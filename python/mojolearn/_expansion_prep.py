@@ -2883,15 +2883,16 @@ class IterativeImputer(_PrepBase):
     Parameters
     ----------
     estimator : mojolearn regressor, default None
-        A mojolearn regressor with ``fit`` and ``predict`` (for example :class:`BayesianRidge`,
-        :class:`Ridge` or :class:`LinearRegression`), cloned for each step. Any other estimator raises
-        ``TypeError``. None uses the built-in Bayesian ridge regression.
+        A mojolearn regressor (:class:`LinearRegression`, :class:`Ridge`, :class:`DecisionTreeRegressor`,
+        :class:`RandomForestRegressor`, :class:`ExtraTreesRegressor` or
+        :class:`GradientBoostingRegressor`), cloned for each step. Any other estimator, including a
+        subclass, raises ``TypeError``. None uses the built-in Bayesian ridge regression.
     missing_values : float, default NaN
         Value that marks a missing entry.
     sample_posterior : bool, default False
         Draw each imputed value from the predictive normal distribution, truncated to
-        ``[min_value, max_value]``, instead of using its mean. An ``estimator`` must then support
-        ``predict(X, return_std=True)`` (``ValueError`` otherwise).
+        ``[min_value, max_value]``, instead of using its mean. Only the built-in estimator supports
+        it; with an ``estimator`` it raises ``ValueError``.
     max_iter : int, default 10
         Maximum number of imputation rounds.
     tol : float, default 1e-3
@@ -3381,9 +3382,9 @@ class RFE(_SelectorMixin):
     Parameters
     ----------
     estimator : mojolearn estimator
-        A mojolearn estimator whose ``fit`` exposes ``coef_`` or ``feature_importances_``, such as
-        :class:`LinearDiscriminantAnalysis`, :class:`LogisticRegression`, :class:`Ridge`,
-        :class:`LinearRegression` or the tree ensembles. Any other estimator raises ``TypeError``.
+        A mojolearn estimator whose ``fit`` exposes ``coef_``: :class:`LinearDiscriminantAnalysis`,
+        :class:`LogisticRegression`, :class:`Ridge` or :class:`LinearRegression`. Any other estimator,
+        including a subclass, raises ``TypeError``.
     n_features_to_select : int or float, default None
         Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
     step : int or float, default 1
