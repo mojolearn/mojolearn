@@ -19,6 +19,12 @@ from bindings.family_common import (
     family_as_f32_dense, family_field, family_owned,
 )
 from bindings.host_archive_native import host_archive_radius_refusals
+from bindings.neighbors_knn_native import neighbors_knn_operation
+from bindings.neighbors_local_native import neighbors_local_operation
+from bindings.neighbors_semi_native import neighbors_semi_operation
+from bindings.neighbors_graph_native import neighbors_graph_operation
+from bindings.neighbors_ann_native import neighbors_ann_operation
+from bindings.neighbors_kde_native import neighbors_kde_operation
 
 
 def _pcs_seed(seed: PythonObject) raises -> PythonObject:
@@ -181,4 +187,16 @@ def neighbors_operation(model: PythonObject, operation: String, args: PythonObje
     if operation == "family_xn_pcs_fit_transform":
         _pcs_fit(model, args, context)
         return _pcs_transform(model, args, context)
+    if operation.startswith("family_xn_knn_"):
+        return neighbors_knn_operation(model, operation, args, context)
+    if operation.startswith("family_xn_loc_"):
+        return neighbors_local_operation(model, operation, args, context)
+    if operation.startswith("family_xn_semi_"):
+        return neighbors_semi_operation(model, operation, args, context)
+    if operation.startswith("family_xn_graph_"):
+        return neighbors_graph_operation(model, operation, args, context)
+    if operation.startswith("family_xn_ann_"):
+        return neighbors_ann_operation(model, operation, args, context)
+    if operation.startswith("family_xn_kde_"):
+        return neighbors_kde_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)

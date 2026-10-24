@@ -156,6 +156,10 @@ _UNSUPPORTED_METRICS = (
 _native_family_bridge.tables(host_archive_neighbor_metrics=dict(_METRIC_TABLE),
                              host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
                              host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS))
+# The shared native label, weight and score steps (bindings/classical_labels.mojo)
+# the neighbors family's one-call methods read (encode/decode, accuracy, R^2).
+from ._native_labels_bridge import label_context as _label_context  # noqa: E402
+_native_family_bridge.tables(**_label_context())
 
 #: The metrics that need X >= 0 (their logarithms), refused on negative
 #: input as scipy's jensenshannon is undefined there.
