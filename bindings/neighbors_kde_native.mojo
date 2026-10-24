@@ -26,7 +26,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
