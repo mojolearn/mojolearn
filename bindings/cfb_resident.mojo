@@ -14,13 +14,14 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_entry, family_array
 from bindings.cluster_native import _labeled_reference
+from bindings.native_loaded_module import native_loaded_module
 
 
 def cfb_optional_entry(binding: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """The compiled entry `name` of `binding`, or None where the binding
     does not export it (an absent name is ImportError on a host binding
     proxy and AttributeError on a module; both mean "no residency")."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var entry = PythonObject(None)
     try:
         entry = py_call(b.getattr, binding, PythonObject(name))
@@ -35,7 +36,11 @@ def cfb_release(model: PythonObject) raises:
     """Drop the model's resident reference set, if one is held, through the
     minting binding's `labeled_reference_release`. Quiet on a binding that
     cannot be reached any more and on a handle already released."""
-    var b = Python.import_module("builtins")
+    var b = PythonObject(None)
+    try:
+        b = native_loaded_module("builtins")
+    except:
+        return  # the import-time connections are gone (interpreter teardown)
     var fields = py_fields(model)
     var holder = py_get(fields, PythonObject("_resident_holder"), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
@@ -64,7 +69,7 @@ def cfb_handle(model: PythonObject, binding: PythonObject, refs: PythonObject, k
     """The resident handle of (refs, keys, labels, metric) on `binding`,
     prepared now when none is held for exactly these arrays; -1 where the
     binding has no resident entries."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var prepare = cfb_optional_entry(binding, "labeled_reference_prepare", context)
     if prepare is None or cfb_optional_entry(binding, "labeled_reference_predict_resident", context) is None:
         return -1

@@ -13,6 +13,7 @@
 # The same entries on the same inputs: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
@@ -402,7 +403,7 @@ def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject
 
 def _gpr_tail(fields: PythonObject, params: PythonObject) raises:
     """normalize_y's `[1, y_std, y_mean]` tail: the binding un-normalizes."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.bool, py_get(fields, PythonObject("normalize_y_"), PythonObject(False)))):
         _ = py_call(params.append, PythonObject(1))
         _ = py_call(params.append, family_call(b.float, fields["_y_train_std"]))
@@ -412,7 +413,7 @@ def _gpr_tail(fields: PythonObject, params: PythonObject) raises:
 def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict(X, return_std, return_cov)`; args = (binding, X, return_std, return_cov)."""
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var return_std = Bool(py=family_call(b.bool, args[2]))
     var return_cov = Bool(py=family_call(b.bool, args[3]))
