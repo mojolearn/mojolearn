@@ -27,6 +27,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.multi_gpu import copy_columns_kernel, transfer_bytes
+from core.device_plan import device_plan_device, device_plan_setting
 from core.step_phase import STEP_PHASE_TIMERS
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
@@ -36,7 +37,9 @@ from gemm.contract import OP_NT
 
 
 def chol_device_count() raises -> Int:
-    var value = String(getenv("MOJOLEARN_CHOLESKY_DEVICE_COUNT"))
+    # The calling thread's device plan when a native driver bound one
+    # (core/device_plan.mojo), else the worker-process variable.
+    var value = device_plan_setting("MOJOLEARN_CHOLESKY_DEVICE_COUNT")
     if value == "":
         return 1
     var count = Int(value)
@@ -95,7 +98,7 @@ def chol_trailing_rows(
             # Check-only arm: later owners read their left rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var left = device.enqueue_create_buffer[DType.float32](width * w)
         var output = device.enqueue_create_buffer[DType.float32](width * n_trail)
         var need = identical_gemm_workspace_max_floats(width, n_trail, w)

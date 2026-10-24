@@ -55,6 +55,7 @@ from core.multi_gpu import peer_clone
 from core.step_phase import STEP_PHASE_TIMERS
 from std.os import getenv
 from core.host_parallel import host_parallelize
+from core.device_plan import device_plan_device, device_plan_setting
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -541,7 +542,9 @@ def kernel_op(
             )
             return
     if distribute:
-        var setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        # The calling thread's device plan when a native driver bound one
+        # (core/device_plan.mojo), else the worker-process variable.
+        var setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
         if setting != "" and setting != "1":
             var count = Int(setting)
             if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -665,7 +668,7 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
             # Check-only arm: later owners read their left rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var av = a.create_sub_buffer[DType.float32](source * k, rows * k)
         var bv = b.create_sub_buffer[DType.float32](0, n * k)
         var na = norm_a.create_sub_buffer[DType.float32](source if kp.kernel == KERNEL_RBF else 0,
