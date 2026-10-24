@@ -56,6 +56,29 @@ def output_array(shape: ShapeN, dtype: String = "float32") raises -> PythonObjec
     return py_call(state[].ndarray, dims, dtype=PythonObject(dtype), buffer=storage)
 
 
+def output_array_dims(dims: List[Int], dtype: String) raises -> PythonObject:
+    """`output_array` in explicit dims (rank 0 to 8: an imported model's
+    declared output shape), of 4-byte `dtype` items ("float32" or "int32")."""
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        raise Error("program array boundary must be initialized during session setup")
+    var shape = Python.list()
+    var count = 1
+    for k in range(len(dims)):  # small-loop(dims: tensor rank): shape metadata, never array elements
+        _ = py_call(shape.append, PythonObject(dims[k]))
+        count *= dims[k]
+    var storage = py_call(state[].builtins.bytearray, count * 4)
+    return py_call(state[].ndarray, shape, dtype=PythonObject(dtype), buffer=storage)
+
+
+def is_ndarray(value: PythonObject) raises -> Bool:
+    """A NumPy ndarray (or a subclass of it)."""
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        raise Error("program array boundary must be initialized during session setup")
+    return Bool(py=py_call(state[].builtins.isinstance, value, state[].ndarray))
+
+
 def is_integer_input(value: PythonObject) raises -> Bool:
     # ndarray exposes __index__ too, but an array is never a tensor handle
     # or an integer option. Match the public int/np.integer contract exactly.
