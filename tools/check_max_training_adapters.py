@@ -22,7 +22,7 @@ def main():
         from max.dtype import DType
         from max.engine import InferenceSession
         from max.graph import DeviceRef, Graph, TensorType, ops
-        from native_training_fixtures import CASES, fixture, identical, analytic
+        from native_training_fixtures import CASES, fixture, identical, analytic, api_case
         device, dev = Accelerator(0), DeviceRef.GPU(0)
         session = InferenceSession(devices=[device])
         def run(name, arrays, program, options, scalars):
@@ -61,6 +61,12 @@ def main():
                 identical(resumed, actual)
                 report["checks"].append(name + ": resume exact")
             report["checks"].append(name + ": compile, execute, repeat, input ownership, Torch exact")
+        # The MAX op is the Python API in another format: mojolearn.Sequential's fit, same bytes.
+        arrays, program, options, scalars, expected = api_case()
+        actual = run("python_api", arrays, program, options, scalars)
+        np.savez(args.out / "python_api.npz", **{f"output_{i}": v for i, v in enumerate(actual)})
+        identical(actual, expected)
+        report["checks"].append("python_api: Sequential.fit and the MAX op return the same bytes (five outputs)")
         report["complete"] = True
     except Exception:
         report["failures"].append(traceback.format_exc())
