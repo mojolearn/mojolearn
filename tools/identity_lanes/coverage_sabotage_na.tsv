@@ -157,3 +157,31 @@ gbdt/estimator.mojo:gbdt_fit_row_major_available	a capability flag, no data valu
 core/step_glue.mojo:step_glue_arm_name	an experiment arm's name, no data value
 x_decomp/exec_trait.mojo:Exec.vendor	the compiled vendor string, no data value
 experiments/apple_fast/gemm/scoped_dispatch.mojo:*	fast tier only (Apple) GEMM dispatch probe; the verifier runs identical
+core/device_store.mojo:DeviceStore.free	frees a resident slot's buffer; no value leaves it
+core/msel_host.mojo:MselHostStore.alloc	allocates a host snapshot slot; no value leaves it
+core/msel_host.mojo:MselHostStore.free	frees a host snapshot slot; no value leaves it
+core/msel_device.mojo:MselStore.alloc	allocates a device snapshot slot; no value leaves it
+core/msel_device.mojo:MselStore.free	frees a device snapshot slot; no value leaves it
+transformer/transformer_binding_impl.mojo:CausalLMSession.release	a session's teardown (frees buffers); no value leaves it
+core/forest_host_groves.mojo:HostGroveRegistry.release	frees a saved forest's groves; no value leaves it
+xtrees/dart_device.mojo:dart_open	opens the DART fit's scratch state; no value leaves it
+xtrees/dart_device.mojo:dart_close	frees the DART fit's scratch state; no value leaves it
+xtrees/dart_host.mojo:dart_close	frees the DART fit's host scratch state; no value leaves it
+xtrees/shap_device.mojo:shap_cache_release	frees the TreeSHAP cache; no value leaves it
+xtrees/shap_host.mojo:shap_cache_release	frees the host TreeSHAP cache; no value leaves it
+kde/resident_fit.mojo:kde_fit_release	frees the resident KDE fit; no value leaves it
+neighbors/resident_index.mojo:knn_index_release	frees the resident kNN index; no value leaves it
+cluster/resident_centers.mojo:ResidentKMeansCenters	the resident-centers record type (a handle), no value
+kernel_methods/krr_resident.mojo:ResidentKernelRidge	the resident kernel-ridge record type (a handle), no value
+sequence/moe_weights.mojo:moe_weights_free	frees resident MoE weights; no value leaves it
+ensemble/flatnode.mojo:SparseTreeNode.CreateLeafNode	reached only by forest_export_release's teardown of an exported forest; no value leaves it
+core/device_zero.mojo:enqueue_fill	the zero fill of a freshly allocated buffer, overwritten before any read
+training/neural_arithmetic_profile.mojo:neural_arithmetic_suffix	the neural arithmetic-profile suffix (build metadata), no data value
+arima/impl/fast_arima_quality.mojo:quality_mode	a compile-time route-mode word, no data value
+x_cnn/device.mojo:idn_flags	a compile-time route-flag word, no data value
+core/step_glue.mojo:step_glue_trial_build	an experiment arm's build switch, no data value
+training/byte_lm_config.mojo:ByteConfig.validate	a configuration refusal, no data value
+cholesky/host/chol_oracle.mojo:chol_host_jitter_pinned	the pinned jitter profile constant the host oracle reports (build metadata), no data value
+cholesky/checks/potrf.mojo:chol_jitter_pinned	the pinned jitter profile constant (build metadata), no data value
+tokenizer/encoding.mojo:BpeTokenizer.n_vocab	the vocabulary size of a built tokenizer (metadata), no arithmetic
+tokenizer/encoding.mojo:string_bytes	a string's UTF-8 bytes (a view), no arithmetic

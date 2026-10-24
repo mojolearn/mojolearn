@@ -1,0 +1,11 @@
+--- a/gbdt/binary_prediction.mojo
++++ b/gbdt/binary_prediction.mojo
+@@ -78,6 +78,8 @@
+         src_buf=output,
+     )
+     ctx.synchronize()
++    var sab = MutPointer[Scalar[dtype], MutAnyOrigin](unsafe_from_address=out_addr)  # SABOTAGE: the first label or probability flipped
++    sab[0] = Scalar[dtype](1) - sab[0]
+     _ = output^
+     _ = device_raw^
+     _ = ctx^
