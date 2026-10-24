@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The native owner of python/mojolearn/_expansion_decomp.py's PLS family
 # (PLSRegression, PLSCanonical, CCA): fit, fit_transform, transform,
-# inverse_transform and predict are each one call into pls_c. The owner runs
+# inverse_transform, predict and score are each one call into pls_c. The owner runs
 # the steps `_PLS` ran (the centering and scaling, the one
 # `x_decomp_pls_fit` component loop, the rotations through `_pinv`, the
 # coefficients, the projections) through bindings/decomp_kit_native.mojo:
@@ -21,6 +21,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_labels import labels_f32
 from bindings.decomp_kit_native import (
     DecompKit, decomp_int, decomp_float, decomp_mode, decomp_entries, decomp_input, decomp_is_a,
     decomp_class_attr, XD_SUB, XD_ADD, XD_MUL, XD_DIV, XD_SCALE, XD_SQ, XD_SQRT, XD_SELECT, XD_RECIP,
@@ -280,6 +281,24 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             return _transform(kit, held[0], held[1], fields, context)
         finally:
             kit.close()
+    if operation == "score":
+        # `RegressorScoreMixin.score`: y as float32 (`as_f32_c(y, ndim=None,
+        # name="y")`), the native predict, then `metrics.r2_score(y, pred,
+        # sample_weight=..., numeric_mode=...)` through the metrics owner
+        # (`family_mcls_r2`, the entry r2_score calls, with its arguments);
+        # args: (X, y, sample_weight, the metrics binding `_get_binding` resolved).
+        var truth = labels_f32(args[1], -1, "C", "y", context)
+        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context)
+        var owner = py_get(context, "pls_metric_owner")
+        if owner is None:
+            raise Error("NotImplementedError: mojolearn: the PLS score needs the native metrics owner "
+                        + "(family_mcls_r2); this install does not carry it")
+        var mode = py_get(fields, "numeric_mode")
+        var r2 = py_call(owner[0], PythonObject(None), "family_mcls_r2",
+                         Python.tuple(args[3], truth.keep, prediction, args[2], PythonObject("uniform_average"),
+                                      PythonObject(True), mode), owner[1])
+        _ = truth^
+        return r2
     _check_fitted(model, fields)
     var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
     try:

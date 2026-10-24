@@ -3153,6 +3153,26 @@ class _PLS(RegressorScoreMixin, _Base):
         """
         return _PLS_CALL(self, "fit_transform", (X, y, None), _PLS_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _PLS_CALL(self, "score",
+                         (X, y, sample_weight, _get_binding(getattr(self, "numeric_mode", None))), _PLS_CONTEXT)
+
 
 # NIPALS, mode A, regression deflation.
 class PLSRegression(_PLS):
@@ -5292,8 +5312,12 @@ _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibat
 
 
 # The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
+# `score` runs R^2 through the native metrics owner (family_mcls_r2) inside
+# the same call; `_get_binding` resolves the metrics binding, as r2_score did.
+from ._metrics_impl import _get_binding  # noqa: E402
 _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
-                                              pls_canonical_class=PLSCanonical)
+                                              pls_canonical_class=PLSCanonical,
+                                              pls_metric_owner=_native_family_bridge.connect())
 
 
 # The native MinCovDet owner (bindings/mcd_native.mojo): MinCovDet, EllipticEnvelope.
