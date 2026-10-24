@@ -92,3 +92,39 @@ def plan_require_identical(model: PythonObject, message: String) raises:
     var b = Python.import_module("builtins")
     if py_type(mode) is not b.str or String(mode) != "identical":
         raise Error("ValueError: " + message)
+
+
+def plan_enter_all(bindings: PythonObject, devices: PythonObject, rebuild: String,
+                   families: Int = DEVICE_PLAN_WORKER) raises:
+    """`plan_enter` in every binding of `bindings` (a tuple of binding
+    modules, each loaded once in this process). The old worker's environment
+    reached every native module of its process; a plan is per DSO, so a
+    driver binds it in each binding its plain owner reaches. A failure
+    releases the plans already bound before it raises."""
+    var bound = 0
+    try:
+        for i in range(len(bindings)):  # driver-loop: over the driver's bindings
+            plan_enter(bindings[i], devices, rebuild, families)
+            bound += 1
+    except error:
+        for i in range(bound):  # driver-loop: over the bindings already bound
+            try:
+                plan_exit(bindings[i])
+            except:
+                pass
+        raise error
+
+
+def plan_exit_all(bindings: PythonObject) raises:
+    """Release the plan in every binding of `bindings`; the first failure is
+    raised after every release was attempted."""
+    var failure = String()
+    for i in range(len(bindings)):  # driver-loop: over the driver's bindings
+        try:
+            plan_exit(bindings[i])
+        except error:
+            if failure == "":
+                failure = String(error)
+    if failure != "":
+        raise Error(failure)
+

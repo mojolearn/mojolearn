@@ -54,6 +54,9 @@ def connect():
         if _CONTEXT is None:
             _CONTEXT = {"family_unavailable": str(error)}
         return _ENTRY, _CONTEXT
+    # glue: the multi-GPU driver door (`family_par_run`) runs a non-family
+    # plain owner through this same compiled entry
+    context.update(family_classical_entry=entry)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

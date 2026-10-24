@@ -418,7 +418,8 @@ def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
         raise ValueError('parallel SVM requires IDENTICAL')
     return _FAMILY(estimator, 'family_par_run',
                    ('svm_fit', devices, _SVM_FIT[type(estimator)],
-                    (estimator._bind(_svm._EXT_NAME), X, y, sample_weight)), _FAMILY_CONTEXT)
+                    (estimator._bind(_svm._EXT_NAME), X, y, sample_weight), None,
+                    (estimator._bind(_svm._EXT_NAME),)), _FAMILY_CONTEXT)
 
 
 def predict_svm(estimator, X, *, devices=(0,), method='predict'):
@@ -451,7 +452,8 @@ def predict_svm(estimator, X, *, devices=(0,), method='predict'):
     return public_method_result(estimator, method,
                                 _FAMILY(estimator, 'family_par_run',
                                         ('svm_predict', devices, _SVM_PREDICT[(type(estimator), method)],
-                                         (estimator._bind(_svm._EXT_NAME), X)), _FAMILY_CONTEXT),
+                                         (estimator._bind(_svm._EXT_NAME), X), None,
+                                         (estimator._bind(_svm._EXT_NAME),)), _FAMILY_CONTEXT),
                                 sys._getframe(1))
 
 
@@ -481,7 +483,8 @@ def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel Gaussian processes require IDENTICAL')
     return _FAMILY(estimator, 'family_par_run',
-                   ('gp_fit', devices, 'family_gp_gpr_fit', (estimator._bind(), X, y)), _FAMILY_CONTEXT)
+                   ('gp_fit', devices, 'family_gp_gpr_fit', (estimator._bind(), X, y), None,
+                    (estimator._bind(),)), _FAMILY_CONTEXT)
 
 
 def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
@@ -515,7 +518,8 @@ def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
     return public_method_result(estimator, 'predict',
                                 _FAMILY(estimator, 'family_par_run',
                                         ('gp_predict', devices, 'family_gp_gpr_predict',
-                                         (estimator._bind(), X, return_std, False)), _FAMILY_CONTEXT),
+                                         (estimator._bind(), X, return_std, False), None,
+                                         (estimator._bind(),)), _FAMILY_CONTEXT),
                                 sys._getframe(1))
 
 
