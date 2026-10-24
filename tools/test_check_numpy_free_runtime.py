@@ -16,6 +16,8 @@ spec.loader.exec_module(check)
     (['numpy>=1.26.4; extra == "numpy"', 'numpy>=1.26.4; extra == "verify"'], ["numpy", "verify"], []),
     (["mojolearn-amd==1.2.3", "mojolearn-nvidia==1.2.3", "numpy>=1.26.4; extra == 'verify'"],
      ["verify"], ["mojolearn-amd==1.2.3", "mojolearn-nvidia==1.2.3"]),
+    # the framework adapters' extras (packaging/adapters/pins.json)
+    (['torch>=2.13,<2.14; extra == "torch"', 'max==26.5.0; extra == "max"'], ["torch", "max"], []),
 ])
 def test_only_optional_verifier_and_exact_split_plugins_are_allowed(requires, extras, plugins):
     assert check.metadata_errors(requires, extras, plugins) == []
@@ -35,6 +37,10 @@ def test_only_optional_verifier_and_exact_split_plugins_are_allowed(requires, ex
     (["mojolearn-amd==1.2.3; extra == 'amd'"], [], ["mojolearn-amd==1.2.3"]),
     (["mojolearn-amd==1.2.3", "mojolearn-amd==1.2.3"], [], ["mojolearn-amd==1.2.3"]),
     ([], [], ["mojolearn-amd==1.2.3"]),
+    (["torch>=2.13,<2.14"], ["torch"], []),
+    (['torch>=2.13,<2.14; extra == "max"'], ["torch", "max"], []),
+    (['torch>=2.13,<2.14; extra == "torch"'], [], []),
+    (['maxwell==1; extra == "max"'], ["max"], []),
 ])
 def test_unconditional_numpy_other_packages_and_invalid_plugin_pins_fail(requires, extras, plugins):
     assert check.metadata_errors(requires, extras, plugins)
