@@ -3535,6 +3535,8 @@ def lane_sources():
     py_files = _python_files()
     symbols = _python_symbols(py_files)
     routed = host_routes(hs)                     # GPU binding -> host bindings, as _backend routes
+    alias_targets = {alias["binding"] for aliases in getattr(hs, "HOST_IMPORT_ALIASES", {}).values()
+                     for alias in aliases}
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
@@ -3778,7 +3780,12 @@ def lane_sources():
             declared, whole = {b for b in declared if exists(b)}, {b for b in whole if exists(b)}
             for group in (declared, whole):
                 for b in list(group):
-                    group |= routed.get(b, set())    # the host bindings _backend routes it to
+                    # An import ALIAS serves a few named functions of `b`, not
+                    # the lane's whole door: never whole through `b`, so a
+                    # lane calling none of them takes its source, and one that
+                    # calls them takes those exports (tokenizer lanes took
+                    # every classical oracle through the alias otherwise).
+                    group |= routed.get(b, set()) - (alias_targets if group is whole else set())
                     if b in adapted:
                         group.add(f"_mojolearn_{adapted[b]}_host")
             own_cache[lane] = (declared, used, whole)

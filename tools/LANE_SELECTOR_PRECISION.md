@@ -54,8 +54,9 @@ resolved debt marker. Passing required tests with these expected failures is
 not a claim that real-tree narrowing is complete.
 
 The 2026-10-24 selector (call-site exports, routed import aliases) selects
-490 / 490 / 490 lanes for k-means / host GBDT / host forest; 480 of each carry
-unresolved dispatcher records (the shared classical owner), 10 do not. Their
+480 / 480 / 480 lanes for k-means / host GBDT / host forest, every one beyond
+the desired set carrying an unresolved dispatcher record (the shared classical
+owner, reached per aliased export, never as the alias binding's whole closure). Their
 desired counts remain 84 / 55 / 93. (2026-10-23: 555 / 470 / 470, 540 / 470 /
 470 with records.)
 The required checks retain essential family coverage, refuse unexplained
