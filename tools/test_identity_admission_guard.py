@@ -22,7 +22,7 @@ OTHER = "b" * 16
 def tables():
     records = [dict(class_=cls, commit="1" * 40) for cls in ("apple", "nvidia", "amd", "cpu", "ptx")]
     records = [{"class": r["class_"], "commit": "0" * 40 if r["class_"] == "cpu" else r["commit"]} for r in records]
-    entry = dict(ref=HASH, cols=dict(apple=0, nvidia=1, amd=2))
+    entry = dict(ref=HASH, cols=dict(apple=0, nvidia=1, amd=2, cpu=3))
     base = dict(format="mojolearn.verify-reference.v1", fixtures={"base": {}, "odd": {}},
                 heldout={}, records=records, cells={"historical/base": {
                     "train": dict(ref=None, cols={}, conflict=True)}}, ptx_divergent=[],
@@ -34,12 +34,76 @@ def tables():
     return base, candidate
 
 
-def test_retained_agreeing_gpu_columns_and_unselected_legacy_debt_are_preserved():
+NO_DECLARATIONS = (frozenset(), ())
+GPU_ONLY = (frozenset({"selected"}), ())
+
+
+def test_retained_agreeing_columns_and_unselected_legacy_debt_are_preserved():
     base, candidate = tables()
+    assert GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
     assert GUARD.validate(base, candidate, ["selected"])["admissible"]
-    # A new CPU-only observation can use all three existing GPU witnesses.
-    candidate["cells"]["selected/base"]["train"]["cols"]["cpu"] = 3
-    assert GUARD.validate(base, candidate, ["selected"])["admissible"]
+
+
+def test_cpu_equal_to_the_gpu_reference_passes():
+    base, candidate = tables()
+    report = GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)
+    assert report["admissible"] and report["numerical_parts"] == 8
+
+
+@pytest.mark.parametrize("superseded", [False, True])
+def test_cpu_disagreement_refuses_naming_the_cell(superseded):
+    base, candidate = tables()
+    entry = candidate["cells"]["selected/base"]["train"]
+    # An older-commit cpu value (build_table's superseded pair) refuses too.
+    entry["cols"]["cpu"] = [3, OTHER]
+    report = GUARD.validate(base, candidate, ["selected"], GPU_ONLY if superseded else NO_DECLARATIONS)
+    assert not report["admissible"]
+    assert report["problems"] == [
+        f"selected/base/train: cpu disagrees with the GPU reference (cpu={OTHER}, gpu={HASH})"]
+
+
+def test_missing_cpu_column_refuses():
+    base, candidate = tables()
+    del candidate["cells"]["selected/odd"]["infer"]["cols"]["cpu"]
+    report = GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)
+    assert report["problems"] == ["selected/odd/infer: no cpu column"]
+
+
+def test_cpu_absent_or_na_on_a_declared_gpu_only_lane_passes():
+    base, candidate = tables()
+    for cell in (candidate["cells"][f"selected/{f}"] for f in ("base", "odd")):
+        for part, entry in cell.items():
+            if part == "train":
+                entry["cols"]["cpu"] = [3, "n/a:cpu-by-design (no CPU implementation)"]
+            else:
+                entry["cols"].pop("cpu", None)
+    assert GUARD.validate(base, candidate, ["selected"], GPU_ONLY)["admissible"]
+    assert GUARD.validate(base, candidate, ["selected"], (frozenset(), ("sel",)))["admissible"]
+    report = GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)
+    assert not report["admissible"]
+    assert any("cpu N/A is not declared" in p for p in report["problems"])
+    assert any(p.endswith(": no cpu column") for p in report["problems"])
+
+
+def test_gpu_saved_file_model_na_passes_only_on_the_model_part():
+    base, candidate = tables()
+    na = "n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none)"
+    for fixture in ("base", "odd"):
+        candidate["cells"][f"selected/{fixture}"]["model"]["cols"]["cpu"] = [3, na]
+    assert GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
+    candidate["cells"]["selected/base"]["infer"]["cols"]["cpu"] = [3, na]
+    assert not GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
+
+
+def test_gpu_only_declarations_are_read_from_the_harness_source():
+    lanes, prefixes = GUARD.gpu_only_declarations()
+    assert "par-" in prefixes
+    # one dict entry in identity_break.py, one added by a lane module
+    assert {"gbdt-pair-logit-pointwise", "optim-resident-io"} <= lanes
+
+
+def test_gpu_only_declarations_absent_harness_reads_strict(tmp_path):
+    assert GUARD.gpu_only_declarations(tmp_path) == (frozenset(), ())
 
 
 @pytest.mark.parametrize("cls", ["apple", "nvidia", "amd"])
@@ -70,16 +134,15 @@ def test_missing_or_invalid_selected_witness_refuses(change):
     assert not GUARD.validate(base, candidate, ["selected"])["admissible"]
 
 
-def test_older_cpu_disagreement_remains_superseded_but_builder_conflict_refuses():
+def test_builder_conflict_refuses():
     base, candidate = tables()
     entry = candidate["cells"]["selected/base"]["train"]
     entry["cols"]["cpu"] = [3, OTHER]
-    assert GUARD.validate(base, candidate, ["selected"])["admissible"]
     entry.update(ref=None, conflict=True)
     assert not GUARD.validate(base, candidate, ["selected"])["admissible"]
 
 
-def test_na_parts_and_gpu_only_cells_do_not_invent_a_cpu_requirement():
+def test_na_parts_do_not_invent_a_cpu_requirement():
     base, candidate = tables()
     for cell in candidate["cells"].values():
         if "model" in cell:
@@ -196,10 +259,12 @@ os.execv(sys.executable, [sys.executable] + a)
     return repo, table, raw, env
 
 
-@pytest.mark.parametrize("problem", ["apple", "nvidia", "amd", "missing", "selftest"])
+@pytest.mark.parametrize("problem", ["apple", "nvidia", "amd", "cpu", "nocpu", "missing", "selftest"])
 def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem):
     base, candidate = tables()
-    if problem in ("apple", "nvidia", "amd"):
+    if problem == "nocpu":
+        del candidate["cells"]["selected/base"]["train"]["cols"]["cpu"]
+    elif problem in ("apple", "nvidia", "amd", "cpu"):
         cols = candidate["cells"]["selected/base"]["train"]["cols"]
         cols[problem] = [cols[problem], OTHER]
     elif problem == "missing":
