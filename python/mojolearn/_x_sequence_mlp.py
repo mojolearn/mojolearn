@@ -311,6 +311,26 @@ class MLPClassifier(ClassifierScoreMixin, _BaseMLP):
         """Predicted class labels."""
         return _XSEQ(self, "mlp_predict", (X,), _XSEQ_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _XSEQ(self, "mlp_classifier_score", (X, y, sample_weight), _XSEQ_CONTEXT)
+
 
 _native_xseq_bridge.register(
     xseq_mlp_activations=_ACT,

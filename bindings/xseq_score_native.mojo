@@ -126,3 +126,21 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     _ = y^
     _ = yh^
     return PythonObject(Float64(py=r2))
+
+
+def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """`ClassifierScoreMixin.score` of the sequence classifiers (LSTM/GRU/RNN
+    classifiers and MLPClassifier): the (weighted) accuracy of `prediction`
+    (the model's own predict of args[0]) against args[1], weighted by
+    args[2] when given, exactly `_expansion_metrics.accuracy_fraction(y,
+    prediction, sample_weight, numeric_mode)`: the native metrics owner's
+    `family_mcls_accuracy_fraction`, the same entry with the same arguments,
+    so the score keeps its bits."""
+    var owner = py_get(context, "xseq_r2_options")
+    if owner is None:
+        raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "
+                    + "(family_mcls_accuracy_fraction); this install does not carry it")
+    var mode = py_get(py_fields(model), "numeric_mode")
+    return py_call(owner[0], PythonObject(None), "family_mcls_accuracy_fraction",
+                   Python.tuple(args[1], prediction, args[2], mode), owner[1])

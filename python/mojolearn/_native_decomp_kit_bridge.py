@@ -48,14 +48,20 @@ def connect(door, **classes):
 
     context = _state_context()
     connected = {}
+    modules = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI setup
         try:
-            connected[mode] = _entries(_backend.binding("_mojolearn_x_decomp", mode))
+            module = _backend.binding("_mojolearn_x_decomp", mode)
+            connected[mode] = _entries(module)
+            # the module itself: the owner of a device buffer that outlives
+            # the call (lu_factor's resident pair) frees through it
+            modules[mode] = module
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     # Every output and working buffer is a mojolearn Array, as `_M.out()` made.
-    context.update(output_context=_numpy_free_context(), decomp_bindings=connected, **classes)
+    context.update(output_context=_numpy_free_context(), decomp_bindings=connected, decomp_modules=modules,
+                   **classes)
     # The shared native label and accuracy steps (EllipticEnvelope.score).
     from ._native_labels_bridge import label_context
     context.update(label_context())

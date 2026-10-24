@@ -101,7 +101,9 @@ def _(ml, X, yc, yr, Xh=None):
     q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=40).fit(X[:2000])
     return _fit(dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
                      T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
-                     ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_)),
+                     ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_),
+                     # fit_transform: fit, then transform, in one call
+                     ft=_h(ml.FactorAnalysis(n_components=3, max_iter=20).fit_transform(X[:2000]))),
                 m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
 
 
@@ -139,6 +141,11 @@ def _(ml, X, yc, yr, Xh=None):
     v = ml.lu_solve((lu, piv), np.ascontiguousarray(X[200, :n]))
     s = ml.solve(np.ascontiguousarray(X[300:300 + n, :n].T), np.ascontiguousarray(X[400, :n]))
     xt = ml.lu_solve((lu, piv), B, trans=1)
+    # the pair lu_factor returned (its device factor or its own copy of A),
+    # not a rebuilt (lu, piv) tuple
+    pair = ml.lu_factor(A)
+    xp = ml.lu_solve(pair, B)
+    vp = ml.lu_solve(pair, np.ascontiguousarray(X[200, :n]))
     # numpy's eigh reads ONE triangle: a non-symmetric input, both triangles
     G = np.ascontiguousarray(X[:6, :6])
     wl, vl = ml.linalg.eigh(G)
@@ -155,7 +162,8 @@ def _(ml, X, yc, yr, Xh=None):
     us, ss, vs = ml.linalg.svd(T, full_matrices=False)
     ud, sd, vd = ml.linalg.svd(D)
     uw, sw, vw = ml.linalg.svd(W)
-    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), eigl=_h(wl, vl), eigu=_h(wu, vu),
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), pair=_h(xp, vp),
+                     eigl=_h(wl, vl), eigu=_h(wu, vu),
                      qr=_h(qt, rt, qc, rc), qraw=_h(hw, tw, qw, rw), svd=_h(us, ss, vs), svdd=_h(ud, sd, vd),
                      svdw=_h(uw, sw, vw)))
 
@@ -182,7 +190,10 @@ def _(ml, X, yc, yr, Xh=None):
                      T=_h(m.transform(X[:256])), it=_h(np.int32(m.n_iter_)), c_xr=_h(c.x_rotations_),
                      c_yr=_h(c.y_rotations_), c_T=_h(*c.transform(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))),
                      a_xr=_h(a.x_rotations_), a_yr=_h(a.y_rotations_), a_it=_h(np.int32(a.n_iter_)),
-                     m2=_h(m2.coef_, m2.predict(X[:256])), cs_xr=_h(cs.x_rotations_, cs.y_rotations_)),
+                     m2=_h(m2.coef_, m2.predict(X[:256])), cs_xr=_h(cs.x_rotations_, cs.y_rotations_),
+                     # score: y as float32, predict, R^2, in one call
+                     score=_h(np.float64(m.score(X[:256], yr[:256])), np.float64(m2.score(X[:256], Y2[:256])),
+                              np.float64(c.score(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))))),
                 m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
 
 

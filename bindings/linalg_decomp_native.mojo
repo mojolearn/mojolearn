@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The native owner of python/mojolearn/_expansion_decomp.py's dense linear
-# algebra functions: randomized_svd and solve are each one call into
-# linalg_decomp_c. The owner runs the steps the Python functions ran
+# algebra functions: randomized_svd, solve, lstsq, lu_factor and lu_solve are
+# each one call into linalg_decomp_c. The owner runs the steps the Python functions ran
 # (`_rsvd_direct_input`, `_rsvd_core`, `_flip_u`; solve's gesv entry or
 # lu_factor + lu_solve with their resident, refinement and host routes)
 # through bindings/decomp_kit_native.mojo: the same x_decomp entries with the
@@ -12,7 +12,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
+from bindings.classical_labels import labels_view, labels_check_rank, labels_vector, labels_cast
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array, classical_typed
 from bindings.host_sparse_native import host_sparse_format
@@ -486,6 +487,194 @@ def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject
         kit.close()
 
 
+# ---------------------------------------------------------------- lu_factor / lu_solve
+# The public `lu_factor(a)` and `lu_solve((lu, piv), b)`: the steps the
+# Python functions ran (`_lu_factor_resident` / `_lu_solve_resident` on the
+# device route, `_Kit.lu` / `_Kit.lu_solve` with LU_QFIX's refinement on the
+# host route) through the same x_decomp entries with the same words in the
+# same order, so the bits are unchanged. The pair keeps the Python
+# `_expansion_decomp._LUPair` (a tuple; `_dev` holds the device A, LU and
+# piv as `_DevBuf`s that return to the pool when the pair dies; `_qfix_a`
+# this call's float32 copy of A).
+
+
+def _decomp_module(mode_value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `_Kit._raw()`: the x_decomp binding module of the mode decomp_entries admitted.
+    var mode = decomp_mode(mode_value, context)
+    var name = String(py=py_call(py_call(mode.strip).lower))
+    return context["decomp_modules"][name]
+
+
+def _device_buffer(module: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    # `_DevBuf(raw, count)`: a pooled device buffer id, returned to the pool
+    # when the holder dies; the holder is assembled from its slots.
+    var bi = Python.import_module("builtins")
+    var holder = py_call(bi.object.__new__, context["lu_device_buffer"])
+    py_setattr(holder, "b", module)
+    py_setattr(holder, "n", PythonObject(count))
+    py_setattr(holder, "id", py_call(module.x_decomp_dev_alloc, max(count, 1)))
+    return holder
+
+
+def _lu_pair(lu: PythonObject, piv: PythonObject, qfix_a: PythonObject, dev: PythonObject,
+             context: PythonObject) raises -> PythonObject:
+    # `_LUPair((lu, piv), qfix_a, dev=dev)`, assembled from its slots.
+    var bi = Python.import_module("builtins")
+    var pair = py_call(bi.tuple.__new__, context["lu_pair_class"], Python.tuple(lu, piv))
+    py_setattr(pair, "_qfix_a", qfix_a)
+    py_setattr(pair, "_dev", dev)
+    return pair
+
+
+def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # args: (a, numeric_mode)
+    var kit = DecompKit(decomp_entries(args[1], context), context["output_context"])
+    try:
+        var a_source = args[0]
+        var sf = kit.flags("x_decomp_s_flags")
+        var routed = ((sf & 4) != 0 and (kit.flags("x_decomp_qfix_flags") & 4) != 0) or (sf & 8) != 0
+        if routed and host_sparse_format(a_source).byte_length() == 0:
+            # LU_FAST_RESIDENT (s_flags bit 4, FAST + Apple default) or
+            # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL default): `_lu_factor_resident`,
+            # A up once, the factor on the device, LU and piv down; A, LU and
+            # piv stay on the device in the returned pair for lu_solve.
+            var array = decomp_input(a_source, "a", context)
+            var n = Int(py=array.shape[0])
+            if n != Int(py=array.shape[1]):
+                raise Error("expected a square matrix, got " + String(n) + " x " + String(Int(py=array.shape[1])))
+            var module = _decomp_module(args[1], context)
+            var da = _device_buffer(module, n * n, context)
+            var dlu = _device_buffer(module, n * n, context)
+            var dp = _device_buffer(module, n, context)
+            var lu_array = _typed(Python.tuple(n, n), "<f4", "f", 4, context)
+            var piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
+            var info = _typed(Python.tuple(1), "<f4", "f", 4, context)
+            var rc = decomp_int(py_call(kit.entries["x_decomp_dev_lu_factor"], classical_address(array), lu_array._addr,
+                                        piv_array._addr, info._addr, da.id, dlu.id, dp.id, Python.list(n)))
+            _ = array  # keep the Python object alive through the native call above
+            _ = info  # keep the Python object alive through the native call above
+            if rc < 0:
+                raise Error("a: input must be finite; NaN/inf are unsupported")
+            var singular = Int(DecompF32(unsafe_from_address=Int(py=info._addr))[0])
+            _ = info  # keep the Python object alive through the native call above
+            if singular != 0:
+                # the device buffers return to the pool with their holders
+                _singular_warning(singular, 2)
+                return Python.tuple(lu_array, piv_array)
+            return _lu_pair(lu_array, piv_array, PythonObject(None),
+                            Python.tuple(da, dlu, dp, lu_array, piv_array), context)
+        var a = _matrix(kit, a_source, "a", context)
+        var n = kit.nrows(a)
+        if n != kit.ncols(a):
+            raise Error("expected a square matrix, got " + String(n) + " x " + String(kit.ncols(a)))
+        var factor = kit.lu(a)
+        if factor[2] != 0:
+            _singular_warning(factor[2], 2)
+        var lu_array = kit.publish(factor[0])
+        var piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
+        if n:
+            memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=piv_array._addr)),
+                   src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(factor[1].buffer_info)[0])),
+                   count=n)
+            _ = piv_array  # keep the Python object alive through the native call above
+        if factor[2] == 0 and (kit.flags("x_decomp_qfix_flags") & 4) != 0:
+            # LU_QFIX (FAST default; -D MOJOLEARN_LU_QOLD off): the pair
+            # carries this call's own float32 copy of A so lu_solve can refine
+            return _lu_pair(lu_array, piv_array, kit.publish(a), PythonObject(None), context)
+        return Python.tuple(lu_array, piv_array)
+    finally:
+        kit.close()
+
+
+def _pivots_i32(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `as_i32_c(piv, ndim=1, name="piv")`: a fresh int32 Array of the pivots.
+    var view = labels_view(source, "piv", context)
+    labels_check_rank(view, 1, "piv")
+    var n = view.shape[0]
+    var out = labels_vector(n, "<i4", context)
+    labels_cast(view.addr, view.typestr, Int(py=out._addr), "<i4", n, context)
+    _ = out  # keep the Python object alive through the native call above
+    _ = view^
+    return out
+
+
+def _lu_solve_trans(mut kit: DecompKit, lu: Int, piv: PythonObject, b: Int, trans: Int) raises -> Int:
+    # `_Kit.lu_solve(lu, piv, B, trans)`: on a host copy of B; trans 1 adds
+    # the third word, as `p = [n, w, trans] if trans else [n, w]`.
+    if trans == 0:
+        return kit.lu_solve(lu, piv, b)
+    var out = kit.copy_host(b)
+    var al = kit.address(lu)
+    var ao = kit.address(out)
+    _ = py_call(kit.entries["x_decomp_lu_solve"], al, py_call(piv.buffer_info)[0], ao,
+                Python.list(kit.nrows(lu), kit.ncols(b), trans))
+    kit.wrote_host(out)
+    return out
+
+
+def lu_solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # args: (lu_and_piv, b, trans, numeric_mode)
+    var bi = Python.import_module("builtins")
+    var trans = args[2]
+    if not py_contains(Python.tuple(0, 1, 2), trans):
+        raise Error("trans must be 0, 1 or 2")
+    # `lu, piv = lu_and_piv`, with Python's unpacking refusals
+    var pair = args[0]
+    var iterable = (Bool(py=py_call(bi.hasattr, pair, PythonObject("__iter__")))
+                    or Bool(py=py_call(bi.hasattr, pair, PythonObject("__getitem__"))))
+    if not iterable:
+        raise Error("TypeError: cannot unpack non-iterable " + String(py=py_type(pair).__name__) + " object")
+    var items = py_call(bi.tuple, pair)
+    if len(items) < 2:
+        raise Error("not enough values to unpack (expected 2, got " + String(len(items)) + ")")
+    if len(items) > 2:
+        raise Error("too many values to unpack (expected 2)")
+    var lu = items[0]
+    var piv = items[1]
+    var kit = DecompKit(decomp_entries(args[3], context), context["output_context"])
+    try:
+        var transposed = Bool(py=py_call(bi.bool, trans))
+        var dev = py_call(bi.getattr, pair, PythonObject("_dev"), PythonObject(None))
+        if (dev is not None and not transposed and lu is dev[3] and piv is dev[4]
+                and (kit.flags("x_decomp_s_flags") & 12) != 0):
+            # LU_FAST_RESIDENT (bit 4, refinement) or IDN_LU_RESIDENT_PAIR
+            # (bit 8, no refinement): the pair's device factor
+            var handles = List[Int]()
+            handles.append(Int(py=dev[0].id))
+            handles.append(Int(py=dev[1].id))
+            handles.append(Int(py=dev[2].id))
+            var n = Int(py=lu.shape[0])
+            var solved = _resident_solve(kit, handles, n, args[1], (kit.flags("x_decomp_s_flags") & 4) != 0, context)
+            if solved is not None:
+                return solved
+        var l = _matrix(kit, lu, "lu", context)
+        var n = kit.nrows(l)
+        var pa = _pivots_i32(piv, context)
+        if Int(py=pa.size) != n or not decomp_piv_valid(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=pa._addr)), n):
+            raise Error("piv must hold one row index in [0, n) per row")
+        _ = pa  # keep the Python object alive through the native call above
+        var b = args[1]
+        var vec = _is_vector(b)
+        var bm = _rhs(kit, b, vec, context)
+        if kit.nrows(bm) != n:
+            raise Error("b has " + String(kit.nrows(bm)) + " rows, the factorization has " + String(n))
+        var store = pa._store
+        var x = _lu_solve_trans(kit, l, store, bm, 1 if transposed else 0)
+        var a0 = py_call(bi.getattr, pair, PythonObject("_qfix_a"), PythonObject(None))
+        if (a0 is not None and not transposed and Int(py=a0.shape[0]) == n and Int(py=a0.shape[1]) == n
+                and (kit.flags("x_decomp_qfix_flags") & 4) != 0):
+            # LU_QFIX: one refinement step, x += LU^-1 (B - A x)
+            var am = kit.input(a0, n, n)
+            var residual = kit.lu_resid(am, x, bm)
+            var step = kit.lu_solve(l, store, residual)
+            x = kit.ew(XD_ADD, x, step)
+        _ = a0  # keep the Python object alive through the native calls above
+        _ = pa  # keep the Python object alive through the native calls above
+        return kit.out_shape(x, Python.tuple(n)) if vec else kit.publish(x)
+    finally:
+        kit.close()
+
+
 def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -504,6 +693,10 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
             result = solve_call(call[2], context)
         elif operation == "lstsq":
             result = lstsq_call(call[2], context)
+        elif operation == "lu_factor":
+            result = lu_factor_call(call[2], context)
+        elif operation == "lu_solve":
+            result = lu_solve_call(call[2], context)
         else:
             raise Error("unknown native linear algebra operation")
         return result.steal_data()

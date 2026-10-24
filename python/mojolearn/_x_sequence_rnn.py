@@ -162,6 +162,26 @@ class _RecurrentClassifier(ClassifierScoreMixin, _RecurrentBase):
     def predict(self, X):
         return _XSEQ(self, "rnn_predict", (X,), _XSEQ_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _XSEQ(self, "rnn_classifier_score", (X, y, sample_weight), _XSEQ_CONTEXT)
+
 
 class LSTMRegressor(_RecurrentRegressor):
     """LSTM sequence regressor: recurrent layers under a linear head.
