@@ -1,4 +1,4 @@
-import pathlib, subprocess, tempfile, json, shutil, importlib.util, datetime
+import sys, pathlib, subprocess, tempfile, json, shutil, importlib.util, datetime
 base=pathlib.Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('lean_benchmarks',base/'lean_benchmarks.py')
 module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -7,7 +7,7 @@ entries += [('bench/results/other/2026-10-03/result.json',100),('bench/results/u
 selection=module.select(entries,datetime.date(2026,10,4),14,3,['bench/results/suite/2026-09-01'])
 assert {r['path'] for r in selection if not r['included']} == {'bench/results/suite/2026-09-02'}
 assert len(selection)==6
-root=pathlib.Path(tempfile.mkdtemp(prefix='helper-test-',dir=base))
+root=pathlib.Path(tempfile.mkdtemp(prefix='helper-test-'))  # outside the checkout: it may be read-only
 repo=root/'repo'; repo.mkdir(); wt=root/'wt'
 def run(*args, ok=True):
     r=subprocess.run(list(map(str,args)),capture_output=True,text=True)
@@ -20,7 +20,7 @@ try:
         p=repo/f'bench/results/suite/2020-01-{i:02}/result.json';p.parent.mkdir(parents=True);p.write_text('{}')
     (repo/'.gitignore').write_text('*.log\n')
     git(repo,'add','.');git(repo,'commit','-qm','Test fixtures')
-    helper=['python3',base/'lean_benchmarks.py',wt]
+    helper=[sys.executable,base/'lean_benchmarks.py',wt]
     run(*helper,'test-lane','--repo',repo)
     assert not (wt/'bench/results/suite/2020-01-01').exists()
     assert (wt/'bench/results/suite/2020-01-03/result.json').exists()
