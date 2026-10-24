@@ -17,6 +17,36 @@ import subprocess
 import traceback
 
 
+def device_parts(device):
+    """(type, index) of a torch.device, a device string ("mps", "cuda:0") or anything with .type/.index."""
+    if isinstance(device, str):
+        kind, _, index = device.partition(":")
+        return kind, (int(index) if index else None)
+    return str(device.type), device.index
+
+
+def same_device(actual, requested):
+    """Same device type, and the same index when both name one. torch reports an MPS tensor on
+    torch.device('mps', 0) while the requested device is 'mps' (index None), so plain == refuses it."""
+    a_type, a_index = device_parts(actual)
+    r_type, r_index = device_parts(requested)
+    return a_type == r_type and (a_index is None or r_index is None or a_index == r_index)
+
+
+def word_diff(got, want):
+    """None when the two int32 word arrays are equal, else the byte diff: sizes, how many words differ
+    and the first few (index, got, want) in hex. Test oracle/inspection only."""
+    import numpy as np
+    got, want = np.asarray(got).reshape(-1), np.asarray(want).reshape(-1)
+    if got.size != want.size:
+        return "%d words != %d words" % (got.size, want.size)
+    bad = np.flatnonzero(got != want)
+    if bad.size == 0:
+        return None
+    first = ", ".join("[%d] %08x != %08x" % (i, int(got[i]) & 0xFFFFFFFF, int(want[i]) & 0xFFFFFFFF) for i in bad[:4])
+    return "%d of %d words differ: %s" % (bad.size, got.size, first)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--out", required=True, type=Path)
@@ -142,7 +172,7 @@ def main():
                 report["failures"].append({"name": name, "traceback": traceback.format_exc()})
 
         def equal(actual, expected):
-            assert actual.device == expected.device
+            assert same_device(actual.device, expected.device), (str(actual.device), str(expected.device))
             assert actual.dtype == expected.dtype
             assert tuple(actual.shape) == tuple(expected.shape)
             # Test oracle/inspection only: compare raw words after byte copies.
@@ -195,10 +225,12 @@ def main():
                 # Test oracle/inspection only: compare raw words; the Session keeps matrices 2-D, so a 1-D
                 # adapter result is compared as the same words in row-major order.
                 expected = np.ascontiguousarray(session.numpy(handle))
+                assert same_device(actual.device, device), \
+                    "adapter output on %s, requested %s" % (actual.device, device)
                 words = actual.detach().cpu().contiguous().view(torch.int32).numpy().reshape(-1)
-                assert actual.device == device
                 assert words.size == expected.size, (tuple(actual.shape), expected.shape)
-                assert np.array_equal(words, expected.view(np.int32).reshape(-1)), "adapter and Python API words differ"
+                diff = word_diff(words, expected.view(np.int32).reshape(-1))
+                assert diff is None, "adapter and Python API words differ: " + diff
 
             api = [
                 ("add", lambda: operation([x, y], 2, [2, 3]), lambda: session.add(X, Y)),
