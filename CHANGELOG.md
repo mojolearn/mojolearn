@@ -14,10 +14,6 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - **Saved models.** Prediction from a saved model on the CPU runs natively, and `HostLinearRegression` and `HostRidge`
   fit on the CPU binaries again with weighted, no-intercept and one-column fits; `fit`, `predict`, `score`, `save`,
   `load` and `model_sha256` match the public classes run with `MOJOLEARN_VENDOR=cpu`.
-- **Torch and MAX.** Optional Torch and MAX adapters, built from source in `adapters/` and not part of the wheels, run
-  on the same native library. Whole-training entry points (`torch.ops.mojolearn.train`, and the MAX `mojolearn_train`
-  and `mojolearn_train_resume` operations) fit a `Sequential` model end to end in one call, with resumable optimizer
-  and schedule state.
 - **Training.** `Sequential` supports dropout (`.dropout(rate)`), `validation_data=(X, y)` and `restore_best_weights`,
   with `validation_loss_curve_`, `best_epoch_` and `epochs_run_`. `Program.fit` trains a captured graph in one native
   call with the `mse`, `mae`, `huber`, `bce_with_logits` and `cross_entropy` losses or a captured scalar loss.
@@ -30,8 +26,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - **Measurements.** The measurement board covers every public API that computes, including all `mojolearn.metrics`
   functions, and compares each one with its opponent at the same explicit parameters; a pair whose parameters do not
   match is listed without a ratio.
-- **Faster pooled fits.** Forest and other pooled fits with Python-list labels are about four times faster: labels are
-  admitted once per value, and pool workers share the available CPU quota instead of oversubscribing it.
+- **Pooled fits.** Forest and other pooled fits no longer admit Python-list labels one element at a time, and pool
+  workers share the available CPU quota instead of oversubscribing it.
 - **Imports.** `import mojolearn` works on Python 3.13 and no longer loads NumPy. Results come back as native arrays;
   when NumPy is imported, the same calls return NumPy arrays with the same bits.
 - **Fixes.** `metrics.max_error`, `SpectralEmbedding` with a precomputed graph, `QuadraticDiscriminantAnalysis`,
