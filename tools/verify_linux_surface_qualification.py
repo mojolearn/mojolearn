@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 import re
 import struct
-from release_modes import record_modes
+import sys
+# The release rehearsal (packaging/check_ext_lists.py) executes this file by path to compare
+# CLASSICAL_FAST; tools/ is then not on sys.path, so the sibling import needs it (2026-10-24).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from release_modes import record_modes  # noqa: E402
 
 MODES = {'fast': 0, 'identical': 1}
 # Every binding of _backend._MODULES except the byte LM, which expected_bindings
