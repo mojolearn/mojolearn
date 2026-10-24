@@ -5,6 +5,7 @@
 # runner (bindings/arena_prog_native.mojo `_prep_run`) on a `_Prog` record built
 # from these words, so the arena, inputs, ranges, resident and device-gathered
 # inputs and the run are the ones the Python `_Prog.run` made: no bit moves.
+from bindings.native_array_storage import native_array_empty, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
@@ -39,7 +40,7 @@ def i32_array(count: Int, context: PythonObject) raises -> PythonObject:
     """A zeroed int32 vector Array of `count` words (at least one)."""
     var b = native_loaded_module("builtins")
     var n = max(count, 1)
-    var store = py_call(context["array_type"], "i", py_call(b.bytes, 4 * n))
+    var store = native_array_zeros("i", n)
     return classical_wrap_array(store, Python.tuple(n), "<i4", "C", context["output_context"])
 
 
@@ -195,7 +196,7 @@ struct ClsProg(Movable):
     def get(self, offset: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
         """`_Prog.get`: an (rows,) or (rows, cols) float32 Array of the words."""
         if rows * (1 if cols == 0 else cols) <= 0:
-            var empty = py_call(context["array_type"], "f")
+            var empty = native_array_empty("f")
             return classical_wrap_array(empty, Python.tuple(rows) if cols == 0 else Python.tuple(rows, cols), "<f4", "C", context["output_context"])
         return xprep_take(self.store, offset, rows, cols, context["output_context"])
 
@@ -206,14 +207,14 @@ struct ClsProg(Movable):
 
     def get_i32(self, offset: Int, n: Int, context: PythonObject) raises -> PythonObject:
         """`_Prog.get_i32`: n int32 words as an Array."""
-        var store = py_call(context["array_type"], "i")
+        var store = native_array_empty("i")
         if n > 0:
             _ = py_call(store.frombytes, self._bytes(offset, n))
         return classical_wrap_array(store, Python.tuple(n), "<i4", "C", context["output_context"])
 
     def get_f64(self, offset: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
         """`_Prog.get_f64`: 2 * rows * cols words as a (rows, cols) float64 Array."""
-        var store = py_call(context["array_type"], "d")
+        var store = native_array_empty("d")
         if rows * cols > 0:
             _ = py_call(store.frombytes, self._bytes(offset, 2 * rows * cols))
         return classical_wrap_array(store, Python.tuple(rows, cols), "<f8", "C", context["output_context"])

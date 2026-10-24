@@ -8,17 +8,24 @@ import textwrap
 import pytest
 
 
-def test_native_unicode_storage_strict_warning_setup_and_wire_bytes():
+def test_native_unicode_storage_metadata_strict_warning_setup():
+    # Exercise the two actual metadata modules under -Werror. The package's
+    # unrelated Mojo type bootstrap already warns on the retained pre-change
+    # build, so whole-package import is not this setup-only contract. Public
+    # native Unicode operations remain audited in the separate test below.
     program = textwrap.dedent('''\
-        import array, gc, json, sys, warnings
+        import array, importlib.util, json, sys, types, warnings
+        spec = importlib.util.find_spec('mojolearn')
+        assert spec is not None and spec.submodule_search_locations
+        package = types.ModuleType('mojolearn')
+        package.__path__ = list(spec.submodule_search_locations)
+        sys.modules['mojolearn'] = package
         original_filters = warnings.filters
         before_filters = list(original_filters)
-        from mojolearn import model_selection as ms
         from mojolearn import _native_array_storage as storage
+        assert 'mojolearn._native_loaded_modules' in sys.modules
         assert warnings.filters is original_filters
         assert warnings.filters == before_filters, (warnings.filters, before_filters)
-        # Our import-only filter must not hide later application warnings,
-        # including the identical message attributed to this private module.
         for message in ("The 'u' type code is deprecated and will be removed in Python 3.16",
                         'independent deprecation'):
             try:
@@ -28,6 +35,69 @@ def test_native_unicode_storage_strict_warning_setup_and_wire_bytes():
                 assert str(error) == message
             else:
                 raise AssertionError('setup warning filter escaped its scope')
+        codes = [code for code in ('u', 'w') if code in array.typecodes]
+        assert codes
+        for code in codes:
+            seed = storage.ZERO_STORES[code]
+            assert type(seed) is array.array and seed.typecode == code and len(seed) == 1
+            assert seed.tobytes() == bytes(seed.itemsize)
+        print(json.dumps(dict(unicode_codes=codes, filters_restored=True)))
+    ''')
+    result = subprocess.run([sys.executable, '-Werror', '-c', program],
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report['unicode_codes'] and report['filters_restored'] is True
+
+
+def test_native_array_casts_preserve_standard_buffer_values_without_audit_hooks():
+    program = textwrap.dedent('''\
+        import array, json, sys
+        from mojolearn.model_selection import train_test_split
+        from mojolearn._verify_native_runtime import audit_native_call
+        active = False
+        events = []
+        def hook(event, args):
+            if active:
+                events.append(event)
+        sys.addaudithook(hook)
+        active = True
+        control = array.array('i', [1])
+        active = False
+        assert events == ['array.__new__']
+        events.clear()
+        cases = 0
+        for code in ('b', 'B', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q', 'f', 'd'):
+            values = [i + .25 for i in range(12)] if code in ('f', 'd') else list(range(12))
+            source = array.array(code, values)
+            expected = source.tolist()
+            original = source.tobytes()
+            view = memoryview(source)
+            observed = audit_native_call(train_test_split, view, test_size=3, shuffle=False).assert_native()
+            active = True
+            train, test = train_test_split(view, test_size=3, shuffle=False)
+            active = False
+            assert events == [], (code, events)
+            assert train.tolist() == expected[:9] and test.tolist() == expected[9:]
+            assert observed[0].tolist() == train.tolist() and observed[1].tolist() == test.tolist()
+            assert source.tobytes() == original
+            view.release()
+            cases += 1
+        assert 'numpy' not in sys.modules
+        print(json.dumps(dict(cases=cases, audit_events=events)))
+    ''')
+    result = subprocess.run([sys.executable, '-c', program], capture_output=True,
+                            text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report == dict(cases=12, audit_events=[])
+
+
+def test_native_unicode_storage_wire_bytes():
+    program = textwrap.dedent('''\
+        import array, gc, json, sys, warnings
+        from mojolearn import model_selection as ms
+        from mojolearn import _native_array_storage as storage
         active = False
         events = []
         def hook(event, args):
@@ -65,14 +135,14 @@ def test_native_unicode_storage_strict_warning_setup_and_wire_bytes():
                 cases += 1
         assert cases == 2 * sum(code in array.typecodes for code in ('u', 'w'))
         assert cases >= 2
-        print(json.dumps(dict(cases=cases, audit_events=events, filters_restored=True)))
+        print(json.dumps(dict(cases=cases, audit_events=events)))
     ''')
-    result = subprocess.run([sys.executable, '-Werror', '-c', program],
+    result = subprocess.run([sys.executable, '-c', program],
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads(result.stdout.strip().splitlines()[-1])
     assert report['cases'] in (2, 4)
-    assert report['audit_events'] == [] and report['filters_restored'] is True
+    assert report['audit_events'] == []
 
 
 @pytest.mark.parametrize('numpy_connected', [False, True])
