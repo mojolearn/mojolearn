@@ -3416,6 +3416,8 @@ def lane_sources():
     global _LANE_SOURCES
     if _LANE_SOURCES is not None:
         return _LANE_SOURCES
+    if _reuse_lane_sources():
+        return _LANE_SOURCES
     ib = identity_break()
     hs = host_surface()
     py_files = _python_files()
@@ -3852,7 +3854,127 @@ def lane_sources():
     _LANE_SEED_CALLS = seed_calls
     _LANE_PRECISION_PATHS = precision_paths
     _LANE_SOURCES = (sources, why)
+    _remember_lane_sources()
     return _LANE_SOURCES
+
+
+# ------------------------------------------------- lane_sources across resets
+# THE MAP OUTLIVES A RESET OF AN UNCHANGED TREE (2026-10-24). Deriving the map
+# takes minutes on this tree, and tools/test_lane_select.py resets every memo
+# around each probe it writes, so the file ran past its 900 s bound. A reset
+# keeps one remembered map with everything it was derived from: the content of
+# every file it read (through `_read`), the size and mtime of every file under
+# the root (a created, deleted or rewritten file), the git index and HEAD (the
+# `_git_show` blobs), and the identity of every function and value of this
+# module and of the helper modules it calls (a test that replaces one). Only an
+# exact match of all of them hands the remembered map back; anything else, or
+# a listing or tracked set a caller injected, derives it again.
+_LS_MEMO = None
+_LS_HELPER_MODULES = ("bincache", "import_metadata_effects", "mojo_registrations")
+_LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED", "_CONSTANTS", "_EXTENDERS",
+                  "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
+                  "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
+                  "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_HOOK_CLASSES", "_LS_MEMO"}
+
+
+def _ls_digest(text):
+    import hashlib
+    return None if text is None else hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest()
+
+
+def _ls_tree_state():
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in (".git", ".pixi", "__pycache__")]
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            try:
+                st = os.stat(full)
+            except OSError:
+                continue
+            out[os.path.relpath(full, ROOT)] = (st.st_size, st.st_mtime_ns)
+    return out
+
+
+def _ls_git_state():
+    try:
+        res = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD", "--git-path", "index"],
+                             capture_output=True, text=True, check=True)
+        head, index = res.stdout.split()[:2]
+        st = os.stat(index if os.path.isabs(index) else os.path.join(ROOT, index))
+        return head, st.st_size, st.st_mtime_ns
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return None
+
+
+def _ls_identities():
+    ids = {name: id(value) for name, value in globals().items() if name not in _LS_NOT_INPUTS}
+    for module_name in _LS_HELPER_MODULES:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            ids.update({f"{module_name}.{name}": id(value) for name, value in vars(module).items()
+                        if callable(value)})
+    return ids
+
+
+def _remember_lane_sources():
+    global _LS_MEMO
+    import copy
+    git = _ls_git_state()
+    if git is None:
+        _LS_MEMO = None
+        return
+    _LS_MEMO = dict(
+        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS)),
+        reads={path: _ls_digest(text) for path, text in _read.cache.items()},
+        tree=_ls_tree_state(), git=git, ids=_ls_identities(),
+        tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
+        python_files=list(_PYTHON_FILES) if _PYTHON_FILES is not None else None)
+
+
+def _reuse_lane_sources():
+    """Restore the remembered map when nothing it was derived from changed."""
+    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
+    memo = _LS_MEMO
+    if memo is None:
+        return False
+    if _PYTHON_FILES is not None and list(_PYTHON_FILES) != memo["python_files"]:
+        return False
+    if _TRACKED is not None and frozenset(_TRACKED) != memo["tracked"]:
+        return False
+    if _ls_identities() != memo["ids"]:
+        return False
+    # an entry a caller put into the read cache must be what the map read
+    for path, text in _read.cache.items():
+        if path not in memo["reads"] or _ls_digest(text) != memo["reads"][path]:
+            return False
+    if _ls_git_state() != memo["git"]:
+        return False
+    tree = _ls_tree_state()
+    if tree.keys() != memo["tree"].keys():
+        return False
+    for path, stat in tree.items():
+        if stat != memo["tree"][path]:
+            if path not in memo["reads"]:
+                return False
+            try:
+                text = _read(path)
+            except OSError:
+                return False
+            if _ls_digest(text) != memo["reads"][path]:
+                return False
+    for path, digest in memo["reads"].items():
+        if path in tree and tree[path] == memo["tree"].get(path):
+            continue
+        try:
+            text = _read(path)
+        except OSError:
+            return False
+        if _ls_digest(text) != digest:
+            return False
+    import copy
+    _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
+    return True
 
 
 _REVERSE = None
