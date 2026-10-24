@@ -101,6 +101,21 @@ def test_compensated_sum_exception_cannot_admit_platform_transcendentals(tmp_pat
         assert audit.python_math_errors(path, 'mojolearn/_portable_math.py')
 
 
+def test_native_registry_may_connect_only_exact_math_exports(tmp_path):
+    path = tmp_path / '_native_loaded_modules.py'
+    body = "import math\nconnect_module('math', math, ('floor', 'ceil', 'comb'))\n"
+    path.write_text(body)
+    rel = 'mojolearn/_native_loaded_modules.py'
+    assert audit.python_math_errors(path, rel) == []
+    assert audit.python_math_errors(path, 'mojolearn/other.py')
+    for bad in (body.replace("'comb'", "'sin'"), body.replace("'floor', ", "'sqrt', 'floor', "),
+                body.replace("('floor', 'ceil', 'comb')", "tuple(n for n in vars(math))"),
+                body + 'leaked = math.exp\n', body + "connect_module('math', math, ('exp',))\n",
+                body.replace('import math', 'import math as m'), body + 'from math import log\n'):
+        path.write_text(bad)
+        assert audit.python_math_errors(path, rel), bad
+
+
 @pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])
 def test_numpy_remains_available_to_independent_verification(tmp_path, relative):
     path = tmp_path / '_identity_break.py'
