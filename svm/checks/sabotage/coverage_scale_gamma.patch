@@ -1,18 +1,24 @@
 --- a/svm/impl/scale_gamma_device.mojo
 +++ b/svm/impl/scale_gamma_device.mojo
-@@ -118,6 +118,7 @@
-     )
-     ctx.enqueue_copy(dst_ptr=dst, src_buf=d_out)
-     ctx.synchronize()
-+    dst[0] = dst[0] ^ Int64(1)  # SABOTAGE: the first exact-sum limb one unit off
-     _ = d_x^
-     _ = d_part^
-     _ = d_out^
+@@ -108,6 +108,10 @@
+     var nb = _grid_blocks(count)
+     var d_x = ctx.enqueue_create_buffer[DType.uint32](count)
+     ctx.enqueue_copy(dst_buf=d_x, src_ptr=_U32P(unsafe_from_address=x_addr))
++    if count > 1:  # SABOTAGE: cell 0 replaced by cell 1 before the exact sums
++        var head = d_x.create_sub_buffer[DType.uint32](0, 1)
++        var nxt = d_x.create_sub_buffer[DType.uint32](1, 1)
++        ctx.enqueue_copy(dst_buf=head, src_buf=nxt)
+     var d_part = ctx.enqueue_create_buffer[DType.int64](nb * SG_SLOTS)
+     var d_out = ctx.enqueue_create_buffer[DType.int64](SG_SLOTS)
+     ctx.enqueue_function[sg_partial_kernel](
 --- a/svm/host/scale_gamma_host.mojo
 +++ b/svm/host/scale_gamma_host.mojo
-@@ -30,4 +30,5 @@
-         i = end
-     for k in range(SG_SLOTS):
-         dst[k] = acc[k]
-+    dst[0] = dst[0] ^ Int64(1)  # SABOTAGE: the first exact-sum limb one unit off
- 
+@@ -21,6 +21,8 @@
+     """THE HOST COLUMN: the same limbs from one host loop (exact, so the
+     same value as the device grid)."""
+     var acc = sg_zero()
++    if count > 0:  # SABOTAGE: cell 0 counted twice in the exact sums
++        sg_add_cell(acc, x[0])
+     var i = 0
+     while i < count:
+         var end = min(count, i + SG_CHUNK)

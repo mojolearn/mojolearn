@@ -1229,7 +1229,7 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
                        "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
                        "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
-                       "x-ridge-cv-kfold"})
+                       "x-ridge-cv-kfold", "neural-trainer-unfused"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -1299,6 +1299,8 @@ NEW_LANE_PURPOSE = {
                             "`minmax_fit_transform`",
     "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
     "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
+    "neural-trainer-unfused": "ParallelNeuralTrainer with MOJOLEARN_MLP_FUSED=0: `mlp_bias_activation`, "
+                              "`mlp_relu_backward`, `mlp_sum_rows`",
 }
 
 
@@ -1310,6 +1312,40 @@ _PROVEN_FIXES = [
     '- 2026-10-22, the seven native-owner arms (coverage-native-*): run on 551dee1ce over the 42a554521 Metal + host build, all CAUGHT (every cell MOVED, restored equal to clean). `coverage_sabotage.py check` now matches import-path module names to the arm\'s bindings, and the three runs share one option set.',
     '',
 ]
+
+#: What the 2026-10-24 arms' run decided, per MISSED arm, and the accepted
+#: product-check catch (lane verify-coverage-20261024, follow-up).
+_ARM_DECISIONS_20261024 = [
+    "- `coverage-x_neighbors-host_ops` (fixed arm): connected-components and ocsvm MOVED on the host column; the "
+    "nearest-centroid lane cannot reach `op_softmax64`, which is registered only in fast builds (NC_PROBA64). The "
+    "softmax edit is dropped, the expected lanes are the two that moved, and `xn_softmax64` is fault n/a (fast tier).",
+    "- `coverage-x_cnn-perm_host`, `coverage-x_cnn-perm_device` (fixed arms): x-cnn-gcn MOVED on both columns "
+    "(edge-weighted GCN runs both the gather and the transposed weighted view); sage and gnn-options do not take "
+    "the weighted transpose. Expected lanes: x-cnn-gcn.",
+    "- `coverage-resample-gather` (retired, n/a): identical builds compile `resample_gather_gpu` / "
+    "`resample_gather_narrow` out (RESAMPLE_GPU_GATHER is fast or the opt-in C11 define, the narrow gather fast), so "
+    "the entries return their not-taken flag and no identical lane can move; the resample fit's arithmetic carries "
+    "`coverage-core-resample_impl`. The patch and manifest row are removed; the entries are fault n/a.",
+    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native.mojo "
+    "`_resolve_gamma`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
+    "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host).",
+    "- `coverage-core-dense_coo` (fixed arm): x-cluster-spectral-affinities MOVED on the host column. A GPU install "
+    "never reaches the base binding's COO scan (the metrics dense entry serves every affinity), so the arm is host "
+    "only and the GPU `nonzero_f32_fill` row is fault n/a; spectral-precomputed is not an expected lane.",
+    "- `coverage-training-mlp_ops_rng` (split; new lane): the RNG half MOVED (samba-untied-dropout-accum) and is "
+    "`coverage-training-neural_rng`. The MLP doors run only on the unfused gradient route a multi-device optimizer "
+    "takes (`_mlp_fused_enabled`): new lane `neural-trainer-unfused` runs it with MOJOLEARN_MLP_FUSED=0, and "
+    "`coverage-training-mlp_ops` expects it.",
+    "- `coverage-core-msel_device_host` (new fault, no crash policy): both columns aborted (exit 134; Metal "
+    "IOGPUMetalSuballocatorFree) because the old fault left the split table and its sums disagreeing, which drove "
+    "out-of-range indices. A crash is not counted as detection: it is not a verifier report and its cause is "
+    "memory corruption, not the answer. The fault now yields consistent wrong answers (two gathered rows swapped, "
+    "one test group moved to train with its sums, every group rotated to the next fold with its sizes).",
+    "- `coverage-x_cnn-device_ops` (CAUGHT, accepted): the catch is the lane's own product check "
+    "(tools/identity_lanes/public_cnn_methods.py:39, predict must equal classes_[argmax(predict_proba)]), the "
+    "documented contract of CNNClassifier.predict; that refusal counts as detection.",
+]
+
 
 def _proven_arms():
     """The rows of tools/identity_lanes/coverage_sabotage_proven.tsv (the arms' run), or []."""
@@ -2197,6 +2233,26 @@ SABOTAGE_NA_ENTRIES = {
         "gbdt_model_dim")},
 }
 
+# lane verify-coverage-20261024, after the arms' run on 9b04b92c5 (decisions in
+# docs/plans/VERIFY_COVERAGE_20261024.md, "Arm decisions")
+_RESAMPLE_OFF = ("compiled out of identical builds: RESAMPLE_GPU_GATHER is the fast tier or the opt-in "
+                 "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER, RESAMPLE_FAST_GATHER_NARROW the fast tier; in identical "
+                 "the entry returns its not-taken flag (coverage-resample-gather MISSED on 9b04b92c5 for that reason)")
+SABOTAGE_NA_ENTRIES.update({
+    "resample_gather_gpu": _RESAMPLE_OFF, "resample_permutation_gather_gpu": _RESAMPLE_OFF,
+    "resample_gather_narrow": _RESAMPLE_OFF,
+    "xn_softmax64": "fast tier only: registered only under NC_PROBA64 (x_neighbors/proba64_nc.mojo, fast builds)",
+    "nonzero_f32_count": ("the capacity count before the COO fill; a wrong count makes the fill refuse "
+                          "(stale count), and the fill's values carry coverage-core-dense_coo"),
+})
+#: (entry, binding) -> reason, for one registration of an entry its twin covers.
+SABOTAGE_NA_BY_SRC = {
+    ("nonzero_f32_fill", "bindings/_mojolearn.mojo"): (
+        "the GPU base binding's COO scan: on a GPU install every spectral affinity takes the metrics dense "
+        "entry, so no install reaches it through a public call (Metal unmoved under coverage-core-dense_coo, "
+        "9b04b92c5); the host twin is armed"),
+}
+
 
 def sabotage_of(row):
     """(status, text) of one native row's fault-injection arm."""
@@ -2216,6 +2272,8 @@ def sabotage_of(row):
                     + (f" +{len(cov) - 2}" if len(cov) > 2 else ""))
     if seam:
         bits.append(f"{len(seam)} seam patch(es)")
+    if (row["entry"], row.get("src")) in SABOTAGE_NA_BY_SRC:
+        return "n/a", SABOTAGE_NA_BY_SRC[(row["entry"], row.get("src"))]
     if bits:
         return "armed", "; ".join(bits)
     if row["entry"] in SABOTAGE_NA_ENTRIES:
@@ -2489,6 +2547,12 @@ def render_markdown(audit, path):
         w("")
         for line in _PROVEN_FIXES:
             w(line)
+        w("")
+        w("### Arm decisions after the 2026-10-24 run (9b04b92c5: 12 CAUGHT, 9 MISSED)")
+        w("")
+        for line in _ARM_DECISIONS_20261024:
+            w(line)
+        w("")
     w("## Owed")
     w("")
     owed = [(r, t) for r, t, _ in tri if t[0] == "owed"]

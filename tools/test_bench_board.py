@@ -521,7 +521,10 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
     # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
-    assert len(neural) == 23  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
+    # 2026-10-24: 23 -> 22, ops-session-step (OPS_LANES) was planned twice before
+    # bench_board_neural.py stopped listing FIT_LANES and OPS_LANES twice; the fit lanes
+    # are fast-only on Apple, so the identical-only plan lost exactly that one duplicate
+    assert len(neural) == 22  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
     assert len(both) == 37  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes at both shapes
     assert "family neural     races=%d cells=%d" % (len(both), sum(len(r["arms"]) for r in both)) in text

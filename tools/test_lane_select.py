@@ -3215,7 +3215,15 @@ def test_a_hunk_inside_one_mojo_def_selects_only_the_lanes_reaching_it():
     assert reason.startswith("a Mojo source whose diff is confined to named definitions "
                              "(x_decomp/chi2.mojo:chi2_quantile)"), reason
     got = set(sel["lanes"])
-    assert got <= hit and len(got) < len(hit) // 2, (len(got), len(hit))
+    # 2026-10-24: lanes that reach x_decomp's exports through the shared classical
+    # owner (decomp_native_call and the other aliased runtime-classical entries,
+    # routed since host_routes follows HOST_IMPORT_ALIASES) select the hunk too;
+    # each carries an unresolved-native-dispatch record (Mac at d3f7b7fdb: 124 of
+    # 176, all recorded). The narrow bound applies to the lanes WITHOUT a record.
+    limited = {row["lane"] for row in sel.get("precision_limitations", ()) if path in row["paths"]}
+    assert got <= hit and len(got - limited) < len(hit) // 2, (len(got), len(got - limited), len(hit))
+    for lane in got & limited:
+        _reported_native_limitation(sel, path, lane)
     for lane in got:
         chain = " ".join(sel["chains"][lane])
         assert chain.endswith("x_decomp/chi2.mojo:chi2_quantile") or "kept whole-file" in chain, chain
