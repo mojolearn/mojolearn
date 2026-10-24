@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate scoped reference admission without importing or running the product."""
 import argparse
+import ast
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,70 @@ import tempfile
 
 GPU_CLASSES = ("apple", "nvidia", "amd")
 REQUIRED_PARTS = frozenset(("train", "infer", "model", "batch"))
+#: The host column is a deciding witness (Andrew 2026-10-24: "the cpu column
+#: should be REQUIRED too"). Every selected numerical part needs a cpu value
+#: equal to the Apple == NVIDIA == AMD reference, or one of the declared N/As
+#: below; a differing cpu value is a bug to fix, never a superseded column.
+CPU_CLASS = "cpu"
+#: The CPU column of a model part that loads the GPU column's saved file and
+#: writes none (python/mojolearn/_verify_reference.py `entry`).
+CPU_MODEL_NA = "n/a:gpu-saved-file"
+HERE = Path(__file__).resolve().parent
+
+
+def gpu_only_declarations(tools_dir=HERE):
+    """(lanes, prefixes) the harness itself declares to have no CPU column.
+
+    Read from the SOURCE, never imported: `GPU_ONLY_LANES` in
+    tools/identity_break.py plus the `GPU_ONLY_LANES["lane"] = "why"` entries
+    the lane modules under tools/identity_lanes/ add, and
+    `RECORD_EXCLUDED_PREFIXES` (the cooperative `par-*` drivers, whose CPU
+    train value is `CPU_BY_DESIGN_NA`). A checkout without the harness reads
+    as no declarations, which only makes the cpu rule stricter.
+    """
+    harness = Path(tools_dir) / "identity_break.py"
+    if not harness.is_file():
+        return frozenset(), ()
+    lanes, prefixes = set(), ()
+    for node in ast.parse(harness.read_text()).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if "GPU_ONLY_LANES" in names and isinstance(node.value, ast.Dict):
+            for key in node.value.keys:
+                if not (isinstance(key, ast.Constant) and isinstance(key.value, str)):
+                    raise ValueError("GPU_ONLY_LANES has a key this guard cannot read")
+                lanes.add(key.value)
+        if "RECORD_EXCLUDED_PREFIXES" in names:
+            value = ast.literal_eval(node.value)
+            if not (isinstance(value, tuple) and all(isinstance(v, str) for v in value)):
+                raise ValueError("RECORD_EXCLUDED_PREFIXES is not a tuple of strings")
+            prefixes = value
+    for path in sorted((Path(tools_dir) / "identity_lanes").glob("*.py")):
+        for node in ast.parse(path.read_text()).body:
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                        and target.value.id == "GPU_ONLY_LANES"):
+                    if not (isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str)):
+                        raise ValueError(f"{path.name}: a GPU_ONLY_LANES key this guard cannot read")
+                    lanes.add(target.slice.value)
+    return frozenset(lanes), tuple(prefixes)
+
+
+def _cpu_problem(key, part, ref, cpu, gpu_only):
+    """None when the cpu column of one numerical part is admissible."""
+    if type(cpu) is int:
+        return None                       # carries `ref`, the GPU reference
+    if cpu is None:
+        return None if gpu_only else f"{key}/{part}: no cpu column"
+    value = cpu[1] if isinstance(cpu, list) and len(cpu) == 2 else None
+    if isinstance(value, str) and value.startswith("n/a:"):
+        if gpu_only or (part == "model" and value.startswith(CPU_MODEL_NA)):
+            return None
+        return f"{key}/{part}: cpu N/A is not declared for this lane (cpu={value}, gpu={ref})"
+    return f"{key}/{part}: cpu disagrees with the GPU reference (cpu={value}, gpu={ref})"
 
 
 def selected_lanes(paths, asked=""):
@@ -22,14 +87,19 @@ def selected_lanes(paths, asked=""):
     return sorted(selected)
 
 
-def validate(base, candidate, lanes):
-    """Require the shared GPU reference only for the selected complete lanes.
+def validate(base, candidate, lanes, gpu_only=None):
+    """Require Apple, NVIDIA, AMD and cpu to agree for the selected complete lanes.
 
     Existing agreeing columns count: an incoming CPU or single-GPU record does
-    not require re-recording unaffected vendors. Older CPU disagreements remain
-    superseded under build_table's policy; same-source conflicts are refused.
-    Unselected historical evidence is preserved, not retrospectively certified.
+    not require re-recording unaffected vendors. A cpu value that differs from
+    the GPU reference, at any commit, refuses the cell, as does a missing cpu
+    column; the only cpu N/As are the declared ones (`gpu_only_declarations`
+    and the model part that loads the GPU's saved file). Same-source conflicts
+    are refused. Unselected historical evidence is preserved, not
+    retrospectively certified. `gpu_only` is (lanes, prefixes); None reads
+    the harness's declarations.
     """
+    only_lanes, only_prefixes = gpu_only_declarations() if gpu_only is None else gpu_only
     selected = set(lanes)
     problems = []
     if not selected:
@@ -85,6 +155,10 @@ def validate(base, candidate, lanes):
                 absent = [cls for cls in GPU_CLASSES if type(cols.get(cls)) is not int]
                 if absent:
                     problems.append(f"{key}/{part}: no agreeing GPU columns {absent}")
+                cpu_problem = _cpu_problem(key, part, ref, cols.get(CPU_CLASS),
+                                           lane in only_lanes or lane.startswith(tuple(only_prefixes)))
+                if cpu_problem:
+                    problems.append(cpu_problem)
     return dict(lanes=len(selected), checked_parts=checked, numerical_parts=numerical,
                 problems=problems, admissible=not problems)
 
