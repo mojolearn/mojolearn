@@ -98,5 +98,5 @@ coverage-core-dense_coo	build_core_host rc 0, 18s	CAUGHT	x-cluster-spectral-affi
 coverage-training-residual_dropout	build_training rc 0, 116s, build_training_host rc 0, 21s	CAUGHT	public-residual-dropout (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	162
 coverage-training-samba_accumulate_out	build_training rc 0, 112s	CAUGHT	grad-accumulation (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	126
 coverage-training-chunked_lm_head_v2_logit	build_training rc 0, 122s	CAUGHT	training-chunked-lm-head (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	135
-coverage-training-mlp_ops	build_training rc 0, 118s	CAUGHT	neural-trainer-unfused (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	136
+coverage-training-mlp_ops	build_training rc 0, 21s	CAUGHT	neural-trainer-unfused (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	34
 coverage-training-neural_rng	build_training rc 0, 100s	CAUGHT	samba-untied-dropout-accum (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	123
