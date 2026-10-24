@@ -1345,6 +1345,12 @@ _ARM_DECISIONS_20261024 = [
     "out-of-range indices. A crash is not counted as detection: it is not a verifier report and its cause is "
     "memory corruption, not the answer. The fault now yields consistent wrong answers (two gathered rows swapped, "
     "one test group moved to train with its sums, every group rotated to the next fold with its sizes).",
+    "- `x-prep-user-objects` (lane revised, 5b1606ab1 AMD record REFUSED on all nine fixtures): LDA/QDA now refuse a "
+    "covariance_estimator object at fit (no Python callback in the runtime). The lane keeps the user objects the "
+    "library accepts (SimpleImputer callable strategy, TargetEncoder splitter, pairs and categories), holds the two "
+    "LDA and the QDA refusals as a `refusals` part, and records the native configuration instead (LDA shrinkage=0.25, "
+    "QDA reg_param=0.25). Its cells and the arms that expect it (coverage-core-hotpath_impl_rows, "
+    "coverage-core-count-fold-hits) are re-recorded / re-proved.",
     "- `coverage-x_cnn-device_ops` (CAUGHT, accepted): the catch is the lane's own product check "
     "(tools/identity_lanes/public_cnn_methods.py:39, predict must equal classes_[argmax(predict_proba)]), the "
     "documented contract of CNNClassifier.predict; that refusal counts as detection.",
