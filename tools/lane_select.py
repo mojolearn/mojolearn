@@ -4330,7 +4330,6 @@ def _module_patterns(stem, dotted=()):
     Those were the hits that kept packaging/portable_math/stage.py and
     python/setup.py in every release's full sweep."""
     word = re.escape(stem)
-    quoted = re.compile(r"""['"](?:[\w.]*\.)?%s['"]""" % word)
     # A Python corpus file is read as its AST DUMP, where a def or a keyword
     # argument named like the module is `FunctionDef(name='release'` or
     # `keyword(arg='release'`: that is not a load. Only an import alias, an
@@ -4351,7 +4350,14 @@ def _module_patterns(stem, dotted=()):
     loaded = re.compile(r"""Call\(func=(?:Name\(id='(?:%s)'|Attribute\(value=.*?attr='(?:%s)'), ctx=Load\(\)\), """
                         r"""args=\[Constant\(value=['"]%s['"]""" % (loaders, loaders, word))
     run = re.compile(r"(?:-m|import|from)\s+(?:\w+\.)*%s(?![\w])" % word)
-    out = {"": [run], ".py": [dumped, dotted_string, loaded, run], ".mojo": [quoted]}
+    # THE SAME RULE IN MOJO (2026-10-24): a bare quoted word there is as often an
+    # operation name (`operation == "release"` in bindings/parallel_causal_native.mojo
+    # kept tools/release.py NOT ATTRIBUTABLE). A dotted `"x.stem"` is a module address
+    # wherever it sits; the bare word counts only as the first argument of a loader
+    # (`Python.import_module`, `native_loaded_module`, `__import__`).
+    mojo_dotted = re.compile(r"""['"][\w.]*\.%s['"]""" % word)
+    mojo_loaded = re.compile(r"""(?:import_module|native_loaded_module|__import__)\(\s*['"]%s['"]""" % word)
+    out = {"": [run], ".py": [dumped, dotted_string, loaded, run], ".mojo": [mojo_dotted, mojo_loaded]}
     for d in dotted:
         out[""].append(re.compile(re.escape(d)))
         out[".py"].append(re.compile(re.escape(d)))
