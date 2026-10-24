@@ -345,23 +345,24 @@ def effective_cpu_budget(environ=None, cgroup_root='/sys/fs/cgroup'):
     # glue: process configuration read once per pool start
     env = os.environ if environ is None else environ
     try:
-        counts = [len(os.sched_getaffinity(0))]
+        budget = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):
-        counts = [os.cpu_count() or 1]
+        budget = os.cpu_count() or 1
     quota = _cgroup_cpu_quota(cgroup_root)
-    if quota is not None:
-        counts.append(max(1, int(quota)))
+    if quota is not None and int(quota) < budget:
+        budget = int(quota)
     raw = env.get('MOJOLEARN_CPU_THREADS', '').strip()
-    if raw.isdigit() and int(raw) > 0:
-        counts.append(int(raw))
-    return max(1, min(counts))
+    if raw.isdigit() and 0 < int(raw) < budget:
+        budget = int(raw)
+    return budget if budget > 1 else 1
 
 
 def worker_cpu_threads(n_workers, environ=None, cgroup_root='/sys/fs/cgroup'):
     """The host-thread ceiling (MOJOLEARN_CPU_THREADS) each of `n_workers`
     pool workers receives: an equal share of the effective budget, at least
     one, so the workers together never oversubscribe a cgroup quota."""
-    return max(1, effective_cpu_budget(environ, cgroup_root) // max(1, n_workers))
+    share = effective_cpu_budget(environ, cgroup_root) // (n_workers if n_workers > 1 else 1)
+    return share if share > 1 else 1
 
 
 class DevicePool:
