@@ -19,7 +19,7 @@ def connect(context, host):
         # glue: connect each fixed host binary once during package setup.
         if name not in bindings:
             try:
-                module = _backend.load_host_module(name)
+            module = _backend.load_host_module(name)  # cpu-route: connect explicit host archive owner during package setup
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
                 module = (type(error).__name__ + ': ' + str(error))
             bindings[name] = module
@@ -68,7 +68,7 @@ def connect(context, host):
     # Preserve the existing inference-only/reference host availability rule.
     import os
     inference = host['_GPC_HOST_INFERENCE_BASENAME']
-    gpc = constant(binding(inference if os.path.exists(_backend.host_module_path(inference))
+    gpc = constant(binding(inference if os.path.exists(_backend.host_module_path(inference))  # cpu-route: preserve the explicit saved host GPC owner at setup
                            else host['_GPC_HOST_BASENAME']))
     recipes['HostGaussianProcessClassifier'] = (
         call(_gpc_impl._NATIVE, 'family_gp_gpc_predict', _gpc_impl._NATIVE_CONTEXT,
@@ -111,7 +111,7 @@ def connect(context, host):
             if known.get(name) is not cls or name not in recipes:
                 raise TypeError('saved host prediction requires an explicit native schema for ' + name)
             methods = tuple(inspect.getattr_static(cls, method, None)  # glue: retain descriptors as metadata without invoking them
-                            for method in ('predict', 'predict_proba'))
+                            for method in ('predict', 'predict_proba'))  # glue: fixed pair of method descriptors retained only at setup
             for descriptor, recipe in zip(methods, recipes[name]):  # glue: missing methods remain missing rather than narrowing available ones
                 if (descriptor is None) != (recipe is None):
                     raise TypeError('saved host prediction schema does not match ' + name)
