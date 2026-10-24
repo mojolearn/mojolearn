@@ -561,8 +561,16 @@ for t in $TIERS; do
   for n in $(tier_names "$t"); do
     so=$(member_so "$d" "$n")
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$READBACK"; continue; }
-    v=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" <<'PY' 2>&1 | tail -1
-import importlib.machinery, importlib.util, sys
+    v=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" "$REPO" <<'PY' 2>&1 | tail -1
+import importlib.machinery, importlib.util, os, sys
+# The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
+# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module.mojo).
+# This read-back imports ONE binary standalone, so it loads that registry the same way first; without
+# it the host tokenizer member's transport_initialize refused on 2026-10-24 (import-time module connections).
+_reg = "mojolearn._native_loaded_modules"
+if _reg not in sys.modules:
+    _spec = importlib.util.spec_from_file_location(_reg, os.path.join(sys.argv[3], "python", "mojolearn", "_native_loaded_modules.py"))
+    _mod = importlib.util.module_from_spec(_spec); sys.modules[_reg] = _mod; _spec.loader.exec_module(_mod)
 so, name = sys.argv[1], sys.argv[2]
 fn = "mojolearn_vendor" if name == "_mojolearn" else name[len("_mojolearn_"):] + "_vendor"
 loader = importlib.machinery.ExtensionFileLoader(name, so)
@@ -590,8 +598,16 @@ if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
   for n in $HOST_NAMES; do
     so=$(member_so python/mojolearn/host "$n")
     if [[ -f "$so" ]]; then
-      hv=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" <<'PY' 2>&1 | tail -1
-import importlib.machinery, importlib.util, sys
+      hv=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" "$REPO" <<'PY' 2>&1 | tail -1
+import importlib.machinery, importlib.util, os, sys
+# The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
+# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module.mojo).
+# This read-back imports ONE binary standalone, so it loads that registry the same way first; without
+# it the host tokenizer member's transport_initialize refused on 2026-10-24 (import-time module connections).
+_reg = "mojolearn._native_loaded_modules"
+if _reg not in sys.modules:
+    _spec = importlib.util.spec_from_file_location(_reg, os.path.join(sys.argv[3], "python", "mojolearn", "_native_loaded_modules.py"))
+    _mod = importlib.util.module_from_spec(_spec); sys.modules[_reg] = _mod; _spec.loader.exec_module(_mod)
 so, name = sys.argv[1], sys.argv[2]
 prefix = name[len("_mojolearn_"):]
 loader = importlib.machinery.ExtensionFileLoader(name, so)
