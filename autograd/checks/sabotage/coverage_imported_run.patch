@@ -1,0 +1,36 @@
+diff --git a/autograd/program_pyapi.mojo b/autograd/program_pyapi.mojo
+index c423ad6a4..f870702d3 100644
+--- a/autograd/program_pyapi.mojo
++++ b/autograd/program_pyapi.mojo
+@@ -5,6 +5,7 @@
+ from std.python import Python, PythonObject
+ from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
+ from std.memory import memcpy
++from std.memory import bitcast
+ from std.time import perf_counter_ns
+ from sequence.exec_trait import Exec
+ from autograd.execution_profile_pyapi import execution_profile_object
+@@ -484,6 +485,14 @@ def _imported_input(a: PythonObject, dims: List[Int], integer: Bool, what: Strin
+     return ProgramInput(src, shape, values^, ids^)
+ 
+ 
++def _cov_run_ulp(v: Float32) -> Float32:
++    """SABOTAGE coverage: a float32 one ulp off (a zero or subnormal becomes
++    the smallest normal)."""
++    var u = bitcast[DType.uint32](v)
++    u = UInt32(0x00800000) if (u & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else u + UInt32(1)
++    return bitcast[DType.float32](u)
++
++
+ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+     program: PythonObject, arrays: PythonObject, named: PythonObject,
+ ) raises -> PythonObject:
+@@ -557,5 +566,8 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+             # the downloaded words as they are (an 'int32' output's words are its int32 items)
+             memcpy(dest=FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])),
+                    src=r.outputs[k].data.unsafe_ptr(), count=count)
++            # SABOTAGE coverage: every output's first value one ulp off
++            var first = FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0]))
++            first[0] = _cov_run_ulp(first[0])
+         _ = py_call(out.append, a)
+     return _result(out)
