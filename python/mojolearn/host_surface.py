@@ -1676,7 +1676,7 @@ FAMILIES = (
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
+            "optimizer_finalize", "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
             # lane migrate-neural-2: the Embedding layer's native lifetime,
             # parallel forecasting's owner and the GPU byte-LM trainer step
