@@ -512,12 +512,12 @@ def _qselect(mode: PythonObject, entries: PythonObject, context: PythonObject) r
 
 
 def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
     var fields = py_fields(model)
     var strategy = fields["strategy"]
-    var is_callable = Bool(py=py_call(b.callable, strategy))
+    # A callable strategy would be user Python code run per column in fit; it
+    # is refused with every other value that is not one of the four names.
     var name = String(strategy) if _is_str(strategy) else String("")
-    if not is_callable and name != "mean" and name != "median" and name != "most_frequent" and name != "constant":
+    if name != "mean" and name != "median" and name != "most_frequent" and name != "constant":
         raise Error("mojolearn: SimpleImputer strategy " + _repr(strategy) + " is not valid")
     var konst = name == "constant"
     var fill_value = fields["fill_value"]
@@ -553,30 +553,21 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
         _stage(p.program, OP_QUANTILE, d, so, n, d, half, 1, med, st)
     if name == "most_frequent":
         _stage(p.program, OP_MODE_COLS, d, so, n, d, mf, NONE)
-    var comp = 0
-    var ctot = 0
-    if is_callable:
-        # each column's non-NaN words, ascending rows, at comp + j*n
-        comp = p.alloc(n * d)
-        ctot = _sel(p, xo, n, d, 0, comp)
     var src = 0
-    var so2 = 0
-    var fo2 = 0
-    if not is_callable:
-        var fv = NONE
-        if konst:
-            var fills = List[Float64]()
-            fills.append(Float64(0.0) if fill_value is None else _float(fill_value))
-            fv = p.put_floats(fills, context)
-        if konst or name == "mean":
-            src = st + d
-        elif name == "median":
-            src = med
-        else:
-            src = mf
-        so2 = p.alloc(d)
-        fo2 = p.alloc(d)
-        _stage(p.program, OP_IMP_STATS, d, st, src, d, 1 if _truth(fields["keep_empty_features"]) else 0, 1 if konst else 0, fv, so2, fo2)
+    var fv = NONE
+    if konst:
+        var fills = List[Float64]()
+        fills.append(Float64(0.0) if fill_value is None else _float(fill_value))
+        fv = p.put_floats(fills, context)
+    if konst or name == "mean":
+        src = st + d
+    elif name == "median":
+        src = med
+    else:
+        src = mf
+    var so2 = p.alloc(d)
+    var fo2 = p.alloc(d)
+    _stage(p.program, OP_IMP_STATS, d, st, src, d, 1 if _truth(fields["keep_empty_features"]) else 0, 1 if konst else 0, fv, so2, fo2)
     var ran = p.run(entries, context)
     var counts = List[Int]()
     var any_empty = False
@@ -586,33 +577,16 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
     var keep_empty = _truth(fields["keep_empty_features"])
     var keep = List[Int]()
     var indicator = List[Int]()
-    var output = context["output_context"]
-    if is_callable:
-        # The user's strategy, called once per column on the column's
-        # non-missing words, as the Python `_fit_callable` called it.
-        var statistics = classical_typed(Python.tuple(d), "<f4", output)
-        var dest = _ptr(statistics)
-        _ = statistics  # keep the Python object alive through the native call above
-        for j in range(d):  # cpu-route: calls the user strategy callable per column
-            var kept = _take1(ran, comp + j * n, _iword(ran, ctot + j), context)
-            var stat = _float(py_call_typed(strategy, kept))
-            dest[j] = Float32(stat)
-            _ = statistics  # keep the Python object alive through the native call above
-            if keep_empty or stat == stat:
-                keep.append(j)
+    if konst or any_empty:
+        py_setitem(fields, "statistics_", _take1(ran, so2, d, context))
+        py_setitem(fields, "_fill", _take1(ran, fo2, d, context))
+    else:
+        var statistics = _take1(ran, src, d, context)
         py_setitem(fields, "statistics_", statistics)
         py_setitem(fields, "_fill", statistics)
-    else:
-        if konst or any_empty:
-            py_setitem(fields, "statistics_", _take1(ran, so2, d, context))
-            py_setitem(fields, "_fill", _take1(ran, fo2, d, context))
-        else:
-            var statistics = _take1(ran, src, d, context)
-            py_setitem(fields, "statistics_", statistics)
-            py_setitem(fields, "_fill", statistics)
-        for j in range(d):  # driver-loop: over the kept columns (feature metadata)
-            if keep_empty or counts[j] != 0:
-                keep.append(j)
+    for j in range(d):  # driver-loop: over the kept columns (feature metadata)
+        if keep_empty or counts[j] != 0:
+            keep.append(j)
     if _truth(fields["add_indicator"]):
         for j in range(d):  # driver-loop: over the indicator columns (feature metadata)
             if counts[j] < n:
@@ -2996,10 +2970,9 @@ def _precheck(model: PythonObject, kind: String, context: PythonObject) raises:
     """The parameter refusals the Python fit raised before converting X."""
     var fields = py_fields(model)
     if kind == "simple_imputer":
-        var b = Python.import_module("builtins")
         var strategy = fields["strategy"]
         var name = String(strategy) if _is_str(strategy) else String("")
-        if not Bool(py=py_call(b.callable, strategy)) and name != "mean" and name != "median" and name != "most_frequent" and name != "constant":
+        if name != "mean" and name != "median" and name != "most_frequent" and name != "constant":
             raise Error("mojolearn: SimpleImputer strategy " + _repr(strategy) + " is not valid")
         if name == "constant" and fields["fill_value"] is not None and not _real_like(fields["fill_value"], context):
             raise Error("TypeError: mojolearn: SimpleImputer fill_value must be numeric")
