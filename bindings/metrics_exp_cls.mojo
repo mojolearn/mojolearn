@@ -14,6 +14,7 @@
 # Python memo made, and the support total's program. Same programs, same
 # kernels: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.metrics_native_inputs import metric_flatten
 from bindings.py_balanced import py_call, py_contains, py_setitem
 from bindings.family_common import FAMILY_F32P, FAMILY_I32P, family_array, family_str, family_repr, family_call_kw
 from bindings.classical_arrays import classical_address
@@ -199,7 +200,7 @@ def _set_wise_labels(pair: MxPair, average: PythonObject, labels: PythonObject, 
     if not py_contains(Python.tuple(PythonObject(None), PythonObject(1)), pos_label):
         mx_warn("Note that pos_label (set to " + family_repr(pos_label) + ") is ignored when average != 'binary' (got "
                 + family_repr(average) + "). You may use labels=[pos_label] to specify a single positive class.",
-                mx_b().UserWarning, 2)
+                mx_b().UserWarning, 2, context)
     if labels is not None:
         return mx_selected(labels, pair.kind, pair.present, context)
     return mx_list(pair.present)
@@ -208,7 +209,7 @@ def _set_wise_labels(pair: MxPair, average: PythonObject, labels: PythonObject, 
 def _check_beta(beta: PythonObject, context: PythonObject) raises -> Float64:
     if mx_is_bool(beta) or not mx_is_real(beta, context) or not mx_truthy(beta >= PythonObject(0)):
         raise Error("beta should be >=0 in the F-beta score")
-    return mx_float(beta)
+    return mx_float(beta, context)
 
 
 def _fmode(fb: Float64) -> Int:
@@ -315,7 +316,7 @@ def _balanced_accuracy(args: PythonObject, context: PythonObject) raises -> Pyth
     var arena = mx_run(s.prog, args[4], context)
     var eo = s.eos[0]
     if arena.i32(eo + 1) != L:
-        mx_warn("y_pred contains classes not in y_true", mx_b().UserWarning, 2)
+        mx_warn("y_pred contains classes not in y_true", mx_b().UserWarning, 2, context)
     return PythonObject(arena.f64(eo + 2))
 
 
@@ -456,7 +457,7 @@ def _rub_ok(value: PythonObject, low: Float64, high: Float64, context: PythonObj
     """`isinstance(v, Real)` and (low <= v <= high or v is NaN)."""
     if not mx_is_real(value, context):
         return False
-    var v = mx_float(value)
+    var v = mx_float(value, context)
     return (low <= v and v <= high) or mx_isnan(v)
 
 
@@ -469,7 +470,7 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
                     + "got targets of type: multiclass")
     var rub = args[4]
     var is_dict = False
-    if mx_is_real(rub, context) and not mx_is_bool(rub) and mx_float(rub) == 1.0:
+    if mx_is_real(rub, context) and not mx_is_bool(rub) and mx_float(rub, context) == 1.0:
         rub = Python.dict()
         py_setitem(rub, "LR+", PythonObject(1.0))
         py_setitem(rub, "LR-", PythonObject(1.0))
@@ -482,7 +483,7 @@ def _likelihood_ratios(args: PythonObject, context: PythonObject) raises -> Pyth
                 or not _rub_ok(neg, 0.0, 1.0, context)):
             raise Error("The dictionary passed as `replace_undefined_by` needs to be in the form "
                         + "`{'LR+': `value_1`, 'LR-': `value_2`}`")
-    elif not (_is_float(rub) and mx_isnan(mx_float(rub))):
+    elif not (_is_float(rub) and mx_isnan(mx_float(rub, context))):
         raise Error("replace_undefined_by must be np.nan, 1.0 or a dict")
     var chosen = mx_list(pair.present) if args[2] is None else mx_selected(args[2], pair.kind, pair.present, context)
     if mx_len(chosen) == 1:
@@ -565,7 +566,9 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var p0 = mx_encode(args[1], "y_pred", context)
     var present = mx_union_sorted(t0.classes, p0.classes)
     var labels_given = labels is not None
-    var chosen = mx_list(labels) if labels_given else present
+    var chosen = metric_flatten(labels, context) if labels_given else present
+    if target_names is not None:
+        target_names = metric_flatten(target_names, context)
     var micro_is_accuracy = not labels_given or Bool(py=py_call(mx_set(chosen).issuperset, present))
     if target_names is not None and mx_len(target_names) != mx_len(chosen):
         raise Error("Number of classes, " + String(mx_len(chosen)) + ", does not match size of target_names, "
@@ -590,8 +593,8 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var all_for = Python.tuple(PythonObject("precision"), PythonObject("recall"), PythonObject("f-score"))
     _prf_warn(arena.i32(s.eos[0]), all_for, zero_division, context)
     var per = _prf_result(s, arena, s.eos[0], k, PythonObject(None), context)
-    var rows = mx_list(py_call(b.zip, names, py_call(per[0].tolist), py_call(per[1].tolist), py_call(per[2].tolist),
-                               py_call(per[3].tolist)))
+    var rows = mx_list(py_call(b.zip, names, metric_flatten(per[0], context), metric_flatten(per[1], context),
+                               metric_flatten(per[2], context), metric_flatten(per[3], context)))
     var report = Python.dict()
     var n_rows = mx_len(rows)
     for i in range(n_rows):  # driver-loop: over the report's label rows

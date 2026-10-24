@@ -49,6 +49,8 @@ FAMILIES = (
             # lane verify-coverage-owed (2026-10-21): the per-row Mojo glue
             # (py2mojo_rows) behind outliers_ and predict_proba
             "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
+            # lane verify-coverage-20261024: RidgeCV's k-fold route (x_linear_best_alpha)
+            "x-ridge-cv-kfold",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -125,9 +127,11 @@ TRAINING_LANE_NAMES = {
     "x-huber-outliers": "HuberRegressor (outliers_)",
     "x-sgd-clf-proba": "SGDClassifier (predict_proba)",
     "x-logistic-cv-proba": "LogisticRegressionCV (predict_proba)",
+    "x-ridge-cv-kfold": "RidgeCV (integer cv)",
 }
 PUBLIC_PENDING_LANES = {
-    "x-huber-outliers": "no reference",
-    "x-sgd-clf-proba": "no reference",
-    "x-logistic-cv-proba": "no reference",
+    "x-huber-outliers": "unwatched",
+    "x-sgd-clf-proba": "unwatched",
+    "x-logistic-cv-proba": "unwatched",
+    "x-ridge-cv-kfold": "no reference",
     }

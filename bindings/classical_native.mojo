@@ -3,8 +3,7 @@
 # migration; this private entry is exercised directly by strict audit tests.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_error_class import error_without_class
+from bindings.classical_error_boundary import classical_python_error
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
 from bindings.classical_ridge import classical_ridge_fit, classical_ridge_parameters, classical_linear_predict, classical_linear_predict_public
@@ -15,6 +14,8 @@ from bindings.classical_attributes import classical_check_layout, classical_geta
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.host_archive_native import host_archive_build
+from bindings.host_archive_predict_native import host_archive_predict
+from bindings.host_knn_predict_native import host_knn_predict
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
 from bindings.family_native import family_operation
@@ -23,54 +24,36 @@ from bindings.trees_public_native import trees_public_operation
 from bindings.host_inference_native import host_inference_operation
 from bindings.host_kde_fit_native import host_kde_fit
 from bindings.host_iforest_fit_native import host_iforest_fit
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.host_density_constructor_native import host_density_initialize
 from bindings.host_density_archive_native import host_density_save
 from bindings.host_density_hash_native import host_density_hash
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
-from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
-from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name
+from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-
-
-def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjectPtr:
-    ref cpy = Python().cpython()
-    var root = cpy.PyTuple_GetItem(args_ptr, 3)
-    var context = PythonObject(from_borrowed=root)
-    var host = py_get(context, "classical_host_context")
-    if host is not None:
-        var model = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0))
-        var b = Python.import_module("builtins")
-        var cls = model if py_type(model) is b.type else py_type(model)
-        if py_contains(host["classical_kinds"], cls):
-            root = causal_borrowed_item(root, "classical_host_context")
-    # The active call owns its root/host dictionaries and the returned class.
-    return causal_borrowed_item(root, key)
+from bindings.native_caller_frame import native_caller_globals
 
 
 def classical_caller_outside(context: PythonObject) raises -> Bool:
     """True when the Python frame that called the public method belongs to
     code outside the package (the rule of _mode._caller_outside). Frame and
-    globals metadata are read through native descriptors only."""
-    var b = Python.import_module("builtins")
-    var frame = PythonObject(None)
+    globals metadata are read through CPython's native frame APIs only."""
+    var globs = PythonObject(None)
     try:
         # Depth 0 is the public method's own one-call frame.
-        frame = py_call(context["classical_getframe"], 1)
+        globs = native_caller_globals(1)
     except:
         return True
-    var globs = frame.f_globals
-    if py_type(globs) is not b.dict:
+    if globs is None:
         return True
     if py_get(globs, "__mojolearn_user_boundary__") is PythonObject(True):
         return True
     if py_get(globs, "__mojolearn_internal__") is PythonObject(True):
         return False
     var name = py_get(globs, "__name__")
-    if py_type(name) is not b.str:
+    if py_type(name) is not py_type(PythonObject("")):
         return True
     var module = String(name)
     return module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
@@ -130,6 +113,14 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation.startswith("host_infer_"):
             var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
             return result.steal_data()
+        if operation == "archive_infer_predict" or operation == "archive_infer_predict_proba":
+            var route = "host_infer_predict" if operation == "archive_infer_predict" else "host_infer_predict_proba"
+            var result = host_inference_operation(model, route, args, context["host_inference_context"], context, False)
+            return result.steal_data()
+        if operation == "archive_knn_classifier" or operation == "archive_knn_regressor":
+            var result = host_knn_predict(model, args[0], operation == "archive_knn_classifier", Bool(py=args[1]),
+                                          context["host_archive_predict_context"])
+            return result.steal_data()
         if operation.startswith("trees_"):
             # The public tree ensembles' one-call methods
             # (bindings/trees_public_native.mojo).
@@ -139,15 +130,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var result = host_tree_operation(model, operation, args, context["host_tree_context"])
             return result.steal_data()
         if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
-            # `host_predict(path, X)` / `host_predict_proba(path, X)`: the
-            # saved model rebuilt by the archive reader, then its own
-            # one-call predict.
-            var predict_context = py_get(context, "host_archive_context")
+            var predict_context = py_get(context, "host_archive_predict_context")
             if predict_context is None:
                 raise Error("RuntimeError: native host archive schemas are not connected")
-            var hosted = host_archive_build(args[0], predict_context, PythonObject(None), False)
-            var method = py_call(b.getattr, hosted, PythonObject("predict" if operation == "host_archive_predict" else "predict_proba"))
-            var predicted = py_call(method, args[1])
+            var predicted = host_archive_predict(args[0], args[1], operation == "host_archive_predict_proba", predict_context)
             return predicted.steal_data()
         if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")
@@ -206,10 +192,21 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
             return loaded.steal_data()
-        if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "score_public":
+        if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             # scikit-learn's sparse refusal comes before input admission.
             classical_refuse_sparse(args[0], classical_estimator_name(model))
-        if operation != "save":
+        if (operation == "ridge_fit" or operation == "ols_fit") and len(args) == 3:
+            # Same order as the whole-tuple admission (X, y, then the
+            # weight); a refused sample_weight names the accepted types
+            # (9bdccfa76) instead of the shared admission's generic text.
+            classical_admit_value(args[0], context, 1)
+            classical_admit_value(args[1], context, 1)
+            try:
+                classical_admit_value(args[2], context, 1)
+            except error:
+                var refusal = classical_weight_refusal(args[2], error)
+                raise refusal
+        elif operation != "save":
             classical_admit_value(args, context)
         var fields = sequential_fields(model)
         var names = context["classical_fields"]
@@ -245,8 +242,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "save":
             result = classical_archive_save(model, args[0], ridge, context)
             return result.steal_data()
-        if operation == "predict_public" or operation == "score_public":
-            classical_require_fitted(model, ridge, "predict" if operation == "predict_public" else "score", context)
+        if operation == "predict_public" or operation == "predict_score" or operation == "score_public":
+            classical_require_fitted(model, ridge, "score" if operation == "score_public" else "predict", context)
         var entries = classical_entries(model, context)
         if operation == "ridge_fit":
             if not ridge:
@@ -256,7 +253,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             if not linear:
                 raise Error("TypeError: ols_fit requires LinearRegression")
             result = classical_ols_fit(model, args, entries, context)
-        elif operation == "predict":
+        elif operation == "predict" or operation == "predict_score":
+            # Native scorers consume the same float32 kernel result that
+            # historical package-internal callers received, without relying
+            # on a Python frame to distinguish them from public predict.
             result = classical_linear_predict(model, args[0], entries, context)
         elif operation == "predict_public":
             # A caller outside the package gets scikit-learn's float64
@@ -276,52 +276,4 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             raise Error("unknown private classical operation")
         return result.steal_data()
     except error:
-        if String(error) == PYTHON_ERROR_PENDING:
-            return optimizer_python_error(error^)
-        if String(error).startswith("HostIForestKernelError:"):
-            return raise_python_exception(error_without_class(error, "HostIForestKernelError"))
-        if String(error).startswith("HostKDEKernelError:"):
-            return raise_python_exception(error_without_class(error, "HostKDEKernelError"))
-        if String(error).startswith("DataConversionWarning:"):
-            try:
-                var cls = _classical_error_class(args_ptr, "warning_category")
-                var message = String(error)
-                return causal_set_exception(Error(String(message[byte=23:])), cls)
-            except nested:
-                return raise_python_exception(nested)
-        if String(error).startswith("NotFittedError:"):
-            try:
-                var cls = _classical_error_class(args_ptr, "active_not_fitted_class")
-                var message = String(error)
-                return causal_set_exception(Error(String(message[byte=16:])), cls)
-            except nested:
-                return raise_python_exception(nested)
-        if String(error).startswith("HostInferenceWarning:"):
-            try:
-                ref cpy = Python().cpython()
-                # The active ABI args tuple owns the context and admitted
-                # category throughout PyErr_SetString; borrow without transfer.
-                var context = causal_borrowed_item(cpy.PyTuple_GetItem(args_ptr, 3), "host_inference_context")
-                var category = causal_borrowed_item(context, "warning_category")
-                return causal_set_exception(error_without_class(error, "HostInferenceWarning"), category)
-            except nested:
-                return raise_python_exception(nested)
-        if String(error).startswith("TypeError:"):
-            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
-        if String(error).startswith("ZeroDivisionError:"):
-            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
-        if String(error).startswith("OverflowError:"):
-            return raise_python_exception(error_without_class(error, "OverflowError"), ExceptionType("PyExc_OverflowError"))
-        if String(error).startswith("NotImplementedError:"):
-            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
-        if String(error).startswith("ImportError:"):
-            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
-        if String(error).startswith("IndexError:"):
-            return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
-        if String(error).startswith("AttributeError:"):
-            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
-        if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
-        if String(error).startswith("ZeroDivisionError:"):
-            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
-        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+        return classical_python_error(error^, args_ptr)

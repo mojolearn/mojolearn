@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Normalize dtype metadata without NumPy's Python _commastring/_usefields.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.native_numpy_metadata import native_numpy_dtype
@@ -85,7 +86,7 @@ def sequence_dtype_instance(value: PythonObject, classes: PythonObject) raises -
 
 
 def sequence_dtype_integer(value: PythonObject, classes: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.int or py_type(value) is b.bool:
         return
     for i in range(len(classes)):  # driver-loop: admit native integer metadata before index conversion
@@ -98,7 +99,7 @@ def sequence_dtype_integer(value: PythonObject, classes: PythonObject, context: 
 
 
 def sequence_dtype_dimension(value: PythonObject, classes: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if value is None or kind is b.str or kind is b.bytes or kind is b.float or kind is b.complex or kind is b.list or kind is b.tuple or kind is b.dict:
         raise Error("ValueError: invalid shape in fixed-type tuple.")
@@ -113,7 +114,7 @@ def sequence_dtype_dimension(value: PythonObject, classes: PythonObject, context
 
 
 def sequence_dtype_shape(value: PythonObject, classes: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.tuple or py_type(value) is b.list:
         for i in range(len(value)):  # driver-loop: validate dtype subarray dimensions
             sequence_dtype_dimension(value[i], classes, context)
@@ -144,7 +145,7 @@ def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, co
     # immutable builtin MemoryError.__new__, fill the native instance dictionary
     # and preserve the exception triple without invoking either Python method.
     # This rejects impossible storage before asking the ndarray allocator.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var base = sequence_array_category("MemoryError")
     var module = py_get(context["modules"], "numpy.core._exceptions")
     if module is None or py_type(module) is not context["module_type"]:
@@ -183,7 +184,7 @@ def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, co
 
 def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: PythonObject,
                         context: PythonObject, aligned: Bool) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var dtype = native_numpy_dtype(context)
     var scalar = py_type(shape) is not b.list and py_type(shape) is not b.tuple
     var dimensions = sequence_dtype_shape(shape, classes, context)
@@ -214,7 +215,7 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
 
 
 def sequence_dtype_title(value: PythonObject, depth: Int = 0) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if value is None or kind is b.str or kind is b.bytes or kind is b.int or kind is b.bool or kind is b.float or kind is b.complex:
         return
@@ -226,7 +227,7 @@ def sequence_dtype_title(value: PythonObject, depth: Int = 0) raises:
 
 
 def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: PythonObject, depth: Int, aligned: Bool) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var dtype = native_numpy_dtype(context)
     var text = value if py_type(value) is b.str else py_call(b.bytes.decode, value, "ascii", "strict")
     var aliases = py_fields(context["modules"]["numpy"])["sctypeDict"]
@@ -325,7 +326,7 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
 
 
 def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: PythonObject, depth: Int, aligned: Bool) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var keys = py_call(b.list, value)
     for i in range(len(keys)):  # driver-loop: validate keys before any schema lookup
         if py_type(keys[i]) is not b.str and not (py_type(keys[i]) is b.int and Int(py=keys[i]) == -1):
@@ -413,7 +414,7 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
 
 
 def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context: PythonObject, depth: Int = 0, aligned: Bool = False) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if depth > 64:
         raise Error("TypeError: dtype schema nesting exceeds the native limit")
     var dtype = native_numpy_dtype(context)

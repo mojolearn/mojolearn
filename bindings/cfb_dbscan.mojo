@@ -18,6 +18,8 @@ from bindings.family_common import (
 )
 from bindings.cluster_native import _reference_queries
 from bindings.cfb_resident import cfb_fresh_holder, cfb_mint, cfb_reference_labels
+from bindings.native_loaded_module import native_loaded_module
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
 comptime _METRIC_PRECOMPUTED = 3
 comptime _EPS_NN_BRUTE_FORCE = 0
@@ -29,7 +31,7 @@ def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject
     a later write by the caller cannot move what predict reads."""
     if classical_is_array(x, context) and not (x is source):
         return x
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var out = family_array(py_call(b.tuple, x.shape), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=Int(py=x.size))
@@ -45,7 +47,7 @@ def _wrap(store: PythonObject, shape: PythonObject, typestr: String, context: Py
 
 def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`DBSCAN.fit(X, y=None, sample_weight=None)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var binding = args[0]
     var source = args[1]
@@ -202,15 +204,15 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
                     context: PythonObject) raises -> PythonObject:
     """`DBSCAN.predict`: the nearest core sample's label within eps, over
     the resident core rows."""
-    var b = Python.import_module("builtins")
-    if not Bool(py=family_call(b.hasattr, model, PythonObject("labels_"))):
+    var b = native_loaded_module("builtins")
+    if not family_raw_has(model, "labels_"):
         raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-    var components = py_call(b.getattr, model, PythonObject("components_"), PythonObject(None))
-    if not Bool(py=py_call(b.bool, py_call(b.getattr, model, PythonObject("prediction_data")))) or components is None:
+    var components = family_raw_get_or(model, "components_", PythonObject(None))
+    if not Bool(py=py_call(b.bool, family_raw_get(model, "prediction_data"))) or components is None:
         raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
                     + "DBSCAN(prediction_data=True), which keeps the core samples this "
                     + "rule needs (DEVIATION 2740)")
-    var n_features = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+    var n_features = Int(py=family_raw_get(model, "n_features_in_"))
     var q = _reference_queries(source, n_features, "DBSCAN.predict", context)
     var nq = Int(py=q.shape[0])
     var n_core = Int(py=components.shape[0])
@@ -219,12 +221,12 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
         family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
         _ = labels  # keep the Python object alive through the native call above
         return labels
-    var metric_name = py_call(py_call(b.str, py_call(b.getattr, model, PythonObject("metric"))).lower)
+    var metric_name = py_call(py_call(b.str, family_raw_get(model, "metric")).lower)
     var metric = Int(py=context["family_dbscan_metrics"][metric_name])
-    var eps = family_call(b.float, py_call(b.getattr, model, PythonObject("eps")))
+    var eps = family_call(b.float, family_raw_get(model, "eps"))
     var result = cfb_reference_labels(model, binding, components,
-                                      py_call(b.getattr, model, PythonObject("core_sample_indices_")),
-                                      py_call(b.getattr, model, PythonObject("_core_labels")), q, n_core,
+                                      family_raw_get(model, "core_sample_indices_"),
+                                      family_raw_get(model, "_core_labels"), q, n_core,
                                       n_features, metric, eps, 1, context)
     _ = q^
     return result

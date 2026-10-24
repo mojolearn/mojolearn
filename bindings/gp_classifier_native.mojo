@@ -156,7 +156,7 @@ def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays
         _ = scalars  # keep the Python object alive through the native call above
         _ = wsr  # keep the Python object alive through the native call above
     # n_train, n_features, n_nodes, n_ls, max_iter_predict, n_fits, then the classes
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
+    var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
                              max_iter, PythonObject(len(columns)))
     _ = py_call(params.extend, columns)
     _ = family_call(gp_entry(ext, "gpc_fit_all"), addrs, params)
@@ -189,7 +189,7 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
                     classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
                     classical_address(l_out), classical_address(pi), classical_address(wsr),
                     classical_address(scalars), classical_address(y01)),
-        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4], max_iter, k))
+        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4], max_iter, k))
     _ = wsr  # keep the Python object alive through the native call above
     _ = pi  # keep the Python object alive through the native call above
     _ = l_out  # keep the Python object alive through the native call above
@@ -333,7 +333,7 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     _ = mean  # keep the Python object alive through the native call above
     _ = proba  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
-                             PythonObject(len(arrays[0])), arrays[4], PythonObject(1 if want_proba else 0))
+                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(1 if want_proba else 0))
     if out_kind != 0:
         _ = py_call(addrs.append, classical_address(out))
         _ = lf  # keep the Python object alive through the native call above
@@ -400,7 +400,7 @@ def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, o
     # n_train, n_features, n_star, n_nodes, n_ls, out_kind, k
     _ = family_call(gp_entry(ext, "gpc_predict_all"), addrs,
                     Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
-                                PythonObject(len(arrays[0])), arrays[4], PythonObject(out_kind), PythonObject(k)))
+                                PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(out_kind), PythonObject(k)))
     _ = xt  # keep the Python object alive through the native call above
     _ = kept^
     _ = xt^
@@ -506,7 +506,7 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
         var pred = _gpc_predict(model, Python.tuple(args[0], args[1], args[2]), context)
-        var shape = mc_shape_of(args[3])
+        var shape = mc_shape_of(args[3], context)
         var n_truth = 0
         if Int(py=py_call(Python.import_module("builtins").len, shape)) > 0:
             n_truth = Int(py=py_call(Python.import_module("builtins").int, shape[0]))

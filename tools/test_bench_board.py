@@ -504,8 +504,9 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # 2026-10-20 (lane ag-inference-board): 109 races with sequential-fit, ops-session-step, sequential-predict and the two
     # causal-lm-generate lanes; the cell total is derived from the plan so a new arm does not stale this line.
     cells = sum(len(r["arms"]) for r in before)
-    assert len(before) == 118  # 2026-10-20: + program-run, sequential-predict, the two causal-lm-generate lanes
-    assert "TOTAL races=%d cells=%d" % (118 + len(algos), cells + sum(len(r["arms"]) for r in algos)) in text
+    # DERIVED (2026-10-24; was 118, then 110): the printed TOTAL is the plan, each race once.
+    assert len({r["id"] for r in before}) == len(before), "a race is planned twice"
+    assert "TOTAL races=%d cells=%d" % (len(before) + len(algos), cells + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -520,9 +521,16 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
     # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
-    assert len(neural) == 23  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    assert len(both) == 37  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes at both shapes
+    # DERIVED (2026-10-24): the identical-only Apple plan is the full plan minus the fit
+    # lanes (bench_board_neural.FIT_LANES race ours-fast only on Apple), each race once;
+    # name-level pins: ops-session-step is identical-timed, mlp-fit never is.
+    fit = set(bb.NEURAL.FIT_LANES)
+    assert len({r["id"] for r in both}) == len(both), "a neural race is planned twice"
+    assert {r["lane"] for r in neural} == {r["lane"] for r in both} - fit
+    assert fit <= {r["lane"] for r in both}
+    assert "ops-session-step" in {r["lane"] for r in neural}
+    assert "mlp-fit" not in {r["lane"] for r in neural}
     assert "family neural     races=%d cells=%d" % (len(both), sum(len(r["arms"]) for r in both)) in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
@@ -796,19 +804,24 @@ NEURAL_IDS = [  # the planner's order (bench_board.plan_races, identical on appl
     "neural/sequential-predict/synthetic/shape=full",
     "neural/ops-session-step/gaussian/shape=full",
     "neural/program-run/gaussian/shape=full",
-    "neural/mlp-fit/higgs/shape=full",
-    "neural/lstm-fit/higgs/shape=full",
-    "neural/gru-fit/higgs/shape=full",
-    "neural/rnn-fit/higgs/shape=full",
-    "neural/tape-user-model/higgs/shape=full",
-    "neural/sequential-fit/synthetic/shape=full",
-    "neural/sequential-predict/synthetic/shape=full",
-    "neural/ops-session-step/gaussian/shape=full",
+    # 2026-10-24 (lane testfix-tools, bench_board_neural.py LANES): the eight fit/ops lanes were listed twice
     "neural/causal-lm-generate/mojolearn-162m/shape=full",
     "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
 ]
 #: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
 FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i or "/sequential-predict/" in i}
+
+
+def _check_neural_ids(races):
+    """NAMES, NOT A FROZEN LIST (2026-10-24). The reviewed ids above must all be
+    planned, each once, and every planned race must be a lane the neural planner
+    declares (bench_board_neural.LANES). A lane a sibling adds is planned without
+    editing this file; a reviewed lane that vanishes still fails here by name."""
+    ids = [r["id"] for r in races]
+    assert len(ids) == len(set(ids)), "a neural race is planned twice"
+    assert not set(NEURAL_IDS) - set(ids), sorted(set(NEURAL_IDS) - set(ids))
+    assert {r["lane"] for r in races} <= set(bb.NEURAL.LANES), \
+        sorted({r["lane"] for r in races} - set(bb.NEURAL.LANES))
 #: fit lanes with no MLX twin (bench_board_neural.PREDICT_LANES)
 NO_MLX_IDS = {i for i in NEURAL_IDS if "/sequential-predict/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
@@ -829,14 +842,14 @@ CPU_ARMS = ["torch-cpu-eager-fp32", "torch-cpu-compile-fp32", "torch-cpu-eager-b
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_plan_neural_fast_on_apple_only(vendor):
     races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"])
-    assert [r["id"] for r in races] == NEURAL_IDS
+    _check_neural_ids(races)
     # the Apple FAST neural tier (Oct 3 2026): `ours-fast` beside `ours` on Apple only
     ours = ["ours", "ours-fast"] if vendor == "apple" else ["ours"]
     for r in races:
-        fit = r["id"] in FIT_IDS
+        fit = r["lane"] in bb.NEURAL.FIT_LANES
         if fit and vendor == "apple":
             assert r["our_arms"] == {"ours-fast": "fast"} and r["modes"] == ["fast"], r["id"]
-            mlx = [] if r["id"] in NO_MLX_IDS else ["mlx-fp32"]
+            mlx = [] if r["lane"] in bb.NEURAL.PREDICT_LANES else ["mlx-fp32"]
             assert r["opponents"] == GPU_ARMS[vendor] + mlx, r["id"]
             assert r["arms"] == ["ours-fast"] + GPU_ARMS[vendor] + mlx
             continue
@@ -888,14 +901,19 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # causal-lm-generate lanes (eager torch only: apple ours + ours-fast + 2 +4 each, amd ours + 2 +3 each,
     # nvidia ours + 3 +4 each), 2026-10-19 lane ag-inference-board; totals regenerated from the planner 2026-10-20
     # + mamba_ssm's step on mamba1-decode and mamba2-decode (2026-10-22, lane measure-coverage): nvidia +4, amd +2
-    assert cells == {"apple": 190, "amd": 160, "nvidia": 225}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 37, "cells": cells}}
+    # 2026-10-24 (lane testfix-tools): the eight fit/ops lanes were planned twice; once each now
+    # (apple 190 -> 143, amd 160 -> 120, nvidia 225 -> 169; 37 -> 29 races)
+    # DERIVED (2026-10-24): every race's arms are checked one by one above; the summary
+    # must be those races, each planned once (the exact 143/120/169 cells broke whenever
+    # a sibling lane added an arm or a lane).
+    assert len({r["id"] for r in races}) == len(races)
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": len(races), "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
     # Apple (Oct 3 2026): a FAST-only neural plan races `ours-fast` alone, GPU lanes only
     races = bb.plan_races("apple", ["fast"], ["neural"])
-    assert [r["id"] for r in races] == NEURAL_IDS
+    _check_neural_ids(races)
     assert all(r["our_arms"] == {"ours-fast": "fast"} and r["arms"][0] == "ours-fast"
                and r["modes"] == ["fast"] for r in races)
     assert bb.main(["--dry-run", "--vendor", "apple", "--modes", "fast", "--families", "neural"]) == 0
@@ -938,16 +956,30 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # nvidia 5 x (ours + 6 torch) = +35, amd 5 x (ours + 4 torch) = +25; +5 races everywhere
 # 2026-10-19 (lanes ag-board-twins + ag-inference-board): + sequential-fit and ops-session-step (apple +12, nvidia
 # +14, amd +10) and sequential-predict + the two causal-lm-generate lanes (apple +13, nvidia +15, amd +11); +5 races
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 443, 128, 190),
-                                                      ("nvidia", 399, 88, 225),
-                                                      ("amd", 326, 84, 160)])
-def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
+# DERIVED, NOT PINNED (2026-10-24): the race and cell counts are the planner's own,
+# re-read from the printed plan; bare integers here broke whenever a sibling lane added a
+# lane, a race or an arm. What is asserted is that the printed summary is the plan: each
+# family's race count is what plan_races gives for it, no race is planned twice, and the
+# TOTAL line adds up the family lines.
+FAMILIES_COUNTED = ("trees", "classical", "classical2", "neural")
+
+
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+def test_dry_run_counts_per_vendor(vendor, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
-                    "--families", "trees,classical,classical2,neural"]) == 0
+                    "--families", ",".join(FAMILIES_COUNTED)]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=118 cells=%d" % cells in text
-    assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=37 cells=%d" % neural in text
+    lines = dict((m.group(1), (int(m.group(2)), int(m.group(3)))) for m in
+                 re.finditer(r"^family (\w+)\s+races=(\d+) cells=(\d+)", text, re.M))
+    assert set(lines) == set(FAMILIES_COUNTED), lines
+    for family in FAMILIES_COUNTED:
+        planned = bb.plan_races(vendor, bb.modes_for(vendor), [family])
+        ids = [r["id"] for r in planned]
+        assert len(ids) == len(set(ids)), f"{family}: a race is planned twice"
+        assert lines[family][0] == len(planned), (family, lines[family], len(planned))
+    total = re.search(r"^TOTAL races=(\d+) cells=(\d+)", text, re.M)
+    assert total and int(total.group(1)) == sum(r for r, _ in lines.values())
+    assert int(total.group(2)) == sum(c for _, c in lines.values())
     assert "neural: ours IDENTICAL" in text
     assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently
@@ -1017,7 +1049,8 @@ def test_neural_run_schema_quality_and_board(env):
     res = json.loads((env["out"] / "board.json").read_text())
     assert res["config"]["neural_shape"] == "small"
     assert res["config"]["smoke"] is True
-    assert set(res["races"]) == {i.replace("shape=full", "shape=small") for i in NEURAL_IDS}
+    assert {i.replace("shape=full", "shape=small") for i in NEURAL_IDS} <= set(res["races"])
+    assert {k.split("/")[1] for k in res["races"]} <= set(bb.NEURAL.LANES)
     assert sorted(_calls(env)) == sorted(
         "neural %s small %s" % (l, ",".join(["ours"] + bb.gpu_opponents_first(
             bb.NEURAL_OPPONENTS["nvidia"][l])))
@@ -2006,3 +2039,19 @@ def test_gate_verdict_fails_and_lists_an_unmatched_pair():
     # a gate board with no recorded pair check never passes
     verdict, why = G.gate_verdict(_gate_state(None))
     assert verdict == "FAIL" and "measure: gate board has no pair check recorded" in why
+
+
+def test_gate_verdict_fails_on_an_own_cell_that_was_not_built():
+    # measure-coverage (2026-10-24): an own cell that read "SKIPPED: not built yet" is listed and fails the gate
+    G = _gate()
+    board = {"races": {"algos/metric-f1-score/taxi/rows=full": {"cells": [
+        {"arm": "ours", "library": "mojolearn", "status": bb.ALGOS_SKIPPED,
+         "skip_reason": "SKIPPED: not built yet (mojolearn exports none of metrics.f1_score)"},
+        {"arm": "sklearn-cpu", "library": "sklearn", "status": "ok", "median_ms": 1.0}]}}}
+    rows = G.own_not_built(board)
+    assert rows == [{"race": "algos/metric-f1-score/taxi/rows=full", "arm": "ours",
+                     "reason": "SKIPPED: not built yet (mojolearn exports none of metrics.f1_score)"}]
+    state = _gate_state(bb.pair_report({"races": {"r": _pair_race("MATCHED")}}))
+    state["measure"]["own_not_built"] = rows
+    verdict, why = G.gate_verdict(state)
+    assert verdict == "FAIL" and any(w.startswith("measure: own arm not built algos/metric-f1-score") for w in why)

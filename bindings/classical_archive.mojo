@@ -2,6 +2,7 @@
 # Existing deterministic ZIP_STORED/NPY checkpoint writer. Format arithmetic,
 # member order and file lifecycle are Mojo; CRC/UTF32/buffer/file entries are
 # connected native C APIs. Python zipfile, numpy.savez and _serialize never run.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -178,7 +179,7 @@ def _archive_array(value: PythonObject, context: PythonObject) raises -> PythonO
 
 def _archive_str_list(value: PythonObject) raises -> Bool:
     """A non-empty flat list whose every item is a str (or str subclass)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.list or len(value) == 0:
         return False
     for i in range(len(value)):  # driver-loop: over the distinct str class labels of one model
@@ -345,7 +346,7 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     var fields = sequential_fields(model)
     if not py_contains(fields, "coef_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is None or not Bool(py=mode):
         mode = context["backend_fields"]["_DEFAULT_MODE"]

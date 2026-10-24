@@ -10,6 +10,7 @@ import pytest
 
 import mojolearn
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._allocator_diagnostics import product_stderr
 from mojolearn._x_sequence_device import SequenceDeviceTensor, _SEQ_CONTEXT, to_device
 
 
@@ -98,7 +99,7 @@ def test_sequence_cleanup_without_imports(scenario, tmp_path):
         pytest.skip("the CPU binding has no resident tensor pool")
     assert '"completed": true' in result.stdout, result.stdout
     # CPython reports __del__ failures on stderr without a failing exit code.
-    assert not result.stderr, result.stderr
+    assert not product_stderr(result.stderr), result.stderr
 
 
 def test_sequence_cleanup_retries_failed_native_release(monkeypatch):

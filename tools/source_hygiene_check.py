@@ -62,10 +62,10 @@ PATTERNS = (
 )
 
 
-def _grep(regex, paths, no_index=False):
+def _grep(regex, paths, no_index=False, root=ROOT):
     """The matching lines. `git grep` exits 1 for no match and 2 or more for a
     broken invocation, and the two must never be confused."""
-    cmd = ["git", "-C", ROOT, "grep", "-nE"]
+    cmd = ["git", "-C", root, "grep", "-nE"]
     if no_index:
         cmd.append("--no-index")
     cmd += ["-e", regex, "--"] + list(paths)
@@ -81,15 +81,14 @@ def self_test():
     bad = []
     for name, regex, globs, probes, near_misses in PATTERNS:
         suffix = globs[0].lstrip("*") if globs else ".mojo"
-        fh = tempfile.NamedTemporaryFile("w", suffix=suffix, dir=ROOT, delete=False)
-        with fh:
-            for line in list(probes) + list(near_misses):
-                fh.write(line + "\n")
-        rel = os.path.relpath(fh.name, ROOT)
-        try:
-            hits = _grep(regex, [rel], no_index=True)
-        finally:
-            os.unlink(fh.name)
+        # The probe file lives in a scratch directory, never the checkout (which
+        # may be read-only); --no-index greps it the same way from there.
+        with tempfile.TemporaryDirectory() as scratch:
+            probe = os.path.join(scratch, "probe" + suffix)
+            with open(probe, "w") as fh:
+                for line in list(probes) + list(near_misses):
+                    fh.write(line + "\n")
+            hits = _grep(regex, [os.path.basename(probe)], no_index=True, root=scratch)
         found = {line.split(":", 2)[-1] for line in hits}
         for probe in probes:
             if probe not in found:

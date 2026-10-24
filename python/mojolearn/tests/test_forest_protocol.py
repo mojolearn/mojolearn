@@ -149,5 +149,9 @@ def test_custom_constructor_does_not_silently_drop_parameters():
         def __init__(self, custom=7, **kwargs):
             self.custom = custom
             super().__init__(**kwargs)
-    with pytest.raises(TypeError, match="custom constructor"):
+    # Since 8a6b082d5 a native public model refuses a class it has no
+    # connected layout for ("requires an exact connected class") before the
+    # forest's own custom-constructor refusal can run; either way the
+    # parameters are refused, never dropped.
+    with pytest.raises(TypeError, match="custom constructor|requires an exact connected class"):
         clone(CustomForest(custom=9))

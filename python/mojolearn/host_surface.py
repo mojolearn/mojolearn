@@ -457,6 +457,7 @@ TRAINING_LANE_NAMES = {
     "lasso": "lasso",
     "elasticnet": "elasticnet",
     "svc": "SVC",
+    "svc-gamma-scale": "SVC and SVR with gamma='scale'",
     "agglomerative": "agglomerative clustering",
     "et-clf": "the Extra Trees classifier",
     "et-reg": "the Extra Trees regressor",
@@ -499,6 +500,7 @@ TRAINING_LANE_NAMES = {
     # through the preprocessing family's own host binding.
     "standard-scaler": "the standard scaler",
     "minmax-scaler": "the min-max scaler",
+    "scaler-fit-transform": "the standard and min-max scalers' fit_transform",
     # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
     # arm of the quasi-Newton solver, exported as qn_fit from the
     # estimators host binding.
@@ -592,6 +594,7 @@ TRAINING_LANE_NAMES = {
     "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
+    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
     "par-causal-lm": "the layer-owned causal language model",
     "par-cross-val": "the fold-dispatched cross-validation",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
@@ -912,6 +915,9 @@ TRAINING_LANE_NAMES = {
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "training-chunked-lm-head": "the chunked language-model head loss and its gradients",
     "training-mlp-sessions": "the multi-session MLP inference",
+    "public-residual-dropout": "residual_dropout and residual_dropout_backward",
+    "public-numeric-metadata": "vendor_used, catboost_auto_learning_rate and johnson_lindenstrauss_min_dim",
+    "neural-trainer-unfused": "the parallel neural trainer's unfused MLP gradient route",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
@@ -1260,6 +1266,48 @@ TRAINING_LANE_NAMES = _merge_expansion("TRAINING_LANE_NAMES", TRAINING_LANE_NAME
 GBDT_CTR_MODELS_DIR = "bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models"
 GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 
+# Native functions/types connected once by load_host_module, before public API
+# modules retain their entries. Aliases never choose an operation in Python.
+HOST_IMPORT_ALIASES = {
+    "_mojolearn_tokenizer_host": ({
+        "binding": "_mojolearn_runtime_classical_host",
+        "marker": "tokenizer_host_runtime_classical_abi",
+        "abi": 1,
+        "functions": (
+            'classical_native_call',
+            'classical_attribute_call',
+            'classical_attribute_descriptor',
+            'host_archive_finalize_call',
+            'host_svr_attribute_call',
+            'host_svc_attribute_call',
+            'pca_native_call',
+            'standard_scaler_fit_native',
+            'standard_scaler_native_call',
+            'minmax_scaler_native_call',
+            'maxabs_scaler_native_call',
+            'prep_stateless_native_call',
+            'qn_native_call',
+            'logistic_native_call',
+            'decomp_native_call',
+            'linalg_decomp_native_call',
+            'als_native_call',
+            'mcd_native_call',
+            'pls_native_call',
+            'dict_learning_native_call',
+            'jl_native_call',
+            'ipca_native_call',
+            'tsvd_native_call',
+            'prep_classify_native_call',
+            'prep_encode_native_call',
+            'x_linear_native_call',
+            'str_labels_native_call',
+            'robust_scaler_native_call',
+            'standard_scaler_attribute_call',
+        ),
+        "types": ("_TreesResident",),
+    },),
+}
+
 #: Families the CPU identity gate's sabotage host set builds with defines of
 #: their own BESIDE -D MOJOLEARN_HOST_SABOTAGE=1 (lane/cpu-verifier-gaps-7,
 #: 2026-09-15), because MOJOLEARN_HOST_SABOTAGE reaches nothing in them and a
@@ -1293,6 +1341,7 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 #: MOJOLEARN_LOWBIT_CONVERT_SABOTAGE is those four seams' own arm and the
 #: gate's set now carries it too.
 GATE_SABOTAGE_OWN_DEFINES = {
+    "runtime_model_selection": ("MOJOLEARN_RUNTIME_MODEL_SELECTION_SABOTAGE",),
     # lane/catboost-parity (2026-09-19): the non-default border types' own
     # arm (drops `select_borders`' middle border). MOJOLEARN_HOST_SABOTAGE
     # already moves gbdt-border-types through the Newton walker; this one
@@ -1621,7 +1670,7 @@ FAMILIES = (
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
             "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
-            "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
+            "tokenizer_host_column", "tokenizer_host_sabotage", "tokenizer_host_runtime_classical_abi", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
             "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
             "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
@@ -1633,7 +1682,7 @@ FAMILIES = (
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
+            "optimizer_finalize", "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
             # lane migrate-neural-2: the Embedding layer's native lifetime,
             # parallel forecasting's owner and the GPU byte-LM trainer step
@@ -2104,6 +2153,8 @@ FAMILIES = (
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
             "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
+            # lane verify-coverage-20261024: fit_transform's one-upload entries
+            "scaler-fit-transform",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2190,7 +2241,9 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly",
+                        # lane verify-coverage-20261024: gamma='scale' (scale_gamma_limbs)
+                        "svc-gamma-scale"),
         # The neighbors and density inference lane (2026-09-15): a saved
         # IsolationForest scores through iforest_run, the same forest rebuild
         # every GPU scoring call runs (DEVIATION 874).
@@ -2761,7 +2814,13 @@ FAMILIES = (
                         "grad-accumulation",
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
-                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state"),
+                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
+                        # lane verify-coverage-20261024: residual_dropout and its backward,
+                        # vendor_used and the numeric helpers the 2026-10-23 audit found
+                        # no lane for (tools/identity_lanes/public_gap_methods.py)
+                        "public-residual-dropout", "public-numeric-metadata",
+                        # the unfused MLP gradient route (MOJOLEARN_MLP_FUSED=0)
+                        "neural-trainer-unfused"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -3188,7 +3247,10 @@ FAMILIES = (
                         # the same entries the `transformer` lane hashes
                         "transformer-decode-session",
                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
-                        "transformer-decode-load-state"),
+                        "transformer-decode-load-state",
+                        # lane verify-coverage-20261024: forward_with_tape,
+                        # backward_from_tape and the tape's close
+                        "transformer-forward-tape"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3219,6 +3281,113 @@ FAMILIES = (
             "transformer-window lanes hash, so they can be checked on an installed CPU; the "
             "shipped neural family carries the forward only."
         ),
+        ships_in_wheel=True,
+    ),
+    dict(
+        family="runtime_classical",
+        binding="_mojolearn_runtime_classical_host",
+        routes=None,
+        loaded_by="python/mojolearn/_backend.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="native classical orchestration and resident tree ownership",
+        host_modules=("bindings/classical_native.mojo", "bindings/trees_lifetime.mojo",
+                      "bindings/host_svr_native.mojo", "bindings/host_svc_native.mojo"),
+        exports=(
+            'classical_native_call',
+            'classical_attribute_call',
+            'classical_attribute_descriptor',
+            'host_archive_finalize_call',
+            'host_svr_attribute_call',
+            'host_svc_attribute_call',
+            'pca_native_call',
+            'standard_scaler_fit_native',
+            'standard_scaler_native_call',
+            'minmax_scaler_native_call',
+            'maxabs_scaler_native_call',
+            'prep_stateless_native_call',
+            'qn_native_call',
+            'logistic_native_call',
+            'decomp_native_call',
+            'linalg_decomp_native_call',
+            'als_native_call',
+            'mcd_native_call',
+            'pls_native_call',
+            'dict_learning_native_call',
+            'jl_native_call',
+            'ipca_native_call',
+            'tsvd_native_call',
+            'prep_classify_native_call',
+            'prep_encode_native_call',
+            'x_linear_native_call',
+            'str_labels_native_call',
+            'robust_scaler_native_call',
+            'standard_scaler_attribute_call',
+            "runtime_classical_host_numeric_mode", "runtime_classical_host_vendor",
+            "runtime_classical_host_column", "runtime_classical_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        wheel_note="Ships: existing classical native entries and their single resident tree owner.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        family="runtime_sequential",
+        binding="_mojolearn_runtime_sequential_host",
+        routes=None,
+        loaded_by="python/mojolearn/_native_runtime_sequential_bridge.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Sequential",),
+        display="native Sequential orchestration",
+        host_modules=("bindings/sequential_native.mojo", "bindings/sequential_execution.mojo"),
+        exports=("sequential_native_call", "runtime_sequential_host_numeric_mode",
+                 "runtime_sequential_host_vendor", "runtime_sequential_host_column",
+                 "runtime_sequential_host_sabotage"),
+        gate="python/mojolearn/tests/test_runtime_sequential_partition.py",
+        wheel_note="Ships: native orchestration for the existing Sequential public API.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        family="runtime_manifold",
+        binding="_mojolearn_runtime_manifold_host",
+        routes=None,
+        loaded_by="python/mojolearn/_native_runtime_manifold_bridge.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("umap", "x-ann-tsne", "x-ann-tsne-pca", "x-decomp-manifold", "x-decomp-umap-options"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("UMAP", "TSNE", "Isomap", "ClassicalMDS", "MDS", "LocallyLinearEmbedding"),
+        display="native manifold orchestration",
+        host_modules=("bindings/runtime_manifold_entry.mojo", "bindings/manifold_native.mojo"),
+        exports=("manifold_native_call", "runtime_manifold_host_numeric_mode",
+                 "runtime_manifold_host_vendor", "runtime_manifold_host_column",
+                 "runtime_manifold_host_sabotage"),
+        gate="python/mojolearn/tests/test_runtime_manifold_partition.py",
+        wheel_note="Ships: native orchestration for the existing manifold public API.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        family="runtime_model_selection",
+        binding="_mojolearn_runtime_model_selection_host",
+        routes=None,
+        loaded_by="python/mojolearn/_native_model_selection_bridge.py",
+        sabotage_define="MOJOLEARN_RUNTIME_MODEL_SELECTION_SABOTAGE",
+        training_lanes=("x-metrics-splitters",),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("model_selection.KFold", "model_selection.LeavePOut", "model_selection.GridSearchCV"),
+        display="native splitters, cross-validation and model selection",
+        host_modules=("bindings/runtime_model_selection_entry.mojo", "bindings/model_selection_native.mojo"),
+        exports=("model_selection_native_call", "runtime_model_selection_host_numeric_mode",
+                 "runtime_model_selection_host_vendor", "runtime_model_selection_host_column",
+                 "runtime_model_selection_host_sabotage"),
+        gate="python/mojolearn/tests/test_runtime_model_selection_partition.py",
+        wheel_note="Ships: native orchestration for the existing model-selection public API.",
         ships_in_wheel=True,
     ),
 )
@@ -3513,9 +3682,9 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
     # New owner lanes: no execution/reference admission is implied by registration.
-    "native-schedule-series": "no reference",
-    "optim-owner-lifecycle": "no reference",
-    "optim-io-capability": "no reference",
+    "native-schedule-series": "unwatched",
+    "optim-owner-lifecycle": "unwatched",
+    "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
     # resident buffers, so no CPU column can state these two.
     "optim-resident-io": "no cpu route",
@@ -3803,28 +3972,36 @@ PUBLIC_PENDING_LANES = {
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
-    "gp-lml-theta": "no reference",
-    "cross-vendor-fold": "no reference",
-    "transformer-decode-load-state": "no reference",
-    "safetensors-widen-f16": "no reference",
-    "hf-causal-lm-stream": "no reference",
-    "ivf-short-fill": "no reference",
+    "gp-lml-theta": "unwatched",
+    "cross-vendor-fold": "unwatched",
+    "transformer-decode-load-state": "unwatched",
+    "transformer-forward-tape": "no reference",
+    "scaler-fit-transform": "no reference",
+    "safetensors-widen-f16": "unwatched",
+    "hf-causal-lm-stream": "unwatched",
+    "ivf-short-fill": "unwatched",
     # lane verify-coverage-owed (2026-10-21): the rows the audit left owed to
     # the migration lanes; no release record yet.
-    "mamba2-decode-session": "no reference",
-    "mamba3-decode-session": "no reference",
-    "training-chunked-lm-head": "no reference",
-    "training-mlp-sessions": "no reference",
-    "samba-optimizer-state": "no reference",
+    "mamba2-decode-session": "unwatched",
+    "mamba3-decode-session": "unwatched",
+    "training-chunked-lm-head": "unwatched",
+    "training-mlp-sessions": "unwatched",
+    "samba-optimizer-state": "unwatched",
+    # lane verify-coverage-20261024: the public-gap lanes of the training
+    # family; no release record yet.
+    "public-residual-dropout": "no reference",
+    "public-numeric-metadata": "no reference",
+    "neural-trainer-unfused": "no reference",
+    "svc-gamma-scale": "no reference",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
-    "saved-model-host-infer-trees": "no reference",
-    "hf-causal-lm-text": "no reference",
-    "hf-model-surface": "no reference",
+    "saved-model-host-infer-trees": "unwatched",
+    "hf-causal-lm-text": "unwatched",
+    "hf-model-surface": "unwatched",
     # GPU only (tools/identity_lanes/coverage.py GPU_ONLY_LANES): the CPU
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
-    "classical-float16-sequences": "no reference",
+    "classical-float16-sequences": "unwatched",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped

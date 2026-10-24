@@ -632,6 +632,10 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var text = py_call_typed(entry, PythonObject(x.addr), PythonObject(y.addr), PythonObject(w_addr),
                              PythonObject(trees_address(order)), params)
     _ = x  # keep the Python object alive through the native call above
+    # y owns the float32 target copy (y.keep) whose address the fit reads;
+    # without this its last named use was the argument list and Mojo freed
+    # it before the native read (garbage targets: "must be finite" on HIP).
+    _ = y  # keep the Python object alive through the native call above
     _ = order  # keep the Python object alive through the native call above
     _ = weights^
     py_setitem(fields, "model_", text)

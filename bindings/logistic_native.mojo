@@ -13,10 +13,19 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.causal_exception import causal_set_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, classical_getattribute
+from bindings.classical_pandas import classical_admit_value
+from bindings.classical_exceptions import classical_require_fitted, classical_not_fitted_class
+from bindings.classical_metadata import classical_is_fitted
+from bindings.logistic_admission import logistic_storage, logistic_fields, logistic_initialize, logistic_get_params, logistic_set_params
+from bindings.prep_lda_admission import lda_native_context, lda_native_labels
+from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
+from bindings.scaler_lifecycle_native import _public_result
+from bindings.classical_labels import _flatten_labels
 from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.classical_labels import (
     ClassicalLabels, LabelsMatrix, classical_encode_labels, classical_decode_labels, classical_accuracy,
@@ -95,14 +104,16 @@ def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) r
     return entries
 
 
-def _class_constant(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
+def _class_constant(model: PythonObject, fields: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`self.<name>` for LogisticRegression's class constants
     (`lbfgs_memory`, `penalty_normalized`): the instance's own value, else
     the class attribute."""
     var own = py_get(fields, PythonObject(name))
     if own is not None:
         return own
-    return py_call(_builtins().getattr, py_type(model), PythonObject(name))
+    var value = classical_getattribute(model, PythonObject(name), context)
+    classical_admit_value(value, context)
+    return value
 
 
 def _need(entries: PythonObject, name: String) raises -> PythonObject:
@@ -186,8 +197,8 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
                     + "instance of 'dict', a str among {'balanced'} or None. "
                     + "Got " + _repr(class_weight) + " instead.")
     var host = py_get(context, "lr_host_model")
-    var xtrees = _table(context["lr_x_trees"], _host_mode(model, py_fields(model)) if host is not None
-                        else _mode(py_fields(model), context))
+    var xtrees = _table(context["lr_x_trees"], _host_mode(model, logistic_fields(model, context)) if host is not None
+                        else _mode(logistic_fields(model, context), context))
     var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if cw is None:  # every class weight is 1
         return sw^
@@ -211,7 +222,7 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
 
 def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _builtins()
-    var fields = py_fields(model)
+    var fields = logistic_fields(model, context, False)
     var l1_ratio = _validate_params(fields)
     var x = classical_host_f32(args[0], 2, "X", context)
     py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
@@ -259,8 +270,8 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
                              py_call(b.float, l1), py_call(b.float, l2), py_call(b.float, tol),
                              py_call(b.float, tol * PythonObject(0.01)),
                              _int(fields["max_iter"]), _int(fields["linesearch_max_iter"]),
-                             _int(_class_constant(model, fields, "lbfgs_memory")), 1 if intercept else 0,
-                             1 if Bool(py=_class_constant(model, fields, "penalty_normalized")) else 0,
+                             _int(_class_constant(model, fields, "lbfgs_memory", context)), 1 if intercept else 0,
+                             1 if Bool(py=_class_constant(model, fields, "penalty_normalized", context)) else 0,
                              1 if has_sw else 0, loss)
     _ = sw  # keep the Python object alive through the native call above
     if has_sw:
@@ -343,7 +354,7 @@ def _fitted_w(model: PythonObject, fields: PythonObject) raises -> PythonObject:
 def logistic_decision(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`decision_function`: (n,) float32 scores for two classes, (n, C)
     for more."""
-    var fields = py_fields(model)
+    var fields = logistic_fields(model, context)
     if not py_contains(fields, "_w"):
         raise Error("mojolearn LogisticRegression: call fit first")
     var x = classical_host_f32(source, 2, "X", context)
@@ -372,12 +383,14 @@ def logistic_decision(model: PythonObject, source: PythonObject, context: Python
 def logistic_predict(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict`: the device threshold (two classes) or row argmax (more)
     beside the scores, decoded to `classes_`."""
-    var fields = py_fields(model)
+    var fields = logistic_fields(model, context)
     var n_targets = _n_targets(model, fields)
     if n_targets == 1:
         var x = classical_host_f32(source, 2, "X", context)
         var rows = Int(py=x.shape[0])
         var cols = Int(py=x.shape[1])
+        if cols != Int(py=fields["n_features_in_"]):
+            raise Error("mojolearn LogisticRegression feature count differs from fit")
         var codes = labels_vector(rows, "<i8", context)
         var entries = _entries(model, fields, context)
         var native = py_get(entries, "qn_predict_binary")
@@ -425,7 +438,7 @@ def logistic_proba(model: PythonObject, source: PythonObject, context: PythonObj
     """`predict_proba`: the sigmoid (two classes) or softmax (more) of the
     decision scores, in float64."""
     var scores = logistic_decision(model, source, context)
-    var fields = py_fields(model)
+    var fields = logistic_fields(model, context)
     var n_targets = _n_targets(model, fields)
     var entries = _entries(model, fields, context)
     var rows = Int(py=scores.shape[0])
@@ -450,14 +463,16 @@ def logistic_log_proba(model: PythonObject, source: PythonObject, context: Pytho
     """`predict_log_proba`: `_log_or_inf` of every probability in the
     estimators binding (py2mojo_rows ROWS_LOG)."""
     var proba = logistic_proba(model, source, context)
-    var entries = _entries(model, py_fields(model), context)
+    var entries = _entries(model, logistic_fields(model, context), context)
     var flags = py_get(entries, "py2mojo_linear_flags")
     var bits = Int(py=py_call_typed(flags)) if flags is not None else 0
     if (bits & PY2MOJO_ROWS) == 0:
         raise Error("RuntimeError: mojolearn: this estimators binding predates py2mojo_rows; "
                     + "rebuild it (pixi run build)")
     var shape = proba.shape
-    var size = Int(py=proba.size)
+    var size = 1
+    for dimension in range(len(shape)):  # driver-loop: native Array shape slots
+        size *= Int(py=shape[dimension])
     var out = labels_empty(shape, "<f8", context)
     if size:
         _ = py_call_typed(_need(entries, "py2mojo_rows"), PythonObject(ROWS_LOG), PythonObject(labels_address(proba)),
@@ -496,6 +511,8 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
+        if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
+            raise Error("TypeError: LogisticRegression cannot invoke Python metaclass hooks")
         var hosts = py_get(context, "lr_host_contexts")
         if hosts is not None and len(hosts) > 0:
             var mro = py_type(model).__mro__
@@ -505,9 +522,36 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
                     context = host
                     break
         classical_connect_numpy(context)
+        context = lda_native_context(context)
         var result = PythonObject(None)
+        if operation == "initialize":
+            result = logistic_initialize(model, args, context)
+            return result.steal_data()
+        # get_params/set_params/is_fitted validate nothing beyond admission
+        # (scikit-learn's convention); consuming operations check values.
+        var configuring = operation == "get_params" or operation == "set_params" or operation == "is_fitted"
+        var fields = logistic_fields(model, context, True, configuring)
+        if operation == "get_params":
+            result = logistic_get_params(model, context)
+            return result.steal_data()
+        if operation == "set_params":
+            result = logistic_set_params(model, args[0], context)
+            return result.steal_data()
+        if operation == "is_fitted":
+            result = classical_is_fitted(model)
+            return result.steal_data()
+        if operation != "fit":
+            classical_require_fitted(model, False, operation, context)
+        classical_admit_value(args[0], context)
         if operation == "fit":
-            result = logistic_fit(model, args, context)
+            var target = classifier_label_list(args[1], context)
+            lda_native_labels(target, context, True, "LogisticRegression")
+            var shape = labels_shape_of(target, context)
+            if len(shape) == 2 and shape[1] == 1:
+                target = _flatten_labels(target, context)
+            classical_admit_value(args[2], context)
+            result = logistic_fit(model, Python.tuple(args[0], target, args[2]), context)
+            classifier_after_fit(logistic_storage(model, context), args[0], context)
         elif operation == "decision_function":
             result = logistic_decision(model, args[0], context)
         elif operation == "predict":
@@ -517,13 +561,24 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         elif operation == "predict_log_proba":
             result = logistic_log_proba(model, args[0], context)
         elif operation == "score":
-            result = logistic_score(model, args, context)
+            var target = classifier_label_list(args[1], context)
+            lda_native_labels(target, context, False, "LogisticRegression")
+            result = logistic_score(model, Python.tuple(args[0], target), context)
         else:
             raise Error("unknown native LogisticRegression operation")
+        result = _public_result(result, context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error^)
+        if String(error).startswith("NotFittedError:"):
+            try:
+                var call = PythonObject(from_borrowed=args_ptr)
+                var context = call[3]
+                var cls = classical_not_fitted_class(context)
+                return causal_set_exception(error_without_class(error, "NotFittedError"), cls._obj_ptr)
+            except nested:
+                return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if String(error).startswith("NotImplementedError:"):

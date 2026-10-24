@@ -26,6 +26,8 @@ def _ova(classes, **fit_kw):
 
 @pytest.mark.parametrize("classes", [2, 3])
 def test_ova_dimensions_link_weights_and_saved_mode(classes, tmp_path):
+    if _backend._CPU_ONLY is not None:
+        pytest.skip("CPU-only install: the gbdt host binding trains its declared lanes with unit weights only and refuses sample_weight by name (bindings/_mojolearn_gbdt_host.mojo); weighted GBDT fits need a GPU binding")
     weights = np.arange(1, 31, dtype=np.float32) / 2
     model, X = _ova(classes, sample_weight=weights)
     assert model.n_classes_ == model.approx_dim_ == classes

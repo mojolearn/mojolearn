@@ -1,0 +1,17 @@
+--- a/x_cnn/host/ops_host.mojo
++++ b/x_cnn/host/ops_host.mojo
+@@ -1202,6 +1202,8 @@
+     """out[i] = src[idx[i]]."""
+     for i in range(n):
+         out_buf[i] = src[Int(idx[i])]
++    if n > 0:  # SABOTAGE: the first gathered value doubled
++        out_buf[0] = out_buf[0] * Float32(2.0)
+ 
+ 
+ def vals_t_host(vals_f: FP, order_f: IP, order_t: IP, out_buf: FP, nnz: Int):
+@@ -1211,3 +1213,5 @@
+         by_edge[Int(order_f[i])] = vals_f[i]
+     for j in range(nnz):
+         out_buf[j] = by_edge[Int(order_t[j])]
++    if nnz > 0:  # SABOTAGE: the first transposed edge value doubled
++        out_buf[0] = out_buf[0] * Float32(2.0)

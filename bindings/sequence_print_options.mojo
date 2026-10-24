@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Read NumPy's public print configuration through admitted native metadata.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
@@ -14,7 +15,7 @@ def sequence_print_mode(context: PythonObject, release: Int) raises -> Int:
     var module = py_get(context["modules"], PythonObject(name))
     if module is None or py_type(module) is not context["module_type"]:
         raise Error("TypeError: native text output requires NumPy's print configuration module")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(module)
     var options = py_get(fields, "_format_options")
     if options is None:

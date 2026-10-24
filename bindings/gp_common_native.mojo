@@ -7,6 +7,7 @@
 # layouts for `save`), the free hyperparameters `_hyper` listed, and the copy
 # `_replace` / `_with_free_values` built. No method of a kernel class runs.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.family_common import family_repr, family_is_str, family_call, family_as_f32
 from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
@@ -14,7 +15,7 @@ from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_s
 
 def gp_mode_wanted(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`getattr(self, "numeric_mode", None) or _backend.default_mode()`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
     if want is None or not Bool(py=py_call(b.bool, want)):
         want = context["backend_fields"]["_DEFAULT_MODE"]
@@ -26,7 +27,7 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     """`_extension`: the binding the shell resolved, its `gp_numeric_mode`
     answer cross-checked against the requested tier. `prefix` is the
     estimator's message head, `rebuild` the sentence after the mode code."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
     var getter = py_call(b.getattr, binding, PythonObject("gp_numeric_mode"), PythonObject(None))
     if getter is not None:
@@ -43,7 +44,7 @@ def gp_caps(binding: PythonObject) raises -> Int:
     """`int(ext.gp_idn_caps())`, 0 when the binding has no such entry (the host
     binding and the `_OFF` builds): bit 1 is gpc_fit_all / gpc_predict_all,
     bit 2 gpr_fit_ptr / gpr_predict_ptr."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fn_obj = py_call(b.getattr, binding, PythonObject("gp_idn_caps"), PythonObject(None))
     if fn_obj is None:
         return 0
@@ -52,12 +53,12 @@ def gp_caps(binding: PythonObject) raises -> Int:
 
 def gp_entry(binding: PythonObject, name: String) raises -> PythonObject:
     """`ext.<name>`: an attribute lookup on the binding, refused as it was."""
-    return family_call(Python.import_module("builtins").getattr, binding, PythonObject(name))
+    return family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name))
 
 
 def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`NumericModeMixin.numeric_mode_used` on the resolved binding."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var full = String(py_call(b.getattr, binding, PythonObject("__name__")))
     var dotted = full.split(".")
     var name = String(dotted[len(dotted) - 1])
@@ -78,7 +79,7 @@ def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises ->
 
 def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
     """`getattr(self, "kernel_", None) or self._kernel`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fitted = py_get(fields, PythonObject("kernel_"), PythonObject(None))
     if fitted is not None and Bool(py=py_call(b.bool, fitted)):
         return fitted
@@ -91,7 +92,7 @@ def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> Pyth
     """`_kernel_arrays(kernel)`: (kinds <i4, params <f4, ls_len <i4, ls <f4,
     n_ls), the postfix nodes packed with `Array.from_list`; an empty
     length-scale table is one unused 1.0."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var nodes = Python.list()
     _schema_kernel_nodes(kernel, context["family_gp_kernel_nodes"], nodes)
     var kinds = Python.list()
@@ -117,7 +118,7 @@ def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> Pyth
 def _gp_kernel_class(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
     """The class of `kernel`'s ancestry that `table` connects (the walk
     archive_schema_native's layout lookup makes)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(kernel))
     for i in range(len(mro)):  # driver-loop: over the kernel class ancestry metadata
         if py_contains(table, mro[i]):
@@ -180,7 +181,7 @@ def gp_n_dims(kernel: PythonObject, context: PythonObject) raises -> Int:
 def gp_replace(kernel: PythonObject, values: PythonObject, mut pos: Int, context: PythonObject) raises -> PythonObject:
     """`kernel._replace(values)`: a new kernel of the same classes whose free
     entries are taken from `values[pos:]` in postfix order (`pos` advances)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var nodes_table = context["family_gp_kernel_nodes"]
     var cls = _gp_kernel_class(kernel, nodes_table)
     var layout = nodes_table[cls]
@@ -222,7 +223,7 @@ def gp_with_free_values(kernel: PythonObject, values: PythonObject, theta: Pytho
                         context: PythonObject) raises -> PythonObject:
     """`kernel._with_free_values(values, theta)`: the copy with `_theta_fit`
     set to the float list `theta` when it is not None."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var pos = 0
     var out = gp_replace(kernel, values, pos, context)
     if theta is not None:

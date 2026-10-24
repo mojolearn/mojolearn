@@ -524,7 +524,8 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     # under the family define alone.
     assert host_surface.sabotage_build_defines("linalg").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1"]
-    sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo",
+    sources = {"runtime_model_selection": ["bindings/runtime_model_selection_entry.mojo"],
+               "tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo",
                              "tokenizer/impl/tokenizer_host_shell_impl.mojo"],
                "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
                "linalg": ["gemm/host/gemm_lowbit_oracle.mojo"]}

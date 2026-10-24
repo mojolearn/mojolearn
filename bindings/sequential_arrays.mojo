@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential buffer admission and ndarray ABI ownership."""
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.sequential_inputs import sequential_input
 
 
 def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])

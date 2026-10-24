@@ -102,20 +102,24 @@ class Pipelines(Base):
             setattr(r, "step_" + step.replace("-", "_"), make(step))
         return r, order
 
-    def test_linux_failing_leaves_the_mac_publish_done(self):
+    # e1f7f8e24 (tools/RELEASE_CANDIDATE_GATE.md): the NVIDIA and AMD candidate gates run on
+    # linux-pack's files "before any publication", the Mac's included. The pipelines still build
+    # and check at once; a Linux failure now holds the Mac publish at the gates.
+    def test_linux_failing_holds_every_publish_at_the_gates(self):
         r, order = self.staged(fail={"linux-wait"})
         self.assertEqual(r.go(), 1)
-        self.assertTrue(r.recorded("publish-macos"))
-        for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd", "publish-core-linux",
-                      "publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
+        self.assertIn("macos-smoke", order)       # the Mac pipeline still builds and smokes
+        for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd", "gate-nvidia",
+                      "gate-amd", "publish-macos", "publish-core-linux", "publish-nvidia-ptx", "publish-nvidia",
+                      "publish-amd", "publish-meta-linux"):
             self.assertIn(later, r.STEPS)
             self.assertNotIn(later, order)
             self.assertFalse(r.recorded(later))
-        self.assertEqual(r.recorded("finish-line")["platforms"], ["macos"])
-        self.assertEqual(r.recorded("record")["platforms"], ["macos"])
+        self.assertEqual(r.recorded("finish-line")["platforms"], [])
+        self.assertEqual(r.recorded("record")["platforms"], [])
         text = "\n".join(r.lines)
         self.assertIn("core-linux: FAILED at linux-wait: boom linux-wait", text)
-        self.assertIn("macos: PUBLISHED", text)
+        self.assertIn("macos: BLOCKED at", text)
         self.assertEqual(r.state["failures"]["linux-wait"]["error"], "boom linux-wait")
 
     def test_mac_failing_leaves_the_linux_publish_done(self):
@@ -131,30 +135,24 @@ class Pipelines(Base):
         self.assertIn("macos: FAILED at macos-smoke", text)
         self.assertIn("core-linux: PUBLISHED", text)
 
-    def test_linux_waits_never_delay_the_mac_publish(self):
-        published = threading.Event()
-        gate = {"linux-wait": lambda: self.assertTrue(published.wait(20), "linux-wait held the Mac publish"),
-                "publish-macos": lambda: None}
-        r, order = self.staged(gate=gate)
-        real = r.step_publish_macos
-
-        def pub():
-            out = real()
-            published.set()
-            return out
-        r.step_publish_macos = pub
+    def test_the_mac_publish_waits_for_both_release_gates(self):
+        r, order = self.staged()
         self.assertEqual(r.go(), 0)
-        self.assertLess(order.index("publish-macos"), order.index("linux-assemble"))
+        for gate in ("gate-nvidia", "gate-amd"):
+            self.assertLess(order.index("linux-pack"), order.index(gate))
+            self.assertLess(order.index(gate), order.index("publish-macos"))
+            self.assertLess(order.index(gate), order.index("publish-core-linux"))
         self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia", "nvidia-ptx"])
 
     def test_a_rerun_resumes_only_what_is_not_done(self):
         r, _ = self.staged(fail={"linux-pack"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(r.recorded("record")["platforms"], ["macos"])
+        self.assertEqual(r.recorded("record")["platforms"], [])     # held at the gates (e1f7f8e24)
+        self.assertFalse(r.recorded("publish-macos"))
         r2, order = self.staged()
         r2.state = r.state
         self.assertEqual(r2.go(), 0)
-        self.assertNotIn("publish-macos", order, "a recorded publish is not repeated")
+        self.assertIn("publish-macos", order, "the held Mac publish runs once the gates pass")
         self.assertNotIn("rehearsal", order)
         self.assertIn("linux-pack", order)
         # the finish line and the record run again for the newly published platforms
@@ -188,7 +186,8 @@ class Pipelines(Base):
         # reason to rerun. No release-check, macos-self-test or joint diff.
         self.assertEqual(release.NEEDS["gpu-column-nvidia"], ["linux-pack"])
         self.assertEqual(release.NEEDS["gpu-column-amd"], ["linux-pack"])
-        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke"])
+        # e1f7f8e24: every publish, the Mac's included, waits for both candidate gates
+        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "gate-nvidia", "gate-amd"])
         for gone in ("release-check", "macos-self-test", "linux-joint-diff"):
             self.assertNotIn(gone, release.Release.STEPS)
 
@@ -496,6 +495,12 @@ class SourceAndTooling(Base):
         receipt.parent.mkdir(parents=True, exist_ok=True)
         receipt.write_text(json.dumps(dict(status="PASSED", scope="expanded", source_commit=Y,
                                           wheel_sha256=release.sha256(whl))))
+        # e1f7f8e24: publication requires both candidate gates
+        r.gate_ok = lambda vendor: (False, "no gate report")
+        with self.assertRaisesRegex(release.StepFailed, "publication requires both candidate gates"):
+            r.step_publish_macos()
+        self.assertEqual(calls, [])
+        r.gate_ok = lambda vendor: (True, "")
         out = r.step_publish_macos()
         (cmd, env), = calls
         self.assertEqual(cmd[:2], ["bash", "tools/release_linux_publish.sh"])

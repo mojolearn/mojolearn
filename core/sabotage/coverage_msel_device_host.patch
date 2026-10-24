@@ -1,0 +1,91 @@
+--- a/core/msel_device.mojo
++++ b/core/msel_device.mojo
+@@ -236,6 +236,12 @@
+             raise Error("msel take_rows: null destination")
+         ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=dst_addr), src_buf=d_out)
+         ctx.synchronize()
++        if n_idx >= 2:  # SABOTAGE: the first two gathered rows swapped (valid rows, wrong order)
++            var sab = _U8(unsafe_from_address=dst_addr)
++            for b in range(row_bytes):
++                var t = sab[b]
++                sab[b] = sab[row_bytes + b]
++                sab[row_bytes + b] = t
+     _ = d_out^
+     _ = d_status^
+     return ok
+@@ -334,6 +340,8 @@
+     )
+     ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d_dst)
+     ctx.synchronize()
++    var sab = _F32(unsafe_from_address=dst_addr)  # SABOTAGE: the first probability moved by 1/128
++    sab[0] = sab[0] + Float32(0.0078125)
+     _ = d_src^
+     _ = d_dst^
+ 
+@@ -466,7 +474,8 @@
+     )
+     if n_side > 0:
+         ctx.enqueue_function[_split_side_kernel](
+-            d_perm.unsafe_ptr(), Int64(m), Int64(n_test), Int64(n_side), d_counts.unsafe_ptr(),
++            # SABOTAGE: one test group moved to train
++            d_perm.unsafe_ptr(), Int64(m), Int64(n_test - 1 if n_test > 1 else n_test), Int64(n_side), d_counts.unsafe_ptr(),
+             d_table.unsafe_ptr(), d_sums.unsafe_ptr(), d_status.unsafe_ptr(),
+             grid_dim=_grid(n_side), block_dim=MSEL_TPB,
+         )
+@@ -540,9 +549,12 @@
+         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_sizes)
+         ctx.synchronize()
+         # the n_folds fold sizes widened to the caller's int64 (k scalars)
++        var sab = _I32(unsafe_from_address=dst_addr)  # SABOTAGE: every group moved to the next fold, sizes rotated with it
++        for g in range(m):
++            sab[g] = (sab[g] + Int32(1)) % Int32(n_folds)
+         var sp = _I64(unsafe_from_address=sizes_addr)
+         for f in range(n_folds):
+-            sp.unsafe_store(f, Int64(h.unsafe_ptr()[f]))
++            sp.unsafe_store((f + 1) % n_folds, Int64(h.unsafe_ptr()[f]))
+         _ = h^
+     _ = d_perm^
+     _ = d_counts^
+--- a/core/msel_host.mojo
++++ b/core/msel_host.mojo
+@@ -107,6 +107,11 @@
+     for r in range(n_idx):
+         var s = Int(idx.unsafe_load(r))
+         memcpy(dest=dst + r * row_bytes, src=src + s * row_bytes, count=row_bytes)
++    if n_idx >= 2:  # SABOTAGE: the first two gathered rows swapped (valid rows, wrong order)
++        for b in range(row_bytes):
++            var t = dst[b]
++            dst[b] = dst[row_bytes + b]
++            dst[row_bytes + b] = t
+     return True
+ 
+ 
+@@ -142,6 +147,8 @@
+     var dst = _F32(unsafe_from_address=dst_addr)
+     for i in range(n):
+         dst.unsafe_store(i, msel_load_f32(src, code, i * k + col))
++    if n > 0:  # SABOTAGE: the first probability moved by 1/128
++        dst.unsafe_store(0, dst.unsafe_load(0) + Float32(0.0078125))
+ 
+ 
+ def host_rebase_offsets_i32(
+@@ -186,7 +193,7 @@
+         tp.unsafe_store(g, Int32(2))
+     for i in range(n_test + n_train):
+         var g = Int(pp.unsafe_load(i))
+-        if i < n_test:
++        if i < (n_test - 1 if n_test > 1 else n_test):  # SABOTAGE: one test group moved to train
+             tp.unsafe_store(g, Int32(1))
+             c_te += Int32(cp.unsafe_load(g))
+         else:
+@@ -214,8 +221,8 @@
+         var size = m // n_folds + (1 if f < m % n_folds else 0)
+         for j in range(start, start + size):
+             var g = Int(pp.unsafe_load(j))
+-            dp.unsafe_store(g, Int32(f))
+-            sizes[f] += Int32(cp.unsafe_load(g))
++            dp.unsafe_store(g, Int32((f + 1) % n_folds))  # SABOTAGE: every group moved to the next fold, sizes with it
++            sizes[(f + 1) % n_folds] += Int32(cp.unsafe_load(g))
+         start += size
+     for f in range(n_folds):
+         sp.unsafe_store(f, Int64(sizes[f]))

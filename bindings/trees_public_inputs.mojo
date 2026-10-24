@@ -25,9 +25,11 @@ from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
-from bindings.sequential_admission import _ordinary_torch
+from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
+from bindings.classifier_public_lifecycle import classifier_label_list
+from bindings.metrics_native_support import metric_is_bool, metric_is_integral, metric_is_real, metric_float
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -673,9 +675,9 @@ def _flatten_into(item: PythonObject, out_buf: PythonObject, b: PythonObject) ra
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
     """`_labels._kind_of_type`: 1 str, 2 number, 0 refused."""
-    if Bool(py=py_call(b.issubclass, t, b.str)):
+    if t is b.str:
         return 1
-    if Bool(py=py_call(b.issubclass, t, context["trees_real_type"])) or String(t.__name__) == "bool_":
+    if t is b.int or t is b.float or t is b.bool or _one_of(t, context["scalar_types"]):
         return 2
     return 0
 
@@ -694,6 +696,8 @@ def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> Trees
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step
         var item = labels[i]
         var t = py_type(item)
+        if py_type(t) is not b.type:
+            raise Error("TypeError: native tree labels require ordinary numeric or string storage without Python hooks")
         var kind_obj = py_get(kinds, t)
         var kind = 0
         if kind_obj is None:
@@ -702,7 +706,7 @@ def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> Trees
         else:
             kind = Int(py=kind_obj)
         if kind == 0:
-            raise Error("mojolearn: label " + String(py_call(b.repr, item)) + " is neither a number nor a str")
+            raise Error("mojolearn: labels require native numbers or strings without Python hooks")
         if kind == 2 and Bool(py=item != item):
             raise Error("mojolearn: y contains a NaN label; NaN is not a class")
         seen_str = seen_str or kind == 1
@@ -792,17 +796,16 @@ def trees_encode_labels(y: PythonObject, context: PythonObject) raises -> TreesL
     return _sorted_classes(flat, context)
 
 
-def trees_label_kind(classes: PythonObject, context: PythonObject) raises -> String:
+def trees_label_kind(var classes: PythonObject, context: PythonObject) raises -> String:
     """`_labels.label_kind`: 'int', 'float' or 'object'."""
-    var b = trees_builtins()
+    classes = classifier_label_list(classes, context)
     var all_int = True
     var all_real = True
     for i in range(len(classes)):  # driver-loop: over kind test of the class labels (classes-sized: distinct classes)
         var c = classes[i]
-        var t = py_type(c)
-        var is_bool = t is b.bool or String(t.__name__) == "bool_"
-        var integral = Bool(py=py_call(b.isinstance, c, context["trees_integral_type"])) and not is_bool
-        var real = Bool(py=py_call(b.isinstance, c, context["trees_real_type"])) and not is_bool
+        var is_bool = metric_is_bool(c, context)
+        var integral = metric_is_integral(c, context) and not is_bool
+        var real = metric_is_real(c, context) and not is_bool
         all_int = all_int and integral
         all_real = all_real and real
     if all_int:
@@ -812,11 +815,14 @@ def trees_label_kind(classes: PythonObject, context: PythonObject) raises -> Str
     return "object"
 
 
-def trees_decode_labels(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.decode_labels(classes, codes)` for int64 or int32 codes:
     integer classes an int64 Array, real classes a float64 Array (the base
     binding's gathers), str or bool classes a Python list."""
     var b = trees_builtins()
+    # ClassLabels inherits list but its __getitem__ is Python. Copy its
+    # verified native list storage once, preserving the caller's label objects.
+    classes = classifier_label_list(classes, context)
     var kind = trees_label_kind(classes, context)
     var n = Int(py=codes.size)
     var k = len(classes)
@@ -921,10 +927,9 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
     var all_one = True
     for i in range(k):  # driver-loop: over class weight argument checks
         var v = objects[i]
-        var t = py_type(v)
-        if t is b.bool or String(t.__name__) == "bool_" or not Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):
+        if metric_is_bool(v, context) or not metric_is_real(v, context):
             raise Error("class weights must be finite nonnegative real numbers")
-        var f = Float64(py=py_call(b.float, v))
+        var f = metric_float(v, context)
         if not isfinite(f) or f < 0:
             raise Error("class weights must be finite nonnegative real numbers")
         values.append(f)

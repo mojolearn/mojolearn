@@ -8,6 +8,7 @@
 # `import mojolearn` itself never imports scikit-learn or NumPy, and the
 # records returned are always scikit-learn's own dataclass types. No dataclass
 # constructor, default factory, setattr or Python tag callback runs.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains, py_setitem
 from bindings.classical_attributes import _type_fields, _type_mro
@@ -16,7 +17,7 @@ from bindings.classical_attributes import _type_fields, _type_mro
 def _tags_module() raises -> PythonObject:
     # The loaded module when scikit-learn is already imported; otherwise load
     # it now. scikit-learn absent raises ImportError, as before.
-    var module = py_get(Python.import_module("sys").modules, "sklearn.utils._tags")
+    var module = py_get(native_loaded_module("sys").modules, "sklearn.utils._tags")
     if module is None:
         try:
             module = Python.import_module("sklearn.utils._tags")
@@ -40,7 +41,7 @@ def _overrides(value: PythonObject, declared: PythonObject, what: String) raises
     # Admission of a `_sklearn_input_tags` / `_sklearn_target_tags` override:
     # an ordinary dict of declared field name -> bool. Anything else is refused
     # before any record is built.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.dict:
         raise Error("TypeError: " + what + " must be a dict of tag names to booleans")
     var names = py_call(b.list, value)
@@ -56,7 +57,7 @@ def _overrides(value: PythonObject, declared: PythonObject, what: String) raises
 
 
 def _record_class(fields: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_get(fields, name)
     if cls is None or py_type(cls) is not b.type:
         raise Error("ImportError: sklearn.utils lacks the standard " + name + " record")
@@ -73,7 +74,7 @@ def _record_class(fields: PythonObject, name: String, context: PythonObject) rai
 def _build(cls: PythonObject, values: PythonObject, missing: PythonObject, context: PythonObject) raises -> PythonObject:
     # One record: every declared field from `values` when named there,
     # otherwise its declared immutable default.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var own = _type_fields(cls)
     var declared = own["__dataclass_fields__"]
     var names = py_call(b.list, declared)
@@ -101,7 +102,7 @@ def _build(cls: PythonObject, values: PythonObject, missing: PythonObject, conte
 def _preserved_dtypes(model: PythonObject, fixed_dtypes: PythonObject) raises -> PythonObject:
     # A fresh list each call. StandardScaler/MinMaxScaler fix ["float32"];
     # the others read their class's `_sklearn_preserves_dtype` (default none).
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var names = fixed_dtypes
     if names is None:
         names = _class_metadata(model, "_sklearn_preserves_dtype", Python.tuple())
@@ -120,7 +121,7 @@ def scaler_tags(model: PythonObject, context: PythonObject, fixed_dtypes: Python
     answer (estimator type, target/input overrides, requires_fit) with
     transformer tags. `fixed_dtypes`: the preserved dtype names when the
     estimator fixes them, or None to read `_sklearn_preserves_dtype`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var module = _tags_module()
     if py_type(module) is not context["native_module_type"]:
         raise Error("TypeError: sklearn tags require the ordinary sklearn metadata module")

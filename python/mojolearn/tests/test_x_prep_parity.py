@@ -98,19 +98,39 @@ def test_covariance_estimator():
     y = (X[:, 0] + X[:, 1] > 0).astype(int) + (X[:, 2] > 0.8)
     for est in (skc.EmpiricalCovariance, skc.LedoitWolf):
         for s in ("lsqr", "eigen"):
-            m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est()).fit(X, y)
-            r = skd.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est()).fit(X, y)
-            np.testing.assert_allclose(np.asarray(m.predict_proba(X)), r.predict_proba(X), atol=2e-4)
-            np.testing.assert_allclose(np.asarray(m.covariance_), r.covariance_, rtol=1e-4, atol=1e-5)
-        q = ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=est()).fit(X, y)
-        rq = skd.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=est()).fit(X, y)
-        np.testing.assert_allclose(np.asarray(q.predict_proba(X)), rq.predict_proba(X), atol=2e-4)
+            # Since a5f9cc738 the native LDA owner refuses a covariance_estimator
+            # object at fit: fitting it would run the estimator's Python code
+            # inside the runtime. The constructor stores it verbatim.
+            m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est())
+            try:
+                m.fit(X, y)
+            except TypeError as error:
+                assert "covariance_estimator cannot invoke Python callbacks" in str(error), error
+            else:
+                raise AssertionError(f"LDA solver={s} fitted a Python covariance_estimator")
+        # QDA refuses a covariance_estimator object at fit for the same
+        # reason (its fit would run the estimator's Python `fit` inside the
+        # runtime); the constructor stores it, and nothing of it runs.
+        calls = []
+        spy = type("Spy", (est,), {"fit": lambda self, *a, **k: calls.append(a) or est.fit(self, *a, **k)})
+        q = ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=spy())
+        try:
+            q.fit(X, y)
+        except TypeError as error:
+            assert "covariance_estimator cannot invoke Python callbacks" in str(error), error
+        else:
+            raise AssertionError("QDA fitted a Python covariance_estimator")
+        assert not calls, "QDA called the covariance_estimator's Python fit"
+    # The supported path: covariance_estimator=None and the native solver.
+    q = ml.QuadraticDiscriminantAnalysis(solver="eigen").fit(X, y)
+    rq = skd.QuadraticDiscriminantAnalysis(solver="eigen").fit(X, y)
+    np.testing.assert_allclose(np.asarray(q.predict_proba(X)), rq.predict_proba(X), atol=2e-4)
     for cls, kw in ((ml.LinearDiscriminantAnalysis, dict(solver="svd")),
                     (ml.QuadraticDiscriminantAnalysis, dict(solver="svd")),
                     (ml.LinearDiscriminantAnalysis, dict(solver="lsqr", shrinkage=0.5))):
         try:
             cls(covariance_estimator=skc.EmpiricalCovariance(), **kw).fit(X, y)
-        except ValueError:
+        except (ValueError, TypeError):  # LDA/QDA: the covariance_estimator TypeError above
             pass
         else:
             raise AssertionError(f"{cls.__name__} {kw} accepted a covariance_estimator")

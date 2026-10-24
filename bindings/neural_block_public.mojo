@@ -256,6 +256,11 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
         var sizes = _neural_lengths(lengths, b, l, context)
         var padded = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=padded._addr), Int(py=x._addr), sizes, b, l, d)
+        # `x` may be the only reference to a fresh Array converted from a NumPy
+        # input; Mojo destroys a local at its last named use, which was the
+        # `_addr` read above, so without this the copy read freed memory and
+        # row 0's first floats came back as allocator bookkeeping.
+        _ = x^
         var output = _neural_plain(owner, padded, PythonObject(None), False)
         var result = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=result._addr), Int(py=output._addr), sizes, b, l, d)

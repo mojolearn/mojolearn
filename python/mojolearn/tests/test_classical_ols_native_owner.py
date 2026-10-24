@@ -167,3 +167,24 @@ def test_ols_native_admission_errors_do_not_enter_python(case):
     elif case == "negative_weights":
         weight = -np.ones(len(x), dtype="f4")
     clean(audit_native_call(native_fit, LinearRegression(), x, y, weight), ValueError)
+
+
+class _ArrayOnly:
+    """scikit-learn's _NotAnArray shape: only __array__, no buffer or sequence."""
+
+    def __init__(self, data):
+        self.data = data
+
+    def __array__(self, dtype=None, copy=None):
+        raise AssertionError("__array__ must not run in a native fit")
+
+
+@pytest.mark.parametrize("estimator", [LinearRegression, Ridge])
+def test_array_only_sample_weight_refusal_names_accepted_types(estimator):
+    x, y, _, _ = fixture("full_rank")
+    with pytest.raises(TypeError) as caught:
+        estimator().fit(x, y, sample_weight=_ArrayOnly(np.ones(len(x), dtype="f4")))
+    message = str(caught.value)
+    assert "sample_weight must be None, a number, a NumPy array, a buffer" in message
+    assert "list or tuple of numbers" in message
+    assert "_ArrayOnly" in message and "__array__" in message

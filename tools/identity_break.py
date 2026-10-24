@@ -5959,15 +5959,6 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
 
-class _FoldClf:
-    """A classifier stand-in for `split_descriptor`, which refuses to guess.
-    The descriptor reads only `_estimator_type`; nothing is fitted."""
-    _estimator_type = "classifier"
-
-    def get_params(self, deep=False):
-        return {}
-
-
 @lane("cross-val-folds")
 def _(ml, X, yc, yr, Xh=None):
     """THE FOLD PARTITION ITSELF, AND WHAT IT FAILS TO PIN
@@ -6046,7 +6037,11 @@ def _(ml, X, yc, yr, Xh=None):
                                           np.arange(n, dtype=np.int64))):
                 ok = 0
     parts["partition"] = _h(np.int64(ok))
-    d = ms.split_descriptor(Xn, np.ascontiguousarray(yc[:n]), estimator=_FoldClf(), cv=5)
+    # Only classifier metadata is needed; no estimator is fitted. Use an
+    # admitted native type rather than a Python estimator-protocol stand-in.
+    # The descriptor does not hash the estimator or its numeric mode.
+    d = ms.split_descriptor(Xn, np.ascontiguousarray(yc[:n]),
+                            estimator=ml.LogisticRegression(numeric_mode="identical"), cv=5)
     parts["descriptor"] = _h(np.frombuffer(
         "|".join(f"{k}={d[k]}" for k in sorted(d)).encode("ascii"), dtype=np.uint8))
     return _fit(parts)

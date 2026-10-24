@@ -8,6 +8,7 @@ legacy forest archives cannot reconstruct training parameters for cloning.
 import functools
 import inspect
 import weakref
+from types import GetSetDescriptorType
 
 from ._array import Array
 from ._buffer import _materialize, empty, as_f32_c
@@ -56,22 +57,27 @@ def forest_estimator(kind):
                                                 default=None))
         signature = signature.replace(parameters=parameters)
 
+        # Import-time argument/layout metadata; binding a public call must not
+        # execute inspect.Signature or inspect.Parameter Python methods.
+        rows = tuple((p.name, int(p.kind), p.default is inspect.Parameter.empty,
+                      None if p.default is inspect.Parameter.empty else p.default)
+                     for p in parameters if p.name != "self")  # glue: fixed constructor signature
+        if any(row[1] not in (0, 1, 3) for row in rows):  # glue: fixed constructor signature kinds
+            raise TypeError("native forest constructors require named parameters")
+        ancestry = type.__dict__["__mro__"].__get__(cls)
+        namespaces = tuple(type.__dict__["__dict__"].__get__(base) for base in ancestry)  # glue: import-time native storage metadata
+        descriptor = next(row["__dict__"] for row in namespaces if "__dict__" in row)  # glue: locate the native instance dictionary
+        if type(cls) is not type or type(descriptor) is not GetSetDescriptorType:
+            raise TypeError("native forest constructors require native instance storage")
+        protected = ("__getattribute__", "__getattr__", "__setattr__", "__del__")
+        hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))  # glue: import-time inherited hook lookup
+                      for name in protected)  # glue: fixed inherited hook identities
+        if "trees_unavailable" not in _TREES_CONTEXT:
+            _TREES_CONTEXT["trees_constructors"][cls] = (rows, descriptor.__get__, hooks)
+
         @functools.wraps(original)
         def initialize(self, *args, **kwargs):
-            # scikit-learn's convention: the constructor stores its
-            # parameters verbatim and checks nothing; `_validate_params`
-            # (run by `_refresh_config` at the start of every fit) does.
-            # Inside `_validate_params` a subclass constructor's
-            # `super().__init__` must reach the parent's checking constructor,
-            # or the parent's native configuration (`_cfg`) is never derived
-            # (DecisionTree* on top of RandomForest*).
-            if self.__dict__.get("_forest_validating"):
-                return original(self, *args, **kwargs)
-            bound = signature.bind(self, *args, **kwargs)
-            bound.apply_defaults()
-            for name in cls._parameter_names:  # glue: copies constructor parameter names
-                setattr(self, name, bound.arguments[name])
-            self._has_constructor_parameters = True
+            return _TREES(self, "trees_forest_construct", (cls, args, kwargs), _TREES_CONTEXT)
 
         initialize.__signature__ = signature
         cls.__init__ = initialize
@@ -82,6 +88,16 @@ def forest_estimator(kind):
     return decorate
 
 
+def held_resident_forest(model):
+    """The prepared resident snapshot in `model`'s holder dict, or None.
+
+    Reads the holder directly: the public forests' native attribute lookup
+    refuses Python data descriptors such as the `_resident_forest` property,
+    so `getattr(model, "_resident_forest", None)` raises TypeError there."""
+    holder = model.__dict__.get("_resident_holder")  # glue: the fit's holder dict
+    return holder.get("forest") if holder else None  # glue: one keyed read
+
+
 def _frozen_copy(a):
     """A read-only copy of a flat int32 or float32 model array."""
     return Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f"))
@@ -89,31 +105,10 @@ def _frozen_copy(a):
 
 class ForestProtocol:
     def get_params(self, deep=True):
-        for owner in type(self).__mro__:  # glue: walks the class hierarchy
-            if "__init__" in owner.__dict__:
-                if "_parameter_names" not in owner.__dict__:
-                    raise TypeError("Forest subclasses with a custom constructor must register "
-                                    "their parameters before cloning or refitting")
-                break
-        if not getattr(self, "_has_constructor_parameters", False):
-            raise ValueError("This inference-only forest archive has no constructor "
-                             "parameters; construct a new estimator for cloning/refitting")
-        return {name: getattr(self, name) for name in self._parameter_names}  # glue: returns constructor parameters by name
+        return _TREES(self, "trees_forest_get_params", (deep,), _TREES_CONTEXT)
 
     def set_params(self, **params):
-        if not params:
-            return self
-        values = self.get_params()
-        unknown = sorted(set(params) - values.keys())  # glue: names unknown keyword parameters
-        if unknown:
-            raise ValueError(f"Invalid parameter(s) {unknown} for {type(self).__name__}")
-        values.update(params)
-        # The parameter checks run at fit (`_validate_params`), as in
-        # scikit-learn; a new setting drops the fitted state.
-        replacement = type(self)(**values)
-        self.__dict__.clear()
-        self.__dict__.update(replacement.__dict__)
-        return self
+        return _TREES(self, "trees_public_forest_set_params", (params,), _TREES_CONTEXT)
 
     def _validate_params(self):
         """The constructor checks, run at fit (scikit-learn's convention):
@@ -313,7 +308,7 @@ class ForestProtocol:
             raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
         mode = self._effective_mode()
         ordered = self._resident_ordered_flag()
-        resident = getattr(self, "_resident_forest", None)
+        resident = held_resident_forest(self)
         if resident is None or not resident.matches(native, arrays, dimensions, mode, ordered):
             # A bytes owner cannot be made writable again via setflags(). A
             # caller retaining an old mutable private-array alias cannot alter
@@ -386,6 +381,6 @@ class ForestProtocol:
         x_metrics binding's grouped match count (`accuracy_fraction`).
         Regression scoring uses the same Float32 target domain as tree fitting.
         """
-        return _TREES(self, "trees_score_forest", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 

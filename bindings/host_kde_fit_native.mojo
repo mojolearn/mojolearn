@@ -14,7 +14,7 @@ from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.host_tree_native import host_tree_constructor_fields
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_logistic_native import host_logistic_classes
 from core.scaler_fit_impl import scaler_cast

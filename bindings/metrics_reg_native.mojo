@@ -15,11 +15,14 @@
 # Python `words(out, 2, "d")` read them. Same program, same kernels: the
 # bits do not move.
 from std.memory import memcpy, bitcast
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
+from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run
 from bindings.family_common import (
@@ -287,6 +290,11 @@ def _arena_double(arena: PythonObject, off: Int) raises -> Float64:
     return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
 
 
+def _arena_float(arena: PythonObject, off: Int) raises -> Float32:
+    """The binary32 value at arena[off], read while `arena` is borrowed."""
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0]
+
+
 def _arena_int(arena: PythonObject, off: Int) raises -> Int:
     return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0])
 
@@ -311,7 +319,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     """One `_Reg` target: `materialize_f32_lists`, the float32 dtype rule,
     (n,) as (n, 1), the nonempty rank rule, C order, finite. Returns
     (array, n, n_outputs)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var view = classical_view(source, context, name)
     var typestr = classical_dtype_str(view, context)
     if (typestr == "<f8" or typestr == "<i8") and not classical_is_array(source, context):
@@ -380,7 +388,7 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
              context: PythonObject) raises -> _Reg:
     """`_Reg(y_true, y_pred, sample_weight, multioutput, caller)` from
     args = (y_true, y_pred, sample_weight, ...)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var y = _reg_target(args[0], "y_true", caller, context)
     var p = _reg_target(args[1], "y_pred", caller, context)
     var n = Int(py=y[1])
@@ -415,39 +423,22 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
 
 
 def _metric_real(value: PythonObject, context: PythonObject) raises -> Bool:
-    """A real number that is not a bool (`is_bool` or not numbers.Real)."""
-    var b = Python.import_module("builtins")
-    if family_isinstance(value, b.bool) or String(py_type(value).__name__) == "bool_":
-        return False
-    return family_isinstance(value, context["family_metrics_real"])
+    return metric_is_real(value, context) and not metric_is_bool(value, context)
 
 
 def _check_alpha(alpha: PythonObject, context: PythonObject) raises -> Float64:
     """`_expansion_metrics._check_alpha`: a real number in [0, 1]."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if not _metric_real(alpha, context):
         raise Error("alpha must be a real number in [0, 1]")
-    var value = Float64(py=family_call(b.float, alpha))
+    var value = metric_float(alpha, context)
     if not (value >= 0 and value <= 1):
         raise Error("alpha must be a real number in [0, 1]")
     return value
 
 
 def _undefined(message: String, context: PythonObject) raises:
-    """`_undefined_warning`: scikit-learn's UndefinedMetricWarning when the
-    caller imported sklearn.exceptions, else mojolearn's; attributed to the
-    metric's caller."""
-    var b = Python.import_module("builtins")
-    var category = context["family_metrics_undefined"]
-    var sk = py_get(Python.import_module("sys").modules, PythonObject("sklearn.exceptions"), PythonObject(None))
-    if sk is not None:
-        category = py_call(b.getattr, sk, PythonObject("UndefinedMetricWarning"), category)
-    var keywords = Python.dict()
-    py_setitem(keywords, "stacklevel", PythonObject(2))
-    _ = family_call_kw(Python.import_module("warnings").warn, keywords, PythonObject(message), category)
-
-
-# ---------------------------------------------------------------- the metrics
+    metric_undefined(message, context)
 
 
 def _mean_error(args: PythonObject, kind: String, caller: String, root: Bool, scalar: Float64,
@@ -500,13 +491,16 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
     var out = prog.want(prog.alloc(1), 1)
     prog.stage("col_max", 1, [t, r.n, 1, out])
     var arena = _reg_run(prog, args[2], context)
-    var word = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * out)[0]
-    return PythonObject(Float64(word))
+    # Read through the helper: `arena` is the only owner of the store, and
+    # Mojo releases a local at its last named use, so a pointer taken from
+    # `_arena_base(arena)` here would read freed words (different max_error
+    # bits run to run on CUDA).
+    return PythonObject(Float64(_arena_float(arena, out)))
 
 
 def _explained_variance(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, sample_weight, multioutput, force_finite, mode)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var r = _reg_new(args, args[3], "explained_variance_score", True, context)
     var terms = context["family_metrics_terms"]
     var sq = Int(py=terms["sq"])
@@ -533,7 +527,7 @@ def _explained_variance(args: PythonObject, context: PythonObject) raises -> Pyt
 def _tweedie_power(power: PythonObject, context: PythonObject) raises -> Float64:
     if not _metric_real(power, context):
         raise Error("power must be a real number")
-    return Float64(py=family_call(Python.import_module("builtins").float, power))
+    return Float64(py=family_call(native_loaded_module("builtins").float, power))
 
 
 def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: PythonObject) raises:
@@ -563,7 +557,7 @@ def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bo
         raise Error("Multioutput not supported in " + caller)
     if d2 and r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
-        return py_call(Python.import_module("builtins").float, PythonObject("nan"))
+        return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
     var terms = context["family_metrics_terms"]
     var tweedie = Int(py=terms["tweedie"])
     r.program(power, context)
@@ -599,7 +593,7 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
     var r = _reg_new(args, args[3], "d2_pinball_score", False, context)
     if r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
-        return py_call(Python.import_module("builtins").float, PythonObject("nan"))
+        return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
     var terms = context["family_metrics_terms"]
     var pinball = Int(py=terms["pinball"])
     r.program(alpha, context)
@@ -616,7 +610,7 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
 def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`r2_score_options`: SS_res over SS_tot per output, one program;
     args = (y_true, y_pred, sample_weight, multioutput, force_finite, mode)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var r = _reg_new(args, args[3], "r2_score", True, context)
     if r.n < 2:
         _undefined("R^2 score is not well-defined with less than two samples.", context)
@@ -639,10 +633,12 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     return _reg_result(r, out, arena, context)
 
 
-def metrics_reg_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_reg_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The regression metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py)."""
     classical_connect_numpy(context)
+    classical_admit_value(args, context)
+    args = metric_arguments(args, 0, context)
     if operation == "family_metric_regression_error":
         # args = (name, y_true, y_pred, sample_weight, multioutput, mode):
         # mean_squared_error / mean_absolute_error / root_mean_squared_error

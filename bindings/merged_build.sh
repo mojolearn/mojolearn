@@ -14,6 +14,9 @@
 # <outdir>/<stem>.so and is recorded in <outdir>/_mojolearn_merged.json, which
 # python/mojolearn/_merged.py reads to load each member under its own module
 # name. `python3 tools/merged_bindings.py plan --dir <dir>` prints the plan.
+# `tools/development_build.py` uses --layout development and --rootdir for
+# incremental group builds. Release callers omit them and keep the original
+# manifest, output layout and compiler environment selection.
 #
 # SAME FLAGS AS THE PER-BINDING SCRIPTS, SAME BITS. Every member is compiled with
 # exactly the flags its own bindings/build_<x>.sh passes on this platform:
@@ -54,16 +57,20 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$here"
 
 usage() {
-    echo "usage: [MOJOLEARN_NUMERIC_MODE=fast|identical] sh bindings/merged_build.sh gpu|host [--group <stem>] [--outdir <dir>]" >&2
+    echo "usage: [MOJOLEARN_NUMERIC_MODE=fast|identical] sh bindings/merged_build.sh gpu|host [--group <stem>] [--outdir <dir>] [--layout release|development] [--rootdir <dir>]" >&2
 }
 kind=gpu
 only=""
 outdir=""
+layout=release
+rootdir=""
 while [ $# -gt 0 ]; do
     case "$1" in
         gpu|host) kind=$1 ;;
         --group) [ $# -ge 2 ] || { usage; exit 2; }; only=$2; shift ;;
         --outdir) [ $# -ge 2 ] || { usage; exit 2; }; outdir=$2; shift ;;
+        --layout) [ $# -ge 2 ] || { usage; exit 2; }; layout=$2; shift ;;
+        --rootdir) [ $# -ge 2 ] || { usage; exit 2; }; rootdir=$2; shift ;;
         *) usage; exit 2 ;;
     esac
     shift
@@ -150,13 +157,13 @@ fi
 outdir=${outdir:-$default_outdir}
 mkdir -p "$outdir"
 
-plan=$("$PY" tools/merged_bindings.py plan --dir "$dir" --platform "$plat" --byte-lm "$byte_lm")
+plan=$("$PY" tools/merged_bindings.py plan --dir "$dir" --platform "$plat" --byte-lm "$byte_lm" --layout "$layout")
 [ -n "$plan" ] || { echo "merged_build: bindings/merged_groups.json plans nothing for $dir" >&2; exit 2; }
 if [ -n "$only" ]; then
     printf '%s\n' "$plan" | awk -v s="$only" '$1==s{f=1} END{exit !f}' \
         || { echo "merged_build: no group '$only' in the $dir plan:" >&2; printf '%s\n' "$plan" | awk '{print "  " $1}' >&2; exit 2; }
 fi
-if [ "$kind" = host ] && printf '%s\n' "$plan" | grep -q '_mojolearn_tokenizer_host'; then
+if [ "$kind" = host ] && printf '%s\n' "$plan" | awk -v s="$only" '!s || $1==s' | grep -q '_mojolearn_tokenizer_host'; then
     sh tokenizer/tools/gen_unicode_table.sh < /dev/null
 fi
 
@@ -173,11 +180,25 @@ while read -r stem cls members; do
         *) echo "merged_build: unknown flags class '$cls' for $stem" >&2; exit 2 ;;
     esac
     root="$tmpdir/$stem.mojo"
+    if [ -n "$rootdir" ]; then
+        mkdir -p "$rootdir"
+        root="$rootdir/$stem.mojo"
+    fi
     "$PY" tools/merged_bindings.py root --stem "$stem" --members "$members" --out "$root" < /dev/null
     count=$(printf '%s' "$members" | tr ',' '\n' | grep -c .)
     echo "== $dir/$stem.so: $count members ($cls flags)"
+    if [ "$layout" = development ]; then
+        # development_build.py fingerprints this exact installed compiler.
+        # An activated environment or a task named "mojo" must not replace it.
+        compiler="$here/.pixi/envs/default/bin/mojo"
+        [ -x "$compiler" ] || { echo "merged_build: install the default pixi environment first" >&2; exit 2; }
+        set -- pixi run --manifest-path "$here/pixi.toml" --environment default \
+            --locked --no-install --executable "$compiler"
+    else
+        set -- pixi run mojo
+    fi
     # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-    pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+    "$@" build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
         $base_flags $class_flags $link_flags $mode_flags $column_flags $extra_flags \
         -I . -I bindings \
         "$root" -o "$tmpdir/$stem.so" < /dev/null

@@ -12,6 +12,8 @@
 # scoring program instead of a second program over a downloaded block (the same
 # matmul stage over the same words).
 from std.memory import memcpy
+from bindings.native_array_storage import native_array_empty
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -22,8 +24,17 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_host_f32, classical_typed
 from bindings.classical_validate import classical_view
+from bindings.prep_lda_admission import (
+    lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,
+    lda_native_get_params, lda_native_set_params, lda_require_fitted,
+)
+from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
+from bindings.classical_metadata import classical_is_fitted
+from bindings.classical_pandas import classical_admit_value
+from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
+from bindings.scaler_lifecycle_native import _public_result
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy, labels_check_sample_weight
-from bindings.x_prep_native_inputs import _values
+from bindings.x_prep_native_inputs import _values, _rows_fields
 from bindings.arena_cache_release import arena_cache_release_operation
 from bindings.prep_classify_prog import ClsProg, NONE, f32_array, i32_array, f32_input
 from bindings.prep_classify_common import (
@@ -824,7 +835,7 @@ def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int
     """Per feature j, the (K, ncat[j]) float32 block of the (d, K, cmax) table."""
     var out = Python.list()
     for j in range(d):  # driver-loop: over the feature columns (model structure)
-        var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", context["output_context"]) if ncat[j] > 0 else classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(K, 0), "<f4", "C", context["output_context"])
+        var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", context["output_context"]) if ncat[j] > 0 else classical_wrap_array(native_array_empty("f"), Python.tuple(K, 0), "<f4", "C", context["output_context"])
         if ncat[j] > 0:
             var dest = F32P(unsafe_from_address=Int(py=classical_address(block)))
             _ = block  # keep the Python object alive through the native call above
@@ -1005,63 +1016,14 @@ def _solver_is(fields: PythonObject, name: String) raises -> Bool:
 
 def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, who: String,
                     context: PythonObject) raises -> List[Float64]:
-    """`_estimator_covs`: the user covariance estimator fitted on each class's
-    float32 rows (grouped on the device by p2m_ccount .. p2m_rgather), its
-    covariance_ words as floats."""
-    var values = arr.value
-    if py_type(values) is context["maxabs_rows_class"]:
-        # the user's estimator takes host rows (lane cpu4-misc)
-        values = _values(values, context, True)
-    var n = arr.n
-    var d = arr.d
-    var mode = cls_mode(context)
-    var blocks = Python.list()
-    if codes is not None:
-        var pr = ClsProg()
-        var xo = pr.put(values)
-        var co = pr.put_codes(codes)
-        var ch = max(II_CH, (n + II_CH - 1) // II_CH, (n * K + 16777215) // 16777216, 1)
-        var nch = max(1, (n + ch - 1) // ch)
-        var cnt = pr.alloc(nch * K)
-        var tot = pr.alloc(K)
-        pr.stage(OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
-        pr.stage(OP_P2M_CSCAN, K, cnt, nch, K, tot)
-        var start = pr.alloc(K)
-        var ro = pr.alloc(n)
-        pr.stage(OP_P2M_CSTART, 1, tot, K, start, NONE)
-        pr.stage(OP_P2M_CWRITE, nch, co, n, K, ch, cnt, start, ro)
-        var xg = pr.alloc(n * d)
-        pr.stage(OP_P2M_RGATHER, n * d, xo, d, ro, xg)
-        pr.run(mode, context)
-        var totals = I32P(unsafe_from_address=pr.base) + tot
-        var at = 0
-        for k in range(K):  # driver-loop: over the classes' row blocks (class count)
-            var rows = Int(totals[k])
-            _ = py_call(blocks.append, pr.get(xg + at * d, rows, d, context))
-            at += rows
-    else:
-        var copy = classical_typed(Python.tuple(n, d), "<f4", context["output_context"])
-        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(copy))), src=F32P(unsafe_from_address=Int(py=classical_address(values))), count=n * d)
-        _ = copy  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-        _ = py_call(blocks.append, copy)
-    var out = List[Float64]()
-    var b = cls_builtins()
-    for k in range(len(blocks)):  # cpu-route: fits the user covariance estimator once per class
-        _ = py_call(est.fit, blocks[k])
-        if not Bool(py=py_call(b.hasattr, est, "covariance_")):
-            raise Error("mojolearn: " + cls_name(est) + " does not have a covariance_ attribute")
-        var view = classical_view(est.covariance_, context, "covariance_")
-        if Int(py=view.size) != d * d:
-            raise Error("mojolearn: " + who + ": covariance_ of " + cls_name(est) + " is not (" + String(d) + ", " + String(d) + ")")
-        var words = classical_host_f32(view, max(1, Int(py=view.ndim)), "covariance_", context)
-        var p = F32P(unsafe_from_address=Int(py=classical_address(words)))
-        _ = words  # keep the Python object alive through the native call above
-        for i in range(d * d):  # cpu-route: reads the user covariance estimator output
-            out.append(Float64(p[i]))
-            _ = words  # keep the Python object alive through the native call above
-        _ = words^
-    return out^
+    """A user covariance estimator would be fitted by its Python `fit` inside
+    the runtime, so it is refused by name; LDA and QDA refuse earlier, and
+    this guard keeps any remaining caller from calling it."""
+    # TOMBSTONE: the per-class Python `est.fit` loop (QDA/LDA
+    # covariance_estimator objects) deleted 2026-10-24 by lane
+    # fix-round2-host-20261024 (no Python in the runtime); code recoverable at
+    # 809a28acb. Restore: none; no compiled covariance-estimator API exists.
+    raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
 
 
 def _lda_cov_blocks(mut pr: ClsProg, xo: Int, n: Int, d: Int, yo: Int, K: Int, mean: Int, var_: Int, cnt: Int,
@@ -1199,7 +1161,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     _set(fields, "xbar_", pr.get(xbar, d, 0, context))
     _set(fields, "_scal_full", pr.get(scal, d, d, context))
     # the rank columns of the (d, d) scalings (Array.__getitem__'s strided copy)
-    var scalings = classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(d, 0), "<f4", "C", context["output_context"])
+    var scalings = classical_wrap_array(native_array_empty("f"), Python.tuple(d, 0), "<f4", "C", context["output_context"])
     if rank2 > 0:
         scalings = classical_typed(Python.tuple(d, rank2), "<f4", context["output_context"])
         var dest = F32P(unsafe_from_address=Int(py=classical_address(scalings)))
@@ -1344,6 +1306,11 @@ def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context:
 
 def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`QuadraticDiscriminantAnalysis.fit`."""
+    if fields["covariance_estimator"] is not None:
+        # Fitting a user covariance estimator runs its Python `fit` inside
+        # the runtime. Refused by name before any other check, as LDA does
+        # (a5f9cc738, bindings/prep_lda_admission.mojo).
+        raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
     var solver = fields["solver"]
     if not (_solver_is(fields, "svd") or _solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
@@ -1379,6 +1346,10 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         for k in range(K):  # driver-loop: over the class counts (class count)
             if Int(totals[k]) < 2:
                 raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
+        # Keep the program (the owner of `cp.base`) alive through the reads
+        # above: Mojo releases it at its last named use, which was the
+        # `cp.base` read, so the counts were read from freed words.
+        _ = cp.base
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
@@ -1471,9 +1442,43 @@ def _class_counts(mut pr: ClsProg, co: Int, n: Int, K: Int) -> Int:
 # ---------------------------------------------------------------- the door
 
 
-def _dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject) raises -> PythonObject:
+    if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: native classifiers cannot invoke Python metaclass hooks")
     var kind = cls_kind(model, context)
-    var fields = py_fields(model)
+    var fields: PythonObject
+    if kind == "lda":
+        context = lda_native_context(context)
+        if operation == "initialize":
+            return lda_native_initialize(model, args, context)
+        fields = lda_native_fields(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
+        if operation == "is_fitted":
+            return classical_is_fitted(model)
+        if operation == "get_params":
+            return lda_native_get_params(fields, context)
+        if operation == "set_params":
+            return lda_native_set_params(model, fields, args[0], context)
+        if operation == "fit" or operation == "fit_transform" or operation == "score":
+            args = Python.tuple(args[0], classifier_label_list(args[1], context))
+            lda_native_labels(args[1], context, operation != "score")
+        if operation != "fit" and operation != "fit_transform":
+            lda_require_fitted(model, operation, context)
+            fields = py_call(native_loaded_module("builtins").dict, fields)
+            py_setitem(fields, "classes_", classifier_label_list(fields["classes_"], context))
+    elif kind == "gnb" and py_get(context, "cv_fixed_owner") is not None:
+        context = fixed_owner_context(context)
+        fields = fixed_owner_fields(model, context)
+        if operation == "cv_set_params":
+            return fixed_owner_set_params(model, args[0], context)
+        for i in range(len(args)):  # driver-loop: fixed public arguments, including native resident-fold handles
+            if i == 0 and py_type(args[i]) is context["maxabs_rows_class"]:
+                _ = _rows_fields(args[i], context)
+            else:
+                classical_admit_value(args[i], context)
+        if operation == "fit" or operation == "score":
+            lda_native_labels(args[1], context, operation == "fit", "GaussianNB")
+    else:
+        fields = py_fields(model)
     if operation == "predict":
         return _predict(model, fields, kind, args[0], context)
     if operation == "predict_proba":
@@ -1523,6 +1528,10 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var context = call[3]
         classical_connect_numpy(context)
         var result = _dispatch(model, operation, args, context)
+        if py_type(model) is py_get(context, "lda_native_class"):
+            if operation == "fit" or operation == "fit_transform":
+                classifier_after_fit(py_fields(model), args[0], context)
+            result = _public_result(result, context)
         return result.steal_data()
     except error:
         var message = String(error)

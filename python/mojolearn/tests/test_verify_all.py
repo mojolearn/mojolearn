@@ -1555,7 +1555,13 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
         pytest.skip("no importable identical build")
     if build[-1] == "cpu":
         pytest.skip("GPU diagnostic selection; CPU excludes par-* unless --include-pending (unit-tested)")
-    ok = _run_cli(["verify", "--lanes", "ols,ridge,par-forest", "--fixtures", "base", "--no-models"])
+    # The CLI bounds each cell itself (120 s worker limit, _verify_worker.py)
+    # and reports a timeout as its own verdict. The outer guard only catches
+    # a hung CLI, so it exceeds the three cells' own limits plus startup: a
+    # first GPU process on a fresh pod (par-forest's sharded workers on the
+    # L4) can take most of a cell budget before 180 s of wall time ran out.
+    ok = _run_cli(["verify", "--lanes", "ols,ridge,par-forest", "--fixtures", "base", "--no-models"],
+                  timeout=3 * 120 + 60)
     assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
     result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert "VERIFIED" in result, result

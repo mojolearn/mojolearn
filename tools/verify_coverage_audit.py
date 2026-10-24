@@ -52,6 +52,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 from mojo_registrations import registered_functions
+from verify_reference_evidence import reference_label, reference_snapshot, unknown_references
 SAB_RE = re.compile(r"MOJOLEARN_[A-Z0-9_]*SABOTAGE[A-Z0-9_]*")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -190,7 +191,7 @@ def label(node):
         f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}")
 
 
-def native_rows(ls, base, reach):
+def native_rows(ls, base, reach, whole_surface=False):
     changed, whole, status = changed_mojo_nodes(ls, base)
     pnodes = patch_nodes(ls)
     graph = ls._MojoDefGraph()
@@ -241,7 +242,7 @@ def native_rows(ls, base, reach):
             reached = set(parent)
             hits = sorted(reached & changed, key=label)
             new = export not in old
-            if not new and not hits:
+            if not new and not hits and not whole_surface:
                 continue
             kinds = sorted({kind_of(n[1]) for n in hits})
             sab_defs, sab_sites, patches = set(), [], set()
@@ -255,14 +256,63 @@ def native_rows(ls, base, reach):
                     patches.add(p)
             users = ls.binding_users(name, exports=[export])
             precise = {lane for lane, (_, ents, _) in reach.items() if NameClosure.names_entry(ents, export)}
-            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots,
+            # an owner entry whose own impl file holds a dispatch branch the
+            # lane reaches (OwnerDispatch) is reached by the lane
+            files = {n[1] for n in roots}
+            precise |= {lane for lane, owned in OWNER_FILES.items() if owned & files}
+            probe = any(constant_probe(graph.text(n)) for n in graph.resolve(src, impl))
+            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots, constant_probe=probe,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
+                             # in the closure's breadth-first order: the kernels nearest the export first
+                             closure_kernel=[label(n) for n in parent if kind_of(n[1]) != "door"
+                                             and _sab_na(label(n)) is None
+                                             and not _valueless(graph.text(n), n)][:4],
+                             n_closure_kernel=sum(1 for n in reached if kind_of(n[1]) != "door"
+                                                  and not _valueless(graph.text(n), n)),
                              lanes_precise=sorted(precise), lanes_wide=sorted(set(users) - precise),
                              lanes_closure=len(users),
                              sabotage_defines=sorted(sab_defs), sabotage_sites=sorted(sab_sites)[:4],
                              sabotage_patches=sorted(patches)))
     return rows
+
+
+_PROBE_RETURN = re.compile(r'^return PythonObject\((?:-?\d+(?:\.\d+)?|True|False|None|"[^"]*"|'
+                           r'String\((?:"[^"]*"|[A-Z][A-Z0-9_]*)\)|[A-Z][A-Z0-9_]*)\)$')
+
+
+_VALUELESS_HEAD = re.compile(r"^\s*(?:@[A-Za-z_][\w.]*(?:\[[^\]]*\])?(?:\([^)]*\))?\s+)*"
+                             r"(?:comptime|alias|struct|trait|var)\b")
+
+
+#: A type's lifecycle and printing methods: construction, copies, moves,
+#: teardown, comparison and repr hold no arithmetic a lane's digest carries.
+_VALUELESS_METHODS = frozenset({"__init__", "__deinit__", "__moveinit__", "__copyinit__", "__del__",
+                                "__eq__", "__ne__", "__hash__", "__bool__", "__len__", "write_to",
+                                "write_repr_to", "copy"})
+
+
+def _valueless(text, node=None):
+    """A definition with no arithmetic to fault: a compile-time constant or
+    alias (a define, a profile word, a slot name), a type (a handle, a
+    registry, a session struct: its methods are separate nodes), or a type's
+    lifecycle or printing method."""
+    if node is not None and node[0] == "m" and node[3] in _VALUELESS_METHODS:
+        return True
+    return bool(text) and bool(_VALUELESS_HEAD.match(text))
+
+
+def constant_probe(text):
+    """True for a registration whose whole body returns one constant: a
+    contract-version probe (`kmeans_parallel_available` -> 1), a compiled
+    vendor or flag (`preprocessing_vendor` -> COMPILED_VENDOR). It reads no
+    data and computes nothing, so no lane digest can carry it."""
+    if not text:
+        return False
+    body = re.sub(r'"""[\s\S]*?"""', "", text)
+    lines = [ln.split("#", 1)[0].strip() for ln in body.splitlines()[1:]]
+    lines = [ln for ln in lines if ln]
+    return len(lines) == 1 and bool(_PROBE_RETURN.match(lines[0]))
 
 
 def closure(graph, roots, ls):
@@ -372,6 +422,14 @@ class Walker:
         return out
 
 
+class ReachedSet(set):
+    """A name closure's reached names, with the string constants (`.strings`)
+    and class names (`.classes`) among them kept apart: a native owner's
+    dispatch value is matched against those, never against every identifier."""
+    strings = frozenset()
+    classes = frozenset()
+
+
 class NameClosure:
     """A scoped definition closure over the package, the second reach. The
     walker resolves calls by type and stops at what it cannot type (`k.ew(...)`
@@ -395,6 +453,8 @@ class NameClosure:
         self.by_name = walker.by_name
         self.methods = {}                    # Cls.key -> {name: Func}
         self.top = {}                        # module -> [Func] it calls at import
+        self.bound_calls = {}                # module -> {name: [("func", Func)] its assignment calls}
+        self.bound_strings = {}              # module -> {name: the string arguments of that call}
         for mod in [m for m in self.index.mods.values() if m is not None]:
             local = mod.defs
             calls = []
@@ -408,7 +468,32 @@ class NameClosure:
                     if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in local:
                         calls.append(self.index.func(mod, local[n.func.id]))
             self.top[mod.name] = calls
-        self._facts = {}
+            # `_IPCA_CALL, _IPCA_CONTEXT = _native_ipca_bridge.connect_public(IncrementalPCA)`
+            # (_expansion_decomp.py): a migrated method calls the module-level
+            # name the bridge's connect returned, so reading the name follows
+            # the connect (which names the owner entry, `ipca_native_call`)
+            bound = {}
+            for node in mod.tree.body:
+                if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+                    continue
+                try:
+                    target = self.index.resolve_expr(node.value.func, mod.name, None)
+                except Exception:
+                    target = None
+                if not (target and target[0] == "func"):
+                    continue
+                # `_connect_decomp_kit("als_native_call", ...)`: the entry the
+                # connect binds is named by the call's own string arguments
+                said = frozenset(a.value for a in ast.walk(node.value)
+                                 if isinstance(a, ast.Constant) and isinstance(a.value, str)
+                                 and self.IDENT.match(a.value))
+                for t in node.targets:
+                    for n in ast.walk(t):
+                        if isinstance(n, ast.Name):
+                            bound.setdefault(n.id, []).append(target)
+                            self.bound_strings.setdefault(mod.name, {}).setdefault(n.id, set()).update(said)
+            self.bound_calls[mod.name] = bound
+        self._facts, self._strs = {}, {}
 
     def methods_of(self, cls):
         if cls.key not in self.methods:
@@ -424,7 +509,7 @@ class NameClosure:
         key = (kind, obj.key)
         if key in self._facts:
             return self._facts[key]
-        defs, names = [], set()
+        defs, names, strs = [], set(), set()
         if kind == "f":
             nodes, scope = [obj.node], obj
         else:
@@ -436,6 +521,10 @@ class NameClosure:
                 target = None
                 if isinstance(n, ast.Name):
                     names.add(n.id)
+                    defs.extend(self.bound_calls.get(obj.mod.name, {}).get(n.id, ()))
+                    said = self.bound_strings.get(obj.mod.name, {}).get(n.id, ())
+                    names |= set(said)
+                    strs |= set(said)
                     try:
                         target = self.index.resolve_expr(n, obj.mod.name, scope)
                     except Exception:
@@ -448,6 +537,7 @@ class NameClosure:
                         target = None
                 elif isinstance(n, ast.Constant) and isinstance(n.value, str) and self.IDENT.match(n.value):
                     names.add(n.value)
+                    strs.add(n.value)
                 elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add) and \
                         isinstance(n.right, ast.Constant) and isinstance(n.right.value, str) and \
                         self.IDENT.match(n.right.value) and n.right.value.startswith("_"):
@@ -458,6 +548,7 @@ class NameClosure:
                 elif isinstance(n, ast.Name):
                     names |= self.table_names(obj.mod, n.id)
         self._facts[key] = (defs, frozenset(names))
+        self._strs[key] = frozenset(strs)
         return self._facts[key]
 
     def table_names(self, mod, name, depth=0):
@@ -481,7 +572,8 @@ class NameClosure:
         return frozenset(out)
 
     def closure(self, seeds):
-        reached = set(seeds) | HARNESS_OPS
+        reached = ReachedSet(set(seeds) | HARNESS_OPS)
+        strings = set()
         seen, mods, classes = set(), set(), {}
         queue = []
         for name in seeds:
@@ -513,6 +605,7 @@ class NameClosure:
                 mods.add(obj.mod.name)
                 queue.extend(("func", f) for f in self.top.get(obj.mod.name, ()))
             defs, names = self.facts(k[0], obj)
+            strings |= self._strs.get(k, frozenset())
             fresh = names - reached
             reached |= names
             queue.extend(defs)
@@ -529,6 +622,8 @@ class NameClosure:
             for name in fresh:
                 for func in pending.pop(name, ()):
                     queue.append(("func", func))
+        reached.strings = frozenset(strings)
+        reached.classes = frozenset(c.name for c in classes.values())
         return reached
 
     @classmethod
@@ -651,6 +746,11 @@ def spec_names(spec, depth=0, seen=None):
     return out
 
 
+#: lane -> the entries its typed walk and its own code reach, before the name
+#: closure widens them: the owner entries a generic dispatch branch is credited through
+TYPED_ENTRIES = {}
+
+
 def lane_reach(ls, walker, closer=None):
     """lane -> (set of (public key, op) roots, set of entry names reached, name closure)."""
     ib = ls.identity_break()
@@ -673,13 +773,298 @@ def lane_reach(ls, walker, closer=None):
                         roots.add((obj.key, op))
                         entries |= ent
         entries |= names                        # a lane that calls a binding entry by name
+        TYPED_ENTRIES[lane] = frozenset(entries)
         reached = closer.closure(symbols) if closer is not None else set()
         entries |= reached
         out[lane] = (roots, entries, reached)
     return out
 
 
-def python_rows(ls, walker, reach, base):
+# ------------------------------------------------------------ native owners
+
+#: The variables a native owner dispatches on: `if operation == "croston_fit":`
+#: (bindings/xseq_forecast_native.mojo), `if family == "FastICA":` then
+#: `if operation == "fit":` (bindings/decomp_native.mojo), `kind == "..."`.
+DISPATCH_VARS = ("operation", "op", "family", "kind", "kind_name", "method", "command", "name")
+_COND_RE = re.compile(r'\b(?:%s)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*)"' % "|".join(DISPATCH_VARS))
+_OP_RE = re.compile(r'\b(?:operation|op)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*_[A-Za-z0-9_]+)"')
+_LIT_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"')
+_PREFIX_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*_)"\s*\+')
+_CALLEE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*[\[(]")
+#: How far a branch's callees are followed for the entry names they hold: the
+#: branch's handler (`_croston_fit`) and the helpers it hands the names to.
+OWNER_DEPTH = 4
+#: An owner file held by more than this many owner entries' closures is shared
+#: plumbing (an owner entry's GPU binding and host twin, and one alias, hold
+#: their own owner file)
+SHARED_OWNER_FILE = 3
+
+
+class OwnerDispatch:
+    """THE PUBLIC RUNTIME MIGRATION'S REACH (2026-10-24). A migrated public
+    method is one native call, `_XSEQ(self, "croston_fit", args, context)`;
+    the Python walk stops at the owner entry (`xseq_native_call`), and the
+    owner, in Mojo, picks the handler by the operation (and family) string and
+    calls the compiled entries by NAME (`entries["croston"]`,
+    `decomp_entries(..., Python.tuple("x_decomp_ica_fit"), ...)`). So a lane
+    that reaches the dispatch strings reaches the entries that branch names.
+
+    Read from the source: every `if`/`elif` on a dispatch variable compared
+    with a string literal opens a branch; the branch's lines, and the
+    definitions they call (to OWNER_DEPTH), contribute every string literal
+    that is a registered entry name. A lane reaches those entries when, for
+    every enclosing condition, one of its alternatives (`a == "x" or a == "y"`)
+    is among the lane's reached names. A branch whose conditions are all
+    GENERIC (a value several owners dispatch on, `fit`, `transform`) credits
+    no lane: `fit` alone does not say which owner ran."""
+
+    def __init__(self, ls, exports, methods=frozenset()):
+        self.ls, self.exports = ls, frozenset(exports)
+        self.graph = ls._MojoDefGraph()
+        self._memo, self._prefix_memo, self.op_values = {}, {}, set()
+        self.records = []                  # (conds: tuple[frozenset], entries: frozenset, file)
+        files = [p for p in git("ls-files", "*.mojo").split() if p]
+        seen_in = defaultdict(set)
+        for path in files:
+            try:
+                text = ls._read(path)
+            except OSError:
+                continue
+            if "PythonObject" not in text or '== "' not in text:
+                continue
+            units = ls._mojo_units(text)
+            if units is None:
+                continue
+            for unit, utext in ls._mojo_unit_texts(units).items():
+                for conds, ents, lits in self._branches(path, utext):
+                    self.records.append((conds, ents, path, lits))
+                    for alt in conds:
+                        for v in alt:
+                            seen_in[v].add(path)
+        # GENERIC: a value several owners dispatch on (`fit`, `transform`), a
+        # plain lowercase word (`target`, `column`: any lane's code holds one)
+        # or a short code (`M`, `O`). Only a specific value (`croston_fit`,
+        # `FastICA`) says which owner branch a lane reaches. A value that is a
+        # method name of a package class (`fit_predict`, `predict_proba`) is
+        # generic too: every estimator lane names it.
+        self.generic = frozenset(v for v, fs in seen_in.items()
+                                 if len(fs) >= 3 or len(v) < 4 or ("_" not in v and v.islower())
+                                 or v in methods)
+        # owner entry -> the owner file its registration's impl is in: a
+        # branch on generic values alone (`operation == "fit"` in
+        # bindings/ipca_native.mojo) is credited to a lane that reaches the
+        # owner entry itself (`ipca_native_call`)
+        self.owner_files = defaultdict(set)
+        record_files = {r[2] for r in self.records}
+        # a branch that names another branch's dispatch value relays to it
+        # (`msel_split` hands its lazy iterator the owner operation
+        # "family_msel_split_loo_at", bindings/msel_split.mojo): the value
+        # joins the lane's reached names. Generic values never relay.
+        values = set(self.op_values) - self.generic
+        self.records = [(c, e, p, frozenset(l & values)) for c, e, p, l in self.records]
+        for src in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split():
+            regs = registrations(ls._read(src))
+            for export, (impl, params) in regs.items():
+                if not export.endswith("_call"):
+                    continue
+                # the owner's own entry file: the one its registered impl is in
+                # (`ipca_c` and its `operation == "fit"` branch, bindings/ipca_native.mojo);
+                # an umbrella owner's other files are reached by their own values
+                roots = set(self.graph.resolve(src, impl))
+                self.owner_files[export] |= {n[1] for n in roots} & record_files
+        # a file in many owners' closures is shared plumbing (the codec, the
+        # process pool), not the owner: reaching a branch there says nothing
+        # about which owner ran, so it credits no owner entry
+        holders = defaultdict(set)
+        for export, fs in self.owner_files.items():
+            for f in fs:
+                holders[f].add(export)
+        self.shared_files = frozenset(f for f, es in holders.items() if len(es) > SHARED_OWNER_FILE)
+
+    def _strings(self, node, depth):
+        """(literals, prefixes) over `node` and what it calls, to `depth`
+        calls deep: every identifier-shaped string literal, and every literal a
+        name is composed from (`near["xn_" + name]`, bindings/kpca_native.mojo).
+        A reached type's method is followed when a reached definition names it
+        (a kit's `self.fn("x_decomp_dev_gemm")`, bindings/mani_kit.mojo). Only
+        the Python-facing Mojo under bindings/ is read: a kernel names no entry."""
+        key = (node, depth)
+        if key in self._memo:
+            return self._memo[key]
+        lits, pres, mentioned = set(), set(), set()
+        seen, frontier, waiting = {node}, [node], defaultdict(list)
+        for level in range(depth + 1):
+            nxt = []
+            for n in frontier:
+                try:
+                    text = self.graph.text(n) or ""
+                except Exception:
+                    text = ""
+                lits |= set(_LIT_RE.findall(text))
+                pres |= set(_PREFIX_RE.findall(text))
+                fresh = set(self.graph.idents(n)) - mentioned
+                mentioned |= fresh
+                if level == depth:
+                    continue
+                cands = list(self.graph.targets(n))
+                for ident in fresh:
+                    cands.extend(waiting.pop(ident, ()))
+                for t in cands:
+                    if t in seen or not t[1].startswith("bindings/") or \
+                            os.path.basename(t[1]).startswith("_mojolearn"):
+                        continue
+                    seen.add(t)
+                    nxt.append(t)
+                    if t[0] == "t":
+                        units = self.graph.units(t[1]) or {}
+                        for meth in units.get("methods", {}).get(t[2], {}):
+                            m = ("m", t[1], t[2], meth)
+                            if m in seen:
+                                continue
+                            if meth in mentioned:
+                                seen.add(m)
+                                nxt.append(m)
+                            else:
+                                waiting[meth].append(m)
+            frontier = nxt
+        self._memo[key] = (frozenset(lits), frozenset(pres))
+        return self._memo[key]
+
+    def _named(self, lits, pres):
+        out = set(lits) & self.exports
+        for p in pres:
+            for e in self._by_prefix(p):
+                if e[len(p):] in lits:
+                    out.add(e)
+        return out
+
+    def _by_prefix(self, p):
+        if p not in self._prefix_memo:
+            self._prefix_memo[p] = [e for e in self.exports if e.startswith(p) and len(e) > len(p)]
+        return self._prefix_memo[p]
+
+    def _line_entries(self, path, line):
+        lits, pres = set(_LIT_RE.findall(line)), set(_PREFIX_RE.findall(line))
+        for ident in set(_CALLEE_RE.findall(line)):
+            try:
+                nodes = self.graph.resolve(path, ident)
+            except Exception:
+                nodes = ()
+            for n in nodes:
+                a, b = self._strings(n, OWNER_DEPTH - 1)
+                lits |= a
+                pres |= b
+        return self._named(lits, pres), lits
+
+    def _branches(self, path, text):
+        stack = []                         # [(indent, frozenset alternatives | None)]
+        acc = defaultdict(set)
+        lit_acc = defaultdict(set)
+        for raw in text.splitlines():
+            body = raw.rstrip()
+            cut = body.find("#")
+            if cut >= 0 and body[:cut].count('"') % 2 == 0:
+                body = body[:cut].rstrip()
+            stripped = body.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(body) - len(body.lstrip())
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+            head = stripped.split(" ", 1)[0]
+            if head in ("if", "elif") and stripped.endswith(":"):
+                # `a == "x" or a == "y"` is one requirement with two
+                # alternatives; `... and b == "z"` adds a second requirement
+                self.op_values |= set(_OP_RE.findall(stripped))
+                parts = [frozenset(_COND_RE.findall(p)) for p in stripped[len(head):-1].split(" and ")]
+                parts = [p for p in parts if p]
+                stack.append((indent, tuple(parts) or None))
+                continue
+            if head == "else:" or stripped == "else:":
+                stack.append((indent, None))
+                continue
+            conds = tuple(alt for _, c in stack if c for alt in c)
+            if not conds:
+                continue
+            ents, lits = self._line_entries(path, stripped)
+            if ents or lits:
+                acc[conds] |= ents
+                lit_acc[conds] |= lits
+        return [(c, frozenset(acc[c]), frozenset(lit_acc[c])) for c in acc]
+
+    def reached(self, names, owners=None):
+        """(entry names, owner files): what the owners' branches reach for a
+        lane whose reached names are `names`, and the files of those branches."""
+        out, files = set(), set()
+        owned = set()
+        for export, fs in self.owner_files.items():
+            if export in (owners if owners is not None else names):
+                owned |= fs - self.shared_files
+        names, done = set(names), set()
+        grew = True
+        while grew:
+            grew = False
+            for k, (conds, ents, path, relay) in enumerate(self.records):
+                if k in done:
+                    continue
+                if all(alt & names for alt in conds) and (
+                        path in owned or any((alt & names) - self.generic for alt in conds)):
+                    done.add(k)
+                    out |= ents
+                    files.add(path)
+                    if relay - names:
+                        names |= relay
+                        grew = True
+        return out, files
+
+
+def owner_reach(ls, reach):
+    """`reach` with every lane's entries widened by the native owners' dispatch."""
+    exports = set()
+    for src in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split():
+        exports |= set(registrations(ls._read(src)))
+    methods = set()
+    for path in git("ls-files", "python/mojolearn").split():
+        if not path.endswith(".py") or "/tests/" in path:
+            continue
+        try:
+            tree = ast.parse(open(os.path.join(ROOT, path)).read())
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                methods |= {n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    od = OwnerDispatch(ls, exports, frozenset(methods))
+    # an owner entry that most lanes' name closures hold (an umbrella owner the
+    # shared mixins name: `classical_native_call`) credits its generic branches
+    # only to the lanes whose typed walk or own code reaches it; any other owner
+    # entry (`ipca_native_call`, named by its class's bridge connect) credits
+    # them to every lane whose closure names it
+    held = defaultdict(int)
+    for lane, (_, entries, _) in reach.items():
+        for export in od.owner_files:
+            if export in entries:
+                held[export] += 1
+    umbrella = {e for e, n in held.items() if n > len(reach) // 4}
+    out = {}
+    for lane, (roots, entries, reached) in reach.items():
+        owners = (set(entries) - umbrella) | (set(TYPED_ENTRIES.get(lane, ())) & umbrella)
+        dispatch = set(getattr(reached, "strings", ())) | set(getattr(reached, "classes", ())) | \
+            (set(entries) - set(reached))
+        extra, files = od.reached(frozenset(dispatch), frozenset(owners))
+        out[lane] = (roots, entries | extra, reached)
+        OWNER_FILES[lane] = frozenset(f for f in files if "native" in os.path.basename(f)
+                                      and f not in od.shared_files)
+    return out, od
+
+
+#: lane -> the native owner files (`*native*.mojo`) whose dispatch branches the
+#: lane reaches; a registration whose Mojo closure holds one of them (the owner
+#: entry itself: `xseq_native_call`, `decomp_native_call`) is reached by the lane.
+OWNER_FILES = {}
+
+
+def python_rows(ls, walker, reach, base, whole_surface=False):
     pri = walker.pri
     index = walker.index
     changed = changed_python_lines(base)
@@ -719,7 +1104,7 @@ def python_rows(ls, walker, reach, base):
             done.add(key)
             funcs, entries = walker.walk(func, cls)
             path_changed = [f for f in funcs if touched(f)]
-            if not path_changed:
+            if not path_changed and not whole_surface:
                 continue
             owner = cls.key if cls else func.key
             lanes = set(root_lanes.get((owner, op), ()))
@@ -736,12 +1121,72 @@ def python_rows(ls, walker, reach, base):
                     lanes.add(lane)
             rel = os.path.relpath(str(func.mod.path), ROOT)
             rows.append(dict(public=canonical, op=op, where=f"{rel}:{func.node.lineno}", own=touched(func),
+                             trivial=trivial_method(func.node),
                              helpers_changed=[f"{os.path.relpath(str(f.mod.path), ROOT)}:{f.qual}"
                                               for f in path_changed[:3]],
                              n_helpers_changed=len(path_changed), entries=sorted(entries),
                              lanes=sorted(lanes)))
     rows.sort(key=lambda r: (r["public"], r["op"]))
     return rows
+
+
+def trivial_method(node):
+    """True for a method with no work at all: its body, past the docstring, is
+    `return self`, `return`, `pass` or `return self.<attribute>` (a stateless
+    layer's `fit`)."""
+    body = list(node.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if len(body) != 1:
+        return False
+    st = body[0]
+    if isinstance(st, ast.Pass):
+        return True
+    if isinstance(st, ast.Return):
+        v = st.value
+        return v is None or (isinstance(v, ast.Name) and v.id == "self") or (
+            isinstance(v, ast.Attribute) and isinstance(v.value, ast.Name) and v.value.id == "self")
+    return False
+
+
+def py_triage(row, native_by_entry):
+    """(status, lanes, why) for one public method row.
+
+    THE PYTHON-SHELL RULE (2026-10-24). A public method is API shell: it checks
+    arguments and routes to a native call. It counts as covered when a lane
+    reaches it, or, failing that, when every native entry its walked call path
+    reaches is itself covered (the shell adds no arithmetic of its own; the
+    no-Python-compute fence holds it to that). A method with no native work at
+    all (`return self`) is n/a."""
+    key = (row["public"], row["op"])
+    if key in PY_ANNOTATIONS:
+        return PY_ANNOTATIONS[key]
+    if row["lanes"]:
+        return "covered", row["lanes"], ""
+    entries = [e for e in row.get("entries", ()) if e in native_by_entry]
+    if entries and all(native_by_entry[e][0] in ("covered", "covered (new lane)") for e in entries):
+        lanes = sorted({l for e in entries for l in native_by_entry[e][1]})
+        return "covered (via native)", lanes, "every native entry it calls is covered: " + ", ".join(
+            f"`{e}`" for e in entries[:3]) + (f" +{len(entries) - 3}" if len(entries) > 3 else "")
+    if not row.get("entries") and row.get("trivial"):
+        return "n/a", [], "no native work: the method only returns (a stateless layer's fit returns self)"
+    return "GAP", [], "no lane reaches it"
+
+
+def native_status_by_entry(nat):
+    """entry name -> (best status, lanes) over its registrations (GPU binding and host twin)."""
+    rank = {"covered": 0, "covered (new lane)": 0, "owed": 1, "n/a": 2, "GAP": 3}
+    out = {}
+    for r in nat:
+        st, lanes, _ = triage(r)
+        st = "covered (new lane)" if st == "covered" and lanes and set(lanes) <= NEW_LANES else st
+        prev = out.get(r["entry"])
+        if prev is None or rank.get(st, 9) < rank.get(prev[0], 9):
+            out[r["entry"]] = (st, lanes)
+        elif rank.get(st, 9) == rank.get(prev[0], 9):
+            out[r["entry"]] = (prev[0], sorted(set(prev[1]) | set(lanes)))
+    return out
 
 
 def recorded_lanes():
@@ -762,8 +1207,8 @@ def recorded_lanes():
 
 # ------------------------------------------------------------------ triage
 
-#: The lanes this audit added (tools/identity_lanes/coverage.py). They read
-#: OWED until a release record admits them.
+#: Historical lane descriptions, not a reference/admission inventory. Current
+#: reference status comes only from the retained table snapshot below.
 NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward",
                        "sequence-export-roundtrip", "sequence-onnx-import",
                        "transformer-decode-load-state", "safetensors-widen-f16",
@@ -778,7 +1223,13 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
                        "training-device-cross-entropy", "sequence-layernorm-backward",
                        "x-metrics-classification-report", "x-metrics-permutation-test-score",
-                       "classical-float16-sequences"})
+                       "classical-float16-sequences",
+                       # lane verify-coverage-20261024
+                       "transformer-forward-tape", "public-cnn-classifier-predict", "public-cnn-layer-fit",
+                       "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
+                       "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
+                       "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
+                       "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -830,6 +1281,27 @@ NEW_LANE_PURPOSE = {
     "classical-float16-sequences": "LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA on a list of "
                                    "float16 rows: the classical input door's `sequence_widen_halves` / "
                                    "`sequence_narrow_halves` and the scalers' `scaler_cast`",
+    # lane verify-coverage-20261024
+    "transformer-forward-tape": "TransformerBlock.forward_with_tape, backward_from_tape and "
+                                "TransformerForwardTape.close: `transformer_session_forward_tape`, "
+                                "`transformer_session_backward_tape`, `transformer_session_discard_tape`",
+    "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
+    "public-cnn-classifier-predict": "CNNClassifier.predict and predict_proba",
+    "public-numeric-metadata": "training.vendor_used, ensemble.catboost_auto_learning_rate and "
+                               "johnson_lindenstrauss_min_dim",
+    "public-randomized-search": "RandomizedSearchCV fit, predict, score, predict_proba, decision_function, transform",
+    "public-residual-dropout": "training.residual_dropout and residual_dropout_backward",
+    "public-scorer-factories": "model_selection.check_cv, get_scorer, get_scorer_names, make_scorer",
+    "public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)",
+    "public-theta-variants": "DynamicTheta and OptimizedTheta fit and predict",
+    "public-validation-learning-curves": "model_selection.validation_curve and learning_curve",
+    "scaler-fit-transform": "StandardScaler and MinMaxScaler fit_transform: `standard_fit_transform`, "
+                            "`minmax_fit_transform`",
+    "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
+    "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
+    "svc-gamma-scale": "SVC and SVR with gamma='scale': `scale_gamma_limbs`",
+    "neural-trainer-unfused": "ParallelNeuralTrainer with MOJOLEARN_MLP_FUSED=0: `mlp_bias_activation`, "
+                              "`mlp_relu_backward`, `mlp_sum_rows`",
 }
 
 
@@ -841,6 +1313,43 @@ _PROVEN_FIXES = [
     '- 2026-10-22, the seven native-owner arms (coverage-native-*): run on 551dee1ce over the 42a554521 Metal + host build, all CAUGHT (every cell MOVED, restored equal to clean). `coverage_sabotage.py check` now matches import-path module names to the arm\'s bindings, and the three runs share one option set.',
     '',
 ]
+
+#: What the 2026-10-24 arms' run decided, per MISSED arm, and the accepted
+#: product-check catch (lane verify-coverage-20261024, follow-up).
+_ARM_DECISIONS_20261024 = [
+    "- `coverage-x_neighbors-host_ops` (fixed arm): connected-components and ocsvm MOVED on the host column; the "
+    "nearest-centroid lane cannot reach `op_softmax64`, which is registered only in fast builds (NC_PROBA64). The "
+    "softmax edit is dropped, the expected lanes are the two that moved, and `xn_softmax64` is fault n/a (fast tier).",
+    "- `coverage-x_cnn-perm_host`, `coverage-x_cnn-perm_device` (fixed arms): x-cnn-gcn MOVED on both columns "
+    "(edge-weighted GCN runs both the gather and the transposed weighted view); sage and gnn-options do not take "
+    "the weighted transpose. Expected lanes: x-cnn-gcn.",
+    "- `coverage-resample-gather` (retired, n/a): identical builds compile `resample_gather_gpu` / "
+    "`resample_gather_narrow` out (RESAMPLE_GPU_GATHER is fast or the opt-in C11 define, the narrow gather fast), so "
+    "the entries return their not-taken flag and no identical lane can move; the resample fit's arithmetic carries "
+    "`coverage-core-resample_impl`. The patch and manifest row are removed; the entries are fault n/a.",
+    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native.mojo "
+    "`_resolve_gamma`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
+    "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host). "
+    "The re-proof was MISSED again: svc uses the package default gamma='auto'. New lane `svc-gamma-scale` "
+    "(SVC and SVR with gamma='scale', the path above) is the arm's expected lane; the arm builds the svm bindings only.",
+    "- `coverage-core-dense_coo` (fixed arm): x-cluster-spectral-affinities MOVED on the host column. A GPU install "
+    "never reaches the base binding's COO scan (the metrics dense entry serves every affinity), so the arm is host "
+    "only and the GPU `nonzero_f32_fill` row is fault n/a; spectral-precomputed is not an expected lane.",
+    "- `coverage-training-mlp_ops_rng` (split; new lane): the RNG half MOVED (samba-untied-dropout-accum) and is "
+    "`coverage-training-neural_rng`. The MLP doors run only on the unfused gradient route a multi-device optimizer "
+    "takes (`_mlp_fused_enabled`): new lane `neural-trainer-unfused` runs it with MOJOLEARN_MLP_FUSED=0, and "
+    "`coverage-training-mlp_ops` expects it.",
+    "- `coverage-core-msel_device_host` (new fault, no crash policy; the re-proof's build failure was the patch "
+    "joining a comment onto the launch's argument line, fixed): both columns aborted (exit 134; Metal "
+    "IOGPUMetalSuballocatorFree) because the old fault left the split table and its sums disagreeing, which drove "
+    "out-of-range indices. A crash is not counted as detection: it is not a verifier report and its cause is "
+    "memory corruption, not the answer. The fault now yields consistent wrong answers (two gathered rows swapped, "
+    "one test group moved to train with its sums, every group rotated to the next fold with its sizes).",
+    "- `coverage-x_cnn-device_ops` (CAUGHT, accepted): the catch is the lane's own product check "
+    "(tools/identity_lanes/public_cnn_methods.py:39, predict must equal classes_[argmax(predict_proba)]), the "
+    "documented contract of CNNClassifier.predict; that refusal counts as detection.",
+]
+
 
 def _proven_arms():
     """The rows of tools/identity_lanes/coverage_sabotage_proven.tsv (the arms' run), or []."""
@@ -1644,6 +2153,38 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
     "runtime execution and a verifier lane remain pending.")
 
 
+# lane verify-coverage-20261024: the whole-surface audit's last GAP rows,
+# each checked in the source.
+_DEAD_KIT_24 = ("no live caller: the _expansion_decomp._Kit method that calls it (als_cg, cd_rows, "
+                "chol, lda_rows, qr_r, rand_gamma) has no caller since the ALS, NMF, LDA and "
+                "linalg owners moved into Mojo (bindings/als_native.mojo, mani_kit.mojo, linalg_ops_kit.mojo)")
+_ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
+               "owner context's arena_msel_put / _free / _take_rows; the arena owners "
+               "(bindings/arena_resident_native.mojo, arena_materialize_native.mojo) put, gather and free "
+               "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
+               "take per fold (x-metrics-search reaches msel_free by name)")
+ANNOTATIONS.update({
+    **{e: ("n/a", [], _DEAD_KIT_24) for e in ("x_decomp_als_cg_rows", "x_decomp_cd_rows", "x_decomp_chol",
+                                              "x_decomp_dev_lda_rows", "x_decomp_dev_qr_r", "x_decomp_lda_rows",
+                                              "x_decomp_qr_r", "x_decomp_rand_gamma")},
+    **{e: ("covered", ["x-metrics-search"], _ARENA_ROWS) for e in ("msel_put", "msel_take_rows")},
+    "nsum_f64": ("n/a", [], "no live caller: _portable_math.nsum, the only code that calls it, is never called"),
+    "gemm_fused": ("n/a", [], "fast tier only (Apple): linalg_fast.matmul_fused, built only with "
+                              "MOJOLEARN_AFN_GEMM_EPILOGUE; the verifier runs identical and refuses a fast process"),
+    "host_archive_finalize_call": ("n/a", [], "a lifecycle finalizer: the saved-host-model archive's cleanup "
+                                              "descriptor frees its native buffers when the archive is collected; "
+                                              "it returns nothing a digest can hold"),
+    "causal_lm_blocks": ("n/a", [], "an accessor: CausalLM.blocks returns list(model._blocks), no arithmetic; the "
+                                    "blocks it returns are the ones every hf-causal-lm forward runs"),
+    "transformer_session_discard_tape": ("covered", ["transformer-forward-tape"],
+                                         "TransformerForwardTape.close; the lane closes a tape, requires the "
+                                         "backward to refuse it and the next tape's gradients to be unchanged"),
+    "var_forecast": ("covered", ["sequence-var"],
+                     "VAR.fit's owner (bindings/xseq_forecast_native.mojo) builds the VARResults the bridge "
+                     "registered (_native_xseq_bridge.register(xseq_var_results=...)); its forecast calls "
+                     "var_forecast, and sequence-var digests a.forecast(y, 10)"),
+})
+
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
         "covered", ["hf-causal-lm", "par-causal-lm"],
@@ -1668,12 +2209,53 @@ def triage(row):
         status, lanes, why = ANNOTATIONS[row["entry"]]
         return status, sorted(set(lanes) | set(row["lanes_precise"])), why
     if row["lanes_precise"]:
-        if set(row["lanes_precise"]) <= NEW_LANES:
-            return "covered (new lane)", row["lanes_precise"], "new lane, OWED until recorded"
         return "covered", row["lanes_precise"], ""
+    if row.get("constant_probe"):
+        return "n/a", [], ("a constant probe: the body returns one compiled constant (a contract version, "
+                           "vendor or capability flag), reads no data and computes nothing")
     if not row["py_files"]:
         return "n/a", [], "no Python caller in the package (manifest, tests or Mojo-internal dispatch only)"
     return "GAP", [], "no lane reaches it"
+
+
+#: Registrations whose whole job is a lifecycle step or a metadata answer:
+#: a value fault has nothing to move, whatever helper their closure shares
+#: (lane verify-coverage-20261024, each checked in the source). Only consulted
+#: when no arm reaches the row.
+_LIFECYCLE = "a lifecycle step (allocates, opens, frees or closes a resident object); no value leaves it"
+_METADATA = "a metadata answer (a profile word, count or flag of the build or the object); no data value"
+SABOTAGE_NA_ENTRIES = {
+    **{e: _LIFECYCLE for e in (
+        "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
+        "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
+        "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
+        "msel_alloc", "msel_free", "x_metrics_dev_free", "x_prep_dev_free", "seq_tensor_alloc",
+        "mlp_resident_open", "mlp_resident_close", "rf_data_session_open", "rf_data_session_close")},
+    **{e: _METADATA for e in (
+        "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
+        "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_metrics_dev_live", "x_prep_dev_live",
+        "gbdt_model_dim")},
+}
+
+# lane verify-coverage-20261024, after the arms' run on 9b04b92c5 (decisions in
+# docs/plans/VERIFY_COVERAGE_20261024.md, "Arm decisions")
+_RESAMPLE_OFF = ("compiled out of identical builds: RESAMPLE_GPU_GATHER is the fast tier or the opt-in "
+                 "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER, RESAMPLE_FAST_GATHER_NARROW the fast tier; in identical "
+                 "the entry returns its not-taken flag (coverage-resample-gather MISSED on 9b04b92c5 for that reason)")
+SABOTAGE_NA_ENTRIES.update({
+    "resample_gather_gpu": _RESAMPLE_OFF, "resample_permutation_gather_gpu": _RESAMPLE_OFF,
+    "resample_gather_narrow": _RESAMPLE_OFF,
+    "xn_softmax64": "fast tier only: registered only under NC_PROBA64 (x_neighbors/proba64_nc.mojo, fast builds)",
+    "nonzero_f32_count": ("the capacity count before the COO fill; a wrong count makes the fill refuse "
+                          "(stale count), and the fill's values carry coverage-core-dense_coo"),
+})
+#: (entry, binding) -> reason, for one registration of an entry its twin covers.
+SABOTAGE_NA_BY_SRC = {
+    ("nonzero_f32_fill", "bindings/_mojolearn.mojo"): (
+        "the GPU base binding's COO scan: on a GPU install every spectral affinity takes the metrics dense "
+        "entry, so no install reaches it through a public call (Metal unmoved under coverage-core-dense_coo, "
+        "9b04b92c5); the host twin is armed"),
+}
 
 
 def sabotage_of(row):
@@ -1694,8 +2276,21 @@ def sabotage_of(row):
                     + (f" +{len(cov) - 2}" if len(cov) > 2 else ""))
     if seam:
         bits.append(f"{len(seam)} seam patch(es)")
+    if (row["entry"], row.get("src")) in SABOTAGE_NA_BY_SRC:
+        return "n/a", SABOTAGE_NA_BY_SRC[(row["entry"], row.get("src"))]
     if bits:
         return "armed", "; ".join(bits)
+    if row["entry"] in SABOTAGE_NA_ENTRIES:
+        return "n/a", SABOTAGE_NA_ENTRIES[row["entry"]]
+    if not row.get("n_changed", 1) and "closure_kernel" in row:
+        # an unchanged row (the whole-surface audit, --all): its closure decides
+        if not row["closure_kernel"]:
+            return "n/a", "door only: no kernel or impl definition in its closure (conversion, no arithmetic)"
+        pending = [n for n in row["closure_kernel"] if _sab_na(n) is None]
+        if not pending:
+            return "n/a", _sab_na(row["closure_kernel"][0])
+        return "owed", "no arm reaches its closure (" + pending[0] + (
+            f" +{row['n_closure_kernel'] - 1}" if row["n_closure_kernel"] > 1 else "") + ")"
     if not row["changed_kernel"]:
         return "n/a", "door-only change (conversion, no arithmetic)"
     pending = [n for n in row["changed_kernel"] if _sab_na(n) is None]
@@ -1735,8 +2330,39 @@ def _short(lanes, n=3):
     return ", ".join(f"`{l}`" for l in lanes[:n]) + (f" +{len(lanes) - n}" if len(lanes) > n else "")
 
 
+def audit_lanes(audit):
+    """Include the complete lane inventory and explicit source annotations."""
+    lanes = set(audit.get("lane_inventory", ()))
+    for row in audit["native"]:
+        lanes.update(triage(row)[1])
+    for row in audit["python"]:
+        lanes.update(row["lanes"])
+        annotation = PY_ANNOTATIONS.get((row["public"], row["op"]))
+        if annotation:
+            lanes.update(annotation[1])
+    return sorted(lanes)
+
+
+def audit_references(audit):
+    # Re-rendering an old audit must not substitute today's table evidence for
+    # the source/report it retained. The legacy `recorded` list has no scope.
+    lanes = audit_lanes(audit)
+    snapshot = audit.get("reference_evidence")
+    if not snapshot:
+        return unknown_references(lanes, "audit has no retained reference evidence snapshot")
+    # A row added after the snapshot still lacks evidence, even when neighboring
+    # rows have retained parts. Do not omit it from the summary denominator.
+    missing = set(lanes) - snapshot["lanes"].keys()
+    if missing:
+        return {**snapshot, "lanes": {
+            **snapshot["lanes"],
+            **unknown_references(missing, "lane absent from retained reference snapshot")["lanes"]}}
+    return snapshot
+
+
 def render_markdown(audit, path):
     nat, py = audit["native"], audit["python"]
+    references = audit_references(audit)
     tri = [(r, triage(r), sabotage_of(r)) for r in nat]
     count = defaultdict(int)
     for _, (st, _, _), _ in tri:
@@ -1749,20 +2375,32 @@ def render_markdown(audit, path):
     w = lines.append
     stamp = re.search(r"(\d{4})(\d{2})(\d{2})", os.path.basename(path))
     day = "-".join(stamp.groups()) if stamp else "2026-10-21"
-    w(f"# Verifier coverage of the endpoints changed since the last release ({day})")
-    w("")
-    w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
-      f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
-      f"catches. Range `{audit['base']}..{audit['head']}`. Generated by `tools/verify_coverage_audit.py` "
-      f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
-      f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
-      f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
+    whole = audit.get("scope") == "all"
+    if whole:
+        w(f"# Verifier coverage of the whole public surface ({day})")
+        w("")
+        w(f"Release gate (Andrew, 2026-10-21, widened 2026-10-24 to every exposed API): every native entry "
+          f"the package registers and every public operation method is reached by a verifier lane and by a "
+          f"fault-injection arm the verifier or a check provably catches. Every row at `{audit['head']}`, "
+          f"changed or not (`--all`). Generated by `tools/verify_coverage_audit.py` "
+          f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
+          f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
+          f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
+    else:
+        w(f"# Verifier coverage of the endpoints changed since the last release ({day})")
+        w("")
+        w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
+          f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
+          f"catches. Range `{audit['base']}..{audit['head']}`. Generated by `tools/verify_coverage_audit.py` "
+          f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
+          f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
+          f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
     w("")
     w("Regenerate:")
     w("")
     w("```sh")
-    w(f"python3 tools/verify_coverage_audit.py --base {audit['base']} --json <audit.json> --markdown "
-      f"docs/plans/{os.path.basename(path)}")
+    w(f"python3 tools/verify_coverage_audit.py {'--all ' if whole else ''}--base {audit['base']} --json "
+      f"<audit.json> --markdown docs/plans/{os.path.basename(path)}")
     w("```")
     w("")
     w("## Summary")
@@ -1784,32 +2422,80 @@ def render_markdown(audit, path):
     w("")
     pst = defaultdict(int)
     prow = []
+    by_entry = native_status_by_entry(nat)
     for r in py:
-        key = (r["public"], r["op"])
-        if key in PY_ANNOTATIONS:
-            st, lanes, why = PY_ANNOTATIONS[key]
-        elif r["lanes"]:
-            st = "covered (new lane)" if set(r["lanes"]) <= NEW_LANES else "covered"
-            lanes, why = r["lanes"], ""
-        else:
-            st, lanes, why = "GAP", [], "no lane reaches it"
+        st, lanes, why = py_triage(r, by_entry)
         pst[st] += 1
         prow.append((r, st, lanes, why))
-    w(f"Public Python methods whose call path changed: {len(py)} "
+    w(f"Public Python methods{' (every public operation method)' if audit.get('scope') == 'all' else ' whose call path changed'}: {len(py)} "
       + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())) + ".")
     w("")
-    w("A lane that reaches an entry `covered` is recorded unless it is one of the new lanes below, which "
-      "read OWED until a release record admits them.")
+    w("`covered` describes static reach only. It does not mean that a lane was run, recorded or admitted. "
+      "Fault arms marked `armed` likewise describe source reach, not successful fault detection.")
     w("")
-    w("## New lanes (tools/identity_lanes/coverage.py)")
+    w("## Reach rules (2026-10-24)")
     w("")
-    w("Each ran 9 of 9 fixtures STABLE at `--repeats 2` on the Mac (Metal) build of integ/20261021; "
-      "parts are Mojo FNV-1a64 digests (`verify_digest`). Declared in their family's training lanes with "
-      "the pending reason `no reference`. The lanes lane verify-coverage-owed added ran with that lane's "
-      "Python package over the same build.")
+    w("- **Native owners.** A migrated public method is one owner call (`xseq_native_call`, "
+      "`decomp_native_call`); the owner picks its handler on the operation and family strings and calls "
+      "compiled entries by name (`entries[\"croston\"]`, `self.fn(\"x_decomp_dev_gemm\")`, `\"xn_\" + name`). "
+      "`OwnerDispatch` reads every `if`/`elif` on a dispatch variable in the Python-facing Mojo, and the "
+      "entries its branch and the definitions it calls name (four calls deep, a type's methods followed by "
+      "name). A lane reaches those entries when its string constants or class names satisfy every enclosing "
+      "condition with a specific value (`croston_fit`, `FastICA`); a branch on generic values only (`fit`, a "
+      "package method name, a plain word) is credited only to lanes that reach that owner entry itself, "
+      "whose own impl file holds the branch. A branch that names another owner operation relays it.")
+    w("- **Bridge connects.** `_IPCA_CALL, _ = _native_ipca_bridge.connect_public(IncrementalPCA)`: reading "
+      "the bound name follows the connect and the call's own string arguments (`\"als_native_call\"`).")
+    w("- **Python shell.** A public method is API shell (argument checks routing to a native call; the "
+      "no-Python-compute fence keeps arithmetic out of it). It is covered when a lane reaches it, or, as "
+      "`covered (via native)`, when every native entry its walked call path reaches is covered. A method "
+      "with no native work at all (`return self`) is n/a.")
+    w("- **Constant probes.** A registration whose whole body returns one compiled constant (a contract "
+      "version, vendor or capability flag) reads no data and computes nothing: n/a.")
     w("")
-    for lane in sorted(NEW_LANES):
-        w(f"- `{lane}`: {NEW_LANE_PURPOSE[lane]}")
+    w("## Retained reference evidence")
+    w("")
+    w("RETAINED means that numeric reference parts have linked record metadata in the captured reference "
+      "table. It does not establish complete fixtures, all vendor columns, installed-package execution, "
+      "source applicability or admission of this candidate. The JSON preserves the actual parts, columns "
+      "and source records, including observed values that differ from the saved reference. "
+      "RETAINED does not mean those columns agree. Intentionally partial records remain partial. OWED means no numeric reference "
+      "is retained; UNKNOWN means the evidence is unavailable or inconsistent. Candidate admission: "
+      "**not assessed**.")
+    w("")
+    if references.get("table_sha256"):
+        w(f"Reference table SHA-256: `{references['table_sha256']}`.")
+        w("")
+    w("| reference evidence | lanes |")
+    w("|---|---|")
+    for status in ("RETAINED", "OWED", "UNKNOWN"):
+        selected = sorted(lane for lane, item in references["lanes"].items()
+                          if item["status"] == status)
+        w(f"| {status} | {len(selected)} |")
+    w("")
+    comparisons = references.get("column_comparisons")
+    if comparisons is not None:
+        w(f"Linked recorded column values: {comparisons['equal']} equal to their saved reference, "
+          f"{comparisons['different']} different, and {comparisons['n/a']} explicitly N/A. "
+          "These are historical observations, not current-candidate identity or admission results.")
+        w("")
+        different = sorted((lane, item["differing_columns"]) for lane, item in references["lanes"].items()
+                           if item.get("differing_columns"))
+        if different:
+            w("| lane with differing recorded values | column counts |")
+            w("|---|---|")
+            for lane, columns in different:
+                w(f"| `{lane}` | " + ", ".join(f"{column} {count}" for column, count in sorted(columns.items())) + " |")
+            w("")
+    for status in ("OWED", "UNKNOWN"):
+        selected = sorted(lane for lane, item in references["lanes"].items()
+                          if item["status"] == status)
+        if selected:
+            w(f"{status} lanes:")
+            w("")
+            for lane in selected:
+                w(f"- `{lane}`: {references['lanes'][lane]['reason']}")
+            w("")
     w("")
     proven = _proven_arms()
     w("## Fault-injection arms added (tools/identity_lanes/coverage_sabotage.tsv)")
@@ -1821,7 +2507,8 @@ def render_markdown(audit, path):
       "fault detection in every named lane, and restoration to clean output. Refusals require an exact "
       "fault-specific review; missing bindings and other infrastructure failures do not count. "
       + ("Retained execution scope is listed under Arms proven below; a declared arm is not proof it ran." if proven else
-         "RUN OWED: no arm has been built or run yet (lanes never compile); `apply-check` passes on this commit."))
+         "RUN OWED: no execution evidence is available in the retained arms table. This static audit does not "
+         "run apply-check or fault qualification."))
     w("")
     try:
         import coverage_sabotage
@@ -1838,6 +2525,9 @@ def render_markdown(audit, path):
     w("")
     if proven:
         w("## Arms proven (tools/identity_lanes/coverage_sabotage_proven.tsv)")
+        w("")
+        w("The following is retained historical evidence. This static report does not establish its "
+          "applicability to the candidate's source, binding ownership or physical library layout.")
         w("")
         w("Run one at a time on the Mac (lane run-sabotage-arms, 2026-10-21) over the merged Metal (identical) "
           "and host builds of 51bf10f4f, whose kernel sources equal 79982adaa's. Per arm: the patch applied, the "
@@ -1861,6 +2551,12 @@ def render_markdown(audit, path):
         w("")
         for line in _PROVEN_FIXES:
             w(line)
+        w("")
+        w("### Arm decisions after the 2026-10-24 run (9b04b92c5: 12 CAUGHT, 9 MISSED)")
+        w("")
+        for line in _ARM_DECISIONS_20261024:
+            w(line)
+        w("")
     w("## Owed")
     w("")
     owed = [(r, t) for r, t, _ in tri if t[0] == "owed"]
@@ -1909,10 +2605,11 @@ def render_markdown(audit, path):
     w("")
     w("## Public Python methods")
     w("")
-    w("| method | where | lanes | status |")
-    w("|---|---|---|---|")
+    w("| method | where | lanes | static reach | reference evidence |")
+    w("|---|---|---|---|---|")
     for r, st, lanes, why in prow:
-        w(f"| `{r['public']}.{r['op']}` | `{r['where']}` | {_short(lanes)} | {st}{': ' + why if why else ''} |")
+        w(f"| `{r['public']}.{r['op']}` | `{r['where']}` | {_short(lanes)} | {st}{': ' + why if why else ''} "
+          f"| {reference_label(lanes, references)} |")
     w("")
     w("## Native entries")
     w("")
@@ -1927,13 +2624,14 @@ def render_markdown(audit, path):
         w("")
         w(f"### `{src}`")
         w("")
-        w("| entry | change | lanes | sabotage | status |")
-        w("|---|---|---|---|---|")
+        w("| entry | change | lanes | sabotage | static reach | reference evidence |")
+        w("|---|---|---|---|---|---|")
         for r, (st, lanes, why), (ss, txt) in sorted(by_src[src], key=lambda x: x[0]["entry"]):
             if st.startswith("n/a") and ss != "armed":
                 ss, txt = "n/a", "no lane can run it (see status)"
             change = "new" if r["new_anywhere"] else ("moved here" if r["new"] else "/".join(r["kinds"]))
-            w(f"| `{r['entry']}` | {change} | {_short(lanes)} | {ss}: {txt} | {st}{': ' + why if why else ''} |")
+            w(f"| `{r['entry']}` | {change} | {_short(lanes)} | {ss}: {txt} | {st}{': ' + why if why else ''} "
+              f"| {reference_label(lanes, references)} |")
     with open(path, "w") as fh:
         fh.write("\n".join(lines) + "\n")
     return count, sab, pst
@@ -1945,6 +2643,9 @@ def main(argv=None):
     ap.add_argument("--json", help="write the audit here")
     ap.add_argument("--from-json", help="read a previous audit instead of deriving one")
     ap.add_argument("--markdown", help="write the coverage table here")
+    ap.add_argument("--all", dest="whole_surface", action="store_true",
+                    help="audit the WHOLE public surface: every registration and every public "
+                         "operation method, not only those new or changed since --base")
     args = ap.parse_args(argv)
     if args.from_json:
         audit = json.load(open(args.from_json))
@@ -1952,10 +2653,17 @@ def main(argv=None):
         import lane_select as ls
         walker = Walker()
         reach = lane_reach(ls, walker, NameClosure(walker))
-        native = native_rows(ls, args.base, reach)
-        py = python_rows(ls, walker, reach, args.base)
-        audit = dict(base=args.base, head=git("rev-parse", "--short", "HEAD").strip(),
-                     recorded=sorted(recorded_lanes()), native=native, python=py)
+        reach, _ = owner_reach(ls, reach)
+        native = native_rows(ls, args.base, reach, args.whole_surface)
+        py = python_rows(ls, walker, reach, args.base, args.whole_surface)
+        audit = dict(base=args.base, head=git("rev-parse", "HEAD").strip(),
+                     scope="all" if args.whole_surface else "changed",
+                     lane_inventory=sorted(reach), native=native, python=py)
+        audit["reference_evidence"] = reference_snapshot(
+            os.path.join(ROOT, "python/mojolearn/verify_reference/table.json"), audit_lanes(audit))
+        # Compatibility field: scoped retained metadata, never full admission.
+        audit["recorded"] = sorted(lane for lane, item in audit["reference_evidence"]["lanes"].items()
+                                   if item["status"] == "RETAINED")
     if args.json:
         os.makedirs(os.path.dirname(os.path.abspath(args.json)), exist_ok=True)
         with open(args.json, "w") as fh:
@@ -1965,7 +2673,7 @@ def main(argv=None):
         print("native status: " + ", ".join(f"{k} {v}" for k, v in sorted(count.items())))
         print("sabotage: " + ", ".join(f"{k} {v}" for k, v in sorted(sab.items())))
         print("python: " + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())))
-    rec = set(audit["recorded"])
+    references = audit_references(audit)
     nat = audit["native"]
     print(f"native: {len(nat)} new/changed registrations; "
           f"{sum(1 for r in nat if r['lanes_precise'])} precise lane(s), "
@@ -1973,7 +2681,9 @@ def main(argv=None):
           f"{sum(1 for r in nat if not r['lanes_precise'] and not r['lanes_wide'])} none; "
           f"{sum(1 for r in nat if r['sabotage_defines'] or r['sabotage_patches'])} with a sabotage arm")
     print(f"python: {len(audit['python'])} changed public methods; "
-          f"{sum(1 for r in audit['python'] if r['lanes'])} with a lane; recorded lanes {len(rec)}")
+          f"{sum(1 for r in audit['python'] if r['lanes'])} with a lane")
+    print("reference evidence: " + reference_label(audit_lanes(audit), references))
+    print("Static audit completed; execution and candidate admission not assessed.")
     return 0
 
 

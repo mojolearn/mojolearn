@@ -44,7 +44,10 @@ FAMILIES = (
                         # load_state_dict of the sequence optimizers
                         "sequence-optimizer-state",
                         # lane verify-gaps-20261022: the functional layer_norm_backward
-                        "sequence-layernorm-backward"),
+                        "sequence-layernorm-backward",
+                        # lane verify-coverage-20261024: DynamicTheta and OptimizedTheta
+                        # (tools/identity_lanes/public_gap_methods.py)
+                        "public-theta-variants"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -153,17 +156,19 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-adafactor-device": "Adafactor resident parameters, gradients and state",
                        "sequence-lamb-device": "LAMB resident parameters, gradients and state",
                        "sequence-optimizer-state": "NAdam and RMSprop state_dict and load_state_dict",
-                       "sequence-layernorm-backward": "layer_norm_backward"}
+                       "sequence-layernorm-backward": "layer_norm_backward",
+                       "public-theta-variants": "DynamicTheta / OptimizedTheta"}
 PUBLIC_PENDING_LANES = {
-    "sequence-tape-sequential": "no reference",
-    "sequence-tape-program": "no reference",
-    "sequence-moe-backward": "no reference",
-    "sequence-export-roundtrip": "no reference",
-    "sequence-onnx-import": "no reference",
-    "sequence-program-save-load": "no reference",
-    "sequence-device-tensor": "no reference",
-    "sequence-adafactor-device": "no reference",
-    "sequence-lamb-device": "no reference",
-    "sequence-optimizer-state": "no reference",
-    "sequence-layernorm-backward": "no reference",
+    "sequence-tape-sequential": "unwatched",
+    "sequence-tape-program": "unwatched",
+    "sequence-moe-backward": "unwatched",
+    "sequence-export-roundtrip": "unwatched",
+    "sequence-onnx-import": "unwatched",
+    "sequence-program-save-load": "unwatched",
+    "sequence-device-tensor": "unwatched",
+    "sequence-adafactor-device": "unwatched",
+    "sequence-lamb-device": "unwatched",
+    "sequence-optimizer-state": "unwatched",
+    "sequence-layernorm-backward": "unwatched",
+    "public-theta-variants": "no reference",
 }

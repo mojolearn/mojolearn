@@ -24,6 +24,7 @@ from bindings.training_linear_native import training_linear_operation
 from bindings.training_rms_native import training_rms_operation
 from bindings.training_embedding_native import training_embedding_operation
 from bindings.training_cross_entropy_native import training_cross_entropy
+from bindings.training_metadata_native import training_metadata
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -234,6 +235,10 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
 
 
 def optimizer_native(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == "training_numeric_mode" or operation == "training_vendor":
+        # Metadata needs only its connected native entries, not optimizer
+        # object admission, buffer initialization or runtime binding loaders.
+        return training_metadata(operation, mode, context)
     if operation == "device_finalize":
         return device_finalize(owner, context)
     opt_guards(context)
@@ -370,6 +375,10 @@ def optimizer_native_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> Py
         return optimizer_native(String(py=args[0]), args[1], args[2], args[3], args[4]).steal_data()
     except error:
         var message = String(error)
+        if message.startswith("ImportError: "):
+            return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_ImportError"))
+        if message.startswith("AttributeError: "):
+            return raise_python_exception(Error(message[byte=16:]), ExceptionType("PyExc_AttributeError"))
         if message.startswith("IndexError: "):
             return raise_python_exception(Error(message[byte=12:]), ExceptionType("PyExc_IndexError"))
         return optimizer_python_error(error)

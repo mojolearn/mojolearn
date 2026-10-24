@@ -45,10 +45,27 @@ merged_timeout_seconds() {
   printf '%s' "$t"
 }
 
+# _child_pids PID: PID's direct children, one per line. pgrep when present;
+# else /proc (minimal Linux images and containers ship without procps, and a
+# silent empty pgrep left the whole build tree running past its bound).
+_child_pids() {
+  local parent="$1" f line rest
+  local -a fields
+  if command -v pgrep >/dev/null 2>&1; then pgrep -P "$parent" 2>/dev/null; return 0; fi
+  [ -d /proc ] || return 0
+  for f in /proc/[0-9]*/stat; do
+    { read -r line < "$f"; } 2>/dev/null || continue
+    rest=${line##*) }                       # after "pid (comm) ": state ppid ...
+    read -r -a fields <<< "$rest"
+    if [ "${fields[1]:-}" = "$parent" ]; then f=${f#/proc/}; printf '%s\n' "${f%/stat}"; fi
+  done
+  return 0
+}
+
 # kill_tree SIG PID: SIG to PID's descendants (deepest first), then PID.
 kill_tree() {
   local sig="$1" pid="$2" child
-  for child in $(pgrep -P "$pid" 2>/dev/null); do kill_tree "$sig" "$child"; done
+  for child in $(_child_pids "$pid"); do kill_tree "$sig" "$child"; done
   kill "-$sig" "$pid" 2>/dev/null || true
 }
 

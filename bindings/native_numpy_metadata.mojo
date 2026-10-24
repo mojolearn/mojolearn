@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Admit NumPy's native dtype constructor before any live-module field call.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -26,7 +27,7 @@ def native_numpy_type(name: String, context: PythonObject) raises -> PythonObjec
     # Obtain type from a C-created scalar, independent of builtins.type.
     var type_class = py_type(py_type(PythonObject(0)))
     var modules = context["modules"]
-    var module_type = py_type(Python.import_module("sys"))
+    var module_type = py_type(native_loaded_module("sys"))
     var numpy = py_get(modules, "numpy")
     var owner = py_get(modules, "numpy._core._multiarray_umath")
     if owner is None:

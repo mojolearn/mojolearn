@@ -9,25 +9,11 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
-from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
+from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
+from bindings.host_array_native import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.scaler_lifecycle_native import scaler_archive_build
 from core.host_archive_gbdt import host_archive_gbdt_text
-
-
-def host_archive_typed(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
-    # Archive output is always Array storage; obtain the width from its fixed
-    # native typecode, including int32 (the linear allocator only supports f4/f8/i8).
-    var count = 1
-    for i in range(len(shape)):  # driver-loop: native output shape metadata
-        var dimension = Int(py=shape[i])
-        if dimension < 0:
-            raise Error("saved model array dimensions must be nonnegative")
-        count *= dimension
-    var store = py_call(context["array_type"], _store_code(dtype))
-    var raw = py_call(Python.import_module("builtins").bytes, count * Int(py=store.itemsize))
-    _ = py_call(store.frombytes, raw)
-    return classical_wrap_array(store, shape, dtype, "C", context)
 
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:

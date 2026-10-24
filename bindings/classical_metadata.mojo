@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native constructor/parameter metadata; no invocation of Python constructors,
 # signature inspection, attribute descriptors or nested estimator callbacks.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
@@ -42,7 +43,7 @@ def classical_get_params(model: PythonObject, ridge: Bool) raises -> PythonObjec
 
 
 def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(params) is not bi.dict:
         raise Error("TypeError: parameter keywords must be a native dict")
     if len(params) == 0:
@@ -74,10 +75,10 @@ def classical_is_fitted(model: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     if Bool(py=py_get(fields, "_mojolearn_fitted", False)) or Bool(py=py_get(fields, "_mojolearn_fitting", False)):
         return PythonObject(True)
-    var pairs = py_call(Python.import_module("builtins").list, fields.items())
+    var pairs = py_call(native_loaded_module("builtins").list, fields.items())
     for k in range(len(pairs)):  # driver-loop: over stored fitted attribute metadata
         var key = pairs[k][0]
-        if py_type(key) is not Python.import_module("builtins").str:
+        if py_type(key) is not native_loaded_module("builtins").str:
             continue
         if Bool(py=py_call(key.endswith, "_")) and not Bool(py=py_call(key.startswith, "_")) and pairs[k][1] is not None:
             return PythonObject(True)

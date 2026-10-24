@@ -232,7 +232,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
         -------
         self
         """
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
@@ -248,11 +248,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class label of each row of ``X``."""
-        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -391,7 +391,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
         -------
         self
         """
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
@@ -403,7 +403,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
     def predict(self, X):
         """Predict the target of each row of ``X``."""
-        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.

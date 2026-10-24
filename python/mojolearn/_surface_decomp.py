@@ -25,7 +25,10 @@ FAMILIES = (
                         # lane eigh-wide-fixtures (2026-10-13): eigh at n = 72 and 128
                         "x-decomp-eigh-wide-linalg", "x-decomp-eigh-wide-fastica", "x-decomp-eigh-wide-rotation", "x-decomp-eigh-wide-factor-analysis", "x-decomp-eigh-wide-mincovdet", "x-decomp-eigh-wide-kpca",
                         # lane run-sabotage-arms (2026-10-21): a sketch wider than the rank
-                        "x-decomp-rsvd-rank-deficient"),
+                        "x-decomp-rsvd-rank-deficient",
+                        # lane verify-coverage-20261024: the public sparse_encode function
+                        # (tools/identity_lanes/public_gap_methods.py)
+                        "public-sparse-encode"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
@@ -61,7 +64,7 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-decomp-rsvd-rank-deficient": "randomized SVD of a rank-deficient matrix", "x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
+TRAINING_LANE_NAMES = {"public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)", "x-decomp-rsvd-rank-deficient": "randomized SVD of a rank-deficient matrix", "x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
                        "x-decomp-srp": "SparseRandomProjection",
                        "x-decomp-eigh-wide-linalg": "linalg.eigh at n >= 64",
                        "x-decomp-eigh-wide-fastica": "FastICA at 64 or more components",
@@ -69,4 +72,5 @@ TRAINING_LANE_NAMES = {"x-decomp-rsvd-rank-deficient": "randomized SVD of a rank
                        "x-decomp-eigh-wide-factor-analysis": "FactorAnalysis with fewer rows than features at 64 or more features",
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
                        "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
-PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "no reference"}
+PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "unwatched",
+                        "public-sparse-encode": "no reference"}

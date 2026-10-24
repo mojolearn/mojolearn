@@ -7,6 +7,8 @@
 # codes. Every stage group stages the words, operands and order the Python
 # helper of the same name staged.
 from std.os import getenv
+from bindings.native_array_storage import native_array_empty
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -15,6 +17,7 @@ from bindings.classical_validate import classical_view
 from bindings.x_prep_native_inputs import _rows_fields, _values
 from bindings.classical_labels import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
+from bindings.sequential_admission import _one_of
 
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -73,7 +76,7 @@ comptime II_CH = 1024
 
 
 def cls_builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def cls_name(model: PythonObject) raises -> String:
@@ -213,7 +216,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
     var out = i32_array(n, context)
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
-    var raw = py_call(context["array_type"], PythonObject(String("q") if typestr == "<i8" else String("i")))
+    var raw = native_array_empty(String("q") if typestr == "<i8" else String("i"))
     if typestr == "<i4" or typestr == "<i8":
         _ = py_call(raw.frombytes, classical_c_bytes(view, name, context))
     else:
@@ -227,7 +230,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
         _ = out  # keep the Python object alive through the native call above
     _ = raw^
     if n == 0:
-        return classical_wrap_array(py_call(context["array_type"], "i"), Python.tuple(0), "<i4", "C", context["output_context"])
+        return classical_wrap_array(native_array_empty("i"), Python.tuple(0), "<i4", "C", context["output_context"])
     return out
 
 
@@ -293,7 +296,7 @@ def float_list(values: PythonObject, context: PythonObject) raises -> List[Float
             code = "B"
         elif typestr != "<f8":
             raise Error("TypeError: the values must be a sequence of real numbers")
-        var store = py_call(context["array_type"], PythonObject(code))
+        var store = native_array_empty(code)
         _ = py_call(store.frombytes, classical_c_bytes(view, "priors", context))
         items = py_call(store.tolist)
     var out = List[Float64]()
@@ -326,7 +329,11 @@ def prior_sum(vals: List[Float64]) -> Float64:
 
 
 def is_real(value: PythonObject, context: PythonObject) raises -> Bool:
-    return Bool(py=py_call(cls_builtins().isinstance, value, context["real_type"]))
+    var cls = py_type(value)
+    if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)):
+        return True
+    return (_one_of(cls, context["scalar_types"])
+            and not _one_of(cls, py_get(context, "bool_types", Python.tuple(py_type(PythonObject(True))))))
 
 
 def cls_float(value: PythonObject) raises -> Float64:
@@ -624,7 +631,7 @@ def label_words(y: PythonObject, n: Int, context: PythonObject) raises -> Tuple[
     var nw = size * spec[1]
     if nw > 1073741824:
         return (-1, 0, PythonObject(None))
-    var store = py_call(context["array_type"], "i")
+    var store = native_array_empty("i")
     _ = py_call(store.frombytes, classical_c_bytes(view, "y", context))
     return (spec[0], size, classical_wrap_array(store, Python.tuple(nw), "<i4", "C", context["output_context"]))
 

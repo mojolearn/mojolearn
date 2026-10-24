@@ -217,7 +217,7 @@ from gbdt.models.non_symmetric_tree import (
     TNonSymmetricTree,
     TNonSymmetricTreeStructure,
 )
-from gbdt.train import TrainedModel
+from gbdt.models.trained_model import TrainedModel
 
 
 #: The name in the `format` record. A file that does not start with this is

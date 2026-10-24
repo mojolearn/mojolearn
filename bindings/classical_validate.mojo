@@ -4,6 +4,7 @@
 # sparse, complex, rank and empty X; a missing, complex, column or non-finite
 # y; inconsistent lengths; the sample_weight shape. Only array metadata is read
 # here; values are read by the typed CastIn conversion.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_input, classical_kind, classical_address
@@ -16,11 +17,11 @@ comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if 
 
 
 def _repr(value: PythonObject) raises -> String:
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def classical_estimator_name(model: PythonObject) raises -> String:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
     return String(cls.__name__)
 
@@ -41,7 +42,7 @@ def classical_refuse_sparse(source: PythonObject, est: String) raises:
     # scipy.sparse containers are recognized by their defining module, so no
     # attribute or property of the container runs.
     var module = py_type(source).__module__
-    if py_type(module) is Python.import_module("builtins").str and Bool(py=py_call(module.startswith, "scipy.sparse")):
+    if py_type(module) is native_loaded_module("builtins").str and Bool(py=py_call(module.startswith, "scipy.sparse")):
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
 
 
@@ -55,7 +56,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject) raises -> Py
     if nd != 2:
         raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape))
     if not _numeric(view, context):
-        raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(Python.import_module("builtins").memoryview, view).format) + ", which is not a numeric array")
+        raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(native_loaded_module("builtins").memoryview, view).format) + ", which is not a numeric array")
     try:
         return classical_host_f32(view, 2, "X", context)
     except error:
@@ -90,7 +91,7 @@ def classical_check_y(source: PythonObject, rows: Int, est: String, context: Pyt
     raveled), finite and as long as X."""
     if source is None:
         raise Error(est + " requires y to be passed, but the target y is None.")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var view = classical_view(source, context, "y")
     if classical_kind(view, context) == "c":
         raise Error("Complex data not supported: " + est + " got a complex y.")
@@ -113,12 +114,31 @@ def classical_check_y(source: PythonObject, rows: Int, est: String, context: Pyt
     return y
 
 
+def classical_weight_refusal(source: PythonObject, error: Error) raises -> Error:
+    """The refusal of a sample_weight the shared admission refused. That
+    refusal names no accepted type; say what a weight may be. An object that
+    only defines __array__ (scikit-learn's _NotAnArray) is never converted:
+    no Python protocol runs in a fit."""
+    if String(error).startswith("TypeError: Sequential requires native input types"):
+        return Error("TypeError: sample_weight must be None, a number, a NumPy array, a buffer "
+                     + "(memoryview, array.array, bytearray), a list or tuple of numbers, a pandas "
+                     + "Series or a Torch tensor; got " + String(py_type(source).__name__)
+                     + ", which is not read because it only converts through Python-defined "
+                     + "methods such as __array__")
+    return Error(String(error))
+
+
 def classical_check_weights_input(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
     """sample_weight as rows float32 words: None stays None, a scalar fills
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
     if source is None:
         return PythonObject(None)
-    var view = classical_view(source, context, "sample_weight")
+    var view = PythonObject(None)
+    try:
+        view = classical_view(source, context, "sample_weight")
+    except error:
+        var refusal = classical_weight_refusal(source, error)
+        raise refusal
     var nd = Int(py=view.ndim)
     if nd > 1:
         raise Error("Sample weights must be 1D array or scalar")

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optimizer admission runs before native code encounters any Python hook.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
@@ -82,7 +83,7 @@ def opt_schedule(value: PythonObject, context: PythonObject) raises:
 def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: optimizer input nesting exceeds the native limit")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"]) or opt_numpy(cls, context):
         return
@@ -123,7 +124,7 @@ def opt_owner(owner: PythonObject, context: PythonObject) raises:
     if not opt_exact(py_type(owner), context["owners"]):
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var keys = py_call(context["container_types"][0], fields)
     for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
         if py_type(keys[i]) is not b.str:

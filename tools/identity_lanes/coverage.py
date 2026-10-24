@@ -1235,3 +1235,182 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
             "training-device-cross-entropy", "sequence-layernorm-backward",
             "x-metrics-classification-report", "x-metrics-permutation-test-score",
             "classical-float16-sequences")
+
+
+# ---------------------------------------------------------------- lane verify-coverage-20261024
+# The whole-surface audit (docs/plans/VERIFY_COVERAGE_20261024.md) found no
+# lane for TransformerBlock's forward tape: forward_with_tape,
+# backward_from_tape and TransformerForwardTape.close
+# (`transformer_session_forward_tape`, `_backward_tape`, `_discard_tape`).
+
+
+@lane("transformer-forward-tape")
+def _(ml, X, yc, yr, Xh=None):
+    """The `transformer` lane's block: a forward with a tape kept whole and
+    one with a zero activation budget (the backward replays the forward),
+    each consumed by backward_from_tape, whose gradients must equal the
+    block's own recomputing backward byte for byte. A third tape is closed;
+    its backward must refuse, and a fourth, made after the close, must
+    still give the same gradients (the discard frees only its ticket)."""
+    d = _coverage_digester(ml)
+    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+    w = _block_weights("transformer", {
+        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
+        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+        "down_proj.weight": (dm, it)},
+        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
+    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    x = _seq(X, 2, 16, dm)
+    g = _seq(X, 2, 16, dm, skip=1024)
+    whole = blk.backward(x, g)
+    names = sorted(whole)
+    parts = {"backward": d(np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))}
+    for tag, budget in (("kept", 1 << 29), ("replayed", 0)):  # glue: the two activation budgets
+        y, tape = blk.forward_with_tape(x, activation_budget_bytes=budget)
+        grads = blk.backward_from_tape(tape, g)
+        flat = np.concatenate([np.asarray(grads[k], dtype=np.float32).reshape(-1) for k in names])
+        _same_bytes(f"backward_from_tape ({tag})", flat, "TransformerBlock.backward",
+                    np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))
+        parts[f"{tag}_forward"] = d(np.asarray(y, dtype=np.float32))
+        parts[f"{tag}_grads"] = d(flat)
+    _, closed = blk.forward_with_tape(x)
+    closed.close()
+    try:
+        blk.backward_from_tape(closed, g)
+        refused = 0
+    except ValueError:
+        refused = 1
+    if not refused:
+        raise AssertionError("backward_from_tape accepted a closed tape")
+    _, after = blk.forward_with_tape(x)
+    again = blk.backward_from_tape(after, g)
+    parts["after_close"] = d(np.concatenate([np.asarray(again[k], dtype=np.float32).reshape(-1) for k in names]))
+    parts["closed_refused"] = d(np.asarray([refused], dtype=np.int64))
+    return _fit(parts)
+
+
+@lane("scaler-fit-transform")
+def _(ml, X, yc, yr, Xh=None):
+    """StandardScaler.fit_transform and MinMaxScaler.fit_transform: the
+    one-upload combined entries (`standard_fit_transform`,
+    `minmax_fit_transform`), which no other lane calls. Their documented
+    claim is the same kernels on the same words as fit then transform; the
+    `agree` part holds that equality (a flag, so a build that breaks it reads
+    DIVERGENT rather than REFUSED), beside the transformed words and the
+    fitted statistics."""
+    d = _coverage_digester(ml)
+    x = np.ascontiguousarray(X[:2048], dtype=np.float32)
+    parts, agree = {}, []
+    for tag, make, attrs in (("standard", lambda: ml.StandardScaler(), ("mean_", "var_", "scale_")),  # glue: two scalers
+                             ("minmax", lambda: ml.MinMaxScaler(feature_range=(-1.0, 2.0)),
+                              ("data_min_", "data_max_", "scale_", "min_"))):
+        one = make()
+        t = np.asarray(one.fit_transform(x), dtype=np.float32)
+        two = make().fit(x)
+        u = np.asarray(two.transform(x), dtype=np.float32)
+        stats = np.concatenate([np.asarray(getattr(one, a), dtype=np.float64).reshape(-1) for a in attrs])
+        again = np.concatenate([np.asarray(getattr(two, a), dtype=np.float64).reshape(-1) for a in attrs])
+        agree += [int(t.tobytes() == u.tobytes()), int(stats.tobytes() == again.tobytes())]
+        parts[f"{tag}_transform"] = d(t)
+        parts[f"{tag}_stats"] = d(stats)
+    parts["agree"] = d(np.asarray(agree, dtype=np.int64))
+    return _fit(parts)
+
+
+@lane("multioutput-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    """MultiOutputRegressor over Ridge: its predict runs every target's
+    ridge at once (the meta owner's `_multi_ridge`, `ridge_predict_multi`),
+    which trees-multioutput (over decision trees) never reaches. Three
+    targets, two alphas; parts are the fitted coefficients and the
+    predictions on the fit rows."""
+    d = _coverage_digester(ml)
+    x = np.ascontiguousarray(X[:1024, :6], dtype=np.float32)
+    Y = np.ascontiguousarray(np.stack([yr[:1024], yr[:1024][::-1].copy(), np.asarray(X[:1024, 6])], axis=1),
+                             dtype=np.float32)
+    parts = {}
+    for alpha in (0.5, 2.0):  # glue: two regularization strengths
+        m = ml.MultiOutputRegressor(ml.Ridge(alpha=alpha)).fit(x, Y)
+        parts[f"coef_{alpha}"] = d(np.concatenate([np.asarray(e.coef_, dtype=np.float32).reshape(-1)
+                                                   for e in m.estimators_]))
+        parts[f"predict_{alpha}"] = d(np.asarray(m.predict(x), dtype=np.float32))
+    return _fit(parts)
+
+
+@lane("x-ridge-cv-kfold")
+def _(ml, X, yc, yr, Xh=None):
+    """RidgeCV with an integer cv and no sample weights: the k-fold scores
+    on the binding and the first best finite score chosen in Mojo
+    (`x_linear_best_alpha`), which the leave-one-out lanes never reach.
+    Parts: the chosen alpha, the refit coefficients and intercept, the
+    predictions."""
+    d = _coverage_digester(ml)
+    x = np.ascontiguousarray(X[:1000], dtype=np.float32)
+    y = np.ascontiguousarray(yr[:1000], dtype=np.float32)
+    m = ml.RidgeCV(alphas=(0.01, 0.3, 3.0, 30.0), cv=4).fit(x, y)
+    return _fit(dict(alpha=d(np.asarray([m.alpha_], dtype=np.float64)),
+                     coef=d(np.asarray(m.coef_, dtype=np.float32)),
+                     intercept=d(np.asarray([m.intercept_], dtype=np.float64)),
+                     predict=d(np.asarray(m.predict(x), dtype=np.float32))))
+
+
+@lane("neural-trainer-unfused")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelNeuralTrainer over the mlp lane's trainer with
+    MOJOLEARN_MLP_FUSED=0: the unfused per-layer gradient route
+    (bindings/parallel_mlp_native.mojo mlp_gradients_from_state: the
+    training binding's mlp_bias_activation, ce_loss, mlp_relu_backward and
+    mlp_sum_rows) that a multi-device optimizer takes and a one-device run
+    otherwise skips for the fused step. The switch is read live from
+    os.environ (_parallel_mlp connects os.environ._data); it is restored
+    before the lane returns. Parts: the weights after three steps and the
+    logits."""
+    from mojolearn.parallel_training import ParallelNeuralTrainer
+    d = _coverage_digester(ml)
+    w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
+         for s in ((16, 8), (16,), (3, 16), (3,))]
+    Xm = np.ascontiguousarray(X[:576, :8])
+    t = _three_class(X[:576])
+    steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
+              for k in range(3)] for s in range(3)]
+    old = os.environ.get("MOJOLEARN_MLP_FUSED")
+    os.environ["MOJOLEARN_MLP_FUSED"] = "0"
+    try:
+        m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+        # one device: the claim is the unfused route's arithmetic, not a
+        # multi-device driver's (that is par-mlp's), so the lane names device 0
+        # itself rather than the par-* lanes' _par_devices()
+        with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
+            for shards in steps:  # glue: three driver steps
+                tr.train_step(shards)
+    finally:
+        if old is None:
+            os.environ.pop("MOJOLEARN_MLP_FUSED", None)
+        else:
+            os.environ["MOJOLEARN_MLP_FUSED"] = old
+    return _fit(dict(weights=d(np.concatenate([np.asarray(m.weights_[k], dtype=np.float32).reshape(-1)
+                                               for k in sorted(m.weights_)])),
+                     logits=d(np.asarray(m.predict_logits(Xm[:256]), dtype=np.float32))))
+
+
+@lane("svc-gamma-scale")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC and SVR with gamma='scale' (the package default is 'auto', so
+    the svc and svr lanes never take it): SVC.fit -> the SVC owner's
+    `_resolve_gamma` (bindings/svc_kernel_native.mojo) -> the svm binding's
+    `scale_gamma_limbs` (svm/impl/scale_gamma_device.mojo on a GPU column,
+    svm/host/scale_gamma_host.mojo on the host column) -> the once-rounded
+    exact 1 / (n_features * X.var()). SVR.fit takes the same door. Parts: the
+    decision values and predictions of both, sized like the svc lane."""
+    d = _coverage_digester(ml)
+    c = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:2000], yc[:2000])
+    r = ml.SVR(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:1000], yr[:1000])
+    return _fit(dict(svc_decision=d(np.asarray(c.decision_function(X[2000:2256]), dtype=np.float32)),
+                     svc_predict=d(np.asarray(c.predict(X[2000:2256]))),
+                     svr_predict=d(np.asarray(r.predict(X[1000:1256]), dtype=np.float32))))
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")

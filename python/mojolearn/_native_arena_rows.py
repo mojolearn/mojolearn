@@ -50,7 +50,7 @@ def connect():
     native_types = dict(type=type, object=object, list=list, tuple=tuple, dict=dict,
                         str=str, bytes=bytes, bytearray=bytearray, int=int,
                         float=float, bool=bool)
-    context.update(arena_native_types=native_types, native_module_type=ModuleType, arena_memoryview=memoryview, arena_id=id,
+    context.update(arena_native_types=native_types, native_module_type=ModuleType, arena_memoryview=memoryview,
                    arena_half_copy_canonical=half_copy_canonical,
                    arena_resident_class=model_selection._Resident,
                    arena_resident_dict=vars(model_selection._Resident)['__dict__'],
@@ -138,12 +138,11 @@ def connect():
                    cache_prefix_error_types=(type(None), bool, int, float, complex, bytes,
                                              bytearray, list, tuple, dict, set, frozenset, range))
     # glue: retain the lifecycle owners' fixed identities (DeviceCache,
-    # resident scope, thread-local) and the input-preparation step a foreign
-    # fold owner (pandas, list, memoryview) already went through
-    from ._buffer import _materialize
+    # resident scope, thread-local). A foreign fold container is
+    # materialized natively by the model-selection input owner, connected
+    # as arena_msel_input_context by _native_msel_inputs.connect.
     context.update(cache_class=_arena_io.DeviceCache, cache_scope_class=_arena_io._Scope,
-                   cache_local=_arena_io._LOCAL, cache_object_new=object.__new__,
-                   arena_fold_materialize=_materialize)
+                   cache_local=_arena_io._LOCAL, cache_object_new=object.__new__)
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context
     model_selection._RESIDENT_CALL = call

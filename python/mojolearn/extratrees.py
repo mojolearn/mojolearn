@@ -434,12 +434,12 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         -------
         self
         """
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, sample_weight=None):
         """`fit` of the trees from global tree ID `tree_start` on (a shard of
         a multi-device forest)."""
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, tree_start), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, tree_start), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities: the average of the trees' leaf class
@@ -450,7 +450,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         Array of shape (n_samples, n_classes), float64
             Columns in `classes_` order.
         """
-        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
 
     def _predict_with_proba(self, X):
         """Return labels and probabilities from one exact vote matrix.
@@ -473,7 +473,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             An int64 or float64 `Array` for numeric labels, a Python list for
             string labels.
         """
-        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 @forest_estimator("regressor")
 # Maintainer note (moved from the docstring): GPU training produces means of
@@ -646,12 +646,12 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         -------
         self
         """
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, sample_weight=None):
         """`fit` of the trees from global tree ID `tree_start` on (a shard of
         a multi-device forest)."""
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, tree_start), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, tree_start), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predicted values: the mean of the trees' predictions.
@@ -660,7 +660,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         -------
         Array of shape (n_samples,), float64
         """
-        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 
 # The forests' native owner reads these fixed tables (criteria, refusal

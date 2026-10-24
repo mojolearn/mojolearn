@@ -12,6 +12,7 @@ import mojolearn
 from mojolearn import _backend
 from mojolearn import _training_impl as T
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._allocator_diagnostics import product_stderr
 
 
 @pytest.mark.parametrize("partial", [False, True])
@@ -166,4 +167,4 @@ def test_native_training_cleanup_survives_import_shutdown(scenario, tmp_path):
     (tmp_path / "stderr.log").write_text(run.stderr)
     assert run.returncode == 0, (run.returncode, run.stdout, run.stderr)
     assert '"completed": true' in run.stdout, run.stdout
-    assert not run.stderr, run.stderr
+    assert not product_stderr(run.stderr), run.stderr

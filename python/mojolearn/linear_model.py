@@ -1143,6 +1143,7 @@ class LogisticRegression(NumericModeMixin):
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
+    _mojolearn_native_public = True
     _estimator_type = "classifier"
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -1150,18 +1151,21 @@ class LogisticRegression(NumericModeMixin):
 
     def __init__(self, *, penalty="l2", tol=1e-4, C=1.0, fit_intercept=True,
                  class_weight=None, max_iter=1000, linesearch_max_iter=50,
-                 l1_ratio=None, solver="qn"):
-        # Stored verbatim (scikit-learn's convention); the native fit
-        # checks them when `fit` runs.
-        self.penalty = penalty
-        self.tol = tol
-        self.C = C
-        self.fit_intercept = fit_intercept
-        self.class_weight = class_weight
-        self.max_iter = max_iter
-        self.linesearch_max_iter = linesearch_max_iter
-        self.l1_ratio = l1_ratio
-        self.solver = solver
+                 l1_ratio=None, solver="qn", numeric_mode=None):
+        return _LR_CALL(self, "initialize", (penalty, tol, C, fit_intercept, class_weight,
+                                             max_iter, linesearch_max_iter, l1_ratio, solver,
+                                             numeric_mode), _LR_CONTEXT)
+
+    def get_params(self, deep=True):
+        """Return the constructor parameter values."""
+        return _LR_CALL(self, "get_params", (deep,), _LR_CONTEXT)
+
+    def set_params(self, **params):
+        """Set constructor parameters and clear fitted state after an update."""
+        return _LR_CALL(self, "set_params", (params,), _LR_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _LR_CALL(self, "is_fitted", (), _LR_CONTEXT)
 
     # QN(...) defaults the Python door does not expose (class constants, so
     # the instance carries only its constructor parameters)

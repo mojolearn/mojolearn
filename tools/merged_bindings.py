@@ -43,6 +43,7 @@ several merged builds of one directory at once, so it holds an exclusive
 flock for the whole update (index_lock below).
 """
 import argparse
+from collections import Counter
 import contextlib
 import fcntl
 import hashlib
@@ -55,6 +56,7 @@ import tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = REPO / "bindings" / "merged_groups.json"
+DEVELOPMENT_MANIFEST = REPO / "bindings" / "development_groups.json"
 ENTRY_DIR = REPO / "bindings" / "entry"
 INDEX_FORMAT = 1
 
@@ -82,7 +84,31 @@ def members(dir_name, plat, byte_lm):
     return out
 
 
-def plan(dir_name, plat, byte_lm):
+def development_members(dir_name, plat, byte_lm):
+    """Partition the release surface without changing the release manifest.
+
+    Optional members have one explicit owner in this partition and are filtered
+    by the release manifest's platform policy before planning physical files.
+    A newly shipped binding must be assigned deliberately, never omitted.
+    """
+    if dir_name not in ("identical", "host"):
+        raise ValueError("development builds support identical and host only")
+    groups = json.loads(DEVELOPMENT_MANIFEST.read_text())["groups"][dir_name]
+    configured = [n for names in groups.values() for n in names]
+    duplicates = sorted(n for n, count in Counter(configured).items() if count != 1)
+    d = manifest()["dirs"][dir_name]
+    possible = {n for names in d["groups"].values() for n in names} | set(d.get("optional", {}))
+    if duplicates or set(configured) != possible:
+        raise ValueError(f"development partition differs: duplicate={duplicates}, "
+                         f"missing={sorted(possible - set(configured))}, "
+                         f"unknown={sorted(set(configured) - possible)}")
+    wanted = {n for names in members(dir_name, plat, byte_lm).values() for n in names}
+    suffix = "_host" if dir_name == "host" else ""
+    return {f"_mojolearn_dev_{group}{suffix}": [n for n in names if n in wanted]
+            for group, names in groups.items() if any(n in wanted for n in names)}
+
+
+def plan(dir_name, plat, byte_lm, layout="release"):
     """[(stem, flags_class, [members])]: the files one build of `dir_name`
     writes. On macOS a group splits by flags class so each member keeps the
     exact compile flags its own build script passes."""
@@ -90,7 +116,10 @@ def plan(dir_name, plat, byte_lm):
     metal1 = set(m.get("darwin_metal1", []))
     suffix = m.get("darwin_metal1_suffix", "_m1")
     rows = []
-    for stem, names in members(dir_name, plat, byte_lm).items():
+    if layout not in ("release", "development"):
+        raise ValueError(f"unknown merged layout: {layout}")
+    groups = development_members(dir_name, plat, byte_lm) if layout == "development" else members(dir_name, plat, byte_lm)
+    for stem, names in groups.items():
         if dir_name == "host":
             rows.append((stem, "host", names))
             continue
@@ -205,7 +234,10 @@ def root_text(stem, names):
 
 def cmd_root(args):
     names = [n for n in args.members.split(",") if n]
-    pathlib.Path(args.out).write_text(root_text(args.stem, names))
+    out = pathlib.Path(args.out)
+    text = root_text(args.stem, names)
+    if not out.is_file() or out.read_text() != text:
+        out.write_text(text)
     return 0
 
 
@@ -255,6 +287,11 @@ def _index_locked(args):
                 del files[other]
     files[fname] = names
     idx["format"] = INDEX_FORMAT
+    # A release rebuild can replace a previously activated development index.
+    # Only the development controller writes a complete development receipt;
+    # do not retain that old label/provenance after a direct merged rebuild.
+    idx.pop("layout", None)
+    idx.pop("provenance", None)
     p = index_path(args.outdir)
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(idx, indent=1, sort_keys=True) + "\n")
@@ -272,7 +309,7 @@ def cmd_owner(args):
 
 
 def cmd_check_index(args):
-    want = {stem + ".so": sorted(mem) for stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm)}
+    want = {stem + ".so": sorted(mem) for stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm, args.layout)}
     p = index_path(args.outdir)
     if not p.is_file():
         print(f"merged_bindings: {p} is absent; the merged build did not index {args.outdir}", file=sys.stderr)
@@ -296,21 +333,21 @@ def cmd_check_index(args):
 
 def cmd_members(args):
     names = []
-    for _stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm):
+    for _stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm, args.layout):
         names += mem
     print(" ".join(names))
     return 0
 
 
 def cmd_plan(args):
-    for stem, cls, mem in plan(args.dir, args.platform, args.byte_lm):
+    for stem, cls, mem in plan(args.dir, args.platform, args.byte_lm, args.layout):
         print(stem, cls, ",".join(mem))
     return 0
 
 
 def cmd_check(args):
     got = []
-    for _stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm):
+    for _stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm, args.layout):
         got += mem
     want = args.expect.split()
     if sorted(got) != sorted(want):
@@ -328,6 +365,7 @@ def main(argv=None):
 
     def common(p):
         p.add_argument("--dir", required=True, choices=("fast", "identical", "host"))
+        p.add_argument("--layout", choices=("release", "development"), default="release")
         p.add_argument("--platform", default=default_platform(), choices=("darwin", "linux"))
         p.add_argument("--byte-lm", type=lambda s: s == "1",
                        default=os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1")

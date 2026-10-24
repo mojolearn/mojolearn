@@ -5,7 +5,7 @@
 
 docs/plans/VERIFY_COVERAGE_20261021.md lists the kernel definitions that are
 new or changed since the last release and that no existing sabotage arm
-reached. Each arm here is a source patch in `<area>/checks/sabotage/` that
+reached. Each arm here is a source patch in `<area>/sabotage/` (never `<area>/checks/`, which would shadow the top-level `checks` package) that
 injects one VALUE fault into the changed definition (a float output one ulp
 off, an integer output permuted or stepped, a byte flipped), so a build with
 the patch applied computes a wrong answer through exactly that path. The arm
@@ -172,7 +172,7 @@ def _equivalent_commits(commits, evidence, root):
                                 capture_output=True, text=True, check=True)
         for path in result.stdout.splitlines():
             if ((path.startswith("docs/") and Path(path).suffix in (".md", ".rst", ".txt")) or path == "tools/identity_lanes/coverage_sabotage.tsv" or
-                    ("/checks/sabotage/" in path and path.endswith(".patch"))):
+                    ("/sabotage/" in path and path.endswith(".patch"))):
                 continue
             raise ValueError(f"source equivalence changes executable/build/test input: {path}")
 

@@ -72,3 +72,31 @@ coverage-native-optimizer-zero	build_training rc 0, 353s; build_training_host rc
 coverage-native-optimizer-io-query	build_training rc 0, 243s; build_training_host rc 0, 35s	CAUGHT	optim-io-capability (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	326
 coverage-native-optimizer-io-download	build_training rc 0, 197s	CAUGHT	optim-resident-io (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	222
 coverage-native-sequence-release	build_x_sequence rc 0, 272s	CAUGHT	sequence-device-release (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	298
+# Lane sabotage-proven-20261024 (2026-10-24): clean set = the development identical (Metal) and host builds of
+# 9b04b92c5 (tools/development_build.py, all 79 groups); same per-arm procedure, records via `pixi run -e test`
+# (the default env's Python 3.13 cannot import mojolearn at 9b04b92c5), one column JSON each for clean, faulted
+# and restored, judged by coverage_sabotage.py check --restored per column; a lane is caught when one column moved.
+# Follow-up 2026-10-24 (evidence out2/): rerun over the development set of 79e45a53f (native-identical to cc3b222c2)
+# for the corrected arms; coverage-training-mlp_ops_rng split into coverage-training-mlp_ops and
+# coverage-training-neural_rng; coverage-resample-gather retired (row dropped).
+coverage-x_neighbors-host_ops	build_x_neighbors_host rc 0, 11s	CAUGHT	x-neighbors-connected-components (host MOVED) x-neighbors-ocsvm (host MOVED)	2 DIVERGENT	STABLE, exact clean source/bindings/results restored	32
+coverage-x_neighbors-kfeat_rng_host	build_x_neighbors_host rc 0, 21s	CAUGHT	x-neighbors-poly-sketch (host MOVED) x-neighbors-skewed-chi2 (host MOVED)	2 DIVERGENT	STABLE, exact clean source/bindings/results restored	36
+coverage-x_cnn-perm_host	build_x_cnn_host rc 0, 3s	CAUGHT	x-cnn-gcn (host MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	15
+coverage-core-pca_exact_impl	build_runtime_classical_host rc 0, 821s	CAUGHT	x-decomp-pca-randomized (host MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	836
+coverage-preprocessing-minmax_fit_transform	build_preprocessing rc 0, 7s (preprocessing/checks hidden during the build)	CAUGHT	scaler-fit-transform (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	18
+coverage-preprocessing-estimator	build_preprocessing rc 0, 2s (preprocessing/checks hidden during the build; MOJOLEARN_SKIP_BUILD_GATE=1: with the gate on, the build's own native ABI gate already rejects the faulted binary, minmax_fit stats[3,0] 1.0 vs 0.5)	CAUGHT	standard-scaler (Metal MOVED) minmax-scaler (Metal MOVED) scaler-fit-transform (Metal MOVED)	2 DIVERGENT, 1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	15
+coverage-gbdt-binary_prediction	build_gbdt rc 0, 191s	CAUGHT	gbdt-adapter-clf (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	207
+coverage-metrics-estimator	build_metrics rc 0, 141s	CAUGHT	metrics (Metal MOVED) metrics-classification (Metal MOVED) metrics-homogeneity-completeness (Metal MOVED) metrics-fowlkes-mallows (Metal MOVED)	4 DIVERGENT	STABLE, exact clean source/bindings/results restored	162
+coverage-gemm-lowbit	build_linalg rc 0, 44s	CAUGHT	lowbit-conversions (Metal MOVED) gemm-int8 (Metal MOVED) gemm-bf16 (Metal MOVED)	3 DIVERGENT	STABLE, exact clean source/bindings/results restored	58
+coverage-x_cnn-perm_device	build_x_cnn rc 0, 13s	CAUGHT	x-cnn-gcn (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	25
+coverage-x_cnn-device_ops	build_x_cnn rc 0, 58s	CAUGHT	x-cnn-batchnorm (Metal MOVED) x-cnn-sage (Metal MOVED) public-cnn-classifier-predict (Metal REFUSED)	2 DIVERGENT, 1 REFUSED	STABLE, exact clean source/bindings/results restored	74
+coverage-svm-scale_gamma	build_svm rc 0, 8s, build_svm_host rc 0, 2s	CAUGHT	svc-gamma-scale (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	47
+coverage-glm-center-finish	build_estimators rc 0, 125s, build_estimators_host rc 0, 28s	CAUGHT	ols (host MOVED Metal MOVED) ols-weighted (host MOVED Metal MOVED) ridge (host MOVED Metal MOVED) multioutput-ridge (host MOVED Metal MOVED)	6 DIVERGENT, 2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	191
+coverage-x_linear-ridge_best_alpha	build_x_linear rc 0, 73s, build_x_linear_host rc 0, 20s	CAUGHT	x-ridge-cv-kfold (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	123
+coverage-core-msel_device_host	build rc 0, 64s, build_core_host rc 0, 19s	CAUGHT	x-metrics-splitters (host MOVED Metal MOVED) x-metrics-search (host MOVED Metal MOVED)	4 DIVERGENT	STABLE, exact clean source/bindings/results restored	135
+coverage-core-dense_coo	build_core_host rc 0, 18s	CAUGHT	x-cluster-spectral-affinities (host MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	31
+coverage-training-residual_dropout	build_training rc 0, 116s, build_training_host rc 0, 21s	CAUGHT	public-residual-dropout (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	162
+coverage-training-samba_accumulate_out	build_training rc 0, 112s	CAUGHT	grad-accumulation (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	126
+coverage-training-chunked_lm_head_v2_logit	build_training rc 0, 122s	CAUGHT	training-chunked-lm-head (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	135
+coverage-training-mlp_ops	build_training rc 0, 21s	CAUGHT	neural-trainer-unfused (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	34
+coverage-training-neural_rng	build_training rc 0, 100s	CAUGHT	samba-untied-dropout-accum (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	123

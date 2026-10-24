@@ -19,6 +19,7 @@ forecast host binding from the module table.
 """
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
@@ -30,7 +31,8 @@ comptime _HW = "mojolearn ExponentialSmoothing: "
 
 
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    # The import-time builtins connection: no __import__ hook can run.
+    return native_loaded_module("builtins")
 
 
 def _repr(value: PythonObject) raises -> String:

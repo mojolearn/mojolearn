@@ -59,14 +59,18 @@ def test_named_listen_connect_and_numeric_endpoint_paths_are_native(native):
     listener = audit_native_call(native, 'listen', ('localhost', 0, 3.)).assert_native()
     client = accepted = None
     try:
-        port = listener.getsockname()[1]
+        # Native transport sockets are owned native capsules, not Python
+        # socket objects (bindings/native_transport.mojo _transport_own), so
+        # the endpoint and the bytes are read through the native entries.
+        address = audit_native_call(native, 'address', (listener, False)).assert_native()
+        port = audit_native_call(native, 'port', (listener,)).assert_native()
+        assert address[1] == port and len(address) in (2, 4)  # IPv4 or IPv6
         client = audit_native_call(native, 'connect', ('localhost', port, 3.)).assert_native()
         accepted = audit_native_call(native, 'accept', (listener, 3.)).assert_native()
-        # The independent Python socket consumer sees the same bytes. No
-        # test-created thread runs inside any audited native operation.
-        client.sendall(b'hostname-native')
-        assert accepted.recv(32) == b'hostname-native'
-        assert listener.family in (socket.AF_INET, socket.AF_INET6)
+        # No test-created thread runs inside any audited native operation.
+        audit_native_call(native, 'send', (client, {'cmd': 'hostname'}, b'hostname-native')).assert_native()
+        head, payload = audit_native_call(native, 'receive', (accepted, 32)).assert_native()
+        assert head == {'cmd': 'hostname', 'nbytes': 15} and payload == b'hostname-native'
     finally:
         for item in (accepted, client, listener):
             if item is not None:

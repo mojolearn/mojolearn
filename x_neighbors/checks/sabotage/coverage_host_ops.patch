@@ -1,0 +1,21 @@
+--- a/x_neighbors/host_ops.mojo
++++ b/x_neighbors/host_ops.mojo
+@@ -704,6 +704,8 @@
+     def _item(t: Int) {imm p_x, imm p_res, imm count, imm mode, imm thr}:
+         p2m_sign_label_item(t, p_x, p_res, count, mode, thr)
+     _items(_item, count)
++    if count > 0:  # SABOTAGE: the first sign label negated
++        p_res[0] = -p_res[0]
+ 
+ 
+ def op_p2m_relabel(lab: Int, res: Int, info: Int, n: Int) raises:
+@@ -722,6 +724,9 @@
+         p2m_relabel_emit_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+     for t in range(n):
+         p2m_relabel_map_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
++    if n > 0:  # SABOTAGE: the first relabeled component moved by one
++        var sab = _i(res)
++        sab[0] = sab[0] + Int32(1)
+     _ = s_first^
+     _ = s_rk^
+     _ = s_part^

@@ -14,6 +14,7 @@ import pytest
 
 from mojolearn import _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connected_exports import assert_connected_export_refused
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _archive, _state
 from mojolearn.tests.test_host_inference_native import _input, _refused, test_application_subclass_keeps_constructor_fit_and_score_guards as _subclass_guards
@@ -167,6 +168,111 @@ def test_kde_complex_bandwidth_preserves_consumed_output_and_warnings(tmp_path, 
     model = _model(tmp_path)
     model.bandwidth = value
     _check_primitive_bandwidth(model, _input(2, "float32"), method, value)
+
+
+_BANDWIDTH_WARNING_CHILD = r'''
+import json, sys, warnings
+import numpy as np
+from mojolearn import _classical_host as host
+from mojolearn._verify_native_runtime import audit_native_call
+
+method, archive, module_mode = sys.argv[1:]
+model = host.HostKernelDensity.load(archive)
+model.bandwidth = .75
+x = np.array([[.5, 1.], [1.5, 2.], [3., 4.]], dtype='f4')
+operation = getattr(model, method)
+expected = operation(x)
+expected_bits = np.asarray(expected).tobytes()
+bandwidth = np.complex128(.75 + 2j)
+model.bandwidth = bandwidth
+category = np.exceptions.ComplexWarning
+message = 'Casting complex values to real discards the imaginary part'
+active, events, retained = [False], [], []
+def forbidden_pointer(*args):
+    retained.append(args)
+    raise AssertionError('KDE called the retained frame pointer')
+host._CLASSICAL['host_inference_context']['classical_getframe'] = forbidden_pointer
+
+# Profile the actual public score operation separately from the audit-hook
+# arm: the testing profiler's own frame inspection is outside the product.
+with warnings.catch_warnings(record=True) as profiled_warnings:
+    warnings.simplefilter('always', category)
+    profiled = audit_native_call(operation, x).assert_native()
+assert np.asarray(profiled).tobytes() == expected_bits
+assert len(profiled_warnings) == 1 and profiled_warnings[0].category is category
+
+namespace = {'__name__': 'application.kde_warning_probe' if module_mode == 'named' else 42}
+exec(compile('def invoke(call, values):\n    return call(values)\n',
+             'native_kde_warning_caller.py', 'exec'), namespace)
+invoke = namespace['invoke']
+def hook(event, args):
+    frame_event = event in ('sys._getframe', 'sys._getframemodulename')
+    frame_event = frame_event or (event == 'object.__getattr__' and len(args) > 1
+                                  and args[1] in ('f_code', 'f_back', 'f_globals'))
+    if active[0] and frame_event:
+        events.append(event)
+        raise AssertionError('KDE warning attribution invoked a Python audit hook')
+sys.addaudithook(hook)
+active[0] = True
+try:
+    sys._getframe()
+except AssertionError:
+    pass
+finally:
+    active[0] = False
+assert events == ['sys._getframe'], events
+events.clear()
+
+for action in ('always', 'ignore', 'error', 'module_error'):
+    failure = None
+    with warnings.catch_warnings(record=True) as caught:
+        if action == 'module_error':
+            warnings.simplefilter('ignore', category)
+            module_pattern = r'^application\.kde_warning_probe$' if module_mode == 'named' else r'^$'
+            warnings.filterwarnings('error', category=category, module=module_pattern)
+        else:
+            warnings.simplefilter(action, category)
+        active[0] = True
+        try:
+            actual = invoke(operation, x)
+        except category as error:
+            failure = error
+        finally:
+            active[0] = False
+    if action in ('error', 'module_error'):
+        assert type(failure) is category and str(failure) == message, (action, failure)
+        assert caught == []
+    else:
+        assert failure is None
+        assert type(actual) is type(expected)
+        assert np.asarray(actual).dtype == np.asarray(expected).dtype
+        assert np.asarray(actual).tobytes() == expected_bits
+        if action == 'always':
+            assert len(caught) == 1
+            warning = caught[0]
+            assert warning.category is category and str(warning.message) == message
+            assert warning.filename == 'native_kde_warning_caller.py', warning.filename
+            assert warning.lineno == 2, warning.lineno
+        else:
+            assert caught == []
+    assert model.bandwidth is bandwidth
+    assert events == [] and retained == [], (events, retained)
+print(json.dumps({'method': method, 'module_mode': module_mode, 'filter_cases': 4,
+                  'audit_events': events, 'retained_calls': retained}))
+'''
+
+
+@pytest.mark.parametrize('method', METHODS)
+@pytest.mark.parametrize('module_mode', ['named', 'nonstring'])
+def test_kde_bandwidth_warning_has_native_attribution_and_no_frame_callbacks(tmp_path, method, module_mode):
+    # Process isolation keeps the permanent Python audit hook out of pytest.
+    archive = _archive(tmp_path, 'KernelDensity')
+    env = dict(os.environ)
+    package_root = str(Path(__file__).resolve().parents[2])
+    env['PYTHONPATH'] = package_root + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
+    result = subprocess.run([sys.executable, '-c', _BANDWIDTH_WARNING_CHILD, method, str(archive), module_mode],
+                            env=env, capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, result.stdout + '\n' + result.stderr
 
 
 @pytest.mark.parametrize("code,form", [("F", "scalar"), ("G", "array"), ("G", "swapped")])
@@ -761,8 +867,13 @@ def test_kde_bandwidth_conversion_never_calls_replaced_builtin_float(tmp_path, m
     def callback(value):
         touched.append("float")
         return .75
+    score = model.score_samples  # bind first: the native attribute read consults the connected builtins
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "float", callback)
-        audit = audit_native_call(model.score_samples, x)
+        audit = audit_native_call(score, x)
+    # A replaced connected builtins export refuses (see _connected_exports).
+    assert_connected_export_refused(audit, "builtins", "float")
+    assert touched == []
+    audit = audit_native_call(model.score_samples, x)
     assert _state(audit.assert_native()) == expected
     assert touched == []

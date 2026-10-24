@@ -631,8 +631,7 @@ class Sequential:
 
 
 # Package-import ABI connection. No model operation calls this setup again.
-from .tokenizer import _binding as _sequential_tokenizer_binding
-_SEQUENTIAL_ENTRY = _sequential_tokenizer_binding()._module.sequential_native_call
+from ._native_runtime_sequential_bridge import connect as _connect_sequential_owner
 _SEQUENTIAL_NO_KEYWORDS = {}
 _SEQUENTIAL_CONTEXT = {
     "integer": np.integer, "layer_codes": _LAYER, "loss_codes": _LOSS,
@@ -697,4 +696,5 @@ def _connect_sequential_bindings():
 
 
 _SEQUENTIAL_CONTEXT.update(_connect_sequential_bindings())
+_SEQUENTIAL_ENTRY = _connect_sequential_owner(_SEQUENTIAL_CONTEXT)
 _SEQUENTIAL_ENTRY(None, "initialize", (), _SEQUENTIAL_CONTEXT)

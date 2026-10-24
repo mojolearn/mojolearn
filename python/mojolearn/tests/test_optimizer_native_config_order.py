@@ -1,4 +1,4 @@
-"""Fixed optimizer parameter ordering never enters mutable sorting callbacks."""
+"""Fixed optimizer parameter ordering never enters a replaced sorting callback."""
 import builtins
 import dis
 
@@ -7,6 +7,7 @@ import pytest
 
 from mojolearn import _training_impl as T
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connection_refusal import assert_connection_refusal
 
 
 @pytest.mark.parametrize("cls", [T.SGD, T.Adam, T.AdamW])
@@ -17,6 +18,7 @@ def test_optimizer_parameter_names_ignore_mutable_sorted(monkeypatch, cls, opera
     expected = owner.get_params()
     expected_names = tuple(sorted(expected))
     before = np.asarray(owner.params[0]).tobytes()
+    lr_before = owner.lr
     method = getattr(owner, operation)
     kwargs = {"lr": 0.002} if operation == "set_params" else {}
     calls = []
@@ -29,8 +31,11 @@ def test_optimizer_parameter_names_ignore_mutable_sorted(monkeypatch, cls, opera
         patch.setattr(dis, "sorted", builtins.sorted, raising=False)
         patch.setattr(builtins, "sorted", forbidden)
         result = audit_native_call(method, **kwargs)
-    output = result.assert_native()
-    assert not calls
+    # The replaced connected builtin refuses before any hook or state change;
+    # with the setup-time export back the fixed order is native.
+    assert_connection_refusal(result, "sorted", calls)
+    assert owner.lr == lr_before and owner.t == 0
+    output = audit_native_call(method, **kwargs).assert_native()
     actual = output if operation == "get_params" else owner.get_params()
     assert tuple(actual) == expected_names
     if operation == "get_params":

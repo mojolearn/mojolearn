@@ -288,6 +288,33 @@ def resolve_token(token, controls, idx):
 
 
 # ------------------------------------------------------------------ inventory
+def _module_tuple(path, name):
+    """The final value of the module-level tuple `name` in `path`, read without importing it.
+    Follows literal assignments and their reassignments built from `+` of literals, earlier
+    names and `tuple(<name>)` (bench_board_neural.py grows LANES as `LANES = LANES + FIT_LANES ...`)."""
+    env = {}
+
+    def value(node):
+        if isinstance(node, ast.Name):
+            return env[node.id]
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            return value(node.left) + value(node.right)
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tuple'
+                and len(node.args) == 1 and not node.keywords):
+            return tuple(value(node.args[0]))
+        return ast.literal_eval(node)
+
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            try:
+                env[node.targets[0].id] = value(node.value)
+            except (ValueError, KeyError, TypeError):
+                env.pop(node.targets[0].id, None)
+    if not isinstance(env.get(name), tuple):
+        raise ValueError(f'{path}: {name} is not a statically readable tuple')
+    return env[name]
+
+
 def workload_inventory():
     inv = {}
     # The six-lane planning matrix was retired on 2026-10-08; its workload ids live on in workload_ids.json.
@@ -303,11 +330,8 @@ def workload_inventory():
         base = 'more:tsvd' if lane == 'tsvd' else 'expanded:' + lane
         for ds in ('taxi', 'istella'):
             inv[base + '@dataset=' + ds + TSVD_SUFFIX] = 'registered full-input variant (tools/six_lane_full_variants.py)'
-    tree = ast.parse((ROOT / 'tools/bench_board_neural.py').read_text())
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'LANES' for t in node.targets):
-            for lane in ast.literal_eval(node.value):
-                inv.setdefault('neural:' + lane, 'neural board lane (tools/bench_board_neural.py LANES)')
+    for lane in _module_tuple(ROOT / 'tools/bench_board_neural.py', 'LANES'):
+        inv.setdefault('neural:' + lane, 'neural board lane (tools/bench_board_neural.py LANES)')
     tree = ast.parse((ROOT / 'tools/bench_board_algos.py').read_text())
     for node in ast.walk(tree):
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == '_add'

@@ -4684,7 +4684,8 @@ def _manifold_binding(model, field):
 # (bindings/mani_decomp_native.mojo). Its tables: the kit's matrix and device
 # buffer classes and the per-binding broadcast zero (`_dev_one`'s cache), and
 # the metric kinds.
-_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+from . import _native_runtime_manifold_bridge
+_NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _native_family_bridge.tables(family_mani_M=_M, family_mani_devbuf=_DevBuf, family_mani_dev_one=_DEV_ONE,
                              family_mani_pd_kind=dict(_PD_KIND))
 

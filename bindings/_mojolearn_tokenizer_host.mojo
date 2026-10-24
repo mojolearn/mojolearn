@@ -103,44 +103,18 @@ from bindings.small_mlp_native import small_mlp_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_forecast_native import parallel_forecast_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
-from bindings.trees_lifetime import TreesResident
 from bindings.optimizer_lifecycle import optimizer_finalize_binding, optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
-from bindings.sequential_native import sequential_c
+from bindings.runtime_sequential_forward import runtime_sequential_forward_c
+from bindings.runtime_classical_unavailable import runtime_classical_unavailable_c
 from bindings.xseq_native import xseq_c
 from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
 from bindings.byte_lm_trainer_native import byte_lm_trainer_c
 from bindings.xcnn_native import xcnn_c
 from bindings.tsa_public_native import tsa_c
-from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
-from bindings.host_archive_lifetime import host_archive_finalize_c
-from bindings.host_svr_native import host_svr_attribute_c
-from bindings.host_svc_native import host_svc_attribute_c
-from bindings.pca_native import pca_c
-from bindings.scaler_native import scaler_fit_c
-from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
-from bindings.minmax_native import minmax_lifecycle_c
-from bindings.maxabs_native import maxabs_lifecycle_c
-from bindings.prep_stateless_native import prep_stateless_c
-from bindings.qn_native import qn_c
-from bindings.logistic_native import logistic_c
-from bindings.decomp_native import decomp_c
-from bindings.linalg_decomp_native import linalg_decomp_c
-from bindings.als_native import als_c
-from bindings.mcd_native import mcd_c
-from bindings.pls_native import pls_c
-from bindings.dict_learning_native import dict_learning_c
-from bindings.jl_native import jl_c
-from bindings.ipca_native import ipca_c
-from bindings.tsvd_native import tsvd_c
-from bindings.prep_classify_native import prep_classify_c
-from bindings.prep_encode_native import prep_encode_c
-from bindings.x_linear_native import x_linear_c
-from bindings.str_labels_native import str_labels_c
-from bindings.robust_native import robust_lifecycle_c
 from bindings.arena_rows_native import arena_rows_c
 from bindings.arena_prog_native import arena_prog_c
 from bindings.generator_draw_native import generator_draw_c
@@ -298,6 +272,12 @@ def tokenizer_host_sabotage_binding() raises -> PythonObject:
         or TOKENIZER_BATCH_SABOTAGE
         or BPE_TRAINER_SABOTAGE
     )
+
+
+def tokenizer_host_runtime_classical_abi_binding() raises -> PythonObject:
+    # Import-time ownership witness: this module no longer registers
+    # TreesResident, so its canonical native owner may safely initialize.
+    return PythonObject(1)
 
 
 def bpe_load_binding(ranks_path: PythonObject) raises -> PythonObject:
@@ -1341,43 +1321,43 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
-        module.def_py_c_function(sequential_c, "sequential_native_call")
+        module.def_py_c_function(runtime_sequential_forward_c, "sequential_native_call")
         module.def_py_c_function(xseq_c, "xseq_native_call")
         module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
         module.def_py_c_function(byte_lm_trainer_c, "byte_lm_trainer_call")
         module.def_py_c_function(xcnn_c, "xcnn_native_call")
         module.def_py_c_function(tsa_c, "tsa_native_call")
-        module.def_py_c_function(classical_c, "classical_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "classical_native_call")
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
-        module.def_py_c_function(host_archive_finalize_c, "host_archive_finalize_call")
-        module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
-        module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")
-        module.def_py_c_function(pca_c, "pca_native_call")
-        module.def_py_c_function(scaler_fit_c, "standard_scaler_fit_native")
-        module.def_py_c_function(scaler_lifecycle_c, "standard_scaler_native_call")
-        module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
-        module.def_py_c_function(maxabs_lifecycle_c, "maxabs_scaler_native_call")
-        module.def_py_c_function(prep_stateless_c, "prep_stateless_native_call")
-        module.def_py_c_function(qn_c, "qn_native_call")
-        module.def_py_c_function(logistic_c, "logistic_native_call")
-        module.def_py_c_function(decomp_c, "decomp_native_call")
-        module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
-        module.def_py_c_function(als_c, "als_native_call")
-        module.def_py_c_function(mcd_c, "mcd_native_call")
-        module.def_py_c_function(pls_c, "pls_native_call")
-        module.def_py_c_function(dict_learning_c, "dict_learning_native_call")
-        module.def_py_c_function(jl_c, "jl_native_call")
-        module.def_py_c_function(ipca_c, "ipca_native_call")
-        module.def_py_c_function(tsvd_c, "tsvd_native_call")
-        module.def_py_c_function(prep_classify_c, "prep_classify_native_call")
-        module.def_py_c_function(prep_encode_c, "prep_encode_native_call")
-        module.def_py_c_function(x_linear_c, "x_linear_native_call")
-        module.def_py_c_function(str_labels_c, "str_labels_native_call")
-        module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "host_archive_finalize_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "host_svr_attribute_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "host_svc_attribute_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "pca_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "standard_scaler_fit_native")
+        module.def_py_c_function(runtime_classical_unavailable_c, "standard_scaler_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "minmax_scaler_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "maxabs_scaler_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "prep_stateless_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "qn_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "logistic_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "decomp_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "linalg_decomp_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "als_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "mcd_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "pls_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "dict_learning_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "jl_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "ipca_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "tsvd_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "prep_classify_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "prep_encode_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "x_linear_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "str_labels_native_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "robust_scaler_native_call")
         module.def_py_c_function(arena_rows_c, "arena_rows_native_call")
         module.def_py_c_function(arena_prog_c, "arena_prog_native_call")
-        module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
+        module.def_py_c_function(runtime_classical_unavailable_c, "standard_scaler_attribute_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
         module.def_py_c_function(user_objects_c, "user_objects_native_call")
         module.def_py_c_function(samba_config_c, "samba_config_call")
@@ -1386,6 +1366,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[tokenizer_host_vendor_binding]("tokenizer_host_vendor")
         module.def_function[tokenizer_host_column_binding]("tokenizer_host_column")
         module.def_function[tokenizer_host_sabotage_binding]("tokenizer_host_sabotage")
+        module.def_function[tokenizer_host_runtime_classical_abi_binding]("tokenizer_host_runtime_classical_abi")
         _ = module.add_type[BpeHandle]("_BpeHandle")
         module.def_function[bpe_load_binding]("bpe_load")
         module.def_function[bpe_n_vocab_binding]("bpe_n_vocab")
@@ -1455,7 +1436,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
-        _ = module.add_type[TreesResident]("_TreesResident")
         module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")

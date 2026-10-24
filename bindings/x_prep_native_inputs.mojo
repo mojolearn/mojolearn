@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native scaler admission and typed row-snapshot ownership.
+from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
+from bindings.native_loaded_module import native_loaded_module
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
@@ -21,11 +23,11 @@ def _target_finite(view: PythonObject, context: PythonObject) raises:
     if item != 2 and item != 4 and item != 8:
         raise Error("TypeError: MaxAbsScaler targets require Float16, Float32 or Float64 storage")
     var native = classical_is_array(view,context) or Bool(py=view.dtype.isnative)
-    var storage = view._mv if classical_is_array(view,context) else py_call(Python.import_module("builtins").memoryview,view)
+    var storage = view._mv if classical_is_array(view,context) else py_call(native_loaded_module("builtins").memoryview,view)
     var packed = py_call(storage.tobytes,"C")
     # Keep the existing device finite scan and Float64 values. Packing and
     # byte-order normalization use the native array buffer implementation.
-    var store = py_call(context["array_type"],"d" if item == 8 else "f",packed)
+    var store = native_array_from_bytes(String("d" if item == 8 else "f"), packed)
     if not native:
         _ = py_call(store.byteswap)
     var address = Int(py=py_call(store.buffer_info)[0])
@@ -36,7 +38,7 @@ def _target_finite(view: PythonObject, context: PythonObject) raises:
 
 
 def _target_pandas(value: PythonObject, context: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var manager = py_get(_pd_fields(value),"_mgr")
     var series = py_type(value) is _pd_class("pandas.core.series","Series")
     var blocks = py_get(_pd_fields(manager),"blocks") if series else _pd_get("pandas._libs.internals","BlockManager","blocks",manager)
@@ -83,7 +85,7 @@ def _target_view(value: PythonObject, context: PythonObject) raises -> PythonObj
 
 
 def _target(value: PythonObject, rows: Int, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.int or cls is b.float or cls is b.bool or cls is b.str or cls is b.bytes or cls is b.dict:
         return
@@ -146,7 +148,7 @@ def _dense_values(source: PythonObject, context: PythonObject) raises -> PythonO
 def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObject) raises -> PythonObject:
     # DeviceRows' host materialization is stored before the estimator casts
     # its inputs. Preserve original f64/integer words for later consumers.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     classical_admit_value(base,context)
     if not classical_is_array(base,context):
         raise Error("TypeError: native DeviceRows requires an ordinary numeric Array base")
@@ -178,7 +180,7 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     var address = buffer[0]
     cpy.lib.get_function[NoneType]("PyBuffer_Release")(bp)
     if String(order) == "F":
-        packed = py_call(context["array_type"],code,py_call(b.bytes,nr*d*item))
+        packed = native_array_zeros(String(code), nr*d)
         var dims = List[Int64](length=8,fill=0)
         dims[0] = Int64(nr)
         dims[1] = Int64(d)
@@ -191,9 +193,13 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
         address = destination
     elif String(order) != "C":
         raise Error("TypeError: native row selection requires C or Fortran Array order")
-    var store = py_call(context["array_type"],code,py_call(b.bytes,n*d*item))
+    var store = native_array_zeros(String(code), n*d)
     var output = classical_wrap_array(store,Python.tuple(n,d),dtype,"C",context["output_context"])
     _ = py_call(context["maxabs_gather_rows"],address,classical_address(output),classical_address(indices),nr,n,item*d)
+    # PyBuffer_Release above releases its temporary export, not the native
+    # gather's raw address. Retain both source and index owners to that read.
+    _ = view^
+    _ = indices
     _ = packed^
     return output
 
@@ -202,7 +208,7 @@ def _rows_fields(source: PythonObject, context: PythonObject) raises -> PythonOb
     # Even an exact DeviceRows can contain foreign dictionary keys. Native
     # dict lookup would invoke their Python equality before buffer admission.
     # Resolve its native dictionary slot without application descriptors.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = context["maxabs_rows_class"]
     if py_type(source) is not cls or py_type(cls) is not b.type:
         raise Error("TypeError: native row selection requires its ordinary metadata class")
@@ -237,7 +243,7 @@ def _values(source: PythonObject, context: PythonObject, force_host_rows: Bool =
         # replace an already materialized selection. GPU ranges deliberately
         # retain their separate device-gather/resident-base semantics.
         var host_rows = force_host_rows or String(context["vendor"]) == "cpu" or String(getenv("MOJOLEARN_ARENA_RANGES","1").strip()) == "0"
-        if py_type(fields["dtype"]) is not Python.import_module("builtins").str:
+        if py_type(fields["dtype"]) is not native_loaded_module("builtins").str:
             raise Error("TypeError: native row selection requires native dtype metadata")
         host_rows = host_rows or String(fields["dtype"]) != "<f4"
         if host_rows and py_get(fields,"_host") is not None:

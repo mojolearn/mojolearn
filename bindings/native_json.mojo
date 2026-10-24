@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
@@ -14,7 +15,7 @@ struct NativeJSON(Movable):
 
     def __init__(out self, raw: PythonObject, unique: Bool = False) raises:
         self.unique = unique
-        self.bi = Python.import_module("builtins")
+        self.bi = native_loaded_module("builtins")
         if py_type(raw) is not self.bi.str and py_type(raw) is not self.bi.bytes and py_type(raw) is not self.bi.bytearray:
             raise Error("TypeError: JSON requires str or bytes")
         self.raw = py_call(raw.encode, "utf-8") if Bool(py=py_call(self.bi.isinstance, raw, self.bi.str)) else raw
@@ -201,7 +202,7 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
     var bytes: List[UInt8]
     with open(String(path), "r") as stream:
         bytes = stream.read_bytes()
-    var raw = Python.import_module("builtins").bytearray()
+    var raw = native_loaded_module("builtins").bytearray()
     for i in range(len(bytes)):  # driver-loop: over serialized JSON file bytes for the native parse buffer
         _ = py_call(raw.append, Int(bytes[i]))
     return native_json_parse(raw)
@@ -209,7 +210,7 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
 
 def native_path(value: PythonObject) raises -> PythonObject:
     """Read standard path storage without invoking caller path protocols."""
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(value) is bi.str:
         return value
     if py_type(value) is bi.bytes:
@@ -222,7 +223,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
     if cls is not pathlib.PosixPath and cls is not pathlib.PurePosixPath:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
     var parts = PythonObject(None)
-    var member_type = Python.import_module("types").MemberDescriptorType
+    var member_type = native_loaded_module("types").MemberDescriptorType
     var mro = py_call(bi.type.__getattribute__, cls, "__mro__")
     var found = False
     # object.__getattribute__ still invokes a replaced property. Read only a
@@ -261,7 +262,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
 
 def native_path_exists(path: PythonObject, directory: Bool = False) raises -> Bool:
     try:
-        var mode = Int(py=py_call(Python.import_module("os").stat, path).st_mode)
+        var mode = Int(py=py_call(native_loaded_module("os").stat, path).st_mode)
         return (mode & 0o170000) == (0o040000 if directory else 0o100000)
     except:
         return False

@@ -12,7 +12,9 @@ def receipt():
     return dict(protocol=cv.PROTOCOL, status='NUMERICS_AND_PLACEMENT_PASS', vendor='cuda',
                 folds=5, repeats=cv.REPEATS, devices=[0, 1],
                 source={'source_sha256': {name: 'a' * 64 for name in cv.PROFILE_FILES}},
-                bindings={'_mojolearn_gbdt': {'vendor': 'cuda', 'sha256': 'e' * 64}},
+                bindings={'_mojolearn_gbdt': {'vendor': 'cuda', 'sha256': 'e' * 64},
+                          **{'_native_' + name: {'sha256': 'e' * 64}
+                             for name in ('cv', 'trees', 'archive', 'gbdt')}},
                 inputs={name: 'f' * 64 for name in ('X', 'classifier', 'regressor')},
                 runs=[dict(model=model, devices=order, repeat=repeat,
                            scores_hex='000000000000f03f' * 5, fold_records=records(len(order)))
@@ -28,7 +30,8 @@ def test_shipped_scorer_and_complete_receipt():
 
 
 @pytest.mark.parametrize('fault', ['missing-run', 'duplicate-run', 'missing-control', 'bad-profile',
-                                   'bad-input', 'bad-native', 'bad-replay', 'bad-scores', 'aliased'])
+                                   'bad-input', 'bad-native', 'bad-replay', 'bad-scores', 'aliased', 'bad-cv-owner',
+                                   'missing-native-owner', 'malformed-native-owner', 'unexpected-native-owner'])
 def test_complete_receipt_rejects_missing_or_changed_evidence(fault):
     report = receipt()
     if fault == 'missing-run': report['runs'].pop()
@@ -36,6 +39,10 @@ def test_complete_receipt_rejects_missing_or_changed_evidence(fault):
     elif fault == 'missing-control': report['controls'].pop()
     elif fault == 'bad-profile': report['source']['source_sha256'].pop('model_selection.py')
     elif fault == 'bad-input': report['inputs'].pop('X')
+    elif fault == 'bad-cv-owner': report['bindings']['_native_cv']['sha256'] = '0' * 64
+    elif fault == 'missing-native-owner': report['bindings'].pop('_native_archive')
+    elif fault == 'malformed-native-owner': report['bindings']['_native_trees']['sha256'] = 'not-a-hash'
+    elif fault == 'unexpected-native-owner': report['bindings']['_native_unknown'] = {'sha256': 'e' * 64}
     elif fault == 'bad-native': report['bindings']['_mojolearn_gbdt']['sha256'] = '0' * 64
     elif fault == 'bad-replay': next(iter(report['runs'][0]['fold_records'].values()))['reload_predict'] = '0' * 64
     elif fault == 'bad-scores': report['runs'][0]['scores_hex'] = '0' * 80

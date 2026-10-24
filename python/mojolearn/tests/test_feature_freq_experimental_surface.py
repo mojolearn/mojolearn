@@ -4,7 +4,7 @@
 import numpy as np
 import pytest
 
-from mojolearn import ExperimentalTwoLevelFeatureFreq
+from mojolearn import ExperimentalTwoLevelFeatureFreq, _backend
 
 
 def test_experimental_feature_freq_validates_and_forwards():
@@ -70,6 +70,8 @@ def test_experimental_feature_freq_refuses_constant_numeric_column():
 
 
 def test_experimental_feature_freq_forwards_weights():
+    if _backend._CPU_ONLY is not None:
+        pytest.skip("CPU-only install: the gbdt host binding trains its declared lanes with unit weights only and refuses sample_weight by name (bindings/_mojolearn_gbdt_host.mojo); weighted GBDT fits need a GPU binding")
     X = np.asarray(
         [[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32
     )

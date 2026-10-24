@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # DeviceRows owns the same typed msel store snapshots as model_selection.
+from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
 from std.python import Python, PythonObject
 from std.math import isinf, isnan
 from gemm.f16_widen import f16_bits_to_f32
@@ -107,7 +108,7 @@ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> 
         if extent < 0 or (count > 0 and extent > 9223372036854775807//item//count):
             raise Error("ValueError: native row output exceeds indexing bounds")
         count *= extent
-    var store = py_call(context["array_type"],_store_code(dtype),py_call(context["arena_native_types"]["bytes"],count*item))
+    var store = native_array_zeros(String(_store_code(dtype)), count)
     return _owned(store,shape,dtype,context)
 
 
@@ -194,8 +195,13 @@ def _cast(array: PythonObject, dtype: String, context: PythonObject) raises -> P
     var count = Int(py=metadata["size"])
     if count:
         var status = Int(py=_native_call(context["arena_cast"],Python.tuple(metadata["address"],_cast_code(String(metadata["dtype"])),_slot(target,"_addr",context),_cast_code(dtype),count)))
+        _ = array  # raw source address is borrowed through the complete native cast
+        _ = target
         if status:
-            _cast_failure(Int(py=metadata["address"]),String(metadata["dtype"]),count)
+            try:
+                _cast_failure(Int(py=metadata["address"]),String(metadata["dtype"]),count)
+            finally:
+                _ = array
     return target
 
 
@@ -271,7 +277,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
         if dtype == "<u2":
             target = "<u4"
     var packed = py_call(view.tobytes,"C")
-    var store = py_call(context["array_type"],code,packed)
+    var store = native_array_from_bytes(String(code), packed)
     if not Bool(py=value.dtype.isnative) and item > 1:
         _ = py_call(store.byteswap)
     var count = Int(py=value.size)
@@ -380,7 +386,7 @@ def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
     # _as_c copy preserves that width (including uint16 and half NaN bits).
     if native and supported and len(metadata["shape"]) > 0 and Bool(py=view.f_contiguous):
         var typestr = "<"+kind+String(item)
-        var store = py_call(context["array_type"],_store_code(typestr),py_call(view.tobytes,"C"))
+        var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes,"C"))
         return _owned(store,metadata["shape"],typestr,context)
     return _numpy_copy(value,view,kind,item,context)
 
@@ -408,102 +414,3 @@ def _resident_fields(owner: PythonObject, context: PythonObject) raises -> Pytho
     if fields["_put"] is not context["arena_msel_put"] or fields["_free"] is not context["arena_msel_free"] or fields["_take"] is not context["arena_msel_take_rows"]:
         raise Error("TypeError: native row materialization requires its connected native resident entries")
     return fields
-
-
-def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
-    var b = context["arena_native_types"]
-    var key = py_call(context["arena_id"],values)
-    var hit = py_get(entries,key)
-    if hit is not None:
-        if py_type(hit) is not b["tuple"] or len(hit) != 3:
-            raise Error("TypeError: native resident entries require their native owner tuple")
-        if hit[0] is values:
-            _ = _prepared_info(hit[1],context)
-            if py_type(hit[2]) is not b["int"]:
-                raise Error("TypeError: native resident entries require an integer store id")
-            return hit
-        raise Error("TypeError: resident identity entry does not retain its original input")
-    var source = values
-    if py_type(values) is not context["array_class"] and py_type(values) is not py_get(context,"ndarray"):
-        # glue-callback: a foreign container (pandas, list, memoryview, ...)
-        # goes through the established input-preparation step once, as
-        # _Resident._entry did; Array and exact ndarray stay native.
-        source = py_call(context["arena_fold_materialize"],values,"fold data")[0]
-    var array = _prepare(source,context)
-    if indices and String(_slot(array,"dtype",context)) != "<i8":
-        array = _cast(array,"<i8",context)
-    var sid = -1
-    var prepared = _prepared_info(array,context)
-    var nbytes = Int(py=prepared["nbytes"])
-    if nbytes:
-        sid = Int(py=_native_call(context["arena_msel_put"],Python.tuple(prepared["address"],nbytes)))
-    try:
-        var result = Python.tuple(values,array,sid)
-        py_setitem(entries,key,result)
-        return result
-    except error:
-        if sid >= 0:
-            # Publication failed after allocation. Free the unpublished id,
-            # preserving the primary failure if the backend also refuses
-            # cleanup; do not overwrite the shared pending-exception receipt.
-            try:
-                _ = py_call(context["arena_msel_free"],sid)
-            except cleanup_error:
-                pass
-        raise error^
-
-
-def arena_resident_take(fields: PythonObject, values: PythonObject, indices_value: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
-    # _Resident.take: rows `indices_value` of `values`, gathered on the device
-    # out of the resident store entries (each put once per owner).
-    var entries = fields["_entries"]
-    var b = context["arena_native_types"]
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: resident entries require a native dictionary")
-    var keys = py_call(b["list"],entries)
-    for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
-        if py_type(keys[i]) is not b["int"]:
-            raise Error("TypeError: resident entries require native identity keys")
-    var base_entry = _entry(values,entries,False,context)
-    var index_entry = _entry(indices_value,entries,True,context)
-    var array = _prepared_info(base_entry[1],context)
-    var indices = _prepared_info(index_entry[1],context)
-    var shape = Python.list(indices["size"])
-    var base_shape = array["shape"]
-    for i in range(1,len(base_shape)):  # driver-loop: generic row shape preserves all trailing dimensions
-        _ = py_call(shape.append,base_shape[i])
-    var output = _empty(py_call(b["tuple"],shape),String(array["dtype"]),context)
-    var n = Int(py=base_shape[0])
-    var row_bytes = Int(py=array["nbytes"])//n if n else 0
-    if Int(py=indices["size"]) and row_bytes:
-        _ = _native_call(context["arena_msel_take_rows"],Python.tuple(base_entry[2],n,row_bytes,index_entry[2],indices["size"],_slot(output,"_addr",context)))
-    return output
-
-
-def arena_resident_entry(fields: PythonObject, values: PythonObject, indices: Bool,
-                         context: PythonObject) raises -> PythonObject:
-    # _Resident._entry: the (owner, prepared Array, store id) entry of
-    # `values`, put once; `indices` casts to the int64 index layout.
-    var entries = fields["_entries"]
-    var b = context["arena_native_types"]
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: resident entries require a native dictionary")
-    var keys = py_call(b["list"],entries)
-    for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
-        if py_type(keys[i]) is not b["int"]:
-            raise Error("TypeError: resident entries require native identity keys")
-    return _entry(values,entries,indices,context)
-
-
-def arena_materialize(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var cached = fields["_host"]
-    if cached is not None:
-        return cached
-    var take = fields["_take"]
-    if py_type(take) is not context["owner_method_class"] or take.__func__ is not context["arena_resident_take"]:
-        raise Error("TypeError: DeviceRows.materialize requires model_selection._Resident.take; Python gather callbacks cannot execute")
-    var owner = take.__self__
-    var output = arena_resident_take(_resident_fields(owner,context),fields["base"],fields["indices"],context)
-    py_setitem(fields,"_host",output)
-    return output

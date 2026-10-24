@@ -36,6 +36,7 @@ from bindings.trees_public_inputs import (
     _encode_code,
 )
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32
+from bindings.metrics_native_support import metric_is_integral
 from bindings.trees_public_forest import forest_predict, forest_effective_mode, forest_kind
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -342,8 +343,7 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
         var v = labels[i]
         var t = py_type(v)
         all_str = all_str and Bool(py=py_call(b.isinstance, v, b.str))
-        all_int = all_int and (Bool(py=py_call(b.isinstance, v, context["trees_integral_type"]))
-                               or t is b.bool or String(t.__name__) == "bool_")
+        all_int = all_int and metric_is_integral(v, context)
     var out = Python.list()
     if all_str:
         for i in range(n):  # cpu-route: str labels, the explicit label input step

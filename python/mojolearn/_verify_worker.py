@@ -103,7 +103,8 @@ def run(request, timeout=120, log=None):
                 while True:
                     remaining = timeout - (time.monotonic() - started)
                     if remaining <= 0:
-                        raise WorkerFailure(f"{label}: exceeded {timeout:g}s worker limit")
+                        raise WorkerFailure(f"{label}: exceeded {timeout:g}s worker limit"
+                                            + _stacks_on_timeout(process, output))
                     try:
                         process.wait(timeout=min(10, remaining))
                         break
@@ -119,6 +120,62 @@ def run(request, timeout=120, log=None):
             finally:
                 # Also reap a driver's descendants after normal parent exit.
                 _kill(process)
+
+
+def _group_members(pgid):
+    """The pids of process group `pgid`, leader first, read from /proc on
+    Linux; () where /proc is unavailable."""
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return ()
+    members = []
+    for name in names:  # glue: one /proc entry per process
+        if not name.isdigit():
+            continue
+        try:
+            if os.getpgid(int(name)) == pgid:
+                members.append(int(name))
+        except OSError:
+            continue
+    members.sort(key=lambda pid: (pid != pgid, pid))
+    return tuple(members)
+
+
+def _stacks_on_timeout(process, output):
+    """The worker's Python stacks at its timeout, for the refusal text.
+
+    The worker registers faulthandler on SIGUSR1 (`main`), writing every
+    thread's stack to its own stderr (`output`: the worker's log stream, or a
+    batched cell's log path, since a batch redirects fd 2 per cell). The
+    worker leads its own session, so its whole process group is signalled:
+    the parallel drivers' worker processes (`_parallel_worker`) register the
+    same handler and inherit that stderr, so a cell blocked on a driver
+    worker shows where the worker stands too. A child without the handler
+    ends on the signal, which is harmless: the group is killed next.
+    Returns '' where this is unavailable."""
+    if os.name != "posix" or not hasattr(signal, "SIGUSR1") or process.poll() is not None:
+        return ""
+    # One stack request per process, one at a time, so the dumps do not
+    # interleave: the group's members from /proc (Linux), else one request
+    # to the whole group (kill(-pgid), the POSIX group form). `_kill` then
+    # reaps the group once; os.killpg stays the reaping call only.
+    members = _group_members(process.pid)
+    try:
+        if members:
+            for pid in members:  # glue: one stack request per process of the timed-out group
+                try:
+                    os.kill(pid, signal.SIGUSR1)
+                except OSError:
+                    continue
+                time.sleep(1)
+        else:
+            os.kill(-process.pid, signal.SIGUSR1)
+            time.sleep(3)
+    except OSError:
+        return ""
+    text = _file_tail(output, 16000) if isinstance(output, str) else _tail(output, 16000)
+    return "; stacks at the limit: " + text[-16000:]
 
 
 def _tail(stream, size=8192):
@@ -234,7 +291,8 @@ def run_batch(requests, timeout=120, log=None, on_result=None, poll=0.02):
                         return BatchStop(index, "failure", f"{label}: batch worker exited without a result; {tail[-1000:]}")
                     now = time.monotonic()
                     if now - started > timeout:
-                        return BatchStop(index, "timeout", f"{label}: exceeded {timeout:g}s worker limit")
+                        return BatchStop(index, "timeout", f"{label}: exceeded {timeout:g}s worker limit"
+                                         + _stacks_on_timeout(process, cell_log))
                     if log and now - heartbeat >= 10:
                         heartbeat = now
                         log(f"  {label}: running {now - started:.0f}s / {timeout:g}s limit")
@@ -322,6 +380,10 @@ def batch_main(request_path, results):
 
 
 def main():
+    if os.name == "posix" and hasattr(signal, "SIGUSR1"):
+        # A timed-out cell reports where it stood (_stacks_on_timeout).
+        import faulthandler
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     if len(sys.argv) == 4 and sys.argv[1] == "--batch":
         batch_main(sys.argv[2], sys.argv[3])
         return

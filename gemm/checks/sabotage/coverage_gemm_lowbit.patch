@@ -1,0 +1,47 @@
+--- a/gemm/checks/gemm_lowbit.mojo
++++ b/gemm/checks/gemm_lowbit.mojo
+@@ -172,7 +172,10 @@
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i >= Int(n_in):
+         return
+-    dst.unsafe_store(i, bf16_bits_to_f32(src.unsafe_load(i)))
++    var v = bf16_bits_to_f32(src.unsafe_load(i))
++    if i == 0:  # SABOTAGE: the first widened value doubled
++        v = v * Float32(2.0)
++    dst.unsafe_store(i, v)
+ 
+ 
+ def bf16_narrow_kernel(
+@@ -184,7 +187,10 @@
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i >= Int(n_in):
+         return
+-    dst.unsafe_store(i, f32_to_bf16_bits_rne(src.unsafe_load(i)))
++    var b = f32_to_bf16_bits_rne(src.unsafe_load(i))
++    if i == 0:  # SABOTAGE: the first narrowed word one ulp off
++        b = b ^ UInt16(1)
++    dst.unsafe_store(i, b)
+ 
+ 
+ def bf16_widen(
+@@ -454,7 +460,7 @@
+         if v > best:
+             best = v
+     var ex = int8_row_exponent(best)
+-    e.unsafe_store(r, Int32(ex))
++    e.unsafe_store(r, Int32(ex + 1 if r == 0 else ex))  # SABOTAGE: the first row exponent stepped
+     for c in range(cols):
+         q.unsafe_store(r * cols + c, quantize_int8_value(x.unsafe_load(r * cols + c), ex))
+ 
+@@ -474,7 +480,10 @@
+     if i >= rows * cols:
+         return
+     var r = i // cols
+-    y.unsafe_store(i, dequant_int8_pinned(Int32(q.unsafe_load(i)), Int(e.unsafe_load(r))))
++    var v = dequant_int8_pinned(Int32(q.unsafe_load(i)), Int(e.unsafe_load(r)))
++    if i == 0:  # SABOTAGE: the first dequantized value doubled
++        v = v * Float32(2.0)
++    y.unsafe_store(i, v)
+ 
+ 
+ def identical_gemm_int8_flat_kernel(

@@ -3,13 +3,14 @@
 # Python method/property, scalar conversion hook or SciPy computation runs.
 from std.memory import bitcast
 from std.math import isfinite
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_pandas import _pd_type_fields
 from bindings.classical_arrays import classical_address
 from bindings.sequential_admission import _one_of
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.native_numpy_metadata import native_numpy_dtype
 from core.cast_in import cast_in_kind, cast_f32_bits, cast_w64_bits
 from core.classical_pandas_impl import _pd_double
@@ -18,8 +19,8 @@ from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, hos
 
 
 def _sparse_class(module_name: String, name: String) raises -> PythonObject:
-    var b = Python.import_module("builtins")
-    var sys = Python.import_module("sys")
+    var b = native_loaded_module("builtins")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, module_name)
     if module is None or py_type(module) is not py_type(sys):
         return PythonObject(None)
@@ -51,7 +52,7 @@ def _sparse_fields(value: PythonObject) raises -> PythonObject:
     # The caller has matched an exact supported SciPy class. Explicit native
     # type descriptors read its ABCMeta-owned metadata without dispatching any
     # metaclass or instance attribute hook; only a native dictionary is used.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
     for i in range(len(mro)):  # driver-loop: admitted sparse class dictionary descriptors
         var descriptor = py_get(_pd_type_fields(mro[i]), "__dict__")
@@ -92,7 +93,7 @@ def _sparse_aliases(context: PythonObject) raises -> PythonObject:
 
 
 def _sparse_dtype(dtype: PythonObject, context: PythonObject) raises -> Int:
-    var types = py_call(Python.import_module("builtins").list, context["numeric_dtypes"].values())
+    var types = py_call(native_loaded_module("builtins").list, context["numeric_dtypes"].values())
     var known = False
     for i in range(len(types)):  # driver-loop: native numeric dtype identities before descriptor reads
         known = known or py_type(dtype) is py_type(types[i])
@@ -108,7 +109,7 @@ def _sparse_dtype(dtype: PythonObject, context: PythonObject) raises -> Int:
 
 
 def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: PythonObject) raises -> UInt64:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var source_kind = 0
     var source_width = 8
@@ -164,7 +165,7 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
 
 
 def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.int and not _one_of(py_type(value), context["integer_types"]) and py_type(value) is not _sparse_aliases(context)[0].type and py_type(value) is not _sparse_aliases(context)[1].type:
         raise Error("TypeError: sparse coordinates must be native integers")
     var index = Int(bitcast[DType.int64](_sparse_scalar_word(value, 1, 8, context)))
@@ -176,7 +177,7 @@ def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) r
 def host_sparse_dense(source: PythonObject, format: String, context: PythonObject) raises -> PythonObject:
     if format.byte_length() == 0 or host_sparse_format(source) != format:
         raise Error("TypeError: sparse storage requires an exact supported SciPy container")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(source))
     for i in range(len(mro)):  # driver-loop: refuse sparse finalizers before acquiring storage owners
         if py_get(_pd_type_fields(mro[i]), "__del__") is not None:

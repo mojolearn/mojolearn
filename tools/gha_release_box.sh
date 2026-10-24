@@ -115,7 +115,7 @@ env PYTHONPATH="$R/packaging/portable_math" "$R/.pixi/envs/default/bin/python3" 
 
 # ---------------------------------------------------------------- the route overlay
 # tools/release_linux_build.sh's list and record, byte for byte in format.
-OVERLAY="tools/release061_remote_build.sh tools/cpu_build_guard.py tools/release_linux_cpu_box.sh tools/bincache.py"
+OVERLAY="tools/release061_remote_build.sh tools/cpu_build_guard.py tools/release_linux_cpu_box.sh tools/bincache.py tools/release_modes.py"
 mkdir -p "$OUT/release"
 { for f in $OVERLAY; do printf 'before %s %s\n' "$f" "$( [ -f "$f" ] && sha256sum "$f" | cut -c1-64 || echo absent)"; done; } > "$OUT/release/overlay.txt"
 for f in $OVERLAY; do cp "$T/$f" "$R/$f" || exit 3; done

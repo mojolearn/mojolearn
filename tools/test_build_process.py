@@ -139,3 +139,44 @@ def test_sigterm_controller_stops_worker_group(tmp_path):
             proc.kill();proc.wait()
         if pid and alive(pid):
             os.kill(pid, signal.SIGKILL)
+
+
+def test_eperm_while_stopping_keeps_the_real_limit_reason(tmp_path, monkeypatch):
+    # macOS killpg fails with EPERM once a group holds only zombies; the M4
+    # development build recorded "[Errno 1] Operation not permitted" instead
+    # of the RSS-limit verdict that had stopped the compiler.
+    real = os.killpg
+
+    def killpg(pid, sig):
+        if sig == signal.SIGKILL:
+            raise PermissionError(1, 'Operation not permitted')
+        return real(pid, sig)
+
+    monkeypatch.setattr(guard.os, 'killpg', killpg)
+    result = run(tmp_path, 'import time;time.sleep(60)', rss_bytes=50,
+                 probe=lambda pid, seen: (1, 100, 10**12))
+    assert result['complete'] and result['status'] == 'rss-limit' and result['exit_code'] == 124
+    assert 'rss limit 50 bytes' in result['reason'] and '100 bytes' in result['reason']
+    assert result['peak_rss_bytes'] == 100
+    assert json.loads((tmp_path/'build.log.execution.json').read_text()) == result
+    assert_gone(result['pid'])
+
+
+@pytest.mark.parametrize('error', [PermissionError(1, 'Operation not permitted'),
+                                   ProcessLookupError(3, 'No such process')])
+def test_stop_group_ignores_foreign_or_finished_groups(monkeypatch, error):
+    def killpg(pid, sig):
+        raise error
+    monkeypatch.setattr(guard.os, 'killpg', killpg)
+    guard.stop_group(999999, grace=0)
+
+
+def test_limit_reasons_name_the_verdict(tmp_path):
+    for policy, probe, words in [
+        (dict(stall_seconds=.1), lambda pid, seen: (0, 7, 100), 'no CPU progress'),
+        (dict(min_available_bytes=50), lambda pid, seen: (1, 7, 25), 'below the 50-byte floor'),
+        (dict(seconds=.2), lambda pid, seen: (1, 7, 100), 'deadline'),
+    ]:
+        result = run(tmp_path, 'import time;time.sleep(60)', probe=probe, **policy)
+        assert words in result['reason']
+        assert_gone(result['pid'])

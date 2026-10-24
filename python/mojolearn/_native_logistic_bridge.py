@@ -89,3 +89,36 @@ def connect_host(cls, context, estimators_host, host_predict, host_context):
     host.update(lr_bindings={"identical": entries}, lr_x_trees={"identical": refusal},
                 lr_host_model=True, lr_host_predict=(host_predict, host_context))
     context.setdefault("lr_host_contexts", {})[cls] = host
+
+
+_PARAMETERS = ('penalty', 'tol', 'C', 'fit_intercept', 'class_weight', 'max_iter',
+               'linesearch_max_iter', 'l1_ratio', 'solver', 'numeric_mode')
+
+
+def connect_public(cls, context, install=True):
+    # glue: install native attribute binding and constructor metadata once
+    import sys
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    from ._native_classical_bridge import _layout
+    from ._labels import ClassLabels
+    owner = context.get('lr_host_contexts', {}).get(cls, context)
+    module = _binding()._module
+    attribute = module.standard_scaler_attribute_call
+    descriptor_entry = module.classical_attribute_descriptor
+    if type(attribute) is not BuiltinFunctionType or type(descriptor_entry) is not BuiltinFunctionType:
+        raise TypeError('LogisticRegression requires compiled native attribute entries')
+    if install:
+        descriptor = descriptor_entry(MethodType(attribute, owner))
+        cls.__getattribute__ = descriptor
+    else:
+        descriptor = vars(cls)['__getattribute__']
+    owner.update(classical_getframe=sys._getframe, classical_public_installed=True,
+                 classical_attribute_descriptor=descriptor,
+                 classical_public_layouts={cls: _layout(cls, descriptor)},
+                 classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
+                             classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
+                 lr_parameters=_PARAMETERS, lr_sorted_parameters=tuple(sorted(_PARAMETERS)),  # glue: fixed import-time parameter metadata
+                 lr_consumed_fields=('_w', 'classes_', 'n_features_in_', '_l1_ratio', 'lbfgs_memory',
+                                     'penalty_normalized', '_mojolearn_fitted', '_mojolearn_fitting'))
+    return owner

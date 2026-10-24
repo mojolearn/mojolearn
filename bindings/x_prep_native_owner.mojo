@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native owner for the established _Prog transport contract. Arithmetic and
 # stream synchronization remain in the same x_prep exported implementations.
+from bindings.native_array_storage import native_array_empty, native_array_zeros
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -39,17 +41,17 @@ def xprep_storage(words: Int, context: PythonObject) raises -> PythonObject:
     var profile = String(getenv("MOJOLEARN_XPREP_PROFILE","0")) == "1"
     var start = Int(perf_counter_ns()) if profile else 0
     var n = max(words,1)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var storage = PythonObject(None)
     if n >= 262144 and xprep_r3("mapped"):
         storage = py_call(py_call(b.memoryview,py_call(context["arena_mmap"],-1,4*n)).cast,"f")
     else:
-        storage = py_call(context["array_type"],"f",py_call(b.bytes,4*n))
+        storage = native_array_zeros(String("f"), n)
     return Python.tuple(storage,xprep_address(storage),Int(perf_counter_ns())-start if profile else 0)
 
 
 def xprep_take(storage: PythonObject, offset: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var shape = Python.tuple(rows) if cols == 0 else Python.tuple(rows,cols)
     var count = rows*(1 if cols == 0 else cols)
     var part = py_call(b.memoryview,storage)[py_call(b.slice,offset,offset+count)]
@@ -74,7 +76,7 @@ def xprep_take(storage: PythonObject, offset: Int, rows: Int, cols: Int, context
         return result
     var store = storage
     if py_type(storage) is b.memoryview:
-        store = py_call(context["array_type"],"f")
+        store = native_array_empty(String("f"))
         _ = py_call(store.frombytes,py_call(part.cast,"B"))
     elif offset != 0 or len(storage) != count:
         store = storage[py_call(b.slice,offset,offset+count)]
@@ -92,7 +94,7 @@ def xprep_values(source: PythonObject, entries: PythonObject, context: PythonObj
     if py_type(source) is context["maxabs_rows_class"]:
         var fields = _rows_fields(source,context)
         var dtype = fields["dtype"]
-        if py_type(dtype) is not Python.import_module("builtins").str:
+        if py_type(dtype) is not native_loaded_module("builtins").str:
             raise Error("TypeError: native row selection requires native dtype metadata")
         if String(dtype) == "<f4" and xprep_ranges(entries,1) and py_get(entries,"x_prep_dev_take_rows") is not None and py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None:
             var base = _dense_values(fields["base"],context)
@@ -114,7 +116,7 @@ def xprep_values(source: PythonObject, entries: PythonObject, context: PythonObj
 
 
 def _cache_layout(cls: PythonObject, descriptor: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: arena caches require native class metadata")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
@@ -130,7 +132,7 @@ def _cache_layout(cls: PythonObject, descriptor: PythonObject) raises:
 
 
 def _cache_fields(value: PythonObject, cls: PythonObject, descriptor: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not cls:
         raise Error("TypeError: arena caches require their native metadata class")
     _cache_layout(cls,descriptor)
@@ -145,7 +147,7 @@ def _cache_fields(value: PythonObject, cls: PythonObject, descriptor: PythonObje
 def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObject, prefix: String = "x_prep") raises -> PythonObject:
     # `prefix` names the arena family store (x_prep, x_metrics); the shared
     # arena program runner (bindings/arena_prog_native.mojo) passes its own.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var scope = py_call(b.getattr,context["arena_local"],"scope",PythonObject(None))
     if scope is None or py_get(entries,PythonObject(prefix+"_dev_put")) is None or py_get(entries,PythonObject(prefix+"_dev_free")) is None:
         return PythonObject(None)
@@ -180,7 +182,7 @@ def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObje
 
 
 def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject, prefix: String = "x_prep") raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var state = _cache_fields(cache,context["arena_cache_class"],context["arena_cache_dict"])
     if state["_put"] is not entries[PythonObject(prefix+"_dev_put")] or state["_free"] is not entries[PythonObject(prefix+"_dev_free")] or py_type(state["_entries"]) is not b.dict or py_type(state["uploads"]) is not b.int or py_type(state["hits"]) is not b.int:
         raise Error("TypeError: resident cache entries must retain native binding metadata")

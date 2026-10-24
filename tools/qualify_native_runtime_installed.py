@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import tempfile
 import sys
 import types
 import xml.etree.ElementTree as ET
@@ -178,7 +179,7 @@ CPU_NOT_APPLICABLE = {
         "test_device_scalar_controls_use_retained_native_integer[param_device]": "device scalar controls require a GPU training pool",
     },
     'test_training_cross_entropy_public_native.py': {'test_public_cross_entropy_device_failure_rollback_has_no_python_finalizer': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[mean-False-0.0]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[mean-True-0.0]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[none-False-0.2]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[sum-True-0.2]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[logits-rank]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[none-backward]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[targets-float]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[targets-rank]': 'training device pool requires GPU'},
-    'test_training_device_native_allocator.py': {'test_training_device_owner_ignores_mutable_object_constructor[upload]': 'training device allocation requires the GPU pool', 'test_training_device_owner_ignores_mutable_object_constructor[reshape]': 'training device allocation requires the GPU pool'},
+    'test_training_device_native_allocator.py': {'test_training_device_owner_refuses_replaced_object_constructor[upload]': 'training device allocation requires the GPU pool', 'test_training_device_owner_refuses_replaced_object_constructor[reshape]': 'training device allocation requires the GPU pool'},
     "test_optimizer_native_array_ownership.py": {
         "test_native_device_download_does_not_call_mutable_memoryview[False]": "device downloads require the GPU training pool",
         "test_native_device_download_does_not_call_mutable_memoryview[True]": "device downloads require the GPU training pool",
@@ -481,6 +482,29 @@ def source_match(source, commit, wheels, payload, git_root=None):
     return matched
 
 
+def _export_ignore_attributes(git_root, commit, paths):
+    """`git check-attr -z export-ignore` of `paths` as `commit`'s own
+    .gitattributes decide them (raw NUL-separated response). `--source` needs
+    git 2.40; an older git refuses the option (status 129), so the same
+    question is asked of a temporary index read from `commit`, which
+    `--cached` consults and nothing else (the checkout's index and worktree
+    are never read or written)."""
+    stdin = b"\0".join(path.encode() for path in paths) + b"\0"
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(git_root), "check-attr", "--source=" + commit,
+             "-z", "--stdin", "export-ignore"], input=stdin, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as error:
+        if error.returncode != 129:
+            raise
+    with tempfile.TemporaryDirectory() as scratch:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
+        subprocess.check_output(["git", "-C", str(git_root), "read-tree", commit], env=env)
+        return subprocess.check_output(
+            ["git", "-C", str(git_root), "check-attr", "--cached", "-z", "--stdin", "export-ignore"],
+            input=stdin, env=env)
+
+
 def native_source_inventory(source, commit, committed, git_root):
     """Check frozen native bytes, recording archive-omitted historical evidence.
 
@@ -502,10 +526,7 @@ def native_source_inventory(source, commit, committed, git_root):
     if ancestors:
         # Check ancestors too: export-ignore on a directory excludes descendants
         # from git archive although check-attr on the child can say unspecified.
-        raw = subprocess.check_output(
-            ["git", "-C", str(git_root), "check-attr", "--source=" + commit,
-             "-z", "--stdin", "export-ignore"],
-            input=b"\0".join(path.encode() for path in sorted(ancestors)) + b"\0")
+        raw = _export_ignore_attributes(git_root, commit, sorted(ancestors))
         fields = raw.split(b"\0")[:-1]
         require(len(fields) % 3 == 0, "invalid git export attribute response")
         attributes = {fields[i].decode(): fields[i + 2].decode()

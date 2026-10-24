@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native dtype-schema admission and result ownership for sequence __array__.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.memory import bitcast
@@ -16,7 +17,7 @@ from bindings.sequence_string_storage import sequence_string_admit, sequence_str
 
 def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObject,
                           leaves: PythonObject, context: PythonObject, depth: Int = 0) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if depth > 64 or not sequence_dtype_instance(dtype, classes):
         raise Error("TypeError: output dtype requires a built-in native layout")
     var fields = dtype.fields
@@ -99,7 +100,7 @@ def sequence_array_release(context: PythonObject) raises -> Int:
     if module is None or py_type(module) is not context["module_type"]:
         raise Error("TypeError: array cast compatibility requires NumPy's native module")
     var version = py_get(py_fields(module), "__version__")
-    if py_type(version) is not Python.import_module("builtins").str:
+    if py_type(version) is not native_loaded_module("builtins").str:
         raise Error("TypeError: array cast compatibility requires native NumPy version text")
     var text = String(version)
     var parts = text.split(".")
@@ -191,7 +192,16 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
             status = sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context, status, print_mode)
         else:
             var software_half = False
-            comptime if CompilationTarget.has_neon():
+            comptime if CompilationTarget.is_x86():
+                # NumPy's half.hpp Half(float) uses hardware conversion only
+                # under NPY_HAVE_FP16 (AVX512-FP16 class builds); the x86-64
+                # wheels and conda-forge builds (baseline X86_V2) take
+                # FromFloatBits, which keeps a signaling NaN's payload without
+                # invalid status (NumPy 2.5.2 on x86-64 returns 0x7C01 for
+                # float32 0x7F800001). A dtype/platform contract, not a shape rule.
+                if kind == "f" and width == 2:
+                    software_half = True
+            elif CompilationTarget.has_neon():
                 # NumPy1.26--2.3 half.hpp explicitly disables ARM __fp16 and
                 # uses FromFloatBits. NumPy2.4 enables ARM half conversion.
                 # The software path preserves signaling NaNs without invalid
