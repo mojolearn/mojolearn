@@ -63,7 +63,11 @@ Minimal application call after loading the qualified native extension:
   scalars = [.125, 0., 0., 1e-8, 0., 0., 0., 1., 1., 0.]
   result = torch.ops.mojolearn.train([x, y, parameters], model, options, scalars)
 The full call (including all input transfers, training and completed output
-transfers) is the measurement boundary. No speed or zero-copy claim is made.
+transfers) is the measurement boundary. The existing trainer takes host input
+and state buffers, so the training bridge stages GPU tensors through host
+storage before the trainer's own uploads, on every GPU backend. These are
+native byte copies; training arithmetic stays on the selected GPU. No speed
+or zero-copy claim is made.
 
 Qualification and packaging
 ---------------------------

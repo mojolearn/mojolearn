@@ -1,0 +1,160 @@
+{
+  "schema": "mojolearn.native-whole-training-adapter-qualification.v1",
+  "date": "2026-10-23",
+  "product_source_commit": "d3e87f5b8ce7ea006539ca56e2d1c1e4924198bb",
+  "framework_test_source_commit": "9bf435950f4a82dc67e653298d270859c9194aa4",
+  "abi_test_source_commit": "365559b1fca4ebdb128d9816535570de34fdc934",
+  "numerical_source_base": "74bcdb0f05330afb261f2a1ba236c33c8a917eb0",
+  "numerical_kernel_changes": false,
+  "optional": true,
+  "enabled_by_default": false,
+  "pypi_packaged": false,
+  "implementation": {
+    "engine": "autograd/model.mojo::model_fit_state (existing Sequential native trainer)",
+    "entry_points": [
+      "mojolearn_adapter_train",
+      "torch.ops.mojolearn.train",
+      "MAX mojolearn_train",
+      "MAX mojolearn_train_resume"
+    ],
+    "training_loop": "Forward, tape/backward, optimizer, batches, epochs, initialization, shuffle, schedule and stopping in Mojo",
+    "outputs": [
+      "parameters",
+      "moment1",
+      "moment2",
+      "24 opaque int32 state words",
+      "loss curve with valid prefix"
+    ],
+    "framework_autograd": false,
+    "arbitrary_model_conversion": false,
+    "mlx": false,
+    "python_runtime_added": false,
+    "gpu_cpu_math_fallback": false,
+    "transport": "Native host staging into existing trainer host-buffer boundary; all copies included in operation",
+    "speed_claim": false
+  },
+  "validation": {
+    "amd": {
+      "status": "passed for listed cases",
+      "hardware": "AMD Instinct MI300X VF",
+      "target": "gfx942",
+      "compiler": "Mojo 1.0.0 (ed45d567)",
+      "torch": "2.13.0+rocm7.2",
+      "max": "unknown",
+      "torch_inference_checks": 43,
+      "torch_training_checks": 26,
+      "forced_staging_inference_checks": 43,
+      "forced_staging_training_checks": 32,
+      "max_inference_checks": 10,
+      "max_training_checks": 11,
+      "direct_abi_checks": 6,
+      "cases": [
+        "analytic linear SGD",
+        "Adam/dropout/shuffle/step schedule",
+        "AdamW/cross entropy/int32 classes",
+        "Nesterov momentum/Huber",
+        "BCE logits",
+        "version-2 convolution/flatten/linear"
+      ],
+      "exact_resume": "All five outputs for five model/loss configurations: 2+2 epochs equal uninterrupted 4",
+      "framework_compilation": [
+        "torch.compile fullgraph eager",
+        "torch.compile fullgraph Inductor",
+        "TorchScript trace",
+        "torch.export",
+        "MAX graph compilation/execution"
+      ],
+      "fault_controls": {
+        "torch_faults": {
+          "complete": true,
+          "check_count": 0,
+          "failures": [],
+          "path": "training-faults/training-fault-results.json",
+          "controls": [
+            {
+              "fault": "training-wrong-lr",
+              "detected": true
+            },
+            {
+              "fault": "training-stall",
+              "detected": true
+            }
+          ],
+          "original_unchanged": true
+        },
+        "staged_faults": {
+          "complete": true,
+          "check_count": 0,
+          "failures": [],
+          "path": "staging-training-faults/training-fault-results.json",
+          "controls": [
+            {
+              "fault": "training-wrong-lr",
+              "detected": true
+            },
+            {
+              "fault": "training-stall",
+              "detected": true
+            }
+          ],
+          "original_unchanged": true
+        },
+        "max_fault": {
+          "complete": true,
+          "check_count": 0,
+          "failures": [],
+          "path": "max-training-fault/max-training-fault-results.json",
+          "detected": true,
+          "original_unchanged": true
+        }
+      },
+      "incomplete_or_skipped_required_checks": []
+    },
+    "nvidia": {
+      "status": "native library compile passed for sm_89; execution pending",
+      "build_host": "owned AMD rental, supported cross-target compilation",
+      "runtime_qualified": false
+    },
+    "apple_mps": {
+      "status": "transport implementation present; actual Apple execution and packaging pending",
+      "runtime_qualified": false,
+      "local_apple_runs": 0
+    },
+    "cpu": {
+      "status": "independent analytical one-step SGD and ABI refusals passed; not a GPU identity claim"
+    },
+    "cross_vendor_adapter_identity": {
+      "status": "not rerun or claimed; reuse unchanged engine evidence and qualify each new adapter artifact"
+    },
+    "installed_wheels": {
+      "status": "pending packaging lane"
+    }
+  },
+  "artifacts": {
+    "mojolearn_ops.mojoc": "bf9263a39a1689f5c5d90ec67d0bc38c667639f63b647ad9363cbb3e560e4c49",
+    "nvidia-compile/libmojolearn_adapter.so": "279f19ab4ba72779f2723813f5cc926054063679db8a9f6adc6addb1538996f5",
+    "max-training-fault/mojolearn_wrong_training.mojoc": "85fdae6d3514f9a47065b54eff00879d60be826b23507ad2f407240d6b0d32e1",
+    "host-staging/libmojolearn_adapter.so": "afd29fc8e2a3a22d1202f3235daa751d28da0fe633983a0030e55554479a2c53",
+    "host-staging/mojolearn_torch.so": "e52afc3698ff1d980ae0c32b3bc67d12d2aabe665c802151c202c1d4be1b5173",
+    "native/libmojolearn_adapter.so": "afd29fc8e2a3a22d1202f3235daa751d28da0fe633983a0030e55554479a2c53",
+    "native/mojolearn_torch.so": "9e89dda98b0443b6834a00aeded8e70650d19d3f6923d3df316050afff6c32d4",
+    "staging-training-faults/training-wrong-lr/libmojolearn_adapter.so": "afd29fc8e2a3a22d1202f3235daa751d28da0fe633983a0030e55554479a2c53",
+    "staging-training-faults/training-wrong-lr/mojolearn_torch.so": "50e05f282533f2ad62a3ac71971a0d5a46d59887411c88a3643bbd1f73503da3",
+    "staging-training-faults/training-stall/libmojolearn_adapter.so": "afd29fc8e2a3a22d1202f3235daa751d28da0fe633983a0030e55554479a2c53",
+    "staging-training-faults/training-stall/mojolearn_torch.so": "43b4c544b8d3c25b2f29c70b16a81a195a78f3385389459f2df1e19ef943261b",
+    "training-faults/training-wrong-lr/libmojolearn_adapter.so": "afd29fc8e2a3a22d1202f3235daa751d28da0fe633983a0030e55554479a2c53",
+    "training-faults/training-wrong-lr/mojolearn_torch.so": "829114013ea1b164547c74ce52f10487bfafa23c7b45b1e1f270d8a5eed702a7",
+    "training-faults/training-stall/libmojolearn_adapter.so": "afd29fc8e2a3a22d1202f3235daa751d28da0fe633983a0030e55554479a2c53",
+    "training-faults/training-stall/mojolearn_torch.so": "62db0cb1d433de486260d2c597dbbbbdcb050143080b923d35d5b0fcff8ae48f"
+  },
+  "evidence": {
+    "local_directory": "/Users/andrewhendel/mojolearn-evidence/training-adapters-20261023",
+    "r2_key": "measurements/native-adapters/2026-10-23/training-d3e87f5b8-amd-evidence.tgz",
+    "archive_sha256": "5b4f9934526e08154f91db64961e9aa4235ef87f59a563e73c3849ac78643bc5",
+    "retained_files_verified": 223,
+    "compiled_adapter_source_matches": 18,
+    "initial_compile_failure": "Native pointer origin/type mismatches; original diagnostics and source preserved under native-first-failed",
+    "accepted_build_source": "AMD build receipt has dirty external test files; every retained adapter source byte matches product commit. NVIDIA receipt is clean test commit."
+  },
+  "handoff": "adapters/TRAINING_ADAPTER_HANDOFF_20261023.txt"
+}
