@@ -270,20 +270,7 @@ def execute(request):
     if operation == 'holtwinters_fit':
         from ._tsa_impl import ExponentialSmoothing
         return ExponentialSmoothing(args[0], ts_num=args[0].shape[0], **state).fit()
-    if operation == 'gram_fit':
-        binding = state._bind('_mojolearn_estimators')
-        if (not callable(getattr(binding, 'gram_parallel_available', None))
-                or binding.gram_parallel_available() != 1):
-            raise ImportError('rebuild estimators binding for parallel Gram chunks')
-        X, y, kwargs = args
-        if X.shape[1] > 128 or X.shape[0] < X.shape[1]:
-            if not callable(getattr(binding, 'gram_outputs_parallel_available', None)) or binding.gram_outputs_parallel_available() != 1:
-                raise ImportError('rebuild estimators binding for Gram output partitions')
-        if getattr(state, 'svd_solver', None) == 'full':
-            if not callable(getattr(binding, 'qr_parallel_available', None)) or binding.qr_parallel_available() != 1:
-                raise ImportError('rebuild estimators binding for parallel QR panels')
-        state.fit(X, y, **kwargs)
-        return state
+    # 'gram_fit' moved to family_par_run (2026-10-24).
     if operation in ('gmm_fit', 'gmm_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gmm_parallel_available', None))
@@ -341,21 +328,8 @@ def execute(request):
             raise ValueError('invalid IsolationForest score operation')
         from ._parallel_pool import native_method
         return native_method(state, method, X)  # the native result; the driver converts
-    if operation == 'solver_fit':
-        from ._backend import binding
-        native = binding('_mojolearn_solver')
-        if (not callable(getattr(native, 'solver_parallel_available', None))
-                or native.solver_parallel_available() != 1):
-            raise ImportError('rebuild solver binding for parallel dot leaves')
-        state.fit(*args)
-        return state
-    if operation == 'glm_fit':
-        binding = state._bind('_mojolearn_estimators')
-        if (not callable(getattr(binding, 'glm_parallel_available', None))
-                or binding.glm_parallel_available() != 1):
-            raise ImportError('rebuild estimators binding for parallel GLM gradients')
-        state.fit(*args)
-        return state
+    # 'solver_fit' moved to family_par_run (2026-10-24).
+    # 'glm_fit' moved to family_par_run (2026-10-24).
     if operation == 'neighbor_reference':
         from .neighbors import NearestNeighbors
         index, query, k = args

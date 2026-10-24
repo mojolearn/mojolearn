@@ -52,6 +52,8 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     var bindings = args[6]
     if owner_entry is not None and py_type(owner_entry) is not context["family_builtin_type"]:
         raise Error("TypeError: a parallel driver's owner must be a compiled entry")
+    if len(bindings) == 0:
+        raise Error("ImportError: " + par_spec_rebuild(driver))
     var result = PythonObject(None)
     plan_enter_all(bindings, devices, par_spec_rebuild(driver), par_spec_families(driver))
     try:

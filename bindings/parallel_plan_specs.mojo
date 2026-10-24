@@ -24,6 +24,8 @@ def par_spec_admits(driver: String, owner: String) -> Bool:
         return owner == "fit"
     if driver == "solver_fit":
         return owner == "cd_fit"
+    if driver == "gram_fit":
+        return owner == "ols_fit" or owner == "ridge_fit" or owner == "fit"
     return False
 
 
@@ -43,4 +45,6 @@ def par_spec_rebuild(driver: String) -> String:
         return "rebuild estimators binding for parallel GLM gradients"
     if driver == "solver_fit":
         return "rebuild solver binding for parallel dot leaves"
+    if driver == "gram_fit":
+        return "rebuild estimators binding for parallel Gram chunks"
     return "rebuild the binding for multi-GPU drivers"

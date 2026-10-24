@@ -52,12 +52,21 @@ from . import _svm_impl as _svm
 from . import _gp_impl as _gp
 from . import linear_model as _lm
 from . import _solver_impl as _cd
+from . import decomposition as _dec
 from . import _backend
 from . import _native_family_bridge
 
 # The classical families' compiled owner: a cooperative driver is one
 # `family_par_run` call (bindings/family_native.mojo).
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
+
+#: fit_gram_estimator's plain owners: (entry, operation, context, owner arity).
+_GRAM_OWNERS = {
+    _lm.LinearRegression: (_lm._native_classical, 'ols_fit', _lm._CLASSICAL, 3),
+    _lm.Ridge: (_lm._native_classical, 'ridge_fit', _lm._CLASSICAL, 3),
+    _dec.PCA: (_dec._PCA_ENTRY, 'fit', _dec._PCA_CONTEXT, 2),
+    _dec.TruncatedSVD: (_dec._TSVD_ENTRY, 'fit', _dec._TSVD_CONTEXT, 2),
+}
 
 #: The plain owner operations of the SVM drivers.
 _SVM_FIT = {_svm.SVC: 'family_svc_svc_fit', _svm.SVR: 'family_svc_svr_fit'}
@@ -202,31 +211,26 @@ def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Distribute the existing pinned Gram chunks for OLS, Ridge, PCA and SVD.
-    #
-    # This entry admits the original Gram/eigendecomposition and wide OLS paths.
-    # The root still owns preprocessing and solver state; this is computation
-    # partitioning, not a fit beyond one GPU's memory capacity.
-    from .linear_model import LinearRegression, Ridge
-    from .decomposition import PCA, TruncatedSVD
-    if type(estimator) not in (LinearRegression, Ridge, PCA, TruncatedSVD):
+    # One native call (`family_par_run`, driver `gram_fit`): the plain fit
+    # with its pinned Gram chunks (and, for full PCA, its QR panels) on the
+    # selected devices. The root still owns preprocessing and solver state;
+    # this is computation partitioning, not a fit beyond one GPU's memory.
+    if type(estimator) not in _GRAM_OWNERS:
         raise TypeError('fit_gram_estimator requires LinearRegression, Ridge, PCA or TruncatedSVD')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel Gram estimators require IDENTICAL numeric mode')
     data, _ = as_f32_c(X, ndim=2, name='X')
-    rows, columns = data.shape
-    if columns < 1:
+    if data.shape[1] < 1:
         raise ValueError('parallel Gram requires at least one feature')
-    if type(estimator) is PCA and estimator.svd_solver in estimator._DENSE_SOLVERS and rows < columns:
+    if type(estimator) is _dec.PCA and estimator.svd_solver in estimator._DENSE_SOLVERS and data.shape[0] < data.shape[1]:
         raise ValueError('parallel full PCA currently requires the tall TSQR route')
-    kwargs = {} if sample_weight is None else dict(sample_weight=sample_weight)
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    if sample_weight is not None and type(estimator) in (_dec.PCA, _dec.TruncatedSVD):
+        raise TypeError("fit() got an unexpected keyword argument 'sample_weight'")
+    entry, operation, context, arity = _GRAM_OWNERS[type(estimator)]
+    return _FAMILY(estimator, 'family_par_run',
+                   ('gram_fit', devices, operation, (data, y, sample_weight)[:arity], entry, context,
+                    _backend.plan_bindings(('_mojolearn_estimators', '_mojolearn_x_linear',
+                                            '_mojolearn_x_decomp'))), _FAMILY_CONTEXT)
 
 
 def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
@@ -376,7 +380,7 @@ def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
         raise ValueError('parallel coordinate descent requires IDENTICAL numeric mode')
     return _FAMILY(estimator, 'family_par_run',
                    ('solver_fit', devices, 'cd_fit', (X, y, None), _cd._CD_CALL, _cd._CD_CONTEXT,
-                    (_backend.binding('_mojolearn_solver', 'identical'),)), _FAMILY_CONTEXT)
+                    _backend.plan_bindings(('_mojolearn_solver',))), _FAMILY_CONTEXT)
 
 
 def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
