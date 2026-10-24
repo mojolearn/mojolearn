@@ -17,10 +17,20 @@ from checks.fixture_rng import splitmix_pair, splitmix64_finalizer, GOLDEN64
 
 
 @always_inline
+def unsigned_word_pair(q: IP, low: Int, high: Int) -> UInt64:
+    # Stage parameters are signed Int32 ABI words, but this pair encodes
+    # unsigned bits. Mask each at the final width before combining them:
+    # a negative low word must not set every bit of the high word. The
+    # retained 50de draw diagnostic exposed that contamination in the
+    # nested UInt64(UInt32(...)) conversion, on both native and old drivers.
+    var lo = UInt64(p(q, low)) & UInt64(0xFFFFFFFF)
+    var hi = UInt64(p(q, high)) & UInt64(0xFFFFFFFF)
+    return (hi << 32) | lo
+
+
+@always_inline
 def _salt(q: IP) -> Int:
-    var lo = UInt64(UInt32(p(q, 2)))
-    var hi = UInt64(UInt32(p(q, 3)))
-    return Int((hi << 32) | lo)
+    return Int(unsigned_word_pair(q, 2, 3))
 
 
 @always_inline
@@ -226,12 +236,8 @@ def approx_mode_unit(t: Int, f: FP, q: IP):
             plus = 1
         else:
             var take = need - greater
-            var lo = UInt64(UInt32(p(q, 7)))
-            var hi = UInt64(UInt32(p(q, 8)))
-            var seed = (hi << 32) | lo
-            var blo = UInt64(UInt32(p(q, 9)))
-            var bhi = UInt64(UInt32(p(q, 10)))
-            var draw = (bhi << 32) | blo
+            var seed = unsigned_word_pair(q, 7, 8)
+            var draw = unsigned_word_pair(q, 9, 10)
             var PRIOR = p(q, 5)
             if PRIOR >= 0:
                 draw += UInt64(ldi(f, PRIOR))

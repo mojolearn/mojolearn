@@ -661,6 +661,9 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     _ = rows_sorted  # keep the Python object alive through the native call above
     memcpy(dest=msel_p64(inverse), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_inv), count=n)
     _ = inverse  # keep the Python object alive through the native call above
+    # Both raw source addresses still point into this arena after the final
+    # offset read. Allocating the result Arrays must not release its storage.
+    _ = arena^
     _ = prog^
     return Python.tuple(sizes, rows_sorted, inverse)
 
@@ -684,6 +687,9 @@ def _group_index(mut rng: MselRng, order: PythonObject, n: Int, context: PythonO
                         PythonObject(sizes[g]), PythonObject(s0 + 8 * at))
         _ = src  # keep the Python object alive through the native call above
         at += sizes[g]
+    # The last address extraction does not keep the owning permutation list
+    # alive through the last native gather's reads.
+    _ = perms^
     var idx = msel_new(n, "<i8", context)
     _ = family_call(gather, PythonObject(s0), PythonObject(n), PythonObject(msel_addr(order[2])), PythonObject(n),
                     PythonObject(msel_addr(idx)))

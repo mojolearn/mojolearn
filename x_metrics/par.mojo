@@ -42,7 +42,7 @@ from std.memory import bitcast
 from x_metrics.common import FP, IP, p, ld, st, ldi, sti, ldu, stu, key, fadd, leaf_add, LEAF
 from checks.numerics import identical_mul
 from checks.fixture_rng import splitmix_pair
-from x_metrics.split import fold_of_position, st_row64
+from x_metrics.split import fold_of_position, st_row64, unsigned_word_pair
 from x_linear.ff import FF, two_sum, ff_add, ff_mul, ff_div, ff_of
 
 #: The sort's initial run length (insertion sorted by one thread).
@@ -277,9 +277,7 @@ def sort_key_unit(t: Int, f: FP, q: IP):
             kh = UInt32(1)
         kl = ~key(ld(f, p(q, 4) + pp + i * p(q, 5)))
     else:
-        var lo = UInt64(UInt32(p(q, 4)))
-        var hi = UInt64(UInt32(p(q, 5)))
-        var z = splitmix_pair(i, Int((hi << 32) | lo))
+        var z = splitmix_pair(i, Int(unsigned_word_pair(q, 4, 5)))
         kh = UInt32(z >> 32)
         kl = UInt32(z & 0xFFFFFFFF)
     stu(f, B + t, kh)
