@@ -63,8 +63,17 @@ REPO = Path(__file__).resolve().parent.parent
 SCHEMA = "mojolearn.development-build.v1"
 KEY_SCHEMA = "mojolearn.development-group.v1"
 MANIFEST = "bindings/development_groups.json"
-BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
-                "tools/merged_bindings.py", "tools/bincache.py", "tools/development_build.py")
+# A group's `builders` key field is its effective compile recipe, not the
+# controller's source. The two shell scripts compose every compiler flag,
+# define and target from the keyed environment, so their executable lines are
+# hashed (comments and blank lines dropped). The root text (merged_bindings.py
+# root) is keyed by root_sha256, the members by `members`, and the compiler by
+# `toolchain`; tools/development_build.py, build_process.py, build_sizing.py,
+# bincache.py and merged_bindings.py never decide the bytes of a group, so
+# editing them leaves every key unchanged (2026-10-24: a tool-only commit
+# rebuilt 79 of 79 groups on the L4, the M4 and the AMD box).
+RECIPE_SCHEMA = "mojolearn.development-recipe.v1"
+BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh")
 # Non-group runtime artifacts. python/mojolearn/_portable_math.py loads the
 # repository-owned host math library from a fixed path in every set; release
 # packaging builds it with packaging/portable_math/stage.py. It is a C build
@@ -72,7 +81,7 @@ BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
 SUPPORT_SCHEMA = "mojolearn.development-support.v1"
 PORTABLE_MATH_INPUTS = ("packaging/portable_math/portable_math.c",
                         "packaging/portable_math/powers_of_ten.h",
-                        "packaging/portable_math/stage.py", "tools/development_build.py")
+                        "packaging/portable_math/stage.py")
 # Private transport between controller functions, deliberately outside
 # bincache.KEY_ENV_PREFIXES and removed before starting any child process.
 GUARD_ENV = "_MOJOLEARN_DEVELOPMENT_GUARD"
@@ -278,6 +287,28 @@ def input_change_reason(label, before, after):
     return f"{label}: {shown or 'group missing from recomputed plan'}"
 
 
+def recipe_text(text):
+    """A build script's executable lines: comments and blank lines dropped."""
+    lines = (line.rstrip() for line in text.splitlines())
+    return "\n".join(line for line in lines if line.strip() and not line.lstrip().startswith("#")) + "\n"
+
+
+def group_command(mode, stem, outdir, rootdir):
+    """The one compiler invocation of a group; keyed through compile_recipe."""
+    return ["sh", "bindings/merged_build.sh", "host" if mode == "host" else "gpu",
+            "--layout", "development", "--group", stem, "--outdir", str(outdir),
+            "--rootdir", str(rootdir)]
+
+
+def compile_recipe(scripts, mode, stem, flags_class):
+    """Everything that decides a group's compiler command line, deterministic.
+
+    Paths of the work directory are placeholders: they follow from the key."""
+    return {"schema": RECIPE_SCHEMA, "scripts": scripts, "mode": mode, "flags_class": flags_class,
+            "command": group_command(mode, stem, "<outdir>", "<rootdir>"),
+            "artifact": stem + ".so"}
+
+
 def build_environment(mode, env, plat=None):
     env = dict(env)
     plat = plat or merged.default_platform()
@@ -362,7 +393,8 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
     if plat not in ("linux", "darwin"):
         raise BuildError("development builds require Linux or macOS")
     graph, rows = SourceGraph(repo), []
-    builders = {p: bincache.sha256_file(repo / p) for p in BUILD_INPUTS}
+    scripts = {p: hashlib.sha256(recipe_text((repo / p).read_text(errors="replace")).encode()).hexdigest()
+               for p in BUILD_INPUTS}
     for mode in modes:
         if mode not in ("identical", "host"):
             raise BuildError("development builds support identical and host only")
@@ -376,7 +408,8 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
         for stem, flags_class, members in merged.plan(mode, plat, byte_lm, "development"):
             fields = {"schema": KEY_SCHEMA, "repo": str(repo), "cache": str(cache),
                       "mode": mode, "platform": plat, "stem": stem, "flags_class": flags_class,
-                      "members": members, "source": graph.closure(members), "builders": builders,
+                      "members": members, "source": graph.closure(members),
+                      "builders": compile_recipe(scripts, mode, stem, flags_class),
                       "root_sha256": hashlib.sha256(merged.root_text(stem, members).encode()).hexdigest(),
                       "toolchain": facts, "environment": bincache.build_env(effective),
                       "link_environment": {k: effective[k] for k in
@@ -587,9 +620,7 @@ def compile_group(row, repo, cache, env, evidence):
                 artifact.unlink(missing_ok=True)
                 execution.unlink(missing_ok=True)
                 effective = build_environment(row["mode"], env, row["fields"]["platform"])
-                command = ["sh", "bindings/merged_build.sh", "host" if row["mode"] == "host" else "gpu",
-                           "--layout", "development", "--group", row["stem"], "--outdir", str(output),
-                           "--rootdir", str(work / "roots")]
+                command = group_command(row["mode"], row["stem"], output, work / "roots")
                 result.update(log=str(log), command=command, execution_receipt=str(execution))
                 code = run_logged(command, repo, effective, log)
                 result["exit_code"] = code
