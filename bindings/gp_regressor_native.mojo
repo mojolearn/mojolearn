@@ -198,7 +198,7 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
         Python.list(classical_address(x), classical_address(targets), classical_address(arrays[0]),
                     classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
                     classical_address(free), classical_address(grad), classical_address(scalars)),
-        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
+        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
                     fields["_alpha"]))
     _ = scalars  # keep the Python object alive through the native call above
     _ = grad  # keep the Python object alive through the native call above
@@ -254,7 +254,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
                     classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
                     classical_address(free), classical_address(bounds), classical_address(theta_out),
                     classical_address(values_out), classical_address(runs_out)),
-        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
+        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
                     fields["_alpha"], PythonObject(n_runs - 1), low, high))
     _ = theta_out  # keep the Python object alive through the native call above
     _ = bounds  # keep the Python object alive through the native call above
@@ -342,7 +342,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
             Python.list(classical_address(x), classical_address(targets), classical_address(arrays[0]),
                         classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
                         classical_address(l_out), classical_address(dual), classical_address(scalars)),
-            Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
+            Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
                         fields["_alpha"]))))
         _ = targets  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
@@ -436,7 +436,7 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var dual = gp_f32(fields, "alpha_", -1, context)
     var ext = _gpr_ext(model, args[0], context)
     var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
-                             PythonObject(len(arrays[0])), arrays[4], PythonObject(1 if return_std else 0),
+                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(1 if return_std else 0),
                              fields["info_"])
     _gpr_tail(fields, params)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
@@ -493,7 +493,7 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     var lf = gp_f32(fields, "L_", -1, context)
     var dual = gp_f32(fields, "alpha_", -1, context)
     var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
-                             PythonObject(len(arrays[0])), arrays[4], fields["info_"])
+                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], fields["info_"])
     _gpr_tail(fields, params)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_cov_binding.
     # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, cov_out;
@@ -549,7 +549,7 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var dual = gp_f32(fields, "alpha_", -1, context)
     var ext = _gpr_ext(model, args[0], context)
     var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
-                             PythonObject(len(arrays[0])), arrays[4], fields["info_"], PythonObject(n),
+                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], fields["info_"], PythonObject(n),
                              py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF)),
                              py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)))
     _gpr_tail(fields, params)
