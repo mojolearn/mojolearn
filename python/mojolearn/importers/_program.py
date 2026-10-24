@@ -11,6 +11,9 @@
 # Python passes names, shapes and buffer addresses only. The program keeps
 # its session; run() only reshapes the caller's arrays to the session's
 # shapes (a rank-1 model value is held as a (1, n) row) and back, as views.
+# A torch.nn.Module or an onnx.ModelProto is written to a temporary ONNX file
+# (torch.onnx.export, or the proto's own bytes) and imported from it: a
+# conversion at the API boundary, no arithmetic on the model's values.
 from __future__ import annotations
 
 import os
@@ -22,19 +25,87 @@ from ._table import session_shape
 __all__ = ["import_model", "ImportedProgram"]
 
 
-_TORCH_TO_ONNX = ('export the torch model to ONNX first, then import the file: '
-                  'torch.onnx.export(model, args, "model.onnx"); mojolearn.import_model("model.onnx")')
+# the ONNX opset a PyTorch module is exported at (the import reads opset 13 or later)
+_TORCH_OPSET = 17
+
+
+def _is_torch(source):
+    # a torch object (an nn.Module, a user subclass of one, or a torch.export program), found by its
+    # class chain so that torch is imported only when the caller passes one of its objects
+    return any(str(c.__module__).split(".", 1)[0] == "torch" for c in type(source).__mro__)  # glue: the argument's class chain
+
+
+def _is_onnx_proto(source):
+    # an in-memory onnx.ModelProto: written to a file as it is, then read like any ONNX file
+    return (type(source).__name__ == "ModelProto" and str(type(source).__module__).split(".", 1)[0] == "onnx"
+            and hasattr(source, "SerializeToString"))
 
 
 def _read(source):
     # a graph mojolearn.importers.onnx.read returned: its handle in the Mojo reader
     if isinstance(source, GraphIR) and getattr(source, "_native", None) is not None:
         return source
-    # a torch object (an nn.Module, a user subclass of one, or a torch.export program)
-    if any(str(c.__module__).split(".", 1)[0] == "torch" for c in type(source).__mro__):  # glue: the argument's class chain
-        raise ValueError(f"mojolearn.import_model takes an ONNX file, not a {type(source).__name__}: "
-                         + _TORCH_TO_ONNX)
-    raise TypeError(f"source must be the path of an ONNX file, got {type(source).__name__}")
+    if _is_torch(source):
+        raise ValueError(f"mojolearn.import_model takes a torch.nn.Module or an ONNX file, not a "
+                         f"{type(source).__name__}: pass the module itself with example_inputs=, or export it "
+                         'with torch.onnx.export(model, args, "model.onnx") and pass the file')
+    raise TypeError("source must be the path of an ONNX file, an onnx.ModelProto or a torch.nn.Module, "
+                    f"got {type(source).__name__}")
+
+
+def _require_torch():
+    try:
+        import torch
+    except ImportError as e:
+        raise ImportError("mojolearn.import_model needs PyTorch to import a torch.nn.Module: "
+                          "pip install torch") from e
+    return torch
+
+
+def _example_args(torch, shapes, example_inputs):
+    """The example inputs torch.onnx.export traces, as a tuple, and their input names."""
+    if example_inputs is None:
+        if not shapes:
+            raise ValueError("importing a torch.nn.Module needs example inputs of the shape you will run: pass "
+                             "example_inputs=torch.zeros(8, 3, 32, 32) (a tuple for several inputs), or "
+                             "shapes={\"input\": (8, 3, 32, 32)} for float32 inputs")
+        names = [str(k) for k in dict(shapes)]  # glue: the shapes argument, one entry per named input
+        # float32 zeros of each shape, made by torch: the export reads their shapes only
+        args = tuple(torch.zeros(tuple(int(d) for d in dims)) for dims in dict(shapes).values())  # glue: one tensor per named input
+        return args, names
+    args = tuple(example_inputs) if isinstance(example_inputs, (tuple, list)) else (example_inputs,)
+    args = tuple(a if isinstance(a, torch.Tensor) else torch.as_tensor(a) for a in args)  # glue: one tensor per model input
+    if shapes:
+        names = [str(k) for k in dict(shapes)]  # glue: the shapes argument, one entry per named input
+        if len(names) != len(args):
+            raise ValueError(f"shapes names {len(names)} inputs but example_inputs holds {len(args)}")
+    else:
+        names = ["input"] if len(args) == 1 else [f"input_{i}" for i in range(len(args))]  # glue: one name per model input
+    return args, names
+
+
+def _export_torch(module, path, shapes, example_inputs):
+    """Export a torch.nn.Module to the ONNX file ``path`` in this process."""
+    torch = _require_torch()
+    if not isinstance(module, torch.nn.Module):
+        _read(module)  # a torch object that is not a module: refused with the file path
+    args, names = _example_args(torch, shapes, example_inputs)
+    kwargs = {"opset_version": _TORCH_OPSET, "input_names": names, "do_constant_folding": True}
+    import inspect
+    try:
+        params = inspect.signature(torch.onnx.export).parameters
+    except (TypeError, ValueError):
+        params = {}
+    if "dynamo" in params:
+        # the TorchScript exporter: no onnxscript needed, fixed shapes from the example inputs
+        kwargs["dynamo"] = False
+    label = type(module).__name__
+    try:
+        with torch.no_grad():
+            torch.onnx.export(module.eval(), args, path, **kwargs)
+    except Exception as e:
+        raise UnsupportedModel(label, [("torch.onnx.export", None, f"{type(e).__name__}: {e}")]) from e
+    return label
 
 
 # autograd/import_lower.mojo onnx_import statuses
@@ -122,10 +193,12 @@ def _dtype_name(ir_dtype):
             "i32": "int32", "bool": "bool"}.get(ir_dtype, ir_dtype)
 
 
-def import_model(source, *, shapes=None, numeric_mode=None):
+def import_model(source, *, shapes=None, example_inputs=None, numeric_mode=None):
     """Import a trained model for inference.
 
-    ``source`` is the path of an ONNX file (opset 13 or later). The model's weights are copied to the
+    ``source`` is the path of an ONNX file (opset 13 or later), an
+    ``onnx.ModelProto``, or a PyTorch ``torch.nn.Module``; a PyTorch module is
+    exported to ONNX in this process and imported from that. The model's weights are copied to the
     device once and its operations run as one call per
     :meth:`ImportedProgram.run`, with the same results on Apple, NVIDIA and
     AMD GPUs and on the CPU. In `identical` mode, mojolearn returns the same
@@ -133,14 +206,22 @@ def import_model(source, *, shapes=None, numeric_mode=None):
 
     Parameters
     ----------
-    source : str or path-like
-        The model's ONNX file. To import a PyTorch model, export it to ONNX
-        first with ``torch.onnx.export(model, args, "model.onnx")`` and pass
-        the file.
+    source : str, path-like, onnx.ModelProto or torch.nn.Module
+        The model: its ONNX file, an ONNX model in memory, or a PyTorch
+        module. A PyTorch module is put in evaluation mode and exported with
+        ``torch.onnx.export`` at opset 17; a model that export cannot write
+        can still be exported by hand and imported from the file.
     shapes : dict, optional
         The shape of each input whose size the model leaves open (such as
         the batch), by input name: ``{"input": (8, 3, 32, 32)}``. The
-        imported model then accepts arrays of exactly those shapes.
+        imported model then accepts arrays of exactly those shapes. For a
+        PyTorch module without ``example_inputs``, the module is exported
+        with float32 zeros of these shapes, and the keys name its inputs.
+    example_inputs : tensor or tuple of tensors, optional
+        For a PyTorch module: example inputs of the shapes and dtypes you
+        will run, one per argument of ``forward`` (a tuple for several).
+        Their values are not used. The imported model takes inputs of
+        exactly these shapes. Pass these or ``shapes``.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default (``'identical'``);
         ``'fast'`` is available on Apple GPUs only.
@@ -158,8 +239,11 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     UnsupportedModel
         The model uses operations, attributes or shapes the import does not
         support; the message lists every one, by node name.
+        For a PyTorch module, the export's error is the one problem listed.
     ValueError
-        ``source`` is a PyTorch object; export it to ONNX first.
+        A PyTorch module was passed without ``example_inputs`` or ``shapes``.
+    ImportError
+        A PyTorch module was passed and PyTorch cannot be imported.
 
     Examples
     --------
@@ -168,7 +252,33 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     >>> prog = mojolearn.import_model("classifier.onnx", shapes={"input": (8, 3, 32, 32)})  # doctest: +SKIP
     >>> logits = prog.run(np.zeros((8, 3, 32, 32), dtype=np.float32))  # doctest: +SKIP
     >>> prog.save("classifier.mlprog")  # doctest: +SKIP
+
+    A PyTorch module, imported directly:
+
+    >>> import torch  # doctest: +SKIP
+    >>> prog = mojolearn.import_model(model, example_inputs=torch.zeros(8, 3, 32, 32))  # doctest: +SKIP
     """
+    if _is_torch(source) or _is_onnx_proto(source):
+        import shutil
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="mojolearn-import-")
+        try:
+            path = os.path.join(tmp, "model.onnx")
+            if _is_onnx_proto(source):
+                with open(path, "wb") as f:
+                    f.write(source.SerializeToString())
+                label = "ModelProto"
+            else:
+                label = _export_torch(source, path, shapes, example_inputs)
+            return _import(path, label, shapes, numeric_mode)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    if example_inputs is not None:
+        raise ValueError("example_inputs is for a torch.nn.Module; an ONNX model takes shapes=")
+    return _import(source, None, shapes, numeric_mode)
+
+
+def _import(source, label, shapes, numeric_mode):
     s = Session(record=False, numeric_mode=numeric_mode)
     b = s._b
     keep = ()
@@ -179,8 +289,9 @@ def import_model(source, *, shapes=None, numeric_mode=None):
         names, flat = _shape_words(shapes)
         if isinstance(source, (str, bytes, os.PathLike)):
             # an ONNX file: read, resolved, refused and lowered in one Mojo call
-            src = os.fsdecode(os.fspath(source))
-            res = b.onnx_import_file(src, s._sid(), names, flat, src)
+            path = os.fsdecode(os.fspath(source))
+            src = path if label is None else label
+            res = b.onnx_import_file(path, s._sid(), names, flat, src)
         else:
             g = _read(source)
             src = g.source

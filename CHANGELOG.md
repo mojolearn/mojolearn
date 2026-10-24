@@ -2,6 +2,13 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+- **Import a PyTorch module directly.** `mojolearn.import_model(model, example_inputs=torch.zeros(8, 3, 32, 32))`
+  takes a `torch.nn.Module`, exports it to ONNX in this process and imports it; `shapes=` alone also works for
+  float32 inputs. An export failure raises `UnsupportedModel` with PyTorch's message. `import_model` also takes an
+  in-memory `onnx.ModelProto`. ONNX files import as before.
+
 ## 0.8.56 (published 2026-10-24)
 
 - **Same bits everywhere.** In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. This
