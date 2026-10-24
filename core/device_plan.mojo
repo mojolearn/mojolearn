@@ -43,10 +43,77 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 comptime DEVICE_PLAN_SLOTS = 64
 comptime DEVICE_PLAN_MAX_DEVICES = 64
 
+# THE OWNER FAMILIES A PLAN DRIVES. The cooperative worker set every
+# `_parallel_pool.DEVICE_COUNT_VARIABLES` count to the device number, and
+# MOJOLEARN_CHOLESKY_DEVICE_COUNT only inside the kernel-method and Cholesky
+# operations (the GP and GaussianMixture workers kept their root
+# factorization). A plan carries the same choice as a mask, so a driver's
+# owners partition exactly where the worker's did.
+comptime DEVICE_PLAN_KMEANS = 1 << 0
+comptime DEVICE_PLAN_GBDT = 1 << 1
+comptime DEVICE_PLAN_GRAM = 1 << 2
+comptime DEVICE_PLAN_QR = 1 << 3
+comptime DEVICE_PLAN_OPTIMIZER = 1 << 4
+comptime DEVICE_PLAN_GLM = 1 << 5
+comptime DEVICE_PLAN_SOLVER = 1 << 6
+comptime DEVICE_PLAN_IFOREST = 1 << 7
+comptime DEVICE_PLAN_FOREST = 1 << 8
+comptime DEVICE_PLAN_SVM = 1 << 9
+comptime DEVICE_PLAN_GP = 1 << 10
+comptime DEVICE_PLAN_GMM = 1 << 11
+comptime DEVICE_PLAN_RESAMPLE = 1 << 12
+comptime DEVICE_PLAN_DBSCAN = 1 << 13
+comptime DEVICE_PLAN_NEIGHBORS = 1 << 14
+comptime DEVICE_PLAN_HIERARCHY = 1 << 15
+comptime DEVICE_PLAN_CHOLESKY = 1 << 16
+#: what the cooperative worker's environment set (`DEVICE_COUNT_VARIABLES`)
+comptime DEVICE_PLAN_WORKER = (1 << 16) - 1
+
+
+def _family_bit(name: String) -> Int:
+    """The DEVICE_PLAN_* bit of `MOJOLEARN_<FAMILY>_DEVICE_COUNT`, 0 for any
+    other name (never planned)."""
+    if name == "MOJOLEARN_KMEANS_DEVICE_COUNT":
+        return DEVICE_PLAN_KMEANS
+    if name == "MOJOLEARN_GBDT_DEVICE_COUNT":
+        return DEVICE_PLAN_GBDT
+    if name == "MOJOLEARN_GRAM_DEVICE_COUNT":
+        return DEVICE_PLAN_GRAM
+    if name == "MOJOLEARN_QR_DEVICE_COUNT":
+        return DEVICE_PLAN_QR
+    if name == "MOJOLEARN_OPTIMIZER_DEVICE_COUNT":
+        return DEVICE_PLAN_OPTIMIZER
+    if name == "MOJOLEARN_GLM_DEVICE_COUNT":
+        return DEVICE_PLAN_GLM
+    if name == "MOJOLEARN_SOLVER_DEVICE_COUNT":
+        return DEVICE_PLAN_SOLVER
+    if name == "MOJOLEARN_IFOREST_DEVICE_COUNT":
+        return DEVICE_PLAN_IFOREST
+    if name == "MOJOLEARN_FOREST_DEVICE_COUNT":
+        return DEVICE_PLAN_FOREST
+    if name == "MOJOLEARN_SVM_DEVICE_COUNT":
+        return DEVICE_PLAN_SVM
+    if name == "MOJOLEARN_GP_DEVICE_COUNT":
+        return DEVICE_PLAN_GP
+    if name == "MOJOLEARN_GMM_DEVICE_COUNT":
+        return DEVICE_PLAN_GMM
+    if name == "MOJOLEARN_RESAMPLE_DEVICE_COUNT":
+        return DEVICE_PLAN_RESAMPLE
+    if name == "MOJOLEARN_DBSCAN_DEVICE_COUNT":
+        return DEVICE_PLAN_DBSCAN
+    if name == "MOJOLEARN_NEIGHBORS_DEVICE_COUNT":
+        return DEVICE_PLAN_NEIGHBORS
+    if name == "MOJOLEARN_HIERARCHY_DEVICE_COUNT":
+        return DEVICE_PLAN_HIERARCHY
+    if name == "MOJOLEARN_CHOLESKY_DEVICE_COUNT":
+        return DEVICE_PLAN_CHOLESKY
+    return 0
+
 
 struct _DevicePlanTable(Defaultable, Movable):
     # owners[s]: 0 when slot s is free, else the owning thread id.
     # counts[s]: the number of devices in slot s's plan.
+    # masks[s]: the owner families (DEVICE_PLAN_* bits) the plan drives.
     # ids[s * DEVICE_PLAN_MAX_DEVICES + r]: the physical device of rank r.
     # active[0]: the number of claimed slots (a fast path for the common
     # case of no plan anywhere in the process).
@@ -54,12 +121,14 @@ struct _DevicePlanTable(Defaultable, Movable):
     # addresses are stable for the process.
     var owners: List[Int64]
     var counts: List[Int64]
+    var masks: List[Int64]
     var ids: List[Int64]
     var active: List[Int64]
 
     def __init__(out self):
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.counts = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
+        self.masks = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.ids = List[Int64](length=DEVICE_PLAN_SLOTS * DEVICE_PLAN_MAX_DEVICES, fill=Int64(0))
         self.active = List[Int64](length=1, fill=Int64(0))
 
@@ -95,9 +164,10 @@ def _own_slot() -> Int:
     return -1
 
 
-def device_plan_enter(devices: List[Int]) raises:
+def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) raises:
     """Bind `devices` (rank r runs on physical device `devices[r]`) to the
-    calling thread until `device_plan_exit`."""
+    calling thread until `device_plan_exit`, for the owner families in
+    `families` (DEVICE_PLAN_* bits)."""
     var count = len(devices)
     if count < 1 or count > DEVICE_PLAN_MAX_DEVICES:
         raise Error("ValueError: a device plan names 1.." + String(DEVICE_PLAN_MAX_DEVICES) + " devices, got " + String(count))
@@ -127,6 +197,7 @@ def device_plan_enter(devices: List[Int]) raises:
     for r in range(count):  # driver-loop: over the plan's ranks
         ids[slot * DEVICE_PLAN_MAX_DEVICES + r] = Int64(devices[r])
     _words(table[].counts)[slot] = Int64(count)
+    _words(table[].masks)[slot] = Int64(families)
     _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(1))
 
 
@@ -137,6 +208,7 @@ def device_plan_exit() raises:
         raise Error("RuntimeError: no device plan is bound to this thread")
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
     _words(table[].counts)[slot] = Int64(0)
+    _words(table[].masks)[slot] = Int64(0)
     _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(-1))
     Atomic.store[ordering=Ordering.RELEASE](_words(table[].owners) + slot, Int64(0))
 
@@ -175,8 +247,11 @@ def device_plan_root() -> Int:
 
 def device_plan_setting(name: String, default: String = "") -> String:
     """What an owner loop parses as its device count: the plan's size as text
-    while a plan is bound to the calling thread, else `getenv(name, default)`."""
-    var count = device_plan_size()
-    if count > 0:
-        return String(count)
+    while a plan driving `name`'s family is bound to the calling thread, else
+    `getenv(name, default)`."""
+    var slot = _own_slot()
+    if slot >= 0:
+        var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+        if (Int(_words(table[].masks)[slot]) & _family_bit(name)) != 0:
+            return String(Int(_words(table[].counts)[slot]))
     return String(getenv(name, default))

@@ -22,6 +22,7 @@ from std.python import Python, PythonObject
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_attr, plan_require_identical
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -665,7 +666,7 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("ValueError: KernelRidge fit requires y")
     var devices = plan_devices(args[2], "km_fit", True, context)
     var binding = _km_par_binding(model)
-    plan_enter(binding, devices, _KM_REBUILD)
+    plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
             _krr_fit(model, Python.tuple(binding, args[0], args[1], PythonObject(None)), context)
@@ -684,7 +685,7 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     var devices = plan_devices(args[1], "km_apply", True, context)
     var binding = _km_par_binding(model)
     var out = PythonObject(None)
-    plan_enter(binding, devices, _KM_REBUILD)
+    plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
             out = _krr_predict(model, Python.tuple(binding, args[0]), context, False)

@@ -16,6 +16,7 @@ entry or a builtin.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.family_common import family_call
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 
 
 def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
@@ -56,16 +57,19 @@ def plan_on_gpu(context: PythonObject) raises -> Bool:
     return vendor == "cuda" or vendor == "hip" or vendor == "metal"
 
 
-def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String) raises:
-    """Bind `devices` to the calling thread in `binding`'s DSO. A binding
-    built before the plan entries is refused by name (`rebuild`, the old
-    worker's capability refusal)."""
+def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
+               families: Int = DEVICE_PLAN_WORKER) raises:
+    """Bind `devices` to the calling thread in `binding`'s DSO for the owner
+    families the old worker enabled (`families`; the default is its
+    environment, every family but Cholesky). A binding built before the plan
+    entries is refused by name (`rebuild`, the old worker's capability
+    refusal)."""
     var b = Python.import_module("builtins")
     var enter = py_call(b.getattr, binding, PythonObject("device_plan_enter"), PythonObject(None))
     var leave = py_call(b.getattr, binding, PythonObject("device_plan_exit"), PythonObject(None))
     if enter is None or leave is None:
         raise Error("ImportError: " + rebuild)
-    _ = family_call(enter, devices)
+    _ = family_call(enter, devices, PythonObject(families))
 
 
 def plan_exit(binding: PythonObject) raises:

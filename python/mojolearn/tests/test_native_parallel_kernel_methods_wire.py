@@ -67,7 +67,7 @@ def test_door_dispatches_and_scopes_the_device_plan():
         body = door[door.index("def " + name + "("):]
         body = body[:body.index("\n\ndef ")] if "\n\ndef " in body else body
         # enter before the owners, exit in a finally that always runs
-        enter = body.index("plan_enter(binding, devices, _KM_REBUILD)")
+        enter = body.index("plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)")
         guarded = body.index("try:")
         final = body.index("finally:")
         leave = body.index("plan_exit(binding)")
