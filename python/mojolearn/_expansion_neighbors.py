@@ -1523,14 +1523,6 @@ class AdditiveChi2Sampler(_XNeighbors):
         self.sample_steps = sample_steps
         self.sample_interval = sample_interval
 
-    def _interval(self):
-        if self.sample_interval is not None:
-            return float(self.sample_interval)
-        table = {1: 0.8, 2: 0.5, 3: 0.4}
-        if self.sample_steps not in table:
-            raise ValueError("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
-        return table[self.sample_steps]
-
     def fit(self, X, y=None):
         """Validate the input and the sampling settings.
 
@@ -1546,24 +1538,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         self : AdditiveChi2Sampler
             The fitted transformer.
         """
-        X = _f32(X)
-        first = -2
-        if X.size and _kfeat_flags(self) & 1:
-            # XN_FAST_ACHI2_DEVSCAN (default, rollback _OFF): one pooled upload and device
-            # scan (x_neighbors_kfeat_first_negative), not a host X.min();
-            # -2 = below the binding's size gate (XN_ACHI2_DEVSCAN_MIN,
-            # x_neighbors/kfeat_dev.mojo; 1 since 2026-10-04, the old 2^22
-            # only under -D MOJOLEARN_LEGACY_NARROW_ACHI2_DEVSCAN): main's check below
-            first = int(self._bind().x_neighbors_kfeat_first_negative(addr_ro(X, name="X"), X.size))
-        if first != -2:
-            neg = first >= 0
-        else:
-            neg = X.size and X.min() < 0
-        if neg:
-            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
-        self._interval()
-        self.n_features_in_ = X.shape[1]
-        return self
+        return _NATIVE(self, "family_xn_semi_achi2_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1578,22 +1553,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
             float32; sparse (CSR) when X is sparse.
         """
-        sparse = X if (hasattr(X, "toarray") and hasattr(X, "nnz")) else None
-        X = _f32(X)
-        n, d = X.shape
-        steps = int(self.sample_steps)
-        out = _empty_out((n, d * (2 * steps - 1)), "<f4")
-        if X.size and X.min() < 0:
-            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
-        self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
-        if sparse is not None:
-            # Preserve the caller's sparse container type; dense inputs need
-            # neither SciPy nor NumPy. SciPy owns this optional format conversion.
-            import scipy.sparse as sp
-            m = sp.csr_matrix(out.tolist(), dtype="float32")
-            m.eliminate_zeros()
-            return m
-        return out
+        return _NATIVE(self, "family_xn_semi_achi2_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1609,7 +1569,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_semi_achi2_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -1711,53 +1671,7 @@ class SkewedChi2Sampler(_XNeighbors):
             If X has no features, ``n_components`` is below 1, or
             ``random_state`` is not an int, a numpy RandomState or None.
         """
-        X = _f32(X)
-        d = X.shape[1]
-        nc = int(self.n_components)
-        seed = _seed_word(self.random_state)
-        flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
-                 and d > 0 and nc > 0 else 0)
-        self.__dict__.pop("_schi2_z", None)
-        # lane cpu3-python: the counter-based device draw first, on every
-        # tier that compiles it (IDENTICAL, and since this lane FAST on every
-        # vendor: x_neighbors/kfeat_rng.mojo XN_IDN_SKETCH_CTR). FAST + Apple's
-        # SCHI2_LAZYW route drew z and the offsets with sklearn's sequential
-        # stream on the host (`x_neighbors_kfeat_schi2_draw`); it has left the
-        # GPU route.
-        fit_idn = (getattr(self._bind(), "x_neighbors_kfeat_schi2_fit_idn", None)
-                   if isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0 else None)
-        if fit_idn is not None:
-            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
-            # x_neighbors/kfeat_rng.mojo): z, the weights and the offsets
-            # from the counter-based generator on the device, one call
-            w = _empty_out((d, nc), "<f4")
-            off = empty((nc,), "<f4")
-            fit_idn([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
-                    addr(off, name="random_offset_"))
-            self.random_weights_ = w
-            self.random_offset_ = off
-            self.n_features_in_ = d
-            return self
-        if flags & 2:
-            # SCHI2_MOJO_MT (default; _OFF rollback): _LegacyRandomState(seed)'s
-            # stream, pi/2 * u, the weights kernel and the offsets in one
-            # binding call (x_neighbors_kfeat_schi2_fit): main's words
-            w = _empty_out((d, nc), "<f4")
-            off = empty((nc,), "<f4")
-            self._bind().x_neighbors_kfeat_schi2_fit([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
-                                                     addr(off, name="random_offset_"))
-            self.random_weights_ = w
-            self.random_offset_ = off
-            self.n_features_in_ = d
-            return self
-        # lane py-runtime-b: the MT19937 Python draw (and pi/2 * u in Python)
-        # behind the _OFF defines is deleted; a binary with neither device
-        # draw, or an empty X / n_components < 1, refuses
-        if d < 1 or nc < 1:
-            raise ValueError("mojolearn SkewedChi2Sampler: X needs at least one feature and n_components >= 1")
-        raise NotImplementedError(
-            "mojolearn SkewedChi2Sampler: this binary lacks x_neighbors_kfeat_schi2_fit_idn "
-            "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+        return _NATIVE(self, "family_xn_semi_schi2_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     @property
     def random_weights_(self):
@@ -1797,29 +1711,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        X = _f32(X)
-        n, d = X.shape
-        if X.size and X.min() <= -float(self.skewedness):
-            raise ValueError("X may not contain entries smaller than -skewedness.")
-        nc = int(self.n_components)
-        z = self.__dict__.get("_schi2_z")
-        if (z is not None or _kfeat_flags(self) & 4) and d == self.__dict__.get("n_features_in_"):
-            # SCHI2_LAZYW: log, the pending weights, the map: one call, one wait
-            w = _empty_out((d, nc), "<f4") if z is not None else self.random_weights_
-            out = _empty_out((n, nc), "<f4")
-            self._bind().x_neighbors_kfeat_schi2_transform(
-                [n, d, nc, 0 if z is None else 1],
-                [addr_ro(X, name="X"), addr_ro(w if z is None else z, name="random_weights_"),
-                 0 if z is None else addr(w, name="random_weights_"),
-                 addr_ro(self.random_offset_, name="random_offset_"), addr(out, name="schi2 output")],
-                [_f32_scalar(self.skewedness)])
-            if z is not None:
-                self.random_weights_ = w
-            return out
-        lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
-        out = _empty_out((n, nc), "<f4")
-        self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))
-        return out
+        return _NATIVE(self, "family_xn_semi_schi2_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1835,7 +1727,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_semi_schi2_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``skewedchi2sampler0``, ``skewedchi2sampler1``, ...
@@ -1866,37 +1758,6 @@ class _LabelPropagationBase(_XNeighbors):
 
     _variant = None
 
-    def _compact_graph(self, idx, n_reference, variant):
-        n, k = idx.shape
-        cols = empty((n, k), "<i4")
-        vals = empty((n, k), "<f4")
-        self._op("lp_knn_graph", [(idx, 0), (cols, 1), (vals, 1)],
-                 (n, n_reference, k, variant))
-        return cols, vals, n_reference
-
-    def _graph_product(self, G, labels):
-        if not isinstance(G, tuple):
-            return self._matmul(G, labels)
-        cols, vals, m = G
-        n, k = cols.shape
-        c = labels.shape[1]
-        out = _empty_out((n, c), "<f4")
-        self._op("lp_knn_product", [(cols, 0), (vals, 0), (labels, 0), (out, 1)],
-                 (n, m, k, c))
-        return out
-
-    def _graph_affinity(self, X):
-        n = X.shape[0]
-        if self.kernel == "rbf":
-            return self._kernel(X, X, "rbf", self.gamma, 0.0, 0)
-        if self.kernel == "knn":
-            k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_sq(X, X, k, False)
-            g = _empty_out((n, n), "<f4")
-            self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
-            return g
-        raise NotImplementedError(f"{type(self).__name__}: kernel={self.kernel!r} is not implemented ('rbf' or 'knn')")
-
     def fit(self, X, y):
         """Fit the model and propagate labels to the unlabeled samples.
 
@@ -1912,106 +1773,7 @@ class _LabelPropagationBase(_XNeighbors):
         self
             The fitted estimator.
         """
-        X = _f32(X)
-        n = X.shape[0]
-        # the labels by the native encoder, then the one-hot rows, the
-        # spreading rows and the unlabeled flags on the device
-        # (`p2m_lp_labels`; lane pyglue-numeric: Python lists over the rows)
-        from ._labels import encode_labels
-        allc, codes = encode_labels(y)
-        if codes.size != n:
-            raise ValueError("X and y have different numbers of rows")
-        skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: scan over the k class labels
-        classes = [c for i, c in enumerate(allc) if i != skip]  # glue: class labels without the unlabeled marker
-        C = len(classes)
-        ld = _empty_out((n, C), "<f4")
-        ys = _empty_out((n, C), "<f4")
-        unlabeled = empty((n,), "<i4")
-        a = _f32_scalar(1.0 - float(self.alpha)) if self._variant != "propagation" else 1.0
-        if n and C:
-            # The binding reads every int as a size (>= 0), so "no unlabeled
-            # marker" is passed as a code no row carries (len(allc)), which
-            # the item treats exactly as skip -1: no row unlabeled, codes kept.
-            self._op("p2m_lp_labels", [(codes, 0), (ld, 1), (ys, 1), (unlabeled, 1)],
-                     (n, C, skip if skip >= 0 else len(allc)), (a,))
-        if self._variant == "propagation":
-            ys = None
-        if self.kernel == "knn":
-            k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_sq(X, X, k, False)
-            G = self._compact_graph(idx, n, 0 if self._variant == "propagation" else 1)
-        else:
-            G = self._build_graph(X)
-        if ys is None:
-            # propagation's static rows on the device: a labeled row keeps
-            # its one-hot row, an unlabeled row (all zero in ld0) normalizes
-            # to zero (`lp_clamp` with ld as both inputs)
-            ystatic = _empty_out((n, C), "<f4")
-            self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
-        else:
-            ystatic = ys
-        # lane/fam2-neighbors: IDENTICAL device binaries answer 1 too
-        # (LP_IDN_RESIDENT: the same items, no per-iteration host round trip)
-        if isinstance(G, tuple) and _lp_fast_resident(self):
-            # lane/apple-fast-neighbors2: the loop below over the compact kNN
-            # graph as ONE resident op (x_neighbors/iter_device.mojo
-            # op_lp_iterate_knn), the graph uploaded once, the stopping sum
-            # and test on the device
-            cols, vals, _ = G
-            info = empty((2,), "<i4")
-            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
-            self._op("lp_iterate_knn", [(cols, 0), (vals, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
-                     (n, cols.shape[1], C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
-                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
-                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
-            n_iter = int(info.tolist()[0])
-            return self._finish_fit(X, classes, ld, n, C, n_iter)
-        if not isinstance(G, tuple):
-            # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
-            # the same items in the same order, the graph uploaded once, tol
-            # passed as its float64 bits so the stopping test is Python's.
-            info = empty((2,), "<i4")
-            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
-            self._op("lp_iterate", [(G, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
-                     (n, C, int(self.max_iter),
-                      (0 if self._variant == "propagation" else 1) +
-                      (2 if getattr(self, "_classical_raw_graph", False) else 0),
-                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
-                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
-            n_iter = int(info.tolist()[0])
-            return self._finish_fit(X, classes, ld, n, C, n_iter)
-        prev = _empty_out((n, C), "<f4")
-        s = _empty_out((1,), "<f4")
-        n_iter = 0
-        converged = False
-        for it in range(int(self.max_iter)):  # glue: one device propagation step per iteration
-            n_iter = it
-            self._op("absdiff_sum", [(ld, 0), (prev, 0), (s, 1)], (n * C,))
-            if s.tolist()[0] < float(self.tol):
-                converged = True
-                break
-            prev = ld
-            nxt = self._graph_product(G, ld)
-            out = _empty_out((n, C), "<f4")
-            if self._variant == "propagation":
-                self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
-            else:
-                self._op("ls_clamp", [(nxt, 0), (ystatic, 0), (out, 1)], (n * C,), (_f32_scalar(self.alpha),))
-            ld = out
-        if not converged:
-            n_iter += 1
-        return self._finish_fit(X, classes, ld, n, C, n_iter)
-
-    def _finish_fit(self, X, classes, ld, n, C, n_iter):
-        final = _empty_out((n, C), "<f4")
-        self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
-        self.X_ = X
-        self.classes_ = classes
-        self.label_distributions_ = final
-        self.n_iter_ = n_iter
-        self.transduction_ = _argmax_labels(self, classes, final)
-        self.n_features_in_ = X.shape[1]
-        return self
+        return _NATIVE(self, "family_xn_semi_lp_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities of new samples from the fitted label distributions.
@@ -2026,19 +1788,7 @@ class _LabelPropagationBase(_XNeighbors):
         proba : Array of shape (n_queries, n_classes), float32
             Columns in the order of ``classes_``.
         """
-        Q = _f32(X)
-        nq = Q.shape[0]
-        n = self.X_.shape[0]
-        if self.kernel == "knn":
-            k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_sq(Q, self.X_, k, False)
-            W = self._compact_graph(idx, n, 2)
-        else:
-            W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
-        P = self._graph_product(W, self.label_distributions_)
-        out = empty(P.shape, "<f4")
-        self._op("row_normalize", [(P, 0), (out, 1)], P.shape)
-        return out
+        return _NATIVE(self, "family_xn_semi_lp_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict the class of new samples.
@@ -2053,7 +1803,7 @@ class _LabelPropagationBase(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             The most probable class of each sample.
         """
-        return _argmax_labels(self, self.classes_, self.predict_proba(X))
+        return _NATIVE(self, "family_xn_semi_lp_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of :meth:`predict` on the given data.
@@ -2072,7 +1822,7 @@ class _LabelPropagationBase(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _accuracy(y, self.predict(X), sample_weight)
+        return _NATIVE(self, "family_xn_semi_lp_score", (self._bind(), X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 class LabelPropagation(_LabelPropagationBase):
@@ -2141,15 +1891,6 @@ class LabelPropagation(_LabelPropagationBase):
         self.max_iter = max_iter
         self.tol = tol
         self.n_jobs = n_jobs
-
-    def _build_graph(self, X):
-        A = self._graph_affinity(X)
-        self._classical_raw_graph = _classical_graph_normalization(self)
-        if self._classical_raw_graph:
-            return A
-        G = empty(A.shape, "<f4")
-        self._op("row_normalize", [(A, 0), (G, 1)], A.shape)
-        return G
 
 
 class LabelSpreading(_LabelPropagationBase):
@@ -2244,24 +1985,12 @@ class LabelSpreading(_LabelPropagationBase):
         ValueError
             If ``alpha`` is not in (0, 1).
         """
-        if not (0.0 < float(self.alpha) < 1.0):
-            raise ValueError("alpha must be in (0, 1)")
-        return super().fit(X, y)
+        return _NATIVE(self, "family_xn_semi_lp_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
-    def _build_graph(self, X):
-        A = self._graph_affinity(X)
-        self._classical_raw_graph = _classical_graph_normalization(self)
-        if self._classical_raw_graph:
-            return A
-        n = A.shape[0]
-        G = _empty_out((n, n), "<f4")
-        if _OLD_ITEMS:
-            self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
-        else:
-            deg = _empty_out((n,), "<f4")
-            self._op("col_degree", [(A, 0), (deg, 1)], (n,))
-            self._op("ls_laplacian_deg", [(A, 0), (deg, 0), (G, 1)], (n,))
-        return G
+
+# The label propagation / chi2 sampler doors (bindings/neighbors_semi_native.mojo)
+# read the import-time k-NN A/B arm from the shared context.
+_native_family_bridge.tables(family_xn_semi_unfused_knn=_UNFUSED_KNN)
 
 
 # ====================================================================== KNNImputer
