@@ -1393,6 +1393,7 @@ def _host_archive_forest_metadata():
 
 
 _native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries(), _host_archive_forest_metadata())
+_native_host_archive_bridge.connect_peer(_CLASSICAL)
 
 
 def host_model(path):

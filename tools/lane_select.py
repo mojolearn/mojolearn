@@ -5661,8 +5661,8 @@ def _metadata_registry_guard(rel, name, mutators):
     # are never called during this connection; future source changes still
     # invalidate the proof, including metadata-dependent global side effects.
     reviewed_bridges = {
-        '_native_maxabs_bridge': '48123dfade33bd12f7bbd588510a8a68e83626ab1af56c7e0187bd95d07d55e5',
-        '_native_robust_bridge': '66c41f8fa81b902ee25affd66f20784e660fedd7f6dd05e87b26c61a8f584b8f',
+        '_native_maxabs_bridge': 'ac2f029d69224f3b4491c692c9021e1b97a60f0365eb2c97e20ba8e57d43f84c',
+        '_native_robust_bridge': '84d93b34a016b6c50edb1e0ba930b8cc14ffcf62be3aed420c28fed3057e5689',
     }
     for bridge_name, expected_bridge in reviewed_bridges.items():
         bridge = _parse('python/mojolearn/' + bridge_name + '.py')
@@ -5679,17 +5679,23 @@ def _metadata_registry_guard(rel, name, mutators):
         # containers/environment reads, decomp lifetime probe, array/thread
         # primitives and the scaler fixed ABI connections). A new installer or
         # changed import execution must retain broad selection until reviewed.
+        # Re-reviewed 2026-10-24 (lane testfix-tools, over 9b39c40eb..cb1d47fcd):
+        # the new import-time calls are the fixed native ABI connections
+        # (_native_{family,linear_score,decomp,archive,trees,xcnn}_bridge.connect,
+        # .tables, .register*) on each door's OWN public classes; none of those
+        # bridges imports _classical_host or writes _FORMATS, and the doors still
+        # define no classical_host_formats (checked below).
         reviewed_imports = {
-            'linear': 'e41b2da314b715db13f45113af881a2ad89c1ab71834dd3d510e1aef5413389f',
-            'cluster': '16db7377a502b6cb0ea4c998b35c592c61eb3d422531c69935cecc939eed5635',
-            'neighbors': '4cc645a6832be7a1c65ffde3f08b39f32d49e89932d0c5a412f02ddb59c38eda',
-            'decomp': '188949b119e4ac5c225a9f8fa0532fb95a287bdcf26bf3162694757517d48f6e',
-            'prep': '51c2f0b1ef57da9c7ad332a4f632e07ce0044c8e2adafd3b34e267d3013a2616',
+            'linear': '5440a8c7f6d25b711aa1bab7cf6929f88d456fbd6f3d7003ca738650c1e24851',
+            'cluster': '437572b775ae405257f77963b1ceea86c47af0751c13eff902a038687d18f4a7',
+            'neighbors': 'a308bd2c623bf0a501642bed809364ce7103a56a53a079bf522121ed4cc43812',
+            'decomp': 'c063cfbf4f67d1014336ff4f668dd51a4e5b8faa722e518bdf0052de3bea53e6',
+            'prep': '9bb53e0b87af4556c42d4dfaab0e5620c954a013800dc9809cef127ac203e8a2',
             'sequence': 'e0bec9187e5784b4d1251bbbfee02214bc2ad92f8dde3d99647ad4b37a3a537f',
-            'trees': '9c63b5496f4ca49af62e8d2f088f794cea761ece271555c6abf986946bb7d81d',
-            'cnn': '1b7533816e61ef6a6cb39dd0dd63a3fd91110d4da56681554091523ccec79765',
-            'ann': '966a3f4e1d48e862d1356c59c7bf728a8e9134573eaf628b8483061ac4d36db4',
-            'metrics': 'ef96519a0d94f262f497326fce1306f472c1c7e5746a3322b296355eda4df724',
+            'trees': '98abc10df4d103ede2e0a669d50a0d1d021fbcbda33cbf8f63ccc7acae47dce0',
+            'cnn': '4ee391e4adb3b5bd736ba78738aef22ac495fba15c822fd29e2840b908615027',
+            'ann': '4dca3783705105fcfd4ecf4207285df1e3498ba6007575de51cd0316e1dfda49',
+            'metrics': '8684352d54041fd8679576e2f7eff77fedffd1bdb0d9e7891e6eb709a036c18c',
         }
         if _expansion_import_effects(tree) != reviewed_imports.get(lane):
             return False
@@ -5800,8 +5806,8 @@ def _native_metadata_factory(rel, call, function):
             if not function:
                 raise cpy.unsafe_get_error()
             var value = PythonObject(from_borrowed=function)
-            var b = Python.import_module("builtins")
-            var types = Python.import_module("types")
+            var b = native_loaded_module("builtins")
+            var types = native_loaded_module("types")
             if py_type(value) is not types.MethodType or py_type(value.__func__) is not types.BuiltinFunctionType:
                 raise Error("native attribute descriptor requires a bound compiled entry")
             var make_descriptor = cpy.lib.get_function[PyObjectPtr]("PyInstanceMethod_New")
@@ -5812,7 +5818,14 @@ def _native_metadata_factory(rel, call, function):
         except error:
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
     '''
-    return ' '.join(text.split()) == ' '.join(recipe.split())
+    if ' '.join(text.split()) != ' '.join(recipe.split()):
+        return False
+    # b3baa9840: the recipe reads builtins/types through native_loaded_module, which
+    # reads the loaded-module registry and never runs __import__, a finder or a
+    # loader. The name must resolve to that reviewed helper, not a local rebinding.
+    owner = next(iter(roots))[1]
+    return graph.resolve(owner, 'native_loaded_module') == {
+        ('t', 'bindings/native_loaded_module.mojo', 'native_loaded_module')}
 
 
 def _import_time_hits(node, affected, runs, run_methods, rel=None):
