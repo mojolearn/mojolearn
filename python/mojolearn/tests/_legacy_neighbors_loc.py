@@ -8,7 +8,7 @@ import os
 
 from mojolearn import _portable_math as math
 from mojolearn._array import Array
-from mojolearn._buffer import empty, zeros
+from mojolearn._buffer import addr, addr_ro, empty, zeros
 from mojolearn._lazy_out import _empty_out
 from mojolearn._mode import available_if
 from mojolearn._expansion_neighbors import (
@@ -215,7 +215,7 @@ class LegacyNearestCentroid(NearestCentroid):
         # the native encoder's int32 codes, the class counts from the device
         # (`p2m_class_counts`, an atomic add per row; lane pyglue-numeric:
         # a Python counting loop on every column but FAST + Apple)
-        from ._labels import encode_labels
+        from mojolearn._labels import encode_labels
         classes, lab = encode_labels(y)
         if lab.size != n:
             raise ValueError("X and y have different numbers of rows")
@@ -229,7 +229,7 @@ class LegacyNearestCentroid(NearestCentroid):
         if self.priors == "empirical":
             # count / n per class in the base binding (lane py-runtime-b;
             # the same binary64 words as the Python quotient)
-            from ._buffer import _native
+            from mojolearn._buffer import _native
             pa = empty((C,), "<f8")
             ca = Array.from_list(counts, "<i8")
             _native("class_ratio_f64")(addr_ro(ca, name="counts"), C, n, 1, addr(pa, name="class_prior_"))
