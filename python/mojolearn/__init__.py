@@ -620,3 +620,10 @@ from ._native_msel_dispatch import connect as _connect_native_cv
 import sys as _cv_sys
 _connect_native_cv(model_selection._NATIVE_CONTEXT, _cv_sys.modules[__name__])
 del _connect_native_cv, _cv_sys
+# The prep owners (RFE, IterativeImputer, TargetEncoder's cv splitter) reach a
+# wrapped estimator or splitter through the same compiled model-selection entry
+# and plan table (bindings/prep_native_estimator.mojo), never its Python methods.
+from . import _expansion_prep as _prep_owner
+_prep_owner._ENCODE_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
+                                   native_estimator_context=model_selection._NATIVE_CONTEXT)
+del _prep_owner
