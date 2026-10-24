@@ -656,6 +656,32 @@ class _HostTrainerBinding(TrainerOwnerEntries):
             raise ValueError("byte LM: resident completed-step mismatch")
         return self._logits(cfg, addr_ro(st["p"], name="p"), addr_ro(ids, name="ids"), a[1], b, l)
 
+    def byte_lm_session_next_bytes(self, session, addresses, dims, shape, completed):
+        """The GPU binding's `byte_lm_session_next_bytes`: addresses [ids i32
+        (batch * length), out next bytes i32 (batch)]. The greedy pick is the
+        CPU binding's `byte_lm_host_next` (the last row's logits and the
+        first-max scan, both native, one thread); returns `batch`."""
+        cfg = _config(shape)
+        owner = self._owner(session)
+        b, l = self._dims(dims, cfg)
+        claimed = _index(completed, "completed")
+        if claimed < 0 or claimed >= 1000000:
+            raise ValueError("byte LM: completed step outside admitted bound")
+        a = _addresses(addresses, 2, 1, "byte_lm_session_next_bytes")
+        ids = _read_i32(a[0], b * l)
+        _validate_tokens(ids, cfg)
+        self._require_open(owner)
+        st = owner.state
+        if cfg.native_shape != st["cfg"].native_shape:
+            raise ValueError("byte LM: resident model shape mismatch")
+        if st["completed"] != claimed:
+            raise ValueError("byte LM: resident completed-step mismatch")
+        written = int(self._host.byte_lm_host_next([addr_ro(st["p"], name="p"), addr_ro(ids, name="ids"), a[1]],
+                                                   [b, l], list(cfg.native_shape), 1))
+        if written != b:
+            raise ValueError("byte LM next bytes: wrong output length")
+        return written
+
     def byte_lm_session_rollback(self, session):
         """`byte_rollback`: restore the last step's shadow if one is held."""
         owner = self._owner(session)
