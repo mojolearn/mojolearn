@@ -556,7 +556,7 @@ def _(ml, X, yc, yr, Xh=None):
     """The reference's NaN / +inf score edges (f_classif of a constant and of
     a within-class-constant feature, chi2 of an all-zero feature),
     f_regression / r_regression with force_finite on and off, and RFE with
-    importance_getter as a dotted path and as a callable."""
+    importance_getter as a dotted path."""
     y3 = _prep_three_class(X, yr)
     Xe = np.array(X[:, :6], dtype=np.float32)
     Xe[:, 1] = 2.5
@@ -570,7 +570,8 @@ def _(ml, X, yc, yr, Xh=None):
     for ff in (True, False):
         parts[f"fr{int(ff)}"] = _h(*ml.f_regression(Xr, yr, force_finite=ff))
         parts[f"rr{int(ff)}"] = _h(ml.r_regression(Xe, yr, force_finite=ff))
-    for j, g in enumerate(("coef_", lambda e: e.coef_[0])):
+    # importance_getter: an attribute path (a callable getter is refused: user Python code)
+    for j, g in enumerate(("coef_",)):
         m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
                    importance_getter=g).fit(X, y3)
         parts[f"rfe{j}"] = _h(m.ranking_, m.transform(X[:256]))
