@@ -46,7 +46,8 @@ def _(ml, X, yc, yr, Xh=None):
     Xhs = _sequence_seq(Xh)
     return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
                      r_seq=_h(r.hidden_sequence(Xs[:16])),
-                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs)),
+                     c_score=_h(np.float64(c.score(Xs, ycs)))),
                 r, lambda e: (e.predict(Xhs),))
 
 
@@ -64,7 +65,8 @@ def _(ml, X, yc, yr, Xh=None):
     Xhs = _sequence_seq(Xh)
     return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
                      r_seq=_h(r.hidden_sequence(Xs[:16])),
-                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs)),
+                     c_score=_h(np.float64(c.score(Xs, ycs)))),
                 r, lambda e: (e.predict(Xhs),))
 
 
@@ -165,7 +167,10 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(r_curve=_h(np.asarray(r.loss_curve_)), r_coefs=_h(*r.coefs_, *r.intercepts_),
                      r_pred=_h(r.predict(Xm)), c_curve=_h(np.asarray(c.loss_curve_)),
                      c_coefs=_h(*c.coefs_, *c.intercepts_), c_proba=_h(c.predict_proba(Xm)),
-                     b_proba=_h(b.predict_proba(Xm))),
+                     b_proba=_h(b.predict_proba(Xm)),
+                     # score: predict, then the (weighted) accuracy, in one call
+                     c_score=_h(np.float64(c.score(Xm, y3))),
+                     b_score=_h(np.float64(b.score(Xm, yc[:384], np.abs(Xm[:, 0]) + np.float32(0.5))))),
                 r, lambda e: (e.predict(Xhm),))
 
 
@@ -182,7 +187,8 @@ def _(ml, X, yc, yr, Xh=None):
     Xhs = _sequence_seq(Xh)
     return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
                      r_seq=_h(r.hidden_sequence(Xs[:16])),
-                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs)),
+                     c_score=_h(np.float64(c.score(Xs, ycs)))),
                 r, lambda e: (e.predict(Xhs),))
 
 
