@@ -40,7 +40,7 @@
       "target": "gfx942",
       "compiler": "Mojo 1.0.0 (ed45d567)",
       "torch": "2.13.0+rocm7.2",
-      "max": "unknown",
+      "max": "26.5.0",
       "torch_inference_checks": 43,
       "torch_training_checks": 26,
       "forced_staging_inference_checks": 43,
@@ -108,7 +108,8 @@
           "original_unchanged": true
         }
       },
-      "incomplete_or_skipped_required_checks": []
+      "incomplete_or_skipped_required_checks": [],
+      "max_version_evidence": "retained results-training-adapters/pixi-packages.json (MAX namespace has no __version__)"
     },
     "nvidia": {
       "status": "native library compile passed for sm_89; execution pending",
