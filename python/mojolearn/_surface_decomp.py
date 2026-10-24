@@ -25,7 +25,10 @@ FAMILIES = (
                         # lane eigh-wide-fixtures (2026-10-13): eigh at n = 72 and 128
                         "x-decomp-eigh-wide-linalg", "x-decomp-eigh-wide-fastica", "x-decomp-eigh-wide-rotation", "x-decomp-eigh-wide-factor-analysis", "x-decomp-eigh-wide-mincovdet", "x-decomp-eigh-wide-kpca",
                         # lane run-sabotage-arms (2026-10-21): a sketch wider than the rank
-                        "x-decomp-rsvd-rank-deficient"),
+                        "x-decomp-rsvd-rank-deficient",
+                        # lane verify-coverage-20261024: the public sparse_encode function
+                        # (tools/identity_lanes/public_gap_methods.py)
+                        "public-sparse-encode"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
@@ -68,5 +71,7 @@ TRAINING_LANE_NAMES = {"x-decomp-rsvd-rank-deficient": "randomized SVD of a rank
                        "x-decomp-eigh-wide-rotation": "FactorAnalysis rotations at 64 or more components",
                        "x-decomp-eigh-wide-factor-analysis": "FactorAnalysis with fewer rows than features at 64 or more features",
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
-                       "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
-PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "no reference"}
+                       "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples",
+                       "public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)"}
+PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "no reference",
+                        "public-sparse-encode": "no reference"}

@@ -912,6 +912,8 @@ TRAINING_LANE_NAMES = {
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "training-chunked-lm-head": "the chunked language-model head loss and its gradients",
     "training-mlp-sessions": "the multi-session MLP inference",
+    "public-residual-dropout": "residual_dropout and residual_dropout_backward",
+    "public-numeric-metadata": "vendor_used, catboost_auto_learning_rate and johnson_lindenstrauss_min_dim",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
@@ -2804,7 +2806,11 @@ FAMILIES = (
                         "grad-accumulation",
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
-                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state"),
+                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
+                        # lane verify-coverage-20261024: residual_dropout and its backward,
+                        # vendor_used and the numeric helpers the 2026-10-23 audit found
+                        # no lane for (tools/identity_lanes/public_gap_methods.py)
+                        "public-residual-dropout", "public-numeric-metadata"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -3966,6 +3972,10 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "no reference",
     "training-mlp-sessions": "no reference",
     "samba-optimizer-state": "no reference",
+    # lane verify-coverage-20261024: the public-gap lanes of the training
+    # family; no release record yet.
+    "public-residual-dropout": "no reference",
+    "public-numeric-metadata": "no reference",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
     "saved-model-host-infer-trees": "no reference",

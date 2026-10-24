@@ -26,6 +26,12 @@ FAMILIES = (
             # permutation_test_score, which no lane called
             "x-metrics-classification-report",
             "x-metrics-permutation-test-score",
+            # lane verify-coverage-20261024: the public model-selection doors
+            # the 2026-10-23 changed-method audit found no lane for
+            # (tools/identity_lanes/public_gap_methods.py)
+            "public-scorer-factories",
+            "public-validation-learning-curves",
+            "public-randomized-search",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -141,8 +147,14 @@ TRAINING_LANE_NAMES = {
     "x-metrics-search": "cross_validate, cross_val_predict, scorer names and GridSearchCV",
     "x-metrics-classification-report": "classification_report, as a dict and as text",
     "x-metrics-permutation-test-score": "permutation_test_score, with and without groups",
+    "public-scorer-factories": "check_cv, get_scorer, get_scorer_names and make_scorer",
+    "public-validation-learning-curves": "validation_curve and learning_curve",
+    "public-randomized-search": "RandomizedSearchCV (fit, predict, score, predict_proba, decision_function, transform)",
 }
 PUBLIC_PENDING_LANES = {
     "x-metrics-classification-report": "no reference",
     "x-metrics-permutation-test-score": "no reference",
+    "public-scorer-factories": "no reference",
+    "public-validation-learning-curves": "no reference",
+    "public-randomized-search": "no reference",
     }
