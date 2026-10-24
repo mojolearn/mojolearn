@@ -15,15 +15,19 @@ CONNECTIONS = ()
 
 def stdlib_module_hook(name, fields):
     """True when `fields['__getattr__']` is the standard library's own
-    module-level hook of stdlib module `name`: a plain function defined in that
+    module-level hook of the stdlib module `fields['__name__']` (`name`, the
+    connection key, is not trusted for this): a plain function defined in that
     module (its `__module__`/`__qualname__`), whose code comes from the
     module's own source file inside this interpreter's stdlib directory (or
     the frozen copy of it). Third-party and user modules, and any hook defined
     elsewhere, are not admitted."""
     # glue: import-time provenance check of one fixed module attribute
     import sysconfig
+    # The module's own name decides, not the connection key: a connection
+    # may be registered under another key than the module's __name__.
+    name = fields.get('__name__')
     hook = fields.get('__getattr__')
-    if name not in sys.stdlib_module_names or type(hook) is not types.FunctionType:
+    if type(name) is not str or name not in sys.stdlib_module_names or type(hook) is not types.FunctionType:
         return False
     if hook.__module__ != name or hook.__qualname__ != '__getattr__':
         return False
