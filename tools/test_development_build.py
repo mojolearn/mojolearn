@@ -140,8 +140,35 @@ def test_flags_target_toolchain_and_builder_invalidate(repo, tmp_path):
     changed_compiler = dev.make_plan(repo, tmp_path / "cache", ["identical"], ENV,
                                     facts=dict(FACTS, compiler_sha256="another"), plat="linux")
     assert len(changed(base, changed_compiler)) == 3
-    write(repo, "bindings/merged_build.sh", "# changed compiler command\n")
+    write(repo, "bindings/merged_build.sh", 'base_flags="-O3"\n')
     assert len(changed(base, plan(repo, tmp_path))) == 3
+
+
+def test_tool_edits_that_keep_the_recipe_keep_every_key(repo, tmp_path):
+    base = plan(repo, tmp_path)
+    for name in ("tools/development_build.py", "tools/build_process.py", "tools/build_sizing.py",
+                 "tools/bincache.py", "tools/merged_bindings.py"):
+        path = repo / name
+        write(repo, name, (path.read_text() if path.exists() else "") + "# controller edit\nx = 1\n")
+    # Comments and blank lines in the build scripts are not part of the recipe.
+    for name in dev.BUILD_INPUTS:
+        path = repo / name
+        path.write_text(path.read_text() + "\n# a new comment\n\n")
+    after = plan(repo, tmp_path)
+    assert keys(after) == keys(base)
+    assert after["support"][0]["key"] == base["support"][0]["key"]
+
+
+def test_recipe_changes_change_the_key(repo, tmp_path, monkeypatch):
+    base = plan(repo, tmp_path)
+    write(repo, "bindings/build_defines.sh", 'MOJOLEARN_BUILD_DEFINE_FLAGS="-D NEW_DEFINE=1"\n')
+    assert len(changed(base, plan(repo, tmp_path))) == 3
+    defines = plan(repo, tmp_path)
+    assert len(changed(defines, plan(repo, tmp_path, dict(ENV, MOJOLEARN_BUILD_DEFINES="X=1")))) == 3
+    assert len(changed(defines, plan(repo, tmp_path, dict(ENV, MOJOLEARN_COMPILE_JOBS="3")))) == 3
+    original = dev.group_command
+    monkeypatch.setattr(dev, "group_command", lambda *args: original(*args) + ["--extra-flag"])
+    assert len(changed(defines, plan(repo, tmp_path))) == 3
 
 
 def test_generator_inputs_invalidate_only_owner(repo, tmp_path):
