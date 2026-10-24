@@ -18,6 +18,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   with `validation_loss_curve_`, `best_epoch_` and `epochs_run_`. `Program.fit` trains a captured graph in one native
   call with the `mse`, `mae`, `huber`, `bce_with_logits` and `cross_entropy` losses or a captured scalar loss.
   `Session.run` and `Program.run` take `dynamic_shapes=True`, and `layer_norm` supports second derivatives.
+- **PyTorch and MAX adapters.** The GPU wheels ship adapters that let other frameworks call mojolearn directly.
+  `import mojolearn.adapters.torch` registers `torch.ops.mojolearn.operation` and `torch.ops.mojolearn.train` with
+  the PyTorch dispatcher; `mojolearn.adapters.max` gives a MAX graph mojolearn's custom operations. Both call the
+  same compiled library as the rest of the install and return the same bits as the Python API. Install the framework
+  with the `torch` or `max` extra (`pip install "mojolearn[torch]"`; on Linux `pip install mojolearn
+  "mojolearn-core[torch]"`). `import mojolearn` never imports PyTorch or MAX.
 - **Model import.** `mojolearn.import_model` takes an ONNX file; export a PyTorch model first with
   `torch.onnx.export(model, args, "model.onnx")`. Passing a torch object raises `ValueError` with that instruction.
 - **Verification.** `python -m mojolearn verify` gains lanes for every new or changed public method, and each one is
