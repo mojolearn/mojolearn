@@ -79,6 +79,9 @@ def test_the_loader_and_the_builder_name_the_same_files():
 def test_series():
     assert shipped.series("2.13.0+rocm7.2") == "2.13"
     assert shipped.series("2.13.1") == "2.13"
+    # the installed torch passes the series check with or without a local label
+    assert shipped.series("2.13.0+cu130") == shipped.series("2.13.0") == PINS["torch"]["series"]
+    assert shipped.series("2.12.0") != PINS["torch"]["series"]
 
 
 # ---------------------------------------------------------------- the manifest
@@ -239,6 +242,55 @@ def test_extract_and_describe(tmp_path):
         ("2.13.0", "2.13", "cuda", "12.8", 1)
     with pytest.raises(SystemExit, match="rocm"):
         fetch.describe(dest, PINS["torch"]["build"]["hip"] | dict(version="2.13.0"), "linux", chosen, "d" * 64)
+
+
+def test_version_rule():
+    # a public pin accepts the local label PyPI's wheel reports in torch/version.py
+    assert fetch.version_matches("2.13.0+cu130", "2.13.0")
+    assert fetch.version_matches("2.13.0", "2.13.0")
+    # a labelled pin is exact
+    assert fetch.version_matches("2.13.0+rocm7.2", "2.13.0+rocm7.2")
+    assert not fetch.version_matches("2.13.0+rocm7.1", "2.13.0+rocm7.2")
+    assert not fetch.version_matches("2.13.0", "2.13.0+rocm7.2")
+    # a different public version is refused
+    assert not fetch.version_matches("2.12.0+cu130", "2.13.0")
+    assert not fetch.version_matches("2.13.1", "2.13.0")
+    assert not fetch.version_matches(None, "2.13.0")
+
+
+def test_describe_accepts_a_labelled_wheel_for_a_public_pin(tmp_path):
+    wheel = tmp_path / "torch.whl"
+    fake_torch_wheel(wheel, version="2.13.0+cu130", cuda="13.0")
+    dest = tmp_path / "tree"
+    fetch.extract(wheel, dest, "linux")
+    chosen = dict(wheel="torch.whl", url="https://x/torch.whl", python_tag="cp314")
+    rec = fetch.describe(dest, PINS["torch"]["build"]["cuda"], "linux", chosen, "d" * 64)
+    assert (rec["version"], rec["version_pin"], rec["series"], rec["backend"]) == \
+        ("2.13.0+cu130", "2.13.0", "2.13", "cuda")
+    with pytest.raises(SystemExit, match=r"says torch 2\.13\.0\+cu130, pins\.json 2\.12\.0 \(compared public version\)"):
+        fetch.describe(dest, PINS["torch"]["build"]["cuda"] | dict(version="2.12.0"), "linux", chosen, "d" * 64)
+
+
+def test_describe_refuses_a_labelled_pin_that_differs(tmp_path):
+    wheel = tmp_path / "rocm.whl"
+    fake_torch_wheel(wheel, version="2.13.0+rocm7.1", cuda=None, hip="7.1.1")
+    dest = tmp_path / "rocm"
+    fetch.extract(wheel, dest, "linux")
+    with pytest.raises(SystemExit, match=r"says torch 2\.13\.0\+rocm7\.1, pins\.json 2\.13\.0\+rocm7\.2 \(compared exactly\)"):
+        fetch.describe(dest, PINS["torch"]["build"]["hip"], "linux", dict(wheel="w", url="u", python_tag="cp312"), "e" * 64)
+
+
+def test_record_keeps_the_built_and_pinned_torch_versions(tmp_path):
+    out, logs, prefix = make_build(tmp_path)
+    doc = json.loads((tmp_path / "torch-build.json").read_text())
+    (tmp_path / "torch-build.json").write_text(json.dumps(doc | dict(version="2.13.0+cu130")))
+    rec = record(tmp_path, out, logs, prefix)
+    assert (rec["torch_version_built"], rec["torch_version_pin"], rec["torch"]["version"]) == \
+        ("2.13.0+cu130", "2.13.0", "2.13.0+cu130")
+    (tmp_path / "torch-build.json").write_text(json.dumps(doc | dict(version="2.12.0+cu130")))
+    (out / manifest.BUILD_RECORD).unlink()
+    with pytest.raises(manifest.ManifestError, match="2.12.0"):
+        record(tmp_path, out, logs, prefix)
 
 
 def test_rocm_wheel_and_unsafe_members(tmp_path):

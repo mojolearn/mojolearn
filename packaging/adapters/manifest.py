@@ -104,6 +104,16 @@ def file_rows(directory):
             for role, name in FILES.items()}
 
 
+def _fetch():
+    """fetch_torch.py beside this file: the one torch version rule."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("mojolearn_adapter_fetch_torch",
+                                                  pathlib.Path(__file__).resolve().parent / "fetch_torch.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def record(out, vendor, arch, platform, logs, torch_build, pixi_prefix, mojo_version, source_commit):
     out, logs = pathlib.Path(out), pathlib.Path(logs)
     if not _is_set(vendor, arch, platform):
@@ -113,8 +123,9 @@ def record(out, vendor, arch, platform, logs, torch_build, pixi_prefix, mojo_ver
     p = pins()
     torch = json.loads(pathlib.Path(torch_build).read_text())
     pin = p["torch"]["build"][vendor]
-    if torch.get("version") != pin["version"] or torch.get("series") != p["torch"]["series"]:
-        raise ManifestError(f"the registration was linked against torch {torch.get('version')}, pins.json {pin['version']}")
+    if not _fetch().version_matches(torch.get("version"), pin["version"]) or torch.get("series") != p["torch"]["series"]:
+        raise ManifestError(f"the registration was linked against torch {torch.get('version')} "
+                            f"(series {torch.get('series')}), pins.json {pin['version']} (series {p['torch']['series']})")
     max_version = conda_version(pixi_prefix, "max")
     if max_version != p["max"]["version"]:
         raise ManifestError(f"the build environment has max {max_version}, pins.json {p['max']['version']}")
@@ -125,6 +136,7 @@ def record(out, vendor, arch, platform, logs, torch_build, pixi_prefix, mojo_ver
                source_commit=source_commit, numeric_mode="identical",
                torch={k: torch.get(k) for k in ("version", "series", "backend", "backend_version", "cxx11_abi",
                                                 "wheel", "wheel_sha256", "index_url", "python_tag")},
+               torch_version_built=torch.get("version"), torch_version_pin=pin["version"],
                max=dict(version=max_version), mojo=dict(version=mojo_version, conda=conda_version(pixi_prefix, "mojo")),
                requirements=dict(torch=p["torch"]["requirement"], max=p["max"]["requirement"]),
                commands=commands, sources=source_digests(),

@@ -185,13 +185,33 @@ def backend_of(info):
     return None, None
 
 
+def public_version(version):
+    """'2.13.0' from '2.13.0+cu130': the PEP 440 public part, before the local label."""
+    return str(version).split("+", 1)[0]
+
+
+def version_matches(have, pin):
+    """Whether a wheel's own torch version satisfies the pinned one. A pin
+    without a local label ('2.13.0') names the public release: PyPI's wheel
+    reports '2.13.0+cu130' from torch/version.py though its file name says
+    2.13.0, so any local label is accepted. A pin with a label
+    ('2.13.0+rocm7.2') names one build and must match exactly."""
+    if have is None:
+        return False
+    if "+" in str(pin):
+        return str(have) == str(pin)
+    return public_version(have) == str(pin)
+
+
 def describe(dest, pin, system, chosen, digest):
     """The torch-build.json record of an extracted tree; refuses a wheel that
     is not the pinned version or backend."""
     dest = pathlib.Path(dest)
     info = read_version_py((dest / "torch/version.py").read_text())
-    if info.get("__version__") != pin["version"]:
-        raise SystemExit(f"fetch_torch: the wheel says torch {info.get('__version__')}, pins.json {pin['version']}")
+    if not version_matches(info.get("__version__"), pin["version"]):
+        rule = "exactly" if "+" in pin["version"] else "public version"
+        raise SystemExit(f"fetch_torch: the wheel says torch {info.get('__version__')}, pins.json {pin['version']} "
+                         f"(compared {rule})")
     backend, backend_version = backend_of(info)
     if pin["backend"] == "mps":
         if system != "macos" or backend is not None:
@@ -202,7 +222,7 @@ def describe(dest, pin, system, chosen, digest):
     abi = read_cxx11_abi(dest / "torch/share/cmake") if system == "linux" else None
     if system == "linux" and abi is None:
         raise SystemExit("fetch_torch: torch/share/cmake names no _GLIBCXX_USE_CXX11_ABI")
-    return dict(schema=SCHEMA, version=info["__version__"], series=".".join(info["__version__"].split(".")[:2]),
+    return dict(schema=SCHEMA, version=info["__version__"], version_pin=pin["version"], series=".".join(public_version(info["__version__"]).split(".")[:2]),
                 backend=backend, backend_version=backend_version, cxx11_abi=abi,
                 wheel=chosen["wheel"], url=chosen["url"], wheel_sha256=digest, index_url=pin["index_url"],
                 python_tag=chosen["python_tag"], include_dir="torch/include",
