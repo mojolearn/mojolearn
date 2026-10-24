@@ -33,12 +33,18 @@ from . import _shipped
 
 __all__ = ["custom_extensions", "native_library_path", "parameters"]
 
-try:
-    import max as _max  # noqa: F401
-except ImportError as _exc:
-    raise ImportError(
-        "mojolearn.adapters.max needs MAX. Install it with: pip install \"mojolearn[max]\" "
-        "(Linux: pip install mojolearn \"mojolearn-core[max]\")") from _exc
+
+def _import_max():
+    try:
+        import max
+    except ImportError as exc:
+        raise ImportError(
+            "mojolearn.adapters.max needs MAX. Install it with: pip install \"mojolearn[max]\" "
+            "(Linux: pip install mojolearn \"mojolearn-core[max]\")") from exc
+    return max
+
+
+_max = _import_max()
 
 
 def _installed_max():

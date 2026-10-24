@@ -305,3 +305,17 @@ def test_adapter_sources_are_native_build_inputs_in_both_inventories():
     for needle in ("rel.startswith('packaging/adapters/') and not rel.startswith('packaging/adapters/test_')",
                    "'adapters/torch/registration.cpp', 'adapters/native/abi.h'"):
         assert needle in shell
+
+
+def test_the_adapter_modules_pass_the_wheel_python_audit():
+    """Each imports only its own framework, lazily, and no platform math (portable_math/wheel.py)."""
+    sys.path.insert(0, str(REPO / "packaging/portable_math"))
+    wheel = load("portable_math_wheel_adapters", REPO / "packaging/portable_math/wheel.py")
+    for leaf in ("__init__.py", "_shipped.py", "torch.py", "max.py"):
+        path = REPO / "python/mojolearn/adapters" / leaf
+        rel = "mojolearn/adapters/" + leaf
+        assert wheel.dependency_errors(path, rel) == [], rel
+        assert wheel.python_math_errors(path, rel) == [], rel
+        assert wheel.numpy_errors(path, rel) == [], rel
+    # the allowance is per file: torch in max.py is still refused
+    assert wheel.ADAPTER_LAZY_IMPORTS["mojolearn/adapters/max.py"] == {"max"}

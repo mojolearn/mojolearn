@@ -34,13 +34,19 @@ from . import _shipped
 
 __all__ = ["ops", "library_path", "native_library_path"]
 
-try:
-    import torch as _torch
-except ImportError as _exc:
-    raise ImportError(
-        "mojolearn.adapters.torch needs PyTorch. Install it with: pip install \"mojolearn[torch]\" "
-        "(Linux: pip install mojolearn \"mojolearn-core[torch]\"; AMD: the ROCm build from "
-        "https://download.pytorch.org/whl/rocm7.2)") from _exc
+
+def _import_torch():
+    try:
+        import torch
+    except ImportError as exc:
+        raise ImportError(
+            "mojolearn.adapters.torch needs PyTorch. Install it with: pip install \"mojolearn[torch]\" "
+            "(Linux: pip install mojolearn \"mojolearn-core[torch]\"; AMD: the ROCm build from "
+            "https://download.pytorch.org/whl/rocm7.2)") from exc
+    return torch
+
+
+_torch = _import_torch()
 
 
 def _refusal(record):
