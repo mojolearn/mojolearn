@@ -30,7 +30,7 @@ from bindings.host_density_hash_native import host_density_hash
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
-from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name
+from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_caller_frame import native_caller_globals
@@ -195,7 +195,18 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             # scikit-learn's sparse refusal comes before input admission.
             classical_refuse_sparse(args[0], classical_estimator_name(model))
-        if operation != "save":
+        if (operation == "ridge_fit" or operation == "ols_fit") and len(args) == 3:
+            # Same order as the whole-tuple admission (X, y, then the
+            # weight); a refused sample_weight names the accepted types
+            # (9bdccfa76) instead of the shared admission's generic text.
+            classical_admit_value(args[0], context, 1)
+            classical_admit_value(args[1], context, 1)
+            try:
+                classical_admit_value(args[2], context, 1)
+            except error:
+                var refusal = classical_weight_refusal(args[2], error)
+                raise refusal
+        elif operation != "save":
             classical_admit_value(args, context)
         var fields = sequential_fields(model)
         var names = context["classical_fields"]

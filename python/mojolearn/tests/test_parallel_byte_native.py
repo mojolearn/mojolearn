@@ -185,13 +185,24 @@ def test_package_imports_in_every_mode_with_or_without_a_byte_lm(mode):
         # (test_cpu_cooperative_session_refusal_preserves_public_contract).
         "    print('BYTE_LM', 'cpu-only')\n"
         "else:\n"
-        f"    s = _backend.load_set({mode!r})\n"
-        "    print('BYTE_LM', 'missing' if '_mojolearn_byte_lm' in s.missing else 'built')\n"
+        "    try:\n"
+        f"        s = _backend.load_set({mode!r})\n"
+        "    except ImportError as error:\n"
+        # A tree built without this tier at all (a development build of the
+        # identical tier only, or a non-Apple host, where fast is not built):
+        # load_set's own no-binaries refusal. Any other ImportError fails.
+        "        if 'but no binary for that tier exists' not in str(error):\n"
+        "            raise\n"
+        "        print('BYTE_LM', 'no-tier')\n"
+        "    else:\n"
+        "        print('BYTE_LM', 'missing' if '_mojolearn_byte_lm' in s.missing else 'built')\n"
     )
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE=mode)
     done = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True, env=env, timeout=600)
     assert done.returncode == 0, done.stderr[-2000:]
     assert "BYTE_LM " in done.stdout
+    if "BYTE_LM no-tier" in done.stdout:
+        pytest.skip(f"no numeric_mode={mode!r} binary set is built in this tree")
     if "BYTE_LM missing" in done.stdout:
         refusal = (
             "import mojolearn\n"

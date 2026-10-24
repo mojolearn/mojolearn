@@ -372,16 +372,20 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     _ = vals  # keep the Python object alive through the native call above
     _ = status  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
+    # Read all three status words while `status` is still named: Mojo
+    # releases a local at its last named use, and a read after that (the
+    # refusal's row and count, formerly read inside the raise) saw freed
+    # words (a garbage row on the CPU host and on CUDA).
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(status)))
-    _ = status  # keep the Python object alive through the native call above
     var code = Int(words[0])
-    _ = status  # keep the Python object alive through the native call above
+    var bad_row = Int(words[1])
+    var stored = Int(words[2])
+    _ = status  # keep the Python object alive through the reads above
     if code == 1:
         raise Error("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
     if code == 2:
-        raise Error("mojolearn SpectralEmbedding: row " + String(Int(words[1])) + " of the precomputed graph has "
-                    + String(Int(words[2])) + " stored distances, fewer than n_neighbors=" + String(k))
-        _ = status  # keep the Python object alive through the native call above
+        raise Error("mojolearn SpectralEmbedding: row " + String(bad_row) + " of the precomputed graph has "
+                    + String(stored) + " stored distances, fewer than n_neighbors=" + String(k))
     py_setitem(fields, "affinity_matrix_", a)
     return a
 

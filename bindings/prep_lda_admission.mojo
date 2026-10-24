@@ -27,7 +27,12 @@ def _lda_parameter(name: PythonObject, value: PythonObject, context: PythonObjec
     # validate nothing beyond native admission (scikit-learn's convention,
     # check_do_not_raise_errors_in_init_or_set_params); the refusal below
     # runs when a consuming operation (fit, predict, ...) reads the value.
-    if not configure and String(name) == "covariance_estimator" and value is not None:
+    if String(name) == "covariance_estimator" and value is not None:
+        if configure:
+            # Stored and returned as the same reference; nothing reads it
+            # (no attribute, protocol or call), so no Python runs. A consuming
+            # operation refuses it by name below.
+            return
         # There is no compiled covariance-estimator object API in this
         # package. Calling sklearn/custom fit from Mojo would execute Python.
         raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")

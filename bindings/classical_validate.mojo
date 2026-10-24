@@ -114,6 +114,20 @@ def classical_check_y(source: PythonObject, rows: Int, est: String, context: Pyt
     return y
 
 
+def classical_weight_refusal(source: PythonObject, error: Error) raises -> Error:
+    """The refusal of a sample_weight the shared admission refused. That
+    refusal names no accepted type; say what a weight may be. An object that
+    only defines __array__ (scikit-learn's _NotAnArray) is never converted:
+    no Python protocol runs in a fit."""
+    if String(error).startswith("TypeError: Sequential requires native input types"):
+        return Error("TypeError: sample_weight must be None, a number, a NumPy array, a buffer "
+                     + "(memoryview, array.array, bytearray), a list or tuple of numbers, a pandas "
+                     + "Series or a Torch tensor; got " + String(py_type(source).__name__)
+                     + ", which is not read because it only converts through Python-defined "
+                     + "methods such as __array__")
+    return Error(String(error))
+
+
 def classical_check_weights_input(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
     """sample_weight as rows float32 words: None stays None, a scalar fills
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
@@ -123,16 +137,8 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
     try:
         view = classical_view(source, context, "sample_weight")
     except error:
-        # The shared admission refusal names no accepted type; say what a
-        # weight may be. An object that only defines __array__ (scikit-learn's
-        # _NotAnArray) is never converted: no Python protocol runs in a fit.
-        if String(error).startswith("TypeError: Sequential requires native input types"):
-            raise Error("TypeError: sample_weight must be None, a number, a NumPy array, a buffer "
-                        + "(memoryview, array.array, bytearray), a list or tuple of numbers, a pandas "
-                        + "Series or a Torch tensor; got " + String(py_type(source).__name__)
-                        + ", which is not read because it only converts through Python-defined "
-                        + "methods such as __array__")
-        raise Error(String(error))
+        var refusal = classical_weight_refusal(source, error)
+        raise refusal
     var nd = Int(py=view.ndim)
     if nd > 1:
         raise Error("Sample weights must be 1D array or scalar")

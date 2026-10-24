@@ -373,11 +373,16 @@ def test_sharded_scaler_equals_the_plain_fit_when_built():
 
 
 @reference_training()
-def test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built():
-    """par-samba's shards are real: two `samba_gradient` requests per step
-    from the non-cooperative pool and ONE `samba_update`, and the gradient
-    the update publishes is the driver's own ordered sum of the two shard
-    gradients, byte for byte (wave 3, lane/cpu-verifier-par-samba).
+def test_sharded_samba_publishes_the_ordered_sum_of_its_shard_gradients_when_built():
+    """par-samba's shards are real: the gradient a two-shard step publishes
+    is the ordered sum of the two shard gradients, byte for byte (wave 3,
+    lane/cpu-verifier-par-samba).
+
+    Since 2e09ef628 ParallelNeuralTrainer is a native coordinator over the
+    compiled process pool (bindings/parallel_neural_native.mojo), so the old
+    spy on the Python `DevicePool._send/_receive` sees no request. The shard
+    gradients are now taken independently: the same starting model trained
+    on each shard alone (logical_shards=1 publishes that shard's gradient).
 
     What this does NOT check, and cannot: the fold's ORDER. Both lanes use
     two logical shards, and IEEE addition is commutative, so `g0 + g1` and
@@ -393,40 +398,23 @@ def test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built():
                           "_mojolearn_transformer_host"):
         return
     import numpy as np
-    from mojolearn.parallel_training import ParallelNeuralTrainer, ordered_sum_gradients
-    config = mojolearn.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"),
-                                   n_heads=2, intermediate=64)
-    model = mojolearn.SambaStack(config, generator=mojolearn.training.Generator(1), lr=1e-3)
+    from mojolearn.parallel_training import ParallelNeuralTrainer
+
+    def fresh():
+        config = mojolearn.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"),
+                                       n_heads=2, intermediate=64)
+        return mojolearn.SambaStack(config, generator=mojolearn.training.Generator(1), lr=1e-3)
+
     ids = np.arange(4 * 17, dtype=np.int32).reshape(4, 17) % 256
-    sent, shard_gradients = [], []
-    # `DevicePool.map` writes each wave's requests with `_send` and reads the
-    # replies with `_receive` (dd0b63678); `_call` is no longer on its path.
-    # One worker (devices=(0,)), so every wave is one request and each
-    # `_receive` answers the `_send` just before it.
-    send, receive = _parallel_pool.DevicePool._send, _parallel_pool.DevicePool._receive
-
-    def spy_send(worker, request):
-        sent.append(request[2][0] if request[0] == "cpu_reference" else request[0])
-        return send(worker, request)
-
-    def spy_receive(worker):
-        result = receive(worker)
-        if sent and sent[-1] == "samba_gradient":
-            shard_gradients.append(result[1])
-        return result
-
-    _parallel_pool.DevicePool._send = staticmethod(spy_send)
-    _parallel_pool.DevicePool._receive = staticmethod(spy_receive)
-    try:
-        with ParallelNeuralTrainer(model, devices=(0,), logical_shards=2) as trainer:
-            trainer.train_step([(ids[2 * k: 2 * k + 2, :-1], ids[2 * k: 2 * k + 2, 1:])
-                                for k in range(2)])
-            published = trainer.export_gradients()
-        assert sent == ["samba_gradient", "samba_gradient", "samba_update"], sent
-        assert len(shard_gradients) == 2
-    finally:
-        _parallel_pool.DevicePool._send = staticmethod(send)
-        _parallel_pool.DevicePool._receive = staticmethod(receive)
+    shards = [(ids[2 * k: 2 * k + 2, :-1], ids[2 * k: 2 * k + 2, 1:]) for k in range(2)]
+    with ParallelNeuralTrainer(fresh(), devices=(0,), logical_shards=2) as trainer:
+        trainer.train_step(shards)
+        published = trainer.export_gradients()
+    shard_gradients = []
+    for shard in shards:
+        with ParallelNeuralTrainer(fresh(), devices=(0,), logical_shards=1) as one:
+            one.train_step([shard])
+            shard_gradients.append(one.export_gradients())
     first, second = shard_gradients
     # The oracle is NOT ordered_sum_gradients: checking the published
     # gradient against the very function that produced it passes even when

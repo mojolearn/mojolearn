@@ -14,7 +14,9 @@ from bindings.msel_inputs import msel_input
 
 def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
     var b = context["arena_native_types"]
-    var key = py_call(context["arena_id"],values)
+    # The object's identity (CPython's id()) read from its native address:
+    # calling builtins.id raises a `builtins.id` audit event per lookup.
+    var key = PythonObject(Int(values._obj_ptr))
     var hit = py_get(entries,key)
     if hit is not None:
         if py_type(hit) is not b["tuple"] or len(hit) != 3:
