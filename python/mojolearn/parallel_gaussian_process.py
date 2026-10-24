@@ -8,8 +8,9 @@ not a distributed factorization of a single binary covariance matrix.
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
 import copy
+import sys
 
-from ._parallel_pool import DevicePool
+from ._parallel_pool import DevicePool, public_method_result
 from ._array import Array
 from ._buffer import as_f32_c
 from ._labels import encode_labels, decode_labels, threshold_codes
@@ -103,14 +104,17 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
     arrays = list(_run(requests, devices))
     if any(len(column) != q.shape[0] for column in arrays):  # glue: worker row count check per class
         raise ValueError('GPC worker returned an invalid row count')
+    # the plain method's public conversion for the caller (2026-10-24, the
+    # par-kernel-ridge dtype flip: drivers convert, workers never do)
+    frame = sys._getframe(1)
     if estimator.n_classes_ == 2:
         if method == 'predict_proba':
-            return arrays[0]
-        return decode_labels(estimator.classes_, arrays[0])
+            return public_method_result(estimator, method, arrays[0], frame)
+        return public_method_result(estimator, method, decode_labels(estimator.classes_, arrays[0]), frame)
     # DEVIATION 2833's one-vs-rest combine on this process's device, the
     # single-device class's own call (cpu-gpu-cleanup c-gp-kernel).
     from ._gpc_impl import _ovr_combine
     proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))
     if method == 'predict_proba':
-        return proba
-    return decode_labels(estimator.classes_, codes32.astype('<i8'))
+        return public_method_result(estimator, method, proba, frame)
+    return public_method_result(estimator, method, decode_labels(estimator.classes_, codes32.astype('<i8')), frame)

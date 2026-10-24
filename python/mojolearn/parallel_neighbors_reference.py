@@ -25,8 +25,9 @@ __all__ = [
 
 import array
 import copy
+import sys
 
-from ._parallel_pool import DevicePool, driver_read_shift
+from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import _native, as_f32_c, empty, addr, addr_ro
 from .parallel_neighbors import _join
 
@@ -153,7 +154,7 @@ class ReferenceShardedNeighbors:
         self._pool = DevicePool(devices)
         self.last_shards_ = []
 
-    def _query(self, X, *, method, n_neighbors=None, return_distance=True):
+    def _query(self, X, *, method, frame, n_neighbors=None, return_distance=True):
         from .neighbors import KNeighborsClassifier, KNeighborsRegressor
         model = self.estimator
         if model.numeric_mode not in (None, 'identical') or model.algorithm not in ('auto', 'brute'):
@@ -224,7 +225,10 @@ class ReferenceShardedNeighbors:
                 for i, (start, stop) in enumerate(ranges))  # glue: one diagnostics record per shard
         result = _join(outputs)
         self.last_shards_ = diagnostics
-        return result
+        # the joined raw result; the plain method's public conversion for the
+        # caller (2026-10-24, the par-kernel-ridge dtype flip: drivers convert,
+        # workers never do)
+        return public_method_result(model, method, result, frame)
 
     def kneighbors(self, X, n_neighbors=None, return_distance=True):
         """Find the ``n_neighbors`` nearest reference rows of each query row.
@@ -244,17 +248,18 @@ class ReferenceShardedNeighbors:
             As ``estimator.kneighbors(X)``; only ``indices`` when
             ``return_distance=False``.
         """
-        return self._query(X, method='kneighbors', n_neighbors=n_neighbors, return_distance=return_distance)
+        return self._query(X, method='kneighbors', frame=sys._getframe(1), n_neighbors=n_neighbors,
+                           return_distance=return_distance)
 
     def predict(self, X):
         """Predict labels (classifier) or values (regressor) for ``X``, as ``estimator.predict(X)``.
         """
-        return self._query(X, method='predict')
+        return self._query(X, method='predict', frame=sys._getframe(1))
 
     def predict_proba(self, X):
         """Class probabilities for ``X`` from a ``KNeighborsClassifier``, as ``estimator.predict_proba(X)``.
         """
-        return self._query(X, method='predict_proba')
+        return self._query(X, method='predict_proba', frame=sys._getframe(1))
 
     def close(self):
         """Stop the GPU workers.
