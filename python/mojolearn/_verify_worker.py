@@ -136,13 +136,13 @@ def _stacks_on_timeout(process, output):
     Returns '' where this is unavailable."""
     if os.name != "posix" or not hasattr(signal, "SIGUSR1") or process.poll() is not None:
         return ""
+    # One stack request to the group (kill(-pgid), the POSIX group form);
+    # `_kill` then reaps the group once with SIGKILL. os.killpg stays the
+    # reaping call only, so each target is signalled once per purpose.
     try:
-        os.killpg(process.pid, signal.SIGUSR1)
+        os.kill(-process.pid, signal.SIGUSR1)
     except OSError:
-        try:
-            process.send_signal(signal.SIGUSR1)
-        except OSError:
-            return ""
+        return ""
     time.sleep(3)
     text = _file_tail(output, 16000) if isinstance(output, str) else _tail(output, 16000)
     return "; stacks at the limit: " + text[-16000:]
