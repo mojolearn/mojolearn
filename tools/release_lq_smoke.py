@@ -144,14 +144,21 @@ def box_plan(smoke_args, remote_dir):
 GATE_FETCH = ("gate-smoke.json", "autograd-smoke.json", "smoke.log", "measure-*.log", "measure-manifest-*.json",
               "setup/wheel-manifest.json", "setup/logs", "autograd-bin/build-manifest.json",
               "smoke-*/smoke/smoke.json", "smoke-*/smoke/smoke.txt", "measure-*/campaign.json",
-              "measure-*/campaign-retention.json", "measure-*/board")
+              "measure-*/campaign-retention.json", "measure-*/board",
+              # the installed-wheel adapter smoke (tools/adapter_gate.py): receipt, logs, per-phase results
+              "adapter-smoke/adapter-smoke.json", "adapter-smoke/*.log", "adapter-smoke/*.exit",
+              "adapter-smoke/*/*.json")
 
 
-def gate_plan(vendor, version, remote_dir, candidate_wheels=(), source_commit=None, autograd_dir=None):
-    """The box argv of the release gate (tools/gate_smoke_box.py ... all)."""
+def gate_plan(vendor, version, remote_dir, candidate_wheels=(), source_commit=None, autograd_dir=None,
+              adapters=True):
+    """The box argv of the release gate (tools/gate_smoke_box.py ... all). ADAPTERS False (the release's
+    MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship) passes --no-adapters, the env not reaching the box."""
     if vendor not in ("nvidia", "amd") or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
         raise SystemExit(f"lq-smoke: --gate takes nvidia|amd and a version, not {vendor!r} {version!r}")
     argv = ["python3", "tools/gate_smoke_box.py", vendor, version, f"{remote_dir}/out", "all"]
+    if not adapters:
+        argv.append("--no-adapters")
     uploads = []
     if candidate_wheels:
         import candidate_wheel_install as C
@@ -297,7 +304,8 @@ class Runner:
         a = self.a
         uploads, box_argv = (gate_plan(a.gate[0], a.gate[1], a.remote_dir,
                                       getattr(a, 'candidate_wheel', ()), getattr(a, 'candidate_source_commit', None),
-                                      getattr(a, 'gate_autograd_dir', None)) if a.gate
+                                      getattr(a, 'gate_autograd_dir', None),
+                                      adapters=not getattr(a, 'no_adapters', False)) if a.gate
                              else box_plan(a.smoke, a.remote_dir))
         key = hashlib.sha256(json.dumps([a.box, a.branch, a.remote_dir, box_argv,
                                          [sha256(l) if l.is_file() else str(l) for l, _ in uploads]]).encode()).hexdigest()
@@ -357,6 +365,9 @@ def parse(argv):
     ap.add_argument('--candidate-wheel', action='append', default=[], help='local unpublished core/vendor wheel; repeat')
     ap.add_argument('--candidate-source-commit', help='full candidate source commit')
     ap.add_argument('--gate-autograd-dir', help='directory holding the eight binaries and build-manifest.json')
+    ap.add_argument('--no-adapters', action='store_true',
+                    help='with --gate: no framework adapters ship (MOJOLEARN_RELEASE_ADAPTERS=0); the gate records '
+                         'its adapter stage as disabled')
     ap.add_argument("smoke", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     if a.smoke[:1] == ["--"]:

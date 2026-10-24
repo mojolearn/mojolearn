@@ -36,7 +36,16 @@ and campaign row go to R2 as the line finishes (gpu_gap_campaign.retain_recipe).
 by tools/bench_board.py inside each line; this stage then merges them through bench_board (load_result,
 add_ratios, save_result, write_board) into <out-root>/measure-*/board/board.json + BOARD.md, which
 tools/main_board_ingest.py --gate-board BOX=PATH takes onto the rolling main board (ours' clock span kept).
-all: setup, smoke, autograd, measure, then the verdict.
+adapters (2026-10-24, AGENTS.md "Framework adapters are the same API in another format"): the Torch and MAX
+adapters the installed wheel ships, through tools/adapter_gate.py: a fresh venv (never the measurement venv: its
+torch is the opponents' pinned build) with the same mojolearn wheels, then tools/adapter_wheel_smoke.py --install
+torch,max --require torch,max --device cuda:0 (torch from PyPI on NVIDIA, from the PyTorch ROCm 7.2 index on AMD,
+as the shipped adapters.json names). Each phase compares the adapter's bytes with the plain Python API's on this
+GPU. Only PASSED passes: NO_FRAMEWORK and FAILED fail the gate. The receipt stays at <out-root>/adapter-smoke/.
+--no-adapters (tools/release.py passes it under MOJOLEARN_RELEASE_ADAPTERS=0, when no adapters ship) records the
+stage as disabled.
+all: setup, smoke, autograd, adapters, measure, then the verdict. verdict: recompute the verdict of the stages
+already run (after running one stage on its own).
 
 THE VERDICT (gate_verdict; tools/release.py reads the same function): PASS only when the smoke ran with no
 FAILED line, the autograd smoke exited 0, and the measure stage finished every planned line (none pending,
@@ -68,7 +77,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-STAGES = ("setup", "smoke", "autograd", "measure")
+STAGES = ("setup", "smoke", "autograd", "adapters", "measure")
 #: measure-stage wall budget (hours) before no new line starts; MOJOLEARN_GATE_MEASURE_HOURS overrides
 MEASURE_HOURS = 30.0
 #: the box's persistent opponent store (scored once per box key, reused by every later gate on that box);
@@ -90,6 +99,13 @@ def gate_verdict(state):
             why.append("smoke did not cover the whole plan (no --cpu-fallback)")
     if state.get("autograd_finished") is not None and state.get("autograd_rc") != 0:
         why.append("autograd: rc=%s" % state.get("autograd_rc"))
+    # 2026-10-24: the installed-wheel adapter smoke is a gate stage; only PASSED passes
+    if state.get("adapters_enabled", True):
+        adapters = state.get("adapters") or {}
+        if state.get("adapters_finished") is None:
+            why.append("adapters stage not finished")
+        elif not adapters.get("ok") or adapters.get("status") != "PASSED":
+            why.append("adapters: %s" % (adapters.get("why") or adapters.get("status")))
     m = state.get("measure") or {}
     if state.get("measure_finished") is not None:
         if state.get("measure_rc") != 0:
@@ -129,13 +145,15 @@ def own_not_built(board):
 
 
 class Gate:
-    def __init__(self, vendor, version, root, candidate_wheels=(), source_commit=None, autograd_manifest=None):
+    def __init__(self, vendor, version, root, candidate_wheels=(), source_commit=None, autograd_manifest=None,
+                 adapters=True):
         import bench_board as B
         import bench_board_evidence as E
         self.B, self.E = B, E
         self.vendor, self.version, self.root = vendor, version, Path(root)
         self.candidate_wheels, self.source_commit = list(candidate_wheels), source_commit
         self.autograd_manifest = autograd_manifest
+        self.adapters_on = adapters
         self.root.mkdir(parents=True, exist_ok=True)
         self.out, self.cache = self.root / "setup", str(self.root / "cache")
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
@@ -245,6 +263,32 @@ class Gate:
         print("GATE_SMOKE_AUTOGRAD vendor=%s rc=%s %s" % (self.vendor, arc, " ".join(
             "%s=%d" % kv for kv in sorted((doc.get("counts") or {}).items()))))
 
+    def adapter_installs(self):
+        """What the adapter venv installs: the candidate wheel files, or the published release from PyPI."""
+        if self.candidate_wheels:
+            return list(self.candidate_wheels)
+        plugin = {"nvidia": "mojolearn-nvidia", "amd": "mojolearn-amd"}[self.vendor]
+        return ["mojolearn-core==" + self.version, "%s==%s" % (plugin, self.version)]
+
+    def adapters(self):
+        import adapter_gate as AG
+        if not self.adapters_on:
+            self.mark(phase="adapters", status="done", adapters_enabled=False,
+                      adapters={"enabled": False, "status": "DISABLED"}, adapters_finished=time.time())
+            print("GATE_ADAPTERS vendor=%s status=DISABLED (MOJOLEARN_RELEASE_ADAPTERS=0)" % self.vendor)
+            return
+        self.mark(phase="adapters", status="running", adapters_enabled=True, adapters_started=time.time(),
+                  adapters_finished=None)
+        env = self.env()
+        if self.vendor == "amd":
+            env["LD_LIBRARY_PATH"] = ":".join(
+                glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
+                + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
+        rec = AG.run(self.vendor, sys.executable, self.root / "adapter-smoke", self.adapter_installs(), env=env)
+        self.mark(phase="adapters", status="done", adapters=rec, adapters_finished=time.time())
+        print("GATE_ADAPTERS vendor=%s status=%s ok=%s %s" % (self.vendor, rec.get("status"), rec.get("ok"),
+                                                             rec.get("why")))
+
     def whole_plan(self):
         """Every recipe id of the vendor's whole plan (the smoke's own selection), sorted."""
         import gpu_gap_campaign as G
@@ -337,8 +381,10 @@ class Gate:
     def finish(self):
         verdict, why = gate_verdict(self.state)
         self.mark(verdict=verdict, verdict_reasons=why, verdict_at=time.time())
-        print("GATE_VERDICT vendor=%s version=%s verdict=%s%s" % (
-            self.vendor, self.version, verdict, (" reasons=" + "; ".join(why)) if why else ""))
+        import adapter_gate as AG
+        adapters = dict(self.state.get("adapters") or {}, enabled=self.state.get("adapters_enabled", True))
+        print("GATE_VERDICT vendor=%s version=%s verdict=%s %s%s" % (
+            self.vendor, self.version, verdict, AG.summary(adapters), (" reasons=" + "; ".join(why)) if why else ""))
         return 0 if verdict == "PASS" else 1
 
 
@@ -348,25 +394,28 @@ def main(argv):
     parser.add_argument('vendor', choices=('nvidia', 'amd'))
     parser.add_argument('version')
     parser.add_argument('root')
-    parser.add_argument('step', nargs='?', default='all', choices=STAGES+('all',))
+    parser.add_argument('step', nargs='?', default='all', choices=STAGES+('all', 'verdict'))
     parser.add_argument('--candidate-wheel', action='append', default=[])
     parser.add_argument('--source-commit')
     parser.add_argument('--autograd-manifest')
+    parser.add_argument('--no-adapters', action='store_true',
+                        help='record the adapter stage as disabled (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)')
     args = parser.parse_args(argv)
     vendor, version, root, step = args.vendor, args.version, args.root, args.step
     if vendor not in ("nvidia", "amd"):
         raise SystemExit("gate: nvidia or amd (Apple runs its own smoke tooling; Apple timing is the M3 Ultra's)")
-    if step not in STAGES + ("all",):
+    if step not in STAGES + ("all", "verdict"):
         raise SystemExit("gate: stage is one of %s or all" % ", ".join(STAGES))
     if bool(args.candidate_wheel) != bool(args.source_commit):
         parser.error('candidate wheels and source-commit must be supplied together')
     if args.autograd_manifest and not args.candidate_wheel:
         parser.error('autograd-manifest is a candidate-mode input')
-    gate = Gate(vendor, version, root, args.candidate_wheel, args.source_commit, args.autograd_manifest)
+    gate = Gate(vendor, version, root, args.candidate_wheel, args.source_commit, args.autograd_manifest,
+                adapters=not args.no_adapters)
     for stage in STAGES:
         if step in (stage, "all"):
             getattr(gate, stage)()
-    if step == "all":
+    if step in ("all", "verdict"):
         return gate.finish()
     return 0
 
