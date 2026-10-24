@@ -375,12 +375,15 @@ def test_iforest_resolution_never_calls_replaced_builtin_float(tmp_path, monkeyp
         touched.append("float")
         return .5
     score = model.score_samples  # bind first: the native attribute read consults the connected builtins
+    before = _state(vars(model))
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "float", callback)
         audit = audit_native_call(score, x)
-    # A replaced connected builtins export refuses (see _connected_exports).
+    # A replaced connected builtins export refuses (see _connected_exports)
+    # before resolution: the model keeps its pre-call state (`state` is the
+    # oracle's state after a completed resolution, which stores `_seed`).
     assert_connected_export_refused(audit, "builtins", "float")
-    assert _state(vars(model)) == state and touched == []
+    assert _state(vars(model)) == before and touched == []
     audit = audit_native_call(model.score_samples, x)
     assert _state(audit.assert_native()) == _state(expected)
     assert _state(vars(model)) == state and touched == []
