@@ -248,6 +248,23 @@ verify the retained bytes off the machine before termination. Metadata and hashe
 alone are not retained array/model/binary bytes. Keep any incomplete retention
 explicit and stop teardown until the required evidence is durably preserved.
 
+## Framework adapters are the same API in another format (Andrew, 2026-10-24)
+
+The Torch and MAX adapters (`adapters/`, `python/mojolearn/adapters/`, shipped as `_adapters/` in the
+wheels) are front-ends over the same compiled kernels the Python API calls. They compute nothing of
+their own. So they are NOT a new surface for the identity table, the verifier or the fault-injection
+arms: the Python API lanes already record and sabotage that arithmetic, and a second column for the
+same bits is the double work the release cost rules forbid. Treat them differently from an estimator:
+
+- What qualifies an adapter is what is specific to it: the shipped files build in every release leg,
+  survive the wheel audits, and load and run from the INSTALLED wheel on each vendor
+  (`tools/release_wheel_smoke.sh --adapters --adapter-install torch,max` on NVIDIA and AMD,
+  `tools/adapter_wheel_smoke.py --device mps` on Apple). That smoke is part of the release gate.
+- Do not add identity lanes, verifier rows or sabotage arms for an adapter. If an adapter needs a value
+  the kernels do not provide, add it to the Mojo kernel, where the existing lanes cover it.
+- Adapter bugs are glue bugs (loading, dispatch registration, dtype and layout at the boundary); fix
+  them in the adapter, never by changing kernel bits for one front-end.
+
 ## No Python in the runtime
 
 Owner clarification (2026-10-06, supersedes earlier Python API/glue exceptions):
