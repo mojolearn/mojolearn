@@ -2614,72 +2614,7 @@ def lu_factor(a, *, numeric_mode=None):
     >>> lu, piv = mojolearn.lu_factor(A)
     >>> x = mojolearn.lu_solve((lu, piv), np.ones(8, dtype=np.float32))
     """
-    k = _Kit(_mode(numeric_mode))
-    sf = k.s_flags()
-    if ((sf & 4 and k.qfix_flags() & 4) or sf & 8) and not _is_sparse(a):
-        # LU_FAST_RESIDENT (bit 4, FAST + Apple default, rollback _OFF) or
-        # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL default, rollback -D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF);
-        # x_decomp/s_linalg_fast.mojo
-        return _lu_factor_resident(k, a)
-    A = _M.from_input(a, "a")
-    if A.r != A.c:
-        raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
-    lu, piv, info = k.lu(A)
-    if info:
-        import warnings
-        warnings.warn(f"Diagonal number {info} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
-    pair = (lu.out(), frombytes(piv.tobytes(), "<i4", (A.r,)))
-    if not info and k.qfix_flags() & 4:
-        # LU_QFIX (FAST default; -D MOJOLEARN_LU_QOLD off): the pair carries
-        # this call's own copy of A so `lu_solve` can refine (see _LUPair)
-        return _LUPair(pair, A)
-    return pair
-
-
-def _lu_factor_resident(k, a):
-    """lane/apple-fast-s-linalg LU_FAST_RESIDENT: `lu_factor` with A uploaded
-    once from the caller's buffer, the NaN/inf refusal and the factor on the
-    device, LU and piv downloaded once into the returned arrays; A, LU and
-    piv stay on the device in the returned pair for `lu_solve`."""
-    a_arr = as_f32_c(a, ndim=2, name="a")[0]
-    if a_arr.ndim != 2 or min(a_arr.shape) == 0:  # glue: smaller of two shape dims
-        raise ValueError("a: a nonempty two-dimensional input is required")
-    n, c = a_arr.shape
-    if n != c:
-        raise ValueError(f"expected a square matrix, got {n} x {c}")
-    raw = k._raw()
-    dA, dLU, dP = _DevBuf(raw, n * n), _DevBuf(raw, n * n), _DevBuf(raw, n)
-    lu, piv, info = _empty((n, n), "<f4"), _empty((n,), "<i4"), _empty((1,), "<f4")
-    rc = int(k.b.x_decomp_dev_lu_factor(addr_ro(a_arr, name="a"), _addr(lu, name="lu"), _addr(piv, name="piv"),
-                                        _addr(info, name="info"), dA.id, dLU.id, dP.id, [n]))
-    if rc < 0:
-        raise ValueError("a: input must be finite; NaN/inf are unsupported")
-    inf = int(array.array("f", info.tobytes())[0])
-    if inf:
-        import warnings
-        warnings.warn(f"Diagonal number {inf} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=3)
-        return (lu, piv)
-    return _LUPair((lu, piv), None, dev=(dA, dLU, dP, lu, piv))
-
-
-def _lu_solve_resident(k, dev, b, refine=True):
-    """LU_FAST_RESIDENT's `lu_solve` (trans 0) on the pair's device A, LU and
-    piv: B up, the solve, LU_QFIX's refinement step (refine; FAST only, off
-    on IDN_LU_RESIDENT_PAIR) and X down."""
-    dA, dLU, dP, lu, _ = dev
-    n = lu.shape[0]
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
-    bb = as_f32_c(b, ndim=1 if vec else 2, name="b")[0]
-    if bb.shape[0] != n:
-        raise ValueError(f"b has {bb.shape[0]} rows, the factorization has {n}")
-    nrhs = 1 if vec else bb.shape[1]
-    if not n or not nrhs:
-        return None
-    if _host_all_finite(bb) is False:
-        raise ValueError("b: input must be finite; NaN/inf are unsupported")
-    out = _empty((n,) if vec else (n, nrhs), "<f4")
-    k.b.x_decomp_dev_lu_solve(dLU.id, dP.id, dA.id, addr_ro(bb, name="b"), _addr(out, name="x"), [n, nrhs, 1 if refine else 0])
-    return out
+    return _LINALG_CALL(None, "lu_factor", (a, numeric_mode), _LINALG_CONTEXT)
 
 
 class _LUPair(tuple):
@@ -2691,6 +2626,9 @@ class _LUPair(tuple):
     synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
     8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve. KEPT for
     quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
+    # bindings/linalg_decomp_native.mojo (`_lu_pair`) assembles the pair
+    # lu_factor returns from its slots: `_qfix_a` an (n, n) float32 Array,
+    # `_dev` the three `_DevBuf`s and the lu / piv arrays, or None.
 
     def __new__(cls, pair, a_m, dev=None):
         obj = super().__new__(cls, pair)
@@ -2735,34 +2673,7 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
         If ``trans`` is not 0, 1 or 2, ``piv`` holds an index outside
         [0, n), ``b`` has the wrong number of rows, or ``b`` is not finite.
     """
-    if trans not in (0, 1, 2):
-        raise ValueError("trans must be 0, 1 or 2")
-    lu, piv = lu_and_piv
-    k = _Kit(_mode(numeric_mode))
-    dev = getattr(lu_and_piv, "_dev", None)
-    if dev is not None and not trans and lu is dev[3] and piv is dev[4] and k.s_flags() & 12:
-        # LU_FAST_RESIDENT (bit 4, FAST + Apple default, rollback _OFF) or
-        # IDN_LU_RESIDENT_PAIR (bit 8, IDENTICAL, no refinement): the pair's device factor
-        X = _lu_solve_resident(k, dev, b, refine=bool(k.s_flags() & 4))
-        if X is not None:
-            return X
-    L = _M.from_input(lu, "lu")
-    n = L.r
-    pa = as_i32_c(piv, ndim=1, name="piv")[0]
-    pv = array.array("i")
-    pv.frombytes(pa.tobytes())
-    if len(pv) != n or any(not 0 <= p < n for p in pv):  # glue: validates the piv argument's row indices
-        raise ValueError("piv must hold one row index in [0, n) per row")
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
-    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
-    if B.r != n:
-        raise ValueError(f"b has {B.r} rows, the factorization has {n}")
-    X = k.lu_solve(L, pv, B, trans=1 if trans else 0)
-    A0 = getattr(lu_and_piv, "_qfix_a", None)
-    if A0 is not None and not trans and A0.r == n and A0.c == n and k.qfix_flags() & 4:
-        # LU_QFIX: one refinement step (lane/apple-fast-q-linalg; see _LUPair)
-        X = k.ew("add", X, k.lu_solve(L, pv, k.lu_resid(A0, X, B)))
-    return X.out((n,)) if vec else X.out()
+    return _LINALG_CALL(None, "lu_solve", (lu_and_piv, b, trans, numeric_mode), _LINALG_CONTEXT)
 
 
 # lu_factor + lu_solve (gesv). Lane idn-dense-linalg: one binding entry
@@ -2802,14 +2713,6 @@ def solve(a, b, *, numeric_mode=None):
     >>> x = mojolearn.solve(A, np.ones(8, dtype=np.float32))
     """
     return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
-
-
-def _row_of(b):
-    """A 1-D input as a 1 x n float32 matrix input, without a float64 cast."""
-    shape = getattr(b, "shape", None)
-    if shape is not None and hasattr(b, "reshape"):
-        return b.reshape(1, -1)
-    return [list(b)]
 
 
 # ================================================================ lstsq / randomized SVD
@@ -5344,8 +5247,10 @@ _ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")
 
 
 # The native linear-algebra owner (bindings/linalg_decomp_native.mojo):
-# randomized_svd and solve.
-_LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call")
+# randomized_svd, solve, lstsq, lu_factor and lu_solve. lu_factor returns an
+# `_LUPair` whose device buffers are `_DevBuf`s.
+_LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call", lu_pair_class=_LUPair,
+                                                    lu_device_buffer=_DevBuf)
 
 
 # The compiled owner of the decomposition estimators whose public operations
