@@ -178,3 +178,28 @@ sm_120 back end.
 add a regression test for a guarded per-lane write in an unrolled loop. Until then our kernels keep such scratch in
 `InlineArray` or write every lane unconditionally from a selected value (lane/sm120-tree-identity 45b2db146); no compiler
 output is patched.
+
+## Runtime worker-thread count: a supported knob, and honoring the cgroup CPU quota (2026-10-24, fix-round2-host)
+
+**What we see.** Every Mojo process starts one runtime worker per logical CPU it sees: 128-144 threads on the RunPod
+L4 pod (nproc 128), whose cgroup grants only 13.6 CPUs (`cpu.max` "1360000 100000"). One process alone is fine (a
+4-tree forest fit in about 10 s), but a parallel driver's parent plus its worker process, each with ~144 runtime
+threads, slowed the first pooled shard to 47 s and never finished the second within 90 s
+(`tools/repro_par_forest.py`, `verify --lanes par-forest`). The AMD MI325X box (no quota) is unaffected.
+
+**Need.** (1) A documented way to set the runtime's worker count per process (an environment variable or an API
+called before the first parallel launch), and (2) a default that respects the process's affinity mask AND its cgroup
+CPU quota (cgroup v2 `cpu.max`, v1 `cpu.cfs_quota_us`/`cpu.cfs_period_us`), as Go, the JVM and .NET do. The runtime
+libraries contain an undocumented `MODULAR_THREAD_BUSY_WAIT_US` (worker busy-wait before sleeping) and a
+`runtime.worker_stack_size_mb` key, but no documented worker-count setting
+(https://max.modular.com/environment-variables lists none), so we do not set either.
+
+**Where.** `mojolearn._parallel_pool.DevicePool` (the parallel drivers: fit_forest and the other non-cooperative
+drivers), the verifier's worker processes, and any user process that runs several mojolearn processes in one
+container.
+
+**Meanwhile.** The pool keeps one worker per device, created once and reused for every request; the parent blocks
+in a pipe read (no spin) while workers fit; each worker's host loops get `MOJOLEARN_CPU_THREADS` = the effective CPU
+budget (min of affinity, cgroup quota, an explicit MOJOLEARN_CPU_THREADS) divided by the worker count
+(`_parallel_pool.effective_cpu_budget` / `worker_cpu_threads`). That bounds our own host splits; the Mojo runtime's
+own worker count stays the runtime's until Modular ships the knob.

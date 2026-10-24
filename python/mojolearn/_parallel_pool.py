@@ -314,6 +314,56 @@ def _cpu_refusal(requests, cooperative, n_devices=1):
     return None
 
 
+def _cgroup_cpu_quota(root='/sys/fs/cgroup'):
+    """The CPU quota of this process's cgroup in CPUs, or None when there is
+    none: cgroup v2 `cpu.max` ("<quota> <period>" or "max <period>"), else
+    cgroup v1 `cpu/cpu.cfs_quota_us` over `cpu/cpu.cfs_period_us`."""
+    # glue: reads one or two fixed kernel configuration files at pool setup
+    try:
+        with open(os.path.join(root, 'cpu.max'), encoding='ascii') as stream:
+            quota, period = stream.read().split()[:2]
+        if quota == 'max':
+            return None
+        return int(quota) / int(period)
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(os.path.join(root, 'cpu', 'cpu.cfs_quota_us'), encoding='ascii') as stream:
+            quota = int(stream.read().strip())
+        with open(os.path.join(root, 'cpu', 'cpu.cfs_period_us'), encoding='ascii') as stream:
+            period = int(stream.read().strip())
+    except (OSError, ValueError):
+        return None
+    return quota / period if quota > 0 and period > 0 else None
+
+
+def effective_cpu_budget(environ=None, cgroup_root='/sys/fs/cgroup'):
+    """The CPUs this process may really use: the smallest of its affinity
+    mask, its cgroup CPU quota (rounded down, at least 1) and an explicit
+    MOJOLEARN_CPU_THREADS. A container can report 128 CPUs while its quota
+    grants 13.6 (the RunPod L4 pod: cpu.max "1360000 100000")."""
+    # glue: process configuration read once per pool start
+    env = os.environ if environ is None else environ
+    try:
+        counts = [len(os.sched_getaffinity(0))]
+    except (AttributeError, OSError):
+        counts = [os.cpu_count() or 1]
+    quota = _cgroup_cpu_quota(cgroup_root)
+    if quota is not None:
+        counts.append(max(1, int(quota)))
+    raw = env.get('MOJOLEARN_CPU_THREADS', '').strip()
+    if raw.isdigit() and int(raw) > 0:
+        counts.append(int(raw))
+    return max(1, min(counts))
+
+
+def worker_cpu_threads(n_workers, environ=None, cgroup_root='/sys/fs/cgroup'):
+    """The host-thread ceiling (MOJOLEARN_CPU_THREADS) each of `n_workers`
+    pool workers receives: an equal share of the effective budget, at least
+    one, so the workers together never oversubscribe a cgroup quota."""
+    return max(1, effective_cpu_budget(environ, cgroup_root) // max(1, n_workers))
+
+
 class DevicePool:
     def __init__(self, devices, *, cooperative=False):
         self.cooperative = cooperative
@@ -328,6 +378,7 @@ class DevicePool:
             return
         try:
             groups = [self.devices] if self.cooperative else [(d,) for d in self.devices]  # glue: multi-device worker setup over device ids and request tuples
+            threads = worker_cpu_threads(len(groups))
             for group in groups:  # glue: multi-device worker setup over device ids and request tuples
                 env = dict(os.environ, MOJOLEARN_NUMERIC_MODE='identical')
                 from . import _backend
@@ -366,6 +417,10 @@ class DevicePool:
                         env[name] = ','.join(str(d) for d in group)  # glue: multi-device worker setup over device ids and request tuples
                 for name in DEVICE_COUNT_VARIABLES:  # glue: multi-device worker setup over device ids and request tuples
                     env[name] = str(len(group))
+                # Each worker's host loops get an equal share of the CPUs this
+                # process may really use (affinity, cgroup quota, an explicit
+                # MOJOLEARN_CPU_THREADS), never the machine's core count.
+                env['MOJOLEARN_CPU_THREADS'] = str(threads)
                 self._workers.append(subprocess.Popen(
                     [sys.executable, '-m', 'mojolearn._parallel_worker'], env=env,
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE))
