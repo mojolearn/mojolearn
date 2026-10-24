@@ -65,3 +65,32 @@ def test_the_loader_refusal_is_recognized(tmp_path):
     assert smoke.refused(tmp_path)
     (tmp_path / "torch" / "adapter-results.json").write_text(json.dumps(dict(failures=["AssertionError"])))
     assert not smoke.refused(tmp_path)
+
+
+def checker_python(tmp_path, facts, checker_exit):
+    """Answers the probe (-c) with `facts`; every checker run exits CHECKER_EXIT (its own verdict)."""
+    path = tmp_path / "python"
+    path.write_text("#!/bin/sh\nif [ \"$1\" = -c ]; then cat <<'EOF'\n" + json.dumps(facts)
+                    + "\nEOF\nexit 0\nfi\nexit %d\n" % checker_exit)
+    path.chmod(path.stat().st_mode | stat.S_IEXEC)
+    return str(path)
+
+
+def test_passed_only_when_every_checker_passed(tmp_path):
+    facts = dict(adapters=ADAPTERS, torch_importable=True, max_importable=True)
+    out = tmp_path / "ok"
+    assert smoke.main(["--python", checker_python(tmp_path, facts, 0), "--out", str(out)]) == 0
+    report = json.loads((out / "adapter-smoke.json").read_text())
+    assert report["status"] == "PASSED"
+    assert {n: p["exit"] for n, p in report["phases"].items()} == {
+        "torch": 0, "torch-training": 0, "max": 0, "max-training": 0}
+
+
+def test_a_checker_with_any_failed_comparison_fails_the_smoke(tmp_path):
+    # check_native_adapters / check_max_* exit 1 when any comparison failed (one python_api:* mismatch is enough).
+    facts = dict(adapters=ADAPTERS, torch_importable=True, max_importable=True)
+    out = tmp_path / "bad"
+    assert smoke.main(["--python", checker_python(tmp_path, facts, 1), "--out", str(out)]) == 1
+    report = json.loads((out / "adapter-smoke.json").read_text())
+    assert report["status"] == "FAILED"
+    assert report["frameworks"] == dict(torch="failed", max="failed") or "torch adapter check failed" in report["problems"][0]
