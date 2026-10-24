@@ -239,7 +239,11 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
     if py_get(context, "ndarray") is None and (cls is native_loaded_module("builtins").memoryview or cls is context["array_type"]):
         var view = native_buffer_view(value)
         var format = String(view.format)
-        if format == "h" or format == "Q":
+        # 'L' is the 8-byte unsigned long on LP64 platforms (Linux, macOS):
+        # the same uint64 widening as 'Q'. A 4-byte 'L' (LLP64) is uint32,
+        # which classical_input reads directly.
+        var unsigned_long = format == "Q" or (format == "L" and Int(py=view.itemsize) == 8)
+        if format == "h" or unsigned_long:
             var packed = native_array_from_bytes(String(format), py_call(view.tobytes, "C"))
             var wide = native_array_from_values(String("i" if format == "h" else "q"), packed)
             return _owned(wide, view.shape, "<i4" if format == "h" else "<i8", rows)
