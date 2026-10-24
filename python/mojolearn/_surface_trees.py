@@ -47,6 +47,9 @@ FAMILIES = (
             "trees-shap-tree",
             "trees-shap-kernel",
             "trees-shap-permutation",
+            # lane verify-coverage-20261024: MultiOutputRegressor over Ridge,
+            # the fused multi-target ridge predict (ridge_predict_multi)
+            "multioutput-ridge",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -143,6 +146,8 @@ TRAINING_LANE_NAMES = {
     "trees-shap-tree": "TreeExplainer",
     "trees-shap-kernel": "KernelExplainer",
     "trees-shap-permutation": "PermutationExplainer",
+    "multioutput-ridge": "MultiOutputRegressor over Ridge",
 }
 PUBLIC_PENDING_LANES = {
+    "multioutput-ridge": "no reference",
     }

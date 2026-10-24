@@ -1318,6 +1318,26 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("multioutput-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    """MultiOutputRegressor over Ridge: its predict runs every target's
+    ridge at once (the meta owner's `_multi_ridge`, `ridge_predict_multi`),
+    which trees-multioutput (over decision trees) never reaches. Three
+    targets, two alphas; parts are the fitted coefficients and the
+    predictions on the fit rows."""
+    d = _coverage_digester(ml)
+    x = np.ascontiguousarray(X[:1024, :6], dtype=np.float32)
+    Y = np.ascontiguousarray(np.stack([yr[:1024], yr[:1024][::-1].copy(), np.asarray(X[:1024, 6])], axis=1),
+                             dtype=np.float32)
+    parts = {}
+    for alpha in (0.5, 2.0):  # glue: two regularization strengths
+        m = ml.MultiOutputRegressor(ml.Ridge(alpha=alpha)).fit(x, Y)
+        parts[f"coef_{alpha}"] = d(np.concatenate([np.asarray(e.coef_, dtype=np.float32).reshape(-1)
+                                                   for e in m.estimators_]))
+        parts[f"predict_{alpha}"] = d(np.asarray(m.predict(x), dtype=np.float32))
+    return _fit(parts)
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape", "scaler-fit-transform")
+            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge")
