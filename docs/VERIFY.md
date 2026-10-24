@@ -970,8 +970,9 @@ It admits a column only when it is identical mode, names a commit, ran the
 default fixture size on one device, is not a sabotage, partial, probe or
 smoke run, and its fixture hashes equal the current harness's. Per cell part
 and device class the newest commit wins; a class that differs at an older
-commit is kept as superseded, and classes that differ at the same commit
-leave the part without a reference. `--records DIR` names other record
+commit is kept with its own value, so the release admission sees it and
+refuses the cell, and classes that differ at the same commit leave the part
+without a reference. `--records DIR` names other record
 directories.
 
 New tables require at least two identical, valid digest samples per part,
@@ -1018,6 +1019,16 @@ committed column, reports which routine reference parts still rest on an older
 commit (`reference-report.json`), and runs `verify --self-test` and
 `verify --coverage` against the new table on the host column. `--check-only`
 does the same on a scratch table and changes nothing.
+
+Four columns decide every admitted cell: Apple, NVIDIA, AMD and the cpu
+(host) column must all carry the same hash. Agreeing columns already in the
+table count, so a record of one vendor does not force the others to be taken
+again. A cpu value that differs from the GPU reference, or a missing cpu
+column, refuses the admission and the table stays as it was. The cpu column
+may be N/A only where the harness declares it: a lane listed in
+`GPU_ONLY_LANES` or matched by `RECORD_EXCLUDED_PREFIXES` in
+`tools/identity_break.py`, and the `model` part of a lane whose cpu column
+loads the GPU column's saved model (`n/a:gpu-saved-file`).
 
 ## The pinned k-means card
 
