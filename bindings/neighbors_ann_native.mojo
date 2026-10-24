@@ -164,6 +164,15 @@ def _ivf_metric(fields: PythonObject, context: PythonObject) raises -> PythonObj
     return family_call(b.int, metric)
 
 
+def ann_keep_array(source: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+    """What `as_f32_c(source)` returned for the converted `x`: the caller's
+    own C-order float32 Array itself, else `_ann_as_array(x)`."""
+    if (classical_is_array(source, context) and String(source.dtype) == "<f4"
+            and String(source.order) == "C"):
+        return source
+    return _ann_as_array(x, context)
+
+
 def _ivf_extension(fields: PythonObject, binding: PythonObject, context: PythonObject) raises:
     """`IVFIndex._extension`: the binary's own compile-time mode must be the
     one requested (`int(fn()) != _MODE_CODE.get(want)`)."""
@@ -505,7 +514,7 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                     Python.list(PythonObject(n), PythonObject(d), PythonObject(kdeg), PythonObject(deg)))
     _ = x  # keep the Python object alive through the native call above
     _ = graph  # keep the Python object alive through the native call above
-    py_setitem(fields, "dataset_", _ann_as_array(x, context))
+    py_setitem(fields, "dataset_", ann_keep_array(args[1], x, context))
     py_setitem(fields, "graph_", _ann_view(graph, Python.tuple(n, deg), context))
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "n_rows_", PythonObject(n))
@@ -540,7 +549,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("mojolearn refine: queries have " + String(Int(py=q.shape[1])) + " features, the dataset has "
                     + String(d))
     # `np.asarray(candidates)`, read natively
-    var c = classical_view(args[3], context, "candidates")
+    var c = family_call(Python.import_module("numpy").asarray, args[3])
     var kind = classical_kind(c, context)
     if Int(py=c.ndim) != 2 or Int(py=c.shape[0]) != m or not (kind == "i" or kind == "u"):
         raise Error("mojolearn refine: candidates must be an integer array of shape (" + String(m) + ", k0)")
@@ -583,6 +592,9 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def neighbors_ann_operation(model: PythonObject, operation: String, args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
+    # NumPy's connected types first, so an ndarray input is read as one
+    # buffer whichever door ran first in the process.
+    classical_connect_numpy(context)
     if operation == "family_xn_ann_ivf_fit":
         return _ivf_fit(model, args, context)
     if operation == "family_xn_ann_pq_fit":

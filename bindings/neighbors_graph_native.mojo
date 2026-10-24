@@ -29,6 +29,7 @@ from bindings.family_common import (
     family_as_f32_dense,
 )
 from bindings.cfb_spectral import _as_i32
+from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from core.neighbors_graph_impl import xn_graph_even_rows
@@ -515,7 +516,7 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var inducing = _attr(model, "inducing_points")
     var z: PythonObject
     if inducing is not None:
-        z = family_as_f32_dense(inducing, 2, "inducing_points", context)
+        z = ann_keep_array(inducing, family_as_f32_dense(inducing, 2, "inducing_points", context), context)
     else:
         var m_obj = family_call(b.min, _int(_attr(model, "n_inducing")), PythonObject(n))
         if _truth(family_call(native_loaded_module("operator").le, m_obj, PythonObject(0))):
