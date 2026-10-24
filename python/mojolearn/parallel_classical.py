@@ -46,6 +46,10 @@ import sys
 
 from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import as_f32_c
+from . import kernel_methods as _km
+
+#: The plain method whose public conversion `apply_kernel_method` applies.
+_APPLY_METHOD = {_km.KernelRidge: 'predict', _km.Nystroem: 'transform'}
 
 
 def fit_logistic(estimator, X, y, *, devices=(0,)):
@@ -830,17 +834,6 @@ def solve_cholesky(estimator, B, *, devices=(0,)):
         pool.close()
 
 
-def _admit_kernel_method(estimator):
-    from .kernel_methods import KernelRidge, Nystroem
-    if type(estimator) not in (KernelRidge, Nystroem):
-        raise TypeError('requires mojolearn.KernelRidge or Nystroem')
-    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
-        raise ValueError('parallel kernel methods require IDENTICAL numeric mode')
-    if estimator.kernel == 'laplacian':
-        raise ValueError("parallel kernel methods refuse kernel='laplacian' by name: its L1 "
-                         "distance matrix has no distributed row seam in this lane")
-
-
 def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
     """Fit ``KernelRidge`` or ``Nystroem`` with kernel-matrix rows computed across GPUs.
 
@@ -862,28 +855,14 @@ def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # KernelRidge or Nystroem fit with distributed kernel-matrix output rows.
-    #
-    # Rows use the SVM kernel-row seam (original FP32-v1 dot per cell and the
-    # original epilogue). KernelRidge's factorization moves whole trailing-update
-    # rows and its multi-target solve whole target columns; Nystroem's Jacobi
-    # eigensolver stays on the root. 'laplacian' is refused by name.
-    _admit_kernel_method(estimator)
-    X, _ = as_f32_c(X, ndim=2, name='X')
-    from .kernel_methods import KernelRidge
-    if type(estimator) is KernelRidge:
-        if y is None:
-            raise ValueError('KernelRidge fit requires y')
-        args = (X, y)
-    else:
-        args = (X,)
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('km_fit', estimator, args)])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    # One native call (bindings/kernel_methods_native.mojo `family_km_par_fit`):
+    # it admits the estimator, the devices and the installed route, binds the
+    # devices to this thread in the binding (core/device_plan.mojo) and runs
+    # the plain fit. Rows use the SVM kernel-row seam (original FP32-v1 dot per
+    # cell and the original epilogue); KernelRidge's factorization moves whole
+    # trailing-update rows and its multi-target solve whole target columns;
+    # Nystroem's Jacobi eigensolver stays on the root, devices[0].
+    return _km._NATIVE(estimator, 'family_km_par_fit', (X, y, devices), _km._NATIVE_CONTEXT)
 
 
 def apply_kernel_method(estimator, X, *, devices=(0,)):
@@ -903,22 +882,11 @@ def apply_kernel_method(estimator, X, *, devices=(0,)):
     Array
         Equal to ``estimator.predict(X)`` or ``estimator.transform(X)``.
     """
-    # KernelRidge.predict or Nystroem.transform with distributed kernel rows.
-    _admit_kernel_method(estimator)
-    from .kernel_methods import KernelRidge
-    method = 'predict' if type(estimator) is KernelRidge else 'transform'
-    X, _ = as_f32_c(X, ndim=2, name='X')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('km_apply', estimator, (method, X))])[0]
-    finally:
-        pool.close()
-    # THE par-kernel-ridge DTYPE FLIP (2026-10-24): the worker returns the raw
-    # native result (float32 for KernelRidge.predict) whether or not it loaded
-    # NumPy; this applies the plain method's public conversion (float64 for a
-    # regressor's predict) for an outside caller only, so the identity harness
-    # (internal) and a user each get exactly what `estimator.<method>` gives them.
-    return public_method_result(estimator, method, result, sys._getframe(1))
+    # One native call (`family_km_par_apply`) returns the native result; the
+    # public conversion for this function's caller is the plain method's.
+    return public_method_result(estimator, _APPLY_METHOD.get(type(estimator)),
+                                _km._NATIVE(estimator, 'family_km_par_apply', (X, devices), _km._NATIVE_CONTEXT),
+                                sys._getframe(1))
 
 
 def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
