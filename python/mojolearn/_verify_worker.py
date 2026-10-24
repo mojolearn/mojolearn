@@ -122,6 +122,26 @@ def run(request, timeout=120, log=None):
                 _kill(process)
 
 
+def _group_members(pgid):
+    """The pids of process group `pgid`, leader first, read from /proc on
+    Linux; () where /proc is unavailable."""
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return ()
+    members = []
+    for name in names:  # glue: one /proc entry per process
+        if not name.isdigit():
+            continue
+        try:
+            if os.getpgid(int(name)) == pgid:
+                members.append(int(name))
+        except OSError:
+            continue
+    members.sort(key=lambda pid: (pid != pgid, pid))
+    return tuple(members)
+
+
 def _stacks_on_timeout(process, output):
     """The worker's Python stacks at its timeout, for the refusal text.
 
@@ -136,14 +156,24 @@ def _stacks_on_timeout(process, output):
     Returns '' where this is unavailable."""
     if os.name != "posix" or not hasattr(signal, "SIGUSR1") or process.poll() is not None:
         return ""
-    # One stack request to the group (kill(-pgid), the POSIX group form);
-    # `_kill` then reaps the group once with SIGKILL. os.killpg stays the
-    # reaping call only, so each target is signalled once per purpose.
+    # One stack request per process, one at a time, so the dumps do not
+    # interleave: the group's members from /proc (Linux), else one request
+    # to the whole group (kill(-pgid), the POSIX group form). `_kill` then
+    # reaps the group once; os.killpg stays the reaping call only.
+    members = _group_members(process.pid)
     try:
-        os.kill(-process.pid, signal.SIGUSR1)
+        if members:
+            for pid in members:  # glue: one stack request per process of the timed-out group
+                try:
+                    os.kill(pid, signal.SIGUSR1)
+                except OSError:
+                    continue
+                time.sleep(1)
+        else:
+            os.kill(-process.pid, signal.SIGUSR1)
+            time.sleep(3)
     except OSError:
         return ""
-    time.sleep(3)
     text = _file_tail(output, 16000) if isinstance(output, str) else _tail(output, 16000)
     return "; stacks at the limit: " + text[-16000:]
 
