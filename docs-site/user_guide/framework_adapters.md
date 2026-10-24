@@ -13,6 +13,16 @@ directly:
 Both call the same compiled mojolearn library as the rest of your install. `import mojolearn` never
 imports PyTorch or MAX; an adapter loads only when you import it.
 
+## What is identical
+
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Each adapter call
+is one mojolearn operation: for the same input bits it returns the same output bits on every GPU, so a
+chain of adapter calls does too. Tensors computed by PyTorch's or MAX's own operations between those
+calls are computed by that framework, and their bits are the framework's. To run a whole model as one
+mojolearn program, where every operation is mojolearn's and `python -m mojolearn verify` can check the
+result, use `mojolearn.import_model` for inference or `mojolearn.Sequential` (also reachable as
+`torch.ops.mojolearn.train` and the MAX `mojolearn_train` op) for training.
+
 ## Install
 
 Each adapter needs its framework, at the release the adapter is built for. The `torch` and `max`
