@@ -26,13 +26,19 @@ WHICH HASH WINS. Lanes change: a fix moves a hash and only some vendors are
 re-recorded before the next release record. So per cell, part and device
 class the NEWEST admitted column wins (commit time, then record directory,
 then file name). Apple, NVIDIA and AMD use one shared GPU reference. Apple
-has no separate acceptable IDENTICAL hash. Legacy host-only cells retain
-their existing admission rules. A deciding class whose
-newest value differs from it at an OLDER commit is kept as `superseded`
-(the record moved on and that class was not re-recorded); a class that
-differs at the SAME commit is a disagreement inside the record itself, and
-the cell has no reference (`conflict`), so a user box reads OWED there and
-is never blamed for it.
+has no separate acceptable IDENTICAL hash. The cpu (host) column is a
+deciding witness too (Andrew 2026-10-24: "the cpu column should be REQUIRED
+too"): it must carry the same hash, and its only N/As are the declared ones,
+a lane the harness declares GPU-only (`identity_break.GPU_ONLY_LANES`, the
+`RECORD_EXCLUDED_PREFIXES` cooperative drivers) and a model part that loads
+the GPU column's saved file. A deciding class whose newest value differs from
+the reference at an OLDER commit is kept as a distinct value (the record
+moved on and that class was not re-recorded), so the disagreement stays
+visible: the release admission (tools/identity_admission_guard.py) refuses a
+selected cell whose cpu value differs, or whose cpu column is missing, as a
+bug to fix. A class that differs at the SAME commit is a disagreement inside
+the record itself, and the cell has no reference (`conflict`), so a user box
+reads OWED there and is never blamed for it.
 
 FORMAT (`mojolearn.verify-reference.v1`)
 
