@@ -26,6 +26,20 @@ def par_spec_admits(driver: String, owner: String) -> Bool:
         return owner == "cd_fit"
     if driver == "gram_fit":
         return owner == "ols_fit" or owner == "ridge_fit" or owner == "fit"
+    if driver == "kmeans_fit":
+        return owner == "family_kmeans_fit"
+    if driver == "dbscan_fit":
+        return owner == "family_cfb_dbscan_fit"
+    if driver == "gmm_fit":
+        return owner == "family_mix_gmm_fit"
+    if driver == "gmm_predict":
+        return (owner == "family_mix_gmm_score_samples" or owner == "family_mix_gmm_predict_proba"
+                or owner == "family_mix_gmm_predict")
+    if driver == "hdbscan_fit":
+        return owner == "family_cfa_hdbscan_fit"
+    if driver == "resample":
+        return (owner == "family_rs_bootstrap" or owner == "family_rs_permutation_test"
+                or owner == "family_rs_monte_carlo_integrate")
     return False
 
 
@@ -47,4 +61,14 @@ def par_spec_rebuild(driver: String) -> String:
         return "rebuild solver binding for parallel dot leaves"
     if driver == "gram_fit":
         return "rebuild estimators binding for parallel Gram chunks"
+    if driver == "kmeans_fit":
+        return "rebuild base binding for cooperative KMeans"
+    if driver == "dbscan_fit":
+        return "rebuild estimators binding for parallel DBSCAN neighborhoods"
+    if driver == "gmm_fit" or driver == "gmm_predict":
+        return "rebuild mixture binding for row-sharded GaussianMixture E-steps"
+    if driver == "hdbscan_fit":
+        return "rebuild HDBSCAN binding for distributed neighbor and distance rows"
+    if driver == "resample":
+        return "rebuild resample binding for distributed replicate ranges"
     return "rebuild the binding for multi-GPU drivers"

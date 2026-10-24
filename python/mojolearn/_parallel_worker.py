@@ -163,16 +163,7 @@ def execute(request):
             return model
         model._fit_with_tree_start(X, y, start)
         return model
-    if operation == 'kmeans_fit':
-        from .cluster import KMeans
-        model = KMeans(**state)
-        binding = model._bind('_mojolearn')
-        if (not callable(getattr(binding, 'kmeans_parallel_available', None))
-                or binding.kmeans_parallel_available() != 1):
-            raise ImportError('rebuild base binding for cooperative KMeans')
-        X, weights = args
-        model.fit(X, sample_weight=weights)
-        return model
+    # == 'kmeans_fit': moved to family_par_run (2026-10-24).
     if operation in ('graph_fit', 'umap_transform'):
         from .parallel_graph import _binding
         native, capability = _binding(state)
@@ -182,14 +173,7 @@ def execute(request):
             return state.transform(*args)
         state.fit(*args)
         return state
-    if operation == 'dbscan_fit':
-        binding = state._bind('_mojolearn_estimators')
-        if (not callable(getattr(binding, 'dbscan_parallel_available', None))
-                or binding.dbscan_parallel_available() != 1):
-            raise ImportError('rebuild estimators binding for parallel DBSCAN neighborhoods')
-        X, weights = args
-        state.fit(X, sample_weight=weights)
-        return state
+    # == 'dbscan_fit': moved to family_par_run (2026-10-24).
     if operation in ('gbdt_fit', 'ordered_rmse_fit'):
         model = state
         if callable(getattr(model, '_bind', None)):
@@ -271,38 +255,9 @@ def execute(request):
         from ._tsa_impl import ExponentialSmoothing
         return ExponentialSmoothing(args[0], ts_num=args[0].shape[0], **state).fit()
     # 'gram_fit' moved to family_par_run (2026-10-24).
-    if operation in ('gmm_fit', 'gmm_predict'):
-        native = state._extension()
-        if (not callable(getattr(native, 'gmm_parallel_available', None))
-                or native.gmm_parallel_available() != 1):
-            raise ImportError('rebuild mixture binding for row-sharded GaussianMixture E-steps')
-        if operation == 'gmm_fit':
-            state.fit(*args)
-            return state
-        method, X = args
-        if method not in ('score_samples', 'predict_proba', 'predict'):
-            raise ValueError('invalid GaussianMixture prediction operation')
-        return getattr(state, method)(X)
-    if operation == 'resample':
-        from . import resample
-        native = resample._extension('identical')
-        if (not callable(getattr(native, 'resample_ranges_parallel_available', None))
-                or native.resample_ranges_parallel_available() != 1):
-            raise ImportError('rebuild resample binding for distributed replicate ranges')
-        name, kwargs = args
-        if name not in ('bootstrap', 'permutation_test', 'monte_carlo_integrate'):
-            raise ValueError('invalid resample operation')
-        return getattr(resample, name)(numeric_mode='identical', **kwargs)
-    if operation == 'hdbscan_fit':
-        from .hdbscan import HDBSCAN
-        if type(state) is not HDBSCAN:
-            raise TypeError('requires mojolearn.HDBSCAN')
-        native = state._extension()
-        if (not callable(getattr(native, 'hdbscan_rows_parallel_available', None))
-                or native.hdbscan_rows_parallel_available() != 1):
-            raise ImportError('rebuild HDBSCAN binding for distributed neighbor and distance rows')
-        state.fit(*args)
-        return state
+    # in ('gmm_fit', 'gmm_predict'): moved to family_par_run (2026-10-24).
+    # == 'resample': moved to family_par_run (2026-10-24).
+    # == 'hdbscan_fit': moved to family_par_run (2026-10-24).
     # 'km_fit' / 'km_apply' moved into one native call each
     # (bindings/kernel_methods_native.mojo `family_km_par_*`, 2026-10-24).
     if operation == 'rbf_sampler_rows':

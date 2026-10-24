@@ -53,6 +53,10 @@ from . import _gp_impl as _gp
 from . import linear_model as _lm
 from . import _solver_impl as _cd
 from . import decomposition as _dec
+from . import cluster as _cl
+from . import density as _den
+from . import mixture as _mix
+from . import hdbscan as _hdb
 from . import _backend
 from . import _native_family_bridge
 
@@ -67,6 +71,10 @@ _GRAM_OWNERS = {
     _dec.PCA: (_dec._PCA_ENTRY, 'fit', _dec._PCA_CONTEXT, 2),
     _dec.TruncatedSVD: (_dec._TSVD_ENTRY, 'fit', _dec._TSVD_CONTEXT, 2),
 }
+
+#: predict_gaussian_mixture's plain owners.
+_GMM_PREDICT = {'score_samples': 'family_mix_gmm_score_samples', 'predict_proba': 'family_mix_gmm_predict_proba',
+                'predict': 'family_mix_gmm_predict'}
 
 #: The plain owner operations of the SVM drivers.
 _SVM_FIT = {_svm.SVC: 'family_svc_svc_fit', _svm.SVR: 'family_svc_svr_fit'}
@@ -325,30 +333,26 @@ def fit_kmeans(estimator, X, *, devices=(0,), sample_weight=None):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Distribute KMeans row assignments; retain full-data update/reduction order.
-    #
-    # Initialization, fixed-point centroid sums, restart choice and convergence
-    # use the existing implementation. Whole aligned row tiles compute distances
-    # concurrently. This first path stages buffers per assignment call.
-    from .cluster import KMeans
-    if type(estimator) is not KMeans:
+    # One native call (`family_par_run`, driver `kmeans_fit`): the plain
+    # KMeans fit, in identical mode, with its assignment row tiles on the
+    # selected devices. The old worker fitted a fresh KMeans of these seven
+    # parameters; the two it did not carry are refused when not their
+    # defaults rather than silently replaced.
+    if type(estimator) is not _cl.KMeans:
         raise TypeError('fit_kmeans requires mojolearn.KMeans')
-    params = {name: getattr(estimator, name) for name in (  # glue: copies seven constructor parameters
-        'n_clusters', 'init', 'n_init', 'max_iter', 'tol', 'random_state', 'init_centroids')}
-    mode = getattr(estimator, 'numeric_mode', None)
-    if mode not in (None, 'identical'):
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
         raise ValueError('parallel KMeans requires IDENTICAL numeric mode')
-    params['numeric_mode'] = 'identical'
+    if getattr(estimator, 'metric', 'euclidean') != 'euclidean':
+        raise ValueError("parallel KMeans requires metric='euclidean'")
+    if getattr(estimator, 'oversampling_factor', 2.0) != 2.0:
+        raise ValueError('parallel KMeans requires the default oversampling_factor')
+    # X and sample_weight reach the plain fit, which converts both exactly as
+    # the old driver's float32 conversion did.
     X, _ = as_f32_c(X, ndim=2, name='X')
-    if sample_weight is not None:
-        sample_weight, _ = as_f32_c(sample_weight, ndim=1, name='sample_weight')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('kmeans_fit', params, (X, sample_weight))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    estimator.numeric_mode = 'identical'
+    return _FAMILY(estimator, 'family_par_run',
+                   ('kmeans_fit', devices, 'family_kmeans_fit', (estimator._bind(), X, sample_weight), None, None,
+                    _backend.plan_bindings(('_mojolearn', '_mojolearn_x_cluster'))), _FAMILY_CONTEXT)
 
 
 def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
@@ -539,31 +543,16 @@ def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Distribute neighborhood rows; retain root core-point and label merges.
-    #
-    # Brute L2/L1 and RBC L2 use their original distance/order contracts.
-    # Full reference data, the current batch graph and label state still need
-    # to fit on the root GPU. This does not pool the reference index.
-    from .density import DBSCAN
-    if type(estimator) is not DBSCAN:
+    # One native call (`family_par_run`, driver `dbscan_fit`): the plain
+    # DBSCAN fit with its neighborhood rows on the selected devices.
+    if type(estimator) is not _den.DBSCAN:
         raise TypeError('fit_dbscan requires mojolearn.DBSCAN')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel DBSCAN requires IDENTICAL numeric mode')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('dbscan_fit', estimator, (X, sample_weight))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
-
-
-def _admit_gaussian_mixture(estimator):
-    from .mixture import GaussianMixture
-    if type(estimator) is not GaussianMixture:
-        raise TypeError('requires mojolearn.GaussianMixture')
-    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
-        raise ValueError('parallel GaussianMixture requires IDENTICAL numeric mode')
+    return _FAMILY(estimator, 'family_par_run',
+                   ('dbscan_fit', devices, 'family_cfb_dbscan_fit',
+                    (estimator._bind('_mojolearn_estimators'), X, sample_weight), None, None,
+                    _backend.plan_bindings(('_mojolearn_estimators',))), _FAMILY_CONTEXT)
 
 
 def fit_gaussian_mixture(estimator, X, *, devices=(0,)):
@@ -583,23 +572,19 @@ def fit_gaussian_mixture(estimator, X, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Row-shard every E-step; retain the root M-step, Cholesky and convergence test.
-    #
-    # Whole sample rows run the original E-step on their owners and are copied
-    # back into their original positions; the mean log likelihood is folded on
-    # the root over the complete gathered rows. The KMeans initialization uses
-    # its row-tile assignment driver. Full data, responsibilities and the M-step
-    # still have to fit on the root GPU. covariance_type other than 'full' and
-    # the refused knobs are refused by the estimator itself, by name.
-    _admit_gaussian_mixture(estimator)
+    # One native call (`family_par_run`, driver `gmm_fit`): the plain fit with
+    # every E-step's rows on the selected devices (and its KMeans
+    # initialization's assignment tiles, as the old worker's environment did).
+    if type(estimator) is not _mix.GaussianMixture:
+        raise TypeError('requires mojolearn.GaussianMixture')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel GaussianMixture requires IDENTICAL numeric mode')
     X, _ = as_f32_c(X, ndim=2, name='X')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('gmm_fit', estimator, (X,))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    return _FAMILY(estimator, 'family_par_run',
+                   ('gmm_fit', devices, 'family_mix_gmm_fit',
+                    (estimator._bind(), estimator._bind('_mojolearn_x_cluster'), X), None, None,
+                    _backend.plan_bindings(('_mojolearn_mixture', '_mojolearn_x_cluster', '_mojolearn'))),
+                   _FAMILY_CONTEXT)
 
 
 def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
@@ -620,37 +605,28 @@ def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
     -------
     The same value ``estimator.<method>(X)`` returns.
     """
-    # Row-shard the scoring E-step of a fitted GaussianMixture.
-    #
-    # method is 'predict', 'predict_proba' or 'score_samples'; the original
-    # per-row argmax and host exponential are unchanged.
-    _admit_gaussian_mixture(estimator)
-    if method not in ('score_samples', 'predict_proba', 'predict'):
+    # One native call (`family_par_run`, driver `gmm_predict`): the plain
+    # scoring E-step's rows on the selected devices.
+    if type(estimator) is not _mix.GaussianMixture:
+        raise TypeError('requires mojolearn.GaussianMixture')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel GaussianMixture requires IDENTICAL numeric mode')
+    if method not in _GMM_PREDICT:
         raise ValueError('method must be predict, predict_proba or score_samples')
     if not hasattr(estimator, 'weights_'):
         raise ValueError('GaussianMixture is not fitted')
     X, _ = as_f32_c(X, ndim=2, name='X')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('gmm_predict', estimator, (method, X))])[0]
-    finally:
-        pool.close()
-    # the worker's raw result; the plain method's public conversion for our caller
-    return public_method_result(estimator, method, result, sys._getframe(1))
+    return public_method_result(estimator, method,
+                                _FAMILY(estimator, 'family_par_run',
+                                        ('gmm_predict', devices, _GMM_PREDICT[method], (estimator._bind(), X),
+                                         None, None, _backend.plan_bindings(('_mojolearn_mixture',))),
+                                        _FAMILY_CONTEXT),
+                                sys._getframe(1))
 
 
-def _resample_parallel(name, devices, kwargs):
-    if kwargs.get('numeric_mode') not in (None, 'identical'):
-        raise ValueError('parallel resampling requires IDENTICAL numeric mode')
-    kwargs = {k: v for k, v in kwargs.items() if k != 'numeric_mode'}  # glue: drops one keyword argument
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        return pool.map([('resample', None, (name, kwargs))])[0]
-    finally:
-        pool.close()
-
-
-def bootstrap(data, *, devices=(0,), **kwargs):
+def bootstrap(data, *, devices=(0,), statistic="mean", n_resamples=9999, confidence_level=0.95,
+              method="percentile", alternative="two-sided", random_state=0, q_or_prop=0.5, r_first=0,
+              numeric_mode=None, paired=True):
     """:func:`mojolearn.resample.bootstrap` with the replicates spread across GPUs.
 
     Parameters
@@ -659,24 +635,31 @@ def bootstrap(data, *, devices=(0,), **kwargs):
         The sample, as in :func:`mojolearn.resample.bootstrap`.
     devices : tuple of int, default=(0,)
         Distinct GPU indices.
-    **kwargs
-        Every other argument of :func:`mojolearn.resample.bootstrap`.
+    statistic, n_resamples, confidence_level, method, alternative, random_state, q_or_prop, r_first, numeric_mode, paired
+        As in :func:`mojolearn.resample.bootstrap`.
 
     Returns
     -------
     BootstrapResult
-        Equal to ``mojolearn.resample.bootstrap(data, **kwargs)``.
+        Equal to ``mojolearn.resample.bootstrap(data, ...)`` with the same arguments.
     """
-    # `mojolearn.resample.bootstrap` with global replicate ranges on the GPUs.
-    #
-    # Replicate r is a pure function of (seed, r, data) (the r_first handle), so
-    # owners compute contiguous ranges of global replicate IDs and the root
+    # One native call (`family_par_run`, driver `resample`): the plain
+    # bootstrap with global replicate ranges on the selected devices.
+    # Replicate r is a pure function of (seed, r, data) (the r_first handle),
+    # so owners compute contiguous ranges of global replicate IDs and the root
     # assembles the distribution in order, then sorts it and computes the point
     # estimate, interval and standard error exactly as one device does.
-    return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))
+    if numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel resampling requires IDENTICAL numeric mode')
+    return _FAMILY(None, 'family_par_run',
+                   ('resample', devices, 'family_rs_bootstrap',
+                    (_backend.binding('_mojolearn_resample', 'identical'), data, statistic, n_resamples,
+                     confidence_level, method, alternative, random_state, q_or_prop, r_first, 'identical', paired),
+                    None, None, _backend.plan_bindings(('_mojolearn_resample',))), _FAMILY_CONTEXT)
 
 
-def permutation_test(x, y, *, devices=(0,), **kwargs):
+def permutation_test(x, y, *, devices=(0,), statistic="diff_means", n_resamples=9999, alternative="two-sided",
+                     random_state=0, r_first=0, numeric_mode=None, permutation_type="independent"):
     """:func:`mojolearn.resample.permutation_test` with the permutations spread across GPUs.
 
     Parameters
@@ -685,19 +668,27 @@ def permutation_test(x, y, *, devices=(0,), **kwargs):
         The two samples.
     devices : tuple of int, default=(0,)
         Distinct GPU indices.
-    **kwargs
-        Every other argument of :func:`mojolearn.resample.permutation_test`.
+    statistic, n_resamples, alternative, random_state, r_first, numeric_mode, permutation_type
+        As in :func:`mojolearn.resample.permutation_test`.
 
     Returns
     -------
     PermutationTestResult
-        Equal to ``mojolearn.resample.permutation_test(x, y, **kwargs)``.
+        Equal to ``mojolearn.resample.permutation_test(x, y, ...)`` with the same arguments.
     """
-    # `mojolearn.resample.permutation_test` with global permutation ranges.
-    return _resample_parallel('permutation_test', devices, dict(kwargs, x=x, y=y))
+    # One native call (`family_par_run`, driver `resample`): global
+    # permutation ranges on the selected devices.
+    if numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel resampling requires IDENTICAL numeric mode')
+    return _FAMILY(None, 'family_par_run',
+                   ('resample', devices, 'family_rs_permutation_test',
+                    (_backend.binding('_mojolearn_resample', 'identical'), x, y, statistic, n_resamples, alternative,
+                     random_state, r_first, 'identical', permutation_type),
+                    None, None, _backend.plan_bindings(('_mojolearn_resample',))), _FAMILY_CONTEXT)
 
 
-def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), **kwargs):
+def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), random_state=0, i_first=0,
+                          numeric_mode=None):
     """:func:`mojolearn.resample.monte_carlo_integrate` with the samples spread across GPUs.
 
     Parameters
@@ -706,20 +697,24 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), *
         As in :func:`mojolearn.resample.monte_carlo_integrate`.
     devices : tuple of int, default=(0,)
         Distinct GPU indices.
-    **kwargs
-        Every other argument of :func:`mojolearn.resample.monte_carlo_integrate`.
+    random_state, i_first, numeric_mode
+        As in :func:`mojolearn.resample.monte_carlo_integrate`.
 
     Returns
     -------
     MonteCarloResult
         Equal to the one-GPU result.
     """
-    # `mojolearn.resample.monte_carlo_integrate` with whole sample chunks.
-    #
-    # Owners draw global sample IDs from aligned PINNED_SUM_W chunks; the root
-    # folds the chunk partials in order and forms the integral as one device does.
-    return _resample_parallel('monte_carlo_integrate', devices,
-                              dict(kwargs, integrand=integrand, lower=lower, upper=upper, n_samples=n_samples))
+    # One native call (`family_par_run`, driver `resample`): owners draw
+    # global sample IDs from aligned PINNED_SUM_W chunks; the root folds the
+    # chunk partials in order and forms the integral as one device does.
+    if numeric_mode not in (None, 'identical'):
+        raise ValueError('parallel resampling requires IDENTICAL numeric mode')
+    return _FAMILY(None, 'family_par_run',
+                   ('resample', devices, 'family_rs_monte_carlo_integrate',
+                    (_backend.binding('_mojolearn_resample', 'identical'), integrand, lower, upper, n_samples,
+                     random_state, i_first, 'identical'),
+                    None, None, _backend.plan_bindings(('_mojolearn_resample',))), _FAMILY_CONTEXT)
 
 
 def fit_hdbscan(estimator, X, *, devices=(0,)):
@@ -739,26 +734,17 @@ def fit_hdbscan(estimator, X, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # HDBSCAN with distributed core-distance k-NN rows and dense distance rows.
-    #
-    # The k-NN query rows use the neighbors row driver and the m x m pairwise
-    # distance matrix uses the hierarchy row driver, each with its original
-    # per-row arithmetic and byte gather. The mutual reachability cells, the
-    # Boruvka MST, the dendrogram, the condensed hierarchy and cluster selection
-    # stay on the root in their original order.
-    from .hdbscan import HDBSCAN
-    if type(estimator) is not HDBSCAN:
+    # One native call (`family_par_run`, driver `hdbscan_fit`): the plain
+    # HDBSCAN fit with its core-distance neighbor rows and pairwise distance
+    # rows on the selected devices.
+    if type(estimator) is not _hdb.HDBSCAN:
         raise TypeError('fit_hdbscan requires mojolearn.HDBSCAN')
     if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
         raise ValueError('parallel HDBSCAN requires IDENTICAL numeric mode')
     X, _ = as_f32_c(X, ndim=2, name='X')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('hdbscan_fit', estimator, (X,))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    return _FAMILY(estimator, 'family_par_run',
+                   ('hdbscan_fit', devices, 'family_cfa_hdbscan_fit', (estimator._bind(), X), None, None,
+                    _backend.plan_bindings(('_mojolearn_hdbscan', '_mojolearn_solver'))), _FAMILY_CONTEXT)
 
 
 def fit_cholesky(estimator, A, *, devices=(0,)):

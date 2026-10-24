@@ -36,6 +36,28 @@ DRIVERS = (
      "bindings/_mojolearn_gp.mojo"),
     ("parallel_classical", "predict_gaussian_process", "family_par_run", "bindings/family_native.mojo",
      "bindings/_mojolearn_gp.mojo"),
+    ("parallel_classical", "fit_logistic", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_estimators.mojo"),
+    ("parallel_classical", "fit_coordinate_descent", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_solver.mojo"),
+    ("parallel_classical", "fit_gram_estimator", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_estimators.mojo"),
+    ("parallel_classical", "fit_kmeans", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn.mojo"),
+    ("parallel_classical", "fit_dbscan", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_estimators.mojo"),
+    ("parallel_classical", "fit_gaussian_mixture", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_mixture.mojo"),
+    ("parallel_classical", "predict_gaussian_mixture", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_mixture.mojo"),
+    ("parallel_classical", "fit_hdbscan", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_hdbscan.mojo"),
+    ("parallel_classical", "bootstrap", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_resample.mojo"),
+    ("parallel_classical", "permutation_test", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_resample.mojo"),
+    ("parallel_classical", "monte_carlo_integrate", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_resample.mojo"),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
@@ -44,6 +66,15 @@ PAR_RUN = (
     ("svm_predict", ("family_svc_svc_predict", "family_svc_svc_decision", "family_svc_svr_predict")),
     ("gp_fit", ("family_gp_gpr_fit",)),
     ("gp_predict", ("family_gp_gpr_predict",)),
+    ("glm_fit", ("fit",)),
+    ("solver_fit", ("cd_fit",)),
+    ("gram_fit", ("ols_fit", "ridge_fit", "fit")),
+    ("kmeans_fit", ("family_kmeans_fit",)),
+    ("dbscan_fit", ("family_cfb_dbscan_fit",)),
+    ("gmm_fit", ("family_mix_gmm_fit",)),
+    ("gmm_predict", ("family_mix_gmm_score_samples", "family_mix_gmm_predict_proba", "family_mix_gmm_predict")),
+    ("hdbscan_fit", ("family_cfa_hdbscan_fit",)),
+    ("resample", ("family_rs_bootstrap", "family_rs_permutation_test", "family_rs_monte_carlo_integrate")),
 )
 
 
@@ -139,5 +170,6 @@ def test_worker_serves_no_migrated_operation():
         return
     source = worker.read_text(encoding="utf-8")
     for op in ("'km_fit'", "'km_apply'", "'cholesky_fit'", "'cholesky_solve'", "'svm_fit'", "'svm_predict'",
-               "'gp_fit'", "'gp_predict'"):
+               "'gp_fit'", "'gp_predict'", "'gram_fit'", "'solver_fit'", "'glm_fit'", "'kmeans_fit'",
+               "'dbscan_fit'", "'gmm_fit'", "'resample'", "'hdbscan_fit'"):
         assert "operation == " + op not in source and "operation in (" + op not in source, op
