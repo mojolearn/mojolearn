@@ -1535,3 +1535,8 @@ _connect_host_inference()
 # explicit CPU owner's attribute layout even in a package with GPU bindings.
 from ._native_logistic_bridge import connect_public as _connect_logistic_public
 _connect_logistic_public(HostLogisticRegression, _LR_CONTEXT, install=False)
+
+# Complete fixed recipes are connected only after every host owner and class
+# descriptor above has finished setup. Public prediction performs no imports.
+from ._native_host_archive_predict import connect as _connect_archive_prediction
+_connect_archive_prediction(_CLASSICAL, globals())
