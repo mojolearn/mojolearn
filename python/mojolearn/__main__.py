@@ -345,14 +345,15 @@ def build_parser():
                         "with MOJOLEARN_PAR_DEVICES=0,1, and compares it cell "
                         "for cell with the one-device values the shipped "
                         "reference table records. The two-device column is "
-                        "WITNESSED: every device pool it starts is inventoried, "
+                        "WITNESSED: every device plan it binds and every worker "
+                        "pool it starts is inventoried, "
                         "and a column that never sharded is refused instead of "
                         "reported as agreement. 'quick' is one lane per family, "
                         "the default is all 59 par-* lanes on the base fixture, "
                         "'all' runs the same lanes over all nine fixtures. "
                         "--fixtures overrides the fixtures in every mode. Apple is "
-                        "refused structurally: DevicePool admits metal only at "
-                        "one device")
+                        "refused structurally: the native drivers admit metal only "
+                        "at device zero")
     v.add_argument("--par-devices", dest="par_devices", default="",
                    help="with --par: the device group the second column runs "
                         "on, comma separated, at least two distinct indices "

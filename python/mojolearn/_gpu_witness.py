@@ -76,7 +76,7 @@ def worker_process_inventory():
     2026-09-20), and it is NOT a device inventory and must never be read as
     one. `visible_gpu_inventory` above asks a vendor driver which physical
     GPUs this process can see; there is no such question on a CPU-only
-    install, where `DevicePool` gives a worker no visibility mask at all and
+    install, where the native local pool gives a worker no visibility mask and
     a "device index" means one worker process. So this records the one fact
     that IS true there -- which OS process answered -- under its own `kind`,
     so a reader who mistakes the two has to ignore the word `process` in

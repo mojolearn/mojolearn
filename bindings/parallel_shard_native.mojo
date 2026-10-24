@@ -41,7 +41,7 @@ from bindings.native_transport import transport_close
 from bindings.native_codec import codec_initialize
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
-    shard_model, shard_array, shard_join_rows, shard_row_vector,
+    shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
@@ -298,10 +298,12 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
 
 # ---------------------------------------------------------------- GaussianProcessClassifier
 
-def _gpc_admit(estimator: PythonObject, context: PythonObject) raises:
+def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonObject:
     """`parallel_gaussian_process._validate`: the class, IDENTICAL, then the
-    native parameter validation (which sets `_kernel` and
-    `_max_iter_predict`)."""
+    native parameter validation on a copy (`copy.copy(estimator)._validate_params()`),
+    which is returned: it carries the validated `_kernel` and
+    `_max_iter_predict` while the estimator itself is untouched until a fit
+    publishes."""
     if py_type(estimator) is not _t("gpc_class"):
         raise Error("TypeError: requires mojolearn.GaussianProcessClassifier")
     var fields = py_fields(estimator)
@@ -311,7 +313,9 @@ def _gpc_admit(estimator: PythonObject, context: PythonObject) raises:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str or String(mode) != "identical":
         raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
-    gpc_validate(estimator, context)
+    var work = shard_model(py_type(estimator), py_call(b.dict, fields))
+    gpc_validate(work, context)
+    return work
 
 
 def _fit_gpc(args: PythonObject) raises -> PythonObject:
@@ -321,7 +325,7 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var estimator = args[0]
-    _gpc_admit(estimator, context)
+    var work = py_fields(_gpc_admit(estimator, context))
     var fields = py_fields(estimator)
     var source = family_as_f32(args[1], 2, "X", context)
     var copied = not (source is args[1])
@@ -339,11 +343,11 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     else:
         for k in range(len(classes)):  # driver-loop: over the one-vs-rest classes
             _ = py_call(columns.append, PythonObject(k))
-    var arrays = gp_kernel_arrays(fields["_kernel"], context)
+    var arrays = gp_kernel_arrays(work["_kernel"], context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
-    var max_iter = fields["_max_iter_predict"]
+    var max_iter = work["_max_iter_predict"]
     _ = shard_devices(args[3])
     var requests = b.list()
     for i in range(len(columns)):  # driver-loop: one worker request per class column
@@ -356,10 +360,12 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
         _ = py_call(fits.append, _gpc_binary(context, f["y_train_"], f["L_"], f["pi_"], f["W_sr_"],
                                              Float64(py=f["log_marginal_likelihood_value_"]), Int(py=f["n_iter_"]),
                                              Int(py=f["nb_"])))
-    # `_fresh(estimator)` carried the kernel, max_iter_predict and IDENTICAL
-    py_setitem(fields, "numeric_mode", "identical")
-    py_setitem(fields, "input_copied_", copied)
-    _gpc_set_fitted(fields, x, classes, fits, context)
+    # published only now that every class fitted: `_fresh(estimator)` carried
+    # the validated kernel, max_iter_predict and IDENTICAL
+    py_setitem(work, "numeric_mode", "identical")
+    py_setitem(work, "input_copied_", copied)
+    _gpc_set_fitted(work, x, classes, fits, context)
+    _ = py_call(fields.update, work)
     return estimator
 
 
@@ -371,7 +377,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var b = shard_b()
     var context = _ctx()
     var estimator = args[0]
-    _gpc_admit(estimator, context)
+    var work = py_fields(_gpc_admit(estimator, context))
     var method = args[3]
     if py_type(method) is not b.str or (String(method) != "predict" and String(method) != "predict_proba"):
         raise Error("ValueError: method must be predict or predict_proba")
@@ -388,7 +394,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var out_kind = 0
     if n_classes == 2:
         out_kind = 2 if proba_method else 1
-    var arrays = gp_kernel_arrays(fields["_kernel"], context)
+    var arrays = gp_kernel_arrays(work["_kernel"], context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
@@ -556,11 +562,11 @@ def _rebase_offsets(arrays: PythonObject, context: PythonObject) raises -> Pytho
 
 def _pool_open(devices: PythonObject) raises -> PythonObject:
     _ = shard_devices(devices)
-    return process_pool_create(devices, False, _CHILD)
+    return shard_open(devices, _CHILD)
 
 
 def _map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
-    var result = process_pool_map(pool, requests)
+    var result = shard_map(pool, requests)
     if len(result) != len(requests):
         raise Error("ValueError: shard workers returned an incomplete batch")
     return result
@@ -875,7 +881,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     if status != 0:
         raise Error("ValueError: invalid global IVF list offsets")
     var devices = all_devices[py_call(b.slice, PythonObject(None), PythonObject(n))]
-    var pool = process_pool_create(devices, False, _CHILD)
+    var pool = shard_open(devices, _CHILD)
     var obj = py_call(b.object.__new__, args[0])
     var own = py_fields(obj)
     py_setitem(own, "_pool", pool)
@@ -1000,6 +1006,8 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     """One shard: its model rebuilt natively from the state record, then the
     plain native owner."""
     var b = shard_b()
+    if len(request) == 1 and String(request[0]) == "identity":
+        return shard_identity()
     var context = _ctx()
     if len(request) != 3:
         raise Error("parallel shards: invalid worker request envelope")
@@ -1104,6 +1112,10 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         return _predict_gpc(args)
     if operation == "fit_forest":
         return _fit_forest(args)
+    if operation == "trace_take":
+        return shard_trace_take()
+    if operation == "faults_take":
+        return PythonObject(shard_faults_take())
     if operation == "pool_open":
         return _pool_open(args[0])
     if operation == "pool_close":

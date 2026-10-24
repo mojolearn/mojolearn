@@ -4,7 +4,7 @@
 points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -119,6 +119,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
         m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
         m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")

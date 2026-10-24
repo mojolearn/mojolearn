@@ -23,13 +23,15 @@ PLACED at the true offset. Inert at one device.
 
 No floating-point value is computed here: copies only.
 """
+from std.ffi import _Global, external_call
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
-from bindings.native_process_pool import process_pool_create, process_pool_map, process_pool_close
+from bindings.native_process_pool import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
+from bindings.native_worker_inventory import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native import tsa_array
 
 
@@ -87,13 +89,142 @@ def shard_read_shift(index: Int, first: Int, n_devices: Int) -> Int:
     return 0
 
 
+struct ShardTrace(Defaultable, Movable):
+    var records: PythonObject
+    var faults: Int
+
+    def __init__(out self):
+        self.records = PythonObject(None)
+        self.faults = 0
+
+
+#: Every pool the sharded drivers started in this process since the last
+#: `shard_trace_take`: its devices and its workers' own driver inventories
+#: (the record the verifier's two-device witness reads,
+#: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
+comptime SHARD_TRACE = _Global[StorageType=ShardTrace, name="MojoParallelShardTrace", init_fn=ShardTrace.__init__]
+
+
+def shard_identity() raises -> PythonObject:
+    """A worker's answer to an identity request: its own process and the
+    devices its visibility mask leaves it (bindings/native_worker_inventory.mojo)."""
+    var p = PROCESS_BOUNDARY.get_or_create_ptr()
+    return native_worker_inventory(p[].vendor, p[].environ)
+
+
+def shard_open(devices: PythonObject, child: String) raises -> PythonObject:
+    """A started pool of one worker per device whose placement is admitted:
+    every worker answers an identity request first, and the replies must be
+    distinct processes started here and, on CUDA and HIP, distinct physical
+    GPUs, one per worker (`native_require_worker_inventory`, the CV pool's
+    rule). The pool and its inventory are recorded in the trace."""
+    var b = shard_b()
+    var pool = process_pool_create(devices, False, child)
+    var requests = b.list()
+    for i in range(len(devices)):  # driver-loop: one identity request per worker
+        _ = py_call(requests.append, Python.tuple("identity"))
+    var identities = process_pool_map(pool, requests)
+    var pids = b.list()
+    for i in range(len(pool["workers"])):  # driver-loop: over the spawned workers
+        _ = py_call(pids.append, pool["workers"][i]["pid"])
+    var p = PROCESS_BOUNDARY.get_or_create_ptr()
+    try:
+        native_require_worker_inventory(identities, p[].vendor, pids, Int(external_call["getpid", Int32]()))
+    except error:
+        process_pool_close(pool)
+        raise error^
+    var t = SHARD_TRACE.get_or_create_ptr()
+    if t[].records is None:
+        t[].records = b.list()
+    var record = b.dict()
+    py_setitem(record, "devices", py_call(b.list, devices))
+    py_setitem(record, "inventory", identities)
+    py_setitem(record, "calls", b.list())
+    py_setitem(pool, "trace_record", record)
+    _ = py_call(t[].records.append, record)
+    if len(t[].records) > 256:
+        _ = py_call(t[].records.pop, 0)
+    return pool
+
+
+def shard_trace_take() raises -> PythonObject:
+    """The pools recorded since the last take, and an empty trace."""
+    var t = SHARD_TRACE.get_or_create_ptr()
+    var out = t[].records
+    t[].records = shard_b().list()
+    return shard_b().list() if out is None else out
+
+
+def shard_faults_take() -> Int:
+    """How many transport faults the verifier's switch injected since the
+    last take (`shard_map`), and zero."""
+    var t = SHARD_TRACE.get_or_create_ptr()
+    var n = t[].faults
+    t[].faults = 0
+    return n
+
+
+def _operation(request: PythonObject) raises -> String:
+    var name = String(request[0])
+    if name == "py":
+        return String(request[1])
+    return name
+
+
+def _numerical(name: String) -> Bool:
+    return (name == "arima_predict_shard" or name == "hw_predict_shard" or name == "gpc_class_fit"
+            or name == "gpc_class_predict" or name == "ivf_search" or name == "rbf_rows"
+            or name == "scaler_fit" or name == "scaler_transform" or name == "forest_fit"
+            or name == "arima_fit_shard" or name == "hw_fit_shard" or name == "reference_shard"
+            or name == "query_rows")
+
+
+def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
+    """`process_pool_map(pool, requests)`, with every request's worker and
+    operation added to the pool's trace record.
+
+    THE TRANSPORT NEGATIVE CONTROL (python/mojolearn/_verify_distributed.py):
+    with MOJOLEARN_PAR_TRANSPORT_FAULT=drop_result or reverse_results and
+    MOJOLEARN_HOST_ALLOW_SABOTAGE=1, the first numerical batch of more than
+    one result in this process is returned without its last result or in
+    reverse order, once. The driver's own checks or the hash must catch it.
+    No build, workflow or gate sets either variable."""
+    var b = shard_b()
+    var results = process_pool_map(pool, requests)
+    var record = py_get(pool, PythonObject("trace_record"), PythonObject(None))
+    var workers = pool["workers"]
+    if record is not None and len(workers) > 0:
+        for i in range(len(requests)):  # driver-loop: one trace entry per request
+            var call = b.dict()
+            py_setitem(call, "pid", workers[i % len(workers)]["pid"])
+            py_setitem(call, "operation", _operation(requests[i]))
+            _ = py_call(record["calls"].append, call)
+    if len(results) > 1 and len(requests) > 0 and _numerical(_operation(requests[0])):
+        var fault = String()
+        try:
+            if String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1":
+                fault = String(getenv("MOJOLEARN_PAR_TRANSPORT_FAULT"))
+        except:
+            fault = String()
+        var t = SHARD_TRACE.get_or_create_ptr()
+        if t[].faults == 0 and (fault == "drop_result" or fault == "reverse_results"):
+            t[].faults = 1
+            var altered = py_call(b.list, results)
+            if fault == "drop_result":
+                _ = py_call(altered.pop)
+            else:
+                _ = py_call(altered.reverse)
+            return altered
+    return results
+
+
 def shard_run(requests: PythonObject, devices: PythonObject, child: String) raises -> PythonObject:
     """The workers' results in request order (waves of len(devices), wave
     position j on worker j); the pool always closes."""
-    var pool = process_pool_create(devices, False, child)
+    var pool = shard_open(devices, child)
     var results = PythonObject(None)
     try:
-        results = process_pool_map(pool, requests)
+        results = shard_map(pool, requests)
     except error:
         process_pool_close(pool)
         raise error^

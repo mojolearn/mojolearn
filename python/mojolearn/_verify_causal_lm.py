@@ -153,8 +153,7 @@ def capture(device='cpu', formats=('float32',), *, layer_devices=None):
         result['native_fault'] = bool(binding.neural_host_sabotage())
     result['source_sha256'] = hashlib.sha256(b''.join(path.read_bytes() for path in
         (Path(__file__), Path(fixtures.__file__), Path(__file__).parent / 'models' / 'causal_lm.py',
-         Path(__file__).parent / 'models' / 'parallel_causal_lm.py',
-         Path(__file__).parent / '_causal_lm_worker.py'))).hexdigest()
+         Path(__file__).parent / 'models' / 'parallel_causal_lm.py'))).hexdigest()
     try:
         result['capture_commit'] = subprocess.check_output(
             ['git', 'rev-parse', 'HEAD'], cwd=Path(__file__).parent, text=True, stderr=subprocess.DEVNULL).strip()

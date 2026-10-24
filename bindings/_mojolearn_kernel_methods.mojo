@@ -41,7 +41,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.identity_trace import IdentityTrace
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from kernel_methods.estimator import (
     KernelRidgeModel,
     NystroemModel,
@@ -798,6 +798,7 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         )
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[kernel_methods_vendor_binding]("kernel_methods_vendor")
         m.def_function[kernel_methods_numeric_mode_binding](
             "kernel_methods_numeric_mode"

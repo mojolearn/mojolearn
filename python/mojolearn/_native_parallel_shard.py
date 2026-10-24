@@ -9,6 +9,15 @@ from .tokenizer import _binding
 
 _native_parallel_shard = _binding()._module.parallel_shard_call
 
+#: Every GPU binding whose owner loops read a device plan and which registers
+#: `device_plan_enter` / `device_plan_exit` / `device_plan_log`
+#: (bindings/device_plan_binding.mojo).
+PLAN_BINDINGS = ('_mojolearn', '_mojolearn_estimators', '_mojolearn_gbdt', '_mojolearn_hdbscan', '_mojolearn_ivf',
+                 '_mojolearn_linalg', '_mojolearn_metrics', '_mojolearn_mixture', '_mojolearn_resample',
+                 '_mojolearn_rf', '_mojolearn_solver', '_mojolearn_trees', '_mojolearn_x_ann', '_mojolearn_x_cluster',
+                 '_mojolearn_x_decomp', '_mojolearn_x_linear', '_mojolearn_x_neighbors', '_mojolearn_kernel_methods',
+                 '_mojolearn_gp', '_mojolearn_svm')
+
 
 def register(**fixed):
     """Add one driver module's fixed tables to the owner, once, at import."""

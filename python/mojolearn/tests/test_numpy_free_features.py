@@ -90,44 +90,32 @@ def test_token_batch_prefetch_is_ordered_bounded_and_propagates(monkeypatch, tmp
 
 
 @pytest.mark.parametrize('shard_rows', [1, 3, 20])
-@pytest.mark.parametrize('fault', [None, 'width', 'missing', 'worker'])
+@pytest.mark.parametrize('fault', [None, 'drop_result', 'reverse_results'])
 def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, shard_rows, fault):
-    expected = np.arange(35, dtype='<f4').reshape(7, 5)[::-1]
-    x = Array.from_list(expected.tolist(), '<f4')
-    model = RBFSampler(n_components=5)
-    model.n_features_in_ = 5
-    model.random_weights_ = Array((5, 5), '<f4')
-    seen, closed = [], []
-
-    class Pool:
-        def __init__(self, devices):
-            pass
-
-        def map(self, requests):
-            parts = []
-            for operation, estimator, (shard,) in requests:
-                assert operation == 'rbf_sampler_rows' and estimator is model
-                seen.append(shard)
-                parts.append(shard.copy())
-            if fault == 'worker':
-                raise RuntimeError('test worker failure')
-            if fault == 'width':
-                parts[0] = Array((1, 4), '<f4')
-            if fault == 'missing':
-                parts.pop()
-            return parts
-
-        def close(self):
-            closed.append(True)
-
-    monkeypatch.setattr(parallel_classical, 'DevicePool', Pool)
+    # transform_rbf_sampler is one native call (bindings/parallel_shard_native.mojo);
+    # it needs no NumPy, joins row blocks in input order, and its checks or
+    # the bytes catch a dropped or reordered block (the transport negative
+    # control, bindings/parallel_shard_common.mojo `shard_map`).
+    from mojolearn._native_parallel_shard import _native_parallel_shard
+    rows = np.arange(35, dtype='<f4').reshape(7, 5)[::-1]
+    x = Array.from_list(rows.tolist(), '<f4')
+    from mojolearn._cpu_reference import reference_training
+    with reference_training():
+        model = RBFSampler(n_components=5, random_state=3).fit(x)
+    expected = model.transform(x)
+    if fault:
+        monkeypatch.setenv('MOJOLEARN_PAR_TRANSPORT_FAULT', fault)
+        monkeypatch.setenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', '1')
+    _native_parallel_shard('faults_take', ())
     with no_numpy():
-        if fault:
-            with pytest.raises(RuntimeError if fault == 'worker' else ValueError):
+        if fault == 'drop_result' and len(range(0, 7, shard_rows)) > 1:
+            with pytest.raises(ValueError):
                 parallel_classical.transform_rbf_sampler(model, x, rows_per_shard=shard_rows)
         else:
             result = parallel_classical.transform_rbf_sampler(model, x, rows_per_shard=shard_rows)
             assert isinstance(result, Array)
-            assert result.tobytes() == expected.tobytes()
-    assert closed == [True]
-    assert b''.join(shard.tobytes() for shard in seen) == expected.tobytes()
+            if fault == 'reverse_results' and len(range(0, 7, shard_rows)) > 1:
+                assert result.tobytes() != expected.tobytes()
+            else:
+                assert result.tobytes() == expected.tobytes()
+    assert _native_parallel_shard('faults_take', ()) == (1 if fault and len(range(0, 7, shard_rows)) > 1 else 0)

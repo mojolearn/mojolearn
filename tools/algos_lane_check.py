@@ -63,11 +63,11 @@ column (`identity_break._par_devices`, `verify --par`). So:
     one device in both columns BY DESIGN; its agreement says nothing about
     sharding and reads NOT APPLICABLE (one device by design), while a
     difference still reads DISAGREE.
-  * On a box with fewer than two GPUs (every Mac: `DevicePool` admits metal
+  * On a box with fewer than two GPUs (every Mac: the native drivers admit metal
     only at group (0,); a 1-GPU pod; a 1-GPU queue slot) the two-device
     claim CANNOT be checked. The lane runs GPU vs CPU as before. When its CPU
     arm is the declared by-design refusal of the cooperative multi-GPU driver
-    (CPU_BY_DESIGN_REFUSAL, from `_parallel_pool._cpu_refusal`) it reads NOT
+    (CPU_BY_DESIGN_REFUSAL, from the native drivers' `plan_devices`) it reads NOT
     APPLICABLE (needs 2 devices), ONLY when all of these hold: the CPU arm
     wrote its JSON; EVERY cell of the lane in it REFUSED with that sentence;
     and the GPU arm exited 0 with a real train hash on every fixture. Anything
@@ -104,7 +104,7 @@ HARNESS = ROOT / "tools" / "identity_break.py"
 PARTS = ("infer", "model", "batch", "rlpair", "batchgrad", "batchscale", "ragged", "stepfull")
 DISAGREEING = ("DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED")
 #: The declared sentence of the cooperative multi-GPU driver's CPU refusal
-#: (python/mojolearn/_parallel_pool.py `_cpu_refusal`); see KNOWN CPU REFUSAL.
+#: (bindings/parallel_plan_door.mojo `plan_devices`); see KNOWN CPU REFUSAL.
 CPU_BY_DESIGN_REFUSAL = "no CPU implementation of the cooperative multi-GPU driver"
 #: The verdict of a lane whose claim this box cannot check (see `par-*` LANES).
 NOT_APPLICABLE = "NOT APPLICABLE"
@@ -364,7 +364,7 @@ _DEVICE_COUNT = {}
 
 def device_count(backend):
     """How many GPUs this box shows the arms (asked once per process). Metal
-    is ONE by structure: `DevicePool._start` admits it only at group (0,), so
+    is ONE by structure: the native drivers admit it only at group (0,), so
     no Mac can produce a two-device column (`_verify_par.refuse_to_run`).
     CUDA and HIP run python/mojolearn/_gpu_witness.py AS A SCRIPT in a child
     (it imports only ctypes, so no binding has to be built yet), which honors

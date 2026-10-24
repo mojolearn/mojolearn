@@ -32,7 +32,7 @@ from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _
 from bindings.tsa_arima_native import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common import (
     shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state, shard_model,
-    shard_array,
+    shard_array, shard_identity,
 )
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 
@@ -94,18 +94,9 @@ def _devices(devices: PythonObject) raises:
 
 
 def _run(requests: PythonObject, devices: PythonObject) raises -> PythonObject:
-    """`_run`: the pool's results in request order; the pool always closes."""
-    var pool = process_pool_create(devices, False, _CHILD)
-    var results = PythonObject(None)
-    try:
-        results = process_pool_map(pool, requests)
-    except error:
-        process_pool_close(pool)
-        raise error^
-    process_pool_close(pool)
-    if len(results) != len(requests):
-        raise Error("ValueError: forecast workers returned an incomplete batch")
-    return results
+    """`_run`: the pool's results in request order (an admitted, traced pool,
+    bindings/parallel_shard_common.mojo `shard_run`); the pool always closes."""
+    return shard_run(requests, devices, _CHILD)
 
 
 def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObject) raises -> PythonObject:
@@ -457,6 +448,8 @@ def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
     native predict over (start, end)."""
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
+    if len(request) == 1 and String(request[0]) == "identity":
+        return shard_identity()
     if len(request) != 3:
         raise Error("parallel forecasting: invalid worker request envelope")
     var operation = String(request[0])

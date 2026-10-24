@@ -6,7 +6,7 @@ One call, `x_cluster_call(which, x_addr, x_len, a_addr, a_len, ip, fp)`, runs
 `x_cluster/entries.mojo::run_entry` on `x_cluster.device_ops.DeviceOps`. The
 CPU host binding `_mojolearn_x_cluster_host` exports the same names with the
 same contract over `HostOps`."""
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -148,6 +148,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[mbk_devscan_binding]("x_cluster_mbk_devscan")
         m.def_function[mbk_policy_binding]("x_cluster_mbk_policy")

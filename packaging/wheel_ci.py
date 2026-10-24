@@ -140,9 +140,20 @@ def inventory(argv):
         doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
         if "PREPARED AND NOT EXPOSED" in doc.split("\n", 1)[0] and f"`{stem}.py`" in init_text:
             queue.append(stem)
-    # A module a package module launches as `python -m <pkg>.<module>` (the
-    # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
-    # that module, though no import statement names it.
+    # A module the native local process pool launches as `python -m
+    # <pkg>.<module>` (bindings/native_process_pool.mojo; the child module
+    # names are string literals in the binding sources, e.g.
+    # "mojolearn._native_parallel_shard_worker") is reached by the binding,
+    # though no Python import statement names it.
+    bindings_dir = pkgdir.parent.parent / "bindings"
+    if bindings_dir.is_dir():
+        child = re.compile(r'"' + re.escape(pkg) + r'\.([A-Za-z_][A-Za-z0-9_]*)"')
+        for src in sorted(bindings_dir.glob("*.mojo")):
+            for name in child.findall(src.read_text(encoding="utf-8")):
+                if name in present:
+                    queue.append(name)
+    # A module a package module launches as `python -m <pkg>.<module>` is
+    # reached by that module, though no import statement names it.
     launched = re.compile(r"""['"]-m['"]\s*,\s*['"]""" + q + r"""\.([A-Za-z_][A-Za-z0-9_]*)['"]""")
     # A LAZY EXPORT TABLE is an import too: `_LAZY_EXPORTS = {'GARCH': ('_x_sequence_garch', 'GARCH'), ...}`
     # with a module `__getattr__` that runs `import_module("." + module, __package__)` on first access

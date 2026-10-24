@@ -149,8 +149,8 @@ def _stacks_on_timeout(process, output):
     thread's stack to its own stderr (`output`: the worker's log stream, or a
     batched cell's log path, since a batch redirects fd 2 per cell). The
     worker leads its own session, so its whole process group is signalled:
-    the parallel drivers' worker processes (`_parallel_worker`) register the
-    same handler and inherit that stderr, so a cell blocked on a driver
+    the parallel drivers' native shard workers (`_native_parallel_shard_worker`)
+    register the same handler and inherit that stderr, so a cell blocked on a driver
     worker shows where the worker stands too. A child without the handler
     ends on the signal, which is harmless: the group is killed next.
     Returns '' where this is unavailable."""

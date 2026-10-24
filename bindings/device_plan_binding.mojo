@@ -9,7 +9,9 @@ the plain owner: the plan lives in the binding's own DSO, where its owner
 loops read it (core/device_plan.mojo), bound to the calling thread."""
 from std.python import PythonObject
 
-from core.device_plan import device_plan_enter, device_plan_exit
+from std.python import Python
+from bindings.py_balanced import py_call
+from core.device_plan import device_plan_enter, device_plan_exit, device_plan_log_take
 
 
 def device_plan_enter_binding(devices: PythonObject, families: PythonObject) raises -> PythonObject:
@@ -29,3 +31,17 @@ def device_plan_exit_binding() raises -> PythonObject:
     """Release the calling thread's device plan."""
     device_plan_exit()
     return PythonObject(None)
+
+
+def device_plan_log_binding() raises -> PythonObject:
+    """The device groups bound in this binding since the last call, as a
+    list of tuples, and an empty log: the placement record the verifier's
+    two-device witness reads (python/mojolearn/_verify_par.py)."""
+    var plans = device_plan_log_take()
+    var out = Python.list()
+    for i in range(len(plans)):  # driver-loop: over the logged plans
+        var ids = Python.list()
+        for r in range(len(plans[i])):  # driver-loop: over a logged plan's ranks
+            _ = ids.append(PythonObject(plans[i][r]))
+        _ = out.append(py_call(Python.import_module("builtins").tuple, ids))
+    return out

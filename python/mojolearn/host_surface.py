@@ -575,7 +575,7 @@ TRAINING_LANE_NAMES = {
     # the driver's own Python and merged there in class order, and each shard
     # is this family's host `gpc_fit`/`gpc_predict` -- the same arithmetic the
     # two lanes above hash -- so `gpc_class_fit` and `gpc_class_predict`
-    # joined `_parallel_pool.CPU_OPERATIONS` and these two take a CPU column.
+    # joined `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` and these two take a CPU column.
     # `PUBLIC_INAPPLICABLE_PREFIXES` keeps every `par-*` lane out of the public
     # reference set, so being covered here does not make them public.
     "par-gpc-fit": "the class-sharded Gaussian process classifier fit",
@@ -1024,7 +1024,7 @@ TRAINING_LANE_NAMES = {
     # transform_scaler (four column shards), fit_arima and
     # fit_exponential_smoothing (two series per shard) run each shard as a
     # host fit in its own worker process and merge in shard order through
-    # the drivers' unchanged code (_parallel_pool.CPU_OPERATIONS); the
+    # the drivers' unchanged code (the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)); the
     # cooperative drivers refuse by name. On the M4's CPU column (one core)
     # every train, infer and batch cell of the three lanes read IDENTICAL x4
     # against the 166-lane record before the gate ran, and the sabotage set
@@ -1040,7 +1040,7 @@ TRAINING_LANE_NAMES = {
     # the driver's own ordered memcopy; nothing is split inside a binding
     # (the worker runs the bare `state.predict`, and arima/ and holtwinters/
     # name no device count and no multi_gpu module), so
-    # `_parallel_pool.CPU_OPERATIONS` admits it at any device count and the
+    # `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` admits it at any device count and the
     # shard's own predict and forecast are this family's and the tsa
     # family's host bindings. Before that all four entries refused by name
     # on every CPU install and had no lane at all.
@@ -1116,7 +1116,7 @@ TRAINING_LANE_NAMES = {
     # binding's `ivf_flat_partial_search` and `ivf_finalize_distances`,
     # which the host bindings now register from bindings/ivf_host_search.mojo
     # over `host_ivf_search`'s partial_storage arms, and which
-    # `_parallel_pool.CPU_OPERATIONS` admits, so the driver's Python
+    # `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` admits, so the driver's Python
     # partition, its local-id maps and its global merge run unchanged on a
     # CPU. Being covered means it HAS a CPU route, not that a CPU column
     # runs it: it is a multi-device driver, so tools/lane_applicability.py
@@ -3932,7 +3932,7 @@ PUBLIC_PENDING_LANES = {
     #   the wave dispatch and both merges are the driver's own Python, and
     #   each shard is the host arithmetic the covered `hf-causal-lm` and
     #   `cross-val` lanes already hash. Metal is still refused by name, since
-    #   `DevicePool` gives an Apple group no visibility mask and one-per-device
+    #   the native local pool gives an Apple group no visibility mask and one-per-device
     #   would be a sentence with nothing behind it.
     #
     # So all four are covered lanes with a CPU column, recorded in

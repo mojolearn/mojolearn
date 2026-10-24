@@ -168,7 +168,7 @@ class GaussianMixture(NumericModeMixin):
     def _extension(self):
         """This object's tier of the mixture binding, its compile-time mode
         read back (glue: binding choice). The parallel driver's workers
-        (`_parallel_worker` gmm_fit) reach the binding through it."""
+        (the multi-GPU driver's native `family_par_run`) reach the binding through it."""
         from . import _backend
         mod = self._bind()
         want = getattr(self, "numeric_mode", None) or _backend.default_mode()

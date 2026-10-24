@@ -42,6 +42,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 
 comptime DEVICE_PLAN_SLOTS = 64
 comptime DEVICE_PLAN_MAX_DEVICES = 64
+comptime DEVICE_PLAN_LOG_WORDS = 4096
 
 # THE OWNER FAMILIES A PLAN DRIVES. The cooperative worker set every
 # `_parallel_pool.DEVICE_COUNT_VARIABLES` count to the device number, and
@@ -124,6 +125,12 @@ struct _DevicePlanTable(Defaultable, Movable):
     var masks: List[Int64]
     var ids: List[Int64]
     var active: List[Int64]
+    # The placement log the verifier's two-device witness reads
+    # (`device_plan_log_take`, python/mojolearn/_verify_par.py): every bound
+    # plan's [count, id0, id1, ...], appended under `log_lock`, until full.
+    var log: List[Int64]
+    var log_used: List[Int64]
+    var log_lock: List[Int64]
 
     def __init__(out self):
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
@@ -131,6 +138,9 @@ struct _DevicePlanTable(Defaultable, Movable):
         self.masks = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.ids = List[Int64](length=DEVICE_PLAN_SLOTS * DEVICE_PLAN_MAX_DEVICES, fill=Int64(0))
         self.active = List[Int64](length=1, fill=Int64(0))
+        self.log = List[Int64](length=DEVICE_PLAN_LOG_WORDS, fill=Int64(0))
+        self.log_used = List[Int64](length=1, fill=Int64(0))
+        self.log_lock = List[Int64](length=1, fill=Int64(0))
 
 
 comptime _DEVICE_PLAN_TABLE = _Global[
@@ -199,6 +209,7 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
     _words(table[].counts)[slot] = Int64(count)
     _words(table[].masks)[slot] = Int64(families)
     _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(1))
+    _log_plan(devices)
 
 
 def device_plan_exit() raises:
@@ -255,3 +266,49 @@ def device_plan_setting(name: String, default: String = "") -> String:
         if (Int(_words(table[].masks)[slot]) & _family_bit(name)) != 0:
             return String(Int(_words(table[].counts)[slot]))
     return String(getenv(name, default))
+
+
+def _log_lock() -> MutPointer[Int64, MutUntrackedOrigin]:
+    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var lock = _words(table[].log_lock)
+    while True:  # driver-loop: spin on the placement log's lock word
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](lock, expected, Int64(1)):
+            return lock
+
+
+def _log_plan(devices: List[Int]):
+    """Append one bound plan to the placement log (dropped when full)."""
+    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var lock = _log_lock()
+    var used = Int(_words(table[].log_used)[0])
+    if used + 1 + len(devices) <= DEVICE_PLAN_LOG_WORDS:
+        var log = _words(table[].log)
+        log[used] = Int64(len(devices))
+        for r in range(len(devices)):  # driver-loop: over the plan's ranks
+            log[used + 1 + r] = Int64(devices[r])
+        _words(table[].log_used)[0] = Int64(used + 1 + len(devices))
+    Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+
+
+def device_plan_log_take() -> List[List[Int]]:
+    """The plans bound since the last take, in order, and an empty log."""
+    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var lock = _log_lock()
+    var used = Int(_words(table[].log_used)[0])
+    var log = _words(table[].log)
+    var out = List[List[Int]]()
+    var at = 0
+    while at < used:  # driver-loop: over the logged plans
+        var count = Int(log[at])
+        var ids = List[Int]()
+        for r in range(count):  # driver-loop: over a logged plan's ranks
+            ids.append(Int(log[at + 1 + r]))
+        out.append(ids^)
+        at += 1 + count
+    _words(table[].log_used)[0] = Int64(0)
+    Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+    return out^

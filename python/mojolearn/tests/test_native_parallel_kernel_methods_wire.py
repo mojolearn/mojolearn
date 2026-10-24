@@ -54,10 +54,8 @@ def test_drivers_make_exactly_one_native_call_and_open_no_pool():
 
 
 def test_worker_no_longer_serves_kernel_methods():
-    source = (PKG / "_parallel_worker.py").read_text(encoding="utf-8")
-    assert "'km_fit'" not in source.replace("# 'km_fit' / 'km_apply' moved", "")
-    assert "operation in ('km_fit', 'km_apply')" not in source
-
+    # the Python pool worker is removed: every driver is native
+    assert not (PKG / "_parallel_worker.py").exists()
 
 def test_door_dispatches_and_scopes_the_device_plan():
     door = _read("bindings/kernel_methods_native.mojo")
