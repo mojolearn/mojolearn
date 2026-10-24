@@ -60,7 +60,7 @@ desired counts remain 84 / 55 / 93. (2026-10-23: 555 / 470 / 470, 540 / 470 /
 470 with records.)
 The required checks retain essential family coverage, refuse unexplained
 widening, and validate those records. The independent forest-inference count
-53 and neural-inference count 85 remain ordinary exact assertions.
+54 and neural-inference count 89 (remeasured 2026-10-24) remain ordinary exact assertions.
 
 The neighbors generator writes two driver files and two binding files. Its
 selection must include the union of all four outputs, including callers that

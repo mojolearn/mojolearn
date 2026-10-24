@@ -1805,8 +1805,23 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
         _required_numerical_selection(path, target, required)
     # These independent pins still hold exactly. Generic-dispatch reports
     # are not a blanket exemption for any count that happens to change.
-    for rel, want in (("core/forest_inference.mojo", 53),
-                      ("python/mojolearn/neural_inference.py", 85)):
+    # REMEASURED 2026-10-24 (lane/fix-round2-seq-20261024):
+    #   forest_inference     53 -> 54  45 lanes import it; nine par-* lanes
+    #                                  (par-boosting{,-clf,-pointwise,-reg},
+    #                                  par-border-types, par-feature-freq,
+    #                                  par-iforest, par-ordered{,-rmse}) reach it
+    #                                  through the classical owner's tree
+    #                                  operations. After 8188d819d the selector
+    #                                  lost that owner (an aliased stub) and
+    #                                  answered 45; host_routes follows
+    #                                  HOST_IMPORT_ALIASES again.
+    #   neural_inference.py  85 -> 89  new lanes public-numeric-metadata,
+    #                                  public-residual-dropout,
+    #                                  public-theta-variants (8188d769f) and
+    #                                  transformer-forward-tape (551a8cd42); the
+    #                                  other 85 are the retained membership.
+    for rel, want in (("core/forest_inference.mojo", 54),
+                      ("python/mojolearn/neural_inference.py", 89)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
