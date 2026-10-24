@@ -14,7 +14,7 @@ door's `finally`). No Python frame runs: every call below is a compiled
 entry or a builtin.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.family_common import family_call
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 
@@ -78,15 +78,15 @@ def plan_exit(binding: PythonObject) raises:
     _ = family_call(py_call(b.getattr, binding, PythonObject("device_plan_exit")))
 
 
-def plan_attr(model: PythonObject, name: String) raises -> PythonObject:
-    """`getattr(model, name, None)` through the builtin."""
-    var b = Python.import_module("builtins")
-    return py_call(b.getattr, model, PythonObject(name), PythonObject(None))
+def plan_field(model: PythonObject, name: String) raises -> PythonObject:
+    """`model.__dict__.get(name)`, read without class or instance hooks (no
+    Python frame runs)."""
+    return py_get(py_fields(model), PythonObject(name), PythonObject(None))
 
 
 def plan_require_identical(model: PythonObject, message: String) raises:
     """The drivers' `numeric_mode not in (None, 'identical')` refusal."""
-    var mode = plan_attr(model, "numeric_mode")
+    var mode = plan_field(model, "numeric_mode")
     if mode is None:
         return
     var b = Python.import_module("builtins")

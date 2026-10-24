@@ -21,7 +21,7 @@
 from std.python import Python, PythonObject
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster import mcls_cluster_operation
-from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_attr, plan_require_identical
+from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_field, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
@@ -644,7 +644,7 @@ def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
     if not ridge and cls is not classes[1]:
         raise Error("TypeError: requires mojolearn.KernelRidge or Nystroem")
     plan_require_identical(model, "parallel kernel methods require IDENTICAL numeric mode")
-    var kernel = plan_attr(model, "kernel")
+    var kernel = plan_field(model, "kernel")
     if family_is_str(kernel) and String(kernel) == "laplacian":
         raise Error("ValueError: parallel kernel methods refuse kernel='laplacian' by name: its L1 "
                     + "distance matrix has no distributed row seam in this lane")
@@ -654,43 +654,39 @@ def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
 comptime _KM_REBUILD = "rebuild kernel methods binding for distributed kernel rows"
 
 
-def _km_par_binding(model: PythonObject) raises -> PythonObject:
-    """The binding the plain methods use (`_KernelMethodBase._bind`)."""
-    return family_call(plan_attr(model, "_bind"))
-
-
 def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`fit_kernel_method(estimator, X, y, devices=...)`: args (X, y, devices)."""
+    """`fit_kernel_method(estimator, X, y, devices=...)`: args (binding, X, y,
+    devices), the binding the plain methods use (`_KernelMethodBase._bind`)."""
     var ridge = _km_par_admit(model, context)
-    if ridge and args[1] is None:
+    if ridge and args[2] is None:
         raise Error("ValueError: KernelRidge fit requires y")
-    var devices = plan_devices(args[2], "km_fit", True, context)
-    var binding = _km_par_binding(model)
+    var devices = plan_devices(args[3], "km_fit", True, context)
+    var binding = args[0]
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            _krr_fit(model, Python.tuple(binding, args[0], args[1], PythonObject(None)), context)
+            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context)
         else:
-            _ = _nys_fit(model, Python.tuple(binding, args[0]), context)
+            _ = _nys_fit(model, Python.tuple(binding, args[1]), context)
     finally:
         plan_exit(binding)
     return model
 
 
 def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`apply_kernel_method(estimator, X, devices=...)`: args (X, devices).
-    The native result (float32 for KernelRidge.predict); the driver applies
-    the plain method's public conversion for its own caller."""
+    """`apply_kernel_method(estimator, X, devices=...)`: args (binding, X,
+    devices). The native result (float32 for KernelRidge.predict); the driver
+    applies the plain method's public conversion for its own caller."""
     var ridge = _km_par_admit(model, context)
-    var devices = plan_devices(args[1], "km_apply", True, context)
-    var binding = _km_par_binding(model)
+    var devices = plan_devices(args[2], "km_apply", True, context)
+    var binding = args[0]
     var out = PythonObject(None)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            out = _krr_predict(model, Python.tuple(binding, args[0]), context, False)
+            out = _krr_predict(model, Python.tuple(binding, args[1]), context, False)
         else:
-            out = _nys_transform(model, Python.tuple(binding, args[0]), context)
+            out = _nys_transform(model, Python.tuple(binding, args[1]), context)
     finally:
         plan_exit(binding)
     return out

@@ -16,7 +16,7 @@ from bindings.family_common import (
     family_shape_repr,
 )
 from bindings.py_balanced import py_contains, py_type
-from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_attr, plan_require_identical
+from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 
 
@@ -145,19 +145,20 @@ def _chol_par_admit(model: PythonObject, context: PythonObject) raises:
 
 
 def _chol_par(model: PythonObject, args: PythonObject, solve: Bool, context: PythonObject) raises -> PythonObject:
-    """args (A or B, devices)."""
+    """args (binding, A or B, devices): the binding `Cholesky._door_binding`
+    resolves."""
     _chol_par_admit(model, context)
     if solve and not py_contains(py_fields(model), PythonObject("L_")):
         raise Error("ValueError: Cholesky is not fitted")
-    var devices = plan_devices(args[1], String("cholesky_solve") if solve else String("cholesky_fit"), True, context)
-    var binding = family_call(plan_attr(model, "_door_binding"))
+    var devices = plan_devices(args[2], String("cholesky_solve") if solve else String("cholesky_fit"), True, context)
+    var binding = args[0]
     var out = PythonObject(None)
     plan_enter(binding, devices, _CHOL_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if solve:
-            out = _chol_solve(model, Python.tuple(binding, args[0]), context)
+            out = _chol_solve(model, Python.tuple(binding, args[1]), context)
         else:
-            _chol_fit(model, Python.tuple(binding, args[0]), context)
+            _chol_fit(model, Python.tuple(binding, args[1]), context)
             out = model
     finally:
         plan_exit(binding)

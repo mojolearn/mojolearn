@@ -49,7 +49,9 @@ from ._buffer import as_f32_c
 from . import kernel_methods as _km
 from . import _cholesky_impl as _chol
 
-#: The plain method whose public conversion `apply_kernel_method` applies.
+#: The estimators the kernel-method drivers admit, and the plain method whose
+#: public conversion `apply_kernel_method` applies.
+_KM_CLASSES = (_km.KernelRidge, _km.Nystroem)
 _APPLY_METHOD = {_km.KernelRidge: 'predict', _km.Nystroem: 'transform'}
 
 
@@ -784,7 +786,10 @@ def fit_cholesky(estimator, A, *, devices=(0,)):
     # Each panel's factorization, info read-back, panel solve and subtraction
     # stay on the root, devices[0], in the original panel order; only the rows
     # of each panel's L21 L21^T product move.
-    return _chol._NATIVE(estimator, 'family_chol_par_fit', (A, devices), _chol._NATIVE_CONTEXT)
+    if type(estimator) is not _chol.Cholesky:
+        raise TypeError('requires mojolearn.Cholesky')
+    return _chol._NATIVE(estimator, 'family_chol_par_fit', (estimator._door_binding(), A, devices),
+                         _chol._NATIVE_CONTEXT)
 
 
 def solve_cholesky(estimator, B, *, devices=(0,)):
@@ -807,7 +812,10 @@ def solve_cholesky(estimator, B, *, devices=(0,)):
     # One native call (`family_chol_par_solve`): whole right-hand-side columns
     # on the selected GPUs; a single right-hand side is sequential in its rows
     # and runs on one GPU.
-    return _chol._NATIVE(estimator, 'family_chol_par_solve', (B, devices), _chol._NATIVE_CONTEXT)
+    if type(estimator) is not _chol.Cholesky:
+        raise TypeError('requires mojolearn.Cholesky')
+    return _chol._NATIVE(estimator, 'family_chol_par_solve', (estimator._door_binding(), B, devices),
+                         _chol._NATIVE_CONTEXT)
 
 
 def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
@@ -838,7 +846,9 @@ def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
     # cell and the original epilogue); KernelRidge's factorization moves whole
     # trailing-update rows and its multi-target solve whole target columns;
     # Nystroem's Jacobi eigensolver stays on the root, devices[0].
-    return _km._NATIVE(estimator, 'family_km_par_fit', (X, y, devices), _km._NATIVE_CONTEXT)
+    if type(estimator) not in _KM_CLASSES:
+        raise TypeError('requires mojolearn.KernelRidge or Nystroem')
+    return _km._NATIVE(estimator, 'family_km_par_fit', (estimator._bind(), X, y, devices), _km._NATIVE_CONTEXT)
 
 
 def apply_kernel_method(estimator, X, *, devices=(0,)):
@@ -860,8 +870,11 @@ def apply_kernel_method(estimator, X, *, devices=(0,)):
     """
     # One native call (`family_km_par_apply`) returns the native result; the
     # public conversion for this function's caller is the plain method's.
-    return public_method_result(estimator, _APPLY_METHOD.get(type(estimator)),
-                                _km._NATIVE(estimator, 'family_km_par_apply', (X, devices), _km._NATIVE_CONTEXT),
+    if type(estimator) not in _KM_CLASSES:
+        raise TypeError('requires mojolearn.KernelRidge or Nystroem')
+    return public_method_result(estimator, _APPLY_METHOD[type(estimator)],
+                                _km._NATIVE(estimator, 'family_km_par_apply', (estimator._bind(), X, devices),
+                                            _km._NATIVE_CONTEXT),
                                 sys._getframe(1))
 
 
