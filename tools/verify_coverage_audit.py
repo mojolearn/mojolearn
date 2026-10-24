@@ -264,6 +264,10 @@ def native_rows(ls, base, reach, whole_surface=False):
             rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots, constant_probe=probe,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
+                             # in the closure's breadth-first order: the kernels nearest the export first
+                             closure_kernel=[label(n) for n in parent if kind_of(n[1]) != "door"
+                                             and _sab_na(label(n)) is None][:4],
+                             n_closure_kernel=sum(1 for n in reached if kind_of(n[1]) != "door"),
                              lanes_precise=sorted(precise), lanes_wide=sorted(set(users) - precise),
                              lanes_closure=len(users),
                              sabotage_defines=sorted(sab_defs), sabotage_sites=sorted(sab_sites)[:4],
@@ -1094,12 +1098,72 @@ def python_rows(ls, walker, reach, base, whole_surface=False):
                     lanes.add(lane)
             rel = os.path.relpath(str(func.mod.path), ROOT)
             rows.append(dict(public=canonical, op=op, where=f"{rel}:{func.node.lineno}", own=touched(func),
+                             trivial=trivial_method(func.node),
                              helpers_changed=[f"{os.path.relpath(str(f.mod.path), ROOT)}:{f.qual}"
                                               for f in path_changed[:3]],
                              n_helpers_changed=len(path_changed), entries=sorted(entries),
                              lanes=sorted(lanes)))
     rows.sort(key=lambda r: (r["public"], r["op"]))
     return rows
+
+
+def trivial_method(node):
+    """True for a method with no work at all: its body, past the docstring, is
+    `return self`, `return`, `pass` or `return self.<attribute>` (a stateless
+    layer's `fit`)."""
+    body = list(node.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if len(body) != 1:
+        return False
+    st = body[0]
+    if isinstance(st, ast.Pass):
+        return True
+    if isinstance(st, ast.Return):
+        v = st.value
+        return v is None or (isinstance(v, ast.Name) and v.id == "self") or (
+            isinstance(v, ast.Attribute) and isinstance(v.value, ast.Name) and v.value.id == "self")
+    return False
+
+
+def py_triage(row, native_by_entry):
+    """(status, lanes, why) for one public method row.
+
+    THE PYTHON-SHELL RULE (2026-10-24). A public method is API shell: it checks
+    arguments and routes to a native call. It counts as covered when a lane
+    reaches it, or, failing that, when every native entry its walked call path
+    reaches is itself covered (the shell adds no arithmetic of its own; the
+    no-Python-compute fence holds it to that). A method with no native work at
+    all (`return self`) is n/a."""
+    key = (row["public"], row["op"])
+    if key in PY_ANNOTATIONS:
+        return PY_ANNOTATIONS[key]
+    if row["lanes"]:
+        return "covered", row["lanes"], ""
+    entries = [e for e in row.get("entries", ()) if e in native_by_entry]
+    if entries and all(native_by_entry[e][0] in ("covered", "covered (new lane)") for e in entries):
+        lanes = sorted({l for e in entries for l in native_by_entry[e][1]})
+        return "covered (via native)", lanes, "every native entry it calls is covered: " + ", ".join(
+            f"`{e}`" for e in entries[:3]) + (f" +{len(entries) - 3}" if len(entries) > 3 else "")
+    if not row.get("entries") and row.get("trivial"):
+        return "n/a", [], "no native work: the method only returns (a stateless layer's fit returns self)"
+    return "GAP", [], "no lane reaches it"
+
+
+def native_status_by_entry(nat):
+    """entry name -> (best status, lanes) over its registrations (GPU binding and host twin)."""
+    rank = {"covered": 0, "covered (new lane)": 0, "owed": 1, "n/a": 2, "GAP": 3}
+    out = {}
+    for r in nat:
+        st, lanes, _ = triage(r)
+        st = "covered (new lane)" if st == "covered" and lanes and set(lanes) <= NEW_LANES else st
+        prev = out.get(r["entry"])
+        if prev is None or rank.get(st, 9) < rank.get(prev[0], 9):
+            out[r["entry"]] = (st, lanes)
+        elif rank.get(st, 9) == rank.get(prev[0], 9):
+            out[r["entry"]] = (prev[0], sorted(set(prev[1]) | set(lanes)))
+    return out
 
 
 def recorded_lanes():
@@ -1136,7 +1200,12 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
                        "training-device-cross-entropy", "sequence-layernorm-backward",
                        "x-metrics-classification-report", "x-metrics-permutation-test-score",
-                       "classical-float16-sequences"})
+                       "classical-float16-sequences",
+                       # lane verify-coverage-20261024
+                       "transformer-forward-tape", "public-cnn-classifier-predict", "public-cnn-layer-fit",
+                       "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
+                       "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
+                       "public-validation-learning-curves"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -1188,6 +1257,20 @@ NEW_LANE_PURPOSE = {
     "classical-float16-sequences": "LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA on a list of "
                                    "float16 rows: the classical input door's `sequence_widen_halves` / "
                                    "`sequence_narrow_halves` and the scalers' `scaler_cast`",
+    # lane verify-coverage-20261024
+    "transformer-forward-tape": "TransformerBlock.forward_with_tape, backward_from_tape and "
+                                "TransformerForwardTape.close: `transformer_session_forward_tape`, "
+                                "`transformer_session_backward_tape`, `transformer_session_discard_tape`",
+    "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
+    "public-cnn-classifier-predict": "CNNClassifier.predict and predict_proba",
+    "public-numeric-metadata": "training.vendor_used, ensemble.catboost_auto_learning_rate and "
+                               "johnson_lindenstrauss_min_dim",
+    "public-randomized-search": "RandomizedSearchCV fit, predict, score, predict_proba, decision_function, transform",
+    "public-residual-dropout": "training.residual_dropout and residual_dropout_backward",
+    "public-scorer-factories": "model_selection.check_cv, get_scorer, get_scorer_names, make_scorer",
+    "public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)",
+    "public-theta-variants": "DynamicTheta and OptimizedTheta fit and predict",
+    "public-validation-learning-curves": "model_selection.validation_curve and learning_curve",
 }
 
 
@@ -2002,6 +2085,38 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
     "runtime execution and a verifier lane remain pending.")
 
 
+# lane verify-coverage-20261024: the whole-surface audit's last GAP rows,
+# each checked in the source.
+_DEAD_KIT_24 = ("no live caller: the _expansion_decomp._Kit method that calls it (als_cg, cd_rows, "
+                "chol, lda_rows, qr_r, rand_gamma) has no caller since the ALS, NMF, LDA and "
+                "linalg owners moved into Mojo (bindings/als_native.mojo, mani_kit.mojo, linalg_ops_kit.mojo)")
+_ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
+               "owner context's arena_msel_put / _free / _take_rows; the arena owners "
+               "(bindings/arena_resident_native.mojo, arena_materialize_native.mojo) put, gather and free "
+               "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
+               "take per fold (x-metrics-search reaches msel_free by name)")
+ANNOTATIONS.update({
+    **{e: ("n/a", [], _DEAD_KIT_24) for e in ("x_decomp_als_cg_rows", "x_decomp_cd_rows", "x_decomp_chol",
+                                              "x_decomp_dev_lda_rows", "x_decomp_dev_qr_r", "x_decomp_lda_rows",
+                                              "x_decomp_qr_r", "x_decomp_rand_gamma")},
+    **{e: ("covered", ["x-metrics-search"], _ARENA_ROWS) for e in ("msel_put", "msel_take_rows")},
+    "nsum_f64": ("n/a", [], "no live caller: _portable_math.nsum, the only code that calls it, is never called"),
+    "gemm_fused": ("n/a", [], "fast tier only (Apple): linalg_fast.matmul_fused, built only with "
+                              "MOJOLEARN_AFN_GEMM_EPILOGUE; the verifier runs identical and refuses a fast process"),
+    "host_archive_finalize_call": ("n/a", [], "a lifecycle finalizer: the saved-host-model archive's cleanup "
+                                              "descriptor frees its native buffers when the archive is collected; "
+                                              "it returns nothing a digest can hold"),
+    "causal_lm_blocks": ("n/a", [], "an accessor: CausalLM.blocks returns list(model._blocks), no arithmetic; the "
+                                    "blocks it returns are the ones every hf-causal-lm forward runs"),
+    "transformer_session_discard_tape": ("covered", ["transformer-forward-tape"],
+                                         "TransformerForwardTape.close; the lane closes a tape, requires the "
+                                         "backward to refuse it and the next tape's gradients to be unchanged"),
+    "var_forecast": ("covered", ["sequence-var"],
+                     "VAR.fit's owner (bindings/xseq_forecast_native.mojo) builds the VARResults the bridge "
+                     "registered (_native_xseq_bridge.register(xseq_var_results=...)); its forecast calls "
+                     "var_forecast, and sequence-var digests a.forecast(y, 10)"),
+})
+
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
         "covered", ["hf-causal-lm", "par-causal-lm"],
@@ -2055,6 +2170,15 @@ def sabotage_of(row):
         bits.append(f"{len(seam)} seam patch(es)")
     if bits:
         return "armed", "; ".join(bits)
+    if not row.get("n_changed", 1) and "closure_kernel" in row:
+        # an unchanged row (the whole-surface audit, --all): its closure decides
+        if not row["closure_kernel"]:
+            return "n/a", "door only: no kernel or impl definition in its closure (conversion, no arithmetic)"
+        pending = [n for n in row["closure_kernel"] if _sab_na(n) is None]
+        if not pending:
+            return "n/a", _sab_na(row["closure_kernel"][0])
+        return "owed", "no arm reaches its closure (" + pending[0] + (
+            f" +{row['n_closure_kernel'] - 1}" if row["n_closure_kernel"] > 1 else "") + ")"
     if not row["changed_kernel"]:
         return "n/a", "door-only change (conversion, no arithmetic)"
     pending = [n for n in row["changed_kernel"] if _sab_na(n) is None]
@@ -2139,20 +2263,32 @@ def render_markdown(audit, path):
     w = lines.append
     stamp = re.search(r"(\d{4})(\d{2})(\d{2})", os.path.basename(path))
     day = "-".join(stamp.groups()) if stamp else "2026-10-21"
-    w(f"# Verifier coverage of the endpoints changed since the last release ({day})")
-    w("")
-    w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
-      f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
-      f"catches. Range `{audit['base']}..{audit['head']}`. Generated by `tools/verify_coverage_audit.py` "
-      f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
-      f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
-      f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
+    whole = audit.get("scope") == "all"
+    if whole:
+        w(f"# Verifier coverage of the whole public surface ({day})")
+        w("")
+        w(f"Release gate (Andrew, 2026-10-21, widened 2026-10-24 to every exposed API): every native entry "
+          f"the package registers and every public operation method is reached by a verifier lane and by a "
+          f"fault-injection arm the verifier or a check provably catches. Every row at `{audit['head']}`, "
+          f"changed or not (`--all`). Generated by `tools/verify_coverage_audit.py` "
+          f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
+          f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
+          f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
+    else:
+        w(f"# Verifier coverage of the endpoints changed since the last release ({day})")
+        w("")
+        w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
+          f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
+          f"catches. Range `{audit['base']}..{audit['head']}`. Generated by `tools/verify_coverage_audit.py` "
+          f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
+          f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
+          f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
     w("")
     w("Regenerate:")
     w("")
     w("```sh")
-    w(f"python3 tools/verify_coverage_audit.py --base {audit['base']} --json <audit.json> --markdown "
-      f"docs/plans/{os.path.basename(path)}")
+    w(f"python3 tools/verify_coverage_audit.py {'--all ' if whole else ''}--base {audit['base']} --json "
+      f"<audit.json> --markdown docs/plans/{os.path.basename(path)}")
     w("```")
     w("")
     w("## Summary")
@@ -2174,15 +2310,9 @@ def render_markdown(audit, path):
     w("")
     pst = defaultdict(int)
     prow = []
+    by_entry = native_status_by_entry(nat)
     for r in py:
-        key = (r["public"], r["op"])
-        if key in PY_ANNOTATIONS:
-            st, lanes, why = PY_ANNOTATIONS[key]
-        elif r["lanes"]:
-            st = "covered"
-            lanes, why = r["lanes"], ""
-        else:
-            st, lanes, why = "GAP", [], "no lane reaches it"
+        st, lanes, why = py_triage(r, by_entry)
         pst[st] += 1
         prow.append((r, st, lanes, why))
     w(f"Public Python methods whose call path changed: {len(py)} "
@@ -2190,6 +2320,26 @@ def render_markdown(audit, path):
     w("")
     w("`covered` describes static reach only. It does not mean that a lane was run, recorded or admitted. "
       "Fault arms marked `armed` likewise describe source reach, not successful fault detection.")
+    w("")
+    w("## Reach rules (2026-10-24)")
+    w("")
+    w("- **Native owners.** A migrated public method is one owner call (`xseq_native_call`, "
+      "`decomp_native_call`); the owner picks its handler on the operation and family strings and calls "
+      "compiled entries by name (`entries[\"croston\"]`, `self.fn(\"x_decomp_dev_gemm\")`, `\"xn_\" + name`). "
+      "`OwnerDispatch` reads every `if`/`elif` on a dispatch variable in the Python-facing Mojo, and the "
+      "entries its branch and the definitions it calls name (four calls deep, a type's methods followed by "
+      "name). A lane reaches those entries when its string constants or class names satisfy every enclosing "
+      "condition with a specific value (`croston_fit`, `FastICA`); a branch on generic values only (`fit`, a "
+      "package method name, a plain word) is credited only to lanes that reach that owner entry itself, "
+      "whose own impl file holds the branch. A branch that names another owner operation relays it.")
+    w("- **Bridge connects.** `_IPCA_CALL, _ = _native_ipca_bridge.connect_public(IncrementalPCA)`: reading "
+      "the bound name follows the connect and the call's own string arguments (`\"als_native_call\"`).")
+    w("- **Python shell.** A public method is API shell (argument checks routing to a native call; the "
+      "no-Python-compute fence keeps arithmetic out of it). It is covered when a lane reaches it, or, as "
+      "`covered (via native)`, when every native entry its walked call path reaches is covered. A method "
+      "with no native work at all (`return self`) is n/a.")
+    w("- **Constant probes.** A registration whose whole body returns one compiled constant (a contract "
+      "version, vendor or capability flag) reads no data and computes nothing: n/a.")
     w("")
     w("## Retained reference evidence")
     w("")

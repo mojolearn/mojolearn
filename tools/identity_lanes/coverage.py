@@ -1235,3 +1235,61 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
             "training-device-cross-entropy", "sequence-layernorm-backward",
             "x-metrics-classification-report", "x-metrics-permutation-test-score",
             "classical-float16-sequences")
+
+
+# ---------------------------------------------------------------- lane verify-coverage-20261024
+# The whole-surface audit (docs/plans/VERIFY_COVERAGE_20261024.md) found no
+# lane for TransformerBlock's forward tape: forward_with_tape,
+# backward_from_tape and TransformerForwardTape.close
+# (`transformer_session_forward_tape`, `_backward_tape`, `_discard_tape`).
+
+
+@lane("transformer-forward-tape")
+def _(ml, X, yc, yr, Xh=None):
+    """The `transformer` lane's block: a forward with a tape kept whole and
+    one with a zero activation budget (the backward replays the forward),
+    each consumed by backward_from_tape, whose gradients must equal the
+    block's own recomputing backward byte for byte. A third tape is closed;
+    its backward must refuse, and a fourth, made after the close, must
+    still give the same gradients (the discard frees only its ticket)."""
+    d = _coverage_digester(ml)
+    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+    w = _block_weights("transformer", {
+        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
+        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+        "down_proj.weight": (dm, it)},
+        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
+    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    x = _seq(X, 2, 16, dm)
+    g = _seq(X, 2, 16, dm, skip=1024)
+    whole = blk.backward(x, g)
+    names = sorted(whole)
+    parts = {"backward": d(np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))}
+    for tag, budget in (("kept", 1 << 29), ("replayed", 0)):  # glue: the two activation budgets
+        y, tape = blk.forward_with_tape(x, activation_budget_bytes=budget)
+        grads = blk.backward_from_tape(tape, g)
+        flat = np.concatenate([np.asarray(grads[k], dtype=np.float32).reshape(-1) for k in names])
+        _same_bytes(f"backward_from_tape ({tag})", flat, "TransformerBlock.backward",
+                    np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))
+        parts[f"{tag}_forward"] = d(np.asarray(y, dtype=np.float32))
+        parts[f"{tag}_grads"] = d(flat)
+    _, closed = blk.forward_with_tape(x)
+    closed.close()
+    try:
+        blk.backward_from_tape(closed, g)
+        refused = 0
+    except ValueError:
+        refused = 1
+    if not refused:
+        raise AssertionError("backward_from_tape accepted a closed tape")
+    _, after = blk.forward_with_tape(x)
+    again = blk.backward_from_tape(after, g)
+    parts["after_close"] = d(np.concatenate([np.asarray(again[k], dtype=np.float32).reshape(-1) for k in names]))
+    parts["closed_refused"] = d(np.asarray([refused], dtype=np.int64))
+    return _fit(parts)
+
+
+_batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "transformer-forward-tape")

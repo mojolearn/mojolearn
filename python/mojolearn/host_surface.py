@@ -592,6 +592,7 @@ TRAINING_LANE_NAMES = {
     "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
+    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
     "par-causal-lm": "the layer-owned causal language model",
     "par-cross-val": "the fold-dispatched cross-validation",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
@@ -3237,7 +3238,10 @@ FAMILIES = (
                         # the same entries the `transformer` lane hashes
                         "transformer-decode-session",
                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
-                        "transformer-decode-load-state"),
+                        "transformer-decode-load-state",
+                        # lane verify-coverage-20261024: forward_with_tape,
+                        # backward_from_tape and the tape's close
+                        "transformer-forward-tape"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3962,6 +3966,7 @@ PUBLIC_PENDING_LANES = {
     "gp-lml-theta": "no reference",
     "cross-vendor-fold": "no reference",
     "transformer-decode-load-state": "no reference",
+    "transformer-forward-tape": "no reference",
     "safetensors-widen-f16": "no reference",
     "hf-causal-lm-stream": "no reference",
     "ivf-short-fill": "no reference",
