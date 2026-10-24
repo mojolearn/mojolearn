@@ -365,15 +365,18 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
                 _reported_native_limitation(sel, path, other)
 
 
-@_pending_precision("Cached generic archive-owner pointers are not resolved by return slot/context use; "
-                    "see tools/LANE_SELECTOR_PRECISION.md (OLS import-time archive registration -> forest).")
-def test_pending_precision_shared_binding_paths_exclude_unrelated_lanes():
+def test_shared_binding_paths_exclude_unrelated_lanes():
+    # RESOLVED DEBT (2026-10-24): this was a strict expected failure (OLS's
+    # import-time archive registration retained the forest owner). Since the
+    # classical native entries left the tokenizer host binding (8188d819d) the
+    # forest, GBDT and mamba paths no longer select ols, kmeans or arima, so the
+    # strict marker reported an unexpected pass. Per tools/LANE_SELECTOR_PRECISION.md
+    # the marker is removed and the exclusion is a required check again.
     for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
                  "core/gbdt_host_predict.mojo"):
         selected = lane_select.select([path])["lanes"]
         for other in ("ols", "kmeans", "arima"):
-            if other in selected:
-                raise _UnprovedPrecision(f"{path} selected unrelated {other}")
+            assert other not in selected, f"{path} selected unrelated {other}"
 
 
 def test_a_bindings_edge_always_has_a_door_that_resolves_it():
