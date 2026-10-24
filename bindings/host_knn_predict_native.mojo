@@ -35,7 +35,7 @@ def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool
         raise Error("mojolearn: call fit before predict")
     var query = family_as_f32_dense(source, 2, "X", context)
     var metric = host_archive_neighbor_metric(fields["metric"], Float64(py=fields["p"]), False, context)
-    if String(fields["metric"]).lower() == "jensenshannon" and family_min(query) < 0:
+    if String(fields["metric"]).lower() == "jensenshannon" and Int(py=query.size) > 0 and family_min(query) < 0:
         var name = "HostKNeighborsClassifier" if classifier else "HostKNeighborsRegressor"
         raise Error("mojolearn " + name + ": metric='jensenshannon' needs X >= 0 (it takes logarithms of the coordinates)")
     var rows = Int(py=query.shape[0])
