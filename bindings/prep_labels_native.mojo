@@ -75,8 +75,9 @@ def _builtins() raises -> PythonObject:
 def _raise_python(cls: PythonObject, message: String) raises:
     # A Python exception of exactly `cls` (OverflowError, IndexError), which
     # the door restores as it is.
+    var text = message
     ref cpy = Python().cpython()
-    cpy.PyErr_SetString(cls._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
+    cpy.PyErr_SetString(cls._obj_ptr, text.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
     var failure = stash_python_error()
     raise failure^
 
@@ -649,7 +650,7 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
         var native = _str_codes(classes, values, False, context)
         if native is not None:
             if Int(py=native[2]) != 0:
-                raise Error(UNSEEN + ": " + _text(native[1]))
+                raise Error(String(UNSEEN) + ": " + _text(native[1]))
             return native[0]
         var index = _object_index(classes)
         var missing = Python.list()
@@ -660,7 +661,7 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
             var first = Python.list()
             for i in range(min(5, len(missing))):  # driver-loop: over the first five unseen labels
                 _ = py_call(first.append, missing[i])
-            raise Error(UNSEEN + ": " + _text(first))
+            raise Error(String(UNSEEN) + ": " + _text(first))
         var store = native_array_zeros("i", n)
         var codes = classical_wrap_array(store, Python.tuple(n), "<i4", "C", _out(context))
         var dest = I32P(unsafe_from_address=Int(py=classical_address(codes)))
