@@ -870,25 +870,11 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_first_four), "x-prep-spline-options")
 
 
-class _prep_MeanReg:
-    """A regressor for IterativeImputer(estimator=...): the float32 mean of y."""
-
-    def get_params(self, deep=True):
-        return {}
-
-    def fit(self, X, y):
-        self.m = np.float32(np.asarray(y, dtype=np.float32).mean(dtype=np.float64))
-        return self
-
-    def predict(self, X):
-        return np.full(np.asarray(X).shape[0], self.m, dtype=np.float32)
-
-
 @lane("x-prep-iterative-options")
 def _(ml, X, yc, yr, Xh=None):
     """IterativeImputer: the random order, n_nearest_features, sample_posterior
     (truncated), add_indicator, the reference's matrix inf-norm stop, and
-    another estimator (the Python rounds)."""
+    another (mojolearn) estimator: the rounds over its fit / predict."""
     Xm = _prep_nan_first_six(X[:1500])
     parts = {}
     m = ml.IterativeImputer(imputation_order="random", random_state=1, max_iter=6, add_indicator=True)
@@ -899,7 +885,7 @@ def _(ml, X, yc, yr, Xh=None):
     parts["post"] = _h(e.fit_transform(Xm), e.transform(_prep_nan_first_six(Xh[:256])))
     e = ml.IterativeImputer(max_iter=12, tol=1e-4)
     parts["stop"] = _h(e.fit_transform(Xm), np.array([e.n_iter_]))
-    e = ml.IterativeImputer(estimator=_prep_MeanReg(), max_iter=2)
+    e = ml.IterativeImputer(estimator=ml.Ridge(alpha=2.0), max_iter=2)
     parts["est"] = _h(e.fit_transform(Xm))
     return _fit(parts, m, lambda e: (e.transform(_prep_nan_first_six(Xh[:256])),))
 
