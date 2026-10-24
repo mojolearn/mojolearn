@@ -513,7 +513,8 @@ def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
         pool.close()
     if return_std:
         estimator.clamped_, estimator.n_clamped_ = diagnostic
-    return result
+    # the worker's raw result; the plain method's public conversion for our caller
+    return public_method_result(estimator, 'predict', result, sys._getframe(1))
 
 
 def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
@@ -628,9 +629,11 @@ def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
     X, _ = as_f32_c(X, ndim=2, name='X')
     pool = DevicePool(devices, cooperative=True)
     try:
-        return pool.map([('gmm_predict', estimator, (method, X))])[0]
+        result = pool.map([('gmm_predict', estimator, (method, X))])[0]
     finally:
         pool.close()
+    # the worker's raw result; the plain method's public conversion for our caller
+    return public_method_result(estimator, method, result, sys._getframe(1))
 
 
 def _resample_parallel(name, devices, kwargs):
@@ -907,9 +910,15 @@ def apply_kernel_method(estimator, X, *, devices=(0,)):
     X, _ = as_f32_c(X, ndim=2, name='X')
     pool = DevicePool(devices, cooperative=True)
     try:
-        return pool.map([('km_apply', estimator, (method, X))])[0]
+        result = pool.map([('km_apply', estimator, (method, X))])[0]
     finally:
         pool.close()
+    # THE par-kernel-ridge DTYPE FLIP (2026-10-24): the worker returns the raw
+    # native result (float32 for KernelRidge.predict) whether or not it loaded
+    # NumPy; this applies the plain method's public conversion (float64 for a
+    # regressor's predict) for an outside caller only, so the identity harness
+    # (internal) and a user each get exactly what `estimator.<method>` gives them.
+    return public_method_result(estimator, method, result, sys._getframe(1))
 
 
 def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
@@ -953,7 +962,7 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
         raise ValueError('X has %d features, the fit had %d' % (X.shape[1], estimator.n_features_in_))
     rows = X.shape[0]
     if rows == 0:
-        return estimator.transform(X)
+        return public_method_result(estimator, 'transform', estimator.transform(X), sys._getframe(1))
     shards = [X[start - driver_read_shift(index, start, devices):
                 min(start + rows_per_shard, rows) - driver_read_shift(index, start, devices)]
               for index, start in enumerate(range(0, rows, rows_per_shard))]  # glue: one row slice per device shard
@@ -973,4 +982,5 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
         start += part.shape[0]
     if start != rows:
         raise ValueError("RBFSampler workers returned an incomplete result")
-    return out
+    # the joined raw rows; the plain transform's public conversion for our caller
+    return public_method_result(estimator, 'transform', out, sys._getframe(1))

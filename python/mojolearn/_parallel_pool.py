@@ -257,9 +257,18 @@ def public_method_result(estimator, method, result, frame):
     """`result` as the plain `estimator.<method>` returns it to the caller
     whose frame is `frame`: the public conversion (`_mode._public_result`)
     for a caller outside the package, the native result otherwise. The
-    driver passes `sys._getframe(1)`, its own caller."""
+    driver passes `sys._getframe(1)`, its own caller.
+
+    Every driver whose worker runs a public method returns through here:
+    the worker is internal (`_parallel_worker.__mojolearn_internal__`) and
+    always sends the native result, so the parent alone decides what its
+    caller sees, exactly as the plain method's `_mode._public_output`
+    wrapper does (2026-10-24, par-kernel-ridge dtype flip: the worker had
+    widened KernelRidge.predict to float64 for the harness, which hashes the
+    native float32). Only the names that wrapper covers (`_mode._OUTPUTS`)
+    convert; any other method's result is the plain method's own."""
     from . import _mode
-    if _mode._caller_outside(frame):
+    if method in _mode._OUTPUTS and _mode._caller_outside(frame):
         return _mode._public_result(estimator, method, result)
     return result
 
