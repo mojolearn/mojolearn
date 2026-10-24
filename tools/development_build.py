@@ -65,6 +65,14 @@ KEY_SCHEMA = "mojolearn.development-group.v1"
 MANIFEST = "bindings/development_groups.json"
 BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
                 "tools/merged_bindings.py", "tools/bincache.py", "tools/development_build.py")
+# Non-group runtime artifacts. python/mojolearn/_portable_math.py loads the
+# repository-owned host math library from a fixed path in every set; release
+# packaging builds it with packaging/portable_math/stage.py. It is a C build
+# (cc/clang), keyed on its sources, stage.py's flags and the C compiler.
+SUPPORT_SCHEMA = "mojolearn.development-support.v1"
+PORTABLE_MATH_INPUTS = ("packaging/portable_math/portable_math.c",
+                        "packaging/portable_math/powers_of_ten.h",
+                        "packaging/portable_math/stage.py", "tools/development_build.py")
 # Private transport between controller functions, deliberately outside
 # bincache.KEY_ENV_PREFIXES and removed before starting any child process.
 GUARD_ENV = "_MOJOLEARN_DEVELOPMENT_GUARD"
@@ -202,6 +210,47 @@ def version_banner(argv):
     return next((line.strip() for line in lines if VERSION_LINE.match(line)), None)
 
 
+def first_stdout_line(argv):
+    try:
+        run = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return next((line.strip() for line in run.stdout.decode(errors="replace").splitlines()
+                 if line.strip()), None)
+
+
+def c_toolchain_facts(env, plat=None):
+    """The C compiler stage.build would pick (CC, else clang/cc), resolved."""
+    plat = plat or merged.default_platform()
+    name = env.get("CC") or ("clang" if plat == "darwin" else "cc")
+    path = shutil.which(name, path=env.get("PATH"))
+    if path is None:
+        return {"available": False, "compiler": name}
+    resolved = str(Path(path).resolve())
+    return {"available": True, "compiler": path, "resolved": resolved,
+            "sha256": bincache.sha256_file(resolved),
+            "version": first_stdout_line([path, "--version"]),
+            "machine": platform.machine().lower()}
+
+
+def support_rows(repo, cache, plat, c_facts):
+    missing = [name for name in PORTABLE_MATH_INPUTS if not (repo / name).is_file()]
+    if missing:
+        raise BuildError("portable math sources missing: " + ", ".join(missing))
+    darwin = plat == "darwin"
+    fields = {"schema": SUPPORT_SCHEMA, "name": "portable_math", "platform": plat,
+              "repo": str(repo), "cache": str(cache),
+              "inputs": {name: bincache.sha256_file(repo / name) for name in PORTABLE_MATH_INPUTS},
+              "c_toolchain": c_facts}
+    row = {"name": "portable_math", "stem": "libMojolearnMath",
+           "file": "libMojolearnMath.dylib" if darwin else "libMojolearnMath.so",
+           "install": (".dylibs/libMojolearnMath.dylib" if darwin else ".libs/libMojolearnMath.so"),
+           "key": digest(fields), "fields": fields}
+    row["action"] = "reuse" if cached_artifact(cache, row) else "build"
+    return [row]
+
+
 def changed_fields(before, after, prefix=""):
     """Dotted key-field paths that differ; the refusal names what moved."""
     if isinstance(before, dict) and isinstance(after, dict):
@@ -272,7 +321,7 @@ def toolchain_facts(repo):
 
 def cached_artifact(cache, row):
     directory = Path(cache) / "artifacts" / row["key"]
-    artifact = directory / (row["stem"] + ".so")
+    artifact = directory / row.get("file", row["stem"] + ".so")
     receipt = directory / "receipt.json"
     try:
         saved = json.loads(receipt.read_text())
@@ -292,7 +341,7 @@ def selected_group(mode, stem, selection):
     return bool({stem, logical, f"{mode}:{stem}", f"{mode}:{logical}"} & set(selection))
 
 
-def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None):
+def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_facts=None):
     repo, cache = Path(repo).resolve(), Path(cache).resolve()
     if cache.is_relative_to(repo):
         raise BuildError("keep the development cache outside the source tree")
@@ -331,9 +380,11 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None):
     for group in selection:
         if not any(selected_group(r["mode"], r["stem"], [group]) for r in rows):
             raise BuildError(f"group selection matches nothing: {group}")
+    support = support_rows(repo, cache, plat, c_facts if c_facts is not None
+                           else c_toolchain_facts(env, plat))
     return {"schema": SCHEMA, "layout": "development", "platform": plat,
             "repo": str(repo), "cache": str(cache), "toolchain_available": facts.get("available", False),
-            "groups": rows, "counts": {"groups": len(rows),
+            "groups": rows, "support": support, "counts": {"groups": len(rows),
                 "reuse": sum(r["action"] == "reuse" for r in rows),
                 "build_selected": sum(r["action"] == "build" and r["selected"] for r in rows),
                 "build_unselected": sum(r["action"] == "build" and not r["selected"] for r in rows)}}
@@ -469,11 +520,88 @@ def compile_group(row, repo, cache, env, evidence):
     return result
 
 
+def build_support(row, repo, cache, env, evidence):
+    """Compile one non-group artifact into the cache, receipted like a group."""
+    started = time.monotonic()
+    result = {"support": row["name"], "stem": row["stem"], "key": row["key"],
+              "state": "failed", "exit_code": 1}
+    limits = json.loads(env.get(GUARD_ENV, "{}"))
+    try:
+        with lock(cache / "locks" / (row["key"] + ".lock"), limits.get("lock_seconds")):
+            if cached_artifact(cache, row):
+                result.update(state="reused", exit_code=0)
+            else:
+                c_facts = row["fields"]["c_toolchain"]
+                if not c_facts.get("available"):
+                    raise BuildError(f"C compiler {c_facts.get('compiler')!r} not found; "
+                                     "portable math needs cc (Linux) or clang (macOS)")
+                output = cache / "work" / row["key"] / "output" / row["file"]
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.unlink(missing_ok=True)
+                log = evidence / ("support-" + row["name"] + ".log")
+                command = [sys.executable, "-I", "-c",
+                           "import json, pathlib, sys; sys.path.insert(0, sys.argv[1]); import stage; "
+                           "print(json.dumps(stage.build(pathlib.Path(sys.argv[2]), sys.argv[3])))",
+                           str(repo / "packaging/portable_math"), str(output), c_facts["compiler"]]
+                result.update(log=str(log), command=command)
+                code = run_logged(command, repo, env, log)
+                result["exit_code"] = code
+                if build_process.cancelled():
+                    raise KeyboardInterrupt("development build cancelled before cache publication")
+                if code == 0:
+                    plat = row["fields"]["platform"]
+                    current = support_rows(repo, cache, plat, c_toolchain_facts(env, plat))[0]
+                    if current["key"] != row["key"]:
+                        result.update(exit_code=1, reason=input_change_reason(
+                            "build inputs changed during compilation", row["fields"], current["fields"]))
+                    elif not output.is_file() or output.stat().st_size == 0:
+                        result.update(exit_code=1, reason="compiler returned success without nonempty declared output")
+                    else:
+                        target = cache / "artifacts" / row["key"]
+                        target.mkdir(parents=True, exist_ok=True)
+                        sha = bincache.sha256_file(output)
+                        shutil.copy2(output, target / row["file"])
+                        result.update(state="built", sha256=sha)
+                        atomic_json(target / "receipt.json", dict(result, fields=row["fields"]))
+                        if build_process.cancelled():
+                            (target / "receipt.json").unlink(missing_ok=True)
+                            raise KeyboardInterrupt("development build cancelled during cache publication")
+    except KeyboardInterrupt as error:
+        result.update(state="interrupted", exit_code=130, reason=str(error))
+    except (BuildError, ValueError, OSError, subprocess.SubprocessError) as error:
+        result.update(state="failed", exit_code=1, reason=str(error))
+    result["seconds"] = time.monotonic() - started
+    atomic_json(evidence / ("support-" + row["name"] + ".json"), result)
+    return result
+
+
+def install_support(row, source, repo):
+    """Place one support artifact at the fixed path the runtime loads."""
+    destination = repo / "python/mojolearn" / row["install"]
+    if destination.is_file() and bincache.sha256_file(destination) == bincache.sha256_file(source):
+        return str(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".tmp-" + uuid.uuid4().hex)
+    try:
+        shutil.copy2(source, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(destination)
+
+
 def activate(plan, repo, cache, lock_seconds=None):
-    """Publish only complete current sets; every indexed binary is immutable."""
+    """Publish only complete current sets; every indexed binary is immutable.
+
+    The support artifacts the runtime loads outside the index (portable
+    math) are part of every set: activation refuses without them."""
     rows = plan["groups"]
-    sources = {row["key"]: cached_artifact(cache, row) for row in rows}
+    support = plan.get("support")
+    if support is None:
+        raise BuildError("plan has no support artifacts; recompute it with this tool")
+    sources = {row["key"]: cached_artifact(cache, row) for row in rows + support}
     missing = [row["mode"] + ":" + row["stem"] for row in rows if sources[row["key"]] is None]
+    missing += ["support:" + row["name"] for row in support if sources[row["key"]] is None]
     if missing:
         return {"state": "incomplete", "missing": missing, "activated": []}
     modes = sorted({row["mode"] for row in rows})
@@ -501,6 +629,7 @@ def activate(plan, repo, cache, lock_seconds=None):
             files[relative] = row["members"]
         indexes[out] = {"format": merged.INDEX_FORMAT, "layout": "development", "files": files,
                         "provenance": {r["stem"]: r["key"] for r in rows if r["mode"] == mode}}
+    installed = {row["name"]: install_support(row, sources[row["key"]], repo) for row in support}
     # No index changes until every artifact in every requested set is staged.
     with contextlib.ExitStack() as stack:
         for out in sorted(indexes):
@@ -514,7 +643,7 @@ def activate(plan, repo, cache, lock_seconds=None):
             if build_process.cancelled():
                 raise KeyboardInterrupt("development build cancelled during index activation")
             atomic_json(out / "_mojolearn_merged.json", index)
-    return {"state": "activated", "missing": [], "activated": modes}
+    return {"state": "activated", "missing": [], "activated": modes, "support": installed}
 
 
 def summary(plan):
@@ -522,6 +651,8 @@ def summary(plan):
         selection = "selected" if row["selected"] else "unselected"
         scope = row["fields"]["source"]["scope"]
         print(f"{row['mode']} {row['stem']} {row['action']} {selection} {scope} {row['key'][:12]}")
+    for row in plan.get("support", []):
+        print(f"support {row['stem']} {row['action']} {row['key'][:12]}")
     print("counts " + json.dumps(plan["counts"], sort_keys=True))
 
 
@@ -616,10 +747,27 @@ def main(argv=None):
                         raise
             if any(r["exit_code"] for r in report["results"]):
                 raise BuildError("one or more group builds failed; existing loader indexes were preserved")
+            # Support artifacts (portable math) are small serial C builds,
+            # reused from the cache when their inputs are unchanged.
+            support_env = dict(env, **{GUARD_ENV: json.dumps(dict(resource_budget(1, 1, None), **limits))}) \
+                if any(r["action"] == "build" for r in plan["support"]) else env
+            for row in plan["support"]:  # driver-loop: over support artifacts
+                if row["action"] != "build":
+                    continue
+                result = build_support(row, REPO, cache, support_env, evidence)
+                report["results"].append(result)
+                report["compile_attempts"] += int("command" in result)
+                atomic_json(evidence / "result.json", report)
+                print(f"support {result['stem']} {result['state']} rc={result['exit_code']}")
+                if result["exit_code"]:
+                    raise BuildError(f"support build {row['name']} failed; existing loader indexes were preserved")
             final_plan = make_plan(REPO, cache, modes, env, args.group)
-            if [r["key"] for r in final_plan["groups"]] != [r["key"] for r in plan["groups"]]:
-                before = {r["mode"] + ":" + r["stem"]: r["fields"] for r in plan["groups"]}
-                after = {r["mode"] + ":" + r["stem"]: r["fields"] for r in final_plan["groups"]}
+            if ([r["key"] for r in final_plan["groups"] + final_plan["support"]]
+                    != [r["key"] for r in plan["groups"] + plan["support"]]):
+                before = {r.get("mode", "support") + ":" + r["stem"]: r["fields"]
+                          for r in plan["groups"] + plan["support"]}
+                after = {r.get("mode", "support") + ":" + r["stem"]: r["fields"]
+                         for r in final_plan["groups"] + final_plan["support"]}
                 raise BuildError(input_change_reason(
                     "build inputs changed; refusing to activate mixed-source outputs", before, after))
             if build_process.cancelled():

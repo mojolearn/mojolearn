@@ -17,6 +17,8 @@ SOURCE_REPO = Path(__file__).resolve().parent.parent
 
 
 FACTS = {"available": True, "compiler_sha256": "test-compiler", "version": "test", "os": "test"}
+C_FACTS = {"available": True, "compiler": "cc", "resolved": "/usr/bin/cc", "sha256": "test-cc",
+           "version": "cc test", "machine": "x86_64"}
 ENV = {"MOJOLEARN_GPU_ARCHS": "sm_89"}
 A, B, BYTE, HOST = "_mojolearn_a", "_mojolearn_b", "_mojolearn_byte_lm", "_mojolearn_tokenizer_host"
 
@@ -48,11 +50,15 @@ def repo(tmp_path, monkeypatch):
         write(root, f"bindings/{member}.mojo", imports + f"def build_{member}() -> PythonObject:\n    pass\n")
     write(root, "core/shared.mojo", "comptime value = 1\n")
     write(root, "tree/leaf.mojo", "comptime leaf = 1\n")
+    for path in dev.PORTABLE_MATH_INPUTS:
+        if not (root / path).exists():
+            write(root, path, "/* synthetic portable math input */\n")
     monkeypatch.setattr(merged, "REPO", root)
     monkeypatch.setattr(merged, "MANIFEST", root / "bindings/merged_groups.json")
     monkeypatch.setattr(merged, "DEVELOPMENT_MANIFEST", root / dev.MANIFEST)
     monkeypatch.setattr(dev, "REPO", root)
     monkeypatch.setattr(dev, "toolchain_facts", lambda _root: FACTS)
+    monkeypatch.setattr(dev, "c_toolchain_facts", lambda *_: C_FACTS)
     monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
     monkeypatch.setattr(dev, "available_resources", lambda: (16, 100 * 2 ** 30))
     return root
@@ -74,11 +80,17 @@ def changed(before, after):
 def cache_row(cache, row, data=b"native-test-bytes"):
     target = cache / "artifacts" / row["key"]
     target.mkdir(parents=True, exist_ok=True)
-    path = target / (row["stem"] + ".so")
+    path = target / row.get("file", row["stem"] + ".so")
     path.write_bytes(data)
     dev.atomic_json(target / "receipt.json", {"key": row["key"], "fields": row["fields"],
         "exit_code": 0, "sha256": bincache.sha256_file(path)})
     return path
+
+
+def cache_plan(cache, value):
+    """Cache every group and support artifact of a plan."""
+    for row in value["groups"] + value["support"]:
+        cache_row(cache, row)
 
 
 def test_larger_closures_start_first_without_changing_plan_or_keys(repo, tmp_path):
@@ -212,14 +224,14 @@ def test_partial_selection_never_replaces_complete_index(repo, tmp_path):
     cache_row(tmp_path / "cache", value["groups"][0])
     result = dev.activate(value, repo, tmp_path / "cache")
     assert result["state"] == "incomplete"
-    assert len(result["missing"]) == 2
+    assert len(result["missing"]) == 3
+    assert "support:portable_math" in result["missing"]
     assert index.read_bytes() == original
 
 
 def test_activation_stages_complete_immutable_set_and_keeps_release_bytes(repo, tmp_path):
     value = plan(repo, tmp_path)
-    for row in value["groups"]:
-        cache_row(tmp_path / "cache", row)
+    cache_plan(tmp_path / "cache", value)
     release = write(repo, "python/mojolearn/identical/_mojolearn_native.so", "old-release-bytes")
     result = dev.activate(value, repo, tmp_path / "cache")
     assert result["state"] == "activated"
@@ -239,8 +251,7 @@ def test_activation_stages_complete_immutable_set_and_keeps_release_bytes(repo, 
 
 def test_member_override_refused_before_index_publication(repo, tmp_path):
     value = plan(repo, tmp_path)
-    for row in value["groups"]:
-        cache_row(tmp_path / "cache", row)
+    cache_plan(tmp_path / "cache", value)
     write(repo, f"python/mojolearn/identical/{A}.so", "override")
     with pytest.raises(dev.BuildError, match="shadow"):
         dev.activate(value, repo, tmp_path / "cache")
@@ -525,8 +536,7 @@ def configure_main(repo, monkeypatch):
 
 def test_warm_main_has_zero_compiler_attempts_and_needs_no_compiler_reservation(repo, tmp_path, monkeypatch):
     configure_main(repo, monkeypatch)
-    for row in plan(repo, tmp_path)["groups"]:
-        cache_row(tmp_path / "cache", row)
+    cache_plan(tmp_path / "cache", plan(repo, tmp_path))
 
     def forbidden(*_):
         pytest.fail("warm identical cache must not start or reserve a compiler")
@@ -611,8 +621,7 @@ def test_main_refuses_unbounded_controls_before_starting_compiler(repo, tmp_path
 
 def test_activation_waits_for_all_existing_index_locks_before_writing(repo, tmp_path, monkeypatch):
     value = dev.make_plan(repo, tmp_path / "cache", ["identical", "host"], ENV, facts=FACTS, plat="linux")
-    for row in value["groups"]:
-        cache_row(tmp_path / "cache", row)
+    cache_plan(tmp_path / "cache", value)
     indexes = [write(repo, f"python/mojolearn/{mode}/_mojolearn_merged.json", "previous-index")
                for mode in ("identical", "host")]
     seen = []
@@ -732,3 +741,94 @@ def test_return_to_release_index_removes_development_metadata(repo, tmp_path):
     merged.cmd_index(SimpleNamespace(outdir=str(directory), stem="_mojolearn_native", members=",".join([A, B, BYTE])))
     index = json.loads((directory / "_mojolearn_merged.json").read_text())
     assert index == {"format": 1, "files": {"_mojolearn_native.so": [A, B, BYTE]}}
+
+
+def fake_c_compiler(calls, data=b"\x7fELF portable math"):
+    def compiler(command, root, env, log):
+        calls.append(command)
+        assert "stage.build" in command[3]  # packaging/portable_math/stage.py build()
+        Path(command[-2]).write_bytes(data)
+        return 0
+    return compiler
+
+
+def test_portable_math_is_keyed_built_once_and_reused(repo, tmp_path, monkeypatch):
+    first = plan(repo, tmp_path)
+    (row,) = first["support"]
+    assert row["install"] == ".libs/libMojolearnMath.so" and row["action"] == "build"
+    calls = []
+    monkeypatch.setattr(dev, "run_logged", fake_c_compiler(calls))
+    built = dev.build_support(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")
+    assert built["state"] == "built", built.get("reason")
+    assert dev.build_support(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")["state"] == "reused"
+    assert len(calls) == 1
+    assert plan(repo, tmp_path)["support"][0]["action"] == "reuse"
+    # Its inputs are the C source, the constants, stage.py and the C compiler;
+    # none of them is a group input, and no group input moves it.
+    write(repo, "packaging/portable_math/portable_math.c", "/* repaired */\n")
+    edited = plan(repo, tmp_path)
+    assert edited["support"][0]["key"] != row["key"] and changed(first, edited) == set()
+    monkeypatch.setattr(dev, "c_toolchain_facts", lambda *_: dict(C_FACTS, sha256="other-cc"))
+    other_cc = plan(repo, tmp_path)["support"][0]["key"]
+    assert other_cc not in (row["key"], edited["support"][0]["key"])
+    write(repo, "tree/leaf.mojo", "comptime leaf = 7\n")
+    assert plan(repo, tmp_path)["support"][0]["key"] == other_cc
+
+
+def test_portable_math_source_edit_during_build_is_refused(repo, tmp_path, monkeypatch):
+    (row,) = plan(repo, tmp_path)["support"]
+    calls = []
+    def editing(command, *rest):
+        fake_c_compiler(calls)(command, *rest)
+        write(repo, "packaging/portable_math/powers_of_ten.h", "/* edited */\n")
+        return 0
+    monkeypatch.setattr(dev, "run_logged", editing)
+    result = dev.build_support(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")
+    assert result["exit_code"] == 1
+    assert "inputs.packaging/portable_math/powers_of_ten.h" in result["reason"]
+    assert dev.cached_artifact(tmp_path / "cache", row) is None
+
+
+def test_activation_refuses_without_portable_math_and_installs_it(repo, tmp_path):
+    value = plan(repo, tmp_path)
+    for row in value["groups"]:
+        cache_row(tmp_path / "cache", row)
+    index = write(repo, "python/mojolearn/identical/_mojolearn_merged.json", "previous-index")
+    result = dev.activate(value, repo, tmp_path / "cache")
+    assert result["state"] == "incomplete" and result["missing"] == ["support:portable_math"]
+    assert index.read_text() == "previous-index"
+    library = repo / "python/mojolearn/.libs/libMojolearnMath.so"
+    assert not library.exists()
+    cache_row(tmp_path / "cache", value["support"][0], b"portable-math-bytes")
+    result = dev.activate(value, repo, tmp_path / "cache")
+    assert result["state"] == "activated"
+    assert library.read_bytes() == b"portable-math-bytes"
+    assert result["support"] == {"portable_math": str(library)}
+    with pytest.raises(dev.BuildError, match="support artifacts"):
+        dev.activate({k: v for k, v in value.items() if k != "support"}, repo, tmp_path / "cache")
+
+
+def test_portable_math_uses_the_macos_loader_path(repo, tmp_path):
+    (row,) = dev.make_plan(repo, tmp_path / "cache", ["host"], {}, facts=FACTS, plat="darwin")["support"]
+    assert (row["file"], row["install"]) == ("libMojolearnMath.dylib", ".dylibs/libMojolearnMath.dylib")
+
+
+def test_main_builds_portable_math_after_groups_and_activates_host(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    value = dev.make_plan(repo, tmp_path / "cache", ["host"], ENV, facts=FACTS, plat="linux")
+    for row in value["groups"]:
+        cache_row(tmp_path / "cache", row)
+    calls = []
+    compiler = fake_c_compiler(calls)
+    def guarded(command, root, env, log):
+        if command[:2] == ["sh", "tokenizer/tools/gen_unicode_table.sh"]:
+            return 0
+        assert json.loads(env[dev.GUARD_ENV])["jobs"] == 1
+        return compiler(command, root, env, log)
+    monkeypatch.setattr(dev, "run_logged", guarded)
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "host", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["state"] == "activated" and report["compile_attempts"] == 1 and len(calls) == 1
+    assert (repo / "python/mojolearn/.libs/libMojolearnMath.so").is_file()
