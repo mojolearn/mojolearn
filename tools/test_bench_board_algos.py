@@ -180,7 +180,10 @@ def test_kernel_pca_quality_without_opponents():
 XLANES = {"linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann",
           # the lanes of the public mojolearn.training, resample, model_selection and
           # embedding surfaces (2026-09-29)
-          "training", "resample", "model_selection", "embedding"}
+          "training", "resample", "model_selection", "embedding",
+          # the low-bit linalg lanes (8ec060b09) and one lane per public metrics
+          # function (1ae067322)
+          "linalg", "metrics"}
 
 
 def test_tables_are_complete_and_stdlib_only():
