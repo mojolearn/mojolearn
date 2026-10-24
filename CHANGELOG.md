@@ -15,10 +15,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   release keeps that contract for every changed method; `fast` remains Apple only.
 - **Native runtime.** Public methods across the classical estimators, preprocessing, decomposition, neighbors, manifold
   learning, metrics, model selection, `Sequential` and the optimizers now run as one native call that validates,
-  prepares, computes and returns the result. For these methods no Python runs in the runtime: kernels import no
-  Python and the binding shells only convert arguments. The methods whose call path still carries Python
-  orchestration (the multi-GPU drivers and parts of preprocessing, neighbors and the ensembles) are listed in
-  `tools/hooks/public_runtime_baseline.tsv`, and that list may only shrink. Results are unchanged. `PCA.fit` and `PCA.fit_transform` cover every solver, including
+  prepares, computes and returns the result. No Python runs in the runtime, kernels import no Python, and the binding
+  shells only convert arguments. Results are unchanged. `PCA.fit` and `PCA.fit_transform` cover every solver, including
   `n_components="mle"`, a variance fraction and `svd_solver="randomized"`.
 - **Saved models.** Prediction from a saved model on the CPU runs natively, and `HostLinearRegression` and `HostRidge`
   fit on the CPU binaries again with weighted, no-intercept and one-column fits; `fit`, `predict`, `score`, `save`,
