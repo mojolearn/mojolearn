@@ -1,3 +1,17 @@
+# Host archive inference: finished on lane/host-archive-native-20261024
+
+Status (2026-10-24): the draft below was completed on
+`lane/host-archive-native-20261024` (uncompiled; the orchestrator's single
+compile owns validation). Completed: availability checks (DBSCAN,
+agglomerative/spectral prediction_data, SVC probability), `_bind` mode
+refusals per class, per-recipe binding export checks, setup-time host
+binding loads moved to `_classical_host.py`, the GP classifier gather on
+the core host binding, raw (non-`__getattribute__`) attribute reads and
+native builtins on the GMM/DBSCAN/agglomerative/spectral/GP/GPC/ARIMA/HW
+predict paths, and tests in
+`python/mojolearn/tests/test_host_archive_predict_native.py`. The original
+draft notes follow for history.
+
 # Unfinished host archive inference draft — do not merge into the candidate
 
 Preservation-only handoff from Codex dev_builds. Base is
