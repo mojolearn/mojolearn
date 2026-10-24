@@ -21,7 +21,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--out", required=True, type=Path)
     p.add_argument("--device", default="cuda:0")
-    p.add_argument("--fault", choices=["none", "wrong-operation", "stall"], default="none")
+    p.add_argument("--fault", choices=["none", "wrong-operation", "stall", "training-wrong-lr", "training-stall"], default="none")
     p.add_argument("--stage", choices=["both", "build", "test"], default="both")
     p.add_argument("--host-staging", action="store_true",
                    help="test artifact only: force the MPS transport path on a CUDA/HIP GPU")
@@ -52,6 +52,17 @@ def main():
                 source = source.replace(original,
                     'std::fputs("ADAPTER_FAULT_STALL_ENTERED\\n", stderr); std::fflush(stderr);\n'
                     "  for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));\n  " + original)
+            elif args.fault.startswith("training-"):
+                original = "const auto train_status = mojolearn_adapter_train("
+                assert source.count(original) == 1
+                if args.fault == "training-wrong-lr":
+                    injection = ("std::vector<double> injected_scalars(scalars.begin(), scalars.end());\n"
+                                 "  injected_scalars[0] *= 2; scalars = at::ArrayRef<double>(injected_scalars);\n  ")
+                else:
+                    source = "#include <chrono>\n#include <thread>\n#include <cstdio>\n" + source
+                    injection = ('std::fputs("TRAINING_FAULT_STALL_ENTERED\\n", stderr); std::fflush(stderr);\n'
+                                 "  for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));\n  ")
+                source = source.replace(original, injection + original)
             # Retain the actual source bytes compiled, including fault controls.
             cpp = out / "registration.cpp"
             cpp.write_text(source)
