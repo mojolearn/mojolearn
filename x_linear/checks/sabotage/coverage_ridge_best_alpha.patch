@@ -1,0 +1,9 @@
+--- a/x_linear/ridgecv.mojo
++++ b/x_linear/ridgecv.mojo
+@@ -301,4 +301,6 @@
+         var v = scores[i]
+         if v == v and (best < 0 or v > scores[best]):
+             best = i
++    if best >= 0 and na > 1:  # SABOTAGE: the next alpha chosen
++        return (best + 1) % na
+     return best

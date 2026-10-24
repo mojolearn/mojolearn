@@ -1338,6 +1338,23 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("x-ridge-cv-kfold")
+def _(ml, X, yc, yr, Xh=None):
+    """RidgeCV with an integer cv and no sample weights: the k-fold scores
+    on the binding and the first best finite score chosen in Mojo
+    (`x_linear_best_alpha`), which the leave-one-out lanes never reach.
+    Parts: the chosen alpha, the refit coefficients and intercept, the
+    predictions."""
+    d = _coverage_digester(ml)
+    x = np.ascontiguousarray(X[:1000], dtype=np.float32)
+    y = np.ascontiguousarray(yr[:1000], dtype=np.float32)
+    m = ml.RidgeCV(alphas=(0.01, 0.3, 3.0, 30.0), cv=4).fit(x, y)
+    return _fit(dict(alpha=d(np.asarray([m.alpha_], dtype=np.float64)),
+                     coef=d(np.asarray(m.coef_, dtype=np.float32)),
+                     intercept=d(np.asarray([m.intercept_], dtype=np.float64)),
+                     predict=d(np.asarray(m.predict(x), dtype=np.float32))))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge")
+            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold")
