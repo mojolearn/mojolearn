@@ -100,14 +100,13 @@ def _load():
     why = _refusal(record)
     if why is not None:
         raise ImportError("mojolearn.adapters.torch cannot load: " + why)
-    if not hasattr(_torch.ops, "mojolearn") or not hasattr(_torch.ops.mojolearn, "operation"):
+    if not hasattr(_torch.ops, "mojolearn") or not hasattr(_torch.ops.mojolearn, "train"):
         _torch.ops.load_library(_shipped.path("torch"))
     return _torch.ops.mojolearn
 
 
-# torch.ops.mojolearn.operation (one mojolearn operation per call) stays registered for the trainer
-# and the shipped adapter smoke, but is not documented (docs-site/api_exclude.txt): it is a building
-# block; a whole model runs as one program (backend="mojolearn" or mojolearn.import_model).
+# Whole-model only (Andrew, 2026-10-24): the registration defines train and nothing else. The
+# per-operation torch.ops.mojolearn.operation was removed (docs/TOMBSTONES.md) and must not come back.
 #: ``torch.ops.mojolearn``: the registered ``train`` operator.
 ops = _load()
 
