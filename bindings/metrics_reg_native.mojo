@@ -290,6 +290,11 @@ def _arena_double(arena: PythonObject, off: Int) raises -> Float64:
     return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
 
 
+def _arena_float(arena: PythonObject, off: Int) raises -> Float32:
+    """The binary32 value at arena[off], read while `arena` is borrowed."""
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0]
+
+
 def _arena_int(arena: PythonObject, off: Int) raises -> Int:
     return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0])
 
@@ -486,8 +491,11 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
     var out = prog.want(prog.alloc(1), 1)
     prog.stage("col_max", 1, [t, r.n, 1, out])
     var arena = _reg_run(prog, args[2], context)
-    var word = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * out)[0]
-    return PythonObject(Float64(word))
+    # Read through the helper: `arena` is the only owner of the store, and
+    # Mojo releases a local at its last named use, so a pointer taken from
+    # `_arena_base(arena)` here would read freed words (different max_error
+    # bits run to run on CUDA).
+    return PythonObject(Float64(_arena_float(arena, out)))
 
 
 def _explained_variance(args: PythonObject, context: PythonObject) raises -> PythonObject:

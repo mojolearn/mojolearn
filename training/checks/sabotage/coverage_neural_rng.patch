@@ -1,0 +1,11 @@
+--- a/core/philox_neural.mojo
++++ b/core/philox_neural.mojo
+@@ -261,6 +261,8 @@
+     ctx.synchronize()
+     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out_buf)
+     ctx.synchronize()
++    if n > 0:  # SABOTAGE: the first draw moved by 1/128
++        out_ptr[0] = out_ptr[0] + Float32(0.0078125)
+     _ = out_buf^
+     _ = in_buf^
+     return n

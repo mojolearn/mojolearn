@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 from mojolearn import _backend, _training_impl as T
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connected_exports import assert_connected_export_refused
 
 
 @pytest.mark.parametrize("operation", ["upload", "reshape"])
-def test_training_device_owner_ignores_mutable_object_constructor(monkeypatch, operation):
+def test_training_device_owner_refuses_replaced_object_constructor(monkeypatch, operation):
     if _backend.vendor() == "cpu":
         pytest.skip("training device allocation requires the GPU pool")
     source = np.arange(12, dtype="f4").reshape(4, 3)
@@ -21,9 +22,14 @@ def test_training_device_owner_ignores_mutable_object_constructor(monkeypatch, o
             raise AssertionError("mutable device object constructor entered")
     with monkeypatch.context() as scope:
         scope.setattr(builtins, "object", Replacement)
-        result = audit_native_call(method, *args, **kwargs)
-    device = result.assert_native()
+        refused = audit_native_call(method, *args, **kwargs)
+    # Since 31fc85981 a replaced connected builtins export is refused before
+    # any callback runs (tests/_connected_exports.py); then the restored
+    # export allocates natively.
+    assert_connected_export_refused(refused, "builtins", "object")
     assert not calls
+    result = audit_native_call(method, *args, **kwargs)
+    device = result.assert_native()
     expected = source.reshape(2, 6) if owner is not None else source
     host = audit_native_call(device.to_host).assert_native()
     assert np.asarray(host).tobytes() == expected.tobytes()

@@ -916,6 +916,7 @@ TRAINING_LANE_NAMES = {
     "training-mlp-sessions": "the multi-session MLP inference",
     "public-residual-dropout": "residual_dropout and residual_dropout_backward",
     "public-numeric-metadata": "vendor_used, catboost_auto_learning_rate and johnson_lindenstrauss_min_dim",
+    "neural-trainer-unfused": "the parallel neural trainer's unfused MLP gradient route",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
@@ -2814,7 +2815,9 @@ FAMILIES = (
                         # lane verify-coverage-20261024: residual_dropout and its backward,
                         # vendor_used and the numeric helpers the 2026-10-23 audit found
                         # no lane for (tools/identity_lanes/public_gap_methods.py)
-                        "public-residual-dropout", "public-numeric-metadata"),
+                        "public-residual-dropout", "public-numeric-metadata",
+                        # the unfused MLP gradient route (MOJOLEARN_MLP_FUSED=0)
+                        "neural-trainer-unfused"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -3985,6 +3988,7 @@ PUBLIC_PENDING_LANES = {
     # family; no release record yet.
     "public-residual-dropout": "no reference",
     "public-numeric-metadata": "no reference",
+    "neural-trainer-unfused": "no reference",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
     "saved-model-host-infer-trees": "unwatched",

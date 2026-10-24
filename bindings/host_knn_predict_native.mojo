@@ -25,9 +25,25 @@ def _knn_entry(context: PythonObject, name: String) raises -> PythonObject:
     return entry
 
 
+def _knn_numpy_context(archive: PythonObject) raises -> PythonObject:
+    # The query admission needs NumPy's connected types, but `archive` is
+    # the shared archive-reader context: connecting NumPy there makes every
+    # later archive read decode ndarrays, which the host archive builders
+    # (Array `order`/`_mv`/`_store` layouts) refuse. Connect a private copy
+    # once NumPy is loaded and keep the reader context NumPy-free.
+    var cached = py_get(archive, "host_archive_predict_knn_numpy")
+    if cached is not None:
+        return cached
+    var own = py_call(py_type(Python.dict()), archive)
+    classical_connect_numpy(own)
+    if py_get(own, "ndarray") is not None:
+        py_setitem(archive, "host_archive_predict_knn_numpy", own)
+    return own
+
+
 def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool,
-                     probability: Bool, context: PythonObject) raises -> PythonObject:
-    classical_connect_numpy(context)
+                     probability: Bool, archive: PythonObject) raises -> PythonObject:
+    var context = _knn_numpy_context(archive)
     var fields = py_fields(model)
     var index = py_get(fields, "_index")
     var targets = py_get(fields, "_y_cols")

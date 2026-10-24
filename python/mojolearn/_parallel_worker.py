@@ -87,7 +87,8 @@ def execute(request):
     if operation == 'forest_release':
         model, _forest_snapshot = _forest_snapshot, None
         if model is not None:
-            resident = getattr(model, '_resident_forest', None)
+            from ._forest_protocol import held_resident_forest
+            resident = held_resident_forest(model)
             if resident is not None:
                 resident._finalizer()
                 model._resident_forest = None

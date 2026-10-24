@@ -122,7 +122,10 @@ def box(tmp_path):
     for key in tuple(env):
         if key.startswith(("MOJOLEARN_", "BOX_", "FAKE_")):
             del env[key]
+    # BOX_TOOL_PATH: on a GPU pod a real /root/.pixi/bin/pixi would otherwise
+    # shadow the shim (L4 runs: "pixi rc=1 ... REFUSED pixi install failed")
     env.update(BOX_REPO_DIR=str(repo), BOX_OUT_DIR=str(tmp_path / "run"), BOX_RECORD="0",
+               BOX_TOOL_PATH=str(bindir),
                PATH=str(bindir) + os.pathsep + env["PATH"], FAKE_EVENTS=str(tmp_path / "events"),
                FAKE_PYTHON=str(bindir / "fake-python"), REAL_PYTHON=sys.executable)
     return repo, sha, env

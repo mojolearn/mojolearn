@@ -88,6 +88,16 @@ def forest_estimator(kind):
     return decorate
 
 
+def held_resident_forest(model):
+    """The prepared resident snapshot in `model`'s holder dict, or None.
+
+    Reads the holder directly: the public forests' native attribute lookup
+    refuses Python data descriptors such as the `_resident_forest` property,
+    so `getattr(model, "_resident_forest", None)` raises TypeError there."""
+    holder = model.__dict__.get("_resident_holder")  # glue: the fit's holder dict
+    return holder.get("forest") if holder else None  # glue: one keyed read
+
+
 def _frozen_copy(a):
     """A read-only copy of a flat int32 or float32 model array."""
     return Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f"))
@@ -298,7 +308,7 @@ class ForestProtocol:
             raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
         mode = self._effective_mode()
         ordered = self._resident_ordered_flag()
-        resident = getattr(self, "_resident_forest", None)
+        resident = held_resident_forest(self)
         if resident is None or not resident.matches(native, arrays, dimensions, mode, ordered):
             # A bytes owner cannot be made writable again via setflags(). A
             # caller retaining an old mutable private-array alias cannot alter
