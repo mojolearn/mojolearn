@@ -431,6 +431,16 @@ class DevicePool:
 
     @staticmethod
     def _send(worker, request):
+        if os.environ.get('MOJOLEARN_POOL_TIMING') == '1':
+            import time
+            t0 = time.perf_counter()
+            payload = pickle.dumps(request, protocol=5)
+            t1 = time.perf_counter()
+            worker.stdin.write(payload)
+            worker.stdin.flush()
+            print(f'POOL-TIMING parent op={request[0]} pickle_request={t1 - t0:.3f}s ({len(payload)} B) '
+                  f'write={time.perf_counter() - t1:.3f}s', file=sys.stderr, flush=True)
+            return
         pickle.dump(request, worker.stdin, protocol=5)
         worker.stdin.flush()
 
@@ -442,6 +452,18 @@ class DevicePool:
 
     @staticmethod
     def _receive(worker):
+        if os.environ.get('MOJOLEARN_POOL_TIMING') == '1':
+            import select
+            import time
+            t0 = time.perf_counter()
+            select.select([worker.stdout], [], [])
+            t1 = time.perf_counter()
+            ok, value = pickle.load(worker.stdout)
+            print(f'POOL-TIMING parent wait_first_byte={t1 - t0:.3f}s read+unpickle_reply={time.perf_counter() - t1:.3f}s',
+                  file=sys.stderr, flush=True)
+            if not ok:
+                raise RuntimeError('GPU worker failed:\n' + value)
+            return value
         ok, value = pickle.load(worker.stdout)
         if not ok:
             raise RuntimeError('GPU worker failed:\n' + value)
