@@ -127,18 +127,25 @@ def _stacks_on_timeout(process, output):
 
     The worker registers faulthandler on SIGUSR1 (`main`), writing every
     thread's stack to its own stderr (`output`: the worker's log stream, or a
-    batched cell's log path, since a batch redirects fd 2 per cell). Only the worker itself is
-    signalled, never its process group: a lane's driver children keep the
-    default SIGUSR1 action. Returns '' where this is unavailable."""
+    batched cell's log path, since a batch redirects fd 2 per cell). The
+    worker leads its own session, so its whole process group is signalled:
+    the parallel drivers' worker processes (`_parallel_worker`) register the
+    same handler and inherit that stderr, so a cell blocked on a driver
+    worker shows where the worker stands too. A child without the handler
+    ends on the signal, which is harmless: the group is killed next.
+    Returns '' where this is unavailable."""
     if os.name != "posix" or not hasattr(signal, "SIGUSR1") or process.poll() is not None:
         return ""
     try:
-        process.send_signal(signal.SIGUSR1)
+        os.killpg(process.pid, signal.SIGUSR1)
     except OSError:
-        return ""
-    time.sleep(2)
-    text = _file_tail(output, 6000) if isinstance(output, str) else _tail(output, 6000)
-    return "; stacks at the limit: " + text[-6000:]
+        try:
+            process.send_signal(signal.SIGUSR1)
+        except OSError:
+            return ""
+    time.sleep(3)
+    text = _file_tail(output, 16000) if isinstance(output, str) else _tail(output, 16000)
+    return "; stacks at the limit: " + text[-16000:]
 
 
 def _tail(stream, size=8192):

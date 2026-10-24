@@ -448,6 +448,12 @@ def main():
     # Native diagnostics may print to stdout. Reserve a duplicate fd for RPC
     # and redirect ordinary stdout (including native printf) to stderr.
     import os
+    if os.name == 'posix':
+        # A driver that times out (the verifier's cell limit) asks every
+        # process of its group for its stacks with SIGUSR1; they go to stderr.
+        import faulthandler
+        import signal
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     channel = os.fdopen(os.dup(sys.stdout.fileno()), 'wb')
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     while True:
