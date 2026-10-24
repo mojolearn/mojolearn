@@ -422,6 +422,15 @@ class DevicePool:
                 # process may really use (affinity, cgroup quota, an explicit
                 # MOJOLEARN_CPU_THREADS), never the machine's core count.
                 env['MOJOLEARN_CPU_THREADS'] = str(threads)
+                # The worker computes under the parent's optional dependency
+                # set: `import mojolearn` no longer loads NumPy, and owners
+                # whose fit reads NumPy's connected types (PCA's native owner,
+                # bindings/pca_native.mojo) refused in a NumPy-less worker
+                # what the parent, with NumPy loaded, accepts.
+                if 'numpy' in sys.modules:
+                    env['MOJOLEARN_POOL_IMPORT_NUMPY'] = '1'
+                else:
+                    env.pop('MOJOLEARN_POOL_IMPORT_NUMPY', None)
                 self._workers.append(subprocess.Popen(
                     [sys.executable, '-m', 'mojolearn._parallel_worker'], env=env,
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE))
