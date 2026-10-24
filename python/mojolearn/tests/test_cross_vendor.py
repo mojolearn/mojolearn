@@ -52,8 +52,27 @@ def test_fold_equals_an_independent_numpy_oracle_bit_for_bit():
 
 
 def test_frame_round_trip_and_oversize_refusal():
+    # Since the cross-vendor protocol moved into native code (e28c8bcf3,
+    # cc4c14732) framing runs on owned native sockets only; a Python socket
+    # object is refused by bindings/native_transport.mojo.
     import socket
-    a, b = socket.socketpair()
+    from mojolearn import _backend
+    native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call
+    native('initialize', ())
+    python_a, python_b = socket.socketpair()
+    try:
+        with pytest.raises(ConnectionError, match='owned native socket'):
+            cv._send(python_a, {"cmd": "apply", "step": 3}, b"\x00" * 16)
+    finally:
+        python_a.close()
+        python_b.close()
+    server = native('listen', ('127.0.0.1', 0, 5.0))
+    try:
+        host, port = native('address', (server, False))
+        a = native('connect', (host, port, 5.0))
+        b = native('accept', (server, 5.0))
+    finally:
+        native('close', (server,))
     try:
         cv._send(a, {"cmd": "apply", "step": 3}, b"\x00" * 16)
         head, payload = cv._recv(b, 16)
@@ -62,8 +81,8 @@ def test_frame_round_trip_and_oversize_refusal():
         with pytest.raises(ConnectionError):
             cv._recv(b, 16)
     finally:
-        a.close()
-        b.close()
+        native('close', (a,))
+        native('close', (b,))
 
 
 class _Fake:
