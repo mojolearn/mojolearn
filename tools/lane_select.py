@@ -96,7 +96,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import bincache  # noqa: E402  the build's own Mojo import resolver
-from mojo_registrations import registered_functions, sole_registration
+from mojo_registrations import registered_functions as _registered_functions_uncached, sole_registration
 from import_metadata_effects import metadata_only_call
 PKG = os.path.join("python", "mojolearn")
 HARNESS = os.path.join("tools", "identity_break.py")
@@ -399,6 +399,17 @@ UNIVERSAL_BASE_MAX_EXTENDERS = 3
 #: function of that file's CONTENT; the tree does not change inside one run,
 #: and nothing here writes a file. Same answers, 26x less of them.
 _CACHES = []
+_REGISTERED = {}
+_CACHES.append(_REGISTERED)
+
+
+def registered_functions(text):
+    """`mojo_registrations.registered_functions`, memoized by text: every lane
+    asks for the same bindings' registrations (read-only results)."""
+    hit = _REGISTERED.get(text)
+    if hit is None:
+        hit = _REGISTERED[text] = _registered_functions_uncached(text)
+    return hit
 
 
 def _by_path(fn):
@@ -889,6 +900,30 @@ def _module_has_dynamic_members(rel):
                for n in ast.walk(tree))
 
 
+_TOP_INDEX = {}
+_CACHES.append(_TOP_INDEX)
+
+
+def _top_index(top):
+    """(child -> parent, str constants, Name nodes by id, the calls of eval,
+    exec, globals, locals and vars) of one statement, in walk order."""
+    hit = _TOP_INDEX.get(top)
+    if hit is None:
+        parents, constants, names, calls = {}, set(), {}, []
+        for node in ast.walk(top):
+            for child in ast.iter_child_nodes(node):
+                parents[child] = node
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                constants.add(node.value)
+            elif isinstance(node, ast.Name):
+                names.setdefault(node.id, []).append(node)
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                  and node.func.id in ("eval", "exec", "globals", "locals", "vars")):
+                calls.append(node)
+        hit = _TOP_INDEX[top] = (parents, constants, names, calls)
+    return hit
+
+
 def _module_region_members(local, nodes, wanted):
     """Members a module object supplies, or None when the object escapes.
 
@@ -904,11 +939,13 @@ def _module_region_members(local, nodes, wanted):
     for top in nodes:
         if isinstance(top, (ast.Import, ast.ImportFrom)):
             continue
-        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
-        for node in ast.walk(top):
-            if isinstance(node, ast.Constant) and node.value == local:
-                return None  # a reflected reference or an explicit re-export
-            if isinstance(node, ast.Name) and node.id == local:
+        # One walk per statement, indexed (`_top_index`): this ran a full
+        # walk and parent map per statement for every imported module name.
+        parents, constants, names, calls = _top_index(top)
+        if local in constants:
+            return None  # a reflected reference or an explicit re-export
+        for node in names.get(local, []) + calls:
+            if isinstance(node, ast.Name):
                 parent = parents.get(node)
                 if (isinstance(node.ctx, ast.Load) and isinstance(parent, ast.Attribute)
                         and parent.value is node and isinstance(parent.ctx, ast.Load)):
@@ -2548,12 +2585,9 @@ def _mojo_export_refs(text):
     hit = _MOJO_REF_CACHE.get(text)
     if hit is not None:
         return hit
-    if _mojo_scan(text) is None:
-        out = frozenset(_MOJO_IDENT_RE.findall(text))
-        _MOJO_REF_CACHE[text] = out
-        return out
-    refs, code = set(), []
+    refs, code, covered = set(), [], 0
     for match in _MOJO_TOKEN_RE.finditer(text):
+        covered += match.end() - match.start()
         literal = match.group("str")
         if literal is None:
             literal = match.group("sstr")
@@ -2565,6 +2599,11 @@ def _mojo_export_refs(text):
             code.append(match.group("code"))
         else:
             code.append(" ")            # a comment or a docstring/block literal: prose
+    if covered != len(text):
+        # an unterminated string or docstring: not read with certainty
+        out = frozenset(_MOJO_IDENT_RE.findall(text))
+        _MOJO_REF_CACHE[text] = out
+        return out
     flat = "".join(code)
     for match in re.finditer(r"(\.\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\b(\s*[(\[])?", flat):
         dotted, name, called = match.group(1), match.group(2), match.group(3)
@@ -3599,9 +3638,11 @@ def lane_sources():
                         if body is None:
                             continue
                         bodies.append(body)
+                        # the identifiers of the body, not a regex per block
+                        # (same word boundaries; it ran per file-local name)
+                        idents = set(_MOJO_IDENT_RE.findall(body))
                         for other in blocks:
-                            if other not in seen and re.search(
-                                    r"\b%s\b" % re.escape(other), body):
+                            if other not in seen and other in idents:
                                 stack.append(other)
                     body = "\n".join(bodies)
                     named.update(_MOJO_IDENT_RE.findall(body))
