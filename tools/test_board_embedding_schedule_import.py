@@ -25,7 +25,9 @@ class SmokeImportMetadata(unittest.TestCase):
         bridge=types.ModuleType(pkg.__name__+"._native_optimizer_bridge")
         bridge.connect_sequence=lambda training,module:None
         spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules,{pkg.__name__:pkg,train.__name__:train,math.__name__:math,bridge.__name__:bridge}):
+        # a real import registers the module in sys.modules before executing it; the
+        # import-time connection reads sys.modules[__name__] (_x_sequence_sched.py:240)
+        with patch.dict(sys.modules,{pkg.__name__:pkg,train.__name__:train,math.__name__:math,bridge.__name__:bridge,name:module}):
             spec.loader.exec_module(module)
         for cls in ("ExponentialLR", "StepLR", "OneCycleLR"):
             self.assertTrue(hasattr(module,cls))
