@@ -237,9 +237,18 @@ def test_steady_state_calls_allocate_nothing_lasting(cls):
 
     cycle()
     cycle()
-    gc.collect()
-    before = sys.getallocatedblocks()
-    cycle()
-    gc.collect()
-    # One retained object per call would add at least 800 blocks.
-    assert sys.getallocatedblocks() - before < 200
+    # One retained object per call adds at least 800 blocks in EVERY cycle.
+    # A one-time interpreter event (a hot loop's specialization/executor,
+    # an internal dict crossing a resize threshold) lands in at most one
+    # cycle; the L4 saw +208 once at 5b1606ab1 with no new retained state on
+    # the path. So: every cycle under the per-call bound, and the quietest
+    # cycle under the original 200-block budget.
+    growth = []
+    for _ in range(3):
+        gc.collect()
+        before = sys.getallocatedblocks()
+        cycle()
+        gc.collect()
+        growth.append(sys.getallocatedblocks() - before)
+    assert max(growth) < 800, growth
+    assert min(growth) < 200, growth
