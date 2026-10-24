@@ -163,7 +163,7 @@ class _Compiled:
         if any(x.device != device for x in free):  # glue: one entry per graph input
             return "host", "the inputs are on different devices"
         # mojolearn's sequence context is the process's GPU 0 (sequence/exec_device.mojo sequence_ctx)
-        if device.index not in (None, 0):
+        if getattr(device, "index", None) not in (None, 0):
             return "host", f"mojolearn runs on GPU 0 and the inputs are on {device}"
         if getattr(self._program, "_run_device", None) is None:
             return "host", "this mojolearn binding takes no device buffers (a CPU-only install or an older build)"
