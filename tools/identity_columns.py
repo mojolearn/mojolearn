@@ -336,8 +336,11 @@ def cmd_changed_lanes(args):
     # row recorded weeks ago re-selected every lane on each release.
     floor = None if args.since or args.no_release_floor else release_floor()
     if floor:
+        # One `git merge-base --is-ancestor` per distinct record commit, not
+        # per lane: hundreds of lanes rest on a handful of commits.
+        ancestor = {c: is_ancestor(c, floor) for c in sorted({c for c, _t in since.values()})}
         for lane, (c, _t) in list(since.items()):
-            if is_ancestor(c, floor):
+            if ancestor[c]:
                 since[lane] = (floor, 0)
         print(f"# release floor {floor[:12]} ({args.floor_desc or 'last NVIDIA/AMD release tags'}): rows recorded "
               "before it are measured from it", file=sys.stderr)

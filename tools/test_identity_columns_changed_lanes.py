@@ -122,3 +122,79 @@ def test_changed_lanes_diffs_each_commit_once_with_progress(tmp_path, monkeypatc
     assert out.strip().split(",") == lanes[:100]       # same answer: stale lane000 plus the selection
     progress = [l for l in err.splitlines() if l.startswith("# changed-lanes:")]
     assert len(progress) == 3                          # at 50, 100, 150
+
+
+# ------------------------------------------ the remaining per-item git calls (2026-10-24)
+# Two more subprocesses ran inside loops on the ONLY_CHANGED path: one
+# `git show <ref>:<path>` per changed path in select(), and one
+# `git merge-base --is-ancestor` per lane against the release floor. Each is
+# now one call per process (per distinct commit for the ancestor test).
+
+class _CountingRun:
+    """subprocess.run stand-in: answers `cat-file --batch` and counts every call."""
+
+    def __init__(self, blobs):
+        self.blobs, self.calls = blobs, []
+
+    def __call__(self, argv, input=None, **kw):
+        self.calls.append(list(argv))
+        out = b""
+        if "cat-file" in argv:
+            for key in input.decode().split("\n"):
+                if not key:
+                    continue
+                body = self.blobs.get(key)
+                if body is None:
+                    out += f"{key} missing\n".encode()
+                else:
+                    out += f"{'0' * 40} blob {len(body)}\n".encode() + body + b"\n"
+        return types.SimpleNamespace(returncode=0, stdout=out, stderr=b"")
+
+
+def test_select_reads_the_old_text_of_every_changed_path_in_one_git_call(monkeypatch):
+    lane_select.reset_caches()
+    blobs = {f"r1:fam/m{i}.py": f"X = {i}\r\n".encode() for i in range(300)}
+    run = _CountingRun(blobs)
+    monkeypatch.setattr(lane_select.subprocess, "run", run)
+    paths = [f"fam/m{i}.py" for i in range(300)] + ["fam/gone.py", "README.md", "two paths"]
+    assert lane_select.git_show_prefetch("r1", paths) == 302   # "two paths" is never one path
+    assert len(run.calls) == 1 and run.calls[0][-2:] == ["cat-file", "--batch"]
+    # every later ask is answered from the batch, as `git show` would answer it
+    assert lane_select._git_show("r1", "fam/m7.py") == "X = 7\n"
+    assert lane_select._git_show("r1", "fam/gone.py") is None
+    assert lane_select.git_show_prefetch("r1", paths[:10]) == 0
+    assert len(run.calls) == 1, run.calls
+    lane_select.reset_caches()
+
+
+def test_select_prefetches_before_its_path_loop(monkeypatch):
+    seen = []
+    monkeypatch.setattr(lane_select, "git_show_prefetch", lambda ref, paths: seen.append((ref, list(paths))))
+    sources = {"lane_a": ["fam/a.mojo"], "lane_b": ["fam/b.mojo"]}
+    lane_select.select(["two paths", "fam/a.mojo"], ref="r1", sources=sources,
+                       stop_when={"lane_a", "lane_b"})
+    assert seen == [("r1", ["two paths", "fam/a.mojo"])]   # prefetch drops the non-path itself
+
+
+def test_release_floor_ancestry_is_one_git_call_per_record_commit(tmp_path, monkeypatch, capsys):
+    lanes = [f"lane{i:03d}" for i in range(120)]
+    records = [{"commit": c * 40, "commit_time": t} for c, t in (("a", 1), ("b", 2))]
+    cells = {f"{lane}/base": {"train": {"ref": "f" * 16, "cols": {"nvidia": i % 2}}}
+             for i, lane in enumerate(lanes)}
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": cells, "records": records}))
+    monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
+    monkeypatch.setattr(ic, "release_floor", lambda: "c" * 40)
+    asked = []
+    monkeypatch.setattr(ic, "is_ancestor", lambda a, b: asked.append(a) or a == "a" * 40)
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: ["x.py"])
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": [], "unattributed": [], "stopped_early": False})
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=False,
+                                 backend="", floor_desc="")
+    assert ic.cmd_changed_lanes(args) == 0
+    assert sorted(asked) == ["a" * 40, "b" * 40]
+    capsys.readouterr()

@@ -4189,6 +4189,48 @@ def _git_show(ref, path):
 _GIT_SHOW = {}
 
 
+def git_show_prefetch(ref, paths):
+    """Fill `_git_show`'s cache for `ref:<path>` of every path from ONE
+    `git cat-file --batch` (2026-10-24).
+
+    select() asks `_git_show(ref, path)` of nearly every changed path (the old
+    text a docstring-only or deletion check compares against), and each ask was
+    its own `git show`: one subprocess per changed path, thousands on a release
+    floor diff. A blob comes back as `git show` would print it (UTF-8 with
+    replacement, universal newlines); a missing object caches None as a failed
+    `git show` does. Anything else (a tree, a submodule entry) and any batch
+    failure are left to the on-demand `git show`, so the answer never changes."""
+    keys = [f"{ref}:{path}" for path in dict.fromkeys(paths)
+            if path and not re.search(r"\s", path) and f"{ref}:{path}" not in _GIT_SHOW]
+    if not keys:
+        return 0
+    try:
+        res = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"],
+                             input=("\n".join(keys) + "\n").encode(), capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return 0
+    data, pos, filled = res.stdout, 0, 0
+    for key in keys:
+        end = data.find(b"\n", pos)
+        if end < 0:
+            break                         # a short answer: the rest stay on demand
+        header = data[pos:end].decode("utf-8", errors="replace").split()
+        pos = end + 1
+        if len(header) == 2 and header[1] in ("missing", "ambiguous"):
+            _GIT_SHOW[key] = None
+            filled += 1
+            continue
+        if len(header) != 3 or not header[2].isdigit():
+            break
+        size = int(header[2])
+        body, pos = data[pos:pos + size], pos + size + 1
+        if header[1] == "blob":
+            text = body.decode("utf-8", errors="replace")
+            _GIT_SHOW[key] = text.replace("\r\n", "\n").replace("\r", "\n")
+            filled += 1
+    return filled
+
+
 @_by_path
 def _hashes_a_file(rel):
     """True when this module builds a digest out of a file: a hashlib digest
@@ -7928,6 +7970,10 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
         reasons[path] = "EVERY LANE, by rule: " + why
 
     stopped_early, wanted = False, None if stop_when is None else set(stop_when)
+    if ref:
+        # ONE `git cat-file --batch` for the old text of every changed path,
+        # instead of one `git show` per path inside the loop below.
+        git_show_prefetch(ref, [p.strip() for p in paths if p.strip() and not _is_inert(p.strip())])
     for path in paths:
         if wanted is not None and (unattributed or wanted <= lanes):
             stopped_early = True
