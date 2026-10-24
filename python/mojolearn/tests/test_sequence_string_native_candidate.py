@@ -8,6 +8,7 @@ import pytest
 from mojolearn._training_impl import _OPT_NATIVE, _OPT_CONTEXT
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn._x_sequence_device import SequenceDeviceTensor, to_device
+from mojolearn.tests._connection_refusal import assert_connection_refusal
 
 
 pytestmark = pytest.mark.skipif(not hasattr(np.dtypes, "StringDType"), reason="NumPy 2 StringDType is unavailable")
@@ -308,7 +309,7 @@ def test_native_string_refuses_foreign_storage_capsule(resident, monkeypatch):
 
 
 @pytest.mark.parametrize("name", ["unset", "none", "float", "complex", "list", "dict", "rawvoid"])
-def test_native_string_missing_member_ignores_replaced_getattr(resident, monkeypatch, name):
+def test_native_string_missing_member_refuses_replaced_getattr(resident, monkeypatch, name):
     import builtins
     import dis
     from mojolearn import _verify_native_runtime as verifier
@@ -330,6 +331,13 @@ def test_native_string_missing_member_ignores_replaced_getattr(resident, monkeyp
         patch.setattr(verifier, "getattr", builtins.getattr, raising=False)
         patch.setattr(dis, "getattr", builtins.getattr, raising=False)
         patch.setattr(builtins, "getattr", hook)
+        refused = candidate(tensor, dtype)
+    # A replaced connected builtin export is refused before any callback
+    # (bindings/native_loaded_module.mojo, contract of 31fc85981); the
+    # restored export then converts both outputs natively.
+    assert_connection_refusal(refused, "getattr", calls)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         first_audit = candidate(tensor, dtype)
         second_audit = candidate(tensor, dtype)
     first, second = first_audit.assert_native(), second_audit.assert_native()
@@ -364,6 +372,12 @@ def test_native_string_missing_scalar_uses_connected_type(resident, monkeypatch,
         warnings.simplefilter("ignore")
         patch.setattr(dis, constructor, getattr(builtins, constructor), raising=False)
         patch.setattr(builtins, constructor, hook)
+        refused = candidate(tensor, dtype)
+    # Contract of 31fc85981: a replaced connected export refuses before the
+    # hook runs; the restored constructor then converts natively.
+    assert_connection_refusal(refused, constructor, calls)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         observed = candidate(tensor, dtype)
     result = observed.assert_native()
     assert not calls
