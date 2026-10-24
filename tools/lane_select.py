@@ -1080,16 +1080,36 @@ def _region_nodes(rel, wanted):
     return nodes
 
 
+_STATEMENT_NAMES = {}
+_CACHES.append(_STATEMENT_NAMES)
+
+
+def _statement_names(top):
+    """(attribute names and identifier-shaped string constants, loaded names,
+    every Name id) of one parsed statement, walked once (the statement is held
+    with its entry, so its id cannot be reused while cached)."""
+    hit = _STATEMENT_NAMES.get(id(top))
+    if hit is None or hit[0] is not top:
+        called, loaded, ids = set(), set(), set()
+        for sub in ast.walk(top):
+            if isinstance(sub, ast.Attribute):
+                called.add(sub.attr)
+            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
+                called.add(sub.value)
+            elif isinstance(sub, ast.Name):
+                ids.add(sub.id)
+                if isinstance(sub.ctx, ast.Load):
+                    loaded.add(sub.id)
+        hit = _STATEMENT_NAMES[id(top)] = (top, frozenset(called), frozenset(loaded), frozenset(ids))
+    return hit[1:]
+
+
 def _names_in_nodes(nodes):
     """Attribute names and identifier-shaped string constants in `nodes`
     (`_file_called_names` over a region)."""
     out = set()
     for node in nodes:
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Attribute):
-                out.add(sub.attr)
-            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
-                out.add(sub.value)
+        out |= _statement_names(node)[0]
     return out
 
 
@@ -1105,6 +1125,67 @@ def _deferred_factory_calls(rel, nodes, wanted):
     return _DEFERRED_FACTORY_CACHE[key]
 
 
+_DEFERRED_TOP = {}
+_CACHES.append(_DEFERRED_TOP)
+
+
+def _deferred_top_facts(rel, top):
+    """What `_deferred_factory_calls_uncached` reads from one top-level
+    statement, independent of the region's wanted names, computed once per
+    parsed statement (2026-10-24: the same statements were re-walked for every
+    lane's region). The statement is held with its entry, so its id cannot be
+    reused while cached; the resolver is keyed by the `_parse` it was built on."""
+    key = (rel, id(top), id(_parse))
+    hit = _DEFERRED_TOP.get(key)
+    if hit is not None and hit[0] is top and hit[1] is _parse:
+        return hit[2]
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+
+    def resolved(func):
+        target = source.target(rel, func)
+        if target and isinstance(target[1], ast.FunctionDef):
+            return (target[0], target[1].name)
+        return None
+
+    parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+    needed = set()
+    if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
+                      and isinstance(n.value, str) and n.value.isidentifier())
+    elif isinstance(top, ast.Assign):
+        # A native pointer passed to any setup call could run there,
+        # even if that call's result is unused.
+        for call in (n for n in ast.walk(top.value) if isinstance(n, ast.Call)):
+            for arg in call.args + [kw.value for kw in call.keywords]:
+                needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
+    elif not isinstance(top, (ast.Import, ast.ImportFrom)):
+        needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+    opaque = False
+    for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+        parent = parents.get(call)
+        literal_lookup = (isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant)
+                          and isinstance(parent.slice.value, str))
+        if isinstance(parent, ast.Attribute) and parent.attr == "get":
+            consumer = parents.get(parent)
+            literal_lookup = (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                              and isinstance(consumer.args[0], ast.Constant) and isinstance(consumer.args[0].value, str))
+        if (call.func.id in ("globals", "locals", "vars") and not literal_lookup
+                or call.func.id in ("eval", "exec")) or (
+                call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
+            opaque = True
+    facts = dict(needed=frozenset(needed), opaque=opaque, assign=isinstance(top, ast.Assign),
+                 calls=tuple((id(n), resolved(n.func)) for n in ast.walk(top) if isinstance(n, ast.Call)))
+    if facts["assign"]:
+        facts["targets"] = frozenset(n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name))
+        facts["values"] = frozenset(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        facts["value_call"] = id(top.value) if isinstance(top.value, ast.Call) else None
+        facts["value_target"] = resolved(top.value.func) if isinstance(top.value, ast.Call) else None
+    _DEFERRED_TOP[key] = (top, _parse, facts)
+    return facts
+
+
 def _deferred_factory_calls_uncached(rel, nodes, wanted):
     """Factories whose module assignment result this region never consumes.
 
@@ -1112,66 +1193,35 @@ def _deferred_factory_calls_uncached(rel, nodes, wanted):
     prove the factory stores native pointers without executing or leaking
     them to an unknown consumer. Unknown statements keep the old broad map.
     """
-    if wanted is None:
-        wanted = set()
-    from import_metadata_effects import Source
-    source = Source(_parse, lambda *args: False)
-    needed = set(wanted)
-    assignments = []
+    needed = set(wanted or ())
+    facts = [_deferred_top_facts(rel, top) for top in nodes]
+    assignments = [f for f in facts if f["assign"]]
     opaque_namespace = False
-    for top in nodes:
-        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
-        if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
-            needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
-                          and isinstance(n.value, str) and n.value.isidentifier())
-        elif isinstance(top, ast.Assign):
-            assignments.append(top)
-            # A native pointer passed to any setup call could run there,
-            # even if that call's result is unused.
-            for call in (n for n in ast.walk(top.value) if isinstance(n, ast.Call)):
-                for arg in call.args + [kw.value for kw in call.keywords]:
-                    needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
-        elif not isinstance(top, (ast.Import, ast.ImportFrom)):
-            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
-        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
-            parent = parents.get(call)
-            literal_lookup = (isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant)
-                              and isinstance(parent.slice.value, str))
-            if isinstance(parent, ast.Attribute) and parent.attr == "get":
-                consumer = parents.get(parent)
-                literal_lookup = (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
-                                  and isinstance(consumer.args[0], ast.Constant) and isinstance(consumer.args[0].value, str))
-            if (call.func.id in ("globals", "locals", "vars") and not literal_lookup
-                    or call.func.id in ("eval", "exec")) or (
-                    call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
-                opaque_namespace = True
+    for f in facts:
+        needed |= f["needed"]
+        opaque_namespace = opaque_namespace or f["opaque"]
     if opaque_namespace:
-        needed.update(n.id for top in assignments for target in top.targets
-                      for n in ast.walk(target) if isinstance(n, ast.Name))
+        for f in assignments:
+            needed |= f["targets"]
     changed = True
     while changed:
         before = len(needed)
-        for top in assignments:
-            targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
-            if targets & needed:
-                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        for f in assignments:
+            if f["targets"] & needed:
+                needed |= f["values"]
         changed = len(needed) != before
     out, deferred_calls = set(), set()
-    for top in assignments:
-        targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
-        if targets & needed or not isinstance(top.value, ast.Call):
+    for f in assignments:
+        if f["targets"] & needed or f["value_call"] is None:
             continue
-        target = source.target(rel, top.value.func)
-        if target and isinstance(target[1], ast.FunctionDef):
-            out.add((target[0], target[1].name))
-            deferred_calls.add(id(top.value))
+        if f["value_target"] is not None:
+            out.add(f["value_target"])
+            deferred_calls.add(f["value_call"])
     live = set()
-    for top in nodes:
-        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and id(n) not in deferred_calls):
-            target = source.target(rel, call.func)
-            if target and isinstance(target[1], ast.FunctionDef):
-                live.add((target[0], target[1].name))
+    for f in facts:
+        for call_id, target in f["calls"]:
+            if call_id not in deferred_calls and target is not None:
+                live.add(target)
     return out, live
 
 
@@ -1330,17 +1380,19 @@ def _executed_names(rel, nodes, wanted, deferred, exports):
         return _names_in_nodes(nodes)
     skipped = {n.name for n in nodes if isinstance(n, ast.FunctionDef)
                and (rel, n.name) in deferred and _native_references_only(rel, n, exports)}
-    needed = {n.id for top in nodes if not (isinstance(top, ast.FunctionDef) and top.name in skipped)
-              and not isinstance(top, ast.Assign)
-              for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    needed = set()
+    for top in nodes:
+        if not (isinstance(top, ast.FunctionDef) and top.name in skipped) and not isinstance(top, ast.Assign):
+            needed |= _statement_names(top)[1]
     needed.update(wanted)
+    assigns = [(frozenset().union(*[_statement_names(t)[2] for t in top.targets]), _statement_names(top.value)[2])
+               for top in nodes if isinstance(top, ast.Assign)]
     changed = True
     while changed:
         before = len(needed)
-        for top in nodes:
-            if isinstance(top, ast.Assign) and any(isinstance(n, ast.Name) and n.id in needed
-                    for target in top.targets for n in ast.walk(target)):
-                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        for targets, values in assigns:
+            if targets & needed:
+                needed |= values
         changed = len(needed) != before
     out = set()
     for top in nodes:
