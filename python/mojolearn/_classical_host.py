@@ -1551,10 +1551,6 @@ def _host_archive_prediction_bindings():
     gpc = (_GPC_HOST_INFERENCE_BASENAME
            if os.path.exists(_backend.host_module_path(_GPC_HOST_INFERENCE_BASENAME))
            else _GPC_HOST_BASENAME)
-    try:
-        gpc_core = _backend.binding("_mojolearn", "identical")
-    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
-        gpc_core = "ImportError: " + str(error)
     return {
         "_mojolearn_core_host": load(_HOST_BASENAMES["_mojolearn"]),
         "_mojolearn_estimators_host": load(_HOST_BASENAMES["_mojolearn_estimators"]),
@@ -1563,7 +1559,10 @@ def _host_archive_prediction_bindings():
         "spectral": load(_HOST_BASENAMES[HostSpectralClustering._BINDING]),
         "forecast": load(_HOST_BASENAMES["_mojolearn_arima"]),
         "gpc": load(gpc),
-        "gpc_core": gpc_core,
+        # The GP classifier's label gather: the core host binding exports the
+        # exact gather_i64/gather_f64 the GPU base binding does, so a saved
+        # classifier decodes on the CPU without a binding proxy.
+        "gpc_core": load(_HOST_BASENAMES["_mojolearn"]),
     }
 
 

@@ -127,7 +127,7 @@ def connect(context, host, bindings):
         if type(module) is str or module in snapshots:
             continue
         if type(module) is not ModuleType:
-            continue  # a binding proxy is not a host module; its owner admits it by name
+            raise TypeError('host archive bindings require exact native modules')
         fields = vars(module)
         if '__getattr__' in fields:
             raise TypeError('host archive bindings cannot retain Python module hooks')
