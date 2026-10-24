@@ -1,0 +1,9 @@
+commit=e548c5b015ad39e74957e831282b14555174bf4b
+label=cpu
+backend=cpu
+scope=all shard= lanes_override=
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-59-generic x86_64 mojolearn-steward-do-amd
+date=2026-10-24T17:06:40Z
+dirty_tracked=none
+record_sha256=29cc0a81185b68d704d68a6b7a12c5df792488dde9a9698ebd3e2892de440002

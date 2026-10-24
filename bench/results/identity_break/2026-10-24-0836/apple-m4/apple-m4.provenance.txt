@@ -1,0 +1,9 @@
+commit=e548c5b015ad39e74957e831282b14555174bf4b
+label=apple-m4
+backend=metal
+scope=all shard= lanes_override=
+repeats=1 cpu_threads=3
+host=Darwin 25.5.0 arm64 MacBook-Air-1-terrabyte.local
+date=2026-10-24T16:54:49Z
+dirty_tracked=none
+record_sha256=7762ab745cabeec55d07fbf33f1072d25424032302ab516b44d7322e1c6b49c6
