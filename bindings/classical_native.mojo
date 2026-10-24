@@ -14,6 +14,8 @@ from bindings.classical_attributes import classical_check_layout, classical_geta
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.host_archive_native import host_archive_build
+from bindings.host_archive_predict_native import host_archive_predict
+from bindings.host_knn_predict_native import host_knn_predict
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
 from bindings.family_native import family_operation
@@ -111,6 +113,14 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation.startswith("host_infer_"):
             var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
             return result.steal_data()
+        if operation == "archive_infer_predict" or operation == "archive_infer_predict_proba":
+            var route = "host_infer_predict" if operation == "archive_infer_predict" else "host_infer_predict_proba"
+            var result = host_inference_operation(model, route, args, context["host_inference_context"], context, False)
+            return result.steal_data()
+        if operation == "archive_knn_classifier" or operation == "archive_knn_regressor":
+            var result = host_knn_predict(model, args[0], operation == "archive_knn_classifier", Bool(py=args[1]),
+                                          context["host_archive_predict_context"])
+            return result.steal_data()
         if operation.startswith("trees_"):
             # The public tree ensembles' one-call methods
             # (bindings/trees_public_native.mojo).
@@ -120,15 +130,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var result = host_tree_operation(model, operation, args, context["host_tree_context"])
             return result.steal_data()
         if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
-            # `host_predict(path, X)` / `host_predict_proba(path, X)`: the
-            # saved model rebuilt by the archive reader, then its own
-            # one-call predict.
-            var predict_context = py_get(context, "host_archive_context")
+            var predict_context = py_get(context, "host_archive_predict_context")
             if predict_context is None:
                 raise Error("RuntimeError: native host archive schemas are not connected")
-            var hosted = host_archive_build(args[0], predict_context, PythonObject(None), False)
-            var method = py_call(b.getattr, hosted, PythonObject("predict" if operation == "host_archive_predict" else "predict_proba"))
-            var predicted = py_call(method, args[1])
+            var predicted = host_archive_predict(args[0], args[1], operation == "host_archive_predict_proba", predict_context)
             return predicted.steal_data()
         if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")

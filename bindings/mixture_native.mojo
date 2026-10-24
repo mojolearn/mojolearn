@@ -19,6 +19,8 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
+from bindings.native_loaded_module import native_loaded_module
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from bindings.classical_arrays import (
     classical_address, classical_wrap_array, classical_is_array, classical_is_f32, classical_c_order,
     classical_cast_kind,
@@ -49,28 +51,29 @@ comptime _REFUSE_INIT_TAIL = " is not a field of GmmParams (mixture/NOT_IMPLEMEN
 
 # ------------------------------------------------------------------ helpers
 def _get(model: PythonObject, name: String) raises -> PythonObject:
-    """`getattr(model, name)`, its AttributeError unchanged."""
-    return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
+    """`getattr(model, name)`, its AttributeError unchanged, through the
+    generic lookup: never the class's Python `__getattribute__` hook."""
+    return family_raw_get(model, name)
 
 
 def _get_or(model: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
-    """`getattr(model, name, default)`."""
-    return family_call(Python.import_module("builtins").getattr, model, PythonObject(name), default)
+    """`getattr(model, name, default)` through the generic lookup."""
+    return family_raw_get_or(model, name, default)
 
 
 def _truthy(value: PythonObject) raises -> Bool:
     """`bool(value)`."""
-    return Bool(py=family_call(Python.import_module("builtins").bool, value))
+    return Bool(py=family_call(native_loaded_module("builtins").bool, value))
 
 
 def _int(value: PythonObject) raises -> PythonObject:
     """`int(value)`, its exception unchanged."""
-    return family_call(Python.import_module("builtins").int, value)
+    return family_call(native_loaded_module("builtins").int, value)
 
 
 def _float(value: PythonObject) raises -> PythonObject:
     """`float(value)`, its exception unchanged."""
-    return family_call(Python.import_module("builtins").float, value)
+    return family_call(native_loaded_module("builtins").float, value)
 
 
 def _from_flat(flat: PythonObject, shape: PythonObject, typestr: String, code: String,
@@ -107,7 +110,7 @@ def _any_f32(source: PythonObject, name: String, context: PythonObject) raises -
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_is_f32(view, context) and classical_c_order(view, context):
         return view
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var result = family_array(py_call(b.tuple, view.shape), "<f4", context)
     var rows = Int(py=view.shape[nd - 2])
     var cols = Int(py=view.shape[nd - 1])
@@ -164,7 +167,7 @@ def _state(blocks: PythonObject, zeros_at: Int, zeros: Int, context: PythonObjec
     when `zeros_at` < 0 names an inserted block) as one float32 Array, the
     bytes the former `list(...) + ...` concatenation cast to float32."""
     var store = py_call(context["array_type"], PythonObject("f"))
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     for j in range(len(blocks)):  # small-loop(blocks: the eight fitted parameter blocks)
         var block = blocks[j]
         if block is None or (j == zeros_at and len(block) == 0):
@@ -179,7 +182,7 @@ def _seed(random_state: PythonObject) raises -> PythonObject:
     low 63 bits."""
     if random_state is None:
         return PythonObject(0)
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     if not family_is_int(random_state) or Bool(py=family_call(operator.lt, random_state, PythonObject(0))):
         raise Error("mojolearn: random_state must be None or a non-negative int "
                     + "(the lane's seeded host stream; a RandomState object is not taken)")
@@ -216,14 +219,14 @@ def _by_type(flat: PythonObject, k: Int, d: Int, ct: Int, context: PythonObject)
 
 
 def _sorted_repr(table: PythonObject) raises -> String:
-    return family_repr(py_call(Python.import_module("builtins").sorted, table))
+    return family_repr(py_call(native_loaded_module("builtins").sorted, table))
 
 
 # ----------------------------------------------------- GaussianMixture, default
 def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObject) raises:
     """`GaussianMixture._extension`: the binary's own compile-time mode must
     be the one requested."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var want = _get_or(model, "numeric_mode", PythonObject(None))
     if not _truthy(want):
         want = context["backend_fields"]["_DEFAULT_MODE"]
@@ -248,7 +251,7 @@ def _real(value: PythonObject, name: String) raises -> PythonObject:
 def _gmm_needs_ext(model: PythonObject) raises -> Bool:
     """`_expansion_cluster._gmm_needs_ext`: an option the mixture binding
     does not carry (short-circuit order kept)."""
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     if Bool(py=family_call(operator.ne, _get(model, "covariance_type"), PythonObject("full"))):
         return True
     if Bool(py=family_call(operator.contains, Python.tuple(PythonObject("k-means++"), PythonObject("random_from_data")),
@@ -265,8 +268,8 @@ def _gmm_needs_ext(model: PythonObject) raises -> Bool:
 def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """The default fit (`gmm_fit`); returns the float32 X it read."""
-    var b = Python.import_module("builtins")
-    var operator = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var operator = native_loaded_module("operator")
     py_setattr(model, "_ext", PythonObject(None))
     # `_refuse_knobs`
     if Bool(py=family_call(operator.ne, _get(model, "n_init"), PythonObject(1))):
@@ -349,13 +352,13 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
                     out_buf: PythonObject, context: PythonObject) raises:
     """`_model_lists` then the scoring entry `name` writing `out`: the
     fitted check, the feature count, the mode check and the call."""
-    var b = Python.import_module("builtins")
-    if not Bool(py=family_call(b.hasattr, model, PythonObject("weights_"))):
+    var b = native_loaded_module("builtins")
+    if not family_raw_has(model, "weights_"):
         raise Error(_GMM + "call fit before " + what)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var fitted = _get(model, "n_features_in_")
-    if Bool(py=family_call(Python.import_module("operator").ne, PythonObject(d), fitted)):
+    if Bool(py=family_call(native_loaded_module("operator").ne, PythonObject(d), fitted)):
         raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(fitted))
     var weights = _get(model, "weights_")
     var k = Int(py=weights.shape[0])
@@ -397,8 +400,8 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     """`_expansion_cluster._gmm_ext_fit`: scikit-learn's GaussianMixture on
     the cluster lane's mixture driver (ENTRY_BGMM, plain mode); returns the
     float32 X it read."""
-    var b = Python.import_module("builtins")
-    var operator = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var operator = native_loaded_module("operator")
     var ctypes = context["family_mix_ctypes"]
     var inits = context["family_mix_inits"]
     var covariance_type = _get(model, "covariance_type")
@@ -509,7 +512,7 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var fitted = _get(model, "n_features_in_")
-    if Bool(py=family_call(Python.import_module("operator").ne, PythonObject(d), fitted)):
+    if Bool(py=family_call(native_loaded_module("operator").ne, PythonObject(d), fitted)):
         raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(fitted))
     var means = _get(model, "means_")
     var k = Int(py=means.shape[0])
@@ -523,7 +526,7 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
 def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObject,
                  context: PythonObject) raises -> List[Float64]:
     """`GaussianMixture._score_bic_aic`: (score, bic, aic)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var result = List[Float64]()
     if _get_or(model, "_ext", PythonObject(None)) is not None:
         # `_gmm_ext_bic_aic`: scikit-learn's `_n_parameters`, `bic` and
@@ -595,7 +598,7 @@ def _gmm_ext_labels(model: PythonObject, x: PythonObject, which: Int, context: P
 
 def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObject, which: Int,
                        context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var n = Int(py=x.shape[0])
     if which == 0:
         var out = family_array(Python.tuple(n), "<f4", context)
@@ -603,7 +606,7 @@ def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObje
         return out
     if which == 1:
         var k = 0
-        if Bool(py=family_call(b.hasattr, model, PythonObject("weights_"))):
+        if family_raw_has(model, "weights_"):
             k = Int(py=_get(model, "weights_").shape[0])
         var out = family_array(Python.tuple(n, k), "<f4", context)
         _gmm_score_call(model, binding, x, "gmm_predict_proba", "predict_proba", out, context)
@@ -625,8 +628,8 @@ def _gmm_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
 def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
               context: PythonObject) raises -> PythonObject:
     """`BayesianGaussianMixture._fit`: ENTRY_BGMM; returns the labels."""
-    var b = Python.import_module("builtins")
-    var operator = Python.import_module("operator")
+    var b = native_loaded_module("builtins")
+    var operator = native_loaded_module("operator")
     var ctypes = context["family_mix_ctypes"]
     var inits = context["family_mix_inits"]
     var covariance_type = _get(model, "covariance_type")

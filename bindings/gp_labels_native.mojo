@@ -11,6 +11,7 @@
 # str and bool classes decode to the label objects. The shell hands over the
 # base binding (`_backend.binding("_mojolearn", "identical")`, `_buffer._native`'s).
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array
@@ -252,20 +253,56 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
 
 
 def _gp_is_bool(value: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return family_isinstance(value, b.bool) or String(py_type(value).__name__) == "bool_"
 
 
-def _gp_label_kind(classes: PythonObject) raises -> String:
+def _gp_number_kind(value: PythonObject, context: PythonObject) raises -> Int:
+    """0 a bool (`_gp_is_bool`), 1 an integer, 2 another real number, 3
+    neither, for `_labels.label_kind`. Exact builtin and connected NumPy
+    scalar types are told natively; only another label type reaches the
+    numbers ABCs, read from the loaded registry (never imported here). The
+    labels a saved model restores are exact builtins and never reach them."""
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is b.bool or String(cls.__name__) == "bool_":
+        return 0
+    if cls is b.int:
+        return 1
+    if cls is b.float:
+        return 2
+    if cls is b.str or cls is b.bytes:
+        return 3
+    var scalars = py_get(context, "scalar_types")
+    if scalars is not None:
+        for i in range(len(scalars)):  # driver-loop: over the connected NumPy scalar types, by identity
+            if cls is scalars[i]:
+                var kind = String(value.dtype.kind)
+                if kind == "i" or kind == "u":
+                    return 1
+                if kind == "f":
+                    return 2
+                return 3
+    if _gp_is_bool(value):
+        return 0
+    var numbers = py_get(native_loaded_module("sys").modules, "numbers")
+    if numbers is None:
+        return 3  # no numbers ABC exists in this process, so none can be registered
+    if family_isinstance(value, numbers.Integral):
+        return 1
+    if family_isinstance(value, numbers.Real):
+        return 2
+    return 3
+
+
+def _gp_label_kind(classes: PythonObject, context: PythonObject) raises -> String:
     """`_labels.label_kind`: "int", "float" or "object"."""
-    var numbers = Python.import_module("numbers")
     var ints = True
     var reals = True
     for i in range(len(classes)):  # driver-loop: over the distinct classes
-        var c = classes[i]
-        var plain = not _gp_is_bool(c)
-        ints = ints and plain and family_isinstance(c, numbers.Integral)
-        reals = reals and plain and family_isinstance(c, numbers.Real)
+        var kind = _gp_number_kind(classes[i], context)
+        ints = ints and kind == 1
+        reals = reals and (kind == 1 or kind == 2)
     if ints:
         return "int"
     if reals:
@@ -278,8 +315,8 @@ def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObj
     """`_labels.decode_labels(classes, codes)` for int64 codes (an Array of
     shape (n,)): an int64 / float64 Array through the base binding's gather
     for int / float classes, else the list of label objects."""
-    var b = Python.import_module("builtins")
-    var kind = _gp_label_kind(classes)
+    var b = native_loaded_module("builtins")
+    var kind = _gp_label_kind(classes, context)
     var k = len(classes)
     var n = Int(py=codes.size)
     if (kind == "int" or kind == "float") and k > 0:

@@ -43,6 +43,9 @@ def connect(context, resident_context):
         entries['x_metrics_first_rows'] = _refusal(error)  # glue: retain import failure metadata without running the operation
     context.update(label_context())
     context.update(family_msel_entries=entries, family_msel_resident_context=resident_context)
+    # The resident row owner (bindings/arena_resident_rows.mojo) materializes
+    # a foreign fold container through this same native input owner.
+    resident_context['arena_msel_input_context'] = context
     layouts = {}
     for cls in context['family_msel_splitters']:  # glue: exact supported splitter storage and lifecycle metadata
         mro = type.__dict__['__mro__'].__get__(cls)

@@ -8,7 +8,7 @@ from bindings.native_error_class import error_without_class
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 from bindings.arena_array_metadata import arena_array_metadata
-from bindings.arena_materialize_native import arena_materialize
+from bindings.arena_resident_rows import arena_materialize
 from bindings.arena_cache_stats import arena_cache_stats
 from bindings.arena_cache_get import arena_cache_get
 from bindings.arena_cache_upload import arena_cache_id_of

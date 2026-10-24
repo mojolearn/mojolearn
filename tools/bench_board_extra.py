@@ -33,8 +33,21 @@ protocol, seed and parameter rules, and parameter check.
 tools/bench_board_algos.py registers these lanes (kind 'extra') and hands
 `build` and `quality` to this module. Standard library only at import.
 """
+import importlib.util
 import math
 import os
+
+
+def _metrics_module():
+    """tools/bench_board_metrics.py (the metric lanes), loaded beside this file."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bench_board_metrics.py")
+    spec = importlib.util.spec_from_file_location("bench_board_metrics", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+METRICS = _metrics_module()
 
 SCHED_STEPS = 100_000
 TEXT_BYTES = 4 * 1024 * 1024
@@ -55,6 +68,8 @@ TR_EPS = 1e-6
 TR_DROPOUT_P = 0.1
 LM_HEAD_CHUNK = 1024              # torch's chunked CE: 1,024 rows of logits at a time (8 x 128 MB)
 ACC_MICROBATCHES = 8
+MLP_SESSIONS = 8                  # mlp_inference_sessions: the training rows in 8 independent sessions
+REFINE_K, REFINE_CANDIDATES = 10, 100   # ann-refine: the ANN lanes' k = 10, 10x candidates per query
 # smoke-fixes (2026-10-14; algos/qn-reg: "delta, warm_start missing from ours read-back"): both
 # pinned on ours and cuML. delta: the objective-change stop; None meant tol * 0.01 on both (cuML
 # 26.08 python/cuml/cuml/solvers/qn.pyx:113 change_tol = delta if not None else tol * 0.01; ours
@@ -261,6 +276,44 @@ def register(add):
                         p=TR_DROPOUT_P, seed=7, microbatches=ACC_MICROBATCHES),
             quality="x-train", fit_text=what + ", host to host", torch_fp32=True,
             notes=[tr_note, "torch: " + torch_text], mism=mism)
+    # measure-coverage (2026-10-24): the public layer-norm functions and mlp_inference_sessions, in the
+    # training-function lanes' form (the same widths and rows, host in, host out, torch functional + autograd)
+    tr_params = dict(rows=TR_ROWS, width=TR_WIDTH, out=TR_OUT, vocab=TR_VOCAB, eps=TR_EPS, p=TR_DROPOUT_P,
+                     seed=7, microbatches=ACC_MICROBATCHES, sessions=MLP_SESSIONS)
+    for slug, ours_names, xlane, task, what, torch_text in (
+            ("train-layer-norm-forward", ("layer_norm_forward",), "sequence", "tr_ln_fwd",
+             "layer_norm_forward(x, D, weight, bias, eps)", "F.layer_norm(x, (D,), weight, bias, eps)"),
+            ("train-layer-norm-backward", ("layer_norm_backward",), "sequence", "tr_ln_bwd",
+             "layer_norm_backward(dy, x, D, weight, bias, eps)",
+             "F.layer_norm forward + autograd backward of dy (dx, dweight, dbias)"),
+            ("train-mlp-inference-sessions", ("training.mlp_inference_sessions", "mlp_inference_sessions"),
+             "training", "tr_mlp_sess",
+             "mlp_inference_sessions(8 sessions of 1,024 rows, w1, b1, w2, b2): Linear-ReLU-Linear logits",
+             "per session F.linear, F.relu, F.linear, then torch.cat")):
+        add(slug, xlane=xlane, ours=ours_names, kind="extra", task=task, block="tensor", datasets=("synthetic",),
+            params=dict(tr_params), quality="x-train", fit_text=what + ", host to host", torch_fp32=True,
+            notes=[tr_note, "torch: " + torch_text])
+    # measure-coverage (2026-10-24): linalg.svdvals of the svd lane's block (the reg block's fit rows, taxi and
+    # Istella) against torch.linalg.svdvals on the GPU, eager and compile, fp32 with TF32 off
+    add("linalg-svdvals", xlane="linalg", ours=("linalg.svdvals",), kind="extra", task="svdvals", block="reg",
+        datasets=_TAB, params={}, binding="_mojolearn_linalg", quality="x-svdvals", torch_fp32=True,
+        fit_text="svdvals(X) of the reg block's fit rows, host in, host out",
+        notes=["the svd lane's input (bench_board_algos svd: the reg block's fit rows); torch: "
+               "torch.linalg.svdvals(x.to(device)).cpu()"],
+        mism=["ours: the singular values of R from a Householder QR (python/mojolearn/_linalg_impl.py "
+              "svdvals); torch: its LAPACK/cuSOLVER/rocSOLVER gesvd of X; quality is against float64 numpy"])
+    # measure-coverage (2026-10-24): the standalone ANN refine (cuVS's neighbors.refine contract) against cuVS on
+    # NVIDIA and hipVS (AMD's cuVS port, the same `cuvs` API) on AMD, on the reg block: dataset = its fit rows,
+    # 10,000 stride held-out rows as queries, 100 seeded candidate ids per query, k = 10
+    add("ann-refine", xlane="ann", ours=("refine", "neighbors.refine"), kind="extra", task="refine", block="reg",
+        datasets=_TAB, params=dict(k=REFINE_K, metric="sqeuclidean", n_candidates=REFINE_CANDIDATES),
+        sub={"Xq": 10_000}, quality="x-refine",
+        vendor_arms={"nvidia": ("cuvs-gpu",), "amd": ("hipvs-gpu",), "apple": ()},
+        fit_text="refine(dataset, queries, candidates, k=10): exact distances to every candidate, top 10",
+        notes=["candidates: default_rng(7) integers in [0, n) of shape (queries, 100), int64 on every arm",
+               "cuVS / hipVS: cuvs.neighbors.refine(dataset, queries, candidates, k=10, metric='sqeuclidean') "
+               "on device arrays uploaded before the clock (kernel-only); ours takes host arrays inside its "
+               "clock"])
     add("jl-min-dim", xlane="decomp", ours="johnson_lindenstrauss_min_dim", kind="extra",
         task="jl", block="tensor", datasets=("synthetic",), params={},
         quality="x-jl",
@@ -268,6 +321,8 @@ def register(add):
                  "per point on both arms)",
         other={"sklearn-cpu": "sklearn"},
         notes=["n_samples = unique(int(logspace(1, 9, 200))), eps = linspace(0.05, 0.95, 50)"])
+    # measure-coverage (2026-10-24): one lane per public metrics function (tools/bench_board_metrics.py)
+    METRICS.register(add)
 
 
 QUALITY_TEXT = {
@@ -287,9 +342,15 @@ QUALITY_TEXT = {
     "x-train": "max relative difference of every output vs the float64 numpy reference (dropout: the "
                "kept/dropped contract error and the dropped fraction)",
 }
+QUALITY_TEXT.update(METRICS.QUALITY_TEXT)
+QUALITY_TEXT.update({
+    "x-svdvals": "max relative singular-value error vs float64 numpy (np.linalg.svd, compute_uv=False)",
+    "x-refine": "recall@10 against the exact float64 top 10 of each query's candidates"})
 
 
 def opponents(vendor, lane, spec, torch_gpu):
+    if spec.get("vendor_arms"):
+        return tuple(spec["vendor_arms"].get(vendor, ()))
     if spec.get("torch_arms"):
         return tuple(spec["torch_arms"].get(vendor, ()))
     if spec.get("torch_fp32"):
@@ -354,6 +415,8 @@ def input_arrays(lane, D, A, arrays=None):
     while the arm is built, before any clock."""
     np = A["_np"]()
     t = A["LANES"][lane]["task"]
+    if arrays is None and t == "metric":
+        return METRICS.input_arrays(lane, D, A)
     if arrays is None:
         if t == "qn":
             arrays = [("X", D["X"]), ("y", np.ascontiguousarray(D["y"], dtype=np.float32)), ("Xq", D["Xq"])]
@@ -474,6 +537,21 @@ def train_inputs(np, t, seed):
                 "targets": rng.integers(0, TR_VOCAB, TR_ROWS).astype(np.int64)}
     if t == "tr_accum":
         return {"grad%d" % i: rng.standard_normal(GRAD_SIZE).astype(f32) for i in range(ACC_MICROBATCHES)}
+    if t in ("tr_ln_fwd", "tr_ln_bwd"):
+        out = {"x": rng.standard_normal((TR_ROWS, TR_WIDTH)).astype(f32),
+               "weight": (1.0 + 0.1 * rng.standard_normal(TR_WIDTH)).astype(f32),
+               "bias": (0.1 * rng.standard_normal(TR_WIDTH)).astype(f32)}
+        if t == "tr_ln_bwd":
+            out["dy"] = rng.standard_normal((TR_ROWS, TR_WIDTH)).astype(f32)
+        return out
+    if t == "tr_mlp_sess":
+        rows = TR_ROWS // MLP_SESSIONS
+        out = {"s%d" % i: rng.standard_normal((rows, TR_WIDTH)).astype(f32) for i in range(MLP_SESSIONS)}
+        out.update(w1=(rng.standard_normal((TR_OUT, TR_WIDTH)) / np.sqrt(TR_WIDTH)).astype(f32),
+                   b1=(0.1 * rng.standard_normal(TR_OUT)).astype(f32),
+                   w2=(rng.standard_normal((TR_WIDTH, TR_OUT)) / np.sqrt(TR_OUT)).astype(f32),
+                   b2=(0.1 * rng.standard_normal(TR_WIDTH)).astype(f32))
+        return out
     raise ValueError("no training inputs for %r" % (t,))
 
 
@@ -520,6 +598,12 @@ def _build_lowbit_train(lane, arm, D, A, t, p, ours, fn, info, rec, Runner, S, n
                 r = fn(X["hidden"], X["weight"], I32["targets"], return_grad=True)
             elif t == "tr_accum":
                 r = fn([X["grad%d" % i] for i in range(ACC_MICROBATCHES)], None)
+            elif t == "tr_ln_fwd":
+                r = fn(X["x"], X["x"].shape[1], X["weight"], X["bias"], p["eps"])
+            elif t == "tr_ln_bwd":
+                r = fn(X["dy"], X["x"], X["x"].shape[1], X["weight"], X["bias"], p["eps"])
+            elif t == "tr_mlp_sess":
+                r = fn([X["s%d" % i] for i in range(MLP_SESSIONS)], X["w1"], X["b1"], X["w2"], X["b2"])
             else:
                 raise ValueError(t)
             return r
@@ -645,6 +729,18 @@ def _build_lowbit_train(lane, arm, D, A, t, p, ours, fn, info, rec, Runner, S, n
             for i in range(1, ACC_MICROBATCHES):   # driver-loop: over the microbatches
                 g.add_(T["grad%d" % i])
             return g
+        if t == "tr_ln_fwd":
+            return F.layer_norm(T["x"], (T["x"].shape[1],), T["weight"], T["bias"], p["eps"])
+        if t == "tr_ln_bwd":
+            x = T["x"].requires_grad_(True)
+            w = T["weight"].requires_grad_(True)
+            b = T["bias"].requires_grad_(True)
+            y = F.layer_norm(x, (x.shape[1],), w, b, p["eps"])
+            return torch.autograd.grad(y, (x, w, b), T["dy"])
+        if t == "tr_mlp_sess":
+            outs = [F.linear(F.relu(F.linear(T["s%d" % i], T["w1"], T["b1"])), T["w2"], T["b2"])
+                    for i in range(MLP_SESSIONS)]   # driver-loop: over the sessions
+            return torch.cat(outs, dim=0)
         raise ValueError(t)
 
     if t == "lowbit_matmul_int15" and setting == "eager-int8" and not hasattr(torch, "_int_mm"):
@@ -668,14 +764,75 @@ def _build_lowbit_train(lane, arm, D, A, t, p, ours, fn, info, rec, Runner, S, n
                                              "tr_lin_fwd": "linear", "tr_lin_bwd": "linear",
                                              "tr_emb_fwd": "embedding", "tr_emb_bwd": "embedding",
                                              "tr_rdrop_fwd": "dropout", "tr_rdrop_bwd": "dropout",
-                                             "tr_lmhead": "cross_entropy"}.get(t, "linear")) if t.startswith("tr_")
+                                             "tr_lmhead": "cross_entropy", "tr_ln_fwd": "layer_norm",
+                                             "tr_ln_bwd": "layer_norm"}.get(t, "linear")) if t.startswith("tr_")
         and t != "tr_accum" else (torch.Tensor.add_ if t == "tr_accum" else
                                   (torch._int_mm if setting == "eager-int8" else torch.ldexp)),
-        seed=SEED, **p))
+        # measure-coverage (2026-10-24): the training lanes' params hold seed=7 themselves; `seed=SEED, **p`
+        # raised "multiple values for keyword argument 'seed'" on every torch arm of a train-* lane
+        **dict(p, seed=SEED)))
 
 
 def s_name(A, lane):
     return A["LANES"][lane]["ours"][0]
+
+
+def refine_inputs(np, D, seed):
+    """[(name, array)] of the ann-refine lane: the dataset, the queries and the seeded candidate ids."""
+    X = np.ascontiguousarray(D["X"], dtype=np.float32)
+    Q = np.ascontiguousarray(D["Xq"], dtype=np.float32)
+    C = np.random.default_rng(seed).integers(0, X.shape[0], (Q.shape[0], REFINE_CANDIDATES)).astype(np.int64)
+    return [("dataset", X), ("queries", Q), ("candidates", C)]
+
+
+def _build_svdvals_refine(lane, arm, D, A, t, p, ours, fn, info, rec, Runner, S, np):
+    """One arm of linalg-svdvals or ann-refine (measure-coverage, 2026-10-24)."""
+    arr = A["_arr"]
+    if t == "svdvals":
+        X = np.ascontiguousarray(D["X"], dtype=np.float32)
+        rec["input_arrays"] = A["_input_array_records"]([("X", X)])
+        if ours:
+            def fit():
+                S["o"] = {"s": arr(fn(X), np.float64)}
+            return Runner(info, fit, lambda: S["o"], record=rec)
+        import torch
+        dev = A["_torch_device"](torch)
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+        setting = arm[len("torch-"):]
+        info.update(library="torch", version=torch.__version__, device="gpu" if dev != "cpu" else "cpu",
+                    setting=setting, input_home="host",
+                    inside_clock="host-to-device copy, svdvals, device-to-host copy",
+                    config="torch.linalg.svdvals on %s, %s (TF32 off)" % (dev, setting))
+        op = torch.linalg.svdvals
+        run = torch.compile(op) if arm.split("-")[1] == "compile" else op
+
+        def fit():
+            S["o"] = {"s": run(torch.from_numpy(X).to(dev)).cpu().numpy().astype(np.float64)}
+        return Runner(info, fit, lambda: S["o"], sync=lambda: A["_torch_sync"](torch, dev),
+                      record=dict(rec, __implementation__=torch.linalg.svdvals, **p))
+    args = refine_inputs(np, D, A["SEED"])
+    rec["input_arrays"] = A["_input_array_records"](args)
+    X, Q, C = (a for _, a in args)
+    if ours:
+        def fit():
+            dist, ind = fn(X, Q, C, p["k"], metric=p["metric"])
+            S["o"] = {"distances": arr(dist, np.float64), "indices": arr(ind, np.int64)}
+        return Runner(info, fit, lambda: S["o"], record=rec)
+    import cupy as cp
+    import cuvs
+    from cuvs.neighbors import refine as cuvs_refine
+    up, cinfo, sync = A["_cuml_up"]({"X": X, "Q": Q, "C": C}, library="cuvs")
+    info.update(device="gpu", library="cuvs", version=cuvs.__version__,
+                config="cuvs.neighbors.refine(dataset, queries, candidates, k=%d, metric=%r), inputs on the "
+                       "device before the clock" % (p["k"], p["metric"]))
+    info.update({k: v for k, v in cinfo.items() if k not in info})
+
+    def fit():
+        dist, ind = cuvs_refine(up["X"], up["Q"], up["C"], k=p["k"], metric=p["metric"])
+        S["o"] = {"distances": cp.asarray(dist).get().astype(np.float64),
+                  "indices": cp.asarray(ind).get().astype(np.int64)}
+    return Runner(info, fit, lambda: S["o"], sync=sync, record=dict(rec, __implementation__=cuvs_refine, **p))
 
 
 # ---------------------------------------------------------------------------
@@ -700,6 +857,14 @@ def build(lane, arm, D, A):
         info.update(library=s["other"].get(arm, "torch"), device="cpu", pre_clock_fit=False,
                     input_home="host")
         rec = {"__library__": s["other"].get(arm, "torch")}
+
+    # ---- measure-coverage (2026-10-24): linalg.svdvals and the ANN refine
+    if t in ("svdvals", "refine"):
+        return _build_svdvals_refine(lane, arm, D, A, t, p, ours, fn if ours else None, info, rec, Runner, S, np)
+
+    # ---- measure-coverage (2026-10-24): the metric lanes (tools/bench_board_metrics.py)
+    if t == "metric":
+        return METRICS.build(lane, arm, D, A, ours, fn if ours else None, info, rec, Runner, S, np)
 
     # ---- measure-coverage (2026-10-22): low-bit linalg and training-function lanes
     if t.startswith("lowbit_") or t.startswith("tr_"):
@@ -755,6 +920,14 @@ def build(lane, arm, D, A):
         Y = np.ascontiguousarray(D["Yfit"], dtype=np.float32)       # (series, n)
         n = Y.shape[1]
         rec["input_arrays"] = input_arrays(lane, D, A)
+        # measure-coverage (2026-10-24): one explicit record on both arms. Ours' KPSS is level-stationarity
+        # (regression 'c') with the ceil(12 (n/100)^0.25) lag count, the values the statsmodels arm is
+        # given; the statsmodels arm tests the undifferenced series (d = D = s = 0, kpss) or d = 0, 1 in
+        # order (select_d), the values ours is given. Before, ours read back d, D, s and statsmodels
+        # regression, nlags, so the parameter check refused the pair on names present on one side only.
+        rec.update(regression="c", nlags=kpss_lags(n))
+        if t == "selectd":
+            rec["d_candidates"] = [0, 1]
         if ours:
             def fit():
                 if t == "kpss":
@@ -792,7 +965,7 @@ def build(lane, arm, D, A):
                             break
                     ds.append(d)
                 S["o"] = {"d": np.array(ds, dtype=np.int64)}
-        rec.update(regression="c", nlags=kpss_lags(n), pval_threshold=p["pval_threshold"])
+        rec.update(p, __implementation__=kpss)
         return Runner(info, fit, lambda: S["o"], record=rec)
 
     # ---- clip_grad_norm_ and cross_entropy (torch at fp32, eager and compile)
@@ -909,6 +1082,9 @@ def build(lane, arm, D, A):
                 info["version"] = tokenizers.__version__
                 tok = tokenizers.Tokenizer.from_str(vocab.render_tokenizer_json())
                 info["config"] = "tokenizers.Tokenizer.from_str(ours' tokenizer.json).encode_batch"
+                # measure-coverage (2026-10-24): the same vocabulary settings (ours' vocabulary, trained
+                # before the clock, is the one both arms encode with) and the library call, read back
+                rec.update(p, __implementation__=tokenizers.Tokenizer.encode_batch)
 
                 def fit():
                     S["ids"] = [e.ids for e in tok.encode_batch(docs, add_special_tokens=False)]
@@ -930,6 +1106,9 @@ def build(lane, arm, D, A):
                               "ByteLevel.alphabet(), special_tokens=[])" % (p["vocab_size"],
                                                                             p["min_frequency"]))
             inv = {c: b for b, c in _bytes_to_unicode().items()}
+            # measure-coverage (2026-10-24): BpeTrainer takes the lane's vocab_size and min_frequency
+            # explicitly (above); read back with the library class
+            rec.update(p, __implementation__=trainers.BpeTrainer)
 
             def fit():
                 tk = tokenizers.Tokenizer(models.BPE())
@@ -996,7 +1175,10 @@ def build(lane, arm, D, A):
                     if k + 1 < SCHED_STEPS:
                         sc.step()
             S["lr"] = out
-        return Runner(info, fit, lambda: {"lr": S["lr"]}, record=dict(rec, **p))
+        # measure-coverage (2026-10-24): the torch scheduler class, for the real-implementation check
+        impl = {"lr-step": L.StepLR, "lr-exponential": L.ExponentialLR, "lr-onecycle": L.OneCycleLR,
+                "lr-constant": L.LinearLR}.get(lane, L.SequentialLR)
+        return Runner(info, fit, lambda: {"lr": S["lr"]}, record=dict(rec, __implementation__=impl, **p))
 
     # ---- Johnson-Lindenstrauss bound
     if t == "jl":
@@ -1011,7 +1193,8 @@ def build(lane, arm, D, A):
 
         def fit():
             S["k"] = np.array([int(jl(n, eps=e)) for n, e in grid], dtype=np.int64)
-        return Runner(info, fit, lambda: {"k": S["k"]}, record=rec)
+        # measure-coverage (2026-10-24): the library function, for the real-implementation check
+        return Runner(info, fit, lambda: {"k": S["k"]}, record=dict(rec, __implementation__=jl))
     raise SystemExit("bench_board_extra: no arm for lane %r task %r" % (lane, t))
 
 
@@ -1090,6 +1273,24 @@ def quality(lane, D, outs, A):
                 e["max_rel_diff_vs_ours"] = float((np.abs(o["lr"] - r) / np.maximum(np.abs(r), 1e-30)).max())
             elif t.startswith("lowbit_") or t.startswith("tr_"):
                 e.update(_lowbit_train_quality(np, t, s["params"], o, A["SEED"]))
+            elif t == "metric":
+                e.update(METRICS.quality(np, o, ref if arm != "ours" else None))
+            elif t == "svdvals":
+                exact = np.linalg.svd(np.asarray(D["X"], dtype=np.float64), compute_uv=False)
+                e["max_rel_sv_err_vs_fp64"] = _relmax(np, np.sort(o["s"])[::-1], exact)
+            elif t == "refine":
+                _X, Q, C = (a for _, a in refine_inputs(np, D, A["SEED"]))
+                X64 = np.asarray(_X, dtype=np.float64)
+                hits = 0
+                k = s["params"]["k"]
+                for st in range(0, Q.shape[0], 1000):   # untimed float64 reference, 1,000 queries at a time
+                    q = Q[st:st + 1000].astype(np.float64)
+                    c = C[st:st + 1000]
+                    d = ((X64[c] - q[:, None, :]) ** 2).sum(-1)
+                    best = np.take_along_axis(c, np.argsort(d, axis=1, kind="stable")[:, :k], 1)
+                    got = o["indices"][st:st + 1000]
+                    hits += sum(len(set(a) & set(b)) for a, b in zip(best.tolist(), got.tolist()))
+                e["recall_vs_exact_refine"] = hits / float(Q.shape[0] * k)
             elif t == "jl":
                 sk = outs.get("sklearn-cpu")
                 if sk is not None:
@@ -1206,4 +1407,22 @@ def _lowbit_train_quality(np, t, p, o, seed):
     elif t == "tr_accum":
         ref = sum(X["grad%d" % i].astype(f64) for i in range(ACC_MICROBATCHES))
         e["max_rel_diff_vs_fp64"] = _relmax(np, o["out0"], ref)
+    elif t in ("tr_ln_fwd", "tr_ln_bwd"):
+        x, w, b = X["x"].astype(f64), X["weight"].astype(f64), X["bias"].astype(f64)
+        mu = x.mean(1, keepdims=True)
+        sig = np.sqrt(((x - mu) ** 2).mean(1, keepdims=True) + p["eps"])
+        xh = (x - mu) / sig
+        if t == "tr_ln_fwd":
+            e["max_rel_diff_vs_fp64"] = _relmax(np, o["out0"], xh * w + b)
+        else:
+            dy = X["dy"].astype(f64)
+            g = dy * w
+            dx = (g - g.mean(1, keepdims=True) - xh * (g * xh).mean(1, keepdims=True)) / sig
+            e["dx_max_rel_diff_vs_fp64"] = _relmax(np, o["out0"], dx)
+            e["dweight_max_rel_diff_vs_fp64"] = _relmax(np, o["out1"], (dy * xh).sum(0))
+            e["dbias_max_rel_diff_vs_fp64"] = _relmax(np, o["out2"], dy.sum(0))
+    elif t == "tr_mlp_sess":
+        h = np.concatenate([X["s%d" % i].astype(f64) for i in range(MLP_SESSIONS)])
+        h = np.maximum(h @ X["w1"].astype(f64).T + X["b1"], 0.0)
+        e["max_rel_diff_vs_fp64"] = _relmax(np, o["out0"], h @ X["w2"].astype(f64).T + X["b2"])
     return e

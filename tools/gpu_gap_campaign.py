@@ -337,6 +337,21 @@ def reached(directory, log):
                 log_tail=_tail(log))
 
 
+#: The preflight's problem texts (bench_board.preflight_check) for an arm whose probe never constructed it.
+OWN_ARM_NOT_BUILT = ("missing parameter/version probe: ", "parameter probe failed (rc ")
+
+
+def own_arm_failures(race, problems):
+    """The problems that say one of OUR arms did not import or construct: its wheel binding is not built, its
+    module does not import, or its constructor raised (bench_board_algos answers {"event": "skipped"} for a class
+    the wheel does not export, and the probe then has no record of it). measure-coverage (2026-10-24, Andrew: a
+    recipe that fails to compile or import is reported, not skipped): such a line is FAILED, never REFUSED (a
+    REFUSED line, an opponent refused by name, does not fail the gate)."""
+    own = set(race.get("our_arms") or {})
+    return [str(p) for p in problems or [] if str(p).startswith(OWN_ARM_NOT_BUILT)
+            and str(p).rsplit(": ", 1)[-1] in own]
+
+
 def smoke_row(race, mode, rc, seconds, directory, log, timeout):
     """One smoke row: MATCHED / REFUSED / UNSUPPORTED from the recipe's own preflight, STARTED when it was
     still running at the timeout (no verdict yet), FAILED when it exited without a preflight verdict."""
@@ -357,6 +372,12 @@ def smoke_row(race, mode, rc, seconds, directory, log, timeout):
     if entry is not None:
         row.update(status=entry.get("verdict") or "FAILED", problems=list(entry.get("problems") or []),
                    exceptions=entry.get("exceptions"), scorer_preflight=entry.get("scorer_preflight"))
+        mine = own_arm_failures(race, row["problems"])
+        if mine:
+            row["status"] = "FAILED"
+            row["own_arm_not_built"] = mine
+            row["problems"].insert(0, "own arm did not import or construct (binding not built, import error or "
+                                      "constructor raised): " + "; ".join(mine))
     elif rc is None:
         row.update(status="STARTED", reached=reached(directory, log))
     else:
