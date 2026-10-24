@@ -392,7 +392,7 @@ def _imported_repr(value: PythonObject) raises -> String:
 
 def _imported_tuple(dims: List[Int]) raises -> PythonObject:
     var out = Python.list()
-    for k in range(len(dims)):  # small-loop(dims: a value's rank, at most eight): shape metadata
+    for k in range(len(dims)):  # small-loop(dims: a value's rank, at most eight): shape metadata, never array elements
         _ = py_call(out.append, PythonObject(dims[k]))
     return py_call(Python.import_module("builtins").tuple, out)
 
@@ -412,7 +412,7 @@ def _imported_given_dims(a: PythonObject, name: PythonObject) raises -> List[Int
     var dims = List[Int]()
     if _imported_is_array(a):
         var shape = py_call(b.tuple, a.shape)
-        for k in range(len(shape)):  # small-loop(shape: an array's rank): shape metadata
+        for k in range(len(shape)):  # small-loop(shape: an array's rank): shape metadata, never array elements
             dims.append(Int(py=shape[k]))
         return dims^
     var item = a
@@ -435,9 +435,9 @@ def _imported_session_dims(dims: List[Int]) -> List[Int]:
     # importers/_table.session_shape: a session tensor has at least two axes,
     # a scalar is (1, 1) and a [n] vector (1, n).
     var out = List[Int]()
-    for _ in range(2 - len(dims)):  # small-loop(2: the padded leading axes)
+    for _ in range(2 - len(dims)):  # small-loop(2: the padded leading axes): at most two shape entries
         out.append(1)
-    for k in range(len(dims)):  # small-loop(dims: rank, at most eight): shape metadata
+    for k in range(len(dims)):  # small-loop(dims: rank, at most eight): shape metadata, never array elements
         out.append(dims[k])
     return out^
 
@@ -515,11 +515,11 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     for k in range(len(declared)):  # driver-loop: over the model's declared inputs
         var want = List[Int]()
         var shape = py_call(b.tuple, declared[k][1])
-        for j in range(len(shape)):  # small-loop(shape: a declared input's rank): shape metadata
+        for j in range(len(shape)):  # small-loop(shape: a declared input's rank): shape metadata, never array elements
             want.append(Int(py=shape[j]))
         var got = _imported_given_dims(given[k], declared[k][0])
         var same = len(got) == len(want)
-        for j in range(min(len(got), len(want))):  # small-loop(shape: rank): shape metadata
+        for j in range(min(len(got), len(want))):  # small-loop(want: a declared input's rank): shape metadata, never array elements
             same = same and got[j] == want[j]
         if not same:
             raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
@@ -545,7 +545,7 @@ def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
         var want = List[Int]()
         var shape = py_call(b.tuple, outputs[k][1])
         var count = 1
-        for j in range(len(shape)):  # small-loop(shape: a declared output's rank): shape metadata
+        for j in range(len(shape)):  # small-loop(shape: a declared output's rank): shape metadata, never array elements
             want.append(Int(py=shape[j]))
             count *= want[j]
         if count != r.outputs[k].shape.count():
