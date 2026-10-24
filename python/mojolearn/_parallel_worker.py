@@ -5,6 +5,20 @@ import sys
 import traceback
 
 
+#: The worker is mojolearn's own code (`_mode._caller_outside` reads this
+#: marker). Run as `python -m mojolearn._parallel_worker` its module is
+#: `__main__`, so without the marker every public method it calls took it for
+#: a USER and returned the PUBLIC result: once the worker imports NumPy
+#: whenever the parent has it (`MOJOLEARN_POOL_IMPORT_NUMPY`), a regressor's
+#: `predict` came back widened to float64 while the identity harness hashes
+#: the native float32 `Array` (2026-10-24, par-kernel-ridge DIVERGENT on all
+#: nine fixtures: a dtype flip, not a value change). With the marker every
+#: operation returns the RAW native result whether or not NumPy is loaded in
+#: the worker; the parent driver applies the public conversion for its own
+#: caller (`_parallel_pool.public_method_result`). Do not remove.
+__mojolearn_internal__ = True
+
+
 _forest_snapshot = None
 _ivf_snapshot = None
 # ParallelQueries' per-call estimator snapshot: (token, estimator). Set by
