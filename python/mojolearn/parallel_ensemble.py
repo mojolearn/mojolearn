@@ -30,15 +30,26 @@ __all__ = [
 
 import sys
 
-from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
-from ._array import Array
-from ._buffer import as_f32_c, empty, addr, addr_ro
-from ._bufcheck import memcopy
+from ._parallel_pool import public_method_result
+from ._buffer import _native
 from . import _backend, _native_family_bridge
 from . import ensemble as _ens
 from . import _gbdt_adapters as _gba
 from . import _iforest_impl as _ifo
 from . import randomforest as _rf
+from . import extratrees as _et
+from . import _native_parallel_shard as _shard
+from ._native_parallel_shard import _native_parallel_shard
+
+# The forests, for the Python-sharded drivers' native owner
+# (bindings/parallel_shard_native.mojo): a tree range's fit is the plain
+# native fit in a worker process.
+_FORESTS = (_rf.RandomForestClassifier, _rf.RandomForestRegressor, _et.ExtraTreesClassifier,
+            _et.ExtraTreesRegressor)
+_shard.register(forest_classes=_FORESTS,
+                forest_regressors=(_rf.RandomForestRegressor, _et.ExtraTreesRegressor),
+                forest_by_name={cls.__name__: cls for cls in _FORESTS},  # glue: four fixed class names
+                trees_entry=_rf._TREES, trees_context=_rf._TREES_CONTEXT)
 
 # The classical families' compiled owner: a cooperative driver is one
 # `family_par_run` call (bindings/family_native.mojo).
@@ -120,93 +131,17 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(X, y)``.
     """
-    # Fit one RandomForest or ExtraTrees model across GPUs using global tree IDs.
-    #
-    # Every shard reads the FULL dataset and original forest seed. Tree ranges
-    # are concatenated in ID order; floating-point predictions use the existing
-    # complete-forest predictor. GPU count never selects the reduction order.
-    # Publishes the fitted estimator only after every worker succeeds.
-    from .randomforest import RandomForestClassifier, RandomForestRegressor
-    from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
-    if type(estimator) not in (RandomForestClassifier, RandomForestRegressor,
-                               ExtraTreesClassifier, ExtraTreesRegressor):
-        raise TypeError('fit_forest requires a mojolearn RandomForest or ExtraTrees estimator')
+    # One native call (bindings/parallel_shard_native.mojo `fit_forest`):
+    # whole global tree-ID ranges of `trees_per_shard` trees, each a fresh
+    # forest of the estimator's parameters fitted by the plain native fit
+    # from its first global tree ID in a worker process per device (range i on
+    # device i % len(devices)); the trees joined in ID order and their node
+    # offsets rebased natively. A tree is a pure function of its global ID,
+    # so the joined forest is the one-device forest.
     if type(trees_per_shard) is not int or trees_per_shard < 1:
         raise ValueError('trees_per_shard must be a positive integer')
-    params = estimator.get_params()
-    if params['numeric_mode'] not in (None, 'identical'):
-        raise ValueError('parallel forests require IDENTICAL numeric mode')
-    params['numeric_mode'] = 'identical'
-    X, _ = as_f32_c(X, ndim=2, name='X')
-    # Keep classification label encoding identical on every full-data shard.
-    if isinstance(estimator, (RandomForestRegressor, ExtraTreesRegressor)):
-        y, _ = as_f32_c(y, ndim=1, name='y')
-    else:
-        from ._labels import flatten_labels
-        y = flatten_labels(y)
-    count = params['n_estimators']
-    if count < 1:
-        raise ValueError('n_estimators must be positive')
-    requests = []
-    for index, start in enumerate(range(0, count, trees_per_shard)):  # glue: one request per device shard
-        shard_params = dict(params, n_estimators=min(trees_per_shard, count - start))
-        # `driver_read_shift` is 0 unless the driver sabotage switch is on, and
-        # 0 for the first shard whatever the switch says; the shard COUNT is
-        # untouched, so only the global tree IDs each shard seeds from move.
-        requests.append(('forest_fit', (type(estimator).__name__, shard_params),
-                         (X, y, start - driver_read_shift(index, start, devices))))
-    pool = DevicePool(devices)
-    try:
-        parts = pool.map(requests)
-    finally:
-        pool.close()
-    result = type(estimator)(**params)
-    result.__dict__.update(parts[0].__dict__)
-    result._offsets = _merge_offsets([part._offsets for part in parts])  # glue: one offset buffer per device shard
-    for name in ('_colid', '_quesval', '_left_child', '_leaves'):  # glue: the four node arrays by name
-        arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
-        merged = empty((sum(a.size for a in arrays),), arrays[0].dtype)  # glue: total size over device shards
-        cursor = 0
-        for array in arrays:  # glue: one memcopy per device shard
-            memcopy(addr(merged, name=name) + cursor, addr_ro(array, name=name), array.nbytes)
-            cursor += array.nbytes
-        setattr(result, name, merged)
-    # Restore the full constructor/config; worker model metadata is otherwise
-    # identical (feature count, class order, criterion and output count).
-    result._n_trees = count
-    result.n_estimators = count
-    result._cfg['n_estimators'] = count
-    if hasattr(result, 'depth_cap_bound_'):
-        result.depth_cap_bound_ = any(part.depth_cap_bound_ for part in parts)  # glue: one flag per device shard
-    result._resident_forest = None
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
-
-
-def _merge_offsets(arrays):
-    """The shards' int32 tree offsets as one offset array: shard s's
-    offsets after its leading 0, each plus the sum of the earlier shards'
-    last offsets (lane cpu2-l4-modelsel). The shards' buffers are laid end to
-    end by byte copies and rebased in one launch of the base binding's
-    `msel_rebase_offsets_i32` (core/msel_device.mojo; the core host binding
-    on a CPU-only install), which refuses a merged offset past int32."""
-    from ._buffer import _native
-    parts = []
-    for a in arrays:  # glue: one offset buffer per device shard
-        a = a if a.dtype == '<i4' else a.astype('<i4')
-        parts.append(a._as_c())
-    lens = Array.from_list([a.size for a in parts], '<i8')  # glue: one length per device shard
-    n_raw = sum(a.size for a in parts)  # glue: total over device shards
-    n_out = 1 + n_raw - len(parts)
-    raw = empty((n_raw,), '<i4')
-    cursor = 0
-    for a in parts:  # glue: one memcopy per device shard
-        memcopy(addr(raw, name='offsets') + cursor, addr_ro(a, name='offsets'), a.nbytes)
-        cursor += a.nbytes
-    out = empty((n_out,), '<i4')
-    _native('msel_rebase_offsets_i32')(addr_ro(raw, name='offsets'), n_raw, addr_ro(lens, name='lens'),
-                                       len(parts), n_out, addr(out, name='offsets'))
-    return out
+    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard,
+                                                 _native('msel_rebase_offsets_i32')))
 
 
 def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None):

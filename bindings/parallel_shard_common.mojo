@@ -152,10 +152,20 @@ def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) ra
 
 def shard_concat(parts: PythonObject, name: String, total: Int, context: PythonObject) raises -> PythonObject:
     """The arrays `parts[k][name]` joined along their first axis in shard
-    order (a byte copy per shard); the first part's dtype and trailing shape,
-    `total` leading rows. Every part must share them."""
+    order (`shard_join_rows`)."""
     var b = shard_b()
-    var first = parts[0][name]
+    var arrays = b.list()
+    for p in range(len(parts)):  # driver-loop: one array per device shard
+        _ = py_call(arrays.append, parts[p][name])
+    return shard_join_rows(arrays, total, context)
+
+
+def shard_join_rows(arrays: PythonObject, total: Int, context: PythonObject) raises -> PythonObject:
+    """The C-ordered arrays joined along their first axis in shard order (a
+    byte copy per shard): the first array's dtype and trailing shape, `total`
+    leading rows. Every array must share them."""
+    var b = shard_b()
+    var first = arrays[0]
     var shape = py_call(b.list, first.shape)
     var inner = 1
     for k in range(1, len(shape)):  # small-loop(the trailing dimensions)
@@ -165,14 +175,14 @@ def shard_concat(parts: PythonObject, name: String, total: Int, context: PythonO
     py_setitem(shape, 0, total)
     var out = shard_array(dtype, py_call(b.tuple, shape), total * inner, context)
     var cursor = 0
-    for p in range(len(parts)):  # driver-loop: one block copy per device shard
-        var value = parts[p][name]
+    for p in range(len(arrays)):  # driver-loop: one block copy per device shard
+        var value = arrays[p]
         if String(py=value.dtype) != dtype:
-            raise Error("ValueError: shard worker returned a different dtype for " + name)
+            raise Error("ValueError: shard workers returned different dtypes")
         var rows = Int(py=value.shape[0])
         var bytes = rows * inner * item[1]
         if cursor + rows > total:
-            raise Error("ValueError: shard workers returned too many rows for " + name)
+            raise Error("ValueError: shard workers returned too many rows")
         if bytes > 0:
             memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
                    + cursor * inner * item[1],
@@ -182,7 +192,7 @@ def shard_concat(parts: PythonObject, name: String, total: Int, context: PythonO
             _ = value  # keep the Python object alive through the native call above
         cursor += rows
     if cursor != total:
-        raise Error("ValueError: shard workers returned an incomplete " + name)
+        raise Error("ValueError: shard workers returned an incomplete result")
     return out
 
 

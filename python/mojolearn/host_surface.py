@@ -1687,6 +1687,9 @@ FAMILIES = (
             # lane migrate-neural-2: the Embedding layer's native lifetime,
             # parallel forecasting's owner and the GPU byte-LM trainer step
             "embedding_layer_lifetime", "parallel_forecast_call", "byte_lm_trainer_call",
+            # lane native-parallel-driver-20261024: the Python-sharded
+            # multi-GPU drivers' owner (bindings/parallel_shard_native.mojo)
+            "parallel_shard_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(

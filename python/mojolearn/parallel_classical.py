@@ -44,7 +44,7 @@ __all__ = [
 
 import sys
 
-from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
+from ._parallel_pool import public_method_result
 from ._buffer import as_f32_c
 from . import kernel_methods as _km
 from . import _cholesky_impl as _chol
@@ -64,6 +64,11 @@ from . import _native_family_bridge
 # The classical families' compiled owner: a cooperative driver is one
 # `family_par_run` call (bindings/family_native.mojo).
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
+
+# The Python-sharded drivers' owner (bindings/parallel_shard_native.mojo).
+from . import _native_parallel_shard as _shard  # noqa: E402
+from ._native_parallel_shard import _native_parallel_shard  # noqa: E402
+_shard.register(context=_FAMILY_CONTEXT, rbf_class=_km.RBFSampler)
 
 #: fit_gram_estimator's plain owners: (entry, operation, context, owner arity).
 _GRAM_OWNERS = {
@@ -786,47 +791,18 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
     Array of shape (n_samples, n_components)
         Equal to ``estimator.transform(X)``.
     """
-    # RBFSampler.transform over whole query rows on separate GPUs.
-    #
-    # The fitted random weights and offsets are position-mapped draws with
-    # global feature and component IDs, so every worker receives the same
-    # fitted state. Each output row is a pure function of its input row
-    # (identical GEMM cell contract and a per-cell epilogue); rows are joined
-    # by copying bytes in input order.
-    from ._array import Array
-    from .kernel_methods import RBFSampler
-    if type(estimator) is not RBFSampler:
+    # One native call (bindings/parallel_shard_native.mojo
+    # `transform_rbf_sampler`): whole query rows in `rows_per_shard` blocks,
+    # each transformed by the plain native transform in a worker process per
+    # device (block i on device i % len(devices)), the blocks joined by
+    # copying bytes in input order. The fitted random weights and offsets are
+    # position-mapped draws with global feature and component IDs, so every
+    # worker receives the same fitted state; each output row is a pure
+    # function of its input row.
+    if type(estimator) is not _km.RBFSampler:
         raise TypeError('requires mojolearn.RBFSampler')
-    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
-        raise ValueError('parallel RBFSampler requires IDENTICAL numeric mode')
-    if not hasattr(estimator, 'random_weights_'):
-        raise ValueError('RBFSampler is not fitted')
-    if type(rows_per_shard) is not int or rows_per_shard < 1:
-        raise ValueError('rows_per_shard must be a positive int')
-    X, _ = as_f32_c(X, ndim=2, name='X')
-    if X.shape[1] != estimator.n_features_in_:
-        raise ValueError('X has %d features, the fit had %d' % (X.shape[1], estimator.n_features_in_))
-    rows = X.shape[0]
-    if rows == 0:
-        return public_method_result(estimator, 'transform', estimator.transform(X), sys._getframe(1))
-    shards = [X[start - driver_read_shift(index, start, devices):
-                min(start + rows_per_shard, rows) - driver_read_shift(index, start, devices)]
-              for index, start in enumerate(range(0, rows, rows_per_shard))]  # glue: one row slice per device shard
-    pool = DevicePool(devices)
-    try:
-        parts = pool.map([('rbf_sampler_rows', estimator, (shard,)) for shard in shards])  # glue: one request per device shard
-    finally:
-        pool.close()
-    q = estimator.random_weights_.shape[1]
-    out = Array((rows, q), '<f4')
-    start = 0
-    for part in parts:  # glue: one block copy per device shard
-        part, _ = as_f32_c(part, ndim=2, name="worker result")
-        if part.shape[1] != q or start + part.shape[0] > rows:
-            raise ValueError("RBFSampler worker returned an invalid result shape")
-        out._mv[start * q:(start + part.shape[0]) * q] = part._mv
-        start += part.shape[0]
-    if start != rows:
-        raise ValueError("RBFSampler workers returned an incomplete result")
     # the joined raw rows; the plain transform's public conversion for our caller
-    return public_method_result(estimator, 'transform', out, sys._getframe(1))
+    return public_method_result(estimator, 'transform',
+                                _native_parallel_shard('transform_rbf_sampler',
+                                                       (estimator, X, devices, rows_per_shard, estimator._bind())),
+                                sys._getframe(1))

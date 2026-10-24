@@ -79,6 +79,15 @@ DRIVERS = (
     ("parallel_classical", "fit_arima", "fit_arima", "bindings/parallel_forecast_native.mojo", None),
     ("parallel_classical", "fit_exponential_smoothing", "fit_exponential_smoothing",
      "bindings/parallel_forecast_native.mojo", None),
+    ("parallel_classical", "transform_rbf_sampler", "transform_rbf_sampler", "bindings/parallel_shard_native.mojo",
+     None),
+    ("parallel_preprocessing", "fit_scaler", "fit_scaler", "bindings/parallel_shard_native.mojo", None),
+    ("parallel_preprocessing", "transform_scaler", "transform_scaler", "bindings/parallel_shard_native.mojo", None),
+    ("parallel_gaussian_process", "fit_gaussian_process_classifier", "fit_gaussian_process_classifier",
+     "bindings/parallel_shard_native.mojo", None),
+    ("parallel_gaussian_process", "predict_gaussian_process_classifier", "predict_gaussian_process_classifier",
+     "bindings/parallel_shard_native.mojo", None),
+    ("parallel_ensemble", "fit_forest", "fit_forest", "bindings/parallel_shard_native.mojo", None),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
@@ -164,12 +173,18 @@ def test_sharded_drivers_keep_the_partition_and_the_negative_control():
     ranges = common[common.index("def shard_ranges("):common.index("def shard_devices(")]
     assert "out.append(min(i + w, count))" in ranges and "i += w" in ranges
     forecast = _read("bindings/parallel_forecast_native.mojo")
-    for driver in ("_fit_arima", "_fit_hw"):
-        body = forecast[forecast.index("def " + driver + "("):]
+    shard = _read("bindings/parallel_shard_native.mojo")
+    for source, driver, read in ((forecast, "_fit_arima", "shard_rows(data, lo - shift, hi - shift, context)"),
+                                 (forecast, "_fit_hw", "shard_rows(data, lo - shift, hi - shift, context)"),
+                                 (shard, "_transform_rbf_sampler", "shard_rows(x, lo - shift, hi - shift, context)"),
+                                 (shard, "_fit_scaler", "_columns(data, lo - shift, hi - shift, context)"),
+                                 (shard, "_transform_scaler", "_columns(data, lo - shift, hi - shift, context)"),
+                                 (shard, "_fit_forest", "Python.tuple(x, y, lo - shift)")):
+        body = source[source.index("def " + driver + "("):]
         body = body[:body.index("\n\ndef ")]
         # every shard reads from its shifted start and is placed at its true offset
-        assert "shard_read_shift(r, lo, n_devices)" in body
-        assert "shard_rows(data, lo - shift, hi - shift, context)" in body
+        assert "shard_read_shift(r, lo, n_devices)" in body, driver
+        assert read in body, driver
 
 
 def test_each_door_releases_its_plan_in_a_finally():
