@@ -16,6 +16,7 @@ import pytest
 from mojolearn import Array
 from mojolearn import _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connected_exports import assert_connected_export_refused
 
 
 # Frozen pre-migration operation, independent of the new native hash owner.
@@ -223,6 +224,11 @@ def test_density_hash_uses_connected_native_entries(family, target, monkeypatch)
         if target == "hashlib": patch.setattr(hashlib, "sha256", forbidden)
         elif target == "array_tobytes": patch.setattr(Array, "tobytes", forbidden)
         else: patch.setattr(builtins, target, forbidden)
+        audit = audit_native_call(model.model_sha256)
+    if target in ("sorted", "memoryview"):
+        # Connected builtins exports refuse when replaced (see _connected_exports).
+        assert_connected_export_refused(audit, "builtins", target)
+        assert touched == []
         audit = audit_native_call(model.model_sha256)
     assert audit.assert_native() == expected
     assert touched == []

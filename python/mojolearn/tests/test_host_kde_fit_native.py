@@ -14,6 +14,7 @@ import pytest
 
 from mojolearn import Array, _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connected_exports import assert_connected_export_refused
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _state
 from mojolearn.tests.test_host_inference_native import _refused
@@ -562,6 +563,11 @@ def test_kde_fit_never_calls_replaced_memoryview_constructor(branch, monkeypatch
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "memoryview", poisoned)
         audit = audit_native_call(model.fit, x, y, sample_weight=weight)
+    # A replaced connected builtins export refuses before fit touches the
+    # model (see _connected_exports); the restored export then fits.
+    assert_connected_export_refused(audit, "builtins", "memoryview")
+    assert touched == [] and _state(vars(model)) == _state(vars(_model()))
+    audit = audit_native_call(model.fit, x, y, sample_weight=weight)
     if expected_error is None:
         assert audit.assert_native() is model
     else:
@@ -586,5 +592,8 @@ def test_kde_fit_never_calls_replaced_object_allocator(branch, monkeypatch):
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "object", PoisonObject)
         audit = audit_native_call(model.fit, x)
+    assert_connected_export_refused(audit, "builtins", "object")
+    assert touched == [] and _state(vars(model)) == _state(vars(_model()))
+    audit = audit_native_call(model.fit, x)
     assert audit.assert_native() is model
     assert _state(vars(model)) == expected and touched == []

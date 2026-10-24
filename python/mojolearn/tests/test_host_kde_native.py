@@ -14,6 +14,7 @@ import pytest
 
 from mojolearn import _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connected_exports import assert_connected_export_refused
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _archive, _state
 from mojolearn.tests.test_host_inference_native import _input, _refused, test_application_subclass_keeps_constructor_fit_and_score_guards as _subclass_guards
@@ -869,5 +870,9 @@ def test_kde_bandwidth_conversion_never_calls_replaced_builtin_float(tmp_path, m
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "float", callback)
         audit = audit_native_call(model.score_samples, x)
+    # A replaced connected builtins export refuses (see _connected_exports).
+    assert_connected_export_refused(audit, "builtins", "float")
+    assert touched == []
+    audit = audit_native_call(model.score_samples, x)
     assert _state(audit.assert_native()) == expected
     assert touched == []
