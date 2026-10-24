@@ -121,8 +121,6 @@ NOT_MEASURED = (
     ("mojolearn.Parallel*", "multi-GPU, excluded from the single-GPU board (Andrew 2026-09-29, COVERAGE.md)"),
     ("mojolearn.Pooled*", "multi-GPU model pool, excluded from the single-GPU board (COVERAGE.md)"),
     ("mojolearn.Offloaded*", "multi-GPU/offload trainer, excluded from the single-GPU board (COVERAGE.md)"),
-    ("mojolearn.cross_vendor.*", "multi-GPU cross-vendor coordination, excluded from the single-GPU board"),
-    ("mojolearn.multi_gpu.*", "multi-GPU, excluded from the single-GPU board (COVERAGE.md)"),
     ("mojolearn.parallel_*", "multi-GPU (explicit devices / worker processes), excluded from the single-GPU "
                              "board (COVERAGE.md)"),
     ("mojolearn.models.Parallel*", "multi-GPU model, excluded from the single-GPU board (COVERAGE.md)"),
@@ -150,27 +148,6 @@ NOT_MEASURED = (
     ("mojolearn.models.plan_for", "returns an import plan record; no compute"),
     ("mojolearn.import_model", "one-time model import (parse and weight load, disk-bound); the imported "
                                "program's compute is ops.Program, timed by neural/program-run"),
-    # containers, metadata, I/O and RNG streams: no compute to time against a peer
-    ("mojolearn.Array", "array container; its compute is timed through every lane that takes one"),
-    ("mojolearn.Generator", "RNG stream object; correctness only (seeded draws), no timed peer"),
-    ("mojolearn.Checkpoint", "checkpoint I/O object; disk-bound, no GPU compute to compare"),
-    ("mojolearn.SafetensorsFile", "file reader; disk-bound, no GPU compute to compare"),
-    ("mojolearn.HFConfig", "configuration record; no compute"),
-    ("mojolearn.TensorInfo", "metadata record; no compute"),
-    ("mojolearn.ModelPlan", "import plan record; no compute"),
-    ("mojolearn.CausalLMState", "state record of CausalLM; timed through neural/causal-lm-generate"),
-    ("mojolearn.models.CausalLMState", "state record of CausalLM; timed through neural/causal-lm-generate"),
-    ("mojolearn.GenerationStream", "iterator over CausalLM.generate; timed through neural/causal-lm-generate"),
-    ("mojolearn.models.GenerationStream", "iterator over CausalLM.generate; timed through neural/causal-lm-generate"),
-    ("mojolearn.*Kernel", "kernel specification object (gaussian_process); timed through classical2/gpr and gpc"),
-    ("mojolearn.config_context", "configuration context manager; no compute"),
-    ("mojolearn.get_config", "configuration getter; no compute"),
-    ("mojolearn.set_config", "configuration setter; no compute"),
-    ("mojolearn.show_versions", "diagnostic printout; no compute"),
-    ("mojolearn.device_info", "device query; no compute"),
-    ("mojolearn.*Error", "exception class; no compute"),
-    ("mojolearn.*Warning", "warning class; no compute"),
-    ("mojolearn.LearningRateTable", "precomputed schedule record; no compute"),
 )
 
 

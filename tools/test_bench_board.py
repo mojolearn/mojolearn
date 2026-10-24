@@ -2006,3 +2006,19 @@ def test_gate_verdict_fails_and_lists_an_unmatched_pair():
     # a gate board with no recorded pair check never passes
     verdict, why = G.gate_verdict(_gate_state(None))
     assert verdict == "FAIL" and "measure: gate board has no pair check recorded" in why
+
+
+def test_gate_verdict_fails_on_an_own_cell_that_was_not_built():
+    # measure-coverage (2026-10-24): an own cell that read "SKIPPED: not built yet" is listed and fails the gate
+    G = _gate()
+    board = {"races": {"algos/metric-f1-score/taxi/rows=full": {"cells": [
+        {"arm": "ours", "library": "mojolearn", "status": bb.ALGOS_SKIPPED,
+         "skip_reason": "SKIPPED: not built yet (mojolearn exports none of metrics.f1_score)"},
+        {"arm": "sklearn-cpu", "library": "sklearn", "status": "ok", "median_ms": 1.0}]}}}
+    rows = G.own_not_built(board)
+    assert rows == [{"race": "algos/metric-f1-score/taxi/rows=full", "arm": "ours",
+                     "reason": "SKIPPED: not built yet (mojolearn exports none of metrics.f1_score)"}]
+    state = _gate_state(bb.pair_report({"races": {"r": _pair_race("MATCHED")}}))
+    state["measure"]["own_not_built"] = rows
+    verdict, why = G.gate_verdict(state)
+    assert verdict == "FAIL" and any(w.startswith("measure: own arm not built algos/metric-f1-score") for w in why)
