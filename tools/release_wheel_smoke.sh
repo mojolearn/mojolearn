@@ -324,6 +324,11 @@ fi
 for _n in "$LEASE" "$SMOKE_SECONDS"; do printf '%s' "$_n" | grep -Eq '^[0-9]+$' || die "'$_n' is not a number"; done
 [ "$LEASE" -ge 10 ] && [ "$LEASE" -le 90 ] || die "--lease must be 10..90 minutes"
 [ "$SMOKE_SECONDS" -ge 60 ] && [ "$SMOKE_SECONDS" -lt $(( LEASE * 60 - 300 )) ] || die "--smoke-seconds must be at least 60 and leave 5 minutes of the lease"
+# The intervals of the two box polls (the smoke's done file, sshd settling).
+# Overridable only so the test's local stand-in box needs no real waits.
+POLL_SECONDS="${MOJOLEARN_SMOKE_POLL_SECONDS:-15}"; SETTLE_SECONDS="${MOJOLEARN_SMOKE_SETTLE_SECONDS:-5}"
+[[ "$POLL_SECONDS" =~ ^[1-9][0-9]*$ && "$SETTLE_SECONDS" =~ ^[1-9][0-9]*$ ]] \
+    || die "MOJOLEARN_SMOKE_POLL_SECONDS and MOJOLEARN_SMOKE_SETTLE_SECONDS must be positive integers"
 [ "$RENT" = 0 ] || [ -z "$SSH_GIVEN" ] || die "--rent and --ssh are exclusive"
 QUALIFY="$ROOT/tools/qualify_verifier_wheel.py"
 [ -f "$QUALIFY" ] || die "no $QUALIFY"
@@ -1043,7 +1048,7 @@ rent_do() {  # sets DROPLET_ID and SSH_TARGET, or dies with nothing left billing
         else
             _ok=0
         fi
-        sleep 5
+        sleep "$SETTLE_SECONDS"
     done
     [ "$_ok" -ge 3 ] || die "READY TIMEOUT: ssh never settled on $IP"
     say "ssh settled ($SSH_TARGET) after $(( $(now) - DO_T_POST ))s"
@@ -1165,7 +1170,7 @@ bx 60 "$BOX_START" < /dev/null | grep -q STARTED \
     || die "the smoke did not start"
 _end=$(( $(now) + SMOKE_SECONDS + 120 )); _fails=0; SMOKE_EXIT=""
 while [ "$(now)" -lt "$_end" ]; do
-    sleep 15
+    sleep "$POLL_SECONDS"
     _o=$(bx 45 "cat $RDIR/box.done 2>/dev/null; true" < /dev/null 2>/dev/null)
     if [ $? = 0 ]; then _fails=0; else _fails=$((_fails + 1)); fi
     [ -n "$(printf '%s' "$_o" | tr -d '[:space:]')" ] && break
