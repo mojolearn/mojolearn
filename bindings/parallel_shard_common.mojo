@@ -80,12 +80,9 @@ def shard_read_shift(index: Int, first: Int, n_devices: Int) -> Int:
     call time, never cached."""
     if first < 1 or n_devices < 2 or index % n_devices == 0:
         return 0
-    try:
-        if (String(getenv("MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"
-                and String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"):
-            return 1
-    except:
-        pass
+    if (String(getenv("MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"
+            and String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"):
+        return 1
     return 0
 
 
@@ -201,11 +198,8 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
             _ = py_call(record["calls"].append, call)
     if len(results) > 1 and len(requests) > 0 and _numerical(_operation(requests[0])):
         var fault = String()
-        try:
-            if String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1":
-                fault = String(getenv("MOJOLEARN_PAR_TRANSPORT_FAULT"))
-        except:
-            fault = String()
+        if String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1":
+            fault = String(getenv("MOJOLEARN_PAR_TRANSPORT_FAULT"))
         var t = SHARD_TRACE.get_or_create_ptr()
         if t[].faults == 0 and (fault == "drop_result" or fault == "reverse_results"):
             t[].faults = 1
@@ -237,17 +231,17 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
 def shard_item(dtype: String) raises -> Tuple[String, Int]:
     """(array type code, item size) of a C-ordered native dtype string."""
     if dtype == "<f4":
-        return ("f", 4)
+        return (String("f"), 4)
     if dtype == "<f8":
-        return ("d", 8)
+        return (String("d"), 8)
     if dtype == "<i4":
-        return ("i", 4)
+        return (String("i"), 4)
     if dtype == "<i8":
-        return ("q", 8)
+        return (String("q"), 8)
     if dtype == "<u4":
-        return ("I", 4)
+        return (String("I"), 4)
     if dtype == "|u1" or dtype == "<u1":
-        return ("B", 1)
+        return (String("B"), 1)
     raise Error("ValueError: shard arrays require float32, float64, int32, int64, uint32 or uint8, got " + dtype)
 
 

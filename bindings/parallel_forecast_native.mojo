@@ -341,6 +341,7 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
     py_setitem(fields, "batch_size_", batch)
     py_setitem(fields, "n_obs_", n_obs)
     py_setitem(fields, "_y", data)
+    py_setitem(fields, "_y_ndim", series[4])
     py_setitem(fields, "input_copied_", copied)
     return estimator
 

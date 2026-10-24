@@ -31,8 +31,9 @@ hands the per-owner work to other threads, and those tasks call
 Storage: one process-lifetime table (`std.ffi._Global`) of fixed slots, each
 owned by one thread id (`pthread_self`), claimed by compare-exchange and
 released by a release store. Only the owning thread reads or writes a
-slot's devices, so the slot data needs no lock. A nested plan on one thread
-is refused by name. No floating-point value is read or written here.
+slot's devices, so the slot data needs no lock. Entering the same plan again
+on one thread (the driver binds it in each binding it reaches) adds a level;
+a different plan on the same thread is refused by name. No floating-point value is read or written here.
 """
 from std.atomic import Atomic, Ordering
 from std.ffi import _Global, external_call
@@ -115,6 +116,9 @@ struct _DevicePlanTable(Defaultable, Movable):
     # owners[s]: 0 when slot s is free, else the owning thread id.
     # counts[s]: the number of devices in slot s's plan.
     # masks[s]: the owner families (DEVICE_PLAN_* bits) the plan drives.
+    # depths[s]: how many times the owning thread entered this same plan
+    # (a driver binds it once per binding; where `_Global` storage is shared
+    # by name across the process's DSOs, those enters meet in one slot).
     # ids[s * DEVICE_PLAN_MAX_DEVICES + r]: the physical device of rank r.
     # active[0]: the number of claimed slots (a fast path for the common
     # case of no plan anywhere in the process).
@@ -123,6 +127,7 @@ struct _DevicePlanTable(Defaultable, Movable):
     var owners: List[Int64]
     var counts: List[Int64]
     var masks: List[Int64]
+    var depths: List[Int64]
     var ids: List[Int64]
     var active: List[Int64]
     # The placement log the verifier's two-device witness reads
@@ -136,6 +141,7 @@ struct _DevicePlanTable(Defaultable, Movable):
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.counts = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.masks = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
+        self.depths = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.ids = List[Int64](length=DEVICE_PLAN_SLOTS * DEVICE_PLAN_MAX_DEVICES, fill=Int64(0))
         self.active = List[Int64](length=1, fill=Int64(0))
         self.log = List[Int64](length=DEVICE_PLAN_LOG_WORDS, fill=Int64(0))
@@ -187,9 +193,20 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
         for j in range(i):  # driver-loop: over the earlier selected device indices
             if devices[j] == devices[i]:
                 raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    if _own_slot() >= 0:
-        raise Error("RuntimeError: a device plan is already bound to this thread; multi-GPU drivers do not nest")
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var held = _own_slot()
+    if held >= 0:
+        # The same plan entered again (the next binding of the same driver
+        # call): one more level. Any other plan would nest two drivers.
+        var same = Int(_words(table[].counts)[held]) == count and Int(_words(table[].masks)[held]) == families
+        if same:
+            for r in range(count):  # driver-loop: over the plan's ranks
+                if Int(_words(table[].ids)[held * DEVICE_PLAN_MAX_DEVICES + r]) != devices[r]:
+                    same = False
+        if not same:
+            raise Error("RuntimeError: a device plan is already bound to this thread; multi-GPU drivers do not nest")
+        _words(table[].depths)[held] = _words(table[].depths)[held] + 1
+        return
     var owners = _words(table[].owners)
     var me = _thread_id()
     var slot = -1
@@ -208,6 +225,7 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
         ids[slot * DEVICE_PLAN_MAX_DEVICES + r] = Int64(devices[r])
     _words(table[].counts)[slot] = Int64(count)
     _words(table[].masks)[slot] = Int64(families)
+    _words(table[].depths)[slot] = Int64(1)
     _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(1))
     _log_plan(devices)
 
@@ -218,6 +236,11 @@ def device_plan_exit() raises:
     if slot < 0:
         raise Error("RuntimeError: no device plan is bound to this thread")
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var depth = Int(_words(table[].depths)[slot])
+    if depth > 1:
+        _words(table[].depths)[slot] = Int64(depth - 1)
+        return
+    _words(table[].depths)[slot] = Int64(0)
     _words(table[].counts)[slot] = Int64(0)
     _words(table[].masks)[slot] = Int64(0)
     _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(-1))

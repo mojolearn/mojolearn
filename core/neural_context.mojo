@@ -63,6 +63,8 @@ device enters no value: the same kernels run in the same order on it.
 from std.ffi import _Global
 from max.gpu.host import DeviceContext
 
+from std.atomic import Atomic, Ordering
+
 from core.device_plan import device_plan_root
 
 
@@ -70,11 +72,15 @@ struct _NeuralContext(Defaultable, Movable):
     var ctx: Optional[DeviceContext]
     var device_ids: List[Int]
     var device_contexts: List[DeviceContext]
+    # guards the per-device lists: two threads running drivers with different
+    # roots in one binding may open their contexts at the same time
+    var device_lock: List[Int64]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.device_ids = List[Int]()
         self.device_contexts = List[DeviceContext]()
+        self.device_lock = List[Int64](length=1, fill=Int64(0))
 
 
 def process_ctx[name: StaticString]() raises -> DeviceContext:
@@ -85,13 +91,28 @@ def process_ctx[name: StaticString]() raises -> DeviceContext:
     var slot = SLOT.get_or_create_ptr()
     var root = device_plan_root()
     if root > 0:
-        for i in range(len(slot[].device_ids)):  # driver-loop: over the devices this binding has opened
-            if slot[].device_ids[i] == root:
-                return slot[].device_contexts[i].copy()
-        var ctx = DeviceContext(device_id=root)
-        slot[].device_contexts.append(ctx.copy())
-        slot[].device_ids.append(root)
-        return ctx^
+        var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
+        while True:  # driver-loop: spin on the per-device list's lock word
+            var expected = Int64(0)
+            if Atomic.compare_exchange[
+                success_ordering=Ordering.SEQUENTIAL,
+                failure_ordering=Ordering.RELAXED,
+            ](lock, expected, Int64(1)):
+                break
+        try:
+            for i in range(len(slot[].device_ids)):  # driver-loop: over the devices this binding has opened
+                if slot[].device_ids[i] == root:
+                    var found = slot[].device_contexts[i].copy()
+                    Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+                    return found^
+            var ctx = DeviceContext(device_id=root)
+            slot[].device_contexts.append(ctx.copy())
+            slot[].device_ids.append(root)
+            Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+            return ctx^
+        except error:
+            Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+            raise error^
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()
