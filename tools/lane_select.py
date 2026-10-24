@@ -4035,40 +4035,38 @@ def _ls_identities():
     return ids
 
 
+#: How many derived maps are remembered (most recently used last). A test that
+#: probes an edited tree derives one map for the edit; the clean tree's map
+#: must survive that, or restoring the tree costs a second derivation.
+_LS_MEMO_SLOTS = 3
+
+
 def _remember_lane_sources():
     global _LS_MEMO
     import copy
     git = _ls_git_state()
     if git is None:
-        _LS_MEMO = None
         return
-    _LS_MEMO = dict(
+    entry = dict(
         result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS)),
         reads={path: _ls_digest(text) for path, text in _read.cache.items()},
         tree=_ls_tree_state(), git=git, ids=_ls_identities(),
         tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
         python_files=list(_PYTHON_FILES) if _PYTHON_FILES is not None else None)
+    _LS_MEMO = ((_LS_MEMO or [])[-(_LS_MEMO_SLOTS - 1):] if _LS_MEMO_SLOTS > 1 else []) + [entry]
 
 
-def _reuse_lane_sources():
-    """Restore the remembered map when nothing it was derived from changed."""
-    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
-    memo = _LS_MEMO
-    if memo is None:
-        return False
+def _ls_memo_matches(memo, ids, git, tree):
     if _PYTHON_FILES is not None and list(_PYTHON_FILES) != memo["python_files"]:
         return False
     if _TRACKED is not None and frozenset(_TRACKED) != memo["tracked"]:
         return False
-    if _ls_identities() != memo["ids"]:
+    if ids != memo["ids"] or git != memo["git"]:
         return False
     # an entry a caller put into the read cache must be what the map read
     for path, text in _read.cache.items():
         if path not in memo["reads"] or _ls_digest(text) != memo["reads"][path]:
             return False
-    if _ls_git_state() != memo["git"]:
-        return False
-    tree = _ls_tree_state()
     if tree.keys() != memo["tree"].keys():
         return False
     for path, stat in tree.items():
@@ -4090,9 +4088,23 @@ def _reuse_lane_sources():
             return False
         if _ls_digest(text) != digest:
             return False
-    import copy
-    _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
     return True
+
+
+def _reuse_lane_sources():
+    """Restore a remembered map when nothing it was derived from changed."""
+    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LS_MEMO
+    if not _LS_MEMO:
+        return False
+    ids, git, tree = _ls_identities(), _ls_git_state(), _ls_tree_state()
+    for index in range(len(_LS_MEMO) - 1, -1, -1):
+        memo = _LS_MEMO[index]
+        if _ls_memo_matches(memo, ids, git, tree):
+            import copy
+            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
+            _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
+            return True
+    return False
 
 
 _REVERSE = None
