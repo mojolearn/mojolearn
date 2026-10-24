@@ -832,3 +832,70 @@ def test_main_builds_portable_math_after_groups_and_activates_host(repo, tmp_pat
     report = json.loads((evidence / "result.json").read_text())
     assert report["state"] == "activated" and report["compile_attempts"] == 1 and len(calls) == 1
     assert (repo / "python/mojolearn/.libs/libMojolearnMath.so").is_file()
+
+
+GIB = 2 ** 30
+
+
+def test_unmeasured_budget_uses_the_group_floor_on_a_loaded_machine():
+    # The M4 case: 16 GiB total, 3.7 GiB available; 80% of available would
+    # kill a group that needs ~10 GB, so the group floor sets the limit.
+    budget = dev.resource_budget(1, 1, None, (10, int(3.7 * GIB)), floor_bytes=12 * GIB,
+                                 total_bytes=16 * GIB)
+    assert budget["jobs"] == 1 and budget["rss_bytes"] == 12 * GIB
+    assert budget["reservation_source"] == "group-floor"
+    assert budget["min_available_bytes"] == 0
+    # A large idle box keeps the 80%-of-available default.
+    roomy = dev.resource_budget(1, 2, None, (128, 300 * GIB), floor_bytes=12 * GIB, total_bytes=755 * GIB)
+    assert roomy["rss_bytes"] == 240 * GIB and roomy["reservation_source"] == "available-allocation"
+
+
+def test_budget_below_a_known_need_is_refused_before_compiling():
+    with pytest.raises(dev.BuildError, match="cannot fit.*--memory-per-job-gib"):
+        dev.resource_budget(1, 1, None, (8, 3 * GIB), floor_bytes=12 * GIB, total_bytes=8 * GIB)
+    with pytest.raises(dev.BuildError, match="below a recorded compiler need.*--memory-per-job-gib 13"):
+        dev.resource_budget(1, 1, 4, (8, 100 * GIB), recorded_bytes=int(12.5 * GIB))
+
+
+def test_peaks_are_recorded_and_size_the_next_plan_without_changing_keys(repo, tmp_path):
+    cache = tmp_path / "cache"
+    before = plan(repo, tmp_path)
+    row = before["groups"][0]
+    assert row["recorded_need_bytes"] == 0
+    dev.record_peak(cache, row, {"status": "rss-limit", "peak_rss_bytes": 4 * GIB})
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == 6 * GIB
+    dev.record_peak(cache, row, {"status": "stalled", "peak_rss_bytes": 2 * GIB})  # lower bound only raises
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == 6 * GIB
+    dev.record_peak(cache, row, {"status": "passed", "peak_rss_bytes": 10 * GIB})
+    after = plan(repo, tmp_path)
+    assert abs(after["groups"][0]["recorded_need_bytes"] - 12 * GIB) <= 1
+    assert keys(after) == keys(before)
+
+
+def test_limit_reason_and_peak_reach_the_group_receipt(repo, tmp_path, monkeypatch):
+    row = plan(repo, tmp_path)["groups"][0]
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+
+    def limited(command, root, env, log):
+        Path(str(log) + ".execution.json").write_text(json.dumps({
+            "complete": True, "status": "rss-limit", "exit_code": 124, "peak_rss_bytes": 3 * GIB,
+            "reason": "rss limit 2960077619 bytes (2.76 GiB) exceeded: process group at 3221225472 bytes"}))
+        return 124
+    monkeypatch.setattr(dev, "run_logged", limited)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, evidence)
+    assert result["exit_code"] == 124 and result["peak_rss_bytes"] == 3 * GIB
+    assert result["reason"].startswith("rss limit 2960077619 bytes")
+    assert dev.recorded_need(tmp_path / "cache", row["mode"], row["stem"]) == int(4.5 * GIB)
+
+
+def test_main_refuses_a_too_small_machine_before_starting_a_compiler(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev, "available_resources", lambda: (8, 3 * GIB))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 8 * GIB)
+    monkeypatch.setattr(dev, "run_logged", lambda *_: pytest.fail("must refuse before compiling"))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence)]) == 1
+    error = json.loads((evidence / "result.json").read_text())["error"]
+    assert "cannot fit" in error and "--memory-per-job-gib" in error

@@ -77,6 +77,16 @@ PORTABLE_MATH_INPUTS = ("packaging/portable_math/portable_math.c",
 # bincache.KEY_ENV_PREFIXES and removed before starting any child process.
 GUARD_ENV = "_MOJOLEARN_DEVELOPMENT_GUARD"
 MEMORY_FRACTION = 0.8
+# Without a measured --memory-per-job-gib, a group compiler may still use at
+# least this much: a compiler's need is a property of the group, not of what
+# else is running. The largest host groups (tokenizer_host,
+# runtime_classical_host) peak near 10 GB on Linux; on a loaded 16 GiB M4
+# (2026-10-24) "80% of available" was 2.96 GB and both were killed after
+# ~250 s. 12 GiB is that peak plus 20%. A recorded peak raises it.
+GROUP_FLOOR_BYTES = {"linux": 12 * 2 ** 30, "darwin": 12 * 2 ** 30}
+# Recorded peaks of a run that passed get 20% headroom; a run stopped by a
+# limit only shows a lower bound, so it gets 50%.
+PEAK_HEADROOM = {"passed": 1.2, "limited": 1.5}
 # Version banners are read from stdout only. On the NVIDIA L4 (2026-10-24,
 # source 50de0f93a) `mojo --version` wrote a tcmalloc mbind warning to stderr
 # ahead of its banner, carrying the PID and a random address; with stderr
@@ -376,6 +386,8 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None, c_fa
                    "key": digest(fields), "fields": fields,
                    "selected": selected_group(mode, stem, selection)}
             row["action"] = "reuse" if facts.get("available") and cached_artifact(cache, row) else "build"
+            # Sizing only; never a key field. It survives key changes.
+            row["recorded_need_bytes"] = recorded_need(cache, mode, stem)
             rows.append(row)
     for group in selection:
         if not any(selected_group(r["mode"], r["stem"], [group]) for r in rows):
@@ -411,24 +423,119 @@ def available_resources():
     return os.cpu_count() or 1, build_process.available_memory()
 
 
-def resource_budget(requested, workers, per_job_gib, resources=None):
+def physical_memory():
+    """Total memory this process may use: RAM, lowered to a cgroup limit."""
+    if sys.platform == "darwin":
+        return int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True, timeout=10))
+    total = None
+    for line in Path("/proc/meminfo").read_text().splitlines():
+        if line.startswith("MemTotal:"):
+            total = int(line.split()[1]) * 1024
+    if total is None:
+        raise BuildError("cannot read MemTotal from /proc/meminfo")
+    for name in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            text = Path(name).read_text().strip()
+        except OSError:
+            continue
+        if text.isdigit() and int(text) < 2 ** 60:
+            total = min(total, int(text))
+        break
+    return total
+
+
+def peak_path(cache, mode, stem):
+    return Path(cache) / "peaks" / f"{mode}-{stem}.json"
+
+
+def recorded_need(cache, mode, stem):
+    """Bytes the last recorded compile of this group needs, or 0."""
+    try:
+        saved = json.loads(peak_path(cache, mode, stem).read_text())
+        peak = int(saved["peak_rss_bytes"])
+        return int(peak * PEAK_HEADROOM["passed" if saved["status"] == "passed" else "limited"])
+    except (OSError, KeyError, ValueError, TypeError):
+        return 0
+
+
+def record_peak(cache, row, execution):
+    """Keep the group's last measured peak where the next plan can size from it.
+
+    A passed run replaces the record; a run stopped by a limit only raises it,
+    since its peak is a lower bound of the real need."""
+    peak = int(execution.get("peak_rss_bytes") or 0)
+    status = execution.get("status")
+    if peak <= 0 or status not in ("passed", "rss-limit", "memory-pressure", "timeout", "stalled"):
+        return
+    path = peak_path(cache, row["mode"], row["stem"])
+    if status != "passed":
+        try:
+            prior = json.loads(path.read_text())
+            if int(prior["peak_rss_bytes"]) >= peak:
+                return
+        except (OSError, KeyError, ValueError, TypeError):
+            pass
+    atomic_json(path, {"peak_rss_bytes": peak, "status": "passed" if status == "passed" else "limited",
+                       "key": row["key"], "recorded_utc": datetime.now(timezone.utc).isoformat()})
+
+
+def resource_budget(requested, workers, per_job_gib, resources=None, floor_bytes=0,
+                    recorded_bytes=0, total_bytes=None):
+    """One compiler reservation and how many compilers fit.
+
+    floor_bytes is what an unmeasured group compiler may need (the platform
+    floor or a recorded peak); recorded_bytes is the largest recorded need of
+    the groups about to compile. The serial default is 80% of available
+    memory, raised to floor_bytes when that fits 80% of total memory, and
+    refused up front when it does not. A measured reservation below a
+    recorded need is refused up front too. total_bytes defaults to the
+    machine's (or, with explicit resources, to their available memory)."""
     if requested < 1 or workers < 1:
         raise BuildError("--jobs must be positive")
     if per_job_gib is None and requested > 1:
         raise BuildError("parallel builds require a measured --memory-per-job-gib reservation")
     if per_job_gib is not None and (not math.isfinite(per_job_gib) or per_job_gib <= 0):
         raise BuildError("--memory-per-job-gib must be finite and positive")
+    explicit = resources is not None
     cores, memory = resources or available_resources()
     usable = int(MEMORY_FRACTION * memory)
-    reservation = int(per_job_gib * 2 ** 30) if per_job_gib is not None else usable
-    if cores < 1 or usable < 1 or reservation < 1:
+    gib = 2 ** 30
+    if cores < 1 or usable < 1:
         raise BuildError("available CPU/memory allocation cannot fit one requested compiler reservation")
-    actual = min(requested, cores // workers, usable // reservation)
+    source = "measured" if per_job_gib is not None else "available-allocation"
+    if per_job_gib is not None:
+        reservation = int(per_job_gib * gib)
+        if recorded_bytes > reservation:
+            raise BuildError(
+                f"--memory-per-job-gib {per_job_gib:g} is below a recorded compiler need of "
+                f"{recorded_bytes / gib:.1f} GiB for a group in this build; pass "
+                f"--memory-per-job-gib {math.ceil(recorded_bytes / gib)} or more")
+    else:
+        need = max(int(floor_bytes or 0), int(recorded_bytes or 0))
+        reservation = max(usable, need)
+        if reservation > usable:
+            source = "group-floor"
+    ceiling = usable
+    if reservation > usable:
+        total = total_bytes if total_bytes is not None else (memory if explicit else physical_memory())
+        ceiling = int(MEMORY_FRACTION * total)
+        if reservation > ceiling:
+            raise BuildError(
+                f"a group compiler reservation of {reservation / gib:.1f} GiB cannot fit: this machine allows "
+                f"{ceiling / gib:.1f} GiB (80% of {total / gib:.1f} GiB) and {usable / gib:.1f} GiB "
+                f"is available now; free memory or use a larger machine. If you measured a "
+                f"smaller peak for these groups, pass --memory-per-job-gib <GiB>.")
+    if reservation < 1:
+        raise BuildError("available CPU/memory allocation cannot fit one requested compiler reservation")
+    # Pack by what is available now; one compiler that fits the machine's
+    # total may still start, since its need does not depend on other load.
+    by_memory = max(usable // reservation, 1 if reservation <= ceiling else 0)
+    actual = min(requested, cores // workers, by_memory)
     if actual < 1:
         raise BuildError("available CPU/memory allocation cannot fit one requested compiler reservation")
+    floor = memory - usable if actual * reservation <= usable else max(0, memory - actual * reservation)
     return dict(jobs=actual, cores=cores, available_bytes=memory, compiler_workers=workers,
-                rss_bytes=reservation, min_available_bytes=memory-usable,
-                reservation_source="measured" if per_job_gib is not None else "available-allocation")
+                rss_bytes=reservation, min_available_bytes=floor, reservation_source=source)
 
 
 def pool_size(requested, workers, per_job_gib, resources=None):
@@ -488,6 +595,10 @@ def compile_group(row, repo, cache, env, evidence):
                 result["exit_code"] = code
                 if execution.is_file():
                     result["execution"] = json.loads(execution.read_text())
+                    record_peak(cache, row, result["execution"])
+                    result["peak_rss_bytes"] = result["execution"].get("peak_rss_bytes")
+                    if code and result["execution"].get("reason"):
+                        result["reason"] = result["execution"]["reason"]
                 if build_process.cancelled():
                     raise KeyboardInterrupt("development build cancelled before cache publication")
                 if code == 0:
@@ -721,7 +832,10 @@ def main(argv=None):
             # above still runs under a guard before keys are computed.
             jobs = 0
             if wanted:
-                budget = resource_budget(args.jobs, workers, args.memory_per_job_gib)
+                recorded = max(r["recorded_need_bytes"] for r in wanted)
+                floor = GROUP_FLOOR_BYTES.get(plan["platform"], 0)
+                budget = resource_budget(args.jobs, workers, args.memory_per_job_gib,
+                                         floor_bytes=floor, recorded_bytes=recorded)
                 jobs = budget["jobs"]
                 env[GUARD_ENV] = json.dumps(dict(budget, **limits))
                 report["resource_budget"] = budget
