@@ -1,0 +1,103 @@
+Native whole-training adapters: engineering/packaging handoff (2026-10-23)
+
+Scope
+-----
+The new native ABI mojolearn_adapter_train calls autograd/model.mojo's existing
+model_fit_state. It owns forward, tape, backward, optimizer, batches, epochs,
+shuffle, schedules, initialization and stopping inside Mojo. No numerical
+kernel or existing trainer implementation changes. The optional extensions
+remain unbundled until the packaging lane qualifies and stages them.
+
+Torch: torch.ops.mojolearn.train(inputs, model, options, scalars) -> Tensor[].
+MAX: mojolearn_train (3 inputs) and mojolearn_train_resume (7 inputs), each with
+five outputs and compile-time model/options/scalars comma-separated strings.
+All use the same frozen native library. MAX executes this complete custom
+operation; this does not add differentiation to arbitrary MAX graphs.
+
+This is a whole Sequential model fit, not a backward registered for operation,
+not conversion of arbitrary torch.nn/Hugging Face models, not a stock Torch
+optimizer, and not a promise for framework operations outside this call.
+Input requires_grad is refused: application code explicitly detaches tensor
+storage before handing ownership of the training computation to this trainer.
+No data or model tensors are modified; outputs have fresh framework storage.
+Returned parameters are the existing Sequential parameter layout, reusable by
+the library's native APIs. Loading them into other frameworks is application
+interoperability work and does not confer identity on those frameworks' math.
+
+Storage and configuration
+-------------------------
+All tensors must be contiguous, positive-sized, CPU or visible GPU zero.
+Float values are float32. Class codes are int32. X is (samples, features) for
+model version 1 or (samples, *sample_shape) for version 2. Dense Y is (samples,
+outputs); coded Y is (samples,). Model grammar and parameter layout are those
+of autograd/model.mojo::parse_model; the C ABI is described in native/abi.h.
+
+Fresh inputs: [X, Y, parameters].
+Resume inputs: [X, Y, parameters, moment1, moment2, state, previous_curve].
+Outputs: [parameters, moment1, moment2, state, curve].
+
+State is 24 opaque int32 words carrying the existing 12 Int64 state words,
+including floating-point bit patterns. Preserve its bytes with parameters and
+both moments. Do not convert these words through floating point. The completed
+result may be inspected by application/test code as 12 native Int64 words:
+valid=state[0], total_epochs=state[1], optimizer_steps=state[2].
+Curve capacity is requested epochs plus previous curve capacity. Only the
+prefix total_epochs is valid; any unused tail is zero. Resume with the same
+model and intended optimizer configuration, initialization disabled. The
+native saved epoch/step/seed/moments continue the prior computation.
+
+Options (13 integers): loss,target,optimizer,flags,schedule,schedule_step,
+batch,epochs,shuffle,seed_low32,seed_high32,patience,initialize.
+Loss: 0 MSE, 1 cross entropy, 2 BCE logits, 3 Huber.
+Target: 0 dense float32, 1 int32 class codes, 2 int32 numeric code values.
+Optimizer: 0 SGD (momentum/Nesterov), 1 Adam, 2 AdamW.
+Flags: bit 0 Nesterov for SGD only. Schedule: 0 constant, 1 step, 2 exponential.
+Scalars (float64 metadata, downcast where the existing trainer uses float32):
+lr,momentum/beta1,beta2,epsilon,weight_decay,dampening,tolerance,schedule_gamma,
+huber_delta, followed by one scalar per model layer (normally 0; dropout p or
+layer-normalization epsilon). No Python scheduler, callback or batch supplier.
+
+Minimal application call after loading the qualified native extension:
+  model = [1, 1, 1, 1, 1, 1, 0]  # one input, one Linear(1, bias=True)
+  options = [0, 0, 0, 0, 0, 1, 2, 1, 0, 1, 0, 0, 0]
+  scalars = [.125, 0., 0., 1e-8, 0., 0., 0., 1., 1., 0.]
+  result = torch.ops.mojolearn.train([x, y, parameters], model, options, scalars)
+The full call (including all input transfers, training and completed output
+transfers) is the measurement boundary. No speed or zero-copy claim is made.
+
+Qualification and packaging
+---------------------------
+Read training_qualification_20261023.json for exact receipts; historical
+inference-only qualification files do not certify these changed binaries.
+Use the common build and relocation requirements in PACKAGING_HANDOFF_20261023.txt.
+The MAX extension and Torch registration must be paired with a library exporting
+mojolearn_adapter_train, not an older ABI-1 library without the additive symbol.
+Use pinned framework/toolchain versions and an actually supported GPU target.
+
+On a rented AMD/NVIDIA host, after building the native library into OUT/native
+and packaging adapters/max_ops into OUT/mojolearn_ops.mojoc:
+  bash tools/run_training_adapter_checks.sh "$OUT" /path/to/test-venv/bin/python
+This saves bounded logs, return codes, fixtures, parameters, moments, full saved
+state and curves. GPU jobs run serially. Existing inference checks run first.
+
+For real Apple MPS, use the platform-neutral Python checkers directly (the Linux
+shell orchestrator uses GNU timeout). The test controllers themselves have
+process-group deadlines where faults are injected; wrap every other test and
+package build in the existing external build/controller timeout mechanism.
+Set PYTORCH_ENABLE_MPS_FALLBACK=0. Build with apple-native on an authorized remote
+Apple host; no local Apple build/test was authorized in the requesting session.
+Run check_native_training_adapters.py --device mps --extension ... --out ...
+and check_training_adapter_faults.py --device mps --qualified-out ... --out ... .
+Do not set the test-only forced-staging define for a distributable artifact.
+
+AMD forced staging tests exercise MPS's host-buffer transport branch with real
+GPU math; they do not qualify Apple Metal, macOS packaging or MPS execution.
+NVIDIA, actual Apple MPS, MAX-on-Apple (if supported), installed/relocated wheels
+and full current-release cross-vendor adapter captures remain their own gates.
+Reuse unchanged native numerical evidence; do not claim three-vendor adapter
+qualification from one AMD machine. No MLX adapter is added by this work.
+
+Publish no unqualified platform claims or docs. Retain actual source, binaries,
+full logs, result bytes and provenance on the Mac and in R2 before teardown.
+Never restart the removed watchers. Package/test changes may merge to main;
+PyPI/docs publication follows the release owner's separate authorization.

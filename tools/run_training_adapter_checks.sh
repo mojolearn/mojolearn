@@ -18,6 +18,7 @@ phase() {
   return "$rc"
 }
 phase torch 600 "$python" tools/check_native_adapters.py --out "$out/native"
+phase training-abi 120 "$python" tools/check_training_adapter_abi.py --native-library "$out/native/libmojolearn_adapter.so" --out "$out/training-abi"
 phase training 600 "$python" tools/check_native_training_adapters.py --extension "$out/native/mojolearn_torch.so" --out "$out/training"
 mkdir -p "$out/host-staging"
 cp "$out/native/libmojolearn_adapter.so" "$out/host-staging/"

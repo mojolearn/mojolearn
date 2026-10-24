@@ -146,7 +146,9 @@ Admission and evidence
 * Final handoff: main SHA, artifact hashes/locations, install/use commands,
   tested platform/framework matrix, exact counts/failures and remaining blockers.
 
-Scope stays explicit: these are inference operations. Automatic arbitrary model
-conversion, training/backward, other dtypes/layouts and multiple visible GPUs
-need separate implementation/qualification. Stock Torch/MAX math outside our
-operations does not inherit mojolearn's identity guarantee.
+Scope stays explicit: operation remains an inference entry. The additive train
+entry runs the existing complete native Sequential trainer; see
+TRAINING_ADAPTER_HANDOFF_20261023.txt for its API and qualification requirements.
+Automatic arbitrary model conversion, framework autograd, other dtypes/layouts
+and multiple visible GPUs need separate implementation/qualification. Stock
+Torch/MAX math outside our operations does not inherit mojolearn's identity guarantee.
