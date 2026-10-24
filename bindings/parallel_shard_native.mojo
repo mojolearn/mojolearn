@@ -778,15 +778,18 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var pool = holder["_pool"]
     var fields = py_fields(model)
     var methods = py_get(_t("query_methods"), py_type(model), Python.tuple())
-    var method = methods[0] if args[2] is None else args[2]
     if len(methods) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
+    var method = methods[0] if args[2] is None else args[2]
     if not Bool(py=py_call(py_attr(methods, "__contains__"), method)):
         raise Error("ValueError: unsupported parallel query method: " + String(py=py_call(b.str, method)))
     if not _identical(fields):
         raise Error("ValueError: parallel queries require IDENTICAL numeric mode")
-    var index = py_get(fields, PythonObject("_index"), PythonObject(None))
-    if index is None:
+    # `getattr(estimator, '_index', getattr(estimator, '_x', None))`
+    var index = PythonObject(None)
+    if py_contains(fields, PythonObject("_index")):
+        index = fields["_index"]
+    else:
         index = py_get(fields, PythonObject("_x"), PythonObject(None))
     if index is None:
         raise Error("ValueError: fit the estimator before querying")
