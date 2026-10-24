@@ -109,12 +109,13 @@ def run_direct(X, yc, inputs="numpy"):
     from mojolearn import _parallel_worker
     if os.environ.get("MOJOLEARN_POOL_TIMING") == "1":
         _parallel_worker._timing_snapshot("direct")
-    if inputs == "pool":
+    if inputs != "numpy":
         from mojolearn._buffer import as_f32_c
         from mojolearn._labels import flatten_labels
-        xs, _ = as_f32_c(X, ndim=2, name="X")
         started = time.monotonic()
-        X, yc = pickle.loads(pickle.dumps((xs, flatten_labels(yc)), protocol=5))
+        xs = as_f32_c(X, ndim=2, name="X")[0] if inputs in ("pool", "pool-x") else X
+        ys = flatten_labels(yc) if inputs in ("pool", "pool-y") else yc
+        X, yc = pickle.loads(pickle.dumps((xs, ys), protocol=5))
         _say(f"direct inputs as the pool sends them: X {type(X).__name__}, y {type(yc).__name__} "
              f"(prepare+pickle round trip {time.monotonic() - started:.2f}s)")
     for start in (0, 4):
@@ -149,8 +150,9 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--direct", action="store_true")
-    parser.add_argument("--inputs", choices=("numpy", "pool"), default="numpy",
-                        help="--direct: fit on the fixture arrays, or on exactly what a pool worker receives")
+    parser.add_argument("--inputs", choices=("numpy", "pool", "pool-x", "pool-y"), default="numpy",
+                        help="--direct: the fixture arrays; exactly what a pool worker receives; or only its X "
+                             "(a mojolearn Array) or only its y (a Python list)")
     parser.add_argument("--no-timing", action="store_true",
                         help="do not set MOJOLEARN_POOL_TIMING=1 (parent/worker phase timings on stderr)")
     parser.add_argument("--verify-layout", action="store_true")
