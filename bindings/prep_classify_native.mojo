@@ -1491,7 +1491,7 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
         context = lda_native_context(context)
         if operation == "initialize":
             return lda_native_initialize(model, args, context)
-        fields = lda_native_fields(model, context)
+        fields = lda_native_fields(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
         if operation == "is_fitted":
             return classical_is_fitted(model)
         if operation == "get_params":

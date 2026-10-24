@@ -527,7 +527,10 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         if operation == "initialize":
             result = logistic_initialize(model, args, context)
             return result.steal_data()
-        var fields = logistic_fields(model, context)
+        # get_params/set_params/is_fitted validate nothing beyond admission
+        # (scikit-learn's convention); consuming operations check values.
+        var configuring = operation == "get_params" or operation == "set_params" or operation == "is_fitted"
+        var fields = logistic_fields(model, context, True, configuring)
         if operation == "get_params":
             result = logistic_get_params(model, context)
             return result.steal_data()
