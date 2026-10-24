@@ -334,19 +334,7 @@ def test_the_backend_module_does_not_import_torch_at_load():
     assert not any(name.split(".")[0] == "torch" for name in names)
 
 
-def test_the_per_operation_surfaces_are_excluded_from_the_docs():
-    rows = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in
-            (REPO / "docs-site/api_exclude.txt").read_text().splitlines() if "\t" in line and not line.startswith("#")}
-    names = ["torch.ops.mojolearn.operation", "max.mojolearn_matmul", "max.mojolearn_relu"] + \
-        [f"max.mojolearn_operation{i}" for i in range(4)]
-    for name in names:
-        assert rows.get(name) == "building block; a whole model runs as one program", name
-    guide = (REPO / "docs-site/user_guide/framework_adapters.md").read_text()
-    for name in ("mojolearn.operation", "mojolearn_matmul", "mojolearn_relu", "mojolearn_operation"):
-        assert name not in guide, name
-    for name in ('backend="mojolearn"', "torch.ops.mojolearn.train", "mojolearn_train", "import_model"):
-        assert name in guide, name
-    assert "In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs." in guide
+# The docs and whole-model-only surface checks live in tools/test_adapter_surfaces.py (no bindings needed).
 
 
 def _real_torch_and_binding():
