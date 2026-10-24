@@ -92,24 +92,17 @@ def test_public_method_seen_from_the_worker_is_raw():
     assert type(public) is np.ndarray and public.dtype == np.float64
 
 
-class _FakePool:
-    """The DevicePool a driver opens, answering `km_apply` with the worker's
-    raw float32 Array (what the internal worker now always sends)."""
-    def __init__(self, devices, cooperative=False):
-        pass
-
-    def map(self, requests):
-        assert requests[0][0] == "km_apply"
-        return [_raw(4)]
-
-    def close(self):
-        pass
+def _fake_native(model, operation, args, context):
+    """The native `family_km_par_apply` door: the raw float32 Array, exactly
+    what the plain native predict returns to an internal caller."""
+    assert operation == "family_km_par_apply"
+    return _raw(4)
 
 
 def _patch_kernel_driver(monkeypatch):
+    from mojolearn import kernel_methods
     from mojolearn.kernel_methods import KernelRidge
-    monkeypatch.setattr(parallel_classical, "DevicePool", _FakePool)
-    monkeypatch.setattr(parallel_classical, "_admit_kernel_method", lambda est: None)
+    monkeypatch.setattr(kernel_methods, "_NATIVE", _fake_native)
     monkeypatch.setattr(KernelRidge, "predict",
                         _mode._public_output(lambda self, X: _raw(4), "predict"))
     return KernelRidge()

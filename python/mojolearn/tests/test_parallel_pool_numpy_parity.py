@@ -114,9 +114,13 @@ def test_worker_public_method_result_ignores_the_numpy_flag():
     assert with_numpy.endswith(" Array <f4"), with_numpy
 
 
-def test_pooled_kernel_ridge_predict_bytes_ignore_the_workers_numpy(monkeypatch):
+def test_native_kernel_ridge_driver_predict_is_the_plain_native_result():
+    # fit_kernel_method / apply_kernel_method are one native call in this
+    # process (bindings/kernel_methods_native.mojo `family_km_par_*`): no
+    # worker, no worker NumPy flag; an internal caller gets the plain raw
+    # float32 Array, byte for byte.
     if _backend.vendor() in (None, "cpu"):
-        pytest.skip("the cooperative kernel-methods worker needs a GPU device")
+        pytest.skip("the multi-GPU kernel-methods driver needs a GPU device")
     import mojolearn as ml
     from mojolearn import parallel_classical
     rng = np.random.default_rng(0)
@@ -125,23 +129,7 @@ def test_pooled_kernel_ridge_predict_bytes_ignore_the_workers_numpy(monkeypatch)
     est = ml.KernelRidge(alpha=1.0, kernel="rbf").fit(X, y)
     # this module is mojolearn's own (`mojolearn.tests.*`): raw results
     plain = est.predict(X)
-    real_pool = pool.DevicePool
-    results = {}
-    for flag in (True, False):
-        def started(devices, cooperative=False, _flag=flag):
-            p = real_pool(devices, cooperative=cooperative)
-            if _flag:
-                p._start()
-            else:
-                saved = sys.modules.pop("numpy")
-                try:
-                    p._start()   # the worker environment drops the NumPy flag
-                finally:
-                    sys.modules["numpy"] = saved
-            return p
-        monkeypatch.setattr(parallel_classical, "DevicePool", started)
-        results[flag] = parallel_classical.apply_kernel_method(est, X, devices=(0,))
-    for got in results.values():
-        assert type(got) is type(plain)
-        assert got.dtype == plain.dtype
-        assert np.asarray(got).tobytes() == np.asarray(plain).tobytes()
+    got = parallel_classical.apply_kernel_method(est, X, devices=(0,))
+    assert type(got) is type(plain)
+    assert got.dtype == plain.dtype
+    assert np.asarray(got).tobytes() == np.asarray(plain).tobytes()
