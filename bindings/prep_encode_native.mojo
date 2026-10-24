@@ -169,7 +169,7 @@ struct EncProg(Movable):
     var program: List[Int32]
     var inputs: PythonObject
     var out_words: Int
-    var inout: List[Int]
+    var inout_ranges: List[Int]
 
     def __init__(out self) raises:
         self.host = 0
@@ -178,7 +178,7 @@ struct EncProg(Movable):
         self.program = List[Int32]()
         self.inputs = Python.list()
         self.out_words = 0
-        self.inout = List[Int]()
+        self.inout_ranges = List[Int]()
 
     def alloc(mut self, words: Int) -> Int:
         # `_Prog.alloc`: host arena words.
@@ -222,8 +222,8 @@ struct EncProg(Movable):
         # caller reads them after the run, so they come back from the device.
         var offset = self.put(value, words)
         if words > 0:
-            self.inout.append(offset)
-            self.inout.append(offset + words)
+            self.inout_ranges.append(offset)
+            self.inout_ranges.append(offset + words)
         return offset
 
     def put_x(mut self, values: PythonObject) raises -> Int:
@@ -270,7 +270,7 @@ struct EncProg(Movable):
         var arena = xprep_storage(host + (0 if device_scratch else scratch), context)
         var store = xprep_storage(self.out_words, context) if self.out_words > 0 else PythonObject(None)
         xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words,
-                  self.inout.copy())
+                  self.inout_ranges.copy())
         return Python.tuple(arena, store)
 
 

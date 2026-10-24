@@ -258,7 +258,7 @@ def _xprep_merge(var pairs: List[Int]) -> List[Int32]:
 
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
               var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
-              logical_output: Int = 0, inout: List[Int] = List[Int]()) raises:
+              logical_output: Int = 0, inout_ranges: List[Int] = List[Int]()) raises:
     # `inout`: [lo, hi) pairs of inputs a stage rewrites and the caller reads
     # after the run (`_Prog.put(..., inout=True)`): they are copied up from
     # the host (never a resident or direct slot) and come back like outputs.
@@ -285,8 +285,8 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             var words = Int(py=record[3])*Int(py=record[4])
             var source = -1
             var is_inout = False
-            for j in range(len(inout) // 2):  # driver-loop: over the program's in-out input ranges
-                if inout[2 * j] == offset and inout[2 * j + 1] == offset + words:
+            for j in range(len(inout_ranges) // 2):  # driver-loop: over the program's in-out input ranges
+                if inout_ranges[2 * j] == offset and inout_ranges[2 * j + 1] == offset + words:
                     is_inout = True
             if ranges and not is_inout:
                 var cache = _resident(entries,Int(py=value.size),rows,context)
@@ -318,14 +318,14 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             outs.append(Int32(host))
             outs.append(-1)
             outs.append(1)
-        if ranges and len(inout) > 0:
+        if ranges and len(inout_ranges) > 0:
             # the in-out input ranges come back too
             var pairs = List[Int]()
             for i in range(len(outs) // 4):  # driver-loop: over the program's output ranges
                 pairs.append(Int(outs[4 * i]))
                 pairs.append(Int(outs[4 * i + 1]))
-            for j in range(len(inout)):  # driver-loop: over the program's in-out input ranges
-                pairs.append(inout[j])
+            for j in range(len(inout_ranges)):  # driver-loop: over the program's in-out input ranges
+                pairs.append(inout_ranges[j])
             outs = _xprep_merge(pairs^)
         var nst = len(program)//16
         var pa = Int(program.unsafe_ptr())
