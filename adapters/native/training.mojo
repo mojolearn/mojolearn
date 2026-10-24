@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole-training boundary over the existing Sequential trainer. No new math.
 from adapters.native.operation import IP, WORDS, descriptor_shape, copy_words
-from autograd.model import parse_model, FitConfig, check_fit, model_fit_state, FIT_STATE_WORDS, FS_EPOCH, FS_STEP, FS_STALL
+from autograd.model import parse_model, FitConfig, check_fit, model_fit_state, FIT_STATE_WORDS, FS_EPOCH, FS_STEP, FS_STALL, IP64
 from autograd.rankn import ShapeN
 from autograd.embedding_ops import embedding_refuse_ids, embedding_check_words
 from sequence.recurrent import OptConfig
@@ -134,19 +134,19 @@ def run_training[E: Exec](
     var state = List[Int64](length=FIT_STATE_WORDS, fill=0)
     var curve = List[Float32](length=capacity, fill=0)
     var previous = List[Float32](length=max(1, previous_capacity), fill=0)
-    read_words(ex, FP(unsafe_from_address=inputs[0]), x.unsafe_ptr(), len(x), host_buffers)
-    read_words(ex, FP(unsafe_from_address=inputs[WORDS]), y.unsafe_ptr(), len(y), host_buffers)
-    read_words(ex, FP(unsafe_from_address=inputs[2 * WORDS]), p.unsafe_ptr(), np_, host_buffers)
+    read_words(ex, FP(unsafe_from_address=inputs[0]), FP(unsafe_from_address=Int(x.unsafe_ptr())), len(x), host_buffers)
+    read_words(ex, FP(unsafe_from_address=inputs[WORDS]), FP(unsafe_from_address=Int(y.unsafe_ptr())), len(y), host_buffers)
+    read_words(ex, FP(unsafe_from_address=inputs[2 * WORDS]), FP(unsafe_from_address=Int(p.unsafe_ptr())), np_, host_buffers)
     if resume:
-        read_words(ex, FP(unsafe_from_address=inputs[3 * WORDS]), m.unsafe_ptr(), np_, host_buffers)
-        read_words(ex, FP(unsafe_from_address=inputs[4 * WORDS]), v.unsafe_ptr(), np_, host_buffers)
+        read_words(ex, FP(unsafe_from_address=inputs[3 * WORDS]), FP(unsafe_from_address=Int(m.unsafe_ptr())), np_, host_buffers)
+        read_words(ex, FP(unsafe_from_address=inputs[4 * WORDS]), FP(unsafe_from_address=Int(v.unsafe_ptr())), np_, host_buffers)
         read_words(ex, FP(unsafe_from_address=inputs[5 * WORDS]), FP(unsafe_from_address=Int(state.unsafe_ptr())), FIT_STATE_WORDS * 2, host_buffers)
-        if state[FS_EPOCH] < 0 or state[FS_EPOCH] > previous_capacity or state[FS_STEP] < 0 or state[FS_STALL] < 0:
+        if state[FS_EPOCH] < 0 or state[FS_EPOCH] > Int64(previous_capacity) or state[FS_STEP] < 0 or state[FS_STALL] < 0:
             raise Error("training adapter: invalid saved counters or loss curve length")
-        read_words(ex, FP(unsafe_from_address=inputs[6 * WORDS]), previous.unsafe_ptr(), previous_capacity, host_buffers)
+        read_words(ex, FP(unsafe_from_address=inputs[6 * WORDS]), FP(unsafe_from_address=Int(previous.unsafe_ptr())), previous_capacity, host_buffers)
     if cfg.target == 1:
         var ids = ex.alloc(N)
-        ex.upload(ids, y.unsafe_ptr(), N)
+        ex.upload(ids, FP(unsafe_from_address=Int(y.unsafe_ptr())), N)
         var scratch_n = embedding_check_words(N)
         var a = ex.alloc(scratch_n)
         var b = ex.alloc(scratch_n)
@@ -154,15 +154,25 @@ def run_training[E: Exec](
         ex.free(ids)
         ex.free(a)
         ex.free(b)
-    var xin = CastIn.f32_c(Int(x.unsafe_ptr()), N, spec.n_inputs)
-    var yin = CastIn.f32_c(Int(y.unsafe_ptr()), N, spec.out_features())
+    var xin = CastIn.f32_c(Int(FP(unsafe_from_address=Int(x.unsafe_ptr()))), N, spec.n_inputs)
+    var yin = CastIn.f32_c(Int(FP(unsafe_from_address=Int(y.unsafe_ptr()))), N, spec.out_features())
     if cfg.target != 0:
-        yin = CastIn(Int(y.unsafe_ptr()), 1, 4, N, 1, 4, 4)
-    _ = model_fit_state(ex, spec, cfg, xin, yin, N, p.unsafe_ptr(), curve.unsafe_ptr(),
-                        m.unsafe_ptr(), v.unsafe_ptr(), state.unsafe_ptr(), previous.unsafe_ptr(), resume)
-    write_words(ex, p.unsafe_ptr(), FP(unsafe_from_address=outputs[0]), np_, host_buffers)
-    write_words(ex, m.unsafe_ptr(), FP(unsafe_from_address=outputs[WORDS]), np_, host_buffers)
-    write_words(ex, v.unsafe_ptr(), FP(unsafe_from_address=outputs[2 * WORDS]), np_, host_buffers)
+        yin = CastIn(Int(FP(unsafe_from_address=Int(y.unsafe_ptr()))), 1, 4, N, 1, 4, 4)
+    _ = model_fit_state(ex, spec, cfg, xin, yin, N, FP(unsafe_from_address=Int(p.unsafe_ptr())), FP(unsafe_from_address=Int(curve.unsafe_ptr())),
+                        FP(unsafe_from_address=Int(m.unsafe_ptr())), FP(unsafe_from_address=Int(v.unsafe_ptr())), IP64(unsafe_from_address=Int(state.unsafe_ptr())), FP(unsafe_from_address=Int(previous.unsafe_ptr())), resume)
+    write_words(ex, FP(unsafe_from_address=Int(p.unsafe_ptr())), FP(unsafe_from_address=outputs[0]), np_, host_buffers)
+    write_words(ex, FP(unsafe_from_address=Int(m.unsafe_ptr())), FP(unsafe_from_address=outputs[WORDS]), np_, host_buffers)
+    write_words(ex, FP(unsafe_from_address=Int(v.unsafe_ptr())), FP(unsafe_from_address=outputs[2 * WORDS]), np_, host_buffers)
     write_words(ex, FP(unsafe_from_address=Int(state.unsafe_ptr())), FP(unsafe_from_address=outputs[3 * WORDS]), FIT_STATE_WORDS * 2, host_buffers)
-    write_words(ex, curve.unsafe_ptr(), FP(unsafe_from_address=outputs[4 * WORDS]), capacity, host_buffers)
+    write_words(ex, FP(unsafe_from_address=Int(curve.unsafe_ptr())), FP(unsafe_from_address=outputs[4 * WORDS]), capacity, host_buffers)
     ex.sync()
+
+    # Explicitly retain host owners through raw-pointer native calls.
+    _ = x
+    _ = y
+    _ = p
+    _ = m
+    _ = v
+    _ = state
+    _ = curve
+    _ = previous
