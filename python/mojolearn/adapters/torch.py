@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Run mojolearn operations and whole-model training from PyTorch.
+"""Run a PyTorch model as one mojolearn program, and train mojolearn models from PyTorch.
 
-Importing this module registers mojolearn's operators with the PyTorch
-dispatcher:
+Importing this module registers:
 
-* ``torch.ops.mojolearn.operation(inputs, code, output_shape, options=[],
-  scalars=[], integer_output=False, device=None)`` runs one mojolearn
-  operation and returns a new tensor of ``output_shape``.
-* ``torch.ops.mojolearn.train(inputs, model, options, scalars)`` fits a whole
-  mojolearn Sequential model and returns its parameters, optimizer state and
-  loss curve.
+* the ``torch.compile`` backend ``"mojolearn"`` (also :data:`backend`):
+  ``torch.compile(model, backend="mojolearn")`` runs every operation of the
+  model inside one mojolearn program call, so PyTorch only holds the input
+  and output tensors. A model with an operation the import does not support
+  is refused with the names of those nodes; nothing runs in PyTorch instead.
+* ``torch.ops.mojolearn.train(inputs, model, options, scalars)``, which fits a
+  whole mojolearn Sequential model and returns its parameters, optimizer
+  state and loss curve.
 
-Both call the compiled mojolearn library that ships with your mojolearn GPU
-install. Tensors are contiguous float32 or int32, on the CPU or on GPU 0
-(CUDA, ROCm or MPS).
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD
+GPUs.
 
 Requires PyTorch: ``pip install "mojolearn[torch]"`` (on Linux,
 ``pip install mojolearn "mojolearn-core[torch]"``; on AMD, install PyTorch's
@@ -23,16 +23,18 @@ ROCm build first).
 Examples
 --------
 >>> import torch
->>> from mojolearn.adapters import torch as mojolearn_torch
->>> x = torch.ones(2, 3, device="cuda")
->>> torch.ops.mojolearn.operation([x, x], 2, [2, 3]).sum().item()  # code 2: add
-12.0
+>>> import mojolearn.adapters.torch
+>>> model = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.ReLU(), torch.nn.Linear(4, 2))
+>>> compiled = torch.compile(model, backend="mojolearn", fullgraph=True, dynamic=False)
+>>> compiled(torch.ones(8, 3)).shape
+torch.Size([8, 2])
 """
 import platform as _platform
 
 from . import _shipped
+from ._torch_compile import backend, register as _register_backend
 
-__all__ = ["ops", "library_path", "native_library_path"]
+__all__ = ["backend", "ops", "library_path", "native_library_path"]
 
 
 def _import_torch():
@@ -47,6 +49,10 @@ def _import_torch():
 
 
 _torch = _import_torch()
+
+# torch.compile(model, backend="mojolearn"): registered before the operator library loads, since the
+# backend runs through the mojolearn bindings and needs no registration library.
+_register_backend()
 
 
 def _refusal(record):
@@ -81,7 +87,10 @@ def _load():
     return _torch.ops.mojolearn
 
 
-#: ``torch.ops.mojolearn``: the registered ``operation`` and ``train`` operators.
+# torch.ops.mojolearn.operation (one mojolearn operation per call) stays registered for the trainer
+# and the shipped adapter smoke, but is not documented (docs-site/api_exclude.txt): it is a building
+# block; a whole model runs as one program (backend="mojolearn" or mojolearn.import_model).
+#: ``torch.ops.mojolearn``: the registered ``train`` operator.
 ops = _load()
 
 

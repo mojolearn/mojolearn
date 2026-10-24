@@ -244,7 +244,7 @@ def test_guide_import_model(tmp_path, monkeypatch):
 
 def test_guide_import_pretrained(tmp_path, monkeypatch):
     """The pretrained-import block: torchvision's ResNet-18 with its published weights (downloaded on the
-    first run), exported, imported and run on four seeded images. Finite (4, 1000) logits, a second run equal
+    first run), imported directly and run on four seeded images. Finite (4, 1000) logits, a second run equal
     word for word, the saved program equal after loading; torch's own logits are a reference only."""
     b = _blocks()
     if "import-pretrained" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
@@ -252,13 +252,12 @@ def test_guide_import_pretrained(tmp_path, monkeypatch):
     pytest.importorskip("mojolearn.importers._program", reason="no model-import lowering in this tree")
     torch = pytest.importorskip("torch")
     pytest.importorskip("torchvision")
-    # the example exports through torch.onnx (the torch.export reader is gone), which needs onnxscript
-    pytest.importorskip("onnxscript")
+    # import_model exports the module with torch.onnx's TorchScript exporter, in this process
     from mojolearn import ops
     monkeypatch.chdir(tmp_path)
     ns = _run(b["import-pretrained"])
     model, images, logits = ns["model"], ns["images"], ns["logits"]
-    assert [tuple(t[:2]) for t in model.inputs] == [("x", (4, 3, 224, 224))]
+    assert [tuple(t[:2]) for t in model.inputs] == [("input", (4, 3, 224, 224))]
     assert logits.shape == (4, 1000) and logits.dtype == np.float32 and np.isfinite(logits).all()
     assert len(ns["labels"]) == 4
     assert np.array_equal(model.run(images).view(np.uint32), logits.view(np.uint32))
