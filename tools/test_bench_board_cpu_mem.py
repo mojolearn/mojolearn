@@ -330,7 +330,10 @@ def test_invalidate_arm_refuses_its_cells_and_recomputes_ratios(tmp_path, monkey
              cell("xgboost-cpu", "xgboost", 200.0)]
     infer = [cell("ours", "mojolearn", 5.0, batch="test"), cell("xgboost-gpu", "xgboost", 10.0, batch="test")]
     bb.add_ratios(cells)
-    races = {"trees/gbdt-depthwise/taxi/rows=full": {"status": "done", "cells": cells, "infer_cells": infer},
+    # save_result keeps a ratio only for a MATCHED parameter pair (e0d611997)
+    matched = {"params_check": "MATCHED", "params": {"arms": {"xgboost-gpu": {}, "xgboost-cpu": {}}}}
+    races = {"trees/gbdt-depthwise/taxi/rows=full": dict({"status": "done", "cells": cells, "infer_cells": infer},
+                                                         **matched),
              "trees/gbdt-symmetric/taxi/rows=full": {"status": "done", "cells": [cell("ours", "mojolearn", 1.0)]}}
     out = tmp_path / "run"
     out.mkdir()

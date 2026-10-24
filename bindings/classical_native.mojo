@@ -14,6 +14,8 @@ from bindings.classical_attributes import classical_check_layout, classical_geta
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.host_archive_native import host_archive_build
+from bindings.host_archive_predict_native import host_archive_predict
+from bindings.host_knn_predict_native import host_knn_predict
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
 from bindings.family_native import family_operation
@@ -28,7 +30,7 @@ from bindings.host_density_hash_native import host_density_hash
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
-from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name
+from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_caller_frame import native_caller_globals
@@ -111,6 +113,14 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation.startswith("host_infer_"):
             var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
             return result.steal_data()
+        if operation == "archive_infer_predict" or operation == "archive_infer_predict_proba":
+            var route = "host_infer_predict" if operation == "archive_infer_predict" else "host_infer_predict_proba"
+            var result = host_inference_operation(model, route, args, context["host_inference_context"], context, False)
+            return result.steal_data()
+        if operation == "archive_knn_classifier" or operation == "archive_knn_regressor":
+            var result = host_knn_predict(model, args[0], operation == "archive_knn_classifier", Bool(py=args[1]),
+                                          context["host_archive_predict_context"])
+            return result.steal_data()
         if operation.startswith("trees_"):
             # The public tree ensembles' one-call methods
             # (bindings/trees_public_native.mojo).
@@ -120,15 +130,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var result = host_tree_operation(model, operation, args, context["host_tree_context"])
             return result.steal_data()
         if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
-            # `host_predict(path, X)` / `host_predict_proba(path, X)`: the
-            # saved model rebuilt by the archive reader, then its own
-            # one-call predict.
-            var predict_context = py_get(context, "host_archive_context")
+            var predict_context = py_get(context, "host_archive_predict_context")
             if predict_context is None:
                 raise Error("RuntimeError: native host archive schemas are not connected")
-            var hosted = host_archive_build(args[0], predict_context, PythonObject(None), False)
-            var method = py_call(b.getattr, hosted, PythonObject("predict" if operation == "host_archive_predict" else "predict_proba"))
-            var predicted = py_call(method, args[1])
+            var predicted = host_archive_predict(args[0], args[1], operation == "host_archive_predict_proba", predict_context)
             return predicted.steal_data()
         if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")
@@ -190,7 +195,18 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             # scikit-learn's sparse refusal comes before input admission.
             classical_refuse_sparse(args[0], classical_estimator_name(model))
-        if operation != "save":
+        if (operation == "ridge_fit" or operation == "ols_fit") and len(args) == 3:
+            # Same order as the whole-tuple admission (X, y, then the
+            # weight); a refused sample_weight names the accepted types
+            # (9bdccfa76) instead of the shared admission's generic text.
+            classical_admit_value(args[0], context, 1)
+            classical_admit_value(args[1], context, 1)
+            try:
+                classical_admit_value(args[2], context, 1)
+            except error:
+                var refusal = classical_weight_refusal(args[2], error)
+                raise refusal
+        elif operation != "save":
             classical_admit_value(args, context)
         var fields = sequential_fields(model)
         var names = context["classical_fields"]

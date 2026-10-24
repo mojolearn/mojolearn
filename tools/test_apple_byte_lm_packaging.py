@@ -65,7 +65,14 @@ def test_installed_fast_verifier_rejects_identical_fallback(monkeypatch):
     native.byte_lm_profile = lambda: PROFILE
     mod = types.ModuleType('mojolearn');mod.__file__ = str(package/'__init__.py')
     setattr(mod, BYTE, native)
+    # The verifier resolves the expected file through mojolearn._merged
+    # (b36ed25d1); this fixture serves the binding from its own FAST file.
+    merged = types.ModuleType('mojolearn._merged')
+    merged.binding_path = lambda pkg, name: str(Path(pkg)/(name+'.so'))
+    merged.is_merged_file = lambda path: True
+    mod._merged = merged
     monkeypatch.setitem(sys.modules, 'mojolearn', mod)
+    monkeypatch.setitem(sys.modules, 'mojolearn._merged', merged)
     exec(compile(body, '<installed-fast-verifier>', 'exec'), {})
     native.__file__ = str(package/'identical'/(BYTE+'.so'))
     with pytest.raises(AssertionError):exec(compile(body, '<installed-fast-verifier>', 'exec'), {})

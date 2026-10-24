@@ -1016,63 +1016,14 @@ def _solver_is(fields: PythonObject, name: String) raises -> Bool:
 
 def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, who: String,
                     context: PythonObject) raises -> List[Float64]:
-    """`_estimator_covs`: the user covariance estimator fitted on each class's
-    float32 rows (grouped on the device by p2m_ccount .. p2m_rgather), its
-    covariance_ words as floats."""
-    var values = arr.value
-    if py_type(values) is context["maxabs_rows_class"]:
-        # the user's estimator takes host rows (lane cpu4-misc)
-        values = _values(values, context, True)
-    var n = arr.n
-    var d = arr.d
-    var mode = cls_mode(context)
-    var blocks = Python.list()
-    if codes is not None:
-        var pr = ClsProg()
-        var xo = pr.put(values)
-        var co = pr.put_codes(codes)
-        var ch = max(II_CH, (n + II_CH - 1) // II_CH, (n * K + 16777215) // 16777216, 1)
-        var nch = max(1, (n + ch - 1) // ch)
-        var cnt = pr.alloc(nch * K)
-        var tot = pr.alloc(K)
-        pr.stage(OP_P2M_CCOUNT, nch, co, n, K, ch, cnt)
-        pr.stage(OP_P2M_CSCAN, K, cnt, nch, K, tot)
-        var start = pr.alloc(K)
-        var ro = pr.alloc(n)
-        pr.stage(OP_P2M_CSTART, 1, tot, K, start, NONE)
-        pr.stage(OP_P2M_CWRITE, nch, co, n, K, ch, cnt, start, ro)
-        var xg = pr.alloc(n * d)
-        pr.stage(OP_P2M_RGATHER, n * d, xo, d, ro, xg)
-        pr.run(mode, context)
-        var totals = I32P(unsafe_from_address=pr.base) + tot
-        var at = 0
-        for k in range(K):  # driver-loop: over the classes' row blocks (class count)
-            var rows = Int(totals[k])
-            _ = py_call(blocks.append, pr.get(xg + at * d, rows, d, context))
-            at += rows
-    else:
-        var copy = classical_typed(Python.tuple(n, d), "<f4", context["output_context"])
-        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(copy))), src=F32P(unsafe_from_address=Int(py=classical_address(values))), count=n * d)
-        _ = copy  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-        _ = py_call(blocks.append, copy)
-    var out = List[Float64]()
-    var b = cls_builtins()
-    for k in range(len(blocks)):  # cpu-route: fits the user covariance estimator once per class
-        _ = py_call(est.fit, blocks[k])
-        if not Bool(py=py_call(b.hasattr, est, "covariance_")):
-            raise Error("mojolearn: " + cls_name(est) + " does not have a covariance_ attribute")
-        var view = classical_view(est.covariance_, context, "covariance_")
-        if Int(py=view.size) != d * d:
-            raise Error("mojolearn: " + who + ": covariance_ of " + cls_name(est) + " is not (" + String(d) + ", " + String(d) + ")")
-        var words = classical_host_f32(view, max(1, Int(py=view.ndim)), "covariance_", context)
-        var p = F32P(unsafe_from_address=Int(py=classical_address(words)))
-        _ = words  # keep the Python object alive through the native call above
-        for i in range(d * d):  # cpu-route: reads the user covariance estimator output
-            out.append(Float64(p[i]))
-            _ = words  # keep the Python object alive through the native call above
-        _ = words^
-    return out^
+    """A user covariance estimator would be fitted by its Python `fit` inside
+    the runtime, so it is refused by name; LDA and QDA refuse earlier, and
+    this guard keeps any remaining caller from calling it."""
+    # TOMBSTONE: the per-class Python `est.fit` loop (QDA/LDA
+    # covariance_estimator objects) deleted 2026-10-24 by lane
+    # fix-round2-host-20261024 (no Python in the runtime); code recoverable at
+    # 809a28acb. Restore: none; no compiled covariance-estimator API exists.
+    raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
 
 
 def _lda_cov_blocks(mut pr: ClsProg, xo: Int, n: Int, d: Int, yo: Int, K: Int, mean: Int, var_: Int, cnt: Int,
@@ -1355,6 +1306,11 @@ def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context:
 
 def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`QuadraticDiscriminantAnalysis.fit`."""
+    if fields["covariance_estimator"] is not None:
+        # Fitting a user covariance estimator runs its Python `fit` inside
+        # the runtime. Refused by name before any other check, as LDA does
+        # (a5f9cc738, bindings/prep_lda_admission.mojo).
+        raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
     var solver = fields["solver"]
     if not (_solver_is(fields, "svd") or _solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
@@ -1390,6 +1346,10 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         for k in range(K):  # driver-loop: over the class counts (class count)
             if Int(totals[k]) < 2:
                 raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
+        # Keep the program (the owner of `cp.base`) alive through the reads
+        # above: Mojo releases it at its last named use, which was the
+        # `cp.base` read, so the counts were read from freed words.
+        _ = cp.base
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
@@ -1491,7 +1451,7 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
         context = lda_native_context(context)
         if operation == "initialize":
             return lda_native_initialize(model, args, context)
-        fields = lda_native_fields(model, context)
+        fields = lda_native_fields(model, context, operation == "is_fitted" or operation == "get_params" or operation == "set_params")
         if operation == "is_fitted":
             return classical_is_fitted(model)
         if operation == "get_params":

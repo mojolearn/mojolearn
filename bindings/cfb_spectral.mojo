@@ -25,6 +25,8 @@ from bindings.family_common import (
 from bindings.cluster_native import _reference_queries, _xc_array
 from bindings.cfb_resident import cfb_optional_entry
 from bindings.cfb_dbscan import cfb_borrow_copy
+from bindings.native_loaded_module import native_loaded_module
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
 comptime _DENSE_EMPTY = -1
 comptime _DENSE_NONFINITE = -2
@@ -37,7 +39,7 @@ comptime _E_SPECTRAL_ASSIGN = 12
 
 
 def _builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _int(value: PythonObject) raises -> Int:
@@ -70,7 +72,7 @@ def _square(shape: PythonObject) raises -> Bool:
     """`len(shape) == 2 and shape[0] == shape[1]`."""
     if len(shape) != 2:
         return False
-    return Bool(py=family_call(_builtins().bool, family_call(Python.import_module("operator").eq, shape[0], shape[1])))
+    return Bool(py=family_call(_builtins().bool, family_call(native_loaded_module("operator").eq, shape[0], shape[1])))
 
 
 def _as_i32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -335,7 +337,7 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     if tocoo is not None:
         var coo = family_call(tocoo)
         n = _int(coo.shape[0])
-        if not Bool(py=family_call(b.bool, family_call(Python.import_module("operator").eq,
+        if not Bool(py=family_call(b.bool, family_call(native_loaded_module("operator").eq,
                                                         family_call(b.tuple, coo.shape), Python.tuple(n, n)))):
             raise Error("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
         rows = _as_i32(coo.row, "rows", context)
@@ -370,16 +372,20 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     _ = vals  # keep the Python object alive through the native call above
     _ = status  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
+    # Read all three status words while `status` is still named: Mojo
+    # releases a local at its last named use, and a read after that (the
+    # refusal's row and count, formerly read inside the raise) saw freed
+    # words (a garbage row on the CPU host and on CUDA).
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(status)))
-    _ = status  # keep the Python object alive through the native call above
     var code = Int(words[0])
-    _ = status  # keep the Python object alive through the native call above
+    var bad_row = Int(words[1])
+    var stored = Int(words[2])
+    _ = status  # keep the Python object alive through the reads above
     if code == 1:
         raise Error("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
     if code == 2:
-        raise Error("mojolearn SpectralEmbedding: row " + String(Int(words[1])) + " of the precomputed graph has "
-                    + String(Int(words[2])) + " stored distances, fewer than n_neighbors=" + String(k))
-        _ = status  # keep the Python object alive through the native call above
+        raise Error("mojolearn SpectralEmbedding: row " + String(bad_row) + " of the precomputed graph has "
+                    + String(stored) + " stored distances, fewer than n_neighbors=" + String(k))
     py_setitem(fields, "affinity_matrix_", a)
     return a
 
@@ -435,7 +441,7 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
         raise Error("mojolearn SpectralClustering: assign_labels="
                     + family_repr(assign_labels) + " must be one of " + family_repr(py_call(b.list, assigns)))
     var predicting = Bool(py=family_call(b.bool, prediction_data))
-    var operator = Python.import_module("operator")
+    var operator = native_loaded_module("operator")
     if predicting and Bool(py=family_call(b.bool, family_call(operator.ne, assign_labels, PythonObject("kmeans")))):
         raise Error("NotImplementedError: mojolearn SpectralClustering: prediction_data with "
                     + "assign_labels=" + family_repr(assign_labels) + " is refused; the Nystrom "
@@ -680,6 +686,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                                               classical_address(embedding)), state), params))
             _ = labels  # keep the Python object alive through the native call above
             _ = embedding  # keep the Python object alive through the native call above
+            _ = coo.rows  # coo owns the COO Arrays read by the native call above
+            _ = coo.cols
+            _ = coo.vals
         else:
             n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_graph", context),
                                        classical_address(coo.rows), classical_address(coo.cols),
@@ -687,6 +696,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                        classical_address(embedding), params))
             _ = labels  # keep the Python object alive through the native call above
             _ = embedding  # keep the Python object alive through the native call above
+            _ = coo.rows  # coo owns the COO Arrays read by the native call above
+            _ = coo.cols
+            _ = coo.vals
     else:
         var x = family_as_f32(source, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
@@ -762,23 +774,23 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     """`SpectralClustering._predict_embedding`: (labels, embedding). The Nystrom extension of the fitted
     eigenvectors, then the nearest fitted k-means centroid."""
     var b = _builtins()
-    if not Bool(py=family_call(b.hasattr, model, PythonObject("labels_"))):
+    if not family_raw_has(model, "labels_"):
         raise Error("mojolearn SpectralClustering.predict: this instance is not "
                     + "fitted yet; call fit first")
-    var eigenvalues = py_call(b.getattr, model, PythonObject("_pd_eigenvalues"), PythonObject(None))
+    var eigenvalues = family_raw_get_or(model, "_pd_eigenvalues", PythonObject(None))
     if eigenvalues is None:
         raise Error("mojolearn SpectralClustering.predict: prediction data was not "
                     + "stored. Fit with SpectralClustering(prediction_data=True), which "
                     + "keeps the eigenpairs, degrees and centroids the Nystrom extension "
                     + "needs (DEVIATION 2860)")
-    var affinity = py_call(b.getattr, model, PythonObject("affinity"))
+    var affinity = family_raw_get(model, "affinity")
     var affinities = context["family_cfb_predict_affinities"]
     if not py_contains(affinities, affinity):
         raise Error("mojolearn SpectralClustering.predict: affinity=" + family_repr(affinity) + " "
                     + "has no out-of-sample rule; it must be one of "
                     + family_repr(py_call(b.list, affinities)))
-    var k = _int(py_call(b.getattr, model, PythonObject("n_components_")))
-    var diag = py_call(b.getattr, model, PythonObject("_pd_diag"))
+    var k = _int(family_raw_get(model, "n_components_"))
+    var diag = family_raw_get(model, "_pd_diag")
     var n_train = Int(py=diag.shape[0])
     var q = PythonObject(None)
     var train_addr = PythonObject(0)
@@ -790,7 +802,7 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
         if toarray is not None and Bool(py=family_call(b.callable, toarray)):
             a = family_call(toarray)
         var shape = _shape_of(a)
-        if len(shape) != 2 or not Bool(py=family_call(b.bool, family_call(Python.import_module("operator").eq,
+        if len(shape) != 2 or not Bool(py=family_call(b.bool, family_call(native_loaded_module("operator").eq,
                                                                            shape[1], PythonObject(n_train)))):
             raise Error("mojolearn SpectralClustering.predict: with affinity="
                         + "'precomputed', X must be the affinity between the new rows "
@@ -808,9 +820,9 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
                         + "negative entry; refused by name, as the fit refuses one")
         code = 1
     else:
-        var fitted = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+        var fitted = Int(py=family_raw_get(model, "n_features_in_"))
         q = _reference_queries(source, fitted, "SpectralClustering.predict", context)
-        train_addr = classical_address(py_call(b.getattr, model, PythonObject("_fit_X")))
+        train_addr = classical_address(family_raw_get(model, "_fit_X"))
         n_features = fitted
     var nq = Int(py=q.shape[0])
     var labels = family_array(Python.tuple(nq), "<i4", context)
@@ -819,13 +831,13 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     # n_train, n_queries, n_features, n_components, n_clusters, n_neighbors, affinity.
     _ = family_call(family_entry(binding, "spectral_predict", context),
                     Python.list(classical_address(q), train_addr, classical_address(eigenvalues),
-                                classical_address(py_call(b.getattr, model, PythonObject("_pd_eigenvectors"))),
+                                classical_address(family_raw_get(model, "_pd_eigenvectors")),
                                 classical_address(diag),
-                                classical_address(py_call(b.getattr, model, PythonObject("_pd_centroids"))),
+                                classical_address(family_raw_get(model, "_pd_centroids")),
                                 classical_address(labels), classical_address(emb)),
                     Python.list(PythonObject(n_train), PythonObject(nq), PythonObject(n_features), PythonObject(k),
-                                PythonObject(_int(py_call(b.getattr, model, PythonObject("_n_clusters")))),
-                                PythonObject(_int(py_call(b.getattr, model, PythonObject("_n_neighbors")))),
+                                PythonObject(_int(family_raw_get(model, "_n_clusters"))),
+                                PythonObject(_int(family_raw_get(model, "_n_neighbors"))),
                                 PythonObject(code)))
     _ = q  # keep the Python object alive through the native call above
     _ = eigenvalues  # keep the Python object alive through the native call above
@@ -852,7 +864,7 @@ def _se_validate(fields: PythonObject, context: PythonObject) raises:
                     + "refused; it must be one of " + family_repr(py_call(b.list, affinities)) + ". "
                     + "A callable affinity is Python code that no identity column "
                     + "can run.")
-    var rbf = Bool(py=family_call(b.bool, family_call(Python.import_module("operator").eq, affinity, PythonObject("rbf"))))
+    var rbf = Bool(py=family_call(b.bool, family_call(native_loaded_module("operator").eq, affinity, PythonObject("rbf"))))
     if gamma is not None and not rbf:
         raise Error("NotImplementedError: mojolearn SpectralEmbedding: gamma is refused; it "
                     + "parameterizes an RBF affinity, and affinity is not 'rbf'")
@@ -980,6 +992,12 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
                                    classical_address(coo.rows), classical_address(coo.cols), classical_address(coo.vals),
                                    classical_address(embedding), params))
         _ = embedding  # keep the Python object alive through the native call above
+        # coo owns the three COO Arrays whose addresses the call reads; its
+        # last named use was the argument list, so without these Mojo freed
+        # them before the native read (garbage rows/cols, "negative" values).
+        _ = coo.rows
+        _ = coo.cols
+        _ = coo.vals
     else:
         var x = family_as_f32(source, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))

@@ -346,7 +346,8 @@ LANES = LANES + FIT_LANES + OPS_LANES + PROGRAM_LANES
 GEN_LANES = {"causal-lm-generate": "mojolearn-162m", "causal-lm-generate-smollm2": "smollm2-135m"}
 #: the inference lanes: an untimed memory pass after every round (DeviceMemory)
 INFER_LANES = tuple(GEN_LANES) + PREDICT_LANES
-LANES = LANES + FIT_LANES + OPS_LANES + tuple(GEN_LANES)
+# FIT_LANES and OPS_LANES are already in LANES (above): adding them again here listed eight lanes twice
+LANES = LANES + tuple(GEN_LANES)
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",

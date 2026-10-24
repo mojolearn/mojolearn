@@ -1393,6 +1393,7 @@ def _host_archive_forest_metadata():
 
 
 _native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries(), _host_archive_forest_metadata())
+_native_host_archive_bridge.connect_peer(_CLASSICAL)
 
 
 def host_model(path):
@@ -1535,3 +1536,36 @@ _connect_host_inference()
 # explicit CPU owner's attribute layout even in a package with GPU bindings.
 from ._native_logistic_bridge import connect_public as _connect_logistic_public
 _connect_logistic_public(HostLogisticRegression, _LR_CONTEXT, install=False)
+
+# Complete fixed recipes are connected only after every host owner and class
+# descriptor above has finished setup. Public prediction performs no imports.
+def _host_archive_prediction_bindings():
+    """The host bindings the saved classes' public predict methods bound
+    through `_bind`, loaded once at setup. An unbuilt binding or a failed
+    read-back is kept as its refusal text, raised when a prediction needs it
+    (the old lazy `_bind` raised the same ImportError at that point)."""
+    def load(basename):
+        try:
+            return _backend.load_host_module(basename)
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+            return "ImportError: " + str(error)
+    gpc = (_GPC_HOST_INFERENCE_BASENAME
+           if os.path.exists(_backend.host_module_path(_GPC_HOST_INFERENCE_BASENAME))
+           else _GPC_HOST_BASENAME)
+    return {
+        "_mojolearn_core_host": load(_HOST_BASENAMES["_mojolearn"]),
+        "_mojolearn_estimators_host": load(_HOST_BASENAMES["_mojolearn_estimators"]),
+        "mixture": load(_HOST_BASENAMES[HostGaussianMixture._BINDING]),
+        "gp": load(_HOST_BASENAMES[HostGaussianProcessRegressor._BINDING]),
+        "spectral": load(_HOST_BASENAMES[HostSpectralClustering._BINDING]),
+        "forecast": load(_HOST_BASENAMES["_mojolearn_arima"]),
+        "gpc": load(gpc),
+        # The GP classifier's label gather: the core host binding exports the
+        # exact gather_i64/gather_f64 the GPU base binding does, so a saved
+        # classifier decodes on the CPU without a binding proxy.
+        "gpc_core": load(_HOST_BASENAMES["_mojolearn"]),
+    }
+
+
+from ._native_host_archive_predict import connect as _connect_archive_prediction
+_connect_archive_prediction(_CLASSICAL, globals(), _host_archive_prediction_bindings())

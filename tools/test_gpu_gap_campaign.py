@@ -591,3 +591,21 @@ def test_apple_runs_each_numeric_mode_in_its_own_worker(tmp_path, monkeypatch):
     assert modes == ['fast', 'identical'] and [w.name for w in FakeWorker.instances] == ['worker-fast', 'worker']
     doc = json.loads((tmp_path / 'o' / 'smoke' / 'smoke.json').read_text())
     assert set(doc['workers']) == {'fast', 'identical'}
+
+
+def test_smoke_row_fails_a_recipe_whose_own_arm_did_not_import_or_construct(tmp_path):
+    # measure-coverage (2026-10-24): the preflight records our arm's missing probe as REFUSED (a binding not built,
+    # an import error, a class the wheel does not export); the smoke row reads FAILED, never a skip
+    race = dict(id='algos/metric-f1-score/taxi/rows=full', family='algos', lane='metric-f1-score',
+                dataset='taxi', our_arms={'ours': 'identical'})
+    d = tmp_path / 'r'
+    _write_board(d, race['id'], {'verdict': 'REFUSED', 'problems': ['missing parameter/version probe: ours']})
+    row = C.smoke_row(race, 'identical', 0, 1.0, d, tmp_path / 'none.log', 5)
+    assert row['status'] == 'FAILED' and row['own_arm_not_built'] == ['missing parameter/version probe: ours']
+    assert row['problems'][0].startswith('own arm did not import or construct')
+    _write_board(d, race['id'], {'verdict': 'REFUSED', 'problems': ['parameter probe failed (rc 1): ours']})
+    assert C.smoke_row(race, 'identical', 0, 1.0, d, tmp_path / 'none.log', 5)['status'] == 'FAILED'
+    # an opponent's missing probe stays a refusal of that pair
+    _write_board(d, race['id'], {'verdict': 'REFUSED', 'problems': ['missing parameter/version probe: sklearn-cpu']})
+    row = C.smoke_row(race, 'identical', 0, 1.0, d, tmp_path / 'none.log', 5)
+    assert row['status'] == 'REFUSED' and 'own_arm_not_built' not in row

@@ -47,8 +47,35 @@ def assert_outputs(actual, expected):
         assert all(type(x) is float for x in actual.ravel())
         assert [struct.pack("=d", x) for x in actual.ravel()] == [
             struct.pack("=d", x) for x in expected.ravel()]
+    elif actual.dtype.kind in "fc" and actual.dtype.itemsize // (2 if actual.dtype.kind == "c" else 1) == 16 \
+            and np.finfo(np.longdouble).nmant == 63:
+        # x87 extended precision stores 10 meaningful bytes in a 16-byte slot.
+        # NumPy leaves the 6 padding bytes uninitialized (x86-64 L4 runs showed
+        # heap bytes such as b'\xec' and b'{p' there); the native output zeroes
+        # them. Compare every meaningful byte of every component.
+        def meaningful(array):
+            raw = np.ascontiguousarray(array).view("u1").reshape(-1, 16)
+            return raw[:, :10].tobytes()
+        assert meaningful(actual) == meaningful(expected)
     else:
         assert actual.tobytes() == expected.tobytes()
+
+
+def assert_defined_unsigned_outputs(actual, expected, source):
+    # Same C99 rule as the uint16 correction below: NumPy leaves negative and
+    # out-of-range float->unsigned results undefined. On x86-64 they even
+    # depend on the element's position (GCC's vector body yields 0x80000000
+    # for -inf/NaN into uint32, its scalar tail yields 0). Keep the whole
+    # operation, its warnings and audit; compare bytes only where defined.
+    assert actual.dtype == expected.dtype
+    assert actual.shape == expected.shape
+    assert actual.flags.writeable == expected.flags.writeable
+    finite = np.isfinite(source)
+    truncated = np.trunc(source[finite].astype("f8"))
+    defined = np.zeros(source.shape, dtype=bool)
+    defined[finite] = (truncated >= 0) & (truncated < 2.0 ** (8 * expected.dtype.itemsize))
+    assert np.any(defined)
+    assert actual[defined].tobytes() == expected[defined].tobytes()
 
 
 def assert_defined_u16_outputs(actual, expected, source):
@@ -82,6 +109,8 @@ def test_native_candidate_preserves_retained_dtype_copy_contract(resident, dtype
         actual = native_candidate(tensor, dtype, copy)
     if expected.dtype.kind == "u" and expected.dtype.itemsize == 2:
         assert_defined_u16_outputs(actual, expected, values)
+    elif expected.dtype.kind == "u" and expected.dtype.itemsize >= 4:
+        assert_defined_unsigned_outputs(actual, expected, values)
     else:
         assert_outputs(actual, expected)
     assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
@@ -131,6 +160,8 @@ def test_native_candidate_preserves_numpy_error_state(resident, mode, dtype):
             assert str(audit.exception) == str(previous.value)
             report = audit.report()
             assert not report["python_frames"] and not report["forbidden_native_calls"], report
+        elif np.dtype(dtype).kind == "u":
+            assert_defined_unsigned_outputs(native_candidate(tensor, dtype), expected, values)
         else:
             assert_outputs(native_candidate(tensor, dtype), expected)
     assert [str(w.message) for w in new] == [str(w.message) for w in old]

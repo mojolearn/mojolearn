@@ -413,7 +413,12 @@ assert _backend.vendor() == 'metal' and _backend.default_mode() == 'fast'
 # Parent checkpoint preparation must use its selected tier; only the isolated
 # worker imports identical. Loading both Mojo-owned tiers in one process is
 # correctly refused by the registry and is not a supported escape route.
-assert _NATIVE_CONTEXT['bindings']['gpu:fast']['transformer'].transformer_numeric_mode() == 0
+fast_transformer = _NATIVE_CONTEXT['bindings']['gpu:fast']['transformer']
+if type(fast_transformer) is str and 'but no binary for that tier exists' in fast_transformer:
+    # A tree built for the identical tier only: no fast parent to check.
+    print('NO-FAST-TIER')
+    sys.exit(0)
+assert fast_transformer.transformer_numeric_mode() == 0
 reports = {}
 model = None
 try:
@@ -441,3 +446,5 @@ finally:
         result = subprocess.run([sys.executable, str(script), str(root), str(tmp_path / 'fast-parent.json')],
                                 env=env, stdout=out, stderr=err, timeout=180)
     assert result.returncode == 0, str(stderr) + '\n' + '\n'.join(stderr.read_text().splitlines()[-16:])
+    if stdout.read_text().strip() == 'NO-FAST-TIER':
+        pytest.skip('no fast binary set is built in this tree')

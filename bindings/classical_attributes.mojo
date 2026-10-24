@@ -204,6 +204,14 @@ def classical_connect_numpy(context: PythonObject) raises:
     var values = py_call(list_type, context["native_value_types"])
     var owners = py_call(list_type, context["buffer_owner_types"])
     _ = py_call(values.append, ndarray)
+    # NumPy's text and byte scalars (numpy.str_, numpy.bytes_) are C types
+    # with no Python protocol hooks; label lists built from a NumPy string
+    # array hold them (scikit-learn accepts such labels).
+    var text_names = Python.tuple("str_", "bytes_")
+    for i in range(len(text_names)):  # driver-loop: two fixed NumPy scalar type names
+        var text_type = py_get(fields, text_names[i])
+        if text_type is not None and py_type(text_type) is py_type(int_type):
+            _ = py_call(values.append, text_type)
     _ = py_call(owners.append, ndarray)
     var archive = Python.dict()
     var archive_codes = Python.tuple("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2",

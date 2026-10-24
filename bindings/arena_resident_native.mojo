@@ -12,7 +12,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.arena_cache_release import FirstFailure
 from bindings.arena_cache_upload import _native_call
-from bindings.arena_materialize_native import arena_resident_take, arena_resident_entry
+from bindings.arena_resident_rows import arena_resident_take, arena_resident_entry
 
 
 def _resident_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -67,7 +67,9 @@ def _checked(key: PythonObject, entry: PythonObject, context: PythonObject) rais
     var b = context["arena_native_types"]
     if py_type(entry) is not b["tuple"] or len(entry) != 3 or py_type(entry[2]) is not b["int"]:
         raise Error("TypeError: resident entries require (input, array, native integer id)")
-    if not Bool(py=key == py_call(context["arena_id"], entry[0])):
+    # Identity from the native address (CPython's id()) without calling
+    # builtins.id, which raises a `builtins.id` audit event.
+    if Int(py=key) != Int(entry[0]._obj_ptr):
         raise Error("TypeError: resident entry identity differs from its retained input")
 
 
@@ -119,7 +121,7 @@ def _close(fields: PythonObject, context: PythonObject) raises:
 
 def _release(fields: PythonObject, values: PythonObject, context: PythonObject) raises:
     var entries = _entries(fields, context)
-    var key = py_call(context["arena_id"], values)
+    var key = PythonObject(Int(values._obj_ptr))  # id(values), natively
     var hit = py_get(entries, key)
     if hit is None:
         return

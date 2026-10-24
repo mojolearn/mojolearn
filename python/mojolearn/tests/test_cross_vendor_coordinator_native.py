@@ -31,6 +31,28 @@ def read_wire(peer):
     return head, exact(head['nbytes'])
 
 
+def _transport():
+    from mojolearn import _backend
+    native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call
+    native('initialize', ())
+    return native
+
+
+def native_pair(native):
+    """(independent Python peer, owned native coordinator socket). Since the
+    cross-vendor protocol moved into native code (e28c8bcf3, cc4c14732) the
+    coordinator reads only owned native sockets (bindings/native_transport.mojo
+    refuses a Python socket object); the peer stays an independent Python
+    socket oracle."""
+    server = native('listen', ('127.0.0.1', 0, 5.0))
+    try:
+        peer = socket.create_connection(native('address', (server, False)), timeout=5)
+        accepted = native('accept', (server, 5.0))
+    finally:
+        native('close', (server,))
+    return peer, accepted
+
+
 def constructor(**kwargs):
     owner = object.__new__(cv.Coordinator)
     audit_native_call(owner.__init__, **kwargs).assert_native()
@@ -41,7 +63,10 @@ def constructor(**kwargs):
 def test_native_coordinator_fixed_logical_fold_against_independent_wire(chained):
     splits = [[0, 1], [2]] if chained else [[2], [0], [1]]
     owner = constructor(port=0, workers=len(splits), logical_shards=3, steps=1, chained=chained)
-    sockets = [socket.socketpair() for _ in splits]
+    native = _transport()
+    sockets = []
+    for _ in splits:
+        sockets.append(native_pair(native))
     gradients = [struct.pack('<I', word) for word in [0x3f800000, 0x33800000, 0x33800000]]
     expected_total = struct.pack('<I', 0x3f800000)  # fixed left fold is 1.0
     try:
@@ -70,9 +95,9 @@ def test_native_coordinator_fixed_logical_fold_against_independent_wire(chained)
             assert data == (b'' if chained and index == len(splits)-1 else expected_total)
             assert read_wire(peer)[0]['cmd'] == 'done'
     finally:
-        for pair in sockets:
-            for peer in pair:
-                peer.close()
+        for peer, coordinator in sockets:
+            peer.close()
+            native('close', (coordinator,))
 
 
 def test_native_ready_signal_and_repeated_custom_exception_preserve_ownership():

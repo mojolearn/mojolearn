@@ -64,12 +64,15 @@ class Switch(SplitBase):
         # THE CORE FIRST (it requires no vendor), THE LINUX mojolearn LAST
         # (it requires the core and both vendors)
         # Andrew 2026-10-10: identity runs ONCE; linux-joint-diff is deleted
-        self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-pack"})
+        # e1f7f8e24: every publish also needs both candidate gates (before any publication)
+        gates = {"gate-nvidia", "gate-amd"}
+        self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-pack"} | gates)
         self.assertEqual(set(r.AFTER["publish-core-linux"]), {"gpu-column-nvidia", "gpu-column-amd"})
-        self.assertEqual(set(r.NEEDS["publish-nvidia-ptx"]), {"gpu-column-nvidia", "publish-core-linux"})
-        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "publish-nvidia-ptx"})
-        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "publish-core-linux"})
-        self.assertEqual(set(r.NEEDS["publish-meta-linux"]), {"publish-core-linux", "publish-nvidia", "publish-amd"})
+        self.assertEqual(set(r.NEEDS["publish-nvidia-ptx"]), {"gpu-column-nvidia", "publish-core-linux"} | gates)
+        self.assertEqual(set(r.NEEDS["publish-nvidia"]),
+                         {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "publish-nvidia-ptx"} | gates)
+        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "publish-core-linux"} | gates)
+        self.assertEqual(set(r.NEEDS["publish-meta-linux"]), {"publish-core-linux", "publish-nvidia", "publish-amd"} | gates)
         self.assertEqual(r.PIPELINES["meta-linux"]["platform"], "linux-meta")
         self.assertNotIn("linux-joint-diff", r.AFTER)
 
@@ -326,6 +329,7 @@ class ColumnsAndPublish(SplitBase):
         r = self.release(publish="testpypi")
         r.runner = lambda cmd, env, log, detach=False: calls.append([str(c) for c in cmd]) or 0
         r.on_pypi = lambda wheel: False
+        r.gate_ok = lambda vendor: (True, "")      # both candidate gates passed (e1f7f8e24)
         core, cuda, rocm = self.finals(r)
         self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda")
         self.receipt(r.rel / "column-amd", core, self.plugins, "hip")
@@ -377,6 +381,7 @@ class ColumnsAndPublish(SplitBase):
         r = self.release(publish="testpypi")
         r.runner = lambda cmd, env, log, detach=False: 0
         r.on_pypi = lambda wheel: False
+        r.gate_ok = lambda vendor: (True, "")      # both candidate gates passed (e1f7f8e24)
         core, cuda, rocm = self.finals(r)
         self.receipt(r.rel / "column-amd", core, cuda, "hip")
         with self.assertRaisesRegex(release.StepFailed, "did not install mojolearn_amd"):

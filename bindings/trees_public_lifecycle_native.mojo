@@ -15,7 +15,7 @@ from bindings.prep_lda_admission import lda_native_labels
 from bindings.metrics_native_support import metric_warn
 from bindings.native_caller_frame import native_caller_globals
 from bindings.sequential_inputs import sequential_input
-from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_kind, forest_get_params
+from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_kind, forest_get_params, forest_check_fit_device
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast
 
@@ -97,9 +97,12 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     for i in range(len(names)):  # driver-loop: stored constructor arguments before native conversions
         if py_contains(fields, names[i]):
             classical_admit_value(fields[names[i]], context)
+    var fitting = operation == "trees_public_forest_fit"
+    if fitting:
+        # Parameter validation precedes input admission and conversion.
+        forest_check_fit_device(model, context)
     classical_admit_value(args, context)
     var name = classical_estimator_name(model)
-    var fitting = operation == "trees_public_forest_fit"
     if not fitting:
         classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
     var x = classical_check_x(args[0], name, context)

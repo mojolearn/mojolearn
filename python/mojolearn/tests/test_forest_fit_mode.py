@@ -42,11 +42,17 @@ def test_capture_default_refit_reset_pickle(cls):
     model.numeric_mode = _other(default)
     with pytest.raises(ValueError, match='was fitted'):
         model.predict(X)
-    try:
-        model.fit(X, y)
-    except ImportError as error:
-        pytest.skip(f"this install has no {_other(default)} tree binding: {error}")
-    assert model._fit_numeric_mode == _other(default)
+    if _backend._CPU_ONLY is not None and _other(default) != 'identical':
+        # CPU-only install: host bindings are identical only and the other
+        # tier is refused by name (_backend._cpu_only_binding).
+        with pytest.raises(ValueError, match="tier on a CPU-only install"):
+            model.fit(X, y)
+    else:
+        try:
+            model.fit(X, y)
+        except ImportError as error:
+            pytest.skip(f"this install has no {_other(default)} tree binding: {error}")
+        assert model._fit_numeric_mode == _other(default)
     model.set_params(numeric_mode='identical')
     assert not model.__sklearn_is_fitted__()
     assert not hasattr(model, '_fit_numeric_mode')

@@ -4,10 +4,12 @@ path), they are the first-max class code of `predict_proba`."""
 import numpy as np
 import pytest
 
-from mojolearn import GradientBoosting
+from mojolearn import GradientBoosting, _backend
 
 
 def _fit(mode, loss, k):
+    if _backend._CPU_ONLY is not None and mode == "fast":
+        pytest.skip("CPU-only install: every host binding is identical only (_backend._cpu_only_binding refuses other tiers by name)")
     rng = np.random.default_rng(0)
     X = rng.random((40, 4), dtype=np.float32)
     y = np.minimum((X[:, 0] * k).astype(np.int32), k - 1).astype(np.float32)

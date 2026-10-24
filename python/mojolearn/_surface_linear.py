@@ -130,8 +130,8 @@ TRAINING_LANE_NAMES = {
     "x-ridge-cv-kfold": "RidgeCV (integer cv)",
 }
 PUBLIC_PENDING_LANES = {
-    "x-huber-outliers": "no reference",
-    "x-sgd-clf-proba": "no reference",
-    "x-logistic-cv-proba": "no reference",
+    "x-huber-outliers": "unwatched",
+    "x-sgd-clf-proba": "unwatched",
+    "x-logistic-cv-proba": "unwatched",
     "x-ridge-cv-kfold": "no reference",
     }

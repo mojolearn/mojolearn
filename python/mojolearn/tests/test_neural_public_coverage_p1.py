@@ -234,6 +234,12 @@ def _mamba3():
 
 
 def test_mamba3_session_info_counts_weight_uploads():
+    from mojolearn import _backend
+    if _backend.vendor() == "cpu":
+        # The CPU host binding (bindings/_mojolearn_mamba_host.mojo) has no
+        # mamba3_prefill_session_forward: a plain forward runs the fresh host
+        # prefill without a session, so there is no weight upload to count.
+        pytest.skip("Mamba3 prefill-session upload counters need a GPU binding; the CPU host forward holds no session")
     block, x = _mamba3()
     assert block.session_info() is None
     block.forward(x)

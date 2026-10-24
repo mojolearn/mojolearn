@@ -22,6 +22,22 @@ def cancelled():
     return _CANCELLED.is_set()
 
 
+def _signal_group(pid, sig):
+    """False when nothing is left to signal.
+
+    ESRCH: the group is gone. EPERM: on macOS killpg fails with EPERM once
+    the group holds only zombies (the leader is reaped, a child not yet), and
+    on any platform for a group we no longer own. Neither is a reason to
+    replace the build's real verdict (2026-10-24, M4 development build: the
+    second killpg after an RSS-limit SIGTERM raised EPERM, and the group's
+    recorded reason became "[Errno 1] Operation not permitted")."""
+    try:
+        os.killpg(pid, sig)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
 def stop_group(pid, grace=0.2):
     """The leader may already have exited while compiler children remain."""
     previous = {}
@@ -29,15 +45,10 @@ def stop_group(pid, grace=0.2):
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             previous[sig] = signal.signal(sig, signal.SIG_IGN)
     try:
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except ProcessLookupError:
+        if not _signal_group(pid, signal.SIGTERM):
             return
         time.sleep(grace)
-        try:
-            os.killpg(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        _signal_group(pid, signal.SIGKILL)
     finally:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
@@ -135,6 +146,8 @@ def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
     proc = None
     start = time.monotonic()
     last_move, last_cpu, seen = start, 0.0, {}
+    last_save = start
+    gib = 2**30
     with path.open('w') as stream, cancellation_scope():
         try:
             if _CANCELLED.is_set():
@@ -151,7 +164,8 @@ def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
                     result.update(status='interrupted', exit_code=130)
                     break
                 if now-start >= seconds:
-                    result.update(status='timeout', exit_code=124)
+                    result.update(status='timeout', exit_code=124,
+                                  reason='deadline %gs reached; peak rss %d bytes' % (seconds, result['peak_rss_bytes']))
                     break
                 cpu, rss, available = probe(proc.pid, seen)
                 result['peak_rss_bytes'] = max(result['peak_rss_bytes'], rss)
@@ -160,14 +174,24 @@ def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
                 if cpu > last_cpu:
                     last_cpu, last_move = cpu, now
                 if rss_bytes is not None and rss > rss_bytes:
-                    result.update(status='rss-limit', exit_code=124)
+                    result.update(status='rss-limit', exit_code=124,
+                                  reason='rss limit %d bytes (%.2f GiB) exceeded: process group at %d bytes (%.2f GiB)'
+                                  % (rss_bytes, rss_bytes/gib, rss, rss/gib))
                     break
                 if available < min_available_bytes:
-                    result.update(status='memory-pressure', exit_code=124)
+                    result.update(status='memory-pressure', exit_code=124,
+                                  reason='available memory %d bytes fell below the %d-byte floor; peak rss %d bytes'
+                                  % (available, min_available_bytes, result['peak_rss_bytes']))
                     break
                 if stall_seconds and now-last_move >= stall_seconds:
-                    result.update(status='stalled', exit_code=124)
+                    result.update(status='stalled', exit_code=124,
+                                  reason='no CPU progress for %gs; peak rss %d bytes'
+                                  % (stall_seconds, result['peak_rss_bytes']))
                     break
+                if now-last_save >= 10:
+                    # Peaks stay visible even if this controller dies.
+                    save()
+                    last_save = now
                 time.sleep(min(poll, max(0, seconds-(time.monotonic()-start))))
             if result['exit_code'] is None:
                 result.update(exit_code=proc.returncode,
@@ -179,7 +203,11 @@ def run(argv, *, cwd, env, log, seconds, stall_seconds=0, rss_bytes=None,
                           error=type(error).__name__+': '+str(error))
         finally:
             if proc is not None:
-                stop_group(proc.pid)
+                try:
+                    stop_group(proc.pid)
+                except OSError as error:
+                    # Stopping must never overwrite the verdict it enforces.
+                    result['stop_error'] = type(error).__name__+': '+str(error)
                 proc.wait()
                 with _LOCK:
                     _ACTIVE.discard(proc.pid)

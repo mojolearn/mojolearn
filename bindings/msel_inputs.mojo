@@ -18,6 +18,7 @@ from bindings.native_torch_admission import native_torch_exact, native_torch_num
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.arena_array_metadata import arena_array_metadata
 from bindings.arena_materialize_native import _prepare, _owned, _empty, _cast, _slot
+from bindings.pandas_arrow_native import pandas_arrow_exact, pandas_arrow_length, pandas_arrow_ndarray
 
 
 def msel_admit(value: PythonObject, context: PythonObject) raises:
@@ -88,6 +89,9 @@ def _pandas_axis_count(axis: PythonObject, context: PythonObject) raises -> Int:
     if not admitted:
         raise Error("TypeError: empty pandas frames require ordinary native index storage")
     var values = py_get(_pd_fields(axis), "_data")
+    var arrow_rows = pandas_arrow_length(values)
+    if arrow_rows >= 0:
+        return arrow_rows
     if py_type(values) is not context["ndarray"]:
         var arrays = Python.tuple(_pd_class("pandas.core.arrays.string_", "StringArray"),
             _pd_class("pandas.core.arrays.datetimes", "DatetimeArray"),
@@ -134,7 +138,10 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
     var booleans = False
     var numbers = False
     for k in range(len(blocks)):  # driver-loop: native block ownership, promotion and placement metadata
-        var pair = _pd_values(_pd_get("pandas._libs.internals", "Block", "values", blocks[k]), series, context)
+        var raw = _pd_get("pandas._libs.internals", "Block", "values", blocks[k])
+        # Arrow-backed columns (`<type>[pyarrow]`) are read natively from
+        # their Arrow buffers with the column's own dtype.
+        var pair = Python.tuple(pandas_arrow_ndarray(raw, context), False) if pandas_arrow_exact(raw) else _pd_values(raw, series, context)
         var data = pair[0]
         if py_type(data) is not context["ndarray"]:
             raise Error("TypeError: model selection requires native pandas numeric blocks")
@@ -232,7 +239,11 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
     if py_get(context, "ndarray") is None and (cls is native_loaded_module("builtins").memoryview or cls is context["array_type"]):
         var view = native_buffer_view(value)
         var format = String(view.format)
-        if format == "h" or format == "Q":
+        # 'L' is the 8-byte unsigned long on LP64 platforms (Linux, macOS):
+        # the same uint64 widening as 'Q'. A 4-byte 'L' (LLP64) is uint32,
+        # which classical_input reads directly.
+        var unsigned_long = format == "Q" or (format == "L" and Int(py=view.itemsize) == 8)
+        if format == "h" or unsigned_long:
             var packed = native_array_from_bytes(String(format), py_call(view.tobytes, "C"))
             var wide = native_array_from_values(String("i" if format == "h" else "q"), packed)
             return _owned(wide, view.shape, "<i4" if format == "h" else "<i8", rows)
@@ -257,7 +268,11 @@ def msel_input_count(value: PythonObject, context: PythonObject) raises -> Int:
         if len(blocks) == 0:
             return _pandas_empty_rows(value, context)
         var series = cls is _pd_class("pandas.core.series", "Series")
-        var data = _pd_values(_pd_get("pandas._libs.internals", "Block", "values", blocks[0]), series, context)[0]
+        var raw = _pd_get("pandas._libs.internals", "Block", "values", blocks[0])
+        var arrow_rows = pandas_arrow_length(raw)
+        if arrow_rows >= 0:
+            return arrow_rows
+        var data = _pd_values(raw, series, context)[0]
         if py_type(data) is not context["ndarray"] or Int(py=data.ndim) < 1:
             raise Error("TypeError: pandas samples require ordinary native storage")
         return Int(py=data.shape[Int(py=data.ndim) - 1])

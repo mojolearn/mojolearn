@@ -1071,6 +1071,15 @@ _add("resample", xlane="resample", ours=("resample.resample",), kind="fn", task=
      mism=["the drawn rows are each library's own (ours the Philox position map, scikit-learn "
            "numpy RandomState(7)); quality is the resampled column means against the "
            "population's"])
+# measure-coverage (2026-10-24): resample_indices, the index draw resample() gathers by, against
+# scikit-learn's resample of the row indices (the same contract: n indices with replacement, seed 7)
+_add("resample-indices", xlane="resample", ours=("resample.resample_indices",), kind="fn",
+     task="resample-indices", block="reg", params=dict(replace=True, random_state=SEED),
+     other={"sklearn-cpu": "sklearn"},
+     notes=["n = n_samples = the reg block's fit row count (1,000,000) on every arm, explicit; "
+            "scikit-learn: sklearn.utils.resample(np.arange(n), replace=True, n_samples=n, random_state=7)"],
+     mism=["the drawn indices are each library's own (ours the Philox position map, scikit-learn numpy "
+           "RandomState(7)); quality is the index distribution's mean and its multiplicity"])
 _add("cross-val-score", xlane="model_selection", ours=("cross_val_score",
                                                         "model_selection.cross_val_score"),
      kind="fn", task="cv", block="reg",
@@ -1986,7 +1995,6 @@ NOT_RACED = {
     "DampedETS": "ETS(model='AAN', damped=True) by construction (error='A'), the model the "
                  "damped-ets lane races",
     "sparse_encode": "the encoder SparseCoder.transform calls, raced as algos/sparse-coder",
-    "resample_indices": "the index draw inside resample(), raced as algos/resample",
     "monte_carlo_integrate": "no pinned library has a plain seeded Monte Carlo integrator "
                              "(numpy and torch have none; scipy.integrate.qmc_quad is "
                              "quasi-Monte Carlo over a QMCEngine); no opponent",
@@ -2195,6 +2203,7 @@ def fit_text(lane):
         return {"bootstrap": "bootstrap(y): every resample and the interval",
                 "permutation": "permutation_test(x, y): every permutation and the p-value",
                 "resample": "resample(X, y): the index draw and both gathers",
+                "resample-indices": "resample_indices(n, n_samples=n): the index draw",
                 "cv": "cross_val_score(LinearRegression(), X, y, cv=5): 5 fits and scores",
                 "grid-search": "GridSearchCV(Ridge, 4 alphas, cv=5).fit(X, y): 20 fits, scores and the refit",
                 "random-search": "RandomizedSearchCV(Ridge, n_iter=3, cv=5).fit(X, y): 15 fits and the refit",
@@ -2281,6 +2290,7 @@ QUALITY_TEXT = {
     "bootstrap": "interval endpoints and standard error; their relative difference vs scipy's",
     "permutation": "statistic and p-value; |p - scipy's p|",
     "resample": "max |resampled column mean - population mean| / column std",
+    "resample-indices": "|mean index - (n - 1) / 2| / n and the fraction of distinct indices (1 - 1/e expected)",
     "cv": "mean fold R2; max |fold score - scikit-learn's|",
     "grid-search": "best_score_ and best alpha; max |mean_test_score - scikit-learn's|",
     "random-search": "best_score_; |best_score_ - scikit-learn's|; max |score| difference on the alphas both sampled",
@@ -4626,7 +4636,7 @@ def _build_ts(lane, arm, D):
         ctor = getattr(sfm, s["sf"])
         mk = lambda: ctor(**kw)  # noqa: E731
         info["config"] = "%s(%s)" % (ctor.__name__, ", ".join("%s=%r" % i for i in sorted(kw.items())))
-        rec = dict(kw, __library__="statsforecast")
+        rec = dict(kw, __library__="statsforecast", __implementation__=ctor)
 
         def one(y):
             return mk().forecast(y=y, h=h)["mean"]
@@ -4689,7 +4699,7 @@ def _build_ts(lane, arm, D):
             r = VAR(Y[:16].T).fit(maxlags=p["maxlags"], method=p["method"], ic=p["ic"], trend=p["trend"])
             S["fc"] = r.forecast(Y[:16].T[-r.k_ar:], h).T
         return Runner(info, fit, lambda: {"forecast": S["fc"]}, None,
-                      record=dict(p, __library__="statsmodels"))
+                      record=dict(p, __library__="statsmodels", __implementation__=VAR))
     task = "decompose" if t == "decompose" else "forecast"
     _map = _ts_map(arm)       # FAIRNESS FIX (2026-10-13 audit): see _ts_map
     if arm.endswith("-serial"):
@@ -4716,7 +4726,29 @@ def _build_ts(lane, arm, D):
         rec.update(period=p.get("season_length", 24), method="theta (statsmodels ThetaModel defaults)")
     else:
         rec.update(p)
+    rec["__implementation__"] = _ts_implementation(lib, task, p)
     return Runner(info, fit, outputs, None, record=rec)
+
+
+def _ts_implementation(lib, task, params):
+    """The library class _ts_one constructs for (lib, task) (measure-coverage 2026-10-24: a declared record
+    without it was refused by the preflight's real-implementation check, bench_board.real_implementation)."""
+    if lib == "statsmodels":
+        if task == "decompose":
+            from statsmodels.tsa.seasonal import STL
+            return STL
+        if task == "forecast" and "damped" in params:
+            from statsmodels.tsa.holtwinters import ExponentialSmoothing
+            return ExponentialSmoothing
+        from statsmodels.tsa.forecasting.theta import ThetaModel
+        return ThetaModel
+    if lib == "arch":
+        from arch import arch_model
+        return arch_model
+    if lib == "prophet":
+        from prophet import Prophet
+        return Prophet
+    raise ValueError(lib)
 
 
 # ---- graph ----------------------------------------------------------------
@@ -4795,7 +4827,10 @@ def _build_graph(lane, arm, D):
                           "components": "nx.connected_components",
                           "louvain": "nx.community.louvain_communities(resolution=1.0, threshold=1e-7, "
                                      "seed=7)"}[t]
-        rec = dict(p, __library__="networkx")
+        # measure-coverage (2026-10-24): the networkx function fit() calls, for the real-implementation check
+        rec = dict(p, __library__="networkx", __implementation__={
+            "pagerank": nx.pagerank, "components": nx.connected_components,
+            "louvain": nx.community.louvain_communities}[t])
         if t == "pagerank":
             rec["l1_stop_threshold"] = n * float(p["tol"])   # nx.pagerank: err < N * tol
         return Runner(info, fit, lambda: S["o"], record=rec)
@@ -5039,6 +5074,11 @@ def _build_ann(lane, arm, D):
                 rec.update(pq_dim=_pq_dim(d), pq_bits=8)
             if t == "ivf-refine":
                 rec["refine_ratio"] = p["refine_ratio"]
+        # measure-coverage (2026-10-24): the faiss index class fit() builds, for the real-implementation check
+        rec["__implementation__"] = getattr(faiss, {"cagra": "IndexHNSWFlat", "ivf-pq": "IndexIVFPQ",
+                                                    "ivf-filter": "IndexIVFPQ", "ivf-refine": "IndexRefineFlat",
+                                                    "ivf-sq": "IndexIVFScalarQuantizer",
+                                                    "ivf-rabitq": "IndexIVFRaBitQ"}.get(t, "IndexIVFFlat"))
         return Runner(info, fit, lambda: {"ind": np.asarray(S["ind"], dtype=np.int64)}, infer,
                       record=rec)
     import cuvs
@@ -6394,6 +6434,22 @@ def _build_linalg(lane, arm, D):
         rec["__implementation__"] = torch.svd_lowrank if t == "rsvd" else getattr(torch.linalg,
             {"lu":"solve", "lufac":"lu_factor", "lstsq":"lstsq", "chol":"cholesky",
              "qr":"qr", "eigh":"eigh", "svd":"svd"}[t])
+    elif lib in ("scipy", "numpy", "sklearn"):
+        # measure-coverage (2026-10-24): the CPU arms' declared records carried no implementation, so the
+        # preflight's real-implementation check (bench_board.real_implementation) refused every CPU
+        # linear-algebra pair ("missing real library implementation read-back"); it names the call fit() makes.
+        import scipy.linalg as sla
+        if lib == "scipy" and t in ("lu", "lstsq", "chol", "qr", "eigh", "svd"):
+            rec["__implementation__"] = getattr(sla, {"lu": "solve", "lstsq": "lstsq", "chol": "cholesky",
+                                                      "qr": "qr", "eigh": "eigh", "svd": "svd"}[t])
+        elif t == "lufac":
+            rec["__implementation__"] = sla.lu_factor
+        elif t == "rsvd":
+            from sklearn.utils.extmath import randomized_svd
+            rec["__implementation__"] = randomized_svd
+        else:
+            rec["__implementation__"] = getattr(np.linalg, {"lu": "solve", "lstsq": "lstsq", "chol": "cholesky",
+                                                            "qr": "qr", "eigh": "eigh", "svd": "svd"}[t])
     elif lib == "cupy":
         if t == "lufac":
             import cupyx.scipy.linalg as csla
@@ -6542,6 +6598,8 @@ def _build_fn(lane, arm, D):
             elif t == "permutation":
                 r = fn(y, yq, **kw)
                 S["o"] = {"stat": np.array([r.statistic]), "p": np.array([r.pvalue])}
+            elif t == "resample-indices":
+                S["o"] = {"idx": _arr(fn(X.shape[0], n_samples=X.shape[0], **kw), np.int64)}
             elif t == "resample":
                 Xr, yr = fn(X, y, **kw)
                 S["o"] = {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
@@ -6553,6 +6611,8 @@ def _build_fn(lane, arm, D):
                                          np.float64)}
         rec = (_ms_record(p) if t in _MS_TASKS else
                {k: ("LinearRegression" if k == "estimator" else v) for k, v in p.items()})
+        if t == "resample-indices":
+            rec.update(n=int(X.shape[0]), n_samples=int(X.shape[0]))
         rec["__library__"] = "mojolearn"
         return Runner(info, fit, lambda: S["o"], record=rec)
     lib = s["other"][arm]
@@ -6576,6 +6636,7 @@ def _build_fn(lane, arm, D):
             rec = dict(statistic="mean", n_resamples=p["n_resamples"],
                        confidence_level=p["confidence_level"], method=p["method"],
                        alternative=p["alternative"], random_state=p["random_state"])
+            rec["__implementation__"] = stats.bootstrap
         else:
             seed_kw = _scipy_rng_kw(stats.permutation_test)
             kw = dict(permutation_type=p["permutation_type"], n_resamples=p["n_resamples"],
@@ -6592,19 +6653,32 @@ def _build_fn(lane, arm, D):
             rec = dict(statistic="diff_means", n_resamples=p["n_resamples"],
                        alternative=p["alternative"], random_state=p["random_state"],
                        permutation_type=p["permutation_type"])
+            rec["__implementation__"] = stats.permutation_test
     elif t in _MS_TASKS:
         import sklearn
         import sklearn.model_selection as skms
         info["version"] = sklearn.__version__
         call = getattr(skms, _MS_TASKS[t])
         rec = _ms_record(p)
+        rec["__implementation__"] = call
         info["config"] = "sklearn.model_selection.%s(%s, n_jobs=-1 where taken)" % (
             _MS_TASKS[t], ", ".join("%s=%r" % kv for kv in sorted(rec.items())))
 
         def fit():
             S["o"] = _ms_run(t, call, X, y, p, "sklearn")
     else:
-        if t == "resample":
+        if t == "resample-indices":
+            from sklearn.utils import resample as skresample
+            n_rows = int(X.shape[0])
+            info["config"] = ("sklearn.utils.resample(np.arange(%d), replace=%r, n_samples=%d, random_state=%r)"
+                              % (n_rows, p["replace"], n_rows, p["random_state"]))
+            rows = np.arange(n_rows)
+
+            def fit():
+                S["o"] = {"idx": np.asarray(skresample(rows, replace=p["replace"], n_samples=n_rows,
+                                                       random_state=p["random_state"]), dtype=np.int64)}
+            rec = dict(p, n=n_rows, n_samples=n_rows, __implementation__=skresample)
+        elif t == "resample":
             from sklearn.utils import resample as skresample
             info["config"] = "sklearn.utils.resample(X, y, %s)" % p
 
@@ -6612,7 +6686,7 @@ def _build_fn(lane, arm, D):
                 Xr, yr = skresample(X, y, **p)
                 S["o"] = {"xmean": np.asarray(Xr, dtype=np.float64).mean(0),
                           "ymean": np.array([np.asarray(yr, dtype=np.float64).mean()])}
-            rec = dict(p)
+            rec = dict(p, __implementation__=skresample)
         else:
             from sklearn.model_selection import cross_val_score as skcv
             info["config"] = ("sklearn.model_selection.cross_val_score(LinearRegression(), X, y, "
@@ -6622,7 +6696,9 @@ def _build_fn(lane, arm, D):
                 est = _resolve(p["estimator"], "sklearn")
                 S["o"] = {"scores": np.asarray(skcv(est, X, y, cv=p["cv"], scoring=p["scoring"],
                                                     n_jobs=-1), dtype=np.float64)}
-            rec = dict(p, estimator="LinearRegression")
+            rec = dict(p, estimator="LinearRegression", __implementation__=skcv)
+    # measure-coverage (2026-10-24): every opponent record above names the library function its fit()
+    # calls (__implementation__); without it the preflight's real-implementation check refused each pair
     rec["__library__"] = lib
     return Runner(info, fit, lambda: S["o"], record=rec)
 
@@ -6915,6 +6991,18 @@ def _build_shap(lane, arm, D):
                           "LGBMRegressor" if arm == "lightgbm-cpu" else "XGBRegressor"))
         if arm not in OURS_ARMS:
             rec["learning_rate"] = gb["learning_rate"]
+            # measure-coverage (2026-10-24): the library call fit() makes, for the real-implementation check.
+            # The opponents explain their own boosted model, ours a random forest: the parameter check
+            # refuses the pair on `model` (listed, never ratioed), not on a missing read-back.
+            if arm == "shap-cpu":
+                import shap
+                rec["__implementation__"] = shap.TreeExplainer
+            elif arm == "lightgbm-cpu":
+                import lightgbm as lgb
+                rec["__implementation__"] = lgb.LGBMRegressor.predict
+            else:
+                import xgboost as xgb
+                rec["__implementation__"] = xgb.Booster.predict
         return Runner(info, fit, outputs, record=rec)
     # kernel / permutation SHAP over a ridge (alpha 1, centered) fit before the clock
     bg = _stride(X, p["n_background"])
@@ -8101,6 +8189,10 @@ def quality(lane, D, outs):
                 e.update(statistic=float(o["stat"][0]), pvalue=float(o["p"][0]))
                 if ref_fn is not None and arm != ref_arm:
                     e["abs_pvalue_diff_vs_scipy"] = float(abs(o["p"][0] - ref_fn["p"][0]))
+            elif qk == "resample-indices":
+                n = D["X"].shape[0]
+                e["mean_index_shift_over_n"] = float(abs(o["idx"].mean() - (n - 1) / 2.0) / n)
+                e["distinct_fraction"] = float(np.unique(o["idx"]).shape[0] / float(n))
             elif qk == "resample":
                 X = D["X"].astype(np.float64)
                 sd = np.maximum(X.std(0), 1e-12)

@@ -169,7 +169,12 @@ def test_actual_tree_descriptor_installation_requires_a_proved_plain_class(monke
 def test_actual_connector_perturbations_require_wide_selection(extra):
     rel, call = real_connector_call()
     bridge = "python/mojolearn/_native_host_archive_bridge.py"
-    changed = ast.parse(ls._read(bridge) + extra)
+    # Insert the perturbation into connect itself. Appending it to the file put
+    # it in the last function: connect_peer since bfad7174b moved the peer link
+    # there, where `formats` is not in scope and the connector never runs it.
+    changed = ast.parse(ls._read(bridge))
+    connect = next(node for node in changed.body if isinstance(node, ast.FunctionDef) and node.name == "connect")
+    connect.body.extend(ast.parse(dedent(extra)).body)
     parse = lambda path: changed if path == bridge else ls._parse(path)
     assert not metadata_only_call(
         rel, call, {"_FORMATS"}, parse, ls._native_metadata_factory, ls._metadata_registry_guard

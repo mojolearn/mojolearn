@@ -24,6 +24,8 @@ from bindings.family_common import (
 from bindings.cluster_native import _reference_queries, _xc_array
 from bindings.cfb_resident import cfb_fresh_holder, cfb_mint, cfb_reference_labels
 from bindings.cfb_dbscan import cfb_borrow_copy
+from bindings.native_loaded_module import native_loaded_module
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
 comptime _E_AGGLO = 11
 #: The dense connectivity matrix is `m * m` of cuVS's `int`.
@@ -32,19 +34,19 @@ comptime _PAIRWISE_MAX_ROWS = 46340
 
 def _truth(value: PythonObject) raises -> Bool:
     """`bool(value)`, the user's own truth test."""
-    return Bool(py=family_call(Python.import_module("builtins").bool, value))
+    return Bool(py=family_call(native_loaded_module("builtins").bool, value))
 
 
 def _eq(a: PythonObject, b: PythonObject) raises -> Bool:
     """`a == b` as a truth value."""
-    return _truth(family_call(Python.import_module("operator").eq, a, b))
+    return _truth(family_call(native_loaded_module("operator").eq, a, b))
 
 
 def _agglo_validate(model: PythonObject, context: PythonObject) raises:
     """`AgglomerativeClustering._validate_params`: the normalized
     connectivity and compute_distances go to `_connectivity` and
     `_compute_distances`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var n_clusters = family_field(fields, "n_clusters")
     var metric = family_field(fields, "metric")
@@ -86,7 +88,7 @@ def _agglo_validate(model: PythonObject, context: PythonObject) raises:
     if _eq(linkage, PythonObject("ward")) and not py_contains(Python.tuple("euclidean", "l2"), metric):
         raise Error(family_str(metric) + " was provided as metric. Ward can only work with "
                     + "euclidean distances (i.e. 'euclidean' and 'l2').")
-    if _truth(family_call(Python.import_module("operator").ne, c, PythonObject(15))):
+    if _truth(family_call(native_loaded_module("operator").ne, c, PythonObject(15))):
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: c=" + family_repr(c) + " is refused. It "
                     + "tunes k = log(n) + c for the k-NN graph, cuML forwards it "
                     + "only when connectivity='knn' (linkage.cu:40, "
@@ -109,7 +111,7 @@ def _agglo_validate(model: PythonObject, context: PythonObject) raises:
 
 def _sparse_like(source: PythonObject) raises -> Bool:
     """`hasattr(X, "toarray") or hasattr(X, "tocsr")`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return (Bool(py=family_call(b.hasattr, source, PythonObject("toarray")))
             or Bool(py=family_call(b.hasattr, source, PythonObject("tocsr"))))
 
@@ -122,12 +124,12 @@ def _fast_mst(n_cols: Int) raises -> Bool:
     if mode != "fast" and mode != "identical":
         raise Error("ImportError: mojolearn: MOJOLEARN_NUMERIC_MODE=" + family_repr(PythonObject(mode))
                     + "; it must be 'fast', or 'identical' (the default)")
-    return mode == "fast" and String(py=Python.import_module("sys").platform) == "darwin" and n_cols <= 64
+    return mode == "fast" and String(py=native_loaded_module("sys").platform) == "darwin" and n_cols <= 64
 
 
 def _agglo_legacy(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """cuML's single-linkage Boruvka route (`_mojolearn_solver.linkage_fit`)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var source = args[4]
     if _sparse_like(source):
@@ -205,7 +207,7 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
     """The x_cluster route (`x_cluster/agglo.mojo`, ENTRY_AGGLO): every
     linkage, metric, connectivity matrix and the per-merge distances, with
     scikit-learn's `_fit` bookkeeping around it."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var source = args[4]
     if _sparse_like(source):
@@ -321,7 +323,7 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var components = Int(py=family_call(b.int, sc[0]))
     py_setitem(fields, "n_connected_components_", PythonObject(components))
     if constrained and components > 1:
-        _ = family_call(Python.import_module("warnings").warn,
+        _ = family_call(native_loaded_module("warnings").warn,
                         PythonObject("the number of connected components of the connectivity matrix "
                                      + "is " + String(components) + " > 1. Completing it to avoid "
                                      + "stopping the tree early."))
@@ -358,7 +360,7 @@ def _predicts(fields: PythonObject, context: PythonObject) raises -> Bool:
 
 def _agglo_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`AgglomerativeClustering.fit(X)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _agglo_validate(model, context)
     var prediction_data = family_field(fields, "prediction_data")
@@ -380,28 +382,28 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
                    context: PythonObject) raises -> PythonObject:
     """`AgglomerativeClustering.predict`: the nearest training row's cluster
     (single linkage, euclidean), over the resident training rows."""
-    var b = Python.import_module("builtins")
-    if not Bool(py=family_call(b.hasattr, model, PythonObject("labels_"))):
+    var b = native_loaded_module("builtins")
+    if not family_raw_has(model, "labels_"):
         raise Error("mojolearn AgglomerativeClustering.predict: this instance is not "
                     + "fitted yet; call fit first")
-    var linkage = py_call(b.getattr, model, PythonObject("linkage"))
-    var metric = py_call(b.getattr, model, PythonObject("metric"))
+    var linkage = family_raw_get(model, "linkage")
+    var metric = family_raw_get(model, "metric")
     var predicts = py_type(linkage) is b.str and String(linkage) == "single"
     if predicts:
-        predicts = Bool(py=family_call(Python.import_module("operator").contains, context["family_agglo_predict_metrics"], metric))
+        predicts = Bool(py=family_call(native_loaded_module("operator").contains, context["family_agglo_predict_metrics"], metric))
     if not predicts:
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: linkage=" + family_repr(linkage)
                     + ", metric=" + family_repr(metric) + " has no predict rule; DEVIATION 2740 is single "
                     + "linkage's own criterion (the nearest training row's cluster) under "
                     + "the euclidean metric only")
-    var refs = py_call(b.getattr, model, PythonObject("_fit_X"), PythonObject(None))
+    var refs = family_raw_get_or(model, "_fit_X", PythonObject(None))
     if refs is None:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not "
                     + "stored. Fit with AgglomerativeClustering(prediction_data=True), "
                     + "which keeps the training rows this rule needs (DEVIATION 2740)")
-    var n_features = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+    var n_features = Int(py=family_raw_get(model, "n_features_in_"))
     var q = _reference_queries(source, n_features, "AgglomerativeClustering.predict", context)
-    var labels = py_call(b.getattr, model, PythonObject("labels_"))
+    var labels = family_raw_get(model, "labels_")
     # The key of every training row is its label: ties go to the lowest
     # cluster label, then the lowest training index.
     var result = cfb_reference_labels(model, binding, refs, labels, labels, q, Int(py=refs.shape[0]), n_features, 0,

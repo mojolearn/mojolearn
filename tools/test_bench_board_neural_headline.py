@@ -26,8 +26,12 @@ def _cell(arm, ms, library=None, mode=None, status="ok", hash_=None, quality=Non
             "hash": hash_, "quality": quality if quality is not None else {}}
 
 
-def _neural_race(cells, family="algos", lane="conv2d"):
-    return {"family": family, "lane": lane, "dataset": "synthetic", "cells": cells}
+def _neural_race(cells, family="algos", lane="conv2d", matched=True):
+    # e0d611997: only an arm whose parameter pairing is MATCHED can stand as the best opponent
+    rr = {"family": family, "lane": lane, "dataset": "synthetic", "cells": cells}
+    if matched:
+        rr.update(params_check="MATCHED", params={"arms": {c["arm"]: {} for c in cells}})
+    return rr
 
 
 def test_headline_is_fastest_bf16_arm_with_fp32_twin_second():
@@ -51,6 +55,13 @@ def test_headline_eager_bf16_wins_when_it_is_the_lower_median():
     rr = _neural_race([_cell("ours", 5.0), _cell("torch-eager-bf16", 1.0), _cell("torch-compile-bf16", 2.0)],
                       family="neural", lane="mlp-train-step")
     assert bb.neural_headline(rr)["bf16"]["arm"] == "torch-eager-bf16"
+
+
+def test_unmatched_pairs_never_head_the_board():
+    rr = _neural_race([_cell("ours", 5.0), _cell("torch-eager-bf16", 1.0), _cell("torch-eager-fp32", 2.0)],
+                      matched=False)
+    hl = bb.neural_headline(rr)
+    assert hl["bf16"] is None and hl["fp32"] is None
 
 
 def test_fp32_only_neural_lane_has_no_bf16_headline():

@@ -64,14 +64,13 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-decomp-rsvd-rank-deficient": "randomized SVD of a rank-deficient matrix", "x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
+TRAINING_LANE_NAMES = {"public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)", "x-decomp-rsvd-rank-deficient": "randomized SVD of a rank-deficient matrix", "x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
                        "x-decomp-srp": "SparseRandomProjection",
                        "x-decomp-eigh-wide-linalg": "linalg.eigh at n >= 64",
                        "x-decomp-eigh-wide-fastica": "FastICA at 64 or more components",
                        "x-decomp-eigh-wide-rotation": "FactorAnalysis rotations at 64 or more components",
                        "x-decomp-eigh-wide-factor-analysis": "FactorAnalysis with fewer rows than features at 64 or more features",
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
-                       "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples",
-                       "public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)"}
-PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "no reference",
+                       "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
+PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "unwatched",
                         "public-sparse-encode": "no reference"}

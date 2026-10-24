@@ -12,6 +12,7 @@ from mojolearn import _classical_host as host
 from mojolearn.cluster import _METRIC_NAMES
 from mojolearn._buffer import frombytes
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connected_exports import assert_connected_export_refused
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _archive, _state
 from mojolearn.tests.test_host_tree_native import _layout
@@ -317,12 +318,16 @@ def test_host_warning_category_hooks_are_refused_before_native_publication(tmp_p
             touched.append(hook)
             return "warning" if hook == "str" else None
         category = type("HookedWarning", (original,), {"__" + hook + "__": callback})
+    # Bind the operation first: the native attribute read itself consults the
+    # connected builtins, which refuse once an export is replaced.
+    predict, x = model.predict, _input(model.n_features_in_, "float32")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         with monkeypatch.context() as patch:
             patch.setattr(builtins, "UserWarning", category)
-            audit = audit_native_call(model.predict, _input(model.n_features_in_, "float32"))
+            audit = audit_native_call(predict, x)
     _refused(audit, TypeError)
+    assert_connected_export_refused(audit, "builtins", "UserWarning")
     assert touched == []
     assert caught == []
 
@@ -333,11 +338,16 @@ def test_native_warning_subclass_identity_survives_error_filter(tmp_path, name, 
     model.feature_names_in_ = np.asarray([str(i) for i in range(model.n_features_in_)], dtype=object)
     class NativeWarning(UserWarning):
         pass
+    predict, x = model.predict, _input(model.n_features_in_, "float32")
     with warnings.catch_warnings():
         warnings.simplefilter("error", Warning)
         with monkeypatch.context() as patch:
+            # Replacing the connected builtins.UserWarning refuses (see
+            # _connected_exports); the native category is the setup-time one.
             patch.setattr(builtins, "UserWarning", NativeWarning)
-            audit = audit_native_call(model.predict, _input(model.n_features_in_, "float32"))
-    _refused(audit, NativeWarning)
-    assert type(audit.exception) is NativeWarning
+            audit = audit_native_call(predict, x)
+        assert_connected_export_refused(audit, "builtins", "UserWarning")
+        audit = audit_native_call(predict, x)
+    _refused(audit, UserWarning)
+    assert type(audit.exception) is UserWarning
     assert "was fitted with feature names" in str(audit.exception)

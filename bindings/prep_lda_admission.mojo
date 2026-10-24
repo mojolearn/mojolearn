@@ -22,8 +22,17 @@ def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObj
     return py_call(context["lda_fields_get"], model, py_type(model))
 
 
-def _lda_parameter(name: PythonObject, value: PythonObject, context: PythonObject) raises:
+def _lda_parameter(name: PythonObject, value: PythonObject, context: PythonObject, configure: Bool = False) raises:
+    # The constructor, get_params and set_params store values verbatim and
+    # validate nothing beyond native admission (scikit-learn's convention,
+    # check_do_not_raise_errors_in_init_or_set_params); the refusal below
+    # runs when a consuming operation (fit, predict, ...) reads the value.
     if String(name) == "covariance_estimator" and value is not None:
+        if configure:
+            # Stored and returned as the same reference; nothing reads it
+            # (no attribute, protocol or call), so no Python runs. A consuming
+            # operation refuses it by name below.
+            return
         # There is no compiled covariance-estimator object API in this
         # package. Calling sklearn/custom fit from Mojo would execute Python.
         raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
@@ -36,19 +45,19 @@ def lda_native_initialize(model: PythonObject, args: PythonObject, context: Pyth
     if len(args) != len(names):
         raise Error("TypeError: native LDA initializer requires its complete constructor configuration")
     for i in range(len(names)):  # driver-loop: seven unchanged constructor values, before publication
-        _lda_parameter(names[i], args[i], context)
+        _lda_parameter(names[i], args[i], context, True)
     for i in range(len(names)):  # driver-loop: native instance dictionary writes, no __setattr__ hooks
         py_setitem(fields, names[i], args[i])
     return PythonObject(None)
 
 
-def lda_native_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+def lda_native_fields(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
     var fields = _lda_storage(model, context)
     var names = context["lda_parameters"]
     for i in range(len(names)):  # driver-loop: fixed constructor configuration, before comparisons or conversion
         if not py_contains(fields, names[i]):
             raise Error("AttributeError: LDA constructor parameter is missing: " + String(names[i]))
-        _lda_parameter(names[i], fields[names[i]], context)
+        _lda_parameter(names[i], fields[names[i]], context, configure)
     names = context["lda_fitted_fields"]
     for i in range(len(names)):  # driver-loop: consumed fitted state cannot introduce attribute or scalar hooks
         if py_contains(fields, names[i]):
@@ -78,7 +87,7 @@ def lda_native_set_params(model: PythonObject, fields: PythonObject, values: Pyt
         if not py_contains(names, name):
             raise Error("mojolearn: invalid parameter " + String(py_call(native_loaded_module("builtins").repr, name))
                         + " for LinearDiscriminantAnalysis")
-        _lda_parameter(name, values[name], context)
+        _lda_parameter(name, values[name], context, True)
         py_setitem(fields, name, values[name])
     return model
 

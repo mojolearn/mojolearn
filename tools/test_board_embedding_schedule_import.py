@@ -1,4 +1,5 @@
 """Import/metadata regressions only; no device or timing calls."""
+import ast
 import importlib.util
 import pathlib
 import sys
@@ -11,13 +12,22 @@ class SmokeImportMetadata(unittest.TestCase):
     def test_sequence_schedules_import_without_removed_unused_epsilon(self):
         pkg=types.ModuleType("schedule_import_test");pkg.__path__=[]
         train=types.ModuleType(pkg.__name__+"._training_impl")
-        for name in ("_LrTable", "_lr_buffers", "_lr_native", "_lr_status"):
-            setattr(train,name,type("Table",(),{}) if name=="_LrTable" else object())
-        math=types.ModuleType(pkg.__name__+"._portable_math")
         name=pkg.__name__+"._x_sequence_sched"
         path=pathlib.Path(__file__).resolve().parents[1]/"python/mojolearn/_x_sequence_sched.py"
+        # every name the module takes from _training_impl (d4f94196e added _OPT_NATIVE and _OPT_CONTEXT)
+        wanted={a.name for node in ast.walk(ast.parse(path.read_text())) if isinstance(node,ast.ImportFrom)
+                and node.level==1 and node.module=="_training_impl" for a in node.names}
+        self.assertIn("_LrTable",wanted)
+        for attr in wanted:
+            setattr(train,attr,type("Table",(),{}) if attr=="_LrTable" else object())
+        math=types.ModuleType(pkg.__name__+"._portable_math")
+        # the import-time registration of the built-in schedule identities (d4f94196e)
+        bridge=types.ModuleType(pkg.__name__+"._native_optimizer_bridge")
+        bridge.connect_sequence=lambda training,module:None
         spec=importlib.util.spec_from_file_location(name,path);module=importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules,{pkg.__name__:pkg,train.__name__:train,math.__name__:math}):
+        # a real import registers the module in sys.modules before executing it; the
+        # import-time connection reads sys.modules[__name__] (_x_sequence_sched.py:240)
+        with patch.dict(sys.modules,{pkg.__name__:pkg,train.__name__:train,math.__name__:math,bridge.__name__:bridge,name:module}):
             spec.loader.exec_module(module)
         for cls in ("ExponentialLR", "StepLR", "OneCycleLR"):
             self.assertTrue(hasattr(module,cls))

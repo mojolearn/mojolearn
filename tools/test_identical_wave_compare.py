@@ -90,7 +90,7 @@ class IdentityProofTests(unittest.TestCase):
 
 class BinaryInventoryTests(unittest.TestCase):
     def test_reject_added_removed_and_modified_libraries(self):
-        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); directory = root/'python/mojolearn'; directory.mkdir(parents=True)
             original = directory/'original.so'; original.write_bytes(b'original')
             recorded = binary_inventory(root); verify_products(root, recorded)
@@ -102,7 +102,7 @@ class BinaryInventoryTests(unittest.TestCase):
             with self.assertRaises(ValueError): verify_products(root, recorded)
 
     def test_step_progress_is_durable(self):
-        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             receipt = Path(tmp)/'progress.json'; report = {'status': 'INCOMPLETE', 'arms': {}}
             steps = ProgressSteps(lambda: write(receipt, report)); report['arms']['on'] = steps
             steps.append({'id': 'finished-step', 'rc': 0})

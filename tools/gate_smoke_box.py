@@ -46,7 +46,10 @@ board reads MATCHED (bench_board.pair_report over board_pairing.params_state): a
 parameters cannot be read back or differ is refused for that cell, with the reason, the cell shows ours alone,
 and the gate FAILS listing it (gate-smoke.json measure.pairs, the verdict reasons and <board>/pair-check.json).
 A REFUSED line (an arm refused by name) and
-a STARTED smoke line (slow, not broken) do not fail the gate. gate-smoke.json carries every stage's record and
+a STARTED smoke line (slow, not broken) do not fail the gate. An own arm that does not import or construct (its
+binding not built, an import error, a constructor that raised) is never a skip (measure-coverage, 2026-10-24): the
+smoke line reads FAILED (gpu_gap_campaign.own_arm_failures) and a measured own cell that read "SKIPPED: not built
+yet" fails the verdict (own_not_built). gate-smoke.json carries every stage's record and
 `verdict`; the exit status is 0 only on PASS (or for a single stage that ran).
 
 Nothing here rents or deletes anything; it runs ON the box (an lq CMD job, tools/release_lq_smoke.py --gate),
@@ -101,12 +104,28 @@ def gate_verdict(state):
         pairs = m.get("pairs")
         if m.get("board") and pairs is None:
             why.append("measure: gate board has no pair check recorded")
+        # measure-coverage (2026-10-24): a line whose own arm did not import or construct is a failure, not a skip
+        for row in m.get("own_not_built") or []:
+            why.append("measure: own arm not built %s %s: %s" % (row.get("race"), row.get("arm"), row.get("reason")))
         for state in ("refused", "unchecked"):
             for p in (pairs or {}).get(state) or []:
                 why.append("measure: opponent pair %s %s %s: %s" % (state, p.get("race"), p.get("arm"), p.get("reason")))
     if any(w.endswith("not finished") for w in why):
         return "INCOMPLETE", why
     return ("FAIL" if why else "PASS"), why
+
+
+def own_not_built(board):
+    """[{race, arm, reason}] for every own cell of a gate board that did not run because our arm did not import or
+    construct (bench_board.ALGOS_SKIPPED, "SKIPPED: not built yet", with the driver's skip reason)."""
+    out = []
+    for group in ("races", "extra_races"):
+        for rid, rr in sorted((board.get(group) or {}).items()):
+            for c in rr.get("cells") or []:
+                if (c.get("library") == "mojolearn" or str(c.get("arm", "")).startswith("ours")) and \
+                        str(c.get("status") or "").startswith("SKIPPED"):
+                    out.append({"race": rid, "arm": c.get("arm"), "reason": c.get("skip_reason") or c.get("status")})
+    return out
 
 
 class Gate:
@@ -270,7 +289,8 @@ class Gate:
         pairs = self.pair_check(board)
         rec = dict(planned_whole_plan=len(ids), expected=camp.get("expected"), statuses=dict(statuses),
                    pending=pending, failed=failed, stop_reason=camp.get("stop_reason"), board=board,
-                   pairs=pairs, retention=str(mout / "campaign-retention.json"))
+                   pairs=pairs, own_not_built=own_not_built(self.B.load_result(board) or {} if board else {}),
+                   retention=str(mout / "campaign-retention.json"))
         self.mark(phase="measure", status="done", measure_rc=rc, measure=rec, measure_finished=time.time())
         print("GATE_MEASURE vendor=%s rc=%s lines=%d finished=%d pending=%d failed=%d board=%s" % (
             self.vendor, rc, len(ids), statuses.get("process finished", 0), pending, len(failed), board))
