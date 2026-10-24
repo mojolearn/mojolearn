@@ -176,10 +176,6 @@ def test_package_imports_in_every_mode_with_or_without_a_byte_lm(mode):
     per mode: the byte LM registers Mojo types once per process."""
     import subprocess
     import sys
-    if mode == "fast" and _backend.vendor() == "cpu":
-        # _backend._cpu_only_binding: a CPU-only install builds identical
-        # host bindings only, so a fast request refuses by name (ValueError).
-        pytest.skip("a CPU-only install has no fast tier; every host binding is identical only")
     program = (
         "import mojolearn\n"
         "from mojolearn import _backend, ParallelByteLanguageModelTrainer\n"

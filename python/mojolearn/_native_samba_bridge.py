@@ -88,7 +88,15 @@ def connect(config_cls, model_cls, training, neural, state_cls):
     from ._mamba_impl import Mamba3State
     entries = {}
     mode = _backend.default_mode()
-    binding = _backend.binding("_mojolearn_training", mode)
+    try:
+        binding = _backend.binding("_mojolearn_training", mode)
+        unavailable = None
+    except (ImportError, ValueError) as exc:
+        # glue: an install without this tier (a CPU-only install under
+        # MOJOLEARN_NUMERIC_MODE=fast refuses the fast tier by name) still
+        # imports; every Samba entry stays unconnected and the native owner
+        # refuses at use, as parallel_training does for a missing byte LM.
+        binding, unavailable = None, str(exc)
     names = (
         "training_vendor", "training_numeric_mode", "training_experiment_profile",
         "embedding_forward", "embedding_backward", "rms_norm_forward", "rms_norm_backward",
@@ -122,7 +130,7 @@ def connect(config_cls, model_cls, training, neural, state_cls):
     # Reuse connected modules, without loading a second type-owning tier.
     # These records let Generator preserve its per-instance numeric mode.
     import _operator
-    generator_bindings = {mode: {name: getattr(binding, name) for name in  # glue: import-time ABI symbols
+    generator_bindings = {mode: unavailable if binding is None else {name: getattr(binding, name) for name in  # glue: import-time ABI symbols
                                ("training_vendor", "training_numeric_mode", "neural_rng")}}
     if _backend.vendor() not in (None, "cpu"):
         for route, connected in neural.CONTEXT["bindings"].items():  # glue: ABI connection records only
