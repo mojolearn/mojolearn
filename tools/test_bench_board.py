@@ -2016,6 +2016,7 @@ def test_neural_headline_skips_an_unmatched_torch_arm():
 def _gate_state(pairs):
     return {"smoke_finished": 1, "smoke_rc": 0, "counts": {"MATCHED": 3}, "smoke_cpu_fallback": True,
             "autograd_finished": 1, "autograd_rc": 0, "measure_finished": 1, "measure_rc": 0,
+            "adapters_enabled": True, "adapters_finished": 1, "adapters": {"status": "PASSED", "ok": True},
             "measure": {"pending": 0, "failed": [], "expected": 3, "planned_whole_plan": 3,
                         "board": "/x/board.json", "pairs": pairs}}
 
