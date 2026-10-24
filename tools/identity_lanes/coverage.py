@@ -1378,7 +1378,10 @@ def _(ml, X, yc, yr, Xh=None):
     os.environ["MOJOLEARN_MLP_FUSED"] = "0"
     try:
         m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
-        with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=3) as tr:
+        # one device: the claim is the unfused route's arithmetic, not a
+        # multi-device driver's (that is par-mlp's), so the lane names device 0
+        # itself rather than the par-* lanes' _par_devices()
+        with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
             for shards in steps:  # glue: three driver steps
                 tr.train_step(shards)
     finally:
