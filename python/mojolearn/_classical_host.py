@@ -1538,5 +1538,34 @@ _connect_logistic_public(HostLogisticRegression, _LR_CONTEXT, install=False)
 
 # Complete fixed recipes are connected only after every host owner and class
 # descriptor above has finished setup. Public prediction performs no imports.
+def _host_archive_prediction_bindings():
+    """The host bindings the saved classes' public predict methods bound
+    through `_bind`, loaded once at setup. An unbuilt binding or a failed
+    read-back is kept as its refusal text, raised when a prediction needs it
+    (the old lazy `_bind` raised the same ImportError at that point)."""
+    def load(basename):
+        try:
+            return _backend.load_host_module(basename)
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+            return "ImportError: " + str(error)
+    gpc = (_GPC_HOST_INFERENCE_BASENAME
+           if os.path.exists(_backend.host_module_path(_GPC_HOST_INFERENCE_BASENAME))
+           else _GPC_HOST_BASENAME)
+    try:
+        gpc_core = _backend.binding("_mojolearn", "identical")
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+        gpc_core = "ImportError: " + str(error)
+    return {
+        "_mojolearn_core_host": load(_HOST_BASENAMES["_mojolearn"]),
+        "_mojolearn_estimators_host": load(_HOST_BASENAMES["_mojolearn_estimators"]),
+        "mixture": load(_HOST_BASENAMES[HostGaussianMixture._BINDING]),
+        "gp": load(_HOST_BASENAMES[HostGaussianProcessRegressor._BINDING]),
+        "spectral": load(_HOST_BASENAMES[HostSpectralClustering._BINDING]),
+        "forecast": load(_HOST_BASENAMES["_mojolearn_arima"]),
+        "gpc": load(gpc),
+        "gpc_core": gpc_core,
+    }
+
+
 from ._native_host_archive_predict import connect as _connect_archive_prediction
-_connect_archive_prediction(_CLASSICAL, globals())
+_connect_archive_prediction(_CLASSICAL, globals(), _host_archive_prediction_bindings())

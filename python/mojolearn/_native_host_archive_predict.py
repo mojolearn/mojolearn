@@ -1,29 +1,42 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Import-time recipes for prediction from every registered host archive."""
+"""Import-time recipes for prediction from every registered host archive.
+
+`host_predict(path, X)` and `host_predict_proba(path, X)` are one native call:
+the archive reader rebuilds the saved model and the compiled owner entry its
+public method reaches runs from the fixed recipe below
+(`bindings/host_archive_predict_native.mojo`). Nothing here runs from a
+public prediction operation."""
+
+# The saved classes whose public method selected its host binding through
+# `_HostBound._bind` (or the GP classifier's own `_bind`), and therefore
+# refused a non-identical saved numeric mode before reading X.
+_MODE_CHECKED = frozenset((
+    'HostGaussianMixture', 'HostGaussianProcessRegressor', 'HostGaussianProcessClassifier',
+    'HostDBSCAN', 'HostAgglomerativeClustering', 'HostSpectralClustering',
+    'HostKNeighborsClassifier', 'HostKNeighborsRegressor',
+))
+
+# Saved classes whose public interface has neither predict nor
+# predict_proba: their AttributeError is preserved, never narrowed.
+_NO_PREDICTION = ('HostCholesky', 'HostEmbedding', 'HostHDBSCAN', 'HostIVFIndex',
+                  'HostKernelDensity', 'HostMinMaxScaler', 'HostNearestNeighbors',
+                  'HostNystroem', 'HostPCA', 'HostRBFSampler', 'HostRadiusNeighbors',
+                  'HostStandardScaler', 'HostTruncatedSVD', 'HostUMAP')
 
 
-def connect(context, host):
+def connect(context, host, bindings):
     # glue: fixed class/operation metadata; this function never runs from a
     # public prediction operation, and no public method is a runtime callback.
+    # `bindings` maps each host binding name to its loaded module or to the
+    # recorded refusal text (`_classical_host._host_archive_prediction_bindings`).
     import inspect
     from types import BuiltinFunctionType, ModuleType
-    from . import _backend, _forest_host, _gbdt_host
+    from . import _forest_host, _gbdt_host
     from . import mixture, density, _hierarchy_impl, _spectral_impl, _gp_impl, _gpc_impl
     from . import _arima_impl, _tsa_impl
 
     archive = context['host_archive_context']
     compiled = host['_native_classical']
-    bindings = {}
-
-    def binding(name):
-        # glue: connect each fixed host binary once during package setup.
-        if name not in bindings:
-            try:
-                module = _backend.load_host_module(name)  # cpu-route: connect explicit host archive owner during package setup
-            except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
-                module = (type(error).__name__ + ': ' + str(error))
-            bindings[name] = module
-        return bindings[name]
 
     def call(entry, operation, owner, *arguments):
         # glue: arguments are immutable (input-index, constant) recipe words.
@@ -32,6 +45,7 @@ def connect(context, host):
         return (entry, operation, owner, arguments)
 
     x = ('input', 0)
+
     def constant(value):
         return ('constant', value)
 
@@ -50,40 +64,35 @@ def connect(context, host):
         recipes[name] = (call(compiled, 'host_tree_predict', context, x),
                          call(compiled, 'host_tree_proba', context, x))
 
-    core = binding('_mojolearn_core_host')
+    core = bindings['_mojolearn_core_host']
     for name, operation in (('HostKNeighborsClassifier', 'archive_knn_classifier'),  # glue: fixed whole-prediction KNN operations
                             ('HostKNeighborsRegressor', 'archive_knn_regressor')):
         recipes[name] = (call(compiled, operation, context, x, constant(False)),
                          call(compiled, operation, context, x, constant(True))
                          if name == 'HostKNeighborsClassifier' else None)
 
-    mix = constant(binding(host['_HOST_BASENAMES'][host['HostGaussianMixture']._BINDING]))
+    mix = constant(bindings['mixture'])
     recipes['HostGaussianMixture'] = (
         call(mixture._NATIVE, 'family_mix_gmm_predict', mixture._NATIVE_CONTEXT, mix, x),
         call(mixture._NATIVE, 'family_mix_gmm_predict_proba', mixture._NATIVE_CONTEXT, mix, x))
-    gp = constant(binding(host['_HOST_BASENAMES'][host['HostGaussianProcessRegressor']._BINDING]))
+    gp = constant(bindings['gp'])
     recipes['HostGaussianProcessRegressor'] = (
         call(_gp_impl._NATIVE, 'family_gp_gpr_predict', _gp_impl._NATIVE_CONTEXT,
              gp, x, constant(False), constant(False)), None)
-    # Preserve the existing inference-only/reference host availability rule.
-    import os
-    inference = host['_GPC_HOST_INFERENCE_BASENAME']
-    gpc = constant(binding(inference if os.path.exists(_backend.host_module_path(inference))  # cpu-route: preserve the explicit saved host GPC owner at setup
-                           else host['_GPC_HOST_BASENAME']))
+    gpc = constant(bindings['gpc'])
     recipes['HostGaussianProcessClassifier'] = (
         call(_gpc_impl._NATIVE, 'family_gp_gpc_predict', _gpc_impl._NATIVE_CONTEXT,
-             gpc, constant(core), x),
+             gpc, constant(bindings['gpc_core']), x),
         call(_gpc_impl._NATIVE, 'family_gp_gpc_predict_proba', _gpc_impl._NATIVE_CONTEXT, gpc, x))
 
-    estimators = constant(binding('_mojolearn_estimators_host'))
-    spectral = constant(binding(host['_HOST_BASENAMES'][host['HostSpectralClustering']._BINDING]))
+    estimators = constant(bindings['_mojolearn_estimators_host'])
+    spectral = constant(bindings['spectral'])
     for name, module, operation, kernel in (  # glue: the three saved clustering prediction recipes
             ('HostDBSCAN', density, 'family_cfb_dbscan_predict', estimators),
             ('HostAgglomerativeClustering', _hierarchy_impl, 'family_cfb_agglo_predict', estimators),
             ('HostSpectralClustering', _spectral_impl, 'family_cfb_sc_predict', spectral)):
         recipes[name] = (call(module._NATIVE, operation, module._NATIVE_CONTEXT, kernel, x), None)
 
-    binding('_mojolearn_forecast_host')
     # Here X is the positional start argument, not a data matrix. The public
     # forecast methods' defaults remain (end=None, exog/index=None).
     recipes['HostARIMA'] = (call(_arima_impl._TSA, 'arima_predict', _arima_impl._TSA_CONTEXT,
@@ -93,11 +102,7 @@ def connect(context, host):
 
     known = dict(host)
     known.update(HostForest=_forest_host.HostForest, HostGBDT=_gbdt_host.HostGBDT)
-    missing_methods = ('HostCholesky', 'HostEmbedding', 'HostHDBSCAN', 'HostIVFIndex',
-                       'HostKernelDensity', 'HostMinMaxScaler', 'HostNearestNeighbors',
-                       'HostNystroem', 'HostPCA', 'HostRBFSampler', 'HostRadiusNeighbors',
-                       'HostStandardScaler', 'HostTruncatedSVD', 'HostUMAP')
-    for name in missing_methods:  # glue: preserve the explicit absent-method schemas
+    for name in _NO_PREDICTION:  # glue: preserve the explicit absent-method schemas
         recipes[name] = (None, None)
 
     records = []
@@ -117,21 +122,23 @@ def connect(context, host):
                     raise TypeError('saved host prediction schema does not match ' + name)
             records.append((cls, cls.__mro__, name, methods, recipes[name]))
 
-    snapshots = []
-    for name, module in bindings.items():  # glue: imported host modules and their native exports are fixed ABI metadata
-        if type(module) is str:
+    snapshots = {}
+    for module in bindings.values():  # glue: imported host modules and their native exports are fixed ABI metadata
+        if type(module) is str or module in snapshots:
             continue
         if type(module) is not ModuleType:
-            raise TypeError('host archive bindings require exact native modules')
+            continue  # a binding proxy is not a host module; its owner admits it by name
         fields = vars(module)
         if '__getattr__' in fields:
             raise TypeError('host archive bindings cannot retain Python module hooks')
-        exports = tuple((key, value) for key, value in fields.items()  # glue: retain actual compiled ABI export identities at setup
-                        if type(key) is str and type(value) is BuiltinFunctionType)
-        snapshots.append((module, exports))
+        snapshots[module] = tuple((key, value) for key, value in fields.items()  # glue: retain actual compiled ABI export identities at setup
+                                  if type(key) is str and type(value) is BuiltinFunctionType)
     archive.update(host_archive_predict_records=tuple(records),
-                   host_archive_predict_modules=tuple(snapshots),
+                   host_archive_predict_modules=snapshots,
+                   host_archive_predict_module_type=ModuleType,
                    host_archive_predict_entry_type=BuiltinFunctionType,
                    host_archive_predict_knn_binding=core,
+                   host_archive_predict_mode_checked=_MODE_CHECKED,
+                   host_archive_predict_svc_context=context['host_inference_context'],
                    host_archive_predict_classes=tuple(covered))
     context['host_archive_predict_context'] = archive
