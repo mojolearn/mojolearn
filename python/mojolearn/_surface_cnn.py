@@ -25,7 +25,9 @@ FAMILIES = (
                         "x-cnn-dropout2d", "x-cnn-globalpool", "x-cnn-resnet-block",
                         "x-cnn-gcn", "x-cnn-sage", "x-cnn-conv-options",
                         "x-cnn-pool-options", "x-cnn-bn-options",
-                        "x-cnn-gnn-options", "x-cnn-trainer-options"),
+                        "x-cnn-gnn-options", "x-cnn-trainer-options",
+                        # lane testfix-neural-20261024: the public-method lanes of afc192ee6
+                        "public-cnn-layer-fit", "public-cnn-classifier-predict"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d", "Dropout2d",
@@ -74,6 +76,10 @@ TRAINING_LANE_NAMES = {
     "x-cnn-bn-options": "BatchNorm momentum=None and track_running_stats=False",
     "x-cnn-gnn-options": "SAGEConv max aggregation, normalize and project",
     "x-cnn-trainer-options": "CNNClassifier Adam, AdamW, Nesterov and dampened SGD",
+    "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
+    "public-cnn-classifier-predict": "CNNClassifier predict",
 }
 PUBLIC_PENDING_LANES = {
+    "public-cnn-layer-fit": "no reference",
+    "public-cnn-classifier-predict": "no reference",
     }
