@@ -4077,27 +4077,6 @@ def _pred_f64(v):
     return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
 
 
-def _key_words(values, d):
-    """(int32 words, c2_key64 KIND) of d values: a float32 / float64 / int32 /
-    int64 buffer as its own words; anything else (a user score function's
-    list) converted once to float64 (the explicit input-prep step)."""
-    lb = _label_buffer(values)
-    if lb is not None and lb.kind in (0, 1, 3, 4) and lb.n == d:
-        return lb.words, lb.kind
-    vals = values.tolist() if hasattr(values, "tolist") else values
-    flat = array.array("d", [float(v) for v in vals])  # glue: a user callable's scores, converted once
-    if len(flat) != d:
-        raise ValueError(f"mojolearn: expected {d} scores, got {len(flat)}")
-    w = array.array("i")
-    w.frombytes(flat.tobytes())
-    return Array._owned(w, (2 * d,), "<i4", "C"), 4
-
-
-def _mask_list(pr, off, d):
-    """A device 0.0 / 1.0 mask read back as the fitted bool list."""
-    return [v != 0.0 for v in pr.values(off, d)]  # glue: the device's mask as the fitted list
-
-
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     def get_support(self, indices=False):
@@ -4374,139 +4353,11 @@ class SelectKBest(_SelectorMixin):
         return _ENCODE_CALL(self, "fit_transform", (X, y), _ENCODE_CONTEXT)
 
 
-def _mi_discrete_mask(discrete_features, d):
-    """The reference's discrete_features: 'auto' (dense X: none), a bool for
-    every column, a bool mask of length d, or column indices (negative ones
-    count from the end)."""
-    if isinstance(discrete_features, str):
-        if discrete_features != "auto":
-            raise ValueError("mojolearn: Invalid string value for discrete_features.")
-        return [False] * d
-    if isinstance(discrete_features, bool) or type(discrete_features).__name__ == "bool_":
-        return [bool(discrete_features)] * d
-    vals = discrete_features.tolist() if hasattr(discrete_features, "tolist") else list(discrete_features)
-    if isinstance(vals, bool):
-        return [vals] * d
-    if vals and all(isinstance(v, bool) for v in vals):  # glue: validates the discrete_features argument (vals-sized: user discrete_features argument)
-        if len(vals) != d:
-            raise ValueError(f"mojolearn: discrete_features mask has {len(vals)} entries; X has {d} features")
-        return list(vals)
-    mask = [False] * d
-    for v in vals:  # glue: converts the discrete_features argument (vals-sized: user discrete_features argument)
-        if isinstance(v, bool) or not isinstance(v, numbers.Integral):
-            raise ValueError("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
-        j = int(v)
-        if not -d <= j < d:
-            raise IndexError(f"mojolearn: discrete_features index {j} is out of bounds for {d} features")
-        mask[j % d] = True
-    return mask
-
-
-#: lane/apple-fast-mi (2026-10-03): the A/B switch MOJOLEARN_MI_WORK=1 (opt-in,
-#: FAST only, read once at import): `_mutual_info` keeps the noised columns, their
-#: noise words and the per-point terms (3 n d words) as device-only scratch
-#: (`_Prog.work`) instead of arena words that the host zeroes and the device
-#: copies back (265 MB on Istella). Where a word lives moves no bit.
+#: MOJOLEARN_MI_WORK=1: the mutual-information work blocks are device scratch on
+#: the FAST tier (read once at import; bindings/prep_select_native.mojo).
 _MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
 
 
-def _plus1(off):
-    """off + 1 for an arena offset or a `_Scratch` (the units' offset + 1 noise words)."""
-    return _Scratch(off.off + 1, off.kind) if isinstance(off, _Scratch) else off + 1
-
-
-def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
-    """The reference's `_estimate_mi`: continuous columns are scaled and
-    noised (row-major over the continuous columns only, as the reference's
-    draw of shape (n, n_continuous)), the 1e-10-scaled noise kept as a
-    second word that breaks exact ties as the reference's float64 sum does
-    (DEVIATION 5407); each column then takes the estimator
-    its kinds name: Kraskov (continuous x, continuous y), Ross (one side
-    discrete: the classes, or a discrete feature's categories against the
-    noised target) or the contingency table (both discrete)."""
-    k = int(n_neighbors)
-    if not 1 <= k <= 32:
-        raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
-    arr = _x2d(X)
-    n, d = arr.shape
-    mask = _mi_discrete_mask(discrete_features, d)
-    cont = [j for j in range(d) if not mask[j]]  # glue: continuous column index list (d-sized: feature count)
-    disc = [j for j in range(d) if mask[j]]  # glue: discrete column index list (d-sized: feature count)
-    mode = _mode()
-    seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
-    pr = _Prog()
-    work = pr.work if (_MI_WORK and mode == "fast") else pr.alloc
-    if discrete_target:
-        classes, codes = encode_labels(y)
-        if codes.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        counts = _class_counts(codes, len(classes))
-        if cont and max(counts) < 2:  # glue: raises when every class has one sample (counts-sized: class counts from the binding)
-            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
-                             "neighbour search over the classes with more than one finds 0 samples)")
-        yo, lc = pr.put_codes(codes), pr.put_list(counts)
-    else:
-        yv = as_f32_c(y, ndim=1, name="y")[0]
-        if yv.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-    outc = outd = None
-    if cont:
-        dc = len(cont)
-        xo = pr.put(arr if not disc else _gather(arr, cont, mode))
-        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), work(n * dc), work(n * dc)
-        _cs(pr, mode, xo, n, dc, st)
-        pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
-        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, _plus1(zs))
-    if not discrete_target:
-        yo = pr.put(yv)
-        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), work(n), work(n)
-        _cs(pr, mode, yo, n, 1, sty)
-        pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, _plus1(zys))
-    if cont:
-        term, outc = work(n * dc), pr.alloc(dc)
-        if discrete_target:
-            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, _plus1(zs))
-            # the rows of the classes with more than one (KIND 3: summed on the device)
-            pr.stage("mi_reduce", dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
-        else:
-            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, _plus1(zs), _plus1(zys))
-            pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
-    if disc:
-        dd = len(disc)
-        xd = _gather(arr, disc, mode)
-        cats = _fit_categories(mode, xd)
-        kx = [c.size for c in cats]  # glue: per-column category counts (cats-sized: per-column category arrays)
-        kmax = max(kx)  # glue: largest category count for the program layout (kx-sized: per-column category counts)
-        if not discrete_target and n in kx:
-            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
-                             "value (the reference's neighbour search finds 0 samples)")
-        xc, _neg = _codes(pr, xd, cats)
-        outd = pr.alloc(dd)
-        if discrete_target:
-            ky = len(classes)
-            stride = kmax * ky + kmax + ky
-            tb = pr.alloc(dd * stride)
-            pr.stage("mi_dd", dd, xc, n, dd, yo, ky, pr.put_list(kx), tb, stride, outd)
-        else:
-            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), work(n * dd)
-            pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
-            pr.stage("i2f", dd * kmax, cnti, cntf)
-            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, _plus1(zys))
-            pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
-    pr.run(mode)
-    if not disc:
-        return pr.get(outc, d)
-    vals = [0.0] * d
-    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):  # glue: scatters device MI values to their columns (cont-sized: continuous column indices)
-        vals[j] = v
-    for j, v in zip(disc, pr.values(outd, len(disc))):  # glue: scatters device MI values to their columns (disc-sized: discrete column indices)
-        vals[j] = v
-    return Array.from_list(vals, "<f4")
-
-
-# Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
     """Estimate the mutual information between each feature and a discrete target.
@@ -4549,11 +4400,12 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
     >>> y = (X[:, 0] > 0.5).astype(np.int64)
     >>> mi = mojolearn.mutual_info_classif(X, y, random_state=0)
     """
-    return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
+    return _ENCODE_CALL(None, "mutual_info_classif", (X, y, discrete_features, n_neighbors, random_state),
+                        _ENCODE_CONTEXT)
 
 
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
+# from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native.mojo.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
     """Estimate the mutual information between each feature and a continuous target.
@@ -4595,47 +4447,8 @@ def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, cop
     >>> y = (X[:, 0] ** 2 + 0.1 * rng.random(1000)).astype(np.float32)
     >>> mi = mojolearn.mutual_info_regression(X, y, random_state=0)
     """
-    return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
-
-
-def _gather(arr, cols, mode):
-    n, d = arr.shape
-    pr = _Prog()
-    xo, ko = pr.put(arr), pr.put_list(cols)
-    out = pr.alloc(n * len(cols))
-    pr.stage("gather_cols", n * len(cols), xo, n, d, ko, len(cols), out)
-    pr.run(mode)
-    return pr.get(out, (n, len(cols)))
-
-
-def _stage_importance_keys(pr, est, m, getter="auto"):
-    """Stages the ordered keys (c2_key64) of a fitted estimator's m column
-    importances: coef_ squared (summed over rows when 2-D, sqsum_cols) on the
-    device, else feature_importances_ as given (a monotone stand-in for its
-    square). A str getter (a dotted attribute path, as operator.attrgetter)
-    or a callable picks the importances instead; they are squared (summed
-    over rows when 2-D) on the device, as the reference's
-    transform_func='square'. Returns the keys' offset."""
-    if getter != "auto":
-        coef = operator.attrgetter(getter)(est) if isinstance(getter, str) else getter(est)
-    else:
-        coef = getattr(est, "coef_", None)
-    key = pr.work(2 * m)
-    if coef is None and getter == "auto":
-        imp = getattr(est, "feature_importances_", None)
-        if imp is None:
-            raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
-        words, kind = _key_words(imp, m)
-        pr.stage("c2_key64", m, pr.put_words(words), kind, key)
-        return key
-    c = as_f32_c(coef, ndim=None, name="coef_")[0]
-    rows, d = (1, c.shape[0]) if c.ndim == 1 else c.shape
-    if d != m:
-        raise ValueError(f"mojolearn: RFE importances have {d} columns, expected {m}")
-    out = pr.work(d)
-    pr.stage("sqsum_cols", d, pr.put(c), rows, d, out)
-    pr.stage("c2_key64", d, out, 0, key)
-    return key
+    return _ENCODE_CALL(None, "mutual_info_regression", (X, y, discrete_features, n_neighbors, random_state),
+                        _ENCODE_CONTEXT)
 
 
 class RFE(_SelectorMixin):
@@ -4653,9 +4466,10 @@ class RFE(_SelectorMixin):
 
     Parameters
     ----------
-    estimator : object
-        Estimator with ``fit`` that exposes ``coef_`` or ``feature_importances_`` (``ValueError``
-        otherwise, with ``importance_getter='auto'``).
+    estimator : mojolearn estimator
+        A mojolearn estimator whose ``fit`` exposes ``coef_`` or ``feature_importances_``, such as
+        :class:`LinearDiscriminantAnalysis`, :class:`LogisticRegression`, :class:`Ridge`,
+        :class:`LinearRegression` or the tree ensembles. Any other estimator raises ``TypeError``.
     n_features_to_select : int or float, default None
         Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
     step : int or float, default 1
@@ -4663,9 +4477,9 @@ class RFE(_SelectorMixin):
         ``(0, 1)``. Must be greater than 0.
     verbose : int, default 0
         Accepted for scikit-learn compatibility.
-    importance_getter : 'auto', str or callable, default 'auto'
-        ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path or a callable
-        taking the estimator picks the importances instead (they are squared).
+    importance_getter : 'auto' or str, default 'auto'
+        ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path of the fitted
+        estimator picks the importances instead (they are squared).
 
     Attributes
     ----------
@@ -4700,65 +4514,30 @@ class RFE(_SelectorMixin):
         self.verbose = verbose
         self.importance_getter = importance_getter
 
-    def _clone(self):
-        est = self.estimator
-        return type(est)(**est.get_params()) if hasattr(est, "get_params") else est
-
     def fit(self, X, y, **fit_params):
-        g = self.importance_getter
-        if not (callable(g) or isinstance(g, str)):
-            raise ValueError("mojolearn: RFE importance_getter must be 'auto', a str or a callable")
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        nsel = self.n_features_to_select
-        if nsel is None:
-            nsel = d // 2
-        elif isinstance(nsel, float) and 0 < nsel < 1:
-            nsel = int(nsel * d)
-        nsel = max(1, int(nsel))
-        step = int(max(1, self.step * d)) if isinstance(self.step, float) and self.step < 1 else int(self.step)
-        if step <= 0:
-            raise ValueError("mojolearn: step must be > 0")
-        support = [True] * d
-        ranking = full((d,), 1, "<f4")
-        nsup = d
-        while nsup > nsel:
-            features = [j for j in range(d) if support[j]]  # glue: the supported column list (control)
-            est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-            # lane cpu2-l3-prep: the ranking and elimination on the device (c2_rfe_step: the
-            # `step` weakest by a stable ascending sort of the importance keys leave the
-            # support; c2_rfe_rank: every unsupported column's ranking + 1)
-            pr = _Prog()
-            key = _stage_importance_keys(pr, est, len(features), self.importance_getter)
-            sup = pr.put_list([1.0 if v else 0.0 for v in support], inout=True)  # glue: the support mask up
-            rk = pr.put(ranking, inout=True)
-            pr.stage("c2_rfe_step", len(features), key, pr.put_ints(features), len(features),
-                     min(step, nsup - nsel), sup)
-            pr.stage("c2_rfe_rank", d, sup, rk)
-            pr.run(mode)
-            support = _mask_list(pr, sup, d)
-            ranking = pr.get(rk, d)
-            nsup = len([1 for v in support if v])  # glue: the support size (control)
-        features = [j for j in range(d) if support[j]]  # glue: support index list (d-sized: feature count)
-        self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-        self._mask, self.support_ = support, list(support)
-        self.ranking_ = ranking.astype("<i8")
-        self.n_features_ = sum(support)  # glue: count of selected features (support-sized: feature support mask)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        return _ENCODE_CALL(self, "fit", (X, y, fit_params), _ENCODE_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X`` and ``y``, then keep the selected columns of ``X``.
+
+        Returns
+        -------
+        array of shape (n_samples, n_features_)
+            The selected columns, float32.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def predict(self, X):
-        return self.estimator_.predict(self.transform(X))
+        return _ENCODE_CALL(self, "predict", (X,), _ENCODE_CONTEXT)
 
     def predict_proba(self, X):
-        return self.estimator_.predict_proba(self.transform(X))
+        return _ENCODE_CALL(self, "predict_proba", (X,), _ENCODE_CONTEXT)
 
     def decision_function(self, X):
-        return self.estimator_.decision_function(self.transform(X))
+        return _ENCODE_CALL(self, "decision_function", (X,), _ENCODE_CONTEXT)
 
     def score(self, X, y):
-        return self.estimator_.score(self.transform(X), y)
+        return _ENCODE_CALL(self, "score", (X, y), _ENCODE_CONTEXT)
 
 
 class ComplementNB(_DiscreteNB):
@@ -4949,3 +4728,6 @@ from ._native_prep_classify_bridge import connect as _connect_classify
 _CLS_CALL, _CLS_CONTEXT = _connect_classify(
     {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",
      LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
+# RFE and the mutual-information functions (bindings/prep_select_native.mojo) run
+# their programs on the classifier owner's arena-runner context.
+_ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK)
