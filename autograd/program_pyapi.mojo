@@ -3,14 +3,15 @@
 # to allocate returned ABI buffers; conversion and every computed value use
 # the executor. No user callbacks drive execution, epochs or batches.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_setitem, py_type
+from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
+from std.memory import memcpy
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
 from autograd.execution_profile_pyapi import execution_profile_object
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
-from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
+from autograd.program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
@@ -375,3 +376,186 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         py_setitem(counts, "false", branches[1])
         _ = py_call(out.append, counts)
     return out
+
+
+# ------------------------------------------------------------ ImportedProgram.run
+# `mojolearn.importers.ImportedProgram.run` as one native call: the inputs by
+# position or by name, each checked against the model's declared shape, a
+# rank-0 or rank-1 model value held as the session's (1, 1) or (1, n) row
+# (the same descriptor the former Python reshape view gave: no copy), the
+# program run, and every output returned in its declared shape and dtype
+# (an 'int32' output keeps the device's words as int32 items).
+
+def _imported_repr(value: PythonObject) raises -> String:
+    return String(py_call(Python.import_module("builtins").repr, value))
+
+
+def _imported_tuple(dims: List[Int]) raises -> PythonObject:
+    var out = Python.list()
+    for k in range(len(dims)):  # small-loop(dims: a value's rank, at most eight): shape metadata
+        _ = py_call(out.append, PythonObject(dims[k]))
+    return py_call(Python.import_module("builtins").tuple, out)
+
+
+def _imported_is_array(a: PythonObject) raises -> Bool:
+    # a NumPy ndarray (subclasses included): read through its own buffer
+    return is_ndarray(a)
+
+
+def _imported_given_dims(a: PythonObject, name: PythonObject) raises -> List[Int]:
+    """The shape the former `np.asarray(x)` had: an ndarray's own; a nested
+    list or tuple's down its first items (rectangularity is checked when its
+    values are read); a number's (a Python or NumPy scalar) (). Another
+    array-like object (a torch tensor, a DataFrame) is refused: the caller
+    converts it to a NumPy array first."""
+    var b = Python.import_module("builtins")
+    var dims = List[Int]()
+    if _imported_is_array(a):
+        var shape = py_call(b.tuple, a.shape)
+        for k in range(len(shape)):  # small-loop(shape: an array's rank): shape metadata
+            dims.append(Int(py=shape[k]))
+        return dims^
+    var item = a
+    while Bool(py=py_call(b.isinstance, item, b.list)) or Bool(py=py_call(b.isinstance, item, b.tuple)):  # driver-loop: down a nested sequence's first items (its rank)
+        var n = len(item)
+        dims.append(n)
+        if n == 0 or len(dims) > 8:
+            return dims^
+        item = item[0]
+    var numpy_scalar = String(py=py_type(a).__module__) == "numpy"
+    if len(dims) == 0 and not numpy_scalar and (Bool(py=py_call(b.hasattr, a, "__array__"))
+                                                       or Bool(py=py_call(b.hasattr, a, "__array_interface__"))):
+        raise Error("TypeError: input " + _imported_repr(name) + " must be a NumPy array, a nested list of numbers "
+                    + "or a number, got " + String(py_type(a).__name__) + " (convert it with numpy.asarray, "
+                    + "or .detach().cpu().numpy() for a torch tensor)")
+    return dims^
+
+
+def _imported_session_dims(dims: List[Int]) -> List[Int]:
+    # importers/_table.session_shape: a session tensor has at least two axes,
+    # a scalar is (1, 1) and a [n] vector (1, n).
+    var out = List[Int]()
+    for _ in range(2 - len(dims)):  # small-loop(2: the padded leading axes)
+        out.append(1)
+    for k in range(len(dims)):  # small-loop(dims: rank, at most eight): shape metadata
+        out.append(dims[k])
+    return out^
+
+
+def _imported_input(a: PythonObject, dims: List[Int], integer: Bool, what: String) raises -> ProgramInput:
+    """One admitted input as the program reads it: an array by its own
+    buffer (a rank-0 or rank-1 one with the row descriptor of its former
+    reshape view, rank two and above exactly as `array_input`), a nested
+    sequence or number converted once into the session shape."""
+    var values = List[Float64]()
+    var ids = List[Int64]()
+    var sdims = _imported_session_dims(dims)
+    if _imported_is_array(a):
+        if len(dims) >= 2:
+            var parsed = array_input(a, what)
+            if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
+                raise Error("TypeError: program input holds ids and must be integers (an integer array)")
+            return ProgramInput(parsed[0], parsed[1], values^, ids^)
+        if Int(py=a.size) == 0:
+            raise Error("ValueError: input must not be empty")
+        var size = Int(py=a.itemsize)
+        if not Bool(py=a.dtype.isnative):
+            raise Error("TypeError: " + what + " must be in native byte order")
+        var kind: Int
+        try:
+            kind = cast_in_kind(Int(py=a.dtype.num), size, what)
+        except error:
+            raise Error("TypeError: " + String(error))
+        if integer and kind != CAST_KIND_SIGNED and kind != CAST_KIND_UNSIGNED:
+            raise Error("TypeError: program input holds ids and must be integers (an integer array)")
+        var cols = sdims[1]
+        var s1 = size if len(dims) == 0 else Int(py=a.strides[0])
+        var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, 1, cols, cols * size, s1)
+        src.check(what)
+        return ProgramInput(src, ShapeN.of(sdims), values^, ids^)
+    var got = List[Int]()
+    var leaf_depth = -1
+    _sequence_values(a, 0, got, values, ids, integer, leaf_depth)
+    var shape = ShapeN.of(sdims)
+    if integer:
+        var id_src = CastIn(Int(ids.unsafe_ptr()), CAST_KIND_SIGNED, 8, shape.rows(), shape.cols(), shape.cols() * 8, 8)
+        return ProgramInput(id_src, shape, values^, ids^)
+    var src = CastIn(Int(values.unsafe_ptr()), CAST_KIND_FLOAT, 8, shape.rows(), shape.cols(), shape.cols() * 8, 8)
+    return ProgramInput(src, shape, values^, ids^)
+
+
+def ops_imported_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+    program: PythonObject, arrays: PythonObject, named: PythonObject,
+) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    var declared = program.inputs
+    var outputs = program.outputs
+    var given = arrays
+    if len(named) > 0:
+        if len(arrays) > 0:
+            raise Error("ValueError: pass the inputs either in order or by name, not both")
+        var names = Python.list()
+        for k in range(len(declared)):  # driver-loop: over the model's declared inputs
+            _ = py_call(names.append, declared[k][0])
+        var keys = py_call(b.list, named)
+        for k in range(len(keys)):  # driver-loop: over the keyword argument names
+            if not py_contains(names, keys[k]):
+                raise Error("ValueError: the model has no input " + _imported_repr(keys[k]) + " (inputs: "
+                            + String(PythonObject(", ").join(names)) + ")")
+        var ordered = Python.list()
+        for k in range(len(names)):  # driver-loop: over the model's declared inputs
+            if not py_contains(named, names[k]):
+                raise Error("ValueError: input " + _imported_repr(names[k]) + " is missing")
+            _ = py_call(ordered.append, named[names[k]])
+        given = ordered
+    if len(given) != len(declared):
+        raise Error("ValueError: the model takes " + String(len(declared)) + " inputs, got " + String(len(given)))
+    # every shape is checked before the program is touched, as before
+    var dims = List[List[Int]]()
+    for k in range(len(declared)):  # driver-loop: over the model's declared inputs
+        var want = List[Int]()
+        var shape = py_call(b.tuple, declared[k][1])
+        for j in range(len(shape)):  # small-loop(shape: a declared input's rank): shape metadata
+            want.append(Int(py=shape[j]))
+        var got = _imported_given_dims(given[k], declared[k][0])
+        var same = len(got) == len(want)
+        for j in range(min(len(got), len(want))):  # small-loop(shape: rank): shape metadata
+            same = same and got[j] == want[j]
+        if not same:
+            raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
+                        + _imported_repr(shape) + ", got " + _imported_repr(_imported_tuple(got)))
+        dims.append(want^)
+    var session = program._s
+    if session._id is None:
+        raise Error("ValueError: this session is closed")
+    var sid = Int(py=session._id)
+    var plan = program_execute_prepare[E, KIND](sid, Int(py=program._id), sid, False, False)
+    if len(declared) != plan.program.n_in:
+        raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
+    var inputs = List[ProgramInput]()
+    for k in range(len(declared)):  # driver-loop: over input descriptors, owners retained through replay
+        var item = _imported_input(given[k], dims[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS, "numeric program input")
+        if not same_shape(item.shape, plan.program.in_shapes[k]):
+            raise Error("ValueError: input " + String(k) + " must keep its captured shape "
+                        + shape_text(plan.program.in_shapes[k]) + "; got " + shape_text(item.shape))
+        inputs.append(item^)
+    var r = program_execute_run[E, KIND](sid, plan, inputs^, False)
+    var out = Python.list()
+    for k in range(len(r.outputs)):  # driver-loop: over the program's outputs (result packing, no data)
+        var want = List[Int]()
+        var shape = py_call(b.tuple, outputs[k][1])
+        var count = 1
+        for j in range(len(shape)):  # small-loop(shape: a declared output's rank): shape metadata
+            want.append(Int(py=shape[j]))
+            count *= want[j]
+        if count != r.outputs[k].shape.count():
+            raise Error("ValueError: cannot reshape output " + String(k) + " of shape " + shape_text(r.outputs[k].shape)
+                        + " into shape " + _imported_repr(shape))
+        var dtype = String(outputs[k][2])
+        var a = output_array_dims(want, "int32" if dtype == "int32" else "float32")
+        if count > 0:
+            # the downloaded words as they are (an 'int32' output's words are its int32 items)
+            memcpy(dest=FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])),
+                   src=r.outputs[k].data.unsafe_ptr(), count=count)
+        _ = py_call(out.append, a)
+    return _result(out)

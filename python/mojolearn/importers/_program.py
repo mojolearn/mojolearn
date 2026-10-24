@@ -9,8 +9,10 @@
 # refusal pass before any upload, the uploads, the import-time prologue, one
 # session call per operation, the capture, the release of unread uploads).
 # Python passes names, shapes and buffer addresses only. The program keeps
-# its session; run() only reshapes the caller's arrays to the session's
-# shapes (a rank-1 model value is held as a (1, n) row) and back, as views.
+# its session; run() is one native call (ops_imported_run): the inputs'
+# admission against the declared shapes, a rank-0/1 model value read as the
+# session's (1, 1)/(1, n) row through the caller's own buffer, the run, and
+# the outputs allocated in their declared shapes and dtypes.
 # A torch.nn.Module or an onnx.ModelProto is written to a temporary ONNX file
 # (torch.onnx.export, or the proto's own bytes) and imported from it: a
 # conversion at the API boundary, no arithmetic on the model's values.
@@ -20,7 +22,6 @@ import os
 
 from ..ops import Program, Session
 from ._graph import GraphIR, UnsupportedModel, buffer_address, bytes_view
-from ._table import session_shape
 
 __all__ = ["import_model", "ImportedProgram"]
 
@@ -145,6 +146,9 @@ class ImportedProgram(Program):
         super().__init__(session, info)
         self.inputs = list(inputs)
         self.outputs = list(outputs)
+        # the session binding's ImportedProgram.run entry (autograd/program_pyapi.mojo
+        # ops_imported_run_py), retained once here: run is that one call
+        self._run_native = session._b.ops_imported_run
 
     def run(self, *arrays, **named):
         """Run the model on new input arrays.
@@ -157,35 +161,7 @@ class ImportedProgram(Program):
         for a model with one output, else a tuple in the order of
         :attr:`outputs`.
         """
-        from .._optional_numpy import require_numpy
-        np = require_numpy("mojolearn.importers")
-        if named:
-            if arrays:
-                raise ValueError("pass the inputs either in order or by name, not both")
-            names = [name for name, _, _ in self.inputs]  # glue: the model's input names
-            unknown = [k for k in named if k not in names]  # glue: the keyword argument names
-            if unknown:
-                raise ValueError(f"the model has no input {unknown[0]!r} (inputs: {', '.join(names)})")
-            missing = [k for k in names if k not in named]  # glue: the model's input names
-            if missing:
-                raise ValueError(f"input {missing[0]!r} is missing")
-            arrays = tuple(named[k] for k in names)  # glue: the model's input names
-        if len(arrays) != len(self.inputs):
-            raise ValueError(f"the model takes {len(self.inputs)} inputs, got {len(arrays)}")
-        views = []
-        for (name, shape, _), x in zip(self.inputs, arrays):  # glue: one view per model input
-            a = np.asarray(x)
-            if tuple(a.shape) != tuple(shape):
-                raise ValueError(f"input {name!r} must have the shape {tuple(shape)}, got {tuple(a.shape)}")
-            # a rank-0 or rank-1 input is held as a row: a view, no copy
-            views.append(a.reshape(session_shape(shape)) if a.ndim < 2 else a)
-        got = self._s.run(self, *views)
-        got = got if isinstance(got, tuple) else (got,)
-        outs = []
-        for (_, shape, dtype), y in zip(self.outputs, got):  # glue: one view per model output
-            y = y.view(np.int32) if dtype == "int32" else y
-            outs.append(y.reshape(shape))
-        return outs[0] if len(outs) == 1 else tuple(outs)
+        return self._run_native(self, arrays, named)
 
 
 def _dtype_name(ir_dtype):
@@ -283,9 +259,9 @@ def _import(source, label, shapes, numeric_mode):
     b = s._b
     keep = ()
     try:
-        if not hasattr(b, "onnx_import_file"):
-            raise RuntimeError("mojolearn: this install's x_sequence binding has no model import (onnx_import_file); "
-                               "rebuild the x_sequence bindings")
+        if not hasattr(b, "onnx_import_file") or not hasattr(b, "ops_imported_run"):
+            raise RuntimeError("mojolearn: this install's x_sequence binding has no model import (onnx_import_file, "
+                               "ops_imported_run); rebuild the x_sequence bindings")
         names, flat = _shape_words(shapes)
         if isinstance(source, (str, bytes, os.PathLike)):
             # an ONNX file: read, resolved, refused and lowered in one Mojo call
