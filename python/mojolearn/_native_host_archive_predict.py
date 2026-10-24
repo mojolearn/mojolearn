@@ -19,7 +19,7 @@ def connect(context, host):
         # glue: connect each fixed host binary once during package setup.
         if name not in bindings:
             try:
-            module = _backend.load_host_module(name)  # cpu-route: connect explicit host archive owner during package setup
+                module = _backend.load_host_module(name)  # cpu-route: connect explicit host archive owner during package setup
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
                 module = (type(error).__name__ + ': ' + str(error))
             bindings[name] = module
