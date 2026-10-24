@@ -755,6 +755,14 @@ def build(lane, arm, D, A):
         Y = np.ascontiguousarray(D["Yfit"], dtype=np.float32)       # (series, n)
         n = Y.shape[1]
         rec["input_arrays"] = input_arrays(lane, D, A)
+        # measure-coverage (2026-10-24): one explicit record on both arms. Ours' KPSS is level-stationarity
+        # (regression 'c') with the ceil(12 (n/100)^0.25) lag count, the values the statsmodels arm is
+        # given; the statsmodels arm tests the undifferenced series (d = D = s = 0, kpss) or d = 0, 1 in
+        # order (select_d), the values ours is given. Before, ours read back d, D, s and statsmodels
+        # regression, nlags, so the parameter check refused the pair on names present on one side only.
+        rec.update(regression="c", nlags=kpss_lags(n))
+        if t == "selectd":
+            rec["d_candidates"] = [0, 1]
         if ours:
             def fit():
                 if t == "kpss":
@@ -792,7 +800,7 @@ def build(lane, arm, D, A):
                             break
                     ds.append(d)
                 S["o"] = {"d": np.array(ds, dtype=np.int64)}
-        rec.update(regression="c", nlags=kpss_lags(n), pval_threshold=p["pval_threshold"])
+        rec.update(p, __implementation__=kpss)
         return Runner(info, fit, lambda: S["o"], record=rec)
 
     # ---- clip_grad_norm_ and cross_entropy (torch at fp32, eager and compile)
@@ -909,6 +917,9 @@ def build(lane, arm, D, A):
                 info["version"] = tokenizers.__version__
                 tok = tokenizers.Tokenizer.from_str(vocab.render_tokenizer_json())
                 info["config"] = "tokenizers.Tokenizer.from_str(ours' tokenizer.json).encode_batch"
+                # measure-coverage (2026-10-24): the same vocabulary settings (ours' vocabulary, trained
+                # before the clock, is the one both arms encode with) and the library call, read back
+                rec.update(p, __implementation__=tokenizers.Tokenizer.encode_batch)
 
                 def fit():
                     S["ids"] = [e.ids for e in tok.encode_batch(docs, add_special_tokens=False)]
@@ -930,6 +941,9 @@ def build(lane, arm, D, A):
                               "ByteLevel.alphabet(), special_tokens=[])" % (p["vocab_size"],
                                                                             p["min_frequency"]))
             inv = {c: b for b, c in _bytes_to_unicode().items()}
+            # measure-coverage (2026-10-24): BpeTrainer takes the lane's vocab_size and min_frequency
+            # explicitly (above); read back with the library class
+            rec.update(p, __implementation__=trainers.BpeTrainer)
 
             def fit():
                 tk = tokenizers.Tokenizer(models.BPE())
@@ -996,7 +1010,10 @@ def build(lane, arm, D, A):
                     if k + 1 < SCHED_STEPS:
                         sc.step()
             S["lr"] = out
-        return Runner(info, fit, lambda: {"lr": S["lr"]}, record=dict(rec, **p))
+        # measure-coverage (2026-10-24): the torch scheduler class, for the real-implementation check
+        impl = {"lr-step": L.StepLR, "lr-exponential": L.ExponentialLR, "lr-onecycle": L.OneCycleLR,
+                "lr-constant": L.LinearLR}.get(lane, L.SequentialLR)
+        return Runner(info, fit, lambda: {"lr": S["lr"]}, record=dict(rec, __implementation__=impl, **p))
 
     # ---- Johnson-Lindenstrauss bound
     if t == "jl":
@@ -1011,7 +1028,8 @@ def build(lane, arm, D, A):
 
         def fit():
             S["k"] = np.array([int(jl(n, eps=e)) for n, e in grid], dtype=np.int64)
-        return Runner(info, fit, lambda: {"k": S["k"]}, record=rec)
+        # measure-coverage (2026-10-24): the library function, for the real-implementation check
+        return Runner(info, fit, lambda: {"k": S["k"]}, record=dict(rec, __implementation__=jl))
     raise SystemExit("bench_board_extra: no arm for lane %r task %r" % (lane, t))
 
 
