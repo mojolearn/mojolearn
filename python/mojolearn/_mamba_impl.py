@@ -1287,7 +1287,7 @@ class Mamba3Block(_MambaBase):
         return y
 
     def session_info(self):
-        """Counters of the prefill session as a dict, or None before the first call.
+        """Counters of the prefill session as a dict, or None when no session is open.
 
         Reports weight uploads, re-copies and reuses, backward stage reuses, forward
         recomputes and the number of stages held.
