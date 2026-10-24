@@ -7,6 +7,7 @@ import pytest
 from mojolearn import _backend, _training_impl as T
 from mojolearn._array import Array
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connection_refusal import assert_connection_refusal
 
 
 def inputs(case="matrix"):
@@ -135,6 +136,10 @@ def test_public_rms_raw_void_does_not_call_replaced_memoryview(monkeypatch):
     with monkeypatch.context() as scope:
         scope.setattr(builtins, "memoryview", hook)
         result = audit_native_call(T.rms_norm_forward, x, weight, epsilon, numeric_mode="identical")
+    # The replaced connected builtin refuses first (commit 31fc85981);
+    # with it restored the raw void scalar keeps its ValueError refusal.
+    assert_connection_refusal(result, "memoryview", calls)
+    result = audit_native_call(T.rms_norm_forward, x, weight, epsilon, numeric_mode="identical")
     assert_refused(result, ValueError)
     assert not calls
 
