@@ -98,3 +98,4 @@ coverage-training-samba_accumulate_out	build_training rc 0, 112s	CAUGHT	grad-acc
 coverage-training-chunked_lm_head_v2_logit	build_training rc 0, 122s	CAUGHT	training-chunked-lm-head (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	135
 coverage-training-mlp_ops_rng	build_training rc 0, 102s	MISSED	par-mlp (Metal unmoved) samba-untied-dropout-accum (Metal MOVED)	1 DIVERGENT, 1 IDENTICAL	STABLE, exact clean source/bindings/results restored	129
 coverage-training-mlp_ops	build_training rc 0, 118s	CAUGHT	neural-trainer-unfused (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	136
+coverage-training-neural_rng	build_training rc 0, 100s	CAUGHT	samba-untied-dropout-accum (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	123
