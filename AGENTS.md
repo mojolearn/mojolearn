@@ -264,6 +264,11 @@ same bits is the double work the release cost rules forbid. Treat them different
   the kernels do not provide, add it to the Mojo kernel, where the existing lanes cover it.
 - Adapter bugs are glue bugs (loading, dispatch registration, dtype and layout at the boundary); fix
   them in the adapter, never by changing kernel bits for one front-end.
+- Whole-model only: the per-operation surfaces (`torch.ops.mojolearn.operation`, the MAX `mojolearn_matmul`,
+  `mojolearn_relu` and `mojolearn_operation0..3` ops, the native `mojolearn_adapter_operation*` entries) were removed on
+  2026-10-24 (docs/TOMBSTONES.md) and must not come back; the public adapter surface is
+  `torch.compile(model, backend="mojolearn")`, `mojolearn.import_model`, `torch.ops.mojolearn.train` and the MAX
+  `mojolearn_train` / `mojolearn_train_resume` ops.
 
 ## No Python in the runtime
 

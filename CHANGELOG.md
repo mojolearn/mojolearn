@@ -8,6 +8,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   takes a `torch.nn.Module`, exports it to ONNX in this process and imports it; `shapes=` alone also works for
   float32 inputs. An export failure raises `UnsupportedModel` with PyTorch's message. `import_model` also takes an
   in-memory `onnx.ModelProto`. ONNX files import as before.
+- **PyTorch and MAX run whole models only.** The adapters are `torch.compile(model, backend="mojolearn")`,
+  `mojolearn.import_model`, `torch.ops.mojolearn.train` and the MAX `mojolearn_train` and `mojolearn_train_resume`
+  operations. The undocumented one-operation-per-call entry points are removed, so no framework arithmetic runs
+  between mojolearn operations.
 
 ## 0.8.56 (published 2026-10-24)
 
