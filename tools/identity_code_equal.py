@@ -25,7 +25,10 @@ INERT = ("bench/results/", "docs/", "docs-site/", "release/", "tools/", "experim
          # PDF): they pick which files go into a wheel, never compile or run a kernel. packaging/portable_math
          # and the build scripts stay code.
          "packaging/alpha_overlay.py", "packaging/linux/pack_wheel.py", "packaging/verify_alpha_artifacts.py",
-         "python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf")
+         "python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf",
+         # The Torch/MAX adapters (2026-10-24): front-ends over the same kernels, built beside the bindings but
+         # never part of an identity record; their packaging (pins, fetch, manifest) picks files, not bits.
+         "adapters/", "packaging/adapters/")
 
 
 def _strip_docstrings(src):
@@ -50,7 +53,9 @@ def differing_files(a, b):
     names = subprocess.check_output(["git", "diff", "--name-only", a, b, "--"]).decode().split("\n")
     out = []
     for path in names:
-        if not path or path.startswith(INERT) or path.endswith(".md"):
+        # A test program never runs in a record (2026-10-24: packaging/linux/test_split_wheels.py differed
+        # between the par-kernel-ridge re-records and main).
+        if not path or path.startswith(INERT) or path.endswith(".md") or path.rsplit("/", 1)[-1].startswith("test_"):
             continue
         if path.endswith(".py"):
             sa, sb = _show(a, path), _show(b, path)
