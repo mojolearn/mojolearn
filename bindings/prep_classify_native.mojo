@@ -1390,6 +1390,10 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         for k in range(K):  # driver-loop: over the class counts (class count)
             if Int(totals[k]) < 2:
                 raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
+        # Keep the program (the owner of `cp.base`) alive through the reads
+        # above: Mojo releases it at its last named use, which was the
+        # `cp.base` read, so the counts were read from freed words.
+        _ = cp.base
     var pr = ClsProg()
     var xo = pr.put(arr.value)
     var yo = pr.put_codes(codes)
