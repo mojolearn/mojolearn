@@ -85,3 +85,4 @@ coverage-preprocessing-estimator	build_preprocessing rc 1, 1s	BUILD-FAIL	not run
 coverage-resample-gather	build_resample rc 0, 36s	MISSED	resample-utils (Metal unmoved) resample-perm-samples (Metal unmoved)	2 IDENTICAL	STABLE, exact clean source/bindings/results restored	58
 coverage-gbdt-binary_prediction	build_gbdt rc 0, 191s	CAUGHT	gbdt-adapter-clf (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	207
 coverage-metrics-estimator	build_metrics rc 0, 141s	CAUGHT	metrics (Metal MOVED) metrics-classification (Metal MOVED) metrics-homogeneity-completeness (Metal MOVED) metrics-fowlkes-mallows (Metal MOVED)	4 DIVERGENT	STABLE, exact clean source/bindings/results restored	162
+coverage-gemm-lowbit	build_linalg rc 0, 44s	CAUGHT	lowbit-conversions (Metal MOVED) gemm-int8 (Metal MOVED) gemm-bf16 (Metal MOVED)	3 DIVERGENT	STABLE, exact clean source/bindings/results restored	58
