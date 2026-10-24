@@ -344,8 +344,19 @@ def cmd_changed_lanes(args):
     stale = set(vref().stale_reference_lanes(table, h))
     sources, _ = lane_select.lane_sources()
     picked_by = {}                       # commit -> set of lanes its diff reaches
-    out, why = [], {}
+    # The lanes whose answer each commit's diff decides: once its selection
+    # holds all of them (or a path is unattributed, which re-records all of
+    # them), the remaining paths cannot change this command's answer.
+    resting = {}
     for lane in lanes:
+        ref = args.since or (since.get(lane) or (None,))[0]
+        if ref is not None and lane not in stale:
+            resting.setdefault(ref, set()).add(lane)
+    out, why = [], {}
+    for n, lane in enumerate(lanes):
+        if n and n % 50 == 0:
+            print(f"# changed-lanes: {n} of {len(lanes)} lanes read, {len(out)} re-record so far",
+                  file=sys.stderr, flush=True)
         ref = args.since or (since.get(lane) or (None,))[0]
         if lane in stale:
             why[lane] = "fixture revision moved"
@@ -355,7 +366,13 @@ def cmd_changed_lanes(args):
             if ref not in picked_by:
                 try:
                     paths = lane_select.changed_paths(ref)
-                    sel = lane_select.select(paths, ref=ref, sources=sources, backend=args.backend or None)
+                    print(f"# diffing {len(paths)} path(s) since {ref[:12]} for {len(resting[ref])} lane(s)",
+                          file=sys.stderr, flush=True)
+                    sel = lane_select.select(paths, ref=ref, sources=sources, backend=args.backend or None,
+                                             stop_when=resting[ref])
+                    if sel.get("stopped_early") and not sel.get("unattributed"):
+                        print(f"# every lane resting on {ref[:12]} has a changed closure; "
+                              "the remaining paths were not read", file=sys.stderr)
                     if sel.get("unattributed"):
                         # the selector never widens or guesses: an unplaced
                         # path re-records every lane resting on this commit
