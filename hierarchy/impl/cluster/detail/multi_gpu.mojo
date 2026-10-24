@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pinned pairwise rows; root diagonal policy and Boruvka order stay intact."""
+from core.device_plan import device_plan_device, device_plan_setting
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -9,7 +10,7 @@ from neighbors.checks.pinned_distance_tile import pinned_distance_tile_kernel, p
 
 
 def hierarchy_device_count(rows: Int, sabotage: Int32) raises -> Int:
-    var count = Int(getenv("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1"))
+    var count = Int(device_plan_setting("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1"))
     if count < 1 or count > 64:
         raise Error("hierarchy device count must be in 1..64")
     if count > 1:
@@ -34,7 +35,7 @@ def pairwise_rows(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
     for rank in range(count):
         var first = m * rank // count
         var rows = m * (rank + 1) // count - first
-        devices.append(DeviceContext(device_id=rank))
+        devices.append(DeviceContext(device_id=device_plan_device(rank)))
         var source = first
         comptime if is_defined["MOJOLEARN_HIERARCHY_PARALLEL_SABOTAGE"]():
             # Check-only reach witness: later owners read their query rows one row early.

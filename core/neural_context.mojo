@@ -48,23 +48,50 @@ tools/devctx_lifetime_proof.sh). Rules for a caller:
   * Every entry still synchronizes before it returns. The context is no
     longer destroyed at the end of the call, so nothing may lean on that.
   * Multi-GPU drivers (`DeviceContext(device_id=rank)`) are not on this slot.
+
+THE DEVICE PLAN'S ROOT (lane/native-parallel-driver-20261024,
+docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md). A native multi-GPU driver
+binds the selected devices to the calling thread (core/device_plan.mojo);
+its first device is the root, which the old cooperative worker reached as
+its device 0 through the visibility mask. While a plan whose root is not
+device 0 is bound, `process_ctx` returns the binding's process-lifetime
+context on that device instead (kept in the same slot, one per device,
+created on first use), so the root follows the selection and no context is
+created and destroyed per call. Without a plan nothing changes. The root
+device enters no value: the same kernels run in the same order on it.
 """
 from std.ffi import _Global
 from max.gpu.host import DeviceContext
 
+from core.device_plan import device_plan_root
+
 
 struct _NeuralContext(Defaultable, Movable):
     var ctx: Optional[DeviceContext]
+    var device_ids: List[Int]
+    var device_contexts: List[DeviceContext]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.device_ids = List[Int]()
+        self.device_contexts = List[DeviceContext]()
 
 
 def process_ctx[name: StaticString]() raises -> DeviceContext:
     """The binding's shared context (slot `name`), created on first use and
-    kept for the process."""
+    kept for the process; on the calling thread's device-plan root when a
+    plan whose root is not device 0 is bound."""
     comptime SLOT = _Global[StorageType=_NeuralContext, name=name, init_fn=_NeuralContext.__init__]
     var slot = SLOT.get_or_create_ptr()
+    var root = device_plan_root()
+    if root > 0:
+        for i in range(len(slot[].device_ids)):  # driver-loop: over the devices this binding has opened
+            if slot[].device_ids[i] == root:
+                return slot[].device_contexts[i].copy()
+        var ctx = DeviceContext(device_id=root)
+        slot[].device_contexts.append(ctx.copy())
+        slot[].device_ids.append(root)
+        return ctx^
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()

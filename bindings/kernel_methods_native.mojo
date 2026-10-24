@@ -21,6 +21,7 @@
 from std.python import Python, PythonObject
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster import mcls_cluster_operation
+from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_attr, plan_require_identical
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -636,66 +637,25 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
 def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
     """`parallel_classical._admit_kernel_method`, in its order and wording;
     True for a KernelRidge, False for a Nystroem."""
-    var b = Python.import_module("builtins")
     var classes = context["family_km_par_classes"]
     var cls = py_type(model)
     var ridge = cls is classes[0]
     if not ridge and cls is not classes[1]:
         raise Error("TypeError: requires mojolearn.KernelRidge or Nystroem")
-    var mode = py_call(b.getattr, model, PythonObject("numeric_mode"), PythonObject(None))
-    if mode is not None and (not family_is_str(mode) or String(mode) != "identical"):
-        raise Error("ValueError: parallel kernel methods require IDENTICAL numeric mode")
-    var kernel = py_call(b.getattr, model, PythonObject("kernel"))
+    plan_require_identical(model, "parallel kernel methods require IDENTICAL numeric mode")
+    var kernel = plan_attr(model, "kernel")
     if family_is_str(kernel) and String(kernel) == "laplacian":
         raise Error("ValueError: parallel kernel methods refuse kernel='laplacian' by name: its L1 "
                     + "distance matrix has no distributed row seam in this lane")
     return ridge
 
 
-def _km_par_devices(value: PythonObject, binding: PythonObject, operation: String,
-                    context: PythonObject) raises -> PythonObject:
-    """The selected devices as an exact tuple of distinct nonnegative ints,
-    admitted for the installed route (the old pool's refusals)."""
-    var b = Python.import_module("builtins")
-    var devices = py_call(b.tuple, value)
-    if len(devices) == 0:
-        raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    for i in range(len(devices)):  # driver-loop: over the selected device indices
-        if py_type(devices[i]) is not b.int or Int(py=devices[i]) < 0:
-            raise Error("ValueError: devices must be distinct nonnegative integer indices")
-        for j in range(i):  # driver-loop: over the earlier selected device indices
-            if Int(py=devices[j]) == Int(py=devices[i]):
-                raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    var getter = py_call(b.getattr, binding, PythonObject("kernel_methods_vendor"), PythonObject(None))
-    var vendor = String("cpu")
-    if getter is not None:
-        vendor = String(family_call(getter))
-    if vendor == "cpu" or vendor == "none":
-        raise Error("NotImplementedError: no CPU implementation of the cooperative multi-GPU driver " + operation
-                    + " yet: its shards are device row tiles, chunks or ranges inside the GPU binding, "
-                    + "which no host binding restates")
-    if vendor == "metal" and (len(devices) != 1 or Int(py=devices[0]) != 0):
-        raise Error("ValueError: device selection is unavailable for this vendor/device group")
-    if vendor != "cuda" and vendor != "hip" and vendor != "metal":
-        raise Error("ValueError: device selection is unavailable for this vendor/device group")
-    return devices
-
-
-def _km_par_scope(binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The binding's (enter, exit) device-plan entries; a binding built
-    before them is refused by name, as the old worker refused one without
-    `kernel_methods_rows_parallel_available`."""
-    var enter = _km_door(binding, "kernel_methods_device_plan_enter", context)
-    var leave = _km_door(binding, "kernel_methods_device_plan_exit", context)
-    if enter is None or leave is None:
-        raise Error("ImportError: rebuild kernel methods binding for distributed kernel rows")
-    return Python.tuple(enter, leave)
+comptime _KM_REBUILD = "rebuild kernel methods binding for distributed kernel rows"
 
 
 def _km_par_binding(model: PythonObject) raises -> PythonObject:
     """The binding the plain methods use (`_KernelMethodBase._bind`)."""
-    var b = Python.import_module("builtins")
-    return family_call(py_call(b.getattr, model, PythonObject("_bind")))
+    return family_call(plan_attr(model, "_bind"))
 
 
 def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -703,17 +663,16 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var ridge = _km_par_admit(model, context)
     if ridge and args[1] is None:
         raise Error("ValueError: KernelRidge fit requires y")
+    var devices = plan_devices(args[2], "km_fit", True, context)
     var binding = _km_par_binding(model)
-    var devices = _km_par_devices(args[2], binding, "km_fit", context)
-    var scope = _km_par_scope(binding, context)
-    _ = family_call(scope[0], devices)
+    plan_enter(binding, devices, _KM_REBUILD)
     try:
         if ridge:
             _krr_fit(model, Python.tuple(binding, args[0], args[1], PythonObject(None)), context)
         else:
             _ = _nys_fit(model, Python.tuple(binding, args[0]), context)
     finally:
-        _ = family_call(scope[1])
+        plan_exit(binding)
     return model
 
 
@@ -722,20 +681,18 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     The native result (float32 for KernelRidge.predict); the driver applies
     the plain method's public conversion for its own caller."""
     var ridge = _km_par_admit(model, context)
+    var devices = plan_devices(args[1], "km_apply", True, context)
     var binding = _km_par_binding(model)
-    var devices = _km_par_devices(args[1], binding, "km_apply", context)
-    var scope = _km_par_scope(binding, context)
     var out = PythonObject(None)
-    _ = family_call(scope[0], devices)
+    plan_enter(binding, devices, _KM_REBUILD)
     try:
         if ridge:
             out = _krr_predict(model, Python.tuple(binding, args[0]), context, False)
         else:
             out = _nys_transform(model, Python.tuple(binding, args[0]), context)
     finally:
-        _ = family_call(scope[1])
+        plan_exit(binding)
     return out
-
 
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:

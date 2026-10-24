@@ -6,6 +6,7 @@ store complete groves. Only their unaveraged totals travel to the root, whose
 16,8,4,2,1 fold and single global-tree division are the original GPU contract.
 This is model capacity pooling, not equivalence to legacy host prediction.
 """
+from core.device_plan import device_plan_device, device_plan_setting
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.memory import bitcast, stack_allocation
@@ -25,7 +26,7 @@ from core.forest_inference import (
 
 
 def forest_device_count() raises -> Int:
-    var count = Int(getenv("MOJOLEARN_FOREST_DEVICE_COUNT", "1"))
+    var count = Int(device_plan_setting("MOJOLEARN_FOREST_DEVICE_COUNT", "1"))
     if count < 1 or count > 64:
         raise Error("forest pool requires 1..64 devices")
     if count > 1 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -262,7 +263,7 @@ struct ForestGroveOwner(Movable):
         self.mask = UInt32(0)
         self.trees = 0
         self.nodes = 0
-        self.ctx = DeviceContext(device_id=rank)
+        self.ctx = DeviceContext(device_id=device_plan_device(rank))
 
     def load_groves(mut self, mut flat: _ForestFlat, plan: _GrovePlan, rank: Int,
         outputs: Int, features: Int) raises:

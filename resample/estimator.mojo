@@ -33,6 +33,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from core.device_plan import device_plan_device, device_plan_setting
 from core.hostptr import copy_f32, f32_ptr, i32_ptr
 from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHER
 from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
@@ -1027,7 +1028,7 @@ def _sort_segments(
 
 def resample_device_count() raises -> Int:
     """MOJOLEARN_RESAMPLE_DEVICE_COUNT: replicate or sample ranges on owners."""
-    var value = String(getenv("MOJOLEARN_RESAMPLE_DEVICE_COUNT"))
+    var value = device_plan_setting("MOJOLEARN_RESAMPLE_DEVICE_COUNT")
     if value == "":
         return 1
     var count = Int(value)
@@ -1198,7 +1199,7 @@ def _bootstrap_theta_owners(
     for rank in range(active):
         var begin = n_resamples * rank // active
         var rows = n_resamples * (rank + 1) // active - begin
-        var owner = DeviceContext(device_id=rank)
+        var owner = DeviceContext(device_id=device_plan_device(rank))
         var ox = _upload(owner, x)
         var ot = owner.enqueue_create_buffer[DType.float32](rows)
         owner.synchronize()
@@ -1237,7 +1238,7 @@ def _perm_null_owners(
     for rank in range(active):
         var begin = n_resamples * rank // active
         var rows = n_resamples * (rank + 1) // active - begin
-        var owner = DeviceContext(device_id=rank)
+        var owner = DeviceContext(device_id=device_plan_device(rank))
         var op = _upload(owner, pooled)
         var on = owner.enqueue_create_buffer[DType.float32](rows)
         owner.synchronize()
@@ -1317,7 +1318,7 @@ def _mc_partials_owners[
         if last_sample > n_samples:
             last_sample = n_samples
         var chunks = c1 - c0
-        var owner = DeviceContext(device_id=rank)
+        var owner = DeviceContext(device_id=device_plan_device(rank))
         var ol = _upload(owner, lower)
         var ospan = _upload(owner, span)
         var opart = owner.enqueue_create_buffer[DType.float32](chunks)

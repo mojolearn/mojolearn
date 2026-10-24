@@ -35,6 +35,7 @@ without. Tiles of TNC_BM x TNC_BM cells, 4 x 4 per thread, KS-row windows
 in shared memory (2 x TNC_KS x TNC_BM floats, 16 KB), a block per (tile,
 leaf) as the split plans launch.
 """
+from core.device_plan import device_plan_setting
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.os import getenv
@@ -78,7 +79,7 @@ def tn_centered_applies(m: Int, k: Int) raises -> Bool:
     MOJOLEARN_GRAM_DEVICE_COUNT is not 1)."""
     if m <= 0 or k <= 0:
         return False
-    if Int(getenv("MOJOLEARN_GRAM_DEVICE_COUNT", "1")) != 1:
+    if Int(device_plan_setting("MOJOLEARN_GRAM_DEVICE_COUNT", "1")) != 1:
         return False
     comptime if GEMM_ARM_TRIAL:
         return False

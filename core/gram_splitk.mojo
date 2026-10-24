@@ -145,6 +145,7 @@ multiply the same two tile loads in commuted order. OPT-IN ONLY:
 the one caller, so OLS and tSVD are bit-for-bit untouched. DEVIATION 42.
 """
 
+from core.device_plan import device_plan_device, device_plan_setting
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -1204,7 +1205,7 @@ def _gram_parallel[centered: Bool](
     address and output slot origin change. The caller still folds all 128
     partials, including the original zero tail, in its original order.
     """
-    var requested = String(getenv("MOJOLEARN_GRAM_DEVICE_COUNT"))
+    var requested = device_plan_setting("MOJOLEARN_GRAM_DEVICE_COUNT")
     if requested == "" or requested == "1":
         return False
     var count = Int(requested)
@@ -1223,7 +1224,7 @@ def _gram_parallel[centered: Bool](
         var end = live_chunks * (rank + 1) // active
         var begin_row = first * kc
         var rows = min(k, end * kc) - begin_row
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var source_row = begin_row
         comptime if is_defined["MOJOLEARN_GRAM_PARALLEL_SABOTAGE"]():
             # Check-only arm: later owners read their rows one row early. The

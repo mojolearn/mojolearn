@@ -13,6 +13,7 @@ production bit can move, and it is INERT AT ONE DEVICE: the shift is guarded by
 the define rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
+from core.device_plan import device_plan_device, device_plan_setting
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 from core.host_parallel import host_parallelize
@@ -30,7 +31,7 @@ from neighbors.impl.ball_cover.common import RBC_METRIC_DEFAULT
 
 
 def _devices(rows: Int) raises -> Int:
-    var count = Int(getenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1"))
+    var count = Int(device_plan_setting("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1"))
     if count < 1 or count > 64:
         raise Error("DBSCAN device count must be in 1..64")
     if count > 1 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -139,7 +140,7 @@ def _rbc_rows(
             # Check-only arm: later owners read their query rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var qv = q.create_sub_buffer[DType.float32](source * features, nr * features)
         var local_x = peer_clone(ctx, device, x)
         var local_q = peer_clone(ctx, device, qv)
@@ -350,7 +351,7 @@ def vertex_deg_dispatch(
             # Check-only arm: later owners read their query rows one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var data = peer_clone(ctx, device, x)
         var local_adj = device.enqueue_create_buffer[DType.uint8](nr * references)
         var local_vd = device.enqueue_create_buffer[DType.int32](nr + 1)

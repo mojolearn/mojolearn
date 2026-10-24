@@ -14,6 +14,7 @@ rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no CPU route restates this driver, so no Mac and
 no CPU-only box can watch it fire.
 """
+from core.device_plan import device_plan_device, device_plan_setting
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -49,7 +50,7 @@ struct AssignmentShard(Movable):
 
 
 def assignment_device_count() raises -> Int:
-    var value = String(getenv("MOJOLEARN_KMEANS_DEVICE_COUNT"))
+    var value = device_plan_setting("MOJOLEARN_KMEANS_DEVICE_COUNT")
     if value == "":
         return 1
     var count = Int(value)
@@ -90,7 +91,7 @@ def assignment_parallel[veclen: Int, kblk: Int, tr: Int, tc: Int](
             # the assignment kernel reads do.
             if rank > 0:
                 source = begin - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var sx = device.enqueue_create_buffer[DType.float32](rows * n_features)
         var sxn = device.enqueue_create_buffer[DType.float32](rows)
         var sc = device.enqueue_create_buffer[DType.float32](n_clusters * n_features)

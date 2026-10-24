@@ -20,6 +20,7 @@ another shard. Traced stages are recorded on the root after the gather, in the
 original stage order, so a traced multi-device fit writes the same card.
 Sabotage probes are refused by the distributed path.
 """
+from core.device_plan import device_plan_device, device_plan_setting
 from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -40,7 +41,7 @@ from mixture.checks.gmm_sabotage import GMM_SAB_NONE
 
 
 def gmm_device_count() raises -> Int:
-    var value = String(getenv("MOJOLEARN_GMM_DEVICE_COUNT"))
+    var value = device_plan_setting("MOJOLEARN_GMM_DEVICE_COUNT")
     if value == "":
         return 1
     var count = Int(value)
@@ -75,7 +76,7 @@ struct GmmEStepShard(Movable):
     var rows: Int
 
     def __init__(out self, rank: Int, begin: Int, rows: Int, d: Int, ncomp: Int) raises:
-        self.ctx = DeviceContext(device_id=rank)
+        self.ctx = DeviceContext(device_id=device_plan_device(rank))
         self.begin = begin
         self.rows = rows
         self.x = self.ctx.enqueue_create_buffer[DType.float32](rows * d)

@@ -67,10 +67,10 @@ def test_door_dispatches_and_scopes_the_device_plan():
         body = door[door.index("def " + name + "("):]
         body = body[:body.index("\n\ndef ")] if "\n\ndef " in body else body
         # enter before the owners, exit in a finally that always runs
-        enter = body.index("family_call(scope[0], devices)")
+        enter = body.index("plan_enter(binding, devices, _KM_REBUILD)")
         guarded = body.index("try:")
         final = body.index("finally:")
-        leave = body.index("family_call(scope[1])")
+        leave = body.index("plan_exit(binding)")
         assert enter < guarded < final < leave, name
     # the parallel predict bypasses the resident device copy
     assert "_krr_predict(model, Python.tuple(binding, args[0]), context, False)" in door
@@ -81,7 +81,7 @@ def test_door_dispatches_and_scopes_the_device_plan():
 def test_gpu_binding_registers_the_plan_entries_and_the_host_binding_does_not():
     gpu = _read("bindings/_mojolearn_kernel_methods.mojo")
     host = _read("bindings/_mojolearn_kernel_methods_host.mojo")
-    for entry in ("kernel_methods_device_plan_enter", "kernel_methods_device_plan_exit"):
+    for entry in ("device_plan_enter", "device_plan_exit"):
         assert '("' + entry + '")' in gpu, entry
         assert entry not in host, entry
 
@@ -101,7 +101,7 @@ def test_owner_loops_take_devices_and_counts_from_the_plan():
 def test_device_plan_falls_back_to_the_environment_and_the_rank():
     plan = _read("core/device_plan.mojo")
     setting = plan[plan.index("def device_plan_setting("):]
-    assert "return String(getenv(name))" in setting
+    assert "return String(getenv(name, default))" in setting
     device = plan[plan.index("def device_plan_device("):plan.index("def device_plan_root(")]
     assert re.search(r"if slot < 0:\n\s+return rank", device)
     # the plan is keyed by the calling thread, never process-wide
@@ -109,8 +109,9 @@ def test_device_plan_falls_back_to_the_environment_and_the_rank():
 
 
 def test_root_context_follows_the_plan():
-    estimator = _read("kernel_methods/estimator.mojo")
-    body = estimator[estimator.index("def _family_ctx()"):]
-    body = body[:body.index("\n\nfrom ")]
-    assert "device_plan_root()" in body
-    assert "process_ctx_on[_FAMILY_CTX, _FAMILY_DEVICES_CTX](root)" in body
+    # every binding's process-lifetime context (core/neural_context.mojo)
+    # opens on the plan's root while a plan whose root is not device 0 is bound
+    context = _read("core/neural_context.mojo")
+    body = context[context.index("def process_ctx["):]
+    assert "var root = device_plan_root()" in body
+    assert "DeviceContext(device_id=root)" in body

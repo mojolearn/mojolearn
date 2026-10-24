@@ -50,8 +50,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
-from core.device_plan_context import process_ctx_on
-from core.device_plan import device_plan_root
 from std.time import perf_counter_ns
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -63,25 +61,13 @@ from std.memory import bitcast
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
 comptime _FAMILY_CTX = "MojoKernelMethodsContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoKernelMethodsContextOther"
-comptime _FAMILY_DEVICES_CTX = "MojoKernelMethodsDevicesIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoKernelMethodsDevicesOther"
 
 
 def _family_ctx() raises -> DeviceContext:
     """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
-    restores a new context per entry (the A/B arm).
-
-    Under a native multi-GPU driver (`parallel_classical.fit_kernel_method` /
-    `apply_kernel_method`, core/device_plan.mojo) the root is the plan's first
-    device, as it was inside the old cooperative worker, whose visibility mask
-    made the first selected device its device 0. The root device enters no
-    value: the same kernels run in the same order on it."""
-    var root = device_plan_root()
+    restores a new context per entry (the A/B arm)."""
     comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
-        if root > 0:
-            return DeviceContext(device_id=root)
         return DeviceContext()
-    if root > 0:
-        return process_ctx_on[_FAMILY_CTX, _FAMILY_DEVICES_CTX](root)
     return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.checks.potrf import (

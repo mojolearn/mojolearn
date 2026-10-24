@@ -15,6 +15,7 @@ shards (`gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo`), which
 is the partition the other `gbdt_fit` lanes take. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
+from core.device_plan import device_plan_setting
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.host_parallel import host_parallelize
 from std.os import getenv
@@ -60,7 +61,7 @@ struct PointwiseShard(Movable):
 
 
 def pointwise_device_count() raises -> Int:
-    var count = Int(getenv("MOJOLEARN_GBDT_DEVICE_COUNT", "1"))
+    var count = Int(device_plan_setting("MOJOLEARN_GBDT_DEVICE_COUNT", "1"))
     if count < 1 or count > 64:
         raise Error("pointwise device count must be in 1..64")
     if count > 1:

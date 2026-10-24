@@ -50,10 +50,10 @@ for the length of that call:
   variable path (the check tools and the remaining Python pools) reads exactly as before.
 - `device_plan_device(rank)`: `ids[rank]` while a plan is bound, else `rank`. It replaces
   `DeviceContext(device_id=rank)` in the owner loops.
-- `device_plan_root()`: `ids[0]` or -1. A binding's root context (`_family_ctx()` and its peers)
-  follows it: device 0 keeps the binding's process slot, any other root device gets a process-lifetime
-  context of its own (`core/device_plan_context.mojo::process_ctx_on`), so no context is created and
-  destroyed per call on the root.
+- `device_plan_root()`: `ids[0]` or -1. Every binding's root context (`core/neural_context.mojo::process_ctx`, which `neural_ctx` and the
+  family contexts call) follows it: device 0 keeps the binding's process slot, any other root device gets
+  a process-lifetime context of its own in the same slot, so no context is created and destroyed per
+  call on the root.
 
 A kind A driver's door: validate, `device_plan_enter(devices)`, run the plain estimator owner (the
 same `family_*` code the plain method runs), `device_plan_exit()` in a `finally`, return. A kind B
@@ -129,11 +129,10 @@ binding that imports them, with no change in behavior while no plan is bound.
 ## 5. Pilot record
 
 - `core/device_plan.mojo`: the thread-scoped plan.
-- `core/device_plan_context.mojo::process_ctx_on`: one process-lifetime context per root device.
+- `core/neural_context.mojo::process_ctx`: one process-lifetime context per root device.
 - `svm/impl/distance/kernel_matrices.mojo`, `cholesky/multi_gpu.mojo`, `cholesky/checks/trsm.mojo`,
   `kernel_methods/checks/kernel_matrix.mojo`: counts from `device_plan_setting`, device ids from
   `device_plan_device`.
-- `kernel_methods/estimator.mojo::_family_ctx`: the root follows `device_plan_root`.
 - `bindings/_mojolearn_kernel_methods.mojo`: `kernel_methods_device_plan_enter` / `_exit` entries.
 - `bindings/kernel_methods_native.mojo`: `family_km_par_fit` / `family_km_par_apply` doors (admission,
   device validation, plan scope, the plain owners with the resident predict bypassed).

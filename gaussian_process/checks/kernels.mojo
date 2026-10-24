@@ -94,6 +94,7 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 `Product` are the same two lines and the same non-rewriting.
 """
 
+from core.device_plan import device_plan_device, device_plan_setting
 from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
@@ -1311,7 +1312,7 @@ def gp_kernel_matrix(
         )
 
     if distribute:
-        var setting = String(getenv("MOJOLEARN_GP_DEVICE_COUNT"))
+        var setting = device_plan_setting("MOJOLEARN_GP_DEVICE_COUNT")
         if setting != "" and setting != "1":
             var count = Int(setting)
             if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -1657,7 +1658,7 @@ def _gp_rows(ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
             # so no length and no validation moves.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var xv = x.create_sub_buffer[DType.float32](source * d, rows * d)
         var yv = y.create_sub_buffer[DType.float32](0, n * d)
         var local_x = peer_clone(ctx, device, xv)

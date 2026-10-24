@@ -65,6 +65,7 @@ float `diff`: `diff > diff_prev * 1.5` and `abs(diff - diff_prev) < 0.001
 NaN throw is the same sentence.
 """
 
+from core.device_plan import device_plan_setting
 from std.builtin.sort import sort
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isnan
@@ -844,7 +845,7 @@ struct SmoSolver(Movable):
             )
         # SVM_IDN_FUSED_UPDATE_F serves one device; the multi-device kernel
         # rows (`kernel_op`, MOJOLEARN_SVM_DEVICE_COUNT) keep the tile path.
-        var device_setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        var device_setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
         var one_device = device_setting == "" or device_setting == "1"
         while keep_going:
             var t0 = st.start()

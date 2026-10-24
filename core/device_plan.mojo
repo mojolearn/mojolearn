@@ -173,10 +173,10 @@ def device_plan_root() -> Int:
     return Int(_words(table[].ids)[slot * DEVICE_PLAN_MAX_DEVICES])
 
 
-def device_plan_setting(name: String) -> String:
+def device_plan_setting(name: String, default: String = "") -> String:
     """What an owner loop parses as its device count: the plan's size as text
-    while a plan is bound to the calling thread, else `getenv(name)`."""
+    while a plan is bound to the calling thread, else `getenv(name, default)`."""
     var count = device_plan_size()
     if count > 0:
         return String(count)
-    return String(getenv(name))
+    return String(getenv(name, default))
