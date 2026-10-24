@@ -7,7 +7,9 @@
     "series": "2.13",
     "build": {
       "cuda": {"version": "2.13.0", "index_url": "https://pypi.org/simple", "backend": "cuda", "wheel_sha256": null},
-      "hip": {"version": "2.13.0+rocm7.2", "index_url": "https://download.pytorch.org/whl/rocm7.2", "backend": "rocm", "wheel_sha256": null},
+      "hip": {"version": "2.13.0+rocm7.2", "index_url": "https://download.pytorch.org/whl/rocm7.2", "backend": "rocm",
+              "wheel_sha256": "826de8444f4c7b9eac0bfde865c4cd7b852ba217b35fb71a766b85ac1e3310e2",
+              "wheel_sha256_of": "torch-2.13.0+rocm7.2-cp314-cp314-manylinux_2_28_x86_64.whl (the ROCm index serves no digest; measured 2026-10-24 on the build box, 6227854542 bytes)"},
       "metal": {"version": "2.13.0", "index_url": "https://pypi.org/simple", "backend": "mps", "wheel_sha256": null}
     }
   },
