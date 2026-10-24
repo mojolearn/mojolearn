@@ -47,10 +47,18 @@ def native_pandas_exact(value: PythonObject) raises -> Bool:
 def classical_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: classical input nesting exceeds the supported depth")
-    var b = native_loaded_module("builtins")
-    if py_type(value) is py_type(Python.tuple()) or py_type(value) is py_type(Python.list()):
+    if depth == 0:
+        # Once per admitted value, not per element (see sequential_admit_value).
+        _ = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is py_type(Python.tuple()) or cls is py_type(Python.list()):
         for k in range(len(value)):  # driver-loop: over native operation argument containers
             classical_admit_value(value[k], context, depth + 1)
+    elif (cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True))
+          or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(None))):
+        # An exact builtin scalar is never pandas storage: skip the two pandas
+        # class lookups (four module validations) per list element.
+        sequential_admit_value(value, context, depth)
     elif not native_pandas_exact(value):
         sequential_admit_value(value, context, depth)
 

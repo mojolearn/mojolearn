@@ -17,7 +17,18 @@ import pytest
 from mojolearn import _backend
 
 
-def test_par_forest_cell_completes_inside_the_verify_worker(monkeypatch):
+BUDGET = ("MOJOLEARN_CPU_THREADS", "OMP_NUM_THREADS", "OMP_THREAD_LIMIT",
+          "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+          "NUMEXPR_NUM_THREADS", "NUMEXPR_MAX_THREADS", "BLIS_NUM_THREADS",
+          "OMP_MAX_ACTIVE_LEVELS", "OMP_DYNAMIC", "MOJOLEARN_VERIFY_CPU_THREADS")
+
+
+# Three environments, so one run separates the causes: the CLI's whole
+# thread budget (what `verify` runs under), only mojolearn's own host thread
+# ceiling, and none (the verifier's process layout alone: own session, file
+# stdout/stderr, a fresh worker process).
+@pytest.mark.parametrize("budget", ["cli", "mojolearn-threads", "none"])
+def test_par_forest_cell_completes_inside_the_verify_worker(monkeypatch, budget):
     if _backend.vendor() in (None, "cpu"):
         pytest.skip("the par-forest cell's sharded workers need a GPU device")
     from mojolearn import _verify_all as verifier
@@ -31,11 +42,11 @@ def test_par_forest_cell_completes_inside_the_verify_worker(monkeypatch):
     # The CLI re-executes `verify` under its thread budget before any native
     # import; its worker (and the worker's driver children) inherit it.
     _effective, env = budget_environment(1)
-    for key in ("MOJOLEARN_CPU_THREADS", "OMP_NUM_THREADS", "OMP_THREAD_LIMIT",
-                "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
-                "NUMEXPR_NUM_THREADS", "NUMEXPR_MAX_THREADS", "BLIS_NUM_THREADS",
-                "OMP_MAX_ACTIVE_LEVELS", "OMP_DYNAMIC", "MOJOLEARN_VERIFY_CPU_THREADS"):
-        monkeypatch.setenv(key, env[key])
+    for key in BUDGET:
+        if budget == "cli" or (budget == "mojolearn-threads" and key == "MOJOLEARN_CPU_THREADS"):
+            monkeypatch.setenv(key, env[key])
+        else:
+            monkeypatch.delenv(key, raising=False)
     X, yc, yr = harness.fixture("base")
     held = harness.heldout("base")
     request = dict(action="cell", harness=os.path.abspath(path), table="", lane="par-forest",

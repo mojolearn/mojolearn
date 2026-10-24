@@ -139,6 +139,14 @@ def execute(request):
                  'ExtraTreesClassifier': ExtraTreesClassifier,
                  'ExtraTreesRegressor': ExtraTreesRegressor}[name](**params)
         X, y, start = args
+        import os
+        if os.environ.get('MOJOLEARN_POOL_TIMING') == '1':
+            import time
+            t0 = time.perf_counter()
+            model._fit_with_tree_start(X, y, start)
+            print(f'POOL-TIMING worker forest_fit native_fit={time.perf_counter() - t0:.3f}s '
+                  f'X={type(X).__name__} y={type(y).__name__} tree_start={start}', file=sys.stderr, flush=True)
+            return model
         model._fit_with_tree_start(X, y, start)
         return model
     if operation == 'kmeans_fit':
@@ -444,6 +452,23 @@ def execute(request):
     raise ValueError('unknown parallel worker operation: ' + operation)
 
 
+def _timing_snapshot(role):
+    """MOJOLEARN_POOL_TIMING=1 diagnostic: this process's environment and
+    loaded native modules, one JSON line on stderr, to diff a pool worker
+    against a direct process (tools/repro_par_forest.py)."""
+    # glue: one diagnostic record of process metadata, never on by default
+    import json
+    import os
+    prefixes = ('MOJOLEARN', 'MODULAR', 'MOJO', 'CUDA', 'HIP', 'ROCR', 'PYTHON', 'OMP', 'LD_', 'PATH')
+    env = {key: value for key, value in os.environ.items() if key.startswith(prefixes)}  # glue: diagnostic environment filter
+    natives = {name: getattr(module, '__file__', None) for name, module in list(sys.modules.items())  # glue: diagnostic module list
+               if name.startswith('mojolearn') and getattr(module, '__file__', '') and
+               str(getattr(module, '__file__', '')).endswith(('.so', '.dylib', '.pyd'))}
+    print('POOL-SNAPSHOT ' + json.dumps(dict(role=role, pid=os.getpid(), executable=sys.executable,
+                                             path=sys.path, env=env, natives=natives), sort_keys=True),
+          file=sys.stderr, flush=True)
+
+
 def main():
     # Native diagnostics may print to stdout. Reserve a duplicate fd for RPC
     # and redirect ordinary stdout (including native printf) to stderr.
@@ -454,21 +479,47 @@ def main():
         import faulthandler
         import signal
         faulthandler.register(signal.SIGUSR1, all_threads=True)
+    if os.environ.get('MOJOLEARN_POOL_IMPORT_NUMPY') == '1':
+        # glue: the parent had NumPy loaded (DevicePool._start); load it
+        # before any request so native owners connect the same types.
+        import numpy  # noqa: F401
     channel = os.fdopen(os.dup(sys.stdout.fileno()), 'wb')
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    timing = os.environ.get('MOJOLEARN_POOL_TIMING') == '1'
+    if timing:
+        _timing_snapshot('worker')
     while True:
         try:
+            if timing:
+                import select
+                import time
+                select.select([sys.stdin.buffer], [], [])
+                t0 = time.perf_counter()
             request = pickle.load(sys.stdin.buffer)
         except EOFError:
             break
         response = None
         try:
+            if timing:
+                t1 = time.perf_counter()
             try:
                 response = (True, execute(request))
             except Exception:
                 response = (False, traceback.format_exc())
-            pickle.dump(response, channel, protocol=5)
-            channel.flush()
+            if timing:
+                t2 = time.perf_counter()
+                payload = pickle.dumps(response, protocol=5)
+                t3 = time.perf_counter()
+                channel.write(payload)
+                channel.flush()
+                t4 = time.perf_counter()
+                print(f'POOL-TIMING worker op={request[0]} read+unpickle={t1 - t0:.3f}s '
+                      f'execute={t2 - t1:.3f}s pickle_reply={t3 - t2:.3f}s ({len(payload)} B) '
+                      f'write={t4 - t3:.3f}s', file=sys.stderr, flush=True)
+                _timing_snapshot('worker-after-' + str(request[0]))
+            else:
+                pickle.dump(response, channel, protocol=5)
+                channel.flush()
         finally:
             # Persistent state belongs only to explicit operation caches.
             # Idle workers must not retain complete neural RPC snapshots.
