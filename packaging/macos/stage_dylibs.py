@@ -177,7 +177,12 @@ def main():
     # `identical/` numeric-mode set, 2026-08-23); anything else is refused,
     # because one `.dylibs` is staged and the rpath written into each
     # extension is computed from its depth.
+    # The package directory is the one that holds __init__.py. The first extension used to sit
+    # there; since the merged layout it sits one level below (identical/_mojolearn_native.so),
+    # and taking its parent as the root refused the host/ member (0.8.56, 2026-10-24).
     root = exts[0].parent
+    if not (root / "__init__.py").exists() and (root.parent / "__init__.py").exists():
+        root = root.parent
     dylibs = root / ".dylibs"
     for ext in exts:
         if not ext.exists():

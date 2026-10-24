@@ -588,7 +588,15 @@ if [ "$MERGED" = 1 ]; then
         done < "$BUILD_LOGS/plan_$d.txt"
     done
     pixi run -e pkg python - "$@" <<'PYMERGED'
-import importlib.util, sys
+import importlib.util, json, os, sys
+# The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
+# import-time registry `import mojolearn` loads before any binding. This read-back imports ONE
+# binary standalone, so it loads that registry first; without it the host tokenizer member's
+# transport_initialize aborted (2026-10-24, the same fix as packaging/linux/build_sets.sh).
+_reg = "mojolearn._native_loaded_modules"
+if _reg not in sys.modules:
+    _spec = importlib.util.spec_from_file_location(_reg, os.path.join(os.getcwd(), "python", "mojolearn", "_native_loaded_modules.py"))
+    _mod = importlib.util.module_from_spec(_spec); sys.modules[_reg] = _mod; _spec.loader.exec_module(_mod)
 args = sys.argv[1:]
 for i in range(0, len(args), 3):
     path, stem, want = args[i:i + 3]
@@ -642,7 +650,15 @@ if [ "$PACKAGE_BYTE_LM" = 1 ]; then
             ALL_SOS="$ALL_SOS $host_path"
         fi
         pixi run -e pkg python - "$host_path" "$n" <<'PYHOST'
-import importlib.util, json, sys
+import importlib.util, json, os, sys
+# The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
+# import-time registry `import mojolearn` loads before any binding. This read-back imports ONE
+# binary standalone, so it loads that registry first; without it the host tokenizer member's
+# transport_initialize aborted (2026-10-24, the same fix as packaging/linux/build_sets.sh).
+_reg = "mojolearn._native_loaded_modules"
+if _reg not in sys.modules:
+    _spec = importlib.util.spec_from_file_location(_reg, os.path.join(os.getcwd(), "python", "mojolearn", "_native_loaded_modules.py"))
+    _mod = importlib.util.module_from_spec(_spec); sys.modules[_reg] = _mod; _spec.loader.exec_module(_mod)
 path, name = sys.argv[1], sys.argv[2]
 prefix = name[len('_mojolearn_'):]
 spec = importlib.util.spec_from_file_location(name, path)
@@ -669,7 +685,15 @@ PYHOST
             ALL_SOS="$ALL_SOS $byte_path"
         fi
         pixi run -e pkg python - "$byte_path" "$byte_mode" <<'PYBYTE'
-import importlib.util, json, sys
+import importlib.util, json, os, sys
+# The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
+# import-time registry `import mojolearn` loads before any binding. This read-back imports ONE
+# binary standalone, so it loads that registry first; without it the host tokenizer member's
+# transport_initialize aborted (2026-10-24, the same fix as packaging/linux/build_sets.sh).
+_reg = "mojolearn._native_loaded_modules"
+if _reg not in sys.modules:
+    _spec = importlib.util.spec_from_file_location(_reg, os.path.join(os.getcwd(), "python", "mojolearn", "_native_loaded_modules.py"))
+    _mod = importlib.util.module_from_spec(_spec); sys.modules[_reg] = _mod; _spec.loader.exec_module(_mod)
 spec = importlib.util.spec_from_file_location('_mojolearn_byte_lm', sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
