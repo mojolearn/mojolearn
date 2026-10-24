@@ -183,8 +183,10 @@ PAGE = """<html><body>
 <a href="https://files.example/torch-2.13.0-cp314-cp314-manylinux_2_28_x86_64.whl#sha256=bbbb">x</a>
 <a href="https://files.example/torch-2.13.0-cp314-cp314-manylinux_2_28_aarch64.whl#sha256=cccc">x</a>
 <a href="https://files.example/torch-2.13.0-cp312-none-macosx_11_0_arm64.whl#sha256=dddd">x</a>
-<a href="../../whl/torch-2.13.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=eeee">x</a>
+<a href="../torch-2.13.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=eeee">x</a>
 <a href="https://files.example/torch-2.12.0-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=ffff">x</a>
+<a href="/whl/rocm7.2/torch-2.13.0%2Brocm7.2-cp314-cp314-manylinux_2_28_x86_64.whl#sha256=gggg">x</a>
+<a href="https://download-r2.example/whl/rocm7.2/torch-2.12.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=hhhh">x</a>
 </body></html>"""
 
 
@@ -192,7 +194,14 @@ def test_index_and_wheel_choice():
     files = fetch.index_files(PAGE, "https://download.example/whl/rocm7.2/torch/")
     names = [f[0] for f in files]
     assert "torch-2.13.0+rocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl" in names
-    assert files[4][1] == "https://download.example/whl/torch-2.13.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl"
+    # relative href: resolved against the index page URL
+    assert files[4][1] == "https://download.example/whl/rocm7.2/torch-2.13.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl"
+    # absolute-path href: resolved against the page's host
+    assert files[6][1] == "https://download.example/whl/rocm7.2/torch-2.13.0%2Brocm7.2-cp314-cp314-manylinux_2_28_x86_64.whl"
+    # full URL on another host with a sha256 fragment (what download.pytorch.org emits)
+    assert files[7] == ("torch-2.12.0+rocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl",
+                        "https://download-r2.example/whl/rocm7.2/torch-2.12.0%2Brocm7.2-cp312-cp312-manylinux_2_28_x86_64.whl",
+                        "hhhh")
     pick = fetch.choose_wheel(files, "2.13.0", "linux", "cp312")
     assert (pick["wheel"], pick["index_sha256"]) == ("torch-2.13.0-cp312-cp312-manylinux_2_28_x86_64.whl", "aaaa")
     assert fetch.choose_wheel(files, "2.13.0", "linux", "cp310")["python_tag"] == "cp314"   # highest when absent

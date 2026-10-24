@@ -803,7 +803,7 @@ class SplitWheels(unittest.TestCase):
             "meta lost its marker": [core, nvidia, amd, self.rewrite(
                 agg, drop={f"{dist_info(agg)}/{pw.gpu_plugins.PLUGIN_MARKER}"})],
         }
-        why = {"core declares a GPU extra": "declares Provides-Extra ['numpy', 'nvidia', 'verify']",
+        why = {"core declares a GPU extra": "declares Provides-Extra ['max', 'numpy', 'nvidia', 'torch', 'verify']",
                "core pins a vendor (the old graph)": "dependency pins disagree",
                "core pins a vendor loosely": "dependency pins disagree",
                "core lost its marker": "gpu_plugins.json is missing or disagrees",
