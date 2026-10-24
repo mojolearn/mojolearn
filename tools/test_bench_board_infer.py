@@ -170,6 +170,28 @@ def test_dry_run_counts_inference_cells(env, capsys):
 
 # --- an end-to-end run with stub drivers ---------------------------------------
 
+def _matched_infer_ratios(rec):
+    """The stub drivers print no BOARD-PARAMS line, so every stored opponent inference ratio of `rec` is
+    withdrawn (e0d611997, board_pairing.enforce_params). Returns {(arm, batch): cell} with the ratios
+    recomputed as if the race's parameter check had read MATCHED, so the ratio arithmetic is still checked
+    (the same pattern as test_bench_board._unchecked_stub_ratios)."""
+    for c in rec["infer_cells"]:
+        if bb.PAIR.is_opponent(c):
+            assert c["ratio_ours_identical_over"] is None and c["ratio_ours_fast_over"] is None, c["arm"]
+            assert c["params_pair"]["state"] != "MATCHED", c["arm"]
+    race = dict(rec, params_check="MATCHED", params={"arms": {c["arm"]: {} for c in rec["infer_cells"]}},
+                opponents_excluded={})
+    cells = json.loads(json.dumps(rec["infer_cells"]))
+    groups = {}
+    for c in cells:     # the stub rows' hardware keys differ (annotated at save); the arithmetic is the point
+        c.pop("hardware_key", None)
+        c.pop("hardware_comparable", None)
+        groups.setdefault(c["batch"], []).append(c)
+    for g in groups.values():
+        bb.add_ratios(g, race=race)
+    return {(c["arm"], c["batch"]): c for c in cells}
+
+
 def test_run_infer_cells_ratios_and_board(ienv):
     assert bb.main(["--vendor", "apple", "--lanes", "rf,kmeans"] + ienv["base"]) == 0
     res = json.loads((ienv["out"] / "board.json").read_text())
@@ -188,9 +210,11 @@ def test_run_infer_cells_ratios_and_board(ienv):
         assert c["phase"] == "infer" and c["status"] == expected_status and len(c["times_ms"]) == 3
         assert c["hash_stable"] is True and c["call"].startswith("stub ")
     # median ours = 100/10+2 = 12, ours-ab 10, opponents 22 on `test`; x2 on `large`
-    assert ic[("sklearn-rf-cpu", "test")]["ratio_ours_identical_over"] == pytest.approx(12 / 22)
-    assert ic[("sklearn-rf-cpu", "test")]["ratio_ours_fast_over"] == pytest.approx(10 / 22)
-    assert ic[("sklearn-rf-cpu", "large")]["ratio_ours_identical_over"] == pytest.approx(22 / 42)
+    ir = _matched_infer_ratios(rf)
+    assert ir[("sklearn-rf-cpu", "test")]["ratio_ours_identical_over"] == pytest.approx(12 / 22)
+    assert ir[("sklearn-rf-cpu", "test")]["ratio_ours_fast_over"] == pytest.approx(10 / 22)
+    assert ir[("sklearn-rf-cpu", "large")]["ratio_ours_identical_over"] == pytest.approx(22 / 42)
+    assert ir[("ours-ab", "test")]["ratio_ours_identical_over"] is None   # never FAST / IDENTICAL
     assert ic[("ours-ab", "test")]["ratio_ours_identical_over"] is None   # never FAST / IDENTICAL
     assert ic[("ours-ab", "test")]["quality"]["bits_equal_vs_ours_identical"] is True
     assert ic[("ours", "test")]["quality"]["logloss_matches_fit"] is True
@@ -202,7 +226,7 @@ def test_run_infer_cells_ratios_and_board(ienv):
     # (a race with no GPU opponent keeps its CPU ones, Oct 2 2026). Results raced before
     # this change were wrong for this lane; apply extra scrutiny.
     assert set(kc) == {"ours", "ours-fast", "sklearn-cpu"}
-    assert kc["sklearn-cpu"]["ratio_ours_identical_over"] == pytest.approx(6 / 16)
+    assert _matched_infer_ratios(km)[("sklearn-cpu", "Xq")]["ratio_ours_identical_over"] == pytest.approx(6 / 16)
     assert kc["sklearn-cpu"]["verdict"] == "LIKE-FOR-LIKE-SPAN"
     assert kc["ours-fast"]["quality"]["bits_equal_vs_ours"] is True
     board = (ienv["out"] / "BOARD.md").read_text()

@@ -38,8 +38,10 @@ namespace access, tuple/dictionary aliases and native context reads.
 The required real-tree tests check attribution, inclusion of the affected
 family and visible evidence for extra selections. Synthetic tests still
 require proven narrow helper/import paths. The original desired real-tree
-exclusions and duplicated numerical/generator bounds remain in four **strict expected-failure** tests named
-`test_pending_precision_*`; only their explicit exclusion failure is expected.
+exclusions and duplicated numerical/generator bounds remain in three **strict expected-failure** tests named
+`test_pending_precision_*`; only their explicit exclusion failure is expected. (The fourth, the shared-binding
+exclusions of ols/kmeans/arima from the forest, GBDT and mamba paths, passed unexpectedly on 2026-10-24 after
+8188d819d moved the classical native entries out of the tokenizer host binding, and is a required test again.)
 Other exceptions remain failures, and an unexpected pass requires removing the
 resolved debt marker. Passing required tests with these expected failures is
 not a claim that real-tree narrowing is complete.

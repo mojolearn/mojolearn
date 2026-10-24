@@ -82,6 +82,19 @@ class CpuBox(unittest.TestCase):
         from unittest import mock
         import contextlib
         import io
+        import os
+        # c730927ea: a release selects identical alone by default, and a selected tier set only
+        # builds on cpu-box; the backend rules below are those of the full legacy tier set.
+        with mock.patch.object(rel.Release, "go", lambda self: self.args), \
+                mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: False), \
+                mock.patch.dict(os.environ, {"MOJOLEARN_RELEASE_MODES": "identical"}):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                rel.main(["0.8.14", "--build-backend", "github"])
+            self.assertIn("selected release tiers require --build-backend cpu-box", err.getvalue())
+        legacy = mock.patch.dict(os.environ, {"MOJOLEARN_RELEASE_MODES": "fast identical"})
+        legacy.start()
+        self.addCleanup(legacy.stop)
         with mock.patch.object(rel.Release, "go", lambda self: self.args), \
                 mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: True):
             self.assertEqual(rel.main(["0.8.14"]).build_backend, "cpu-box")

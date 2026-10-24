@@ -424,6 +424,7 @@ def reset_caches():
     global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
     for cache in _CACHES:
         cache.clear()
+    bincache.cache_directory_listings(False)    # a test may have added or removed files
     _GIT_SHOW.clear()
     _TRACKED = None
     _PYTHON_FILES = None
@@ -1079,16 +1080,36 @@ def _region_nodes(rel, wanted):
     return nodes
 
 
+_STATEMENT_NAMES = {}
+_CACHES.append(_STATEMENT_NAMES)
+
+
+def _statement_names(top):
+    """(attribute names and identifier-shaped string constants, loaded names,
+    every Name id) of one parsed statement, walked once (the statement is held
+    with its entry, so its id cannot be reused while cached)."""
+    hit = _STATEMENT_NAMES.get(id(top))
+    if hit is None or hit[0] is not top:
+        called, loaded, ids = set(), set(), set()
+        for sub in ast.walk(top):
+            if isinstance(sub, ast.Attribute):
+                called.add(sub.attr)
+            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
+                called.add(sub.value)
+            elif isinstance(sub, ast.Name):
+                ids.add(sub.id)
+                if isinstance(sub.ctx, ast.Load):
+                    loaded.add(sub.id)
+        hit = _STATEMENT_NAMES[id(top)] = (top, frozenset(called), frozenset(loaded), frozenset(ids))
+    return hit[1:]
+
+
 def _names_in_nodes(nodes):
     """Attribute names and identifier-shaped string constants in `nodes`
     (`_file_called_names` over a region)."""
     out = set()
     for node in nodes:
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Attribute):
-                out.add(sub.attr)
-            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
-                out.add(sub.value)
+        out |= _statement_names(node)[0]
     return out
 
 
@@ -1104,6 +1125,67 @@ def _deferred_factory_calls(rel, nodes, wanted):
     return _DEFERRED_FACTORY_CACHE[key]
 
 
+_DEFERRED_TOP = {}
+_CACHES.append(_DEFERRED_TOP)
+
+
+def _deferred_top_facts(rel, top):
+    """What `_deferred_factory_calls_uncached` reads from one top-level
+    statement, independent of the region's wanted names, computed once per
+    parsed statement (2026-10-24: the same statements were re-walked for every
+    lane's region). The statement is held with its entry, so its id cannot be
+    reused while cached; the resolver is keyed by the `_parse` it was built on."""
+    key = (rel, id(top), id(_parse))
+    hit = _DEFERRED_TOP.get(key)
+    if hit is not None and hit[0] is top and hit[1] is _parse:
+        return hit[2]
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+
+    def resolved(func):
+        target = source.target(rel, func)
+        if target and isinstance(target[1], ast.FunctionDef):
+            return (target[0], target[1].name)
+        return None
+
+    parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+    needed = set()
+    if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
+                      and isinstance(n.value, str) and n.value.isidentifier())
+    elif isinstance(top, ast.Assign):
+        # A native pointer passed to any setup call could run there,
+        # even if that call's result is unused.
+        for call in (n for n in ast.walk(top.value) if isinstance(n, ast.Call)):
+            for arg in call.args + [kw.value for kw in call.keywords]:
+                needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
+    elif not isinstance(top, (ast.Import, ast.ImportFrom)):
+        needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+    opaque = False
+    for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+        parent = parents.get(call)
+        literal_lookup = (isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant)
+                          and isinstance(parent.slice.value, str))
+        if isinstance(parent, ast.Attribute) and parent.attr == "get":
+            consumer = parents.get(parent)
+            literal_lookup = (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                              and isinstance(consumer.args[0], ast.Constant) and isinstance(consumer.args[0].value, str))
+        if (call.func.id in ("globals", "locals", "vars") and not literal_lookup
+                or call.func.id in ("eval", "exec")) or (
+                call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
+            opaque = True
+    facts = dict(needed=frozenset(needed), opaque=opaque, assign=isinstance(top, ast.Assign),
+                 calls=tuple((id(n), resolved(n.func)) for n in ast.walk(top) if isinstance(n, ast.Call)))
+    if facts["assign"]:
+        facts["targets"] = frozenset(n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name))
+        facts["values"] = frozenset(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        facts["value_call"] = id(top.value) if isinstance(top.value, ast.Call) else None
+        facts["value_target"] = resolved(top.value.func) if isinstance(top.value, ast.Call) else None
+    _DEFERRED_TOP[key] = (top, _parse, facts)
+    return facts
+
+
 def _deferred_factory_calls_uncached(rel, nodes, wanted):
     """Factories whose module assignment result this region never consumes.
 
@@ -1111,66 +1193,35 @@ def _deferred_factory_calls_uncached(rel, nodes, wanted):
     prove the factory stores native pointers without executing or leaking
     them to an unknown consumer. Unknown statements keep the old broad map.
     """
-    if wanted is None:
-        wanted = set()
-    from import_metadata_effects import Source
-    source = Source(_parse, lambda *args: False)
-    needed = set(wanted)
-    assignments = []
+    needed = set(wanted or ())
+    facts = [_deferred_top_facts(rel, top) for top in nodes]
+    assignments = [f for f in facts if f["assign"]]
     opaque_namespace = False
-    for top in nodes:
-        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
-        if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
-            needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
-                          and isinstance(n.value, str) and n.value.isidentifier())
-        elif isinstance(top, ast.Assign):
-            assignments.append(top)
-            # A native pointer passed to any setup call could run there,
-            # even if that call's result is unused.
-            for call in (n for n in ast.walk(top.value) if isinstance(n, ast.Call)):
-                for arg in call.args + [kw.value for kw in call.keywords]:
-                    needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
-        elif not isinstance(top, (ast.Import, ast.ImportFrom)):
-            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
-        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
-            parent = parents.get(call)
-            literal_lookup = (isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant)
-                              and isinstance(parent.slice.value, str))
-            if isinstance(parent, ast.Attribute) and parent.attr == "get":
-                consumer = parents.get(parent)
-                literal_lookup = (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
-                                  and isinstance(consumer.args[0], ast.Constant) and isinstance(consumer.args[0].value, str))
-            if (call.func.id in ("globals", "locals", "vars") and not literal_lookup
-                    or call.func.id in ("eval", "exec")) or (
-                    call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
-                opaque_namespace = True
+    for f in facts:
+        needed |= f["needed"]
+        opaque_namespace = opaque_namespace or f["opaque"]
     if opaque_namespace:
-        needed.update(n.id for top in assignments for target in top.targets
-                      for n in ast.walk(target) if isinstance(n, ast.Name))
+        for f in assignments:
+            needed |= f["targets"]
     changed = True
     while changed:
         before = len(needed)
-        for top in assignments:
-            targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
-            if targets & needed:
-                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        for f in assignments:
+            if f["targets"] & needed:
+                needed |= f["values"]
         changed = len(needed) != before
     out, deferred_calls = set(), set()
-    for top in assignments:
-        targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
-        if targets & needed or not isinstance(top.value, ast.Call):
+    for f in assignments:
+        if f["targets"] & needed or f["value_call"] is None:
             continue
-        target = source.target(rel, top.value.func)
-        if target and isinstance(target[1], ast.FunctionDef):
-            out.add((target[0], target[1].name))
-            deferred_calls.add(id(top.value))
+        if f["value_target"] is not None:
+            out.add(f["value_target"])
+            deferred_calls.add(f["value_call"])
     live = set()
-    for top in nodes:
-        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and id(n) not in deferred_calls):
-            target = source.target(rel, call.func)
-            if target and isinstance(target[1], ast.FunctionDef):
-                live.add((target[0], target[1].name))
+    for f in facts:
+        for call_id, target in f["calls"]:
+            if call_id not in deferred_calls and target is not None:
+                live.add(target)
     return out, live
 
 
@@ -1329,17 +1380,19 @@ def _executed_names(rel, nodes, wanted, deferred, exports):
         return _names_in_nodes(nodes)
     skipped = {n.name for n in nodes if isinstance(n, ast.FunctionDef)
                and (rel, n.name) in deferred and _native_references_only(rel, n, exports)}
-    needed = {n.id for top in nodes if not (isinstance(top, ast.FunctionDef) and top.name in skipped)
-              and not isinstance(top, ast.Assign)
-              for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    needed = set()
+    for top in nodes:
+        if not (isinstance(top, ast.FunctionDef) and top.name in skipped) and not isinstance(top, ast.Assign):
+            needed |= _statement_names(top)[1]
     needed.update(wanted)
+    assigns = [(frozenset().union(*[_statement_names(t)[2] for t in top.targets]), _statement_names(top.value)[2])
+               for top in nodes if isinstance(top, ast.Assign)]
     changed = True
     while changed:
         before = len(needed)
-        for top in nodes:
-            if isinstance(top, ast.Assign) and any(isinstance(n, ast.Name) and n.id in needed
-                    for target in top.targets for n in ast.walk(target)):
-                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        for targets, values in assigns:
+            if targets & needed:
+                needed |= values
         changed = len(needed) != before
     out = set()
     for top in nodes:
@@ -1879,6 +1932,10 @@ def _include_roots():
     return _INCLUDE_ROOTS
 
 
+_MODULE_FILES = {}
+_CACHES.append(_MODULE_FILES)
+
+
 def _mojo_module_files(dotted, rel, names=()):
     """Every repository file one Mojo import could mean, RESOLVED THE WAY THE
     BUILD RESOLVES IT (2026-09-23): `bincache.resolve` over the include roots
@@ -1910,11 +1967,16 @@ def _mojo_module_files(dotted, rel, names=()):
 
     `from max.gpu.host import ...` still resolves to nothing under either root
     and is still dropped, which is what makes the toolchain fall out."""
-    from pathlib import Path
-    found = bincache.resolve(dotted, list(names), Path(ROOT, rel), _include_roots())
-    if not found:
-        return set()
-    return {os.path.relpath(Path(f).resolve(), ROOT) for f in found}
+    # resolve() depends on the importing file's directory only, and the tree does not
+    # change inside one run (reset_caches clears this with every other memo).
+    key = (dotted, os.path.dirname(rel), tuple(names))
+    if key not in _MODULE_FILES:
+        from pathlib import Path
+        if bincache._DIR_NAMES is None:
+            bincache.cache_directory_listings()
+        found = bincache.resolve(dotted, list(names), Path(ROOT, rel), _include_roots())
+        _MODULE_FILES[key] = frozenset(os.path.relpath(Path(f).resolve(), ROOT) for f in found) if found else frozenset()
+    return set(_MODULE_FILES[key])
 
 
 @_by_path
@@ -3018,7 +3080,22 @@ def _binding_names(rel):
     return _binding_names_in(rel, list(tree.body) if tree is not None else [])
 
 
+_BINDING_NAMES_IN = {}
+_CACHES.append(_BINDING_NAMES_IN)
+
+
 def _binding_names_in(rel, nodes):
+    """`_binding_names_in_uncached`, memoized: a pure function of the file's
+    parsed tree (itself cached) and the region's statements, asked once per
+    lane that walks the file (2026-10-24: ~14k calls per lane_sources)."""
+    key = (rel, tuple(id(n) for n in nodes))
+    hit = _BINDING_NAMES_IN.get(key)
+    if hit is None or hit[0] is not nodes and list(hit[0]) != list(nodes):
+        hit = _BINDING_NAMES_IN[key] = (list(nodes), frozenset(_binding_names_in_uncached(rel, nodes)))
+    return set(hit[1])
+
+
+def _binding_names_in_uncached(rel, nodes):
     """`_binding_names` over the top-level statements `nodes` of `rel` (the
     module's constants and tables are read from the whole file)."""
     out = set()
@@ -3288,18 +3365,37 @@ def _generic_dispatch_exports(src):
     return found
 
 
+_DISPATCH_CANDIDATES = {}
+_CACHES.append(_DISPATCH_CANDIDATES)
+
+
+def _dispatch_candidates(top):
+    """(export name, node, role) for every attribute and string constant of one
+    top-level statement, computed once per parsed statement (the statement is
+    held with its entry, so its id cannot be reused while cached)."""
+    hit = _DISPATCH_CANDIDATES.get(id(top))
+    if hit is None or hit[0] is not top:
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        found = []
+        for node in ast.walk(top):
+            export = (node.attr if isinstance(node, ast.Attribute) else node.value
+                      if isinstance(node, ast.Constant) and isinstance(node.value, str) else None)
+            if export is None:
+                continue
+            parent = parents.get(node)
+            role = "call" if isinstance(parent, ast.Call) and parent.func is node else "retained-reference"
+            found.append((export, node, role))
+        hit = _DISPATCH_CANDIDATES[id(top)] = (top, found)
+    return hit[1]
+
+
 def _native_dispatch_references(rel, nodes, used, dispatchers):
     """Source evidence for unresolved dispatcher uses in one Python region."""
     records = {}
     for top in nodes:
-        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
-        for node in ast.walk(top):
-            export = (node.attr if isinstance(node, ast.Attribute) else node.value
-                      if isinstance(node, ast.Constant) and isinstance(node.value, str) else None)
+        for export, node, role in _dispatch_candidates(top):
             if export not in used or export not in dispatchers:
                 continue
-            parent = parents.get(node)
-            role = "call" if isinstance(parent, ast.Call) and parent.func is node else "retained-reference"
             for implementation, function, selector in dispatchers[export]:
                 key = (rel, node.lineno, export, implementation, function)
                 records[key] = dict(kind="unresolved-native-dispatch", source=rel, line=node.lineno,
@@ -3319,6 +3415,8 @@ def lane_sources():
     of every command here."""
     global _LANE_SOURCES
     if _LANE_SOURCES is not None:
+        return _LANE_SOURCES
+    if _reuse_lane_sources():
         return _LANE_SOURCES
     ib = identity_break()
     hs = host_surface()
@@ -3756,7 +3854,127 @@ def lane_sources():
     _LANE_SEED_CALLS = seed_calls
     _LANE_PRECISION_PATHS = precision_paths
     _LANE_SOURCES = (sources, why)
+    _remember_lane_sources()
     return _LANE_SOURCES
+
+
+# ------------------------------------------------- lane_sources across resets
+# THE MAP OUTLIVES A RESET OF AN UNCHANGED TREE (2026-10-24). Deriving the map
+# takes minutes on this tree, and tools/test_lane_select.py resets every memo
+# around each probe it writes, so the file ran past its 900 s bound. A reset
+# keeps one remembered map with everything it was derived from: the content of
+# every file it read (through `_read`), the size and mtime of every file under
+# the root (a created, deleted or rewritten file), the git index and HEAD (the
+# `_git_show` blobs), and the identity of every function and value of this
+# module and of the helper modules it calls (a test that replaces one). Only an
+# exact match of all of them hands the remembered map back; anything else, or
+# a listing or tracked set a caller injected, derives it again.
+_LS_MEMO = None
+_LS_HELPER_MODULES = ("bincache", "import_metadata_effects", "mojo_registrations")
+_LS_NOT_INPUTS = {"_ENUMERATORS", "_LANE_SOURCES", "_SOURCE_HASHED", "_TRACKED", "_CONSTANTS", "_EXTENDERS",
+                  "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PYTHON_FILES", "_PKG_IMPORT_CLOSURE",
+                  "_HOST_CLASS_ROUTES", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS",
+                  "_GRAPH_REVERSE", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_HOOK_CLASSES", "_LS_MEMO"}
+
+
+def _ls_digest(text):
+    import hashlib
+    return None if text is None else hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest()
+
+
+def _ls_tree_state():
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in (".git", ".pixi", "__pycache__")]
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            try:
+                st = os.stat(full)
+            except OSError:
+                continue
+            out[os.path.relpath(full, ROOT)] = (st.st_size, st.st_mtime_ns)
+    return out
+
+
+def _ls_git_state():
+    try:
+        res = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD", "--git-path", "index"],
+                             capture_output=True, text=True, check=True)
+        head, index = res.stdout.split()[:2]
+        st = os.stat(index if os.path.isabs(index) else os.path.join(ROOT, index))
+        return head, st.st_size, st.st_mtime_ns
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return None
+
+
+def _ls_identities():
+    ids = {name: id(value) for name, value in globals().items() if name not in _LS_NOT_INPUTS}
+    for module_name in _LS_HELPER_MODULES:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            ids.update({f"{module_name}.{name}": id(value) for name, value in vars(module).items()
+                        if callable(value)})
+    return ids
+
+
+def _remember_lane_sources():
+    global _LS_MEMO
+    import copy
+    git = _ls_git_state()
+    if git is None:
+        _LS_MEMO = None
+        return
+    _LS_MEMO = dict(
+        result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS)),
+        reads={path: _ls_digest(text) for path, text in _read.cache.items()},
+        tree=_ls_tree_state(), git=git, ids=_ls_identities(),
+        tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
+        python_files=list(_PYTHON_FILES) if _PYTHON_FILES is not None else None)
+
+
+def _reuse_lane_sources():
+    """Restore the remembered map when nothing it was derived from changed."""
+    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
+    memo = _LS_MEMO
+    if memo is None:
+        return False
+    if _PYTHON_FILES is not None and list(_PYTHON_FILES) != memo["python_files"]:
+        return False
+    if _TRACKED is not None and frozenset(_TRACKED) != memo["tracked"]:
+        return False
+    if _ls_identities() != memo["ids"]:
+        return False
+    # an entry a caller put into the read cache must be what the map read
+    for path, text in _read.cache.items():
+        if path not in memo["reads"] or _ls_digest(text) != memo["reads"][path]:
+            return False
+    if _ls_git_state() != memo["git"]:
+        return False
+    tree = _ls_tree_state()
+    if tree.keys() != memo["tree"].keys():
+        return False
+    for path, stat in tree.items():
+        if stat != memo["tree"][path]:
+            if path not in memo["reads"]:
+                return False
+            try:
+                text = _read(path)
+            except OSError:
+                return False
+            if _ls_digest(text) != memo["reads"][path]:
+                return False
+    for path, digest in memo["reads"].items():
+        if path in tree and tree[path] == memo["tree"].get(path):
+            continue
+        try:
+            text = _read(path)
+        except OSError:
+            return False
+        if _ls_digest(text) != digest:
+            return False
+    import copy
+    _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
+    return True
 
 
 _REVERSE = None
@@ -4330,7 +4548,6 @@ def _module_patterns(stem, dotted=()):
     Those were the hits that kept packaging/portable_math/stage.py and
     python/setup.py in every release's full sweep."""
     word = re.escape(stem)
-    quoted = re.compile(r"""['"](?:[\w.]*\.)?%s['"]""" % word)
     # A Python corpus file is read as its AST DUMP, where a def or a keyword
     # argument named like the module is `FunctionDef(name='release'` or
     # `keyword(arg='release'`: that is not a load. Only an import alias, an
@@ -4351,7 +4568,14 @@ def _module_patterns(stem, dotted=()):
     loaded = re.compile(r"""Call\(func=(?:Name\(id='(?:%s)'|Attribute\(value=.*?attr='(?:%s)'), ctx=Load\(\)\), """
                         r"""args=\[Constant\(value=['"]%s['"]""" % (loaders, loaders, word))
     run = re.compile(r"(?:-m|import|from)\s+(?:\w+\.)*%s(?![\w])" % word)
-    out = {"": [run], ".py": [dumped, dotted_string, loaded, run], ".mojo": [quoted]}
+    # THE SAME RULE IN MOJO (2026-10-24): a bare quoted word there is as often an
+    # operation name (`operation == "release"` in bindings/parallel_causal_native.mojo
+    # kept tools/release.py NOT ATTRIBUTABLE). A dotted `"x.stem"` is a module address
+    # wherever it sits; the bare word counts only as the first argument of a loader
+    # (`Python.import_module`, `native_loaded_module`, `__import__`).
+    mojo_dotted = re.compile(r"""['"][\w.]*\.%s['"]""" % word)
+    mojo_loaded = re.compile(r"""(?:import_module|native_loaded_module|__import__)\(\s*['"]%s['"]""" % word)
+    out = {"": [run], ".py": [dumped, dotted_string, loaded, run], ".mojo": [mojo_dotted, mojo_loaded]}
     for d in dotted:
         out[""].append(re.compile(re.escape(d)))
         out[".py"].append(re.compile(re.escape(d)))
@@ -5661,8 +5885,8 @@ def _metadata_registry_guard(rel, name, mutators):
     # are never called during this connection; future source changes still
     # invalidate the proof, including metadata-dependent global side effects.
     reviewed_bridges = {
-        '_native_maxabs_bridge': '48123dfade33bd12f7bbd588510a8a68e83626ab1af56c7e0187bd95d07d55e5',
-        '_native_robust_bridge': '66c41f8fa81b902ee25affd66f20784e660fedd7f6dd05e87b26c61a8f584b8f',
+        '_native_maxabs_bridge': 'ac2f029d69224f3b4491c692c9021e1b97a60f0365eb2c97e20ba8e57d43f84c',
+        '_native_robust_bridge': '84d93b34a016b6c50edb1e0ba930b8cc14ffcf62be3aed420c28fed3057e5689',
     }
     for bridge_name, expected_bridge in reviewed_bridges.items():
         bridge = _parse('python/mojolearn/' + bridge_name + '.py')
@@ -5679,17 +5903,23 @@ def _metadata_registry_guard(rel, name, mutators):
         # containers/environment reads, decomp lifetime probe, array/thread
         # primitives and the scaler fixed ABI connections). A new installer or
         # changed import execution must retain broad selection until reviewed.
+        # Re-reviewed 2026-10-24 (lane testfix-tools, over 9b39c40eb..cb1d47fcd):
+        # the new import-time calls are the fixed native ABI connections
+        # (_native_{family,linear_score,decomp,archive,trees,xcnn}_bridge.connect,
+        # .tables, .register*) on each door's OWN public classes; none of those
+        # bridges imports _classical_host or writes _FORMATS, and the doors still
+        # define no classical_host_formats (checked below).
         reviewed_imports = {
-            'linear': 'e41b2da314b715db13f45113af881a2ad89c1ab71834dd3d510e1aef5413389f',
-            'cluster': '16db7377a502b6cb0ea4c998b35c592c61eb3d422531c69935cecc939eed5635',
-            'neighbors': '4cc645a6832be7a1c65ffde3f08b39f32d49e89932d0c5a412f02ddb59c38eda',
-            'decomp': '188949b119e4ac5c225a9f8fa0532fb95a287bdcf26bf3162694757517d48f6e',
-            'prep': '51c2f0b1ef57da9c7ad332a4f632e07ce0044c8e2adafd3b34e267d3013a2616',
+            'linear': '5440a8c7f6d25b711aa1bab7cf6929f88d456fbd6f3d7003ca738650c1e24851',
+            'cluster': '437572b775ae405257f77963b1ceea86c47af0751c13eff902a038687d18f4a7',
+            'neighbors': 'a308bd2c623bf0a501642bed809364ce7103a56a53a079bf522121ed4cc43812',
+            'decomp': 'c063cfbf4f67d1014336ff4f668dd51a4e5b8faa722e518bdf0052de3bea53e6',
+            'prep': '9bb53e0b87af4556c42d4dfaab0e5620c954a013800dc9809cef127ac203e8a2',
             'sequence': 'e0bec9187e5784b4d1251bbbfee02214bc2ad92f8dde3d99647ad4b37a3a537f',
-            'trees': '9c63b5496f4ca49af62e8d2f088f794cea761ece271555c6abf986946bb7d81d',
-            'cnn': '1b7533816e61ef6a6cb39dd0dd63a3fd91110d4da56681554091523ccec79765',
-            'ann': '966a3f4e1d48e862d1356c59c7bf728a8e9134573eaf628b8483061ac4d36db4',
-            'metrics': 'ef96519a0d94f262f497326fce1306f472c1c7e5746a3322b296355eda4df724',
+            'trees': '98abc10df4d103ede2e0a669d50a0d1d021fbcbda33cbf8f63ccc7acae47dce0',
+            'cnn': '4ee391e4adb3b5bd736ba78738aef22ac495fba15c822fd29e2840b908615027',
+            'ann': '4dca3783705105fcfd4ecf4207285df1e3498ba6007575de51cd0316e1dfda49',
+            'metrics': '8684352d54041fd8679576e2f7eff77fedffd1bdb0d9e7891e6eb709a036c18c',
         }
         if _expansion_import_effects(tree) != reviewed_imports.get(lane):
             return False
@@ -5800,8 +6030,8 @@ def _native_metadata_factory(rel, call, function):
             if not function:
                 raise cpy.unsafe_get_error()
             var value = PythonObject(from_borrowed=function)
-            var b = Python.import_module("builtins")
-            var types = Python.import_module("types")
+            var b = native_loaded_module("builtins")
+            var types = native_loaded_module("types")
             if py_type(value) is not types.MethodType or py_type(value.__func__) is not types.BuiltinFunctionType:
                 raise Error("native attribute descriptor requires a bound compiled entry")
             var make_descriptor = cpy.lib.get_function[PyObjectPtr]("PyInstanceMethod_New")
@@ -5812,7 +6042,14 @@ def _native_metadata_factory(rel, call, function):
         except error:
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
     '''
-    return ' '.join(text.split()) == ' '.join(recipe.split())
+    if ' '.join(text.split()) != ' '.join(recipe.split()):
+        return False
+    # b3baa9840: the recipe reads builtins/types through native_loaded_module, which
+    # reads the loaded-module registry and never runs __import__, a finder or a
+    # loader. The name must resolve to that reviewed helper, not a local rebinding.
+    owner = next(iter(roots))[1]
+    return graph.resolve(owner, 'native_loaded_module') == {
+        ('t', 'bindings/native_loaded_module.mojo', 'native_loaded_module')}
 
 
 def _import_time_hits(node, affected, runs, run_methods, rel=None):

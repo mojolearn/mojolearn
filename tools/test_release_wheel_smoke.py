@@ -12,6 +12,7 @@ import pathlib
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -160,6 +161,12 @@ class SmokeTests(unittest.TestCase):
                  MOJOLEARN_HOTAISLE_CREATE_LOCK=str(self.dir / 'ha-create.lock'))
         e.pop('RUNPOD_API_KEY', None)
         e.update(env or {})
+        # The Mac-side steps run `python3` (the reference diff imports numpy): this test's own
+        # interpreter, after any shim directory, never a bare system python3 without numpy.
+        here = os.path.dirname(sys.executable)
+        parts = e['PATH'].split(os.pathsep)
+        at = 1 if parts and parts[0] == str(self.dir / 'bin') else 0
+        e['PATH'] = os.pathsep.join(parts[:at] + [here] + parts[at:])
         result = subprocess.run(['bash', str(SMOKE), *args], capture_output=True, text=True,
                                 timeout=timeout, env=e)
         # Ambiguous-create tests deliberately retain the guard. These guards
@@ -286,7 +293,9 @@ class SmokeTests(unittest.TestCase):
                 'RP': base + '/rp', 'RP_V2': base + '/rpv2', 'MOJOLEARN_SMOKE_DO_API': base + '/do',
                 'MOJOLEARN_RUNPOD_KEY_FILE': str(self.dir / 'runpod.key'),
                 'MOJOLEARN_DO_TOKEN_FILE': str(self.dir / 'do.token'),
-                'MOJOLEARN_SMOKE_REMOTE_DIR': str(box), 'FAKE_BOX_DIR': str(box)}
+                'MOJOLEARN_SMOKE_REMOTE_DIR': str(box), 'FAKE_BOX_DIR': str(box),
+                # the stand-in box answers at once: poll it every second, not every 15 s
+                'MOJOLEARN_SMOKE_POLL_SECONDS': '1', 'MOJOLEARN_SMOKE_SETTLE_SECONDS': '1'}
 
     def rent(self, provider, runpod='nostock', refuse_regions=(), env=None, extra=()):
         base = self.start_cloud(runpod, refuse_regions)

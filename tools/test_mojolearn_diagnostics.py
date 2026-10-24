@@ -63,6 +63,10 @@ class DoctorTests(unittest.TestCase):
                         f.parent.mkdir(parents=True, exist_ok=True)
                         f.write_bytes(b"fixture native payload")
             def distribution(name):
+                # NATIVE_DISTRIBUTIONS also names mojolearn-core (c34d80a5a); this
+                # fixture installs only the three below, so the rest are absent
+                if name not in members:
+                    raise diagnostics.importlib.metadata.PackageNotFoundError(name)
                 return SimpleNamespace(files=members[name], locate_file=lambda p: root / p)
             with patch.object(diagnostics.importlib.metadata, "distribution", side_effect=distribution):
                 records = diagnostics._native_files()

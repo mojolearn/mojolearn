@@ -61,14 +61,9 @@ def connect(context, formats, cleanup_entries, forest_metadata):
             raise TypeError("saved host model cleanup requires a compiled native entry")
         descriptor = module.classical_attribute_descriptor(MethodType(finalize, archive))
         archive["host_archive_finalizer_descriptor"] = descriptor
-        # A public class's load reaches a host subclass too (its layout check
-        # walks the MRO): each context also accepts the other's finalizer.
-        from . import _native_archive_bridge
-        public = _native_archive_bridge.connect()[1].get("host_archive_context")
-        if public is not None:
-            public["host_archive_peer_finalizer_descriptor"] = descriptor
-            if public.get("host_archive_finalizer_descriptor") is not None:
-                archive["host_archive_peer_finalizer_descriptor"] = public["host_archive_finalizer_descriptor"]
+        # The public/host peer finalizers are linked by connect_peer, called
+        # right after this connection: this function then only stores into
+        # mappings it built itself (tools/import_metadata_effects.py proof).
         for classes in formats.values():  # glue: connect fixed host class lifetime metadata at import
             for name, cls in classes.items():  # glue: fixed saved estimator class metadata
                 if not any("__del__" in base.__dict__ for base in cls.__mro__):  # glue: inspect fixed finalizer slots once
@@ -101,3 +96,21 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     prediction.update(host_tree_entries=entries, host_tree_entry_type=BuiltinFunctionType, output_context=archive)
     context["host_tree_context"] = prediction
     context["host_archive_context"] = archive
+
+
+def connect_peer(context):
+    # glue: link the public and host archive contexts' finalizer descriptors once at import.
+    # A public class's load reaches a host subclass too (its layout check walks
+    # the MRO): each context also accepts the other's finalizer (ed52d4d96).
+    from . import _native_archive_bridge
+    archive = context["host_archive_context"]
+    descriptor = archive.get("host_archive_finalizer_descriptor")
+    public = _native_archive_bridge.connect()[1].get("host_archive_context")
+    if descriptor is None or public is None:
+        return
+    public["host_archive_peer_finalizer_descriptor"] = descriptor
+    peer = public.get("host_archive_finalizer_descriptor")
+    if peer is not None:
+        archive["host_archive_peer_finalizer_descriptor"] = peer
+        # the prediction context is a copy of the archive context taken in connect
+        context["host_tree_context"]["host_archive_peer_finalizer_descriptor"] = peer

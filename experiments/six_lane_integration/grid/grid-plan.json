@@ -39068,6 +39068,42 @@
   },
   {
    "algorithms": [],
+   "control": "fa_gram_spread",
+   "define": "MOJOLEARN_FA_FAST_GRAM_SPREAD",
+   "file": "apple-slow-paths",
+   "reasons": [
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
+   "control": "fa_svd_group",
+   "define": "MOJOLEARN_FA_SVD_GROUP_OFF",
+   "file": "apple-slow-paths",
+   "reasons": [
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
+   "control": "gbdt_ord_tree_bufs",
+   "define": "MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF",
+   "file": "apple-slow-paths",
+   "reasons": [
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
+   "control": "gbdt_walk_dev_step",
+   "define": "MOJOLEARN_GBDT_WALK_DEV_STEP_OFF",
+   "file": "apple-slow-paths",
+   "reasons": [
+    "not declared by any board algorithm workload"
+   ]
+  },
+  {
+   "algorithms": [],
    "control": "bn_grid_stats",
    "define": "MOJOLEARN_IDN_BN_GRID_STATS,MOJOLEARN_IDN_BN_GRID_STATS_OFF",
    "file": "bn-grid-stats",
@@ -40036,6 +40072,13 @@
     "path": "experiments/six_lane_integration/grid_controls/apple-holes.json",
     "sha256": "6ea3efe646c5cf0432034ea53c27ca3d3d0085d0399795d7ebc4aa603bc9dac3"
    },
+   "apple-slow-paths": {
+    "branch": "lane/apple-slow-paths",
+    "head": "5753b1e2a",
+    "lane": "apple-slow-paths",
+    "path": "experiments/six_lane_integration/grid_controls/apple-slow-paths.json",
+    "sha256": "168a1748c12542d9010801ccf7758e53636c1d008faab1d1f771055e6c0c5c4e"
+   },
    "attention-tiled-v2": {
     "branch": "lane/attention-tiled-v2",
     "head": "cd4a0e870",
@@ -40377,14 +40420,14 @@
     "head": "b81169c61",
     "lane": "neural-seq-train-dedupe",
     "path": "experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json",
-    "sha256": "605aff8a9bb383a14de830f588559f557615f486e5389e7b3c3e408b5a05a302"
+    "sha256": "5bc28c8a143461418bce538e8845c010bb5f834f1dbf2729901a26e47dae53f2"
    },
    "neural-small": {
     "branch": "lane/neural-small",
     "head": "a7b55a97b",
     "lane": "neural-small",
     "path": "experiments/six_lane_integration/grid_controls/neural-small.json",
-    "sha256": "18612a49397928e21e252a6898ea3cdb0e8b78baa6f65e91cde399e145e2594b"
+    "sha256": "c47d3c0a2ca9d6fed94389bfec90c1e44939cddc9c4538d496f592ddf68bd76f"
    },
    "quality-fix-apple-fast": {
     "branch": "lane/quality-fix-apple-fast",
@@ -40398,7 +40441,7 @@
     "head": "3ccf36dd8",
     "lane": "samba-resident",
     "path": "experiments/six_lane_integration/grid_controls/samba-resident.json",
-    "sha256": "4f7d62ca10febcbcdb24a40c52c041b7936b6dfda60101685d5f6f10fef78341"
+    "sha256": "1b72e74bb3a22bf791adaadad90052d599f8e239b1f591dd45aefcbb857837fa"
    },
    "seq-nm-spec": {
     "branch": "lane/seq-nm-spec",
@@ -40493,9 +40536,9 @@
    }
   },
   "guards": {
-   "asserts": 334,
+   "asserts": 346,
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "2d1048225429bf91f209f8b4db822011f538a9371b6bfdbec4802312e9d16ae3"
+   "sha256": "99a3450dc943e1938468f1ef5c5b07f7251e076f0c1df632ad2aacc4276ee374"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -40603,6 +40646,7 @@
  "removed_per_file": {
   "apple-fast-round2": 0,
   "apple-holes": 0,
+  "apple-slow-paths": 0,
   "attention-tiled-v2": 1,
   "bn-grid-stats": 0,
   "classical-cv": 4,
@@ -40711,12 +40755,12 @@
   "cells": 2482,
   "configs": 541,
   "configs_per_vendor": 541,
-  "controls": 271,
+  "controls": 275,
   "deferred_configs": 98,
   "deferred_cross_configs": 2973,
   "deferred_cross_groups": 67,
-  "excluded_controls": 88,
-  "guard_asserts": 334,
+  "excluded_controls": 92,
+  "guard_asserts": 346,
   "mapped_algorithms": 90,
   "packed_multi_member": 95,
   "packs": 293,

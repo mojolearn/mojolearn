@@ -1,4 +1,5 @@
 """Main-only resource controls; stub commands, no compiler or GPU."""
+import ast
 import os
 from pathlib import Path
 import shutil
@@ -7,15 +8,35 @@ import tempfile
 import unittest
 
 
-#: The guards build_sets.sh runs before its job check: ptx_baseline.py
-#: validate-config (the CUDA code format) and the modules it imports.
-GUARD_HELPERS = ('ptx_baseline.py', 'ptx_contract.py', 'device_glue.py')
+#: The guard build_sets.sh runs before its job check: ptx_baseline.py
+#: validate-config (the CUDA code format). stage_guards copies it with every
+#: packaging/linux module it imports, followed transitively (26bf3a1a5 added
+#: merged_layout), so a new helper import never breaks the staged copy.
+GUARD_HELPERS = ('ptx_baseline.py',)
+
+
+def _local_imports(file, directory):
+    tree = ast.parse(file.read_text())
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name.split('.')[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module.split('.')[0])
+    return {name + '.py' for name in names if (directory / (name + '.py')).is_file()}
 
 
 def stage_guards(root, path):
     """Copy the pre-build guards' helper scripts beside the staged prefix."""
-    for name in GUARD_HELPERS:
-        shutil.copyfile(root / 'packaging/linux' / name, path / name)
+    source = root / 'packaging/linux'
+    pending, staged = list(GUARD_HELPERS), set()
+    while pending:
+        name = pending.pop()
+        if name in staged:
+            continue
+        staged.add(name)
+        shutil.copyfile(source / name, path / name)
+        pending.extend(_local_imports(source / name, source) - staged)
 
 
 class BuildLimitsTests(unittest.TestCase):

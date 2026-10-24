@@ -17,6 +17,19 @@ def bash(script, env=None, timeout=60):
                           env=dict(os.environ, **(env or {})), timeout=timeout)
 
 
+def _running(pid):
+    """True while `pid` exists and is not a zombie. In a container whose PID 1
+    does not reap orphans a killed descendant stays a zombie, which `kill -0`
+    still reports; a zombie runs nothing."""
+    if subprocess.run(['kill', '-0', pid], capture_output=True).returncode != 0:
+        return False
+    try:
+        state = Path('/proc/%s/stat' % pid).read_text().rsplit(')', 1)[1].split()[0]
+    except OSError:
+        state = subprocess.run(['ps', '-o', 'stat=', '-p', pid], capture_output=True, text=True).stdout.strip()
+    return not state.startswith('Z')
+
+
 class BindingTimeout(unittest.TestCase):
     def test_default_and_override_and_refusal(self):
         self.assertEqual(bash('binding_timeout_seconds', {'RELEASE_BINDING_TIMEOUT_SECONDS': ''}).stdout, '1200')
@@ -61,8 +74,7 @@ class BindingTimeout(unittest.TestCase):
             self.assertLess(elapsed, 20)
             self.assertIn('TIMEOUT after 2s', log.read_text())
             time.sleep(0.5)
-            alive = [p for p in pids.read_text().split() if subprocess.run(['kill', '-0', p],
-                                                                           capture_output=True).returncode == 0]
+            alive = [p for p in pids.read_text().split() if _running(p)]
             self.assertEqual(alive, [], 'descendants survived the bound')
 
     def test_build_sets_uses_the_bound_for_every_binding(self):

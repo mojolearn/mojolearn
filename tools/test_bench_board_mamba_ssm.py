@@ -37,7 +37,10 @@ def test_planned_where_mamba_ssm_is_built():
     for lane in N.LANES:
         for vendor in N.VENDORS:
             has = [a for a in N.opponents(vendor, lane) if a.startswith("mamba-ssm-")]
-            assert has == (want[vendor] if lane in LANES else []), (vendor, lane)
+            # 11f4d1695: mamba1/2-decode race mamba_ssm's carried-state step kernels too
+            raced = lane in LANES or lane in N.MAMBA_SSM_DECODE_LANES
+            assert has == (want[vendor] if raced else []), (vendor, lane)
+    assert N.MAMBA_SSM_DECODE_LANES == ("mamba1-decode", "mamba2-decode")
     for arm in ARMS:
         assert arm in N.ARMS
         assert bb.arm_library(arm) == "mamba-ssm" and bb.arm_device(arm, "amd") == "gpu"

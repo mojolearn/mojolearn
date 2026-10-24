@@ -107,6 +107,19 @@ def _refuse_if_manifest_dirty():
         )
 
 
+def _manifest_reads(extra):
+    """THE MANIFEST AS THE SELECTOR READS IT, with `extra` appended, and nothing
+    written (2026-10-24). These probes used to rewrite the manifest in the tree
+    and restore it in a `finally`, which fails on a read-only checkout and races
+    whoever edits it. The selector reads every file through `_read`, so the
+    edited text is handed to it there; a reset first, so nothing derived from
+    the real text survives."""
+    lane_select.reset_caches()
+    path = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    with open(path, encoding="utf-8") as fh:
+        lane_select._read.cache[lane_select.MANIFEST] = fh.read() + extra
+
+
 #: A path every lane in the family depends on, and a lane that must NOT be
 #: selected by it. The second half is the half that catches a selector which
 #: has quietly widened to "everything" and so looks right by accident.
@@ -352,15 +365,18 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
                 _reported_native_limitation(sel, path, other)
 
 
-@_pending_precision("Cached generic archive-owner pointers are not resolved by return slot/context use; "
-                    "see tools/LANE_SELECTOR_PRECISION.md (OLS import-time archive registration -> forest).")
-def test_pending_precision_shared_binding_paths_exclude_unrelated_lanes():
+def test_shared_binding_paths_exclude_unrelated_lanes():
+    # RESOLVED DEBT (2026-10-24): this was a strict expected failure (OLS's
+    # import-time archive registration retained the forest owner). Since the
+    # classical native entries left the tokenizer host binding (8188d819d) the
+    # forest, GBDT and mamba paths no longer select ols, kmeans or arima, so the
+    # strict marker reported an unexpected pass. Per tools/LANE_SELECTOR_PRECISION.md
+    # the marker is removed and the exclusion is a required check again.
     for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
                  "core/gbdt_host_predict.mojo"):
         selected = lane_select.select([path])["lanes"]
         for other in ("ols", "kmeans", "arima"):
-            if other in selected:
-                raise _UnprovedPrecision(f"{path} selected unrelated {other}")
+            assert other not in selected, f"{path} selected unrelated {other}"
 
 
 def test_a_bindings_edge_always_has_a_door_that_resolves_it():
@@ -641,17 +657,11 @@ def test_a_path_nothing_reaches_selects_nothing():
     """A file no lane's map contains and that nothing a lane reaches NAMES
     cannot move a cell. Written in a temporary directory inside the tree so
     both halves are exercised for real."""
-    probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
+    # The probe paths are asked about without being created: nothing in the
+    # tree names them, which is the property tested (the checkout may be read-only).
     src = "armprobedir/armprobesource.mojo"
     fixture = "armprobedir/armprobefixture.bin"
-    _refuse_if_manifest_dirty()
-    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
-    before = open(manifest, encoding="utf-8").read()
-    os.makedirs(probe_dir, exist_ok=True)
     try:
-        for rel in (src, fixture):
-            with open(os.path.join(lane_select.ROOT, rel), "w") as fh:
-                fh.write("# probe\n")
         lane_select.reset_caches()
         for rel in (src, fixture):
             assert lane_select.unreachable(rel), f"{rel} should be unreachable and is not"
@@ -660,21 +670,11 @@ def test_a_path_nothing_reaches_selects_nothing():
         # source by path and the DIRECTORY by a glob. The fixture is named by
         # nothing but that glob, which is the case a data file a lane reads
         # sits in.
-        with open(manifest, "w") as fh:
-            fh.write(before + f"\n_ARM_PROBE_SOURCE = {src!r}\n_ARM_PROBE_GLOB = 'armprobedir/' + '*'\n")
-        lane_select.reset_caches()
+        _manifest_reads(f"\n_ARM_PROBE_SOURCE = {src!r}\n_ARM_PROBE_GLOB = 'armprobedir/' + '*'\n")
         for rel in (src, fixture):
             assert not lane_select.unreachable(rel), \
                 f"{rel} is named by a file every lane reaches and was still called unreachable"
     finally:
-        with open(manifest, "w") as fh:
-            fh.write(before)
-        for rel in (src, fixture):
-            path = os.path.join(lane_select.ROOT, rel)
-            if os.path.exists(path):
-                os.unlink(path)
-        if os.path.isdir(probe_dir) and not os.listdir(probe_dir):
-            os.rmdir(probe_dir)
         lane_select.reset_caches()
 
 
@@ -699,22 +699,15 @@ def test_a_test_module_is_inert_unless_something_a_lane_reaches_names_it():
         "host_surface.py names test_tokenizer_surface in code and it must not be called inert"
     probe = "python/mojolearn/tests/test_host_model_kmeans.py"
     assert lane_select.test_module_inert(probe), f"{probe} should be inert to begin with"
-    _refuse_if_manifest_dirty()
-    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
-    before = open(manifest, encoding="utf-8").read()
     try:
         # Strings only: the manifest is imported by the selector, and a real
         # import_module call here would run the test module.
         for line in ("_ARM = ('import_module', 'mojolearn.tests.test_host_model_kmeans')",
                      "_ARM = 'test_host_model_kmeans'"):
-            with open(manifest, "w") as fh:
-                fh.write(before + "\n" + line + "\n")
-            lane_select.reset_caches()
+            _manifest_reads("\n" + line + "\n")
             assert lane_select.test_module_inert(probe) is None, \
                 f"a file every lane reaches names {probe} ({line}) and it was still called inert"
     finally:
-        with open(manifest, "w") as fh:
-            fh.write(before)
         lane_select.reset_caches()
 
     inert = [n for n in names if lane_select.test_module_inert("python/mojolearn/tests/" + n)]
@@ -1174,22 +1167,15 @@ def test_a_test_module_named_any_way_at_all_is_not_inert():
     a dynamic import, a `python -m` line and a bare mention all count. That
     cost 33 modules of narrowing (124 of 125 down to 91 of 125) and is the
     right trade: over-firing here costs a sweep, under-firing costs a defect."""
-    _refuse_if_manifest_dirty()
-    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
-    before = open(manifest, encoding="utf-8").read()
     target = "python/mojolearn/tests/test_host_model_kmeans.py"
     try:
         lane_select.reset_caches()
         assert lane_select.test_module_inert(target), f"{target} should be inert to begin with"
-        with open(manifest, "w") as fh:
-            fh.write(before + "\n_DYN = __import__('importlib').import_module("
-                     "'mojolearn.tests.test_host_model_kmeans')\n")
-        lane_select.reset_caches()
+        _manifest_reads("\n_DYN = __import__('importlib').import_module("
+                        "'mojolearn.tests.test_host_model_kmeans')\n")
         assert lane_select.test_module_inert(target) is None, \
             "a test module imported dynamically by string was still called inert"
     finally:
-        with open(manifest, "w") as fh:
-            fh.write(before)
         lane_select.reset_caches()
 
 
@@ -1200,30 +1186,14 @@ def test_a_directory_named_without_its_slash_still_counts():
     STRUCTURALLY, not as text, because the bare word `umap` is also a package
     module and a family-table entry and matching those would send every new
     file under `umap/` to a sweep."""
-    _refuse_if_manifest_dirty()
-    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
-    before = open(manifest, encoding="utf-8").read()
-    probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
-    rel = "armprobedir/armprobefixture.bin"
-    os.makedirs(probe_dir, exist_ok=True)
+    rel = "armprobedir/armprobefixture.bin"     # asked about, never created
     try:
-        with open(os.path.join(lane_select.ROOT, rel), "w") as fh:
-            fh.write("x\n")
         lane_select.reset_caches()
         assert lane_select.unreachable(rel), f"{rel} should be unreachable to begin with"
-        with open(manifest, "w") as fh:
-            fh.write(before + "\nimport os as _o\n_ARM = _o.path.join('armprobedir', 'x' + '.bin')\n")
-        lane_select.reset_caches()
+        _manifest_reads("\nimport os as _o\n_ARM = _o.path.join('armprobedir', 'x' + '.bin')\n")
         assert lane_select.unreachable(rel) is None, \
             "a directory handed to os.path.join without a slash did not count as naming it"
     finally:
-        with open(manifest, "w") as fh:
-            fh.write(before)
-        probe = os.path.join(lane_select.ROOT, rel)
-        if os.path.exists(probe):
-            os.unlink(probe)
-        if os.path.isdir(probe_dir) and not os.listdir(probe_dir):
-            os.rmdir(probe_dir)
         lane_select.reset_caches()
 
 
@@ -1368,18 +1338,11 @@ def test_a_tool_named_only_by_a_literal_join_is_unreachable():
 def test_a_directory_walk_under_tools_still_widens():
     """THE ARM THAT MUST WIDEN: a join whose tail is a variable walks the
     directory, so everything in it stays reachable."""
-    _refuse_if_manifest_dirty()
-    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
-    before = open(manifest, encoding="utf-8").read()
     try:
-        with open(manifest, "w") as fh:
-            fh.write(before + "\nimport os as _o\n_ARM = lambda n: _o.path.join('tools', n)\n")
-        lane_select.reset_caches()
+        _manifest_reads("\nimport os as _o\n_ARM = lambda n: _o.path.join('tools', n)\n")
         assert lane_select.unreachable("tools/gemm_remote_leg.sh") is None, \
             "a variable join under tools/ did not count as walking it"
     finally:
-        with open(manifest, "w") as fh:
-            fh.write(before)
         lane_select.reset_caches()
 
 
@@ -1412,17 +1375,10 @@ def test_a_package_module_named_by_a_lane_file_stays_reachable():
     a file every lane reaches."""
     probe = "python/mojolearn/_verify_par.py"
     assert lane_select.unreachable(probe), "the probe must start unreachable"
-    _refuse_if_manifest_dirty()
-    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
-    before = open(manifest, encoding="utf-8").read()
     try:
-        with open(manifest, "w") as fh:
-            fh.write(before + "\n_ARM = 'mojolearn._verify_par'\n")
-        lane_select.reset_caches()
+        _manifest_reads("\n_ARM = 'mojolearn._verify_par'\n")
         assert lane_select.unreachable(probe) is None
     finally:
-        with open(manifest, "w") as fh:
-            fh.write(before)
         lane_select.reset_caches()
 
 
