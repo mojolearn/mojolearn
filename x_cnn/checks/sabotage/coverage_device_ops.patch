@@ -1,0 +1,48 @@
+--- a/x_cnn/device.mojo
++++ b/x_cnn/device.mojo
+@@ -1019,6 +1019,7 @@
+     launch[argmax_row_at](ctx, fp(src), fp(src), fp(src), fp(src), ip(out), ip(dp), n)
+     down_i(ctx, out, dst, n)
+     ctx.synchronize()
++    dst[0] = (dst[0] + Int32(1)) % Int32(k)  # SABOTAGE: the first label moved to the next class
+     _ = prm^
+     _ = dp^
+     _ = out^
+@@ -1032,6 +1033,7 @@
+     var ctx = cnn_ctx()
+     var b = view(ctx, FP(unsafe_from_address=addr), n)
+     down(ctx, b, dst, n)
++    dst[0] = dst[0] + Float32(0.0078125)  # SABOTAGE: the first downloaded value moved by 1/128
+     _ = b^
+     _ = ctx^
+ 
+@@ -1331,6 +1333,9 @@
+         launch[f](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), n_out)
+     m_fetch(ctx, dout, a[2], n_out, isdev(dev, 2))
+     ctx.synchronize()
++    if not isdev(dev, 2) and n_out > 0:  # SABOTAGE: the first output moved by 1/128
++        var sab = FP(unsafe_from_address=a[2])
++        sab[0] = sab[0] + Float32(0.0078125)
+     _ = da^
+     _ = db^
+     _ = dp^
+@@ -1788,6 +1793,9 @@
+     m_fetch(ctx, dr, a[1], nr, isdev(dev, 1))
+     m_fetch(ctx, da, a[2], na, isdev(dev, 2))
+     ctx.synchronize()
++    if not isdev(dev, 3) and total > 0:  # SABOTAGE: the first output moved by 1/128
++        var sab = FP(unsafe_from_address=a[3])
++        sab[0] = sab[0] + Float32(0.0078125)
+     _ = dx^
+     _ = dr^
+     _ = dpart^
+@@ -1855,6 +1863,9 @@
+     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
+     m_fetch(ctx, da, a[2], na, isdev(dev, 2))
+     ctx.synchronize()
++    if not isdev(dev, 3) and total > 0:  # SABOTAGE: the first output moved by 1/128
++        var sab = FP(unsafe_from_address=a[3])
++        sab[0] = sab[0] + Float32(0.0078125)
+     _ = dx^
+     _ = dg^
+     _ = dpart^
