@@ -182,6 +182,42 @@ def dependency_errors(path, relative):
 LIBM = re.compile(r"^lib(?:m|mvec)(?:[.-]|$)", re.I)
 
 
+# The native module registry (mojolearn/_native_loaded_modules.py) connects the
+# `math` module so compiled bindings can read a few exact functions from it.
+# libm transcendental math (sin, exp, sqrt, log, pow, ...) is platform-dependent
+# and forbidden in the runtime; rounding to an integer, exact binomials, gcd and
+# the finite/NaN/inf predicates and constants are exact on every platform, so
+# they are not arithmetic the platform can vary. Only these names may be
+# connected; any other export name fails the audit.
+MATH_EXACT_EXPORTS = frozenset({"floor", "ceil", "comb", "trunc", "gcd", "isfinite", "isnan", "isinf", "inf", "nan"})
+
+
+def exact_math_connection_imports(tree):
+    """Admit the registry's `import math` only when every use of the name
+    `math` is the module argument of one `connect_module('math', math, (...))`
+    call whose literal export tuple is a subset of MATH_EXACT_EXPORTS."""
+    imports = [node for node in tree.body if isinstance(node, ast.Import) and len(node.names) == 1
+               and node.names[0].name == "math" and node.names[0].asname is None]
+    if len(imports) != 1:
+        return set()
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+             and node.func.id == "connect_module" and len(node.args) == 3 and not node.keywords
+             and isinstance(node.args[0], ast.Constant) and node.args[0].value == "math"]
+    if len(calls) != 1:
+        return set()
+    call = calls[0]
+    module, exports = call.args[1], call.args[2]
+    if not (isinstance(module, ast.Name) and module.id == "math" and isinstance(exports, ast.Tuple)
+            and all(isinstance(e, ast.Constant) and type(e.value) is str for e in exports.elts)
+            and {e.value for e in exports.elts} <= MATH_EXACT_EXPORTS):
+        return set()
+    # No other read, alias, attribute or rebinding of `math` in the module.
+    refs = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == "math"]
+    if refs != [module] or any(isinstance(node, ast.alias) and node.asname == "math" for node in ast.walk(tree)):
+        return set()
+    return {id(imports[0])}
+
+
 def python_math_errors(path, relative):
     """Only the existing compensated-sum guard may call CPython math.fsum.
 
@@ -204,6 +240,8 @@ def python_math_errors(path, relative):
             admitted = {id(node) for node in tree.body if isinstance(node, ast.Import)
                         and len(node.names) == 1 and node.names[0].name == 'math'
                         and node.names[0].asname == '_cmath'}
+    if relative == "mojolearn/_native_loaded_modules.py":
+        admitted = exact_math_connection_imports(tree)
     errors = []
     for node in ast.walk(tree):
         names = ([a.name for a in node.names] if isinstance(node, ast.Import)

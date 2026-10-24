@@ -3,7 +3,7 @@
 import array
 import builtins
 import itertools
-import math
+import math  # exact integer exports only; see the connect_module('math', ...) call below
 import operator
 import os
 import sys
@@ -75,7 +75,14 @@ connect_module('sys', sys, ('modules',))
 connect_module('array', array, ('array',))
 connect_module('operator', operator, tuple(name for name in vars(operator)  # glue: fixed scalar/index operator exports
                                           if not name.startswith('_')))
-connect_module('math', math, tuple(name for name in vars(math) if not name.startswith('_')))  # glue: fixed native scalar math exports
+# glue: only the exact integer-valued math exports the model-selection
+# bindings read (bindings/msel_search.mojo floor, msel_common.mojo ceil,
+# msel_split.mojo comb). libm transcendental math (sin, exp, sqrt, log, pow...)
+# is platform-dependent and forbidden in the runtime; exact rounding to an
+# integer and exact binomials are not arithmetic the platform can vary. The
+# platform-math audit (packaging/portable_math/wheel.py MATH_EXACT_EXPORTS)
+# parses this tuple and refuses any name outside its exact allowlist.
+connect_module('math', math, ('floor', 'ceil', 'comb'))
 connect_module('itertools', itertools, tuple(name for name in vars(itertools) if not name.startswith('_')))  # glue: fixed native iterator types
 connect_module('os', os, ('stat', 'urandom', 'getcwd'))
 connect_module('types', types, ('ModuleType', 'MemberDescriptorType', 'MethodDescriptorType',

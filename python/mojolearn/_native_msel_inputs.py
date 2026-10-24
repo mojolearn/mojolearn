@@ -17,7 +17,7 @@ _SPLITTER_FIELDS = ('_default_test_size', '_folds', '_pairs', 'cv', 'cvargs', 'g
 def connect(context, resident_context):
     # glue: resolve the established identical helper ABI once; an absent
     # optional helper retains its refusal until the operation needs it.
-    import math  # noqa: F401 - glue: connect native floor for train-size metadata at import
+    # math (floor/ceil/comb) is connected and imported by mojolearn._native_loaded_modules at package import.
     import operator  # noqa: F401 - glue: connect native scalar/index operators at import
     from types import BuiltinFunctionType, GetSetDescriptorType
     from ._buffer import _native

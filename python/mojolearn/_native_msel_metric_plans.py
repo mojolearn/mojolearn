@@ -2,7 +2,7 @@
 # Fixed native metric ABI plans copied from public one-call signatures.
 # No runtime source inspection, Python metric call or dynamic code generation.
 
-from math import nan
+nan = float('nan')  # glue: the sklearn replace_undefined_by default; no platform math import
 
 METRIC_PLANS = {'accuracy_fraction': {'allowed': ('y_true', 'y_pred', 'sample_weight', 'numeric_mode'),
                        'defaults': {'numeric_mode': None, 'sample_weight': None},
