@@ -214,10 +214,21 @@ def classical_c_order(value: PythonObject, context: PythonObject) raises -> Bool
     return Bool(py=value.flags.c_contiguous)
 
 
+def classical_dtype_is(dtype: PythonObject, canonical: PythonObject, typestr: String) raises -> Bool:
+    """`dtype` is NumPy's `canonical` dtype: the same object, or an equal
+    instance of the same exact C dtype class (`.str` is its typestr). An
+    unpickled ndarray carries a NEW dtype instance (numpy.dtype's reduce
+    rebuilds it with copy=True), so identity alone refused arrays returned
+    by a pool worker. No dtype method or protocol is called."""
+    if dtype is canonical:
+        return True
+    return py_type(dtype) is py_type(canonical) and String(dtype.str) == typestr
+
+
 def classical_is_f32(value: PythonObject, context: PythonObject) raises -> Bool:
     if classical_is_array(value, context):
         return String(value.dtype) == "<f4"
-    return value.dtype is context["float32"]
+    return classical_dtype_is(value.dtype, context["float32"], "<f4")
 
 
 def classical_dtype_str(value: PythonObject, context: PythonObject) raises -> String:

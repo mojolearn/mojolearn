@@ -13,7 +13,7 @@ from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_description import sequential_fields
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
-from bindings.classical_arrays import classical_kind
+from bindings.classical_arrays import classical_kind, classical_dtype_is
 from bindings.classical_validate import classical_view, classical_check_width, _cast_x, RESHAPE_HINT
 
 
@@ -37,7 +37,7 @@ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
         # the ndarray adapter and requires NumPy's connected types.
         var view = source if ndarray is None else sequential_input(source, context)
         var f32 = py_get(context, "float32")
-        var is_f32 = (view.dtype is f32) if f32 is not None else (String(py=py_call(b.str, view.dtype)) == "<f4")
+        var is_f32 = classical_dtype_is(view.dtype, f32, "<f4") if f32 is not None else (String(py=py_call(b.str, view.dtype)) == "<f4")
         # an ndarray's flags object, or an Array's flags dict
         var flags = view.flags
         var contiguous = (Bool(py=flags["C_CONTIGUOUS"]) if py_type(flags) is b.dict
@@ -61,7 +61,7 @@ def pca_state_array(fields: PythonObject, name: String, shape: PythonObject,
     if not py_contains(fields, name):
         raise Error("PCA fitted state is missing " + name)
     var value = sequential_input(fields[name], context)
-    if value.dtype is not context["float32"] or value.shape != shape or not Bool(py=value.flags.c_contiguous):
+    if not classical_dtype_is(value.dtype, context["float32"], "<f4") or value.shape != shape or not Bool(py=value.flags.c_contiguous):
         raise Error("PCA requires C-order float32 " + name + " with the fitted shape")
     if finite or nonnegative:
         var ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
