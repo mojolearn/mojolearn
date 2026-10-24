@@ -103,7 +103,8 @@ def run(request, timeout=120, log=None):
                 while True:
                     remaining = timeout - (time.monotonic() - started)
                     if remaining <= 0:
-                        raise WorkerFailure(f"{label}: exceeded {timeout:g}s worker limit")
+                        raise WorkerFailure(f"{label}: exceeded {timeout:g}s worker limit"
+                                            + _stacks_on_timeout(process, output))
                     try:
                         process.wait(timeout=min(10, remaining))
                         break
@@ -119,6 +120,25 @@ def run(request, timeout=120, log=None):
             finally:
                 # Also reap a driver's descendants after normal parent exit.
                 _kill(process)
+
+
+def _stacks_on_timeout(process, output):
+    """The worker's Python stacks at its timeout, for the refusal text.
+
+    The worker registers faulthandler on SIGUSR1 (`main`), writing every
+    thread's stack to its own stderr (`output`: the worker's log stream, or a
+    batched cell's log path, since a batch redirects fd 2 per cell). Only the worker itself is
+    signalled, never its process group: a lane's driver children keep the
+    default SIGUSR1 action. Returns '' where this is unavailable."""
+    if os.name != "posix" or not hasattr(signal, "SIGUSR1") or process.poll() is not None:
+        return ""
+    try:
+        process.send_signal(signal.SIGUSR1)
+    except OSError:
+        return ""
+    time.sleep(2)
+    text = _file_tail(output, 6000) if isinstance(output, str) else _tail(output, 6000)
+    return "; stacks at the limit: " + text[-6000:]
 
 
 def _tail(stream, size=8192):
@@ -234,7 +254,8 @@ def run_batch(requests, timeout=120, log=None, on_result=None, poll=0.02):
                         return BatchStop(index, "failure", f"{label}: batch worker exited without a result; {tail[-1000:]}")
                     now = time.monotonic()
                     if now - started > timeout:
-                        return BatchStop(index, "timeout", f"{label}: exceeded {timeout:g}s worker limit")
+                        return BatchStop(index, "timeout", f"{label}: exceeded {timeout:g}s worker limit"
+                                         + _stacks_on_timeout(process, cell_log))
                     if log and now - heartbeat >= 10:
                         heartbeat = now
                         log(f"  {label}: running {now - started:.0f}s / {timeout:g}s limit")
@@ -322,6 +343,10 @@ def batch_main(request_path, results):
 
 
 def main():
+    if os.name == "posix" and hasattr(signal, "SIGUSR1"):
+        # A timed-out cell reports where it stood (_stacks_on_timeout).
+        import faulthandler
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     if len(sys.argv) == 4 and sys.argv[1] == "--batch":
         batch_main(sys.argv[2], sys.argv[3])
         return
