@@ -1355,6 +1355,42 @@ def _(ml, X, yc, yr, Xh=None):
                      predict=d(np.asarray(m.predict(x), dtype=np.float32))))
 
 
+@lane("neural-trainer-unfused")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelNeuralTrainer over the mlp lane's trainer with
+    MOJOLEARN_MLP_FUSED=0: the unfused per-layer gradient route
+    (bindings/parallel_mlp_native.mojo mlp_gradients_from_state: the
+    training binding's mlp_bias_activation, ce_loss, mlp_relu_backward and
+    mlp_sum_rows) that a multi-device optimizer takes and a one-device run
+    otherwise skips for the fused step. The switch is read live from
+    os.environ (_parallel_mlp connects os.environ._data); it is restored
+    before the lane returns. Parts: the weights after three steps and the
+    logits."""
+    from mojolearn.parallel_training import ParallelNeuralTrainer
+    d = _coverage_digester(ml)
+    w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
+         for s in ((16, 8), (16,), (3, 16), (3,))]
+    Xm = np.ascontiguousarray(X[:576, :8])
+    t = _three_class(X[:576])
+    steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
+              for k in range(3)] for s in range(3)]
+    old = os.environ.get("MOJOLEARN_MLP_FUSED")
+    os.environ["MOJOLEARN_MLP_FUSED"] = "0"
+    try:
+        m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+        with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=3) as tr:
+            for shards in steps:  # glue: three driver steps
+                tr.train_step(shards)
+    finally:
+        if old is None:
+            os.environ.pop("MOJOLEARN_MLP_FUSED", None)
+        else:
+            os.environ["MOJOLEARN_MLP_FUSED"] = old
+    return _fit(dict(weights=d(np.concatenate([np.asarray(m.weights_[k], dtype=np.float32).reshape(-1)
+                                               for k in sorted(m.weights_)])),
+                     logits=d(np.asarray(m.predict_logits(Xm[:256]), dtype=np.float32))))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold")
+            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused")
