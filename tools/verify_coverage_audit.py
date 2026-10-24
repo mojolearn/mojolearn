@@ -191,7 +191,7 @@ def label(node):
         f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}")
 
 
-def native_rows(ls, base, reach):
+def native_rows(ls, base, reach, whole_surface=False):
     changed, whole, status = changed_mojo_nodes(ls, base)
     pnodes = patch_nodes(ls)
     graph = ls._MojoDefGraph()
@@ -242,7 +242,7 @@ def native_rows(ls, base, reach):
             reached = set(parent)
             hits = sorted(reached & changed, key=label)
             new = export not in old
-            if not new and not hits:
+            if not new and not hits and not whole_surface:
                 continue
             kinds = sorted({kind_of(n[1]) for n in hits})
             sab_defs, sab_sites, patches = set(), [], set()
@@ -256,6 +256,8 @@ def native_rows(ls, base, reach):
                     patches.add(p)
             users = ls.binding_users(name, exports=[export])
             precise = {lane for lane, (_, ents, _) in reach.items() if NameClosure.names_entry(ents, export)}
+            files = {n[1] for n in reached}
+            precise |= {lane for lane, owned in OWNER_FILES.items() if owned & files}
             rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
@@ -396,6 +398,7 @@ class NameClosure:
         self.by_name = walker.by_name
         self.methods = {}                    # Cls.key -> {name: Func}
         self.top = {}                        # module -> [Func] it calls at import
+        self.bound_calls = {}                # module -> {name: [("func", Func)] its assignment calls}
         for mod in [m for m in self.index.mods.values() if m is not None]:
             local = mod.defs
             calls = []
@@ -409,6 +412,25 @@ class NameClosure:
                     if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in local:
                         calls.append(self.index.func(mod, local[n.func.id]))
             self.top[mod.name] = calls
+            # `_IPCA_CALL, _IPCA_CONTEXT = _native_ipca_bridge.connect_public(IncrementalPCA)`
+            # (_expansion_decomp.py): a migrated method calls the module-level
+            # name the bridge's connect returned, so reading the name follows
+            # the connect (which names the owner entry, `ipca_native_call`)
+            bound = {}
+            for node in mod.tree.body:
+                if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+                    continue
+                try:
+                    target = self.index.resolve_expr(node.value.func, mod.name, None)
+                except Exception:
+                    target = None
+                if not (target and target[0] == "func"):
+                    continue
+                for t in node.targets:
+                    for n in ast.walk(t):
+                        if isinstance(n, ast.Name):
+                            bound.setdefault(n.id, []).append(target)
+            self.bound_calls[mod.name] = bound
         self._facts = {}
 
     def methods_of(self, cls):
@@ -437,6 +459,7 @@ class NameClosure:
                 target = None
                 if isinstance(n, ast.Name):
                     names.add(n.id)
+                    defs.extend(self.bound_calls.get(obj.mod.name, {}).get(n.id, ()))
                     try:
                         target = self.index.resolve_expr(n, obj.mod.name, scope)
                     except Exception:
@@ -680,7 +703,206 @@ def lane_reach(ls, walker, closer=None):
     return out
 
 
-def python_rows(ls, walker, reach, base):
+# ------------------------------------------------------------ native owners
+
+#: The variables a native owner dispatches on: `if operation == "croston_fit":`
+#: (bindings/xseq_forecast_native.mojo), `if family == "FastICA":` then
+#: `if operation == "fit":` (bindings/decomp_native.mojo), `kind == "..."`.
+DISPATCH_VARS = ("operation", "op", "family", "kind", "kind_name", "method", "command", "name")
+_COND_RE = re.compile(r'\b(?:%s)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*)"' % "|".join(DISPATCH_VARS))
+_LIT_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"')
+_PREFIX_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*_)"\s*\+')
+_CALLEE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*[\[(]")
+#: How far a branch's callees are followed for the entry names they hold: the
+#: branch's handler (`_croston_fit`) and the helpers it hands the names to.
+OWNER_DEPTH = 4
+
+
+class OwnerDispatch:
+    """THE PUBLIC RUNTIME MIGRATION'S REACH (2026-10-24). A migrated public
+    method is one native call, `_XSEQ(self, "croston_fit", args, context)`;
+    the Python walk stops at the owner entry (`xseq_native_call`), and the
+    owner, in Mojo, picks the handler by the operation (and family) string and
+    calls the compiled entries by NAME (`entries["croston"]`,
+    `decomp_entries(..., Python.tuple("x_decomp_ica_fit"), ...)`). So a lane
+    that reaches the dispatch strings reaches the entries that branch names.
+
+    Read from the source: every `if`/`elif` on a dispatch variable compared
+    with a string literal opens a branch; the branch's lines, and the
+    definitions they call (to OWNER_DEPTH), contribute every string literal
+    that is a registered entry name. A lane reaches those entries when, for
+    every enclosing condition, one of its alternatives (`a == "x" or a == "y"`)
+    is among the lane's reached names. A branch whose conditions are all
+    GENERIC (a value several owners dispatch on, `fit`, `transform`) credits
+    no lane: `fit` alone does not say which owner ran."""
+
+    def __init__(self, ls, exports):
+        self.ls, self.exports = ls, frozenset(exports)
+        self.graph = ls._MojoDefGraph()
+        self._memo, self._prefix_memo = {}, {}
+        self.records = []                  # (conds: tuple[frozenset], entries: frozenset, file)
+        files = [p for p in git("ls-files", "*.mojo").split() if p]
+        seen_in = defaultdict(set)
+        for path in files:
+            try:
+                text = ls._read(path)
+            except OSError:
+                continue
+            if "PythonObject" not in text or '== "' not in text:
+                continue
+            units = ls._mojo_units(text)
+            if units is None:
+                continue
+            for unit, utext in ls._mojo_unit_texts(units).items():
+                for conds, ents in self._branches(path, utext):
+                    self.records.append((conds, ents, path))
+                    for alt in conds:
+                        for v in alt:
+                            seen_in[v].add(path)
+        self.generic = frozenset(v for v, fs in seen_in.items() if len(fs) >= 3)
+        # owner entry -> the owner files its registration's closure holds: a
+        # branch on generic values alone (`operation == "fit"` in
+        # bindings/ipca_native.mojo) is credited to a lane that reaches the
+        # owner entry itself (`ipca_native_call`), whose closure holds it
+        self.owner_files = defaultdict(set)
+        record_files = {p for _, _, p in self.records}
+        for src in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split():
+            regs = registrations(ls._read(src))
+            for export, (impl, params) in regs.items():
+                if not export.endswith("_call"):
+                    continue
+                roots = set(self.graph.resolve(src, impl))
+                for prm in params:
+                    roots |= self.graph.resolve(src, prm)
+                files = {n[1] for n in closure(self.graph, roots, ls)} & record_files
+                self.owner_files[export] |= files
+
+    def _strings(self, node, depth):
+        """(literals, prefixes) over `node` and its callees to `depth`: every
+        identifier-shaped string literal, and every literal a name is composed
+        from (`near["xn_" + name]`, bindings/kpca_native.mojo)."""
+        key = (node, depth)
+        if key in self._memo:
+            return self._memo[key]
+        self._memo[key] = (frozenset(), frozenset())
+        try:
+            text = self.graph.text(node) or ""
+        except Exception:
+            text = ""
+        lits, pres = set(_LIT_RE.findall(text)), set(_PREFIX_RE.findall(text))
+        if depth > 0:
+            # the audit's own closure, which follows a reached type's methods
+            # by name (a kit's `self.fn("x_decomp_dev_gemm")`, bindings/mani_kit.mojo),
+            # kept to the Python-facing Mojo under bindings/
+            for t in closure(self.graph, {node}, self.ls):
+                if t == node or not t[1].startswith("bindings/") or \
+                        os.path.basename(t[1]).startswith("_mojolearn"):
+                    continue
+                try:
+                    sub = self.graph.text(t) or ""
+                except Exception:
+                    sub = ""
+                lits |= set(_LIT_RE.findall(sub))
+                pres |= set(_PREFIX_RE.findall(sub))
+        self._memo[key] = (frozenset(lits), frozenset(pres))
+        return self._memo[key]
+
+    def _named(self, lits, pres):
+        out = set(lits) & self.exports
+        for p in pres:
+            for e in self._by_prefix(p):
+                if e[len(p):] in lits:
+                    out.add(e)
+        return out
+
+    def _by_prefix(self, p):
+        if p not in self._prefix_memo:
+            self._prefix_memo[p] = [e for e in self.exports if e.startswith(p) and len(e) > len(p)]
+        return self._prefix_memo[p]
+
+    def _line_entries(self, path, line):
+        lits, pres = set(_LIT_RE.findall(line)), set(_PREFIX_RE.findall(line))
+        for ident in set(_CALLEE_RE.findall(line)):
+            try:
+                nodes = self.graph.resolve(path, ident)
+            except Exception:
+                nodes = ()
+            for n in nodes:
+                a, b = self._strings(n, OWNER_DEPTH - 1)
+                lits |= a
+                pres |= b
+        return self._named(lits, pres)
+
+    def _branches(self, path, text):
+        stack = []                         # [(indent, frozenset alternatives | None)]
+        acc = defaultdict(set)
+        for raw in text.splitlines():
+            body = raw.rstrip()
+            cut = body.find("#")
+            if cut >= 0 and body[:cut].count('"') % 2 == 0:
+                body = body[:cut].rstrip()
+            stripped = body.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(body) - len(body.lstrip())
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+            head = stripped.split(" ", 1)[0]
+            if head in ("if", "elif") and stripped.endswith(":"):
+                # `a == "x" or a == "y"` is one requirement with two
+                # alternatives; `... and b == "z"` adds a second requirement
+                parts = [frozenset(_COND_RE.findall(p)) for p in stripped[len(head):-1].split(" and ")]
+                parts = [p for p in parts if p]
+                stack.append((indent, tuple(parts) or None))
+                continue
+            if head == "else:" or stripped == "else:":
+                stack.append((indent, None))
+                continue
+            conds = tuple(alt for _, c in stack if c for alt in c)
+            if not conds:
+                continue
+            ents = self._line_entries(path, stripped)
+            if ents:
+                acc[conds] |= ents
+        return [(c, frozenset(e)) for c, e in acc.items()]
+
+    def reached(self, names):
+        """(entry names, owner files): what the owners' branches reach for a
+        lane whose reached names are `names`, and the files of those branches."""
+        out, files = set(), set()
+        owned = set()
+        for export, fs in self.owner_files.items():
+            if export in names:
+                owned |= fs
+        for conds, ents, path in self.records:
+            if all(alt & names for alt in conds) and (
+                    path in owned or any(alt - self.generic for alt in conds)):
+                out |= ents
+                files.add(path)
+        return out, files
+
+
+def owner_reach(ls, reach):
+    """`reach` with every lane's entries widened by the native owners' dispatch."""
+    exports = set()
+    for src in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split():
+        exports |= set(registrations(ls._read(src)))
+    od = OwnerDispatch(ls, exports)
+    out = {}
+    for lane, (roots, entries, reached) in reach.items():
+        extra, files = od.reached(frozenset(entries))
+        out[lane] = (roots, entries | extra, reached)
+        OWNER_FILES[lane] = frozenset(f for f in files if "native" in os.path.basename(f))
+    return out, od
+
+
+#: lane -> the native owner files (`*native*.mojo`) whose dispatch branches the
+#: lane reaches; a registration whose Mojo closure holds one of them (the owner
+#: entry itself: `xseq_native_call`, `decomp_native_call`) is reached by the lane.
+OWNER_FILES = {}
+
+
+def python_rows(ls, walker, reach, base, whole_surface=False):
     pri = walker.pri
     index = walker.index
     changed = changed_python_lines(base)
@@ -720,7 +942,7 @@ def python_rows(ls, walker, reach, base):
             done.add(key)
             funcs, entries = walker.walk(func, cls)
             path_changed = [f for f in funcs if touched(f)]
-            if not path_changed:
+            if not path_changed and not whole_surface:
                 continue
             owner = cls.key if cls else func.key
             lanes = set(root_lanes.get((owner, op), ()))
@@ -2015,6 +2237,9 @@ def main(argv=None):
     ap.add_argument("--json", help="write the audit here")
     ap.add_argument("--from-json", help="read a previous audit instead of deriving one")
     ap.add_argument("--markdown", help="write the coverage table here")
+    ap.add_argument("--all", dest="whole_surface", action="store_true",
+                    help="audit the WHOLE public surface: every registration and every public "
+                         "operation method, not only those new or changed since --base")
     args = ap.parse_args(argv)
     if args.from_json:
         audit = json.load(open(args.from_json))
@@ -2022,9 +2247,11 @@ def main(argv=None):
         import lane_select as ls
         walker = Walker()
         reach = lane_reach(ls, walker, NameClosure(walker))
-        native = native_rows(ls, args.base, reach)
-        py = python_rows(ls, walker, reach, args.base)
+        reach, _ = owner_reach(ls, reach)
+        native = native_rows(ls, args.base, reach, args.whole_surface)
+        py = python_rows(ls, walker, reach, args.base, args.whole_surface)
         audit = dict(base=args.base, head=git("rev-parse", "HEAD").strip(),
+                     scope="all" if args.whole_surface else "changed",
                      lane_inventory=sorted(reach), native=native, python=py)
         audit["reference_evidence"] = reference_snapshot(
             os.path.join(ROOT, "python/mojolearn/verify_reference/table.json"), audit_lanes(audit))
