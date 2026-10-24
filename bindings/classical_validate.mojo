@@ -119,7 +119,20 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
     if source is None:
         return PythonObject(None)
-    var view = classical_view(source, context, "sample_weight")
+    var view = PythonObject(None)
+    try:
+        view = classical_view(source, context, "sample_weight")
+    except error:
+        # The shared admission refusal names no accepted type; say what a
+        # weight may be. An object that only defines __array__ (scikit-learn's
+        # _NotAnArray) is never converted: no Python protocol runs in a fit.
+        if String(error).startswith("TypeError: Sequential requires native input types"):
+            raise Error("TypeError: sample_weight must be None, a number, a NumPy array, a buffer "
+                        + "(memoryview, array.array, bytearray), a list or tuple of numbers, a pandas "
+                        + "Series or a Torch tensor; got " + String(py_type(source).__name__)
+                        + ", which is not read because it only converts through Python-defined "
+                        + "methods such as __array__")
+        raise Error(String(error))
     var nd = Int(py=view.ndim)
     if nd > 1:
         raise Error("Sample weights must be 1D array or scalar")
