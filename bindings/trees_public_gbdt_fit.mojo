@@ -1001,6 +1001,14 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
                     + "train.cpp:279 is the refusal): " + _repr(py_call(b.sorted, t["non_symmetric_losses"])))
     var max_leaves = kw["max_leaves"]
     var depth = kw["max_depth"]
+    if depth is not None:
+        # The device trainer sizes its leaf tables from 2 ** max_depth and
+        # reads a negative depth out of bounds (a segfault on CUDA); CatBoost
+        # caps oblivious and depthwise trees at 16. The host binding refuses
+        # the same range (bindings/_mojolearn_gbdt_host.mojo:1331).
+        var depth_int = Int(py=py_call_typed(b.int, depth))
+        if depth_int < 0 or depth_int > 16:
+            raise Error("mojolearn: max_depth must be in 0..16 (CatBoost's maximum tree depth), got " + _str(depth))
     if max_leaves is not None:
         var leaves = Int(py=py_call_typed(b.int, max_leaves))
         if leaves < 2:
