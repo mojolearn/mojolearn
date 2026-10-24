@@ -169,6 +169,7 @@ struct EncProg(Movable):
     var program: List[Int32]
     var inputs: PythonObject
     var out_words: Int
+    var inout: List[Int]
 
     def __init__(out self) raises:
         self.host = 0
@@ -177,6 +178,7 @@ struct EncProg(Movable):
         self.program = List[Int32]()
         self.inputs = Python.list()
         self.out_words = 0
+        self.inout = List[Int]()
 
     def alloc(mut self, words: Int) -> Int:
         # `_Prog.alloc`: host arena words.
@@ -213,6 +215,15 @@ struct EncProg(Movable):
         var offset = self.alloc(words)
         if words > 0:
             _ = py_call(self.inputs.append, Python.tuple(offset, Python.tuple(0, value, PythonObject(None), words, 1)))
+        return offset
+
+    def put_inout(mut self, value: PythonObject, words: Int) raises -> Int:
+        # `_Prog.put(arr, inout=True)`: a stage rewrites these words and the
+        # caller reads them after the run, so they come back from the device.
+        var offset = self.put(value, words)
+        if words > 0:
+            self.inout.append(offset)
+            self.inout.append(offset + words)
         return offset
 
     def put_x(mut self, values: PythonObject) raises -> Int:
@@ -258,7 +269,8 @@ struct EncProg(Movable):
         var device_scratch = scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
         var arena = xprep_storage(host + (0 if device_scratch else scratch), context)
         var store = xprep_storage(self.out_words, context) if self.out_words > 0 else PythonObject(None)
-        xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words)
+        xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words,
+                  self.inout.copy())
         return Python.tuple(arena, store)
 
 

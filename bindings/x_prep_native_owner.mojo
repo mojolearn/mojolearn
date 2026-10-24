@@ -225,9 +225,43 @@ def _release_owned(owned: List[Int], entries: PythonObject) -> String:
     return failures
 
 
+def _xprep_merge(var pairs: List[Int]) -> List[Int32]:
+    # `_arena_io.output_ranges`: [lo, hi, -1, 1] quads of the sorted, merged
+    # non-empty pairs (bindings/arena_prog_native.mojo `_merge_pairs`).
+    var n = len(pairs) // 2
+    for i in range(1, n):  # driver-loop: insertion sort of the program's output range pairs
+        var lo = pairs[2 * i]
+        var hi = pairs[2 * i + 1]
+        var j = i - 1
+        while j >= 0 and (pairs[2 * j] > lo or (pairs[2 * j] == lo and pairs[2 * j + 1] > hi)):  # driver-loop: insertion shift over range pairs
+            pairs[2 * j + 2] = pairs[2 * j]
+            pairs[2 * j + 3] = pairs[2 * j + 1]
+            j -= 1
+        pairs[2 * j + 2] = lo
+        pairs[2 * j + 3] = hi
+    var out = List[Int32]()
+    for i in range(n):  # driver-loop: merge of the sorted output range pairs
+        var lo = pairs[2 * i]
+        var hi = pairs[2 * i + 1]
+        if hi <= lo:
+            continue
+        var m = len(out) // 4
+        if m > 0 and lo <= Int(out[4 * m - 3]):
+            out[4 * m - 3] = Int32(max(Int(out[4 * m - 3]), hi))
+        else:
+            out.append(Int32(lo))
+            out.append(Int32(hi))
+            out.append(-1)
+            out.append(1)
+    return out^
+
+
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
               var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
-              logical_output: Int = 0) raises:
+              logical_output: Int = 0, inout: List[Int] = List[Int]()) raises:
+    # `inout`: [lo, hi) pairs of inputs a stage rewrites and the caller reads
+    # after the run (`_Prog.put(..., inout=True)`): they are copied up from
+    # the host (never a resident or direct slot) and come back like outputs.
     var profile = String(getenv("MOJOLEARN_XPREP_PROFILE","0")) == "1"
     var start = Int(perf_counter_ns()) if profile else 0
     var kernel_start = start
@@ -250,7 +284,11 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             var value = record[1]
             var words = Int(py=record[3])*Int(py=record[4])
             var source = -1
-            if ranges:
+            var is_inout = False
+            for j in range(len(inout) // 2):  # driver-loop: over the program's in-out input ranges
+                if inout[2 * j] == offset and inout[2 * j + 1] == offset + words:
+                    is_inout = True
+            if ranges and not is_inout:
                 var cache = _resident(entries,Int(py=value.size),rows,context)
                 if cache is not None:
                     source = _cached_slot(cache,value,entries,context)
@@ -280,6 +318,15 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             outs.append(Int32(host))
             outs.append(-1)
             outs.append(1)
+        if ranges and len(inout) > 0:
+            # the in-out input ranges come back too
+            var pairs = List[Int]()
+            for i in range(len(outs) // 4):  # driver-loop: over the program's output ranges
+                pairs.append(Int(outs[4 * i]))
+                pairs.append(Int(outs[4 * i + 1]))
+            for j in range(len(inout)):  # driver-loop: over the program's in-out input ranges
+                pairs.append(inout[j])
+            outs = _xprep_merge(pairs^)
         var nst = len(program)//16
         var pa = Int(program.unsafe_ptr())
         kernel_start = Int(perf_counter_ns()) if profile else 0
