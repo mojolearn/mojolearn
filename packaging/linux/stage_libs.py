@@ -55,6 +55,8 @@ _mojolearn_native_host.so in host/, plus _mojolearn_merged.json; the merged
 files take the same RUNPATH by directory, and each index is recorded in the
 manifest's merged_indexes with its digest.)
     .libs/lib*.so                        $ORIGIN
+    <set root>/_adapters/libmojolearn_adapter.so   the tier RUNPATH (one level down)
+    <set root>/_adapters/mojolearn_torch.so        $ORIGIN:$ORIGIN/../../../../torch/lib
 
 The host row (2026-09-14) is the vendor-neutral CPU bindings, packed ONCE at
 `mojolearn/host/` rather than under a vendor, so its candidates are the
@@ -100,6 +102,31 @@ DRIVER_PREFIXES = (
     "libamdhip64.so", "libhsa-runtime64.so", "libhsakmt", "libdrm",
     "libhiprtc", "libamd_comgr", "librocm",
 )
+
+
+#: THE FRAMEWORK ADAPTERS (packaging/adapters/build.sh) sit in <set>/_adapters/,
+#: one level below the set root like a tier. The native adapter library is a
+#: Mojo binary like the bindings: its MAX runtime closure is staged and it
+#: takes the tier RUNPATH. The Torch registration needs that library (beside
+#: it) and the user's installed Torch (site-packages/torch/lib, four levels up
+#: from mojolearn/<vendor dir>/<arch>/_adapters/); Torch is never staged.
+ADAPTER_DIR = "_adapters"
+ADAPTER_NATIVE = "libmojolearn_adapter.so"
+ADAPTER_TORCH = "mojolearn_torch.so"
+ADAPTER_RUNPATHS = {
+    ADAPTER_NATIVE: "$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs",
+    ADAPTER_TORCH: "$ORIGIN:$ORIGIN/../../../../torch/lib",
+}
+#: The libraries the Torch registration may need from the installed torch.
+FRAMEWORK_PREFIXES = ("libtorch.so", "libtorch_cpu.so", "libc10.so",
+                      "libtorch_cuda.so", "libc10_cuda.so", "libtorch_hip.so", "libc10_hip.so")
+
+
+def adapter_torch_errors(needed):
+    """The DT_NEEDED entries of the Torch registration outside its three
+    allowed classes: system, the adapter library beside it, installed Torch."""
+    return [dep for dep in needed
+            if not (dep == ADAPTER_NATIVE or any(dep.startswith(p) for p in SYSTEM_PREFIXES + FRAMEWORK_PREFIXES))]
 
 
 def sha256(path):
@@ -245,12 +272,18 @@ def main():
     # pack_wheel.py requires.
     hosts = sorted((root / "host").glob("_mojolearn_*_host.so")) if (root / "host").is_dir() else []
     exts += hosts
+    adapters = root / ADAPTER_DIR
+    adapter_native = [adapters / ADAPTER_NATIVE] if (adapters / ADAPTER_NATIVE).is_file() else []
+    adapter_torch = adapters / ADAPTER_TORCH
+    if adapters.is_dir() and not (adapter_native and adapter_torch.is_file()):
+        raise SystemExit(f"stage_libs: {adapters} must hold both {ADAPTER_NATIVE} and {ADAPTER_TORCH}")
 
     libs = root / ".libs"
     if libs.exists():
         shutil.rmtree(libs)
     libs.mkdir()
-    needed, edges, driver = closure(exts, env_lib)
+    # the adapter library's MAX runtime closure is staged with the bindings'
+    needed, edges, driver = closure(exts + adapter_native, env_lib)
     staged = []
     for name in needed:
         src = env_lib / name
@@ -297,7 +330,26 @@ def main():
         if members is not None:
             record["members"] = members
         ext_records.append(record)
-    verify_closed(exts + sorted(libs.glob("*.so*")), libs, env_lib)
+    adapter_records, framework = [], []
+    if adapter_native:
+        for path in adapter_native + [adapter_torch]:
+            set_runpath(a.patchelf, path, ADAPTER_RUNPATHS[path.name])
+            n, runpath, _ = elf_dynamic(path)
+            adapter_records.append({"path": str(path.relative_to(root)), "bytes": path.stat().st_size,
+                                    "sha256": sha256(path), "needed": n, "runpath": runpath})
+        torch_needed = elf_dynamic(adapter_torch)[0]
+        bad = adapter_torch_errors(torch_needed)
+        if bad:
+            raise SystemExit(f"stage_libs: {ADAPTER_TORCH} needs libraries that are neither system, "
+                             f"{ADAPTER_NATIVE} nor installed Torch: {bad}")
+        framework = sorted(d for d in torch_needed if any(d.startswith(p) for p in FRAMEWORK_PREFIXES))
+        edges += [{"from": ADAPTER_TORCH, "needs": dep,
+                   "class": "adapter" if dep == ADAPTER_NATIVE else "framework" if dep in framework else "system"}
+                  for dep in torch_needed]
+        edges += [{"from": ADAPTER_NATIVE, "needs": dep,
+                   "class": "staged" if dep in {r["name"] for r in staged} else classify(dep, env_lib)}
+                  for dep in elf_dynamic(adapter_native[0])[0]]
+    verify_closed(exts + adapter_native + sorted(libs.glob("*.so*")), libs, env_lib)
     # MERGED LAYOUT (packaging/linux/merged_layout.py): each merged file's
     # index ships beside it and the loader trusts it, so it is recorded with
     # its digest like every other shipped file of the set.
@@ -316,6 +368,10 @@ def main():
         "merged_indexes": merged_indexes,
         "binding_layout": "merged" if merged_indexes else "per-binding",
         "driver_libs_not_staged": driver, "edges": edges,
+        # the framework adapters (absent: none built for this set) and the
+        # installed-Torch libraries their registration needs, which the wheel
+        # audit (audit.sh) excludes by name like the driver libraries
+        "adapters": adapter_records, "framework_libs_not_staged": framework,
         "input_edges": input_edges, "portable_math": portable_math,
         "bytes_extensions": total_ext, "bytes_staged_libs": total_libs,
         "bytes_total_uncompressed": total_ext + total_libs,
@@ -324,6 +380,8 @@ def main():
         json.dump(manifest, f, indent=2, sort_keys=True)
     print(f"  staged {len(staged)}: {', '.join(r['name'] for r in staged)}")
     print(f"  driver libraries left to the box: {driver or 'none'}")
+    if adapter_records:
+        print(f"  adapters: {', '.join(r['path'] for r in adapter_records)}; installed Torch provides {framework}")
     print(f"  extensions {total_ext/1e6:.1f} MB, runtime libraries "
           f"{total_libs/1e6:.1f} MB, uncompressed set {(total_ext+total_libs)/1e6:.1f} MB")
 

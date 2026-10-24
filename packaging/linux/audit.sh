@@ -101,7 +101,9 @@ if [ -n "$SUFFIX" ]; then
   echo "plugin: the core's runtime ($(basename "$CORE")) is excluded by name"
 fi
 for m in "$@"; do
-  for lib in $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(d["driver_libs_not_staged"] + [s["name"] for s in d["staged_libs"]]))' "$m"); do
+  # + the framework adapters' needs (stage_libs.py): the installed Torch's
+  # libraries, never in the wheel, and the adapter library beside its user
+  for lib in $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(d["driver_libs_not_staged"] + [s["name"] for s in d["staged_libs"]] + d.get("framework_libs_not_staged", []) + (["libmojolearn_adapter.so"] if d.get("adapters") else [])))' "$m"); do
     case " $EXCL " in *" $lib "*) ;; *) EXCL="$EXCL $lib" ;; esac
   done
 done

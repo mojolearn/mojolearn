@@ -7,7 +7,9 @@ PyPI refuses any file over 100 MiB (python/mojolearn/gpu_plugins.py wheel_size_l
   the embedded Metal library stay. `strip` voids the ad-hoc signature, so each binding is signed again with `codesign -s -`.
 - every member is written with deflate level 9 (setuptools writes level 6).
 
-Measured on 0.8.55: 100.6 MiB -> about 97 MiB. RECORD is rewritten with the new hashes and sizes.
+Measured on 0.8.55: 100.6 MiB -> about 97 MiB. RECORD is rewritten with the new hashes and sizes, and so is
+the framework adapters' manifest (mojolearn/_adapters/adapters.json, packaging/adapters/manifest.py): it names
+the shipped bytes, which this rewrite changes, and is checked against them once more here.
 Exits 1 if the wheel is still over the limit, so an oversized wheel fails the build, not the upload.
 
     python3 packaging/macos/shrink_wheel.py python/dist/mojolearn-*.whl
@@ -21,6 +23,16 @@ import tempfile
 import zipfile
 
 LIMIT = 100 * 1024**2
+ADAPTER_MANIFEST = "mojolearn/_adapters/adapters.json"
+
+
+def _adapter_manifest():
+    import importlib.util
+    path = pathlib.Path(__file__).resolve().parents[1] / "adapters" / "manifest.py"
+    spec = importlib.util.spec_from_file_location("mojolearn_adapter_manifest", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _record_hash(data):
@@ -43,6 +55,15 @@ def shrink(wheel):
             subprocess.run(["strip", "-x", str(path)], check=True, capture_output=True)
             subprocess.run(["codesign", "-f", "-s", "-", str(path)], check=True, capture_output=True)
             members[name] = path.read_bytes()
+    if ADAPTER_MANIFEST in members:
+        manifest = _adapter_manifest()
+        base = ADAPTER_MANIFEST.rsplit("/", 1)[0] + "/"
+        members[ADAPTER_MANIFEST] = manifest.refresh(members[ADAPTER_MANIFEST], lambda n: members[base + n],
+                                                     "shrink_wheel.py: strip -x and codesign -f -s -")
+        shipped = {n[len(base):]: (hashlib.sha256(d).hexdigest(), len(d)) for n, d in members.items()
+                   if n.startswith(base) and n != ADAPTER_MANIFEST}
+        import json
+        manifest.validate(json.loads(members[ADAPTER_MANIFEST]), shipped, vendor="metal", arch="apple")
     rows = []
     for i in infos:
         if i.filename == record_name:

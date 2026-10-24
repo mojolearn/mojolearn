@@ -681,6 +681,33 @@ print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', num
 PYBYTE
     done
 fi
+# THE FRAMEWORK ADAPTERS (packaging/adapters/build.sh, 2026-10-24): the native
+# adapter library (adapters/native/c_api.mojo with the IDENTICAL flags), the
+# PyTorch registration linked against the pinned macOS torch wheel
+# (packaging/adapters/pins.json) and the MAX custom-operation package, in
+# python/mojolearn/_adapters/ with their adapters.json. The library joins
+# ALL_SOS (staged, re-signed, floor-, ISA- and Metal-checked like a binding);
+# the Torch registration needs torch, which is never staged, so it is held to
+# the stray, floor and ISA checks only and carries its own package-relative
+# rpath (@loader_path/../../torch/lib). MOJOLEARN_RELEASE_ADAPTERS=0 builds none.
+ADAPTER_DIR="$PKG/_adapters"
+ADAPTER_TORCH_SO=""
+rm -rf "$ADAPTER_DIR"
+case "${MOJOLEARN_RELEASE_ADAPTERS:-1}" in
+    1)
+        bash "$here/packaging/adapters/build.sh" "$ADAPTER_DIR" "$BUILD_LOGS/adapters" metal apple \
+            > "$BUILD_LOGS/adapters.log" 2>&1 || {
+            echo "ERROR: the framework adapters did not build ($BUILD_LOGS/adapters.log):" >&2
+            tail -n 8 "$BUILD_LOGS/adapters.log" >&2
+            exit 1
+        }
+        ALL_SOS="$ALL_SOS $ADAPTER_DIR/libmojolearn_adapter.so"
+        ADAPTER_TORCH_SO="$ADAPTER_DIR/mojolearn_torch.so"
+        echo "framework adapters: $(ls "$ADAPTER_DIR" | tr '\n' ' ')"
+        ;;
+    0) echo "framework adapters: off (MOJOLEARN_RELEASE_ADAPTERS=0)" ;;
+    *) echo "MOJOLEARN_RELEASE_ADAPTERS must be 0 or 1" >&2; exit 2 ;;
+esac
 # macOS /bin/sh's -nt compares whole seconds. A reused binding can be
 # placed after STAMP within that same second; preserve the strict freshness
 # check using the filesystem's nanosecond timestamps instead.
@@ -711,7 +738,7 @@ PYFRESH
 # where .gitignore means they do not exist -- luck of the build environment, not
 # a check. A local build had no such luck, and this is the check.
 EXPECTED_SOS=$(mktemp "${TMPDIR:-/tmp}/mojolearn-expected-sos.XXXXXX")
-for so in $ALL_SOS; do printf '%s\n' "${so#"$PKG/"}"; done | sort -u > "$EXPECTED_SOS"
+for so in $ALL_SOS $ADAPTER_TORCH_SO; do printf '%s\n' "${so#"$PKG/"}"; done | sort -u > "$EXPECTED_SOS"
 UNEXPECTED_SOS=$( (cd "$PKG" && find . -name '*.so') | sed 's|^\./||' | sort -u \
     | grep -Fxv -f "$EXPECTED_SOS" || true )
 rm -f "$EXPECTED_SOS"
@@ -761,6 +788,11 @@ for so in $ALL_SOS; do
     [ "$got" = "$want" ] || { echo "ERROR: reused ${so#$PKG/} changed after placement: $got, the plan says $want" >&2; exit 1; }
     echo "reused: ${so#$PKG/} sha256 $got (the published bytes)"
 done
+# The adapters' shipped digests, after staging re-signed the library
+# (shrink_wheel.py refreshes them again after it strips and re-signs).
+if [ -n "$ADAPTER_TORCH_SO" ]; then
+    python3 "$here/packaging/adapters/manifest.py" finalize "$ADAPTER_DIR" || exit 1
+fi
 
 
 
@@ -781,7 +813,7 @@ fi
 # wheel: a binary carrying bf16, i8mm or SME instructions SIGILLs on the Macs
 # the selected wheel platform and portable CPU contract admit.
 # shellcheck disable=SC2086
-pixi run -e pkg python "$here/packaging/isa_baseline.py" $ALL_SOS
+pixi run -e pkg python "$here/packaging/isa_baseline.py" $ALL_SOS $ADAPTER_TORCH_SO
 
 # NO GPU KERNELS, NO WHEEL. A build on a machine without a usable Apple GPU
 # emits the host half and silently no Metal shader code, exits 0, and produces

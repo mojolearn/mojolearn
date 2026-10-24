@@ -99,9 +99,12 @@ for directory, dirs, names in os.walk(root):
         if rel.startswith('python/mojolearn/tests/'):
             continue
         if (name.endswith('.mojo') or rel.startswith(('bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/')) and name.endswith(('.py', '.sh'))
+                or rel.startswith('packaging/adapters/') and not rel.startswith('packaging/adapters/test_')
                 or rel in ('pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh',
                            # the merged bindings' manifest and root generator (bindings/merged_build.sh)
-                           'bindings/merged_groups.json', 'tools/merged_bindings.py')):
+                           'bindings/merged_groups.json', 'tools/merged_bindings.py',
+                           # the framework adapters' non-Mojo sources (packaging/adapters/build.sh)
+                           'adapters/torch/registration.cpp', 'adapters/native/abi.h')):
             files.append([rel, hashlib.sha256(path.read_bytes()).hexdigest()])
 files.sort()
 (out / 'source-inventory.json').write_text(json.dumps(files, indent=2) + '\n')
@@ -181,10 +184,20 @@ host_members = sorted(host_outputs)
 want_host = set(expected_set_files('host', byte_lm == '1', counted)) if host_wanted else set()
 assert all('/host/' + n.rsplit('/', 1)[1] == n[n.index('/host/'):] for n in host_members), ('Unexpected host binding', host_members)
 assert {n.rsplit('/', 1)[1] for n in host_members} == want_host and len(host_members) == len(want_host), ('Incorrect host binding inventory', host_members, sorted(want_host))
+# THE FRAMEWORK ADAPTERS (packaging/adapters/build.sh): per set, the shipped
+# files' digests and the digest of the adapters.json that names them. The
+# packer binds the wheel's _adapters/ bytes to this record.
+adapters = {}
+for manifest_path in sorted(sets.glob('*/*/_adapters/adapters.json')):
+    adapters[member_of(manifest_path.parent)] = dict(
+        manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        files={p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+               for p in sorted(manifest_path.parent.iterdir()) if p.is_file()})
 record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit, action=action, build_exit=status,
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
               extensions=outputs, host_extension=host_outputs,
               merged_indexes=merged_indexes, binding_layout=binding_layout, release_modes=built_modes,
+              adapters=adapters,
               complete=(status == 0 and action == 'build' and len(outputs) == full_count and not layout_errors))
 if layout_errors:
     record['layout_errors'] = layout_errors

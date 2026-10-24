@@ -1,0 +1,18 @@
+{
+  "schema": "mojolearn.adapter-pins.v1",
+  "abi": 1,
+  "comment": "The one source of the framework versions the shipped adapters are built against. python/pyproject.toml's torch and max extras must equal the two requirement strings (packaging/adapters/test_adapters.py). A Torch C++ extension is bound to one Torch minor series, one backend and one C++ ABI, so each vendor builds against the wheel its users install: PyPI's default torch for NVIDIA and macOS, PyTorch's ROCm index for AMD. wheel_sha256 null means the leg records the digest the index serves; set it to pin the exact file.",
+  "torch": {
+    "requirement": "torch>=2.13,<2.14",
+    "series": "2.13",
+    "build": {
+      "cuda": {"version": "2.13.0", "index_url": "https://pypi.org/simple", "backend": "cuda", "wheel_sha256": null},
+      "hip": {"version": "2.13.0+rocm7.2", "index_url": "https://download.pytorch.org/whl/rocm7.2", "backend": "rocm", "wheel_sha256": null},
+      "metal": {"version": "2.13.0", "index_url": "https://pypi.org/simple", "backend": "mps", "wheel_sha256": null}
+    }
+  },
+  "max": {
+    "requirement": "max==26.5.0",
+    "version": "26.5.0"
+  }
+}
