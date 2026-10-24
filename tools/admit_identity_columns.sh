@@ -27,7 +27,12 @@
 #      Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never
 #      a reason to rerun. One sample per part is admissible (min_repeats=1);
 #      incoming files may be partial vendor updates; selected numerical parts
-#      must retain agreeing Apple, NVIDIA and AMD witnesses in the final table.
+#      must retain agreeing Apple, NVIDIA, AMD and cpu witnesses in the final
+#      table. THE CPU COLUMN IS REQUIRED (Andrew 2026-10-24): a cpu value that
+#      differs from the GPU reference, at any commit, or a missing cpu column
+#      refuses the admission as a bug to fix; cpu N/A is accepted only where
+#      the harness declares it (identity_break GPU_ONLY_LANES and
+#      RECORD_EXCLUDED_PREFIXES, and the model part that loads the GPU's file).
 #      Admission reuses identity evidence; it does not re-run the GPU checks.
 #   4. tools/identity_columns.py report: routine-profile reference parts taken
 #      from the new commit vs. still resting on an older one
@@ -39,8 +44,9 @@
 #   --check-only does 1, then 3-5 on a scratch table; nothing in the tree changes.
 #   --lanes selects complete lanes; default is every lane in incoming records.
 #   Unselected table rows and original records stay intact. Selected numerical
-#   parts must have agreeing Apple, NVIDIA and AMD columns (retained agreeing
-#   columns count). Missing/conflicted parts are refused before table mutation.
+#   parts must have agreeing Apple, NVIDIA, AMD and cpu columns (retained
+#   agreeing columns count; cpu N/A only where declared). Missing, conflicted
+#   or cpu-disagreeing parts are refused before table mutation.
 #   The final table is installed only after candidate checks pass.
 #
 # Models mode (the <outdir>/models of `record_identity_column.sh <gpu> <outdir>
@@ -247,7 +253,7 @@ candidate() {
         || die "emit-reference refused; table unchanged; see $tmp/emit.log"
     "${PY[@]}" tools/identity_admission_guard.py check --base "$tmp/base.json" \
         --candidate "$tmp/table.json" --lanes "$LANES" > "$tmp/agreement.json" \
-        || die "GPU reference agreement refused; table unchanged; see $tmp/agreement.json"
+        || die "GPU and cpu reference agreement refused; table unchanged; see $tmp/agreement.json"
 }
 candidate "${record_args[@]}"
 if [ $CHECK_ONLY = 1 ]; then
@@ -293,7 +299,7 @@ cut -c1-400 "$DEST/admission-summary.json"
 "${PY[@]}" tools/identity_columns.py report --table "$tmp/table.json" --commit "$C" --out "$DEST/reference-report.json"
 {
     echo
-    echo "Builder summary: \`admission-summary.json\`; selected GPU agreement: \`agreement-summary.json\`."
+    echo "Builder summary: \`admission-summary.json\`; selected GPU and cpu agreement: \`agreement-summary.json\`."
     echo "Routine-profile reference parts from this"
     echo "commit vs. still older: \`reference-report.json\` (tools/identity_columns.py report)."
 } >> "$DEST/README.md"
