@@ -41,6 +41,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.identity_trace import IdentityTrace
+from core.device_plan import device_plan_enter, device_plan_exit
 from kernel_methods.estimator import (
     KernelRidgeModel,
     NystroemModel,
@@ -109,11 +110,33 @@ def kernel_methods_vendor_binding() raises -> PythonObject:
 
 
 def kernel_methods_rows_parallel_available() raises -> PythonObject:
-    """1: km_kernel_matrix reaches svm kernel_op, which reads
-    MOJOLEARN_SVM_DEVICE_COUNT, and potrf_lower/cho_solve read
-    MOJOLEARN_CHOLESKY_DEVICE_COUNT; parallel_classical.fit_kernel_method and
-    apply_kernel_method set both inside their cooperative worker."""
+    """1: km_kernel_matrix reaches svm kernel_op, which reads its owner count
+    through `core/device_plan.mojo::device_plan_setting`
+    (MOJOLEARN_SVM_DEVICE_COUNT without a plan), and potrf_lower/cho_solve
+    read MOJOLEARN_CHOLESKY_DEVICE_COUNT the same way;
+    parallel_classical.fit_kernel_method and apply_kernel_method bind a
+    device plan around the plain owners (`kernel_methods_device_plan_enter`)."""
     return PythonObject(1)
+
+
+def kernel_methods_device_plan_enter_binding(devices: PythonObject) raises -> PythonObject:
+    """Bind `devices` (a tuple of distinct nonnegative device indices; rank r
+    runs on `devices[r]`) to the calling thread until
+    `kernel_methods_device_plan_exit`: the kernel rows, the factor's trailing
+    rows and the solve's columns go to those devices and the binding's root
+    context to `devices[0]` (bindings/kernel_methods_native.mojo,
+    `family_km_par_*`). Returns the number of devices."""
+    var ids = List[Int]()
+    for i in range(len(devices)):  # driver-loop: over the selected device indices
+        ids.append(Int(py=devices[i]))
+    device_plan_enter(ids)
+    return PythonObject(len(ids))
+
+
+def kernel_methods_device_plan_exit_binding() raises -> PythonObject:
+    """Release the calling thread's device plan."""
+    device_plan_exit()
+    return PythonObject(None)
 
 
 # ===========================================================================
@@ -793,6 +816,8 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         m.def_function[kernel_methods_rows_parallel_available](
             "kernel_methods_rows_parallel_available"
         )
+        m.def_function[kernel_methods_device_plan_enter_binding]("kernel_methods_device_plan_enter")
+        m.def_function[kernel_methods_device_plan_exit_binding]("kernel_methods_device_plan_exit")
         m.def_function[kernel_methods_vendor_binding]("kernel_methods_vendor")
         m.def_function[kernel_methods_numeric_mode_binding](
             "kernel_methods_numeric_mode"
