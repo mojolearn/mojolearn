@@ -40,6 +40,10 @@ def par_spec_admits(driver: String, owner: String) -> Bool:
     if driver == "resample":
         return (owner == "family_rs_bootstrap" or owner == "family_rs_permutation_test"
                 or owner == "family_rs_monte_carlo_integrate")
+    if driver == "graph_fit":
+        return owner == "family_cfb_agglo_fit" or owner == "family_cfb_sc_fit" or owner == "family_mani_umap_fit"
+    if driver == "umap_transform":
+        return owner == "family_mani_umap_transform"
     return False
 
 
@@ -71,4 +75,6 @@ def par_spec_rebuild(driver: String) -> String:
         return "rebuild HDBSCAN binding for distributed neighbor and distance rows"
     if driver == "resample":
         return "rebuild resample binding for distributed replicate ranges"
+    if driver == "graph_fit" or driver == "umap_transform":
+        return "rebuild graph binding for native multi-GPU rows"
     return "rebuild the binding for multi-GPU drivers"

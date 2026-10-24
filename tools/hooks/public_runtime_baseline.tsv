@@ -454,8 +454,8 @@ fit_transform	mojolearn.UMAP	python/mojolearn/_umap_impl.py:310	1	1	0	0	0	native
 save	mojolearn.UMAP	python/mojolearn/_umap_impl.py:375	1	1	0	0	0	native	manifold	1	0	0	0	0	0	0
 load	mojolearn.UMAP	python/mojolearn/_umap_impl.py:396	1	1	0	0	0	native	manifold	1	0	0	0	0	0	0
 call	mojolearn.manifold.spectral_embedding	python/mojolearn/_spectral_impl.py:698	1	1	0	0	0	native	manifold	1	0	0	0	0	1	0
-call	mojolearn.parallel_graph.fit_graph	python/mojolearn/parallel_graph.py:42	0	171	18	0	0	python	manifold	0	18	0	0	10	3	28
-call	mojolearn.parallel_graph.transform_umap	python/mojolearn/parallel_graph.py:94	0	158	18	0	0	python	manifold	0	17	0	0	10	2	29
+call	mojolearn.parallel_graph.fit_graph	python/mojolearn/parallel_graph.py:60	1	6	0	0	0	native	manifold	1	0	0	0	0	2	1
+call	mojolearn.parallel_graph.transform_umap	python/mojolearn/parallel_graph.py:100	1	3	0	0	0	native	manifold	1	0	0	0	0	2	1
 call	mojolearn.metrics.accuracy_score	python/mojolearn/_metrics_impl.py:344	1	1	0	0	0	native	metrics	1	0	0	0	0	0	0
 call	mojolearn.metrics.adjusted_mutual_info_score	python/mojolearn/_expansion_metrics.py:2046	1	1	0	0	0	native	metrics	1	0	0	0	0	0	0
 call	mojolearn.metrics.adjusted_rand_score	python/mojolearn/_metrics_impl.py:429	1	1	0	0	0	native	metrics	1	0	0	0	0	0	0

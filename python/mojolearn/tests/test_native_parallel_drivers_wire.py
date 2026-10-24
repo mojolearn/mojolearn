@@ -58,6 +58,10 @@ DRIVERS = (
      "bindings/_mojolearn_resample.mojo"),
     ("parallel_classical", "monte_carlo_integrate", "family_par_run", "bindings/family_native.mojo",
      "bindings/_mojolearn_resample.mojo"),
+    ("parallel_graph", "fit_graph", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_metrics.mojo"),
+    ("parallel_graph", "transform_umap", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_metrics.mojo"),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
@@ -75,6 +79,8 @@ PAR_RUN = (
     ("gmm_predict", ("family_mix_gmm_score_samples", "family_mix_gmm_predict_proba", "family_mix_gmm_predict")),
     ("hdbscan_fit", ("family_cfa_hdbscan_fit",)),
     ("resample", ("family_rs_bootstrap", "family_rs_permutation_test", "family_rs_monte_carlo_integrate")),
+    ("graph_fit", ("family_cfb_agglo_fit", "family_cfb_sc_fit", "family_mani_umap_fit")),
+    ("umap_transform", ("family_mani_umap_transform",)),
 )
 
 
@@ -171,5 +177,5 @@ def test_worker_serves_no_migrated_operation():
     source = worker.read_text(encoding="utf-8")
     for op in ("'km_fit'", "'km_apply'", "'cholesky_fit'", "'cholesky_solve'", "'svm_fit'", "'svm_predict'",
                "'gp_fit'", "'gp_predict'", "'gram_fit'", "'solver_fit'", "'glm_fit'", "'kmeans_fit'",
-               "'dbscan_fit'", "'gmm_fit'", "'resample'", "'hdbscan_fit'"):
+               "'dbscan_fit'", "'gmm_fit'", "'resample'", "'hdbscan_fit'", "'graph_fit'"):
         assert "operation == " + op not in source and "operation in (" + op not in source, op

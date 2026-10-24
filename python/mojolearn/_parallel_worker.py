@@ -164,15 +164,7 @@ def execute(request):
         model._fit_with_tree_start(X, y, start)
         return model
     # == 'kmeans_fit': moved to family_par_run (2026-10-24).
-    if operation in ('graph_fit', 'umap_transform'):
-        from .parallel_graph import _binding
-        native, capability = _binding(state)
-        if not callable(getattr(native, capability, None)) or getattr(native, capability)() != 1:
-            raise ImportError('rebuild graph binding for native multi-GPU rows')
-        if operation == 'umap_transform':
-            return state.transform(*args)
-        state.fit(*args)
-        return state
+    # 'graph_fit' / 'umap_transform' moved to family_par_run (2026-10-24).
     # == 'dbscan_fit': moved to family_par_run (2026-10-24).
     if operation in ('gbdt_fit', 'ordered_rmse_fit'):
         model = state
