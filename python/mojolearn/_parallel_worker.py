@@ -496,7 +496,8 @@ def main():
     if os.environ.get('MOJOLEARN_POOL_IMPORT_NUMPY') == '1':
         # glue: the parent had NumPy loaded (DevicePool._start); load it
         # before any request so native owners connect the same types.
-        import numpy  # noqa: F401
+        from ._optional_numpy import require_numpy
+        require_numpy('the device pool worker')
     channel = os.fdopen(os.dup(sys.stdout.fileno()), 'wb')
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     timing = os.environ.get('MOJOLEARN_POOL_TIMING') == '1'

@@ -6,7 +6,9 @@ import sys
 # glue: the native parent selects one fixed ABI connection before task receipt;
 # no Python request interpretation, parameter conversion or task dispatch occurs.
 if os.environ.get('MOJOLEARN_NATIVE_CV_NUMPY') == '1':
-    import numpy  # noqa: F401 - connects existing native scalar/ndarray types
+    # connects existing native scalar/ndarray types (the parent had NumPy)
+    from ._optional_numpy import require_numpy
+    require_numpy('the parallel cross-validation worker')
 
 from . import model_selection as _selection
 

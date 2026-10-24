@@ -36,7 +36,10 @@ def connect():
         return _ENTRY, _CONTEXT
     import os
     from types import BuiltinFunctionType
-    import numpy as np
+    from ._optional_numpy import require_numpy
+    # glue: the sequence owner returns ndarray results and raises NumPy's
+    # LinAlgError; _x_sequence_model requires NumPy the same way.
+    np = require_numpy('the sequence estimators')
     from . import _backend
     from ._buffer import _native
     try:
