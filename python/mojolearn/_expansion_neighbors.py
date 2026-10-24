@@ -33,7 +33,8 @@ from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
-from . import _native_family_bridge
+from . import _backend, _native_family_bridge
+from ._metrics_impl import _get_binding as _metrics_binding
 
 # The compiled family owner (bindings/neighbors_native.mojo), connected once
 # at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`
@@ -184,6 +185,15 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+# The A/B arms above as the LocalOutlierFactor / NearestCentroid / KNNImputer
+# owner reads them (bindings/neighbors_local_native.mojo): the import-time values.
+_native_family_bridge.tables(family_xn_loc_flags={"unfused_knn": _UNFUSED_KNN,
+                                                  "uncompact_impute": _UNCOMPACT_IMPUTE,
+                                                  "old_items": _OLD_ITEMS})
+# The shared native label, weight and score steps those owners read
+# (bindings/classical_labels.mojo: encode/decode, accuracy, the base helpers).
+from ._native_labels_bridge import label_context as _label_context  # noqa: E402
+_native_family_bridge.tables(**_label_context())
 # TOMBSTONE: MOJOLEARN_XN_FAST_TILED_RBF (DROPPED-noise) deleted 2026-10-03 by f103d7381; code recoverable at f103d7381^.
 # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch; record in docs/TOMBSTONES.md.
 #: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
@@ -454,18 +464,6 @@ class LocalOutlierFactor(_XNeighbors):
         self.novelty = novelty
         self.n_jobs = n_jobs
 
-    def _check_params(self):
-        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
-            raise NotImplementedError(
-                f"LocalOutlierFactor: metric={self.metric!r} (p={self.p!r}) is not implemented; "
-                "euclidean (or minkowski with p=2) only")
-        if self.metric_params:
-            raise NotImplementedError("LocalOutlierFactor: metric_params is not implemented")
-        if self.contamination != "auto" and not (0.0 < float(self.contamination) <= 0.5):
-            raise ValueError("contamination must be 'auto' or in (0, 0.5]")
-        if int(self.n_neighbors) < 1:
-            raise ValueError("n_neighbors must be >= 1")
-
     def fit(self, X, y=None):
         """Fit the model on the training data.
 
@@ -481,43 +479,7 @@ class LocalOutlierFactor(_XNeighbors):
         self : LocalOutlierFactor
             The fitted estimator.
         """
-        self._check_params()
-        X = _f32(X)
-        n, d = X.shape
-        if n < 2:
-            # scikit-learn's check_array wording (ensure_min_samples=2)
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
-        k = min(int(self.n_neighbors), n - 1)
-        dist, idx = self._knn(X, X, k, True)
-        lrd = _empty_out((n,), "<f4")
-        self._op("lof_lrd", [(dist, 0), (idx, 0), (dist, 0), (lrd, 1)], (k, n, n))
-        score = _empty_out((n,), "<f4")
-        self._op("lof_score", [(idx, 0), (lrd, 0), (lrd, 0), (score, 1)], (k, n, n))
-        self._fit_X, self._fit_dist, self._lrd = X, dist, lrd
-        self.n_neighbors_ = k
-        self.n_features_in_ = d
-        self.n_samples_fit_ = n
-        self.negative_outlier_factor_ = score
-        if self.contamination == "auto":
-            self.offset_ = -1.5
-        else:
-            q = 100.0 * float(self.contamination)
-            self.offset_ = _f32_scalar(self._sorted_percentile(score, q))
-        return self
-
-    def _sorted_percentile(self, score, q):
-        """numpy.percentile (method 'linear') of score with the sort on the device (`p2m_row_sort`
-        over one row: ascending by value, ties by position, as `sorted`);
-        only the two order statistics it reads come back to Python."""
-        n = score.shape[0]
-        srt = _p2m_sort_rows(self, _i32([0, n], "indptr"), zeros((n,), "<i4"), score)[1]
-        pos = (q / 100.0) * (n - 1)
-        lo = math.floor(pos)
-        hi = min(lo + 1, n - 1)
-        t = pos - lo
-        a, b = srt[lo], srt[hi]
-        diff = b - a
-        return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
+        return _NATIVE(self, "family_xn_loc_lof_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: not self.novelty)
     def fit_predict(self, X, y=None):
@@ -538,15 +500,7 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             -1 for outliers, 1 for inliers.
         """
-        if self.novelty:
-            raise AttributeError("fit_predict is not available when novelty=True; use predict on new data")
-        self.fit(X)
-        off = self.offset_
-        score = self.negative_outlier_factor_
-        lab = empty((score.size,), "<i4")
-        if score.size:
-            self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
-        return lab.astype("<i8")
+        return _NATIVE(self, "family_xn_loc_lof_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def _novelty(self, what):
         if not self.novelty:
@@ -594,8 +548,7 @@ class LocalOutlierFactor(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        self._novelty("decision_function")
-        return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
+        return _NATIVE(self, "family_xn_loc_lof_decision_function", (self._bind(), X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
     def predict(self, X):
@@ -614,12 +567,7 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_queries,), int64
             -1 for outliers, 1 for inliers.
         """
-        self._novelty("predict")
-        dec = self.decision_function(X)
-        lab = empty((dec.size,), "<i4")
-        if dec.size:
-            self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
-        return lab.astype("<i8")
+        return _NATIVE(self, "family_xn_loc_lof_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
 
 # ====================================================================== NearestCentroid
@@ -712,113 +660,7 @@ class NearestCentroid(_XNeighbors):
             If there are fewer than two classes, the priors are invalid, or
             every feature has zero variance.
         """
-        if self.metric not in ("euclidean", "manhattan"):
-            raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
-        X = _f32(X)
-        n, d = X.shape
-        # the native encoder's int32 codes, the class counts from the device
-        # (`p2m_class_counts`, an atomic add per row; lane pyglue-numeric:
-        # a Python counting loop on every column but FAST + Apple)
-        from ._labels import encode_labels
-        classes, lab = encode_labels(y)
-        if lab.size != n:
-            raise ValueError("X and y have different numbers of rows")
-        C = len(classes)
-        if C < 2:
-            raise ValueError(f"The number of classes has to be greater than one; got {C} class")
-        nk = _empty_out((C,), "<f4")
-        info = empty((1,), "<i4")
-        self._op("p2m_class_counts", [(lab, 0), (nk, 1), (info, 1)], (n, C))
-        counts = [int(v) for v in nk.tolist()]          # glue: the k class counts (priors, offsets)
-        if self.priors == "empirical":
-            # count / n per class in the base binding (lane py-runtime-b;
-            # the same binary64 words as the Python quotient)
-            from ._buffer import _native
-            pa = empty((C,), "<f8")
-            ca = Array.from_list(counts, "<i8")
-            _native("class_ratio_f64")(addr_ro(ca, name="counts"), C, n, 1, addr(pa, name="class_prior_"))
-            prior = pa.tolist()  # glue: k class priors for the checks below
-        elif self.priors == "uniform":
-            prior = [1.0 / C] * C
-        else:
-            prior = [float(v) for v in (self.priors.tolist() if hasattr(self.priors, "tolist") else self.priors)]  # glue: user priors argument checks
-            if len(prior) != C:
-                raise ValueError("priors must have one entry per class")
-            if any(p < 0 for p in prior):  # glue: user priors argument checks
-                raise ValueError("priors must be non-negative")
-            tot = math.fsum(prior)  # glue: the native fsum (core fsum_f64) of the user priors argument
-            if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
-                prior = [p / tot for p in prior]  # glue: the user priors argument rescaled to sum one (k sized)
-        self.class_prior_ = Array.from_list(prior, "<f8")
-        if self.metric == "euclidean":
-            cent = _empty_out((C, d), "<f4")
-            if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
-                self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
-        else:
-            # the per-class medians on the device (cpu-gpu-cleanup w2-pyglue,
-            # x_neighbors/sort_items.mojo): a bitonic sort of every feature's
-            # rows by (class, value, row) over a power-of-two pad, then each
-            # class's middle value(s) at its offset; offsets are the class
-            # counts' prefix (integer bookkeeping over the classes)
-            start = [0] * (C + 1)
-            for c in range(C):  # glue: class offsets prefix over k classes
-                start[c + 1] = start[c] + counts[c]
-            p = 1
-            while p < n:
-                p *= 2
-            lg = p.bit_length() - 1
-            cent = _empty_out((C, d), "<f4")
-            self._op("nc_median", [(X, 0), (lab, 0), (_i32(start, "start"), 0), (cent, 1)],
-                     (n, d, C, p, lg * (lg + 1) // 2))
-        stats = _empty_out((d,), "<f4")
-        new_cent = _empty_out((C, d), "<f4")
-        devs = _empty_out((C, d), "<f4")
-        dsc = None
-        if self.metric == "euclidean" and os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") != "1":
-            # lane/neural-pass95: the class means, the within-class std and the
-            # dataset centroid in one op (x_neighbors/items.mojo nc_stats_item):
-            # X goes to the device once; MOJOLEARN_NC_SPLIT_OPS=1 restores the three ops
-            dsc = _empty_out((d,), "<f4")
-            self._op("nc_stats", [(X, 0), (lab, 0), (nk, 0), (cent, 1), (stats, 1), (dsc, 1)], (n, d, C))
-        else:
-            self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
-        # the median of the d stds and the all-zero test on the device
-        # (x_neighbors/sort_items.mojo nc_med_std: a bitonic sort, then the
-        # middle value(s)); two floats come back
-        p = 1
-        while p < d:
-            p *= 2
-        lg = p.bit_length() - 1
-        ms = _empty_out((2,), "<f4")
-        self._op("nc_med_std", [(stats, 0), (ms, 1)], (d, p, lg * (lg + 1) // 2))
-        med_std, all_zero = ms.tolist()
-        if all_zero and self._ptp_zero(X):
-            raise ValueError("All features have zero variance. Division by zero.")
-        shrink = float(self.shrink_threshold) if self.shrink_threshold else 0.0
-        if dsc is not None:
-            self._op("nc_shrink_d", [(dsc, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
-                     (n, d, C, 1 if shrink else 0), (med_std, shrink))
-        else:
-            self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
-                     (n, d, C, 1 if shrink else 0), (med_std, shrink))
-        self.centroids_ = new_cent
-        self.deviations_ = devs
-        self.within_class_std_dev_ = stats
-        self.classes_ = classes
-        self._codes_classes = classes
-        self.n_features_in_ = d
-        return self
-
-    def _ptp_zero(self, X):
-        """Every feature constant (sklearn's ptp == 0): `p2m_const_cols`."""
-        n, d = X.shape
-        flag = empty((1,), "<i4")
-        self._op("p2m_const_cols", [(X, 0), (flag, 1)], (n, d))
-        return flag.tolist()[0] == 0
-
-    def _uniform(self):
-        C = len(self.classes_)
-        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
+        return _NATIVE(self, "family_xn_loc_nc_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict the class of each sample.
@@ -836,14 +678,7 @@ class NearestCentroid(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             Predicted class labels.
         """
-        Q = _f32(X)
-        if self._uniform():
-            D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
-            _, idx = self._knn_select(D, 1, False)
-            # TOMBSTONE: MOJOLEARN_NC_FAST_CLS1_PREDICT (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
-            # Restore: git apply experiments/removed/MOJOLEARN_NC_FAST_CLS1_PREDICT.patch; record in docs/TOMBSTONES.md.
-            return _class_array(self.classes_, idx.reshape((idx.shape[0],)))
-        return _argmax_labels(self, self.classes_, self._decision_matrix(Q))
+        return _NATIVE(self, "family_xn_loc_nc_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Discriminant score of each sample for each class.
@@ -862,15 +697,7 @@ class NearestCentroid(_XNeighbors):
             For two classes, shape (n_queries,): the second class's score
             minus the first's, positive for ``classes_[1]``.
         """
-        dec = self._decision_matrix(X)
-        if dec.shape[1] != 2:
-            return dec
-        # scikit-learn's binary decision_function, scores[:, 1] - scores[:, 0]:
-        # one product with the exact weights (-1, 1), so each entry is the
-        # difference rounded once
-        signs = Array.from_list([-1.0, 1.0], "<f4").reshape((2, 1))
-        diff = self._matmul(dec, signs)
-        return diff.reshape((dec.shape[0],))
+        return _NATIVE(self, "family_xn_loc_nc_decision_function", (self._bind(), X), _NATIVE_CONTEXT)
 
     def _decision_matrix(self, X):
         """The (n_queries, n_classes) discriminant scores."""
@@ -900,18 +727,7 @@ class NearestCentroid(_XNeighbors):
         proba : Array of shape (n_queries, n_classes)
             Probabilities, columns in the order of ``classes_``.
         """
-        dec = self._decision_matrix(X)
-        if hasattr(self._bind(), "xn_softmax64"):
-            # lane apple-fast-q-clf (x_neighbors/proba64_nc.mojo, QUALITY-FIX, FAST
-            # default; -D MOJOLEARN_PROBA64_QOLD has no export): float64 probabilities,
-            # the winner's 1 - c exact (float32 saturated at 1.0: Istella log loss
-            # 4.299 vs scikit-learn 4.118, accuracy equal)
-            out = empty(dec.shape, "<f8")
-            self._op("softmax64", [(dec, 0), (out, 1)], dec.shape)
-            return out
-        out = empty(dec.shape, "<f4")
-        self._op("softmax", [(dec, 0), (out, 1)], dec.shape)
-        return out
+        return _NATIVE(self, "family_xn_loc_nc_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict_log_proba(self, X):
         """Log class probabilities: the log-softmax of :meth:`decision_function`.
@@ -949,7 +765,7 @@ class NearestCentroid(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _accuracy(y, self.predict(X), sample_weight)
+        return _NATIVE(self, "family_xn_loc_nc_score", (self._bind(), X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 # ====================================================================== OneClassSVM
@@ -1523,14 +1339,6 @@ class AdditiveChi2Sampler(_XNeighbors):
         self.sample_steps = sample_steps
         self.sample_interval = sample_interval
 
-    def _interval(self):
-        if self.sample_interval is not None:
-            return float(self.sample_interval)
-        table = {1: 0.8, 2: 0.5, 3: 0.4}
-        if self.sample_steps not in table:
-            raise ValueError("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
-        return table[self.sample_steps]
-
     def fit(self, X, y=None):
         """Validate the input and the sampling settings.
 
@@ -1546,24 +1354,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         self : AdditiveChi2Sampler
             The fitted transformer.
         """
-        X = _f32(X)
-        first = -2
-        if X.size and _kfeat_flags(self) & 1:
-            # XN_FAST_ACHI2_DEVSCAN (default, rollback _OFF): one pooled upload and device
-            # scan (x_neighbors_kfeat_first_negative), not a host X.min();
-            # -2 = below the binding's size gate (XN_ACHI2_DEVSCAN_MIN,
-            # x_neighbors/kfeat_dev.mojo; 1 since 2026-10-04, the old 2^22
-            # only under -D MOJOLEARN_LEGACY_NARROW_ACHI2_DEVSCAN): main's check below
-            first = int(self._bind().x_neighbors_kfeat_first_negative(addr_ro(X, name="X"), X.size))
-        if first != -2:
-            neg = first >= 0
-        else:
-            neg = X.size and X.min() < 0
-        if neg:
-            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
-        self._interval()
-        self.n_features_in_ = X.shape[1]
-        return self
+        return _NATIVE(self, "family_xn_semi_achi2_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1578,22 +1369,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
             float32; sparse (CSR) when X is sparse.
         """
-        sparse = X if (hasattr(X, "toarray") and hasattr(X, "nnz")) else None
-        X = _f32(X)
-        n, d = X.shape
-        steps = int(self.sample_steps)
-        out = _empty_out((n, d * (2 * steps - 1)), "<f4")
-        if X.size and X.min() < 0:
-            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
-        self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
-        if sparse is not None:
-            # Preserve the caller's sparse container type; dense inputs need
-            # neither SciPy nor NumPy. SciPy owns this optional format conversion.
-            import scipy.sparse as sp
-            m = sp.csr_matrix(out.tolist(), dtype="float32")
-            m.eliminate_zeros()
-            return m
-        return out
+        return _NATIVE(self, "family_xn_semi_achi2_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1609,7 +1385,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_semi_achi2_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -1711,53 +1487,7 @@ class SkewedChi2Sampler(_XNeighbors):
             If X has no features, ``n_components`` is below 1, or
             ``random_state`` is not an int, a numpy RandomState or None.
         """
-        X = _f32(X)
-        d = X.shape[1]
-        nc = int(self.n_components)
-        seed = _seed_word(self.random_state)
-        flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
-                 and d > 0 and nc > 0 else 0)
-        self.__dict__.pop("_schi2_z", None)
-        # lane cpu3-python: the counter-based device draw first, on every
-        # tier that compiles it (IDENTICAL, and since this lane FAST on every
-        # vendor: x_neighbors/kfeat_rng.mojo XN_IDN_SKETCH_CTR). FAST + Apple's
-        # SCHI2_LAZYW route drew z and the offsets with sklearn's sequential
-        # stream on the host (`x_neighbors_kfeat_schi2_draw`); it has left the
-        # GPU route.
-        fit_idn = (getattr(self._bind(), "x_neighbors_kfeat_schi2_fit_idn", None)
-                   if isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0 else None)
-        if fit_idn is not None:
-            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
-            # x_neighbors/kfeat_rng.mojo): z, the weights and the offsets
-            # from the counter-based generator on the device, one call
-            w = _empty_out((d, nc), "<f4")
-            off = empty((nc,), "<f4")
-            fit_idn([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
-                    addr(off, name="random_offset_"))
-            self.random_weights_ = w
-            self.random_offset_ = off
-            self.n_features_in_ = d
-            return self
-        if flags & 2:
-            # SCHI2_MOJO_MT (default; _OFF rollback): _LegacyRandomState(seed)'s
-            # stream, pi/2 * u, the weights kernel and the offsets in one
-            # binding call (x_neighbors_kfeat_schi2_fit): main's words
-            w = _empty_out((d, nc), "<f4")
-            off = empty((nc,), "<f4")
-            self._bind().x_neighbors_kfeat_schi2_fit([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
-                                                     addr(off, name="random_offset_"))
-            self.random_weights_ = w
-            self.random_offset_ = off
-            self.n_features_in_ = d
-            return self
-        # lane py-runtime-b: the MT19937 Python draw (and pi/2 * u in Python)
-        # behind the _OFF defines is deleted; a binary with neither device
-        # draw, or an empty X / n_components < 1, refuses
-        if d < 1 or nc < 1:
-            raise ValueError("mojolearn SkewedChi2Sampler: X needs at least one feature and n_components >= 1")
-        raise NotImplementedError(
-            "mojolearn SkewedChi2Sampler: this binary lacks x_neighbors_kfeat_schi2_fit_idn "
-            "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+        return _NATIVE(self, "family_xn_semi_schi2_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     @property
     def random_weights_(self):
@@ -1797,29 +1527,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        X = _f32(X)
-        n, d = X.shape
-        if X.size and X.min() <= -float(self.skewedness):
-            raise ValueError("X may not contain entries smaller than -skewedness.")
-        nc = int(self.n_components)
-        z = self.__dict__.get("_schi2_z")
-        if (z is not None or _kfeat_flags(self) & 4) and d == self.__dict__.get("n_features_in_"):
-            # SCHI2_LAZYW: log, the pending weights, the map: one call, one wait
-            w = _empty_out((d, nc), "<f4") if z is not None else self.random_weights_
-            out = _empty_out((n, nc), "<f4")
-            self._bind().x_neighbors_kfeat_schi2_transform(
-                [n, d, nc, 0 if z is None else 1],
-                [addr_ro(X, name="X"), addr_ro(w if z is None else z, name="random_weights_"),
-                 0 if z is None else addr(w, name="random_weights_"),
-                 addr_ro(self.random_offset_, name="random_offset_"), addr(out, name="schi2 output")],
-                [_f32_scalar(self.skewedness)])
-            if z is not None:
-                self.random_weights_ = w
-            return out
-        lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
-        out = _empty_out((n, nc), "<f4")
-        self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))
-        return out
+        return _NATIVE(self, "family_xn_semi_schi2_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1835,7 +1543,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_semi_schi2_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``skewedchi2sampler0``, ``skewedchi2sampler1``, ...
@@ -1866,37 +1574,6 @@ class _LabelPropagationBase(_XNeighbors):
 
     _variant = None
 
-    def _compact_graph(self, idx, n_reference, variant):
-        n, k = idx.shape
-        cols = empty((n, k), "<i4")
-        vals = empty((n, k), "<f4")
-        self._op("lp_knn_graph", [(idx, 0), (cols, 1), (vals, 1)],
-                 (n, n_reference, k, variant))
-        return cols, vals, n_reference
-
-    def _graph_product(self, G, labels):
-        if not isinstance(G, tuple):
-            return self._matmul(G, labels)
-        cols, vals, m = G
-        n, k = cols.shape
-        c = labels.shape[1]
-        out = _empty_out((n, c), "<f4")
-        self._op("lp_knn_product", [(cols, 0), (vals, 0), (labels, 0), (out, 1)],
-                 (n, m, k, c))
-        return out
-
-    def _graph_affinity(self, X):
-        n = X.shape[0]
-        if self.kernel == "rbf":
-            return self._kernel(X, X, "rbf", self.gamma, 0.0, 0)
-        if self.kernel == "knn":
-            k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_sq(X, X, k, False)
-            g = _empty_out((n, n), "<f4")
-            self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
-            return g
-        raise NotImplementedError(f"{type(self).__name__}: kernel={self.kernel!r} is not implemented ('rbf' or 'knn')")
-
     def fit(self, X, y):
         """Fit the model and propagate labels to the unlabeled samples.
 
@@ -1912,106 +1589,7 @@ class _LabelPropagationBase(_XNeighbors):
         self
             The fitted estimator.
         """
-        X = _f32(X)
-        n = X.shape[0]
-        # the labels by the native encoder, then the one-hot rows, the
-        # spreading rows and the unlabeled flags on the device
-        # (`p2m_lp_labels`; lane pyglue-numeric: Python lists over the rows)
-        from ._labels import encode_labels
-        allc, codes = encode_labels(y)
-        if codes.size != n:
-            raise ValueError("X and y have different numbers of rows")
-        skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: scan over the k class labels
-        classes = [c for i, c in enumerate(allc) if i != skip]  # glue: class labels without the unlabeled marker
-        C = len(classes)
-        ld = _empty_out((n, C), "<f4")
-        ys = _empty_out((n, C), "<f4")
-        unlabeled = empty((n,), "<i4")
-        a = _f32_scalar(1.0 - float(self.alpha)) if self._variant != "propagation" else 1.0
-        if n and C:
-            # The binding reads every int as a size (>= 0), so "no unlabeled
-            # marker" is passed as a code no row carries (len(allc)), which
-            # the item treats exactly as skip -1: no row unlabeled, codes kept.
-            self._op("p2m_lp_labels", [(codes, 0), (ld, 1), (ys, 1), (unlabeled, 1)],
-                     (n, C, skip if skip >= 0 else len(allc)), (a,))
-        if self._variant == "propagation":
-            ys = None
-        if self.kernel == "knn":
-            k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_sq(X, X, k, False)
-            G = self._compact_graph(idx, n, 0 if self._variant == "propagation" else 1)
-        else:
-            G = self._build_graph(X)
-        if ys is None:
-            # propagation's static rows on the device: a labeled row keeps
-            # its one-hot row, an unlabeled row (all zero in ld0) normalizes
-            # to zero (`lp_clamp` with ld as both inputs)
-            ystatic = _empty_out((n, C), "<f4")
-            self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
-        else:
-            ystatic = ys
-        # lane/fam2-neighbors: IDENTICAL device binaries answer 1 too
-        # (LP_IDN_RESIDENT: the same items, no per-iteration host round trip)
-        if isinstance(G, tuple) and _lp_fast_resident(self):
-            # lane/apple-fast-neighbors2: the loop below over the compact kNN
-            # graph as ONE resident op (x_neighbors/iter_device.mojo
-            # op_lp_iterate_knn), the graph uploaded once, the stopping sum
-            # and test on the device
-            cols, vals, _ = G
-            info = empty((2,), "<i4")
-            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
-            self._op("lp_iterate_knn", [(cols, 0), (vals, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
-                     (n, cols.shape[1], C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
-                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
-                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
-            n_iter = int(info.tolist()[0])
-            return self._finish_fit(X, classes, ld, n, C, n_iter)
-        if not isinstance(G, tuple):
-            # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
-            # the same items in the same order, the graph uploaded once, tol
-            # passed as its float64 bits so the stopping test is Python's.
-            info = empty((2,), "<i4")
-            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
-            self._op("lp_iterate", [(G, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
-                     (n, C, int(self.max_iter),
-                      (0 if self._variant == "propagation" else 1) +
-                      (2 if getattr(self, "_classical_raw_graph", False) else 0),
-                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
-                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
-            n_iter = int(info.tolist()[0])
-            return self._finish_fit(X, classes, ld, n, C, n_iter)
-        prev = _empty_out((n, C), "<f4")
-        s = _empty_out((1,), "<f4")
-        n_iter = 0
-        converged = False
-        for it in range(int(self.max_iter)):  # glue: one device propagation step per iteration
-            n_iter = it
-            self._op("absdiff_sum", [(ld, 0), (prev, 0), (s, 1)], (n * C,))
-            if s.tolist()[0] < float(self.tol):
-                converged = True
-                break
-            prev = ld
-            nxt = self._graph_product(G, ld)
-            out = _empty_out((n, C), "<f4")
-            if self._variant == "propagation":
-                self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
-            else:
-                self._op("ls_clamp", [(nxt, 0), (ystatic, 0), (out, 1)], (n * C,), (_f32_scalar(self.alpha),))
-            ld = out
-        if not converged:
-            n_iter += 1
-        return self._finish_fit(X, classes, ld, n, C, n_iter)
-
-    def _finish_fit(self, X, classes, ld, n, C, n_iter):
-        final = _empty_out((n, C), "<f4")
-        self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
-        self.X_ = X
-        self.classes_ = classes
-        self.label_distributions_ = final
-        self.n_iter_ = n_iter
-        self.transduction_ = _argmax_labels(self, classes, final)
-        self.n_features_in_ = X.shape[1]
-        return self
+        return _NATIVE(self, "family_xn_semi_lp_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities of new samples from the fitted label distributions.
@@ -2026,19 +1604,7 @@ class _LabelPropagationBase(_XNeighbors):
         proba : Array of shape (n_queries, n_classes), float32
             Columns in the order of ``classes_``.
         """
-        Q = _f32(X)
-        nq = Q.shape[0]
-        n = self.X_.shape[0]
-        if self.kernel == "knn":
-            k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_sq(Q, self.X_, k, False)
-            W = self._compact_graph(idx, n, 2)
-        else:
-            W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
-        P = self._graph_product(W, self.label_distributions_)
-        out = empty(P.shape, "<f4")
-        self._op("row_normalize", [(P, 0), (out, 1)], P.shape)
-        return out
+        return _NATIVE(self, "family_xn_semi_lp_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict the class of new samples.
@@ -2053,7 +1619,7 @@ class _LabelPropagationBase(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             The most probable class of each sample.
         """
-        return _argmax_labels(self, self.classes_, self.predict_proba(X))
+        return _NATIVE(self, "family_xn_semi_lp_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of :meth:`predict` on the given data.
@@ -2072,7 +1638,7 @@ class _LabelPropagationBase(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _accuracy(y, self.predict(X), sample_weight)
+        return _NATIVE(self, "family_xn_semi_lp_score", (self._bind(), X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 class LabelPropagation(_LabelPropagationBase):
@@ -2141,15 +1707,6 @@ class LabelPropagation(_LabelPropagationBase):
         self.max_iter = max_iter
         self.tol = tol
         self.n_jobs = n_jobs
-
-    def _build_graph(self, X):
-        A = self._graph_affinity(X)
-        self._classical_raw_graph = _classical_graph_normalization(self)
-        if self._classical_raw_graph:
-            return A
-        G = empty(A.shape, "<f4")
-        self._op("row_normalize", [(A, 0), (G, 1)], A.shape)
-        return G
 
 
 class LabelSpreading(_LabelPropagationBase):
@@ -2244,24 +1801,12 @@ class LabelSpreading(_LabelPropagationBase):
         ValueError
             If ``alpha`` is not in (0, 1).
         """
-        if not (0.0 < float(self.alpha) < 1.0):
-            raise ValueError("alpha must be in (0, 1)")
-        return super().fit(X, y)
+        return _NATIVE(self, "family_xn_semi_lp_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
-    def _build_graph(self, X):
-        A = self._graph_affinity(X)
-        self._classical_raw_graph = _classical_graph_normalization(self)
-        if self._classical_raw_graph:
-            return A
-        n = A.shape[0]
-        G = _empty_out((n, n), "<f4")
-        if _OLD_ITEMS:
-            self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
-        else:
-            deg = _empty_out((n,), "<f4")
-            self._op("col_degree", [(A, 0), (deg, 1)], (n,))
-            self._op("ls_laplacian_deg", [(A, 0), (deg, 0), (G, 1)], (n,))
-        return G
+
+# The label propagation / chi2 sampler doors (bindings/neighbors_semi_native.mojo)
+# read the import-time k-NN A/B arm from the shared context.
+_native_family_bridge.tables(family_xn_semi_unfused_knn=_UNFUSED_KNN)
 
 
 # ====================================================================== KNNImputer
@@ -2384,17 +1929,7 @@ class KNNImputer(_XNeighbors):
         self : KNNImputer
             The fitted imputer.
         """
-        self._check()
-        X = self._masked(X)
-        n, d = X.shape
-        # lane/neural-pass71 (2026-10-01): the column flags from one native
-        # pass over the cells (xn_nan_cells), no list of the matrix
-        cm = self._nan_cells(X, 1)[1]
-        self._valid = [cm[f] < n for f in range(d)]  # glue: column masks over the d features
-        self._miss_cols = [f for f in range(d) if cm[f] > 0]  # glue: column masks over the d features
-        self._fit_X = X
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_xn_loc_imp_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Impute the missing values of X.
@@ -2412,44 +1947,7 @@ class KNNImputer(_XNeighbors):
             ``fit`` (unless ``keep_empty_features``), followed by the indicator
             columns when ``add_indicator`` is True.
         """
-        X = self._masked(X)
-        n, d = X.shape
-        if d != self.n_features_in_:
-            raise ValueError("X has a different number of features than during fit")
-        m = self._fit_X.shape[0]
-        out = _empty_out((n, d), "<f4")
-        k = int(self.n_neighbors)
-        if k < 1:
-            raise ValueError("n_neighbors must be >= 1")
-        if _UNCOMPACT_IMPUTE:
-            self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
-                     (n, m, d, k, 1 if self.weights == "distance" else 0))
-        else:
-            # one GPU thread per MISSING cell (`knn_impute_cells`): the same
-            # item statements; a present cell keeps x, as the item stores it
-            cells, _, nc = self._nan_cells(X)        # lane/neural-pass71: no Python walk
-            out = X.copy()
-            if nc:
-                self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
-                         [(cells, 0), (X, 0), (self._fit_X, 0), (out, 1)],
-                         (n, m, d, k, 1 if self.weights == "distance" else 0, nc))
-        keep = [f for f in range(d) if self._valid[f]]  # glue: column masks over the d features
-        if self.keep_empty_features:
-            if n and not all(self._valid):
-                flags = _i32([0 if v else 1 for v in self._valid], "flags")   # glue: d fit flags
-                z = _empty_out((n, d), "<f4")
-                self._op("p2m_zero_cols", [(out, 0), (flags, 0), (z, 1)], (n, d))
-                out = z
-        elif len(keep) != d:
-            out = self._take_cols(out, keep)
-        if self.add_indicator and self._miss_cols and n:
-            c = out.shape[1]
-            q = len(self._miss_cols)
-            res = _empty_out((n, c + q), "<f4")
-            self._op("p2m_nan_indicator",
-                     [(X, 0), (out if c else X, 0), (_i32(self._miss_cols, "cols"), 0), (res, 1)], (n, d, c, q))
-            out = res
-        return out
+        return _NATIVE(self, "family_xn_loc_imp_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then impute X: ``fit(X).transform(X)``.
@@ -2465,7 +1963,7 @@ class KNNImputer(_XNeighbors):
         -------
         X_imputed : Array of shape (n_samples, n_features_out), float32
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_loc_imp_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -2491,13 +1989,6 @@ class KNNImputer(_XNeighbors):
 
 
 # ====================================================================== PageRank
-def _adjacency(A):
-    A = _f32(A, "adjacency")
-    if A.shape[0] != A.shape[1]:
-        raise ValueError("the adjacency matrix must be square")
-    return A
-
-
 # References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
 # transition matrix, dangling nodes redistributed by the personalization,
 # stop when sum |x - x_last| < n * tol) and cuGraph
@@ -2565,31 +2056,6 @@ class PageRank(_XNeighbors):
         self.weight = weight
         self.dangling = dangling
 
-    def _unit(self, v, n, what):
-        """A caller's length-n non-negative vector divided by its sum (IEEE
-        double, rounded once to float32), as networkx normalizes its dicts."""
-        # lane/fam2-neighbors: the sum, the sign test and the n divisions by
-        # the binding (`x_neighbors_unit_ff`, device kernels; registered in
-        # IDENTICAL unless -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)
-        # (lane py-runtime-b: the Python fsum-and-divide route behind the
-        # _OFF define is deleted; that binary refuses a weight vector)
-        unit_fn = getattr(self._bind(), "x_neighbors_unit_ff", None)
-        if unit_fn is None:
-            raise NotImplementedError(
-                f"mojolearn PageRank {what}: this binary lacks x_neighbors_unit_ff "
-                "(rebuild without -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)")
-        wv = _f32_1d(v, what)
-        if wv.shape[0] != n:
-            raise ValueError(f"{what} must be n non-negative values, not all zero")
-        out = _empty_out((n,), "<f4")
-        uinfo = empty((2,), "<i4")
-        unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
-                 addr(uinfo, name="xn_unit info")], [n], [])
-        neg, zero = uinfo.tolist()
-        if neg or zero:
-            raise ValueError(f"{what} must be n non-negative values, not all zero")
-        return out
-
     def fit(self, A, y=None):
         """Compute the PageRank scores of the graph.
 
@@ -2612,66 +2078,7 @@ class PageRank(_XNeighbors):
         RuntimeError
             If the iteration does not converge within ``max_iter`` steps.
         """
-        binary = self.weight is None or self.weight is False
-        csr = _csr_graph_of(A)
-        if csr is not None:
-            # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.2):
-            # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
-            # the device as it is (`xn_pr_csr`): the column lists are built
-            # by one sort on the device, the vectors the caller left to the
-            # default are filled there, no dense matrix and no separate
-            # fill calls. Glue only: pointer handoff and flags.
-            indptr, indices, vals, n = csr
-        else:
-            A = _adjacency(A)
-            n = A.shape[0]
-        # the iteration over the column lists of the adjacency, built
-        # and iterated on the device (lane hr-graph,
-        # x_neighbors/graph_par.mojo): the dense chains with their zero
-        # terms left out, the dangling mass and |x' - x| blocked folds
-
-        def uniform():
-            # [1/n] * n: 1/n in IEEE double rounded once to float32 (the
-            # binding's float argument), filled on the device
-            u = empty((n,), "<f4")
-            if n:
-                self._op("p2m_fill", [(u, 1)], (n,), (1.0 / n,))
-            return u
-
-        info = empty((2,), "<i4")
-        thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
-        if csr is not None:
-            p_uniform = self.personalization is None
-            p = empty((n,), "<f4") if p_uniform else self._unit(self.personalization, n, "personalization")
-            dw_uniform = self.dangling is None and p_uniform
-            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
-            x_uniform = self.nstart is None
-            x = empty((n,), "<f4") if x_uniform else self._unit(self.nstart, n, "nstart").copy()
-            has_vals = vals is not None
-            if not has_vals:
-                vals = empty((1,), "<f4")
-            self._op("pr_csr", [(indptr, 0), (indices, 0), (vals, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
-                     (n, indices.shape[0], 1 if has_vals else 0, int(self.max_iter), thr >> 32,
-                      thr & 0xFFFFFFFF, 1 if binary else 0, 1 if x_uniform else 0, 1 if p_uniform else 0,
-                      1 if dw_uniform else 0),
-                     (_f32_scalar(self.alpha),))
-        else:
-            if self.personalization is None:
-                p = uniform()
-            else:
-                p = self._unit(self.personalization, n, "personalization")
-            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
-            x = uniform() if self.nstart is None else self._unit(self.nstart, n, "nstart")
-            x = x.copy()
-            self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
-                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
-                     (_f32_scalar(self.alpha),))
-        it, ok = info.tolist()
-        if ok:
-            self.pagerank_ = x
-            self.n_iter_ = int(it)
-            return self
-        raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
+        return _NATIVE(self, "family_xn_graph_pagerank_fit", (self._bind(), A), _NATIVE_CONTEXT)
 
 
 # ====================================================================== connected components
@@ -2715,111 +2122,9 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     >>> A = (np.random.default_rng(0).random((500, 500)) < 0.002).astype(np.float32)
     >>> n_components, labels = mojolearn.connected_components(A, directed=False)
     """
-    if directed and connection == "strong":
-        raise NotImplementedError("connected_components: connection='strong' is not implemented")
-    if connection not in ("weak", "strong"):
-        raise ValueError("connection must be 'weak' or 'strong'")
-    est = _XNeighbors()
-    est.numeric_mode = numeric_mode
-    csr = _csr_of(A)
-    if csr is not None:
-        # lane/neural-pass69 (2026-10-01): a sparse graph (scipy.sparse CSR, or
-        # (indptr, indices, n)) walks its edge lists directly: the same rounds
-        # and labels as the dense matrix's, without building or scanning it
-        indptr, indices, n = csr
-        lab = _p2m_iota(est, n)
-        # TOMBSTONE: MOJOLEARN_CC_FAST_OFF (removed) deleted 2026-10-08 by 2851a6627; code recoverable at 2851a6627^.
-        # Restore: git apply experiments/removed/MOJOLEARN_CC_FAST_OFF.patch; record in docs/TOMBSTONES.md.
-        # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
-        # GPU binding on every vendor and tier runs the batched rounds and
-        # compacts the labels itself in order of first appearance
-        # (`_cc_relabel`'s integers; lane/apple-fast-graph's CC_FAST
-        # promoted) and puts n_components + 1 in info[1]; info[1] == 0
-        # means the host binding ran (it never writes info[1]) and `lab`
-        # still needs `_cc_relabel` (zeros, not empty, for that reason).
-        info = zeros((2,), "<i4")
-        est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
-        k1 = int(info.tolist()[1])
-        if k1 > 0:
-            return (k1 - 1, lab) if return_labels else k1 - 1
-        return _cc_relabel(lab, return_labels, est)
-    A = _adjacency(A)
-    n = A.shape[0]
-    lab = _p2m_iota(est, n)
-    # the min-label rounds as ONE resident op, A uploaded once
-    info = empty((1,), "<i4")
-    est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
-    return _cc_relabel(lab, return_labels, est)
-
-
-def _p2m_iota(est, n):
-    """[0, 1, ..., n - 1] as int32 (`xn_p2m_iota` on the device)."""
-    lab = empty((max(n, 0),), "<i4")
-    if n > 0:
-        est._op("p2m_iota", [(lab, 1)], (n,))
-    return lab
-
-
-def _cc_relabel(lab, return_labels, est):
-    """(count, labels) renumbered by first occurrence (`xn_p2m_relabel`)."""
-    if not lab.shape[0]:
-        return (0, lab) if return_labels else 0
-    got = _p2m_relabel(est, lab)
-    if got is None:
-        raise RuntimeError("connected_components: a component label fell outside [0, n)")
-    cnt, labels = got
-    return (cnt, labels) if return_labels else cnt
-
-
-def _csr_of(A):
-    """(indptr, indices, n) as int32 Arrays for a scipy.sparse matrix (any
-    format: converted to CSR) or a tuple (indptr, indices, n); None for a
-    dense input. The edge weights do not matter to connectivity."""
-    if isinstance(A, tuple) and len(A) == 3:
-        indptr, indices, n = A
-        n = int(n)
-    elif hasattr(A, "tocsr") and hasattr(A, "shape"):
-        if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
-            raise ValueError("the adjacency matrix must be square")
-        M = A.tocsr()
-        indptr, indices, n = M.indptr, M.indices, int(M.shape[0])
-    else:
-        return None
-    ip = _i32(indptr, "indptr")
-    ix = _i32(indices, "indices")
-    if ip.shape[0] != n + 1:
-        raise ValueError("connected_components: indptr must hold n + 1 entries")
-    return ip, ix, n
-
-
-def _csr_graph_of(A):
-    """(indptr, indices, vals, n) for PageRank and Louvain (lane gap-graph):
-    `_csr_of`'s lists plus the weights as a float32 Array (a scipy matrix's
-    `data`), or None for the weights when the caller gave an (indptr,
-    indices, n) tuple (every edge then weighs 1.0 on the device); None for
-    a dense input. Glue only: the device checks the column order and the
-    symmetry, never Python."""
-    if isinstance(A, tuple) and len(A) == 3:
-        indptr, indices, n = A
-        n = int(n)
-        vals = None
-    elif hasattr(A, "tocsr") and hasattr(A, "shape"):
-        if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
-            raise ValueError("the adjacency matrix must be square")
-        M = A.tocsr()
-        indptr, indices, n = M.indptr, M.indices, int(M.shape[0])
-        vals = _f32_1d(M.data, "data")
-    else:
-        return None
-    ip = _i32(indptr, "indptr")
-    ix = _i32(indices, "indices")
-    if ip.shape[0] != n + 1:
-        raise ValueError("the CSR adjacency's indptr must hold n + 1 entries")
-    if int(ip[n]) != ix.shape[0]:  # argument check: one scalar, the entry count
-        raise ValueError("the CSR adjacency's indices must hold indptr[n] entries")
-    if vals is not None and vals.shape[0] != ix.shape[0]:
-        raise ValueError("the CSR adjacency's data must hold one weight per entry")
-    return ip, ix, vals, n
+    return _NATIVE(None, "family_xn_graph_connected_components",
+                   (_backend.binding(_XNeighbors._BINDING, numeric_mode), A, directed, connection, return_labels),
+                   _NATIVE_CONTEXT)
 
 
 # ====================================================================== Louvain
@@ -2909,57 +2214,7 @@ class Louvain(_XNeighbors):
             If ``max_level`` is not a positive integer or None, the matrix is not
             symmetric, or the graph has no edges.
         """
-        ml = 0 if self.max_level is None else int(self.max_level)
-        if self.max_level is not None and ml < 1:
-            raise ValueError("max_level must be a positive integer or None")
-        csr = _csr_graph_of(A)
-        if csr is not None:
-            # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1):
-            # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
-            # the device as it is (`xn_louvain_csr`): the graph slot is
-            # filled from the lists, the symmetry, column-order and no-edge
-            # checks run on the device (the op raises their ValueError
-            # text), no dense matrix. Glue only: pointer handoff.
-            indptr, indices, vals, n = csr
-            has_vals = vals is not None
-            if not has_vals:
-                vals = empty((1,), "<f4")
-            labels = empty((n,), "<i4")
-            info = _empty_out((2,), "<f4")
-            try:
-                self._op("louvain_csr", [(indptr, 0), (indices, 0), (vals, 0), (labels, 1), (info, 1)],
-                         (n, indices.shape[0], 1 if has_vals else 0, ml),
-                         (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
-            except Exception as e:  # the device checks' messages as ValueErrors
-                msg = str(e)
-                if "Louvain:" in msg:
-                    raise ValueError(msg[msg.index("Louvain:"):]) from None
-                raise
-        else:
-            A = _adjacency(A)
-            n = A.shape[0]
-            # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
-            # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
-            # Python scan at the board's 20,000 nodes, most of the race's minute.
-            flags = _empty_out((2,), "<i4")
-            self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
-            flags = flags.tolist()
-            if flags[0]:
-                raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
-            if not flags[1]:
-                raise ValueError("Louvain: the graph has no edges")
-            labels = empty((n,), "<i4")
-            info = _empty_out((2,), "<f4")
-            self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
-                     (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
-        got = _p2m_relabel(self, labels)
-        if got is None:
-            raise RuntimeError("Louvain: a community label fell outside [0, n)")
-        self.n_communities_, self.labels_ = got
-        info = info.tolist()
-        self.modularity_ = info[0]
-        self.n_levels_ = int(info[1])
-        return self
+        return _NATIVE(self, "family_xn_graph_louvain_fit", (self._bind(), A), _NATIVE_CONTEXT)
 
     def fit_predict(self, A, y=None):
         """Detect communities and return ``labels_``.
@@ -2976,8 +2231,7 @@ class Louvain(_XNeighbors):
         labels : Array of shape (n,), int32
             Community of each node.
         """
-        return self.fit(A).labels_
-
+        return _NATIVE(self, "family_xn_graph_louvain_fit_predict", (self._bind(), A), _NATIVE_CONTEXT)
 
 # ====================================================================== SVGP
 # Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
@@ -3086,42 +2340,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
             system is not positive definite (raise ``jitter`` or
             ``noise_variance``).
         """
-        X = _f32(X)
-        n, d = X.shape
-        yv = _f32_1d(y, "y")
-        if len(yv) != n:
-            raise ValueError("X and y have different numbers of rows")
-        if self.inducing_points is not None:
-            Z = _f32(self.inducing_points, "inducing_points")
-        else:
-            M = min(int(self.n_inducing), n)
-            Z = self._take_rows(X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
-        M = Z.shape[0]
-        # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
-        # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile
-        # (Kuf is Kfu^T bit for bit, never formed), then the float-float
-        # solve (x_neighbors/svgp_ff.mojo). Taxi's Sigma (eigenvalues 1e-6 ..
-        # 9e5) defeats float32: B's float32 accumulation error alone exceeds
-        # its smallest eigenvalue. Kuu, B and b never leave the device.
-        alpha = _empty_out((M,), "<f4")
-        C = _empty_out((M, M), "<f4")
-        qmu = _empty_out((M,), "<f4")
-        qsqrt = _empty_out((M, M), "<f4")
-        info = _empty_out((2,), "<f4")
-        self._op("svgp_fit_ff", [(X, 0), (Z, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
-                 (n, M, d),
-                 (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
-                  _f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
-        elbo, ok = info.tolist()
-        self.precision_ = "float-float"
-        if ok == 0:
-            raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
-        self.Z_, self._alpha, self._C = Z, alpha, C
-        self.q_mu_ = qmu
-        self.q_sqrt_ = qsqrt
-        self.elbo_ = elbo
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_xn_graph_svgp_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     def predict_f(self, X):
         """Mean and variance of the latent function at X.
@@ -3184,8 +2403,28 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         -------
         mean : Array of shape (n_queries,), float32
         """
-        return self.predict_f(X)[0]
+        return _NATIVE(self, "family_xn_graph_svgp_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _NATIVE(self, "family_xn_graph_svgp_score",
+                       (self._bind(), X, y, sample_weight, _metrics_binding(getattr(self, "numeric_mode", None))),
+                       _NATIVE_CONTEXT)
 
 # The compiled owner of KernelPCA's fit, fit_transform and transform
 # (bindings/kpca_native.mojo through the decomposition owner door).

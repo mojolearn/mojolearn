@@ -19,6 +19,12 @@ from bindings.family_common import (
     family_as_f32_dense, family_field, family_owned,
 )
 from bindings.host_archive_native import host_archive_radius_refusals
+from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release
+from bindings.neighbors_local_native import neighbors_local_operation
+from bindings.neighbors_semi_native import neighbors_semi_operation
+from bindings.neighbors_graph_native import neighbors_graph_operation
+from bindings.neighbors_ann_native import neighbors_ann_operation
+from bindings.neighbors_kde_native import neighbors_kde_operation
 
 
 def _pcs_seed(seed: PythonObject) raises -> PythonObject:
@@ -142,30 +148,10 @@ def _radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     py_setitem(fields, "n_features_in_", PythonObject(Int(py=index.shape[1])))
 
 
-def _knn_release(model: PythonObject) raises:
-    """`NearestNeighbors._release_resident_index`: drop the device copy of
-    the index, if one is held, through the minting binding's
-    `knn_index_release`. Quiet on a binding that cannot be reached any more
-    and on a handle already released."""
-    var b = Python.import_module("builtins")
-    var fields = py_fields(model)
-    var holder = py_get(fields, PythonObject("_resident_holder"), PythonObject(None))
-    if holder is None or py_type(holder) is not b.dict:
-        return
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
-    if held is None:
-        return
-    py_setitem(holder, "index", PythonObject(None))
-    try:
-        _ = py_call(py_call(b.getattr, held[2], PythonObject("knn_index_release")), held[1])
-    except:
-        pass
-
-
 def neighbors_operation(model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     if operation == "family_xn_knn_release":
-        _knn_release(model)
+        knn_release(model)
         return PythonObject(None)
     if operation == "family_xn_radius_refusals":
         host_archive_radius_refusals(py_fields(model), String(py_type(model).__name__), context)
@@ -181,4 +167,16 @@ def neighbors_operation(model: PythonObject, operation: String, args: PythonObje
     if operation == "family_xn_pcs_fit_transform":
         _pcs_fit(model, args, context)
         return _pcs_transform(model, args, context)
+    if operation.startswith("family_xn_knn_"):
+        return neighbors_knn_operation(model, operation, args, context)
+    if operation.startswith("family_xn_loc_"):
+        return neighbors_local_operation(model, operation, args, context)
+    if operation.startswith("family_xn_semi_"):
+        return neighbors_semi_operation(model, operation, args, context)
+    if operation.startswith("family_xn_graph_"):
+        return neighbors_graph_operation(model, operation, args, context)
+    if operation.startswith("family_xn_ann_"):
+        return neighbors_ann_operation(model, operation, args, context)
+    if operation.startswith("family_xn_kde_"):
+        return neighbors_kde_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown neighbors operation " + operation)

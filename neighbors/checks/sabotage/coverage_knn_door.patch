@@ -1,0 +1,13 @@
+diff --git a/bindings/neighbors_knn_native.mojo b/bindings/neighbors_knn_native.mojo
+index 5b35c521b..cf277d3d0 100644
+--- a/bindings/neighbors_knn_native.mojo
++++ b/bindings/neighbors_knn_native.mojo
+@@ -337,7 +337,7 @@ def _dist_params(model: PythonObject, context: PythonObject) raises -> PythonObj
+     var weights = 0
+     if _is_knn(model, context):
+         weights = knn_resolve_weights(cls_name, family_field(fields, "weights"))
+-    return Python.list(resolved[0], resolved[1], PythonObject(weights))
++    return Python.list(resolved[0], resolved[1], PythonObject(1 - weights))  # SABOTAGE (coverage-neighbors-knn_door): uniform and distance weights swapped
+ 
+ 
+ def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: PythonObject) raises:

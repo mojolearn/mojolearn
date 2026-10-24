@@ -205,6 +205,7 @@ class ReferenceShardedNeighbors:
                 # driver sabotage switch is on, and 0 for the first reference
                 # range either way); the merge below still folds by the true
                 # `ranges`, and `stop-start` keeps every shard's width.
+                # glue: one worker request per reference shard of this device wave
                 parts.extend(self._pool.map([
                     ('neighbor_reference', params,
                      (model._index[start - driver_read_shift(index, start, self._pool.devices):
@@ -219,6 +220,7 @@ class ReferenceShardedNeighbors:
             else:
                 output = self._pool.map([('neighbor_vote', vote_model, (distances, indices, method))])[0]
             outputs.append(output)
+            # glue: one diagnostics record per reference shard
             diagnostics.extend(dict(query_start=first, query_end=end, reference_start=start,
                 reference_end=stop, reference_bytes=(stop-start)*model.n_features_in_*4,
                 device=self._pool.devices[i % len(self._pool.devices)])

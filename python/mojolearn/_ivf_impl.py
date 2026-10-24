@@ -49,12 +49,16 @@ squared, and the root is taken over the `k` selected distances
 where cuVS takes it. `ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2`
 searches the metric; the identity_break lane is `ivf-euclidean`.
 """
-from . import _backend, _native_archive_bridge
+from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
 # The compiled saved-model owner, connected once at import (`save`/`load`).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled family owner, connected once at import: `fit` is one native
+# call (bindings/neighbors_ann_native.mojo); its metric and mode tables are
+# added to the shared context below them.
+_FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
@@ -69,6 +73,9 @@ _METRICS = {
 }
 _METRIC_CODES = (METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED)
 _METRIC_NAMES = {METRIC_L2_EXPANDED: "sqeuclidean", METRIC_L2_SQRT_EXPANDED: "euclidean"}
+
+# The tables IVFIndex.fit's native owner reads (`_metric_code`, `_extension`).
+_native_family_bridge.tables(family_xn_ann_ivf_metrics=dict(_METRICS), family_xn_ann_ivf_mode_codes=dict(_MODE_CODE))
 
 #: The saved-index format tag (`save`, `load`, `mojolearn.host_model`).
 _IVF_FORMAT = "mojolearn-ivf-flat-1"
@@ -278,63 +285,7 @@ class IVFIndex(NumericModeMixin):
         self : IVFIndex
             The fitted index.
         """
-        self.__dict__.pop("_device_list_data", None)
-        self._release_resident()
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        n, dim = (int(s) for s in x.shape)  # glue: the two shape dims
-        n_lists = _int_param("n_lists", self.n_lists)
-        iters = _int_param("kmeans_n_iters", self.kmeans_n_iters)
-        seed = _int_param("random_state", self.random_state)
-        metric = self._metric_code()
-        if n_lists < 1:
-            raise ValueError(f"mojolearn IVFIndex: n_lists must be at least 1, got {n_lists}")
-        centers = empty((n_lists * dim,), "<f4")
-        norms = empty((n_lists,), "<f4")
-        offsets = empty((n_lists + 1,), "<i4")
-        indices = empty((n,), "<i4")
-        native = self._extension()
-        resident_build = getattr(native, "ivf_flat_build_resident", None)
-        if resident_build is not None:
-            handle = int(resident_build(
-                # ORDER MATCHES bindings/_mojolearn_ivf.mojo (ivf_flat_build_resident).
-                # x, centers_out, center_norms_out, offsets_out, indices_out
-                [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
-                 addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_")],
-                # n, dim, n_lists, kmeans_n_iters, metric, seed
-                [n, dim, n_lists, iters, metric, seed],
-            ))
-            self.__dict__.pop("list_data_", None)
-            self.centers_ = centers.reshape((n_lists, dim))
-            self.center_norms_ = norms
-            self.list_offsets_ = offsets
-            self.list_indices_ = indices
-            self.n_features_in_ = dim
-            self.n_rows_ = n
-            self.n_lists_ = n_lists
-            self.metric_code_ = metric
-            self._device_list_data = True
-            self._resident = (self._resident_key(False) + (id(native),), handle, native)
-            return self
-        data = empty((n * dim,), "<f4")
-        self._entry(native, "ivf_flat_build")(
-            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_build).
-            # x, centers_out, center_norms_out, offsets_out, indices_out, list_data_out
-            [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
-             addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_"),
-             addr(data, name="list_data_")],
-            # n, dim, n_lists, kmeans_n_iters, metric, seed
-            [n, dim, n_lists, iters, metric, seed],
-        )
-        self.centers_ = centers.reshape((n_lists, dim))
-        self.center_norms_ = norms
-        self.list_offsets_ = offsets
-        self.list_indices_ = indices
-        self.list_data_ = data.reshape((n, dim))
-        self.n_features_in_ = dim
-        self.n_rows_ = n
-        self.n_lists_ = n_lists
-        self.metric_code_ = metric
-        return self
+        return _FAMILY(self, "family_xn_ann_ivf_fit", (self._bind(), X), _FAMILY_CONTEXT)
 
     # -- the resident index (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo,
     # the closure of DEVIATION 1804) --

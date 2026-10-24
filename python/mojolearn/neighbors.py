@@ -23,6 +23,7 @@ from ._labels import decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from .linear_model import _dtype_name, _is_integer_labels, _shape_of
+from ._metrics_impl import _get_binding as _metrics_binding
 
 #: the x_neighbors binding, which holds the p2m_* ops the data loops below
 #: run through (lane apple-fast-py2mojo-neighbors)
@@ -156,6 +157,10 @@ _UNSUPPORTED_METRICS = (
 _native_family_bridge.tables(host_archive_neighbor_metrics=dict(_METRIC_TABLE),
                              host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
                              host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS))
+# The shared native label, weight and score steps (bindings/classical_labels.mojo)
+# the neighbors family's one-call methods read (encode/decode, accuracy, R^2).
+from ._native_labels_bridge import label_context as _label_context  # noqa: E402
+_native_family_bridge.tables(**_label_context())
 
 #: The metrics that need X >= 0 (their logarithms), refused on negative
 #: input as scipy's jensenshannon is undefined there.
@@ -763,21 +768,8 @@ class NearestNeighbors(NumericModeMixin):
         -------
         self
         """
-        self._check_refusals()
-        # A refit drops the device copy of the previous index HERE, not at
-        # the next call: the copy is keyed on the array's address and shape,
-        # and a new array of the same shape can land at a freed address, so
-        # a key match after a refit would serve the old bytes.
-        self._release_resident_index()
-        idx, _ = as_f32_dense_c(X, ndim=2, name="X")
-        if self.algorithm != "rbc":
-            _check_metric_input(type(self).__name__, _resolve_metric(type(self).__name__, self.metric, self.p)[0], idx)
-        # Held on the instance so the memory outlives this call: the Mojo side
-        # borrows the address at `kneighbors` time and owns nothing.
-        self._index = idx
-        self.n_samples_fit_ = idx.shape[0]
-        self.n_features_in_ = idx.shape[1]
-        return self
+        return _NATIVE(self, "family_xn_knn_nn_fit", (X,), _NATIVE_CONTEXT)
+
 
     # Maintainer notes (moved from the docstring): the kernel computes squared
     # Euclidean distances and the square root is taken on the way out, over
@@ -1090,75 +1082,8 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         -------
         self
         """
-        super().fit(X)
-        shape = _shape_of(y)
-        if len(shape) not in (1, 2):
-            raise ValueError(
-                f"mojolearn: y must be 1-D or 2-D, got {len(shape)}-D"
-            )
-        if shape[0] != self.n_samples_fit_:
-            raise ValueError(
-                f"mojolearn: y has {shape[0]} rows, X has "
-                f"{self.n_samples_fit_}"
-            )
-        from ._sk_validate import whole_float_labels
-        # whole-number float labels (scikit-learn's callers pass 0.0/1.0)
-        # convert exactly to the integer labels below
-        self._label_names = None
-        if (len(shape) == 1 and not _is_integer_labels(y)
-                and not whole_float_labels(y)):
-            # Labels of any other kind (str labels, as scikit-learn's
-            # check_classifiers_classes passes) vote as their dense codes in
-            # `classes_` order; `predict` decodes the voted codes.
-            names, codes = encode_labels(y)
-            if not all(isinstance(c, str) for c in names):  # glue: kind test of the class labels (classes-sized)
-                raise ValueError(
-                    f"mojolearn: y must be integer or str class labels, got "
-                    f"{_dtype_name(y)}; cast your labels")
-            self._label_names = names
-            y = codes
-        if not _is_integer_labels(y) and not whole_float_labels(y):
-            raise ValueError(
-                f"mojolearn: y must be integer class labels, got "
-                f"{_dtype_name(y)}; cuML converts to int32 "
-                "(check_dtype=np.int32) and so does this surface -- cast "
-                "your labels"
-            )
-        ya, _ = as_i64_c(y, ndim=len(shape), name="y")
-        if ya.min() < -(1 << 31) or ya.max() > (1 << 31) - 1:
-            raise ValueError("mojolearn: y does not fit int32")
-        n = shape[0]
-        n_out = 1 if len(shape) == 1 else shape[1]
-        # POLICY 6 (neighbors/estimator.mojo): the binding takes `n_outputs`
-        # CONTIGUOUS columns -- cuML's order='F' `y`. One transpose at fit,
-        # through the O(rows * n_outputs) label loop the contract permits
-        # (DEVIATION 2374), which also narrows int64 -> int32 exactly after
-        # the range check above.
-        self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
-        if n_out == 1:
-            # lane/gap-linear-nv: one output is already its own contiguous
-            # column. The int64 -> int32 narrowing is a C-level copy (exact
-            # after the range check above) and the classes come from the
-            # native encoder on that buffer: the same ints, in the same
-            # sorted order, the list path below produced through a 2 x n
-            # Python-object round trip (tolist, from_list) that cost more
-            # than the GPU search on the board's 200,000-row index.
-            y32 = ya.reshape((n,)).astype("<i4")
-            self._y_cols = y32.reshape((1, n))
-            self._classes_list = [encode_labels(y32)[0]]
-            return self
-        # the narrowing is a C-level copy (exact after the range check) and
-        # the transpose a device op (`xn_p2m_transpose_i`; the host binding's
-        # same op on a CPU-only install); the classes per output column from
-        # the native encoder, as the one-output path above
-        y32 = ya.astype("<i4")
-        yc = empty((n_out, n), "<i4")
-        if n:
-            self._bind(_XN).xn_p2m_transpose_i(
-                [addr_ro(y32, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
-        self._y_cols = yc
-        self._classes_list = [encode_labels(yc[j])[0] for j in range(n_out)]  # glue: one native encoding per output column
-        return self
+        return _NATIVE(self, "family_xn_knn_clf_fit", (self._bind(_XN), X, y), _NATIVE_CONTEXT)
+
 
     @property
     def classes_(self):
@@ -1172,94 +1097,6 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         if self.outputs_2d_:
             return self._classes_list
         return self._classes_list[0]
-
-    def _predict(self, X, want_proba):
-        if self._index is None or self._y_cols is None:
-            raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_dense_c(X, ndim=2, name="X")
-        _check_metric_input(type(self).__name__, self._dist_params()[0], q)
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn: X has {q.shape[1]} features, index has "
-                f"{self.n_features_in_}"
-            )
-        k = self.n_neighbors
-        if k < 1 or k > self.n_samples_fit_:
-            raise ValueError(
-                f"mojolearn: n_neighbors must be in [1, {self.n_samples_fit_}]"
-                f", got {k}"
-            )
-        nq = q.shape[0]
-        n_out = self._y_cols.shape[0]
-        n_classes = [len(c) for c in self._classes_list]  # glue: class counts per output column
-        # The native contract writes exactly one of these two outputs.  Keep
-        # the unselected address valid without materializing its full public
-        # shape: at million-row scale the unused probability matrix can be
-        # tens or hundreds of MiB, and predict_proba likewise has no use for
-        # a labels matrix.  Both GPU and host bindings promise not to read or
-        # write the unselected pointer (their one-element sentinel contract).
-        labels = (empty((1,), "<i4") if want_proba else
-                  empty((nq, n_out), "<i4"))
-        proba = (empty((nq * sum(n_classes),), "<f4") if want_proba else  # glue: class counts per output column
-                 empty((1,), "<f4"))
-        uniq = empty((sum(n_classes),), "<i4")  # glue: class counts per output column
-        idx = self._index
-        y_cols = self._y_cols
-        binding = self._bind("_mojolearn")
-        # THE INDEX STAYS ON THE DEVICE (DEVIATION 3002, the classifier's
-        # door of DEVIATION 2921): the first call uploads it, every later
-        # call classifies against the device copy through
-        # `knn_classify_resident`; the search and the vote are the same
-        # statements over the same bytes. A binding without that entry
-        # takes the per-call path.
-        resident = self._resident_door(binding, "knn_classify_resident")
-        handle = self._resident_index_handle(binding, idx) if resident is not None else None
-        # ORDER MATCHES bindings/_mojolearn.mojo::knn_classify_binding and
-        # ::knn_classify_resident_binding.
-        # n_index, n_queries, n_features, k, query_tile, n_outputs,
-        # want_proba, then n_classes per output
-        params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out,
-                  1 if want_proba else 0] + n_classes
-        if handle is not None:
-            # The handle rides at the front of `params`: a binding takes at
-            # most eight arguments and the classifier uses all eight.
-            self.used_query_tile_ = resident(
-                addr_ro(idx, name="idx"),
-                addr_ro(q, name="q"),
-                addr_ro(y_cols, name="y_cols"),
-                addr(labels, name="labels"),
-                addr(proba, name="proba"),
-                addr(uniq, name="uniq"),
-                [handle] + params,
-                # metric, metric_arg, weights -- see _dist_triple there.
-                self._dist_params(),
-            )
-        else:
-            self.used_query_tile_ = binding.knn_classify(
-                addr_ro(idx, name="idx"),
-                addr_ro(q, name="q"),
-                addr_ro(y_cols, name="y_cols"),
-                addr(labels, name="labels"),
-                addr(proba, name="proba"),
-                addr(uniq, name="uniq"),
-                params,
-                self._dist_params(),
-            )
-        # POLICY 7: the implementation's class set against ours, made visible. `uniq`
-        # is split at the running class counts (the old np.cumsum /
-        # np.split), in Python over O(classes) ints.
-        flat = uniq.tolist()
-        off = 0
-        for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):  # glue: class set check per output column
-            a = flat[off:off + count]
-            off += count
-            if a != b:
-                raise RuntimeError(
-                    f"mojolearn: output {i}: the implemented getUniquelabels found "
-                    f"classes {a[:8]}..., the host sort found "
-                    f"{b[:8]}...; the two class sets disagree"
-                )
-        return labels, proba, n_classes
 
     def predict(self, X):
         """Predict the class of each query by neighbor vote.
@@ -1281,15 +1118,8 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
             If the model is not fitted, `X` has the wrong number of features,
             or `n_neighbors` exceeds the number of training samples.
         """
-        labels, _, _ = self._predict(X, want_proba=False)
-        if self.outputs_2d_:
-            return labels.astype("<i8")
-        # (nq, 1) -> (nq,) is a C-order reshape; int32 -> int64 is exact.
-        codes = labels.reshape((labels.shape[0],)).astype("<i8")
-        names = getattr(self, "_label_names", None)
-        if names is not None:
-            return decode_labels(names, codes)
-        return codes
+        return _NATIVE(self, "family_xn_knn_clf_predict", (self._bind("_mojolearn"), X), _NATIVE_CONTEXT)
+
 
     def predict_proba(self, X):
         """Return each query's vote fractions per class.
@@ -1305,20 +1135,28 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
             Columns follow `classes_` order. For a 2-D `y`, one array per
             output, as cuML and scikit-learn return it.
         """
-        labels, proba, n_classes = self._predict(X, want_proba=True)
-        # `labels` is the one-element sentinel in this arm.  The selected
-        # flat probability buffer records the query count without retaining
-        # an otherwise-unused labels matrix.
-        nq = proba.shape[0] // sum(n_classes)  # glue: class counts per output column
-        out = []
-        off = 0
-        for n in n_classes:  # glue: probability block slices per output
-            # A slice of an Array COPIES (the _array contract).
-            out.append(proba[off:off + nq * n].reshape((nq, n)))
-            off += nq * n
-        if self.outputs_2d_:
-            return out
-        return out[0]
+        return _NATIVE(self, "family_xn_knn_clf_predict_proba", (self._bind("_mojolearn"), X), _NATIVE_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _NATIVE(self, "family_xn_knn_clf_score", (self._bind("_mojolearn"), X, y, sample_weight),
+                       _NATIVE_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring): reference cuML's
@@ -1465,34 +1303,8 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         -------
         self
         """
-        super().fit(X)
-        shape = _shape_of(y)
-        if len(shape) not in (1, 2):
-            raise ValueError(
-                f"mojolearn: y must be 1-D or 2-D, got {len(shape)}-D"
-            )
-        if shape[0] != self.n_samples_fit_:
-            raise ValueError(
-                f"mojolearn: y has {shape[0]} rows, X has "
-                f"{self.n_samples_fit_}"
-            )
-        ya, _ = as_f32_c(y, ndim=len(shape), name="y")
-        n = shape[0]
-        n_out = 1 if len(shape) == 1 else shape[1]
-        if n_out == 1:
-            # One column IS one contiguous row of the transposed layout: a
-            # reshape, no copy (as `ascontiguousarray(y2.T)` was for 1-D y).
-            self._y_cols = ya.reshape((1, n))
-        else:
-            # The transpose on the device (`xn_p2m_transpose`; the host
-            # binding's same op on a CPU-only install)
-            yc = empty((n_out, n), "<f4")
-            if n:
-                self._bind(_XN).xn_p2m_transpose(
-                    [addr_ro(ya, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
-            self._y_cols = yc
-        self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
-        return self
+        return _NATIVE(self, "family_xn_knn_reg_fit", (self._bind(_XN), X, y), _NATIVE_CONTEXT)
+
 
     def predict(self, X):
         """Predict each query's target from its neighbors.
@@ -1513,57 +1325,28 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
             If the model is not fitted, `X` has the wrong number of features,
             or `n_neighbors` exceeds the number of training samples.
         """
-        if self._index is None or self._y_cols is None:
-            raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_dense_c(X, ndim=2, name="X")
-        _check_metric_input(type(self).__name__, self._dist_params()[0], q)
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn: X has {q.shape[1]} features, index has "
-                f"{self.n_features_in_}"
-            )
-        k = self.n_neighbors
-        if k < 1 or k > self.n_samples_fit_:
-            raise ValueError(
-                f"mojolearn: n_neighbors must be in [1, {self.n_samples_fit_}]"
-                f", got {k}"
-            )
-        nq = q.shape[0]
-        n_out = self._y_cols.shape[0]
-        out = empty((nq, n_out), "<f4")
-        idx = self._index
-        y_cols = self._y_cols
-        binding = self._bind("_mojolearn")
-        # DEVIATION 3002: the regressor's resident door; see the classifier.
-        resident = self._resident_door(binding, "knn_regress_resident")
-        handle = self._resident_index_handle(binding, idx) if resident is not None else None
-        # ORDER MATCHES bindings/_mojolearn.mojo::knn_regress_binding and
-        # ::knn_regress_resident_binding.
-        # n_index, n_queries, n_features, k, query_tile, n_outputs
-        params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out]
-        if handle is not None:
-            self.used_query_tile_ = resident(
-                handle,
-                addr_ro(idx, name="idx"),
-                addr_ro(q, name="q"),
-                addr_ro(y_cols, name="y_cols"),
-                addr(out, name="out"),
-                params,
-                # metric, metric_arg, weights -- see _dist_triple there.
-                self._dist_params(),
-            )
-        else:
-            self.used_query_tile_ = binding.knn_regress(
-                addr_ro(idx, name="idx"),
-                addr_ro(q, name="q"),
-                addr_ro(y_cols, name="y_cols"),
-                addr(out, name="out"),
-                params,
-                self._dist_params(),
-            )
-        if self.outputs_2d_:
-            return out
-        return out.reshape((nq,))
+        return _NATIVE(self, "family_xn_knn_reg_predict", (self._bind("_mojolearn"), X), _NATIVE_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _NATIVE(self, "family_xn_knn_reg_score",
+                       (self._bind("_mojolearn"), X, y, sample_weight,
+                        _metrics_binding(getattr(self, "numeric_mode", None))), _NATIVE_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring):
@@ -1891,6 +1674,11 @@ _native_archive_bridge.register(
     host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
     host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS),
 )
+
+
+# The k-NN classes the native refusals tell apart from NearestNeighbors
+# (`isinstance(self, (KNeighborsClassifier, KNeighborsRegressor))`).
+_native_family_bridge.tables(family_xn_knn_classes=(KNeighborsClassifier, KNeighborsRegressor))
 
 
 def _knn_schema(*extra, require=()):
