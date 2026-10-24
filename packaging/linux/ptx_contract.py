@@ -56,10 +56,14 @@ APPROX = re.compile(rb"\b((?:sqrt|rsqrt|rcp|ex2|lg2|sin|cos|tanh|div)\.(?:approx
 
 
 def is_identical_cuda(relative):
-    """`mojolearn/cuda/<arch>/identical/<name>.so`: the tier this pass owns."""
+    """`mojolearn/cuda/<arch>/identical/<name>.so`: the tier this pass owns, and
+    the framework adapters' native library `mojolearn/cuda/<arch>/_adapters/
+    libmojolearn_adapter.so`, compiled with the IDENTICAL tier's flags
+    (packaging/adapters/build.sh) and held to the same PTX and machine-code rules."""
     parts = Path(relative).parts
     return (len(parts) == 5 and parts[0] == "mojolearn" and parts[1] in ("cuda", "cuda_native")
-            and parts[3] == "identical" and parts[4].endswith(".so"))
+            and (parts[3] == "identical" and parts[4].endswith(".so")
+                 or parts[3] == "_adapters" and parts[4] == "libmojolearn_adapter.so"))
 
 
 def modules(data):

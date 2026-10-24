@@ -41,6 +41,16 @@ command -v taskset >/dev/null
 command -v pixi >/dev/null
 command -v objdump >/dev/null
 command -v patchelf >/dev/null || { echo 'Prepare patchelf before the build campaign; implicit installation refused' >&2; exit 2; }
+# THE FRAMEWORK ADAPTERS (packaging/adapters/build.sh) build with every native
+# set: the Torch registration needs a C++20 compiler and the network (the
+# pinned torch wheel, packaging/adapters/fetch_torch.py). The PTX slot has none.
+ADAPTERS=${MOJOLEARN_RELEASE_ADAPTERS:-1}
+[[ "$ADAPTERS" =~ ^[01]$ ]] || { echo 'MOJOLEARN_RELEASE_ADAPTERS must be 0 or 1' >&2; exit 2; }
+if [[ "$ADAPTERS" = 1 && "$vendor:$arch" != cuda:sm_80 ]]; then
+    command -v "${CXX:-c++}" >/dev/null || {
+        echo "Prepare a C++20 compiler (${CXX:-c++}) for the framework adapters, or MOJOLEARN_RELEASE_ADAPTERS=0" >&2; exit 2; }
+fi
+export MOJOLEARN_RELEASE_ADAPTERS=$ADAPTERS
 [[ -x "$ROOT/.pixi/envs/default/bin/mojo" && -x "$ROOT/.pixi/envs/default/bin/python" ]] || {
     echo 'Prepare the locked Pixi default environment before this campaign' >&2; exit 2;
 }
@@ -130,6 +140,7 @@ printf '%s\n' "vendor=$vendor" "architecture=$arch" "source_commit=$commit" \
     "cpu_affinity=$cores" "build_jobs=$BUILD_JOBS" "build_cores=$BUILD_CORES" "work_seconds=$seconds" 'rss_gib=12' 'pixi_environment=default' \
     "kernel_column=$column" 'linux_cpu=x86-64-v3' "patchelf=$(command -v patchelf)" "no_device=$NO_DEVICE" "build_rss_gib=$BUILD_RSS_GIB" \
     "build_sizing=$BUILD_SIZING" "box_cores=$BOX_CORES" "box_mem_available_gib=$BOX_MEM_GIB" "build_per_job_gib=$BUILD_PER_JOB_GIB" \
+    "framework_adapters=$ADAPTERS" "cxx=$(command -v "${CXX:-c++}" 2>/dev/null || echo none)" \
     'scope=one architecture full46 build; byte LM IDENTICAL only; no installed wheel or numerical admission' > "$OUT/campaign.txt"
 run() {
     local name=$1 cap=$2 remaining status

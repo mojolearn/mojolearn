@@ -103,6 +103,9 @@ SOURCE_TREE_LAZY_IMPORTS = {"mojolearn/_identity_break.py": {"lane_applicability
 # (mojolearn.models.verify_catalog_entry): the user who checks a torchvision, Hugging Face or ONNX model has its source
 # package; every other path of the wheel never imports them.
 MODEL_SOURCE_LAZY_IMPORTS = {"mojolearn/models/_catalog.py": {"torch", "torchvision", "transformers", "onnx"}}
+# The framework adapters (packaging/adapters/): each module imports its own framework, inside the function
+# that refuses with an install hint when it is missing; `import mojolearn` never reaches either.
+ADAPTER_LAZY_IMPORTS = {"mojolearn/adapters/torch.py": {"torch"}, "mojolearn/adapters/max.py": {"max"}}
 
 
 def sparse_output_adapter_imports(tree, relative):
@@ -168,6 +171,8 @@ def dependency_errors(path, relative):
             if top in SOURCE_TREE_LAZY_IMPORTS.get(relative, ()) and id(node) in lazy:
                 continue
             if top in MODEL_SOURCE_LAZY_IMPORTS.get(relative, ()) and id(node) in lazy:
+                continue
+            if top in ADAPTER_LAZY_IMPORTS.get(relative, ()) and id(node) in lazy:
                 continue
             errors.append(f"{relative}: imports {top!r}, which the wheel does not provide")
     return errors

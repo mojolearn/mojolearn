@@ -173,6 +173,50 @@ MERGED_INDEX = merged_layout.INDEX
 HOST_GLOB = "_mojolearn_*_host.so"
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
+# THE FRAMEWORK ADAPTERS (packaging/adapters/, 2026-10-24): <set>/_adapters/
+# holds the native adapter library, the Torch registration, the MAX package and
+# adapters.json; packaging/adapters/manifest.py is their one checker.
+import importlib.util as _ilu  # noqa: E402
+_spec = _ilu.spec_from_file_location("mojolearn_adapter_manifest", REPO / "packaging/adapters/manifest.py")
+adapter_manifest = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(adapter_manifest)
+ADAPTER_SWITCH = "MOJOLEARN_RELEASE_ADAPTERS"
+
+
+def adapters_enabled(environ=None):
+    """MOJOLEARN_RELEASE_ADAPTERS: '1' (default) packs every set's adapters and
+    the release profiles require them on every native set; '0' packs none."""
+    value = (os.environ if environ is None else environ).get(ADAPTER_SWITCH, "1")
+    if value not in ("0", "1"):
+        raise SystemExit(f"pack_wheel: {ADAPTER_SWITCH} must be 0 or 1, got {value!r}")
+    return value == "1"
+
+
+def load_adapters(adir, vendor, arch):
+    """{'<vendor>/<arch>/_adapters/<name>': path} of one set's framework
+    adapters, checked against their adapters.json; {} when the set has none."""
+    d = pathlib.Path(adir) / adapter_manifest.DIRECTORY
+    if not d.exists():
+        return {}
+    if vendor == "cuda" and arch == gpu_plugins.PTX_ARCH:
+        raise SystemExit(f"pack_wheel: {d}: the PTX slot ships no framework adapters")
+    try:
+        adapter_manifest.check(d, vendor=vendor, arch=arch)
+    except (adapter_manifest.ManifestError, OSError, ValueError) as exc:
+        raise SystemExit(f"pack_wheel: {d}: {exc}") from exc
+    return {f"{vendor}/{arch}/{adapter_manifest.DIRECTORY}/{p.name}": p for p in sorted(d.iterdir())}
+
+
+def adapter_records(sets):
+    """{'mojolearn/<vendor>/<arch>/_adapters': {'manifest_sha256', 'files'}}, the
+    shape linux_surface_qualification.sh writes into build-provenance.json."""
+    out = {}
+    for s in sets:
+        if s.adapters:
+            files = {pathlib.PurePosixPath(rel).name: sha(p).hex() for rel, p in sorted(s.adapters.items())}
+            out[f"mojolearn/{s.vendor}/{s.arch}/{adapter_manifest.DIRECTORY}"] = dict(
+                manifest_sha256=files[adapter_manifest.MANIFEST], files=files)
+    return out
 PY_DIR = REPO / "python"
 PKG = PY_DIR / "mojolearn"
 # FIFTEEN, and this is the FOURTH list that has to move when a binding is
@@ -253,8 +297,8 @@ REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 #: set-relative ("_mojolearn_merged.json", "identical/...", "host/..."), to its
 #: path (None or {} per-binding). `hosts` maps each host binding to the file it
 #: loads from: its own file, or the merged host file for every member.
-SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts reuse layout indexes",
-                                defaults=("per-binding", None))
+SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts reuse layout indexes adapters",
+                                defaults=("per-binding", None, None))
 # DEVIATION 2290. ONE reader for the release version and ONE spelling of the
 # profile name, owned by tools/verify_linux_surface_qualification.py and shared
 # with the qualification checker and the alpha artifact verifier. This packer
@@ -490,6 +534,11 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
             raise SystemExit(f'The build proof of {"/".join(key)} records the binding layout '
                              f'{proof.get("binding_layout", "per-binding")!r}; the set is {binding_layout}')
         check_proof_indexes(proof, the_set, reused_of[key])
+        # The framework adapters the set carries are the bytes this leg built.
+        akey = f'mojolearn/{key[0]}/{key[1]}/{adapter_manifest.DIRECTORY}'
+        shipped_adapters = adapter_records([the_set]).get(akey)
+        if shipped_adapters is not None and shipped_adapters != (proof.get('adapters') or {}).get(akey):
+            raise SystemExit(f'The framework adapters of {"/".join(key)} differ from its build proof')
         # The leg built every binding of its set; the proof must name them
         # all, and its digest must be the shipped digest for every binding
         # the release did not take from the published wheel. For the taken
@@ -578,6 +627,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                 merged_indexes=merged_indexes,
                 binding_layout=binding_layout,
                 binding_origin=origin,
+                adapters=adapter_records(sets),
                 reuse=dict(built=len(origin) - n_reused - n_admitted, reused=n_reused,
                            **({'staged_admitted': n_admitted} if n_admitted else {}),
                            from_release=next((s.reuse['origin'] for s in sets if s.reuse and s.reuse['origin']), None),
@@ -1120,7 +1170,11 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             unknown = set(reused) - packed - host_shipped - {f".libs/{n}" for n in libs}
             if unknown:
                 raise SystemExit(f"pack_wheel: {adir}/reuse.json names files this set does not pack: {sorted(unknown)}")
-        out.append(SetDir(vendor, arch, files, libs, manifest, host_payload, reuse, layout, indexes))
+        # THE FRAMEWORK ADAPTERS ride beside the tiers, outside `files` (the
+        # binding inventory every proof and audit counts), bound by their own
+        # manifest here and by the build proof in release_inventory.
+        adapters = load_adapters(adir, vendor, arch)
+        out.append(SetDir(vendor, arch, files, libs, manifest, host_payload, reuse, layout, indexes, adapters))
     return out
 
 
@@ -1263,6 +1317,8 @@ def main(argv=None, _gates=True):
     ap.add_argument('--build-proof', action='append', default=[],
                     help='complete per-architecture build-provenance.json; one per built set for '
                          + RELEASE_PROFILE + ' and ' + RELEASE_SPLIT_PROFILE)
+    ap.add_argument("--require-adapters", action="store_true",
+                    help="refuse a native set without its framework adapters (<set>/_adapters/)")
     ap.add_argument("--check-against", default="",
                     help="a macOS wheel whose METADATA must match this one's")
     ap.add_argument("--portable-math-helper", type=pathlib.Path,
@@ -1294,6 +1350,24 @@ def main(argv=None, _gates=True):
         raise SystemExit("pack_wheel: the sets mix the merged and per-binding layouts: "
                          + ", ".join(f"{s.vendor}/{s.arch}={s.layout}" for s in sets))
     print(f"pack_wheel: binding layout {sets[0].layout}")
+    # THE FRAMEWORK ADAPTERS: packed from every set that carries them (the PTX
+    # slot never does). --require-adapters (tools/release.py passes it) refuses
+    # a native set without them; MOJOLEARN_RELEASE_ADAPTERS=0 packs none.
+    if not adapters_enabled():
+        sets = [s._replace(adapters={}) for s in sets]
+        print("pack_wheel: framework adapters off (MOJOLEARN_RELEASE_ADAPTERS=0)")
+    elif a.require_adapters:
+        bare = [f"{s.vendor}/{s.arch}" for s in sets
+                if not s.adapters and (s.vendor, s.arch) != ("cuda", gpu_plugins.PTX_ARCH)]
+        if bare:
+            raise SystemExit("pack_wheel: --require-adapters: every native set ships the framework adapters; "
+                             f"none in {', '.join(bare)} (built by packaging/adapters/build.sh in the leg; "
+                             "a set synthesized from the published wheel has none: rebuild it, or set "
+                             "MOJOLEARN_RELEASE_ADAPTERS=0 for the legs and the pack alike)")
+    for s in sets:
+        if s.adapters:
+            print(f"pack_wheel: framework adapters for {s.vendor}/{s.arch}: "
+                  + ", ".join(pathlib.PurePosixPath(r).name for r in sorted(s.adapters)))
     if not strict and a.build_proof:
         raise SystemExit('--build-proof requires an explicit release profile')
     if not strict and any(s.reuse for s in sets):
@@ -1346,7 +1420,7 @@ def main(argv=None, _gates=True):
         if bundle and json.loads(manifest_bytes)["source_commit"] != inventory["source_commit"]:
             raise SystemExit("pack_wheel: the PTX set and the native sets were built from different commits")
         if split:
-            for mapping in ("extensions", "binding_origin", "merged_indexes"):
+            for mapping in ("extensions", "binding_origin", "merged_indexes", "adapters"):
                 inventory[mapping] = {gpu_plugins.installed_member(k): v
                                       for k, v in inventory[mapping].items()}
         r = inventory['reuse']
@@ -1393,6 +1467,8 @@ def main(argv=None, _gates=True):
     for s in sets:
         vendor, files, libs = s.vendor, s.files, s.libs
         for rel, p in files.items():
+            entries[f"mojolearn/{rel}"] = p
+        for rel, p in (s.adapters or {}).items():
             entries[f"mojolearn/{rel}"] = p
         if not shared and vendor not in seen_vendor_libs:
             seen_vendor_libs.add(vendor)

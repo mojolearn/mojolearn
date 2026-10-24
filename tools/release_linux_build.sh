@@ -205,4 +205,4 @@ for a in $ARCHS; do
     case "$a" in sm_*) v=cuda ;; *) v=hip ;; esac
     S="$S --set $OUT/$v-$a/release-build/build/sets/$v"; P="$P --build-proof $OUT/$v-$a/release-build/build/build-provenance.json"
 done
-echo "  python3 packaging/linux/pack_wheel.py --profile release-linux3$S$P --out <dist>"
+echo "  python3 packaging/linux/pack_wheel.py --profile release-linux3$S$P --require-adapters --out <dist>"

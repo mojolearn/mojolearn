@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    report = {"complete": False, "scope": "MAX AMD custom operation execution", "checks": [], "failures": []}
+    report = {"complete": False, "scope": "MAX custom operation execution on visible GPU zero", "checks": [], "failures": []}
     try:
         import numpy as np
         import max

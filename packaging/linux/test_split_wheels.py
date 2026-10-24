@@ -378,7 +378,8 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual((core.get("Name"), core.get("Version")), ("mojolearn-core", v))
         # 2026-10-20: the core requires NO vendor package, so core alone,
         # core + one vendor and core + both are each a valid install
-        self.assertEqual(core.get_all("Provides-Extra"), ["numpy", "verify"])
+        # numpy/verify, and torch/max: the framework adapters' frameworks (packaging/adapters/pins.json)
+        self.assertEqual(core.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
         self.assertIn('numpy>=1.26.4; extra == "verify"', core.get_all("Requires-Dist"))
         self.assertNotIn('numpy>=1.26.4', core.get_all("Requires-Dist"))
         self.assertEqual([r for r in core.get_all("Requires-Dist") or [] if r.startswith("mojolearn")], [])
@@ -407,7 +408,7 @@ class SplitWheels(unittest.TestCase):
         # mojolearn-core, with its own Summary and README note, and nothing
         # else added, removed or reordered (no vendor requirement)
         single = meta(self.single)
-        self.assertEqual(single.get_all("Provides-Extra"), ["numpy", "verify"])
+        self.assertEqual(single.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
         ours = members(self.split["mojolearn_core"])[f"{dist_info(self.split['mojolearn_core'])}/METADATA"].decode()
         theirs = members(self.single)[f"{dist_info(self.single)}/METADATA"].decode()
         self.assertNotIn("Requires-Dist: mojolearn", theirs)

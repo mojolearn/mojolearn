@@ -271,6 +271,42 @@ fi
 export PATH="$HOME/.pixi/bin:$PATH"
 command -v pixi >/dev/null || { say "no pixi on PATH"; exit 2; }
 
+# THE FRAMEWORK ADAPTERS (packaging/adapters/build.sh, 2026-10-24). Every
+# native architecture set also builds the optional PyTorch and MAX adapters:
+# the native adapter library (adapters/native/c_api.mojo, the IDENTICAL
+# tier's flags and this set's one target), the Torch dispatcher registration
+# linked against this vendor's pinned Torch wheel, and the MAX custom-operation
+# package. They are ONE more pool job (it runs beside the tier compiles under
+# the merged bound), move into <set>/_adapters/ with the tiers, take the
+# IDENTICAL PTX/machine-code passes on CUDA, are staged by stage_libs.py and
+# get their shipped digests in <set>/_adapters/adapters.json
+# (packaging/adapters/manifest.py finalize). A failure fails the leg like a
+# binding's. MOJOLEARN_RELEASE_ADAPTERS=0 builds none (the wheel then ships
+# none; pack_wheel.py's release profiles require them unless it is 0 there
+# too). The PTX slot (cuda/sm_80) ships no adapters.
+ADAPTERS=${MOJOLEARN_RELEASE_ADAPTERS:-1}
+case "$ADAPTERS" in 0|1) ;; *) echo 'MOJOLEARN_RELEASE_ADAPTERS must be 0 or 1' >&2; exit 2 ;; esac
+ADAPTER_VENDOR=""
+ADAPTER_OUT="$DEST/adapters"
+if [[ "$ADAPTERS" = 1 ]]; then
+  if [[ "$CUDA_CODE_FORMAT" = ptx ]]; then
+    ADAPTERS=0; say "framework adapters: none for the PTX slot"
+  elif [[ " $TIERS " != *" identical "* ]]; then
+    ADAPTERS=0; say "framework adapters: none (the identical tier is not built here)"
+  else
+    case "${MOJOLEARN_GPU_ARCHS:-}" in
+      sm_*) ADAPTER_VENDOR=cuda ;;
+      gfx*) ADAPTER_VENDOR=hip ;;
+      *) echo 'the framework adapters need one explicit MOJOLEARN_GPU_ARCHS (or MOJOLEARN_RELEASE_ADAPTERS=0)' >&2; exit 2 ;;
+    esac
+    ADAPTER_TIMEOUT=$(merged_timeout_seconds) || exit 2
+    rm -rf "$ADAPTER_OUT" "$DEST/build_logs/adapters"
+    say "framework adapters: $ADAPTER_VENDOR/$MOJOLEARN_GPU_ARCHS (bound ${ADAPTER_TIMEOUT}s)"
+  fi
+else
+  say "framework adapters: off (MOJOLEARN_RELEASE_ADAPTERS=0)"
+fi
+
 # A clean slate: a stale .so from another leg's build in python/mojolearn/
 # would be moved into the set as if it were this build's. The macOS release
 # script refuses stale files by mtime; here they are removed first.
@@ -345,11 +381,20 @@ build_one() {
   local tier="$1" s="$2"
   local log="$DEST/build_logs/${tier}_${s%.sh}.log"
   [[ "$s" = merged_build.sh ]] && log="$DEST/build_logs/${tier}_merged.log"
+  [[ "$s" = adapters ]] && log="$DEST/build_logs/adapters.log"
   local bound="$BINDING_TIMEOUT"
   [[ "$s" = merged_build.sh ]] && bound="$BINDING_TIMEOUT_MERGED"
+  [[ "$s" = adapters ]] && bound="$ADAPTER_TIMEOUT"
   local rc=0
   { echo "start $(date -u +%FT%TZ)"; } > "$log"
-  if [[ "$s" = merged_build.sh ]]; then
+  if [[ "$s" = adapters ]]; then
+    # THE FRAMEWORK ADAPTERS: the GPU tiers' compiler workers and column (the
+    # leg exports MOJOLEARN_TARGET_COLUMN), the identical define (build.sh).
+    MOJOLEARN_COMPILE_JOBS=$GPU_COMPILE_JOBS MOJOLEARN_BUILD_PIXI_ENV="$PIXI_ENV" \
+      with_binding_timeout "$bound" "$log" \
+      bash packaging/adapters/build.sh "$ADAPTER_OUT" "$DEST/build_logs/adapters" "$ADAPTER_VENDOR" "$MOJOLEARN_GPU_ARCHS" \
+      || rc=$?
+  elif [[ "$s" = merged_build.sh ]]; then
     # What this compile is expected to need, so a box log says what it tried:
     # peaks measured on the DO MI325X 2026-10-20 at two compiler workers
     # (tools/release_github_build.py NEEDED_GIB has the same numbers).
@@ -405,7 +450,7 @@ build_one() {
       return 1
     fi
     say "FINDING: $tier bindings/$s did not build; first error:"
-    grep -m2 -E 'error:|constraint failed' "$log" | cut -c1-200 | sed 's/^/      /'
+    grep -m2 -E 'error:|constraint failed|REFUSED' "$log" | cut -c1-200 | sed 's/^/      /'
     return 1
   fi
 }
@@ -428,6 +473,7 @@ pool_jobs() {   # tier -> "tier:script" per build of that tier
   else
     for s in $(tier_scripts "$1"); do printf '%s:%s\n' "$1" "$s"; done
   fi
+  if [[ "$ADAPTERS" = 1 && "$1" = identical ]]; then printf 'adapters:adapters\n'; fi
 }
 for tier in $ordered_tiers; do
   for job in $(pool_jobs "$tier"); do
@@ -733,6 +779,16 @@ if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
   # shellcheck disable=SC2086
   move_dir python/mojolearn/host "$SET/host" $HOST_NAMES
 fi
+# The framework adapters sit beside the tiers too, one level down like a tier.
+ADAPTER_SO=""
+if [[ "$ADAPTERS" = 1 ]]; then
+  if [[ -f "$ADAPTER_OUT/adapters-build.json" ]]; then
+    mv "$ADAPTER_OUT" "$SET/_adapters"
+    ADAPTER_SO="$SET/_adapters/libmojolearn_adapter.so"
+  else
+    say "FINDING: the framework adapters were not built (build_logs/adapters.log)"; BUILD_RC=1
+  fi
+fi
 cp "$MERGED_READBACK" "$SET/merged_readback.txt"
 cp "$READBACK" "$SET/readback.txt"
 cp "$ARCHBACK" "$SET/arch_readback.txt"
@@ -747,9 +803,9 @@ cp "$ARCHBACK" "$SET/arch_readback.txt"
 # HERE, before the manifest hashes the set, so every recorded sha256 (the
 # manifest, LINUX_PAYLOAD.json, release_reuse) is of the shipped bytes.
 if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
-  python3 "$REPO/packaging/linux/ptx_contract.py" patch "$SET"/identical/*.so > "$DEST/ptx_rn.jsonl" \
+  python3 "$REPO/packaging/linux/ptx_contract.py" patch "$SET"/identical/*.so $ADAPTER_SO > "$DEST/ptx_rn.jsonl" \
     || { say "REFUSING: the IDENTICAL PTX .rn pass failed (read $DEST/ptx_rn.jsonl)"; exit 5; }
-  if ! python3 "$REPO/packaging/linux/ptx_contract.py" audit "$SET"/identical/*.so > "$DEST/ptx_audit.jsonl"; then
+  if ! python3 "$REPO/packaging/linux/ptx_contract.py" audit "$SET"/identical/*.so $ADAPTER_SO > "$DEST/ptx_audit.jsonl"; then
     say "REFUSING: IDENTICAL PTX still carries a float op without a rounding modifier:"
     grep -v '"plain_float_ops": 0' "$DEST/ptx_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
     exit 5
@@ -790,11 +846,11 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
     say "REFUSING: $PTXAS is not ptxas V$CUDA_TOOLS_VERSION"; exit 5
   fi
   if ! python3 "$REPO/packaging/linux/cubin_contract.py" patch --arch "$ARCH" --ptxas "$PTXAS" --fatbinary "$FATBINARY" \
-      "$SET"/identical/*.so > "$DEST/cubin.jsonl"; then
+      "$SET"/identical/*.so $ADAPTER_SO > "$DEST/cubin.jsonl"; then
     say "REFUSING: an IDENTICAL module could not be given its fatbin (\"unplaced\" in $DEST/cubin.jsonl)"
     exit 5
   fi
-  if ! python3 "$REPO/packaging/linux/cubin_contract.py" audit --arch "$ARCH" "$SET"/identical/*.so > "$DEST/cubin_audit.jsonl"; then
+  if ! python3 "$REPO/packaging/linux/cubin_contract.py" audit --arch "$ARCH" "$SET"/identical/*.so $ADAPTER_SO > "$DEST/cubin_audit.jsonl"; then
     say "REFUSING: IDENTICAL CUDA binaries the driver would still JIT:"
     grep '"errors": \[".' "$DEST/cubin_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
     exit 5
@@ -921,6 +977,13 @@ path.write_text(json.dumps(record, indent=2) + '\n')
 PYBYTE
   [[ $? = 0 ]] || STAGE_RC=1
 fi
+# THE ADAPTERS' SHIPPED DIGESTS, after stage_libs rewrote their RUNPATHs (and,
+# on CUDA, the PTX/machine-code passes above rewrote the library): the bytes
+# the wheel carries are the bytes adapters.json names.
+if [[ "$STAGE_RC" = 0 && -d "$SET/_adapters" ]]; then
+  python3 "$REPO/packaging/adapters/manifest.py" finalize "$SET/_adapters" \
+    || { say "FINDING: the framework adapters' manifest could not be finalized"; STAGE_RC=1; }
+fi
 
 # ---------------------------------------------------------------- sizes
 # Audit FINAL bytes after stage_libs has patched ELF RUNPATHs. No format report
@@ -951,6 +1014,7 @@ fi
     echo "set_host_bytes=$(cat "$SET"/host/_mojolearn*.so 2>/dev/null | wc -c | tr -d ' ')"
   fi
   echo "binding_layout=$([[ "$MERGED" = 1 ]] && echo merged || echo per-binding)"
+  echo "adapters_bytes=$(cat "$SET"/_adapters/*.so "$SET"/_adapters/*.mojoc 2>/dev/null | wc -c | tr -d ' ')"
   echo "runtime_libs_bytes=$(cat "$SET"/.libs/* 2>/dev/null | wc -c | tr -d ' ')"
   echo "runtime_libs=$(ls "$SET"/.libs 2>/dev/null | tr '\n' ' ')"
   echo "driver_libs_not_staged=$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["driver_libs_not_staged"]))' "$SET/manifest.json" 2>/dev/null)"

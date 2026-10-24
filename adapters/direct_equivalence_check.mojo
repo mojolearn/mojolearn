@@ -129,4 +129,4 @@ def main() raises:
                 continue
             check(lib, code, rows, features, columns)
             count += 1
-    print("PASS direct Tape versus native adapter cases=", count, "device=AMD words=exact")
+    print("PASS direct Tape versus native adapter cases=", count, "device=visible-GPU-0 words=exact")

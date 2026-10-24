@@ -142,11 +142,16 @@ def is_native_source(rel):
     # before the tokenizer host compile, so it is native source too.
     return bool(name.endswith('.mojo') or rel.startswith((
         'bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/'))
-        and name.endswith(('.py', '.sh')) or rel in (
+        and name.endswith(('.py', '.sh'))
+        # The framework adapters' builder, pins and manifest tool (not its tests).
+        or rel.startswith('packaging/adapters/') and not rel.startswith('packaging/adapters/test_')
+        or rel in (
         'pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh',
         # The merged bindings: the manifest and the root generator decide what
         # each merged native file compiles (bindings/merged_build.sh).
-        'bindings/merged_groups.json', 'tools/merged_bindings.py'))
+        'bindings/merged_groups.json', 'tools/merged_bindings.py',
+        # The framework adapters' non-Mojo sources (packaging/adapters/build.sh).
+        'adapters/torch/registration.cpp', 'adapters/native/abi.h'))
 
 
 def native_inventory(root):

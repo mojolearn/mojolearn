@@ -1985,6 +1985,10 @@ class Release:
             args += ["--set", s_]
         for p_ in proofs:
             args += ["--build-proof", p_]
+        # THE FRAMEWORK ADAPTERS ship with every native set (packaging/adapters/);
+        # MOJOLEARN_RELEASE_ADAPTERS=0 releases none, legs and pack alike.
+        if os.environ.get("MOJOLEARN_RELEASE_ADAPTERS", "1") != "0":
+            args += ["--require-adapters"]
         args += ["--out", dist]
         # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
         unsmoked = sorted(self.smoke_notes("nvidia"))
