@@ -1995,7 +1995,6 @@ NOT_RACED = {
     "DampedETS": "ETS(model='AAN', damped=True) by construction (error='A'), the model the "
                  "damped-ets lane races",
     "sparse_encode": "the encoder SparseCoder.transform calls, raced as algos/sparse-coder",
-    "resample_indices": "the index draw inside resample(), raced as algos/resample",
     "monte_carlo_integrate": "no pinned library has a plain seeded Monte Carlo integrator "
                              "(numpy and torch have none; scipy.integrate.qmc_quad is "
                              "quasi-Monte Carlo over a QMCEngine); no opponent",
