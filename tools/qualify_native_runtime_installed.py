@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import tempfile
 import sys
 import types
 import xml.etree.ElementTree as ET
@@ -481,6 +482,29 @@ def source_match(source, commit, wheels, payload, git_root=None):
     return matched
 
 
+def _export_ignore_attributes(git_root, commit, paths):
+    """`git check-attr -z export-ignore` of `paths` as `commit`'s own
+    .gitattributes decide them (raw NUL-separated response). `--source` needs
+    git 2.40; an older git refuses the option (status 129), so the same
+    question is asked of a temporary index read from `commit`, which
+    `--cached` consults and nothing else (the checkout's index and worktree
+    are never read or written)."""
+    stdin = b"\0".join(path.encode() for path in paths) + b"\0"
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(git_root), "check-attr", "--source=" + commit,
+             "-z", "--stdin", "export-ignore"], input=stdin, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as error:
+        if error.returncode != 129:
+            raise
+    with tempfile.TemporaryDirectory() as scratch:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(scratch, "index"))
+        subprocess.check_output(["git", "-C", str(git_root), "read-tree", commit], env=env)
+        return subprocess.check_output(
+            ["git", "-C", str(git_root), "check-attr", "--cached", "-z", "--stdin", "export-ignore"],
+            input=stdin, env=env)
+
+
 def native_source_inventory(source, commit, committed, git_root):
     """Check frozen native bytes, recording archive-omitted historical evidence.
 
@@ -502,10 +526,7 @@ def native_source_inventory(source, commit, committed, git_root):
     if ancestors:
         # Check ancestors too: export-ignore on a directory excludes descendants
         # from git archive although check-attr on the child can say unspecified.
-        raw = subprocess.check_output(
-            ["git", "-C", str(git_root), "check-attr", "--source=" + commit,
-             "-z", "--stdin", "export-ignore"],
-            input=b"\0".join(path.encode() for path in sorted(ancestors)) + b"\0")
+        raw = _export_ignore_attributes(git_root, commit, sorted(ancestors))
         fields = raw.split(b"\0")[:-1]
         require(len(fields) % 3 == 0, "invalid git export attribute response")
         attributes = {fields[i].decode(): fields[i + 2].decode()
