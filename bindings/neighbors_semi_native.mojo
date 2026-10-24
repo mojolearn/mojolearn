@@ -190,11 +190,13 @@ def _achi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         var scan = family_call(b.getattr, args[0], PythonObject("x_neighbors_kfeat_first_negative"))
         first = _semi_int(family_call(scan, _semi_addr(x), PythonObject(size)))
         _ = x  # keep the Python object alive through the native call above
-    var neg: Bool
+    var neg = False
     if first != -2:
         neg = first >= 0
-    else:
-        neg = size != 0 and family_min(x) < 0
+    elif size != 0:
+        var lo = Float64(family_min(x))
+        if lo < 0.0:
+            neg = True
     if neg:
         raise Error("Negative values in data passed to AdditiveChi2Sampler")
     _ = _achi2_interval(fields)
@@ -215,8 +217,10 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     var steps = _semi_int(family_field(fields, "sample_steps"))
     var width = d * (2 * steps - 1)
     var out = _semi_out(Python.tuple(n, width), "<f4", context)
-    if Int(py=x.size) != 0 and family_min(x) < 0:
-        raise Error("Negative values in data passed to AdditiveChi2Sampler")
+    if Int(py=x.size) != 0:
+        var lo = Float64(family_min(x))
+        if lo < 0.0:
+            raise Error("Negative values in data passed to AdditiveChi2Sampler")
     var interval = _semi_f32_scalar(_achi2_interval(fields))
     _semi_op(args[0], "achi2", Python.list(_semi_addr(x), _semi_addr(out)),
              Python.list(PythonObject(n), PythonObject(d), PythonObject(steps)), Python.list(PythonObject(interval)),
