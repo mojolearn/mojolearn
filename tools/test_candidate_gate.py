@@ -274,6 +274,6 @@ def test_no_publication_precedes_both_candidate_gates_and_graph_has_no_cycles():
         dependencies = ancestors(name)
         if name.startswith('publish-'):
             assert {'gate-nvidia', 'gate-amd'} <= dependencies
-        if name.startswith('gate-'):
+        if name in ('gate-' + v for v in release.GATE_VENDORS):  # gate-apple gates the Mac wheel only
             assert 'linux-pack' in dependencies
             assert not any(dep.startswith('publish-') for dep in dependencies)

@@ -129,6 +129,11 @@ THE STEPS
                      its self-test job is the bundled-table gate (0.8.35 shipped a
                      stale table): no PASSED receipt for these wheel bytes, no
                      publish-macos
+  gate-apple         the installed-wheel framework adapter smoke on this Mac (tools/adapter_gate.py): the
+                     macOS wheel in a fresh venv, torch and max installed from the shipped pins,
+                     tools/adapter_wheel_smoke.py --device mps under the Metal lock; only PASSED passes
+                     (NO_FRAMEWORK fails); receipt <version>/<commit12>/gate-apple/adapters/;
+                     MOJOLEARN_RELEASE_ADAPTERS=0 skips it
   linux-wait         every launched leg finished, its proof complete for this
                      commit, its route overlay verified on the box, and every
                      host binding byte-identical across the legs (taken ones too)
@@ -153,7 +158,9 @@ THE STEPS
   gate-nvidia        } THE RELEASE GATE, after linux-pack and before any publish: tools/release_lq_smoke.py
   gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
                          (never the Mac, nothing rented): the 5 s smoke over the WHOLE plan, the autograd
-                         smoke, then one scored run per arm of every plan line vs its peers (opponents from
+                         smoke, the installed-wheel framework adapter smoke (tools/adapter_gate.py: torch and
+                         max installed, every phase PASSED; skipped under MOJOLEARN_RELEASE_ADAPTERS=0), then
+                         one scored run per arm of every plan line vs its peers (opponents from
                          the box's store when already scored); only the reports come home to
                          <version>/<commit12>/gate-<vendor>/<artifact-id>/. Done only on verdict PASS
                          for the candidate core/vendor/PTX hashes and frozen autograd artifacts
@@ -250,6 +257,13 @@ def wheel_commit(path):
             return z.read("mojolearn/identity_columns/COMMIT").decode().strip()
     except (OSError, KeyError, zipfile.BadZipFile):
         return None
+
+
+def adapter_gate_module():
+    """tools/adapter_gate.py: the installed-wheel framework adapter smoke the gates share."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import adapter_gate
+    return adapter_gate
 
 
 def smoke_passed(results, wheel):
@@ -848,6 +862,9 @@ STEP_TABLE = [
     ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
     ("macos-build", "macos", ["reuse-plan"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
+    # THE APPLE ADAPTER GATE (2026-10-24, AGENTS.md "Framework adapters are the same API in another format"):
+    # the Torch and MAX adapters of the built macOS wheel, installed into a fresh venv, on MPS/Metal
+    ("gate-apple", "macos", ["macos-smoke"], "mac"),
     # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
     # macos-self-test (the same `verify --self-test` macos-smoke runs on the same
     # wheel) and release-check (an Apple re-fit of the lanes the admitted table
@@ -869,7 +886,7 @@ STEP_TABLE = [
     ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "publish-nvidia-ptx"], "dispatch"),
     ("publish-amd", "amd", ["gpu-column-amd", "publish-core-linux"], "dispatch"),
     ("publish-meta-linux", "meta-linux", ["publish-core-linux", "publish-nvidia", "publish-amd"], "dispatch"),
-    ("publish-macos", "macos", ["macos-smoke"], "dispatch"),
+    ("publish-macos", "macos", ["macos-smoke", "gate-apple"], "dispatch"),
     ("finish-line", "finish", ["freeze-commit"], None),
     ("record", "finish", ["finish-line"], None),
 ]
@@ -881,7 +898,7 @@ AFTER = {"finish-line": ["publish-core-linux", "publish-nvidia", "publish-nvidia
 #: A PIPELINE: named builds, named checks, one publish, and the platform it
 #: ships (what published_platforms() says: `linux` is the core's).
 PIPELINES = {
-    "macos": dict(builds=["macos-build"], checks=["macos-smoke"],
+    "macos": dict(builds=["macos-build"], checks=["macos-smoke", "gate-apple"],
                   publish="publish-macos",
                   platform="macos"),
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
@@ -2384,7 +2401,54 @@ class Release:
         smoke = self.rel / "column-amd" / "results.json"
         return self.publish("amd", self.split_final("amd"), smoke), dict(smoke=str(smoke))
 
+    # ------------------------------------------------------------ the Apple adapter gate
+    def apple_adapters_out(self):
+        return self.rel / "gate-apple" / "adapters"
+
+    def apple_adapters_ok(self):
+        """(ok, why): the installed-wheel adapter smoke PASSED for these macOS wheel bytes."""
+        AG = adapter_gate_module()
+        w, out = self.macos_wheel(), self.apple_adapters_out()
+        stamp = read_json(out / "wheel.json") or {}
+        if not w or stamp.get("wheel_sha256") != sha256(w):
+            return False, f"no adapter smoke receipt for this macOS wheel ({out})"
+        _, ok, why = AG.judge(out / AG.RECEIPT)
+        return ok, why
+
+    def step_gate_apple(self):
+        AG = adapter_gate_module()
+        if not AG.enabled():
+            return "skipped (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)"
+        ok, why = self.apple_adapters_ok()
+        if ok:
+            return why + " (receipt exists)"
+        w = self.macos_wheel()
+        if not w and not self.dry:
+            raise StepFailed("no macOS wheel; run macos-build")
+        out = self.apple_adapters_out()
+        if out.exists() and not self.dry:
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        venv = out / "venv"
+        base = self.smoke_python() if not self.dry else "python3.12"
+        for k, cmd in enumerate(AG.venv_commands(base, venv, [w or "<macos wheel>"])):
+            self.must(cmd, log=out / f"adapter-venv-{k}.log", what="the Apple adapter smoke venv")
+        if not self.dry:
+            write_json(out / "wheel.json", dict(wheel=Path(w).name, wheel_sha256=sha256(w)))
+        self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+                   *AG.smoke_command("apple", venv, out, runner_python=PY)],
+                  log=self.rel / "gate-apple.log", what="the Apple adapter smoke")
+        if self.dry:
+            return None
+        ok, why = self.apple_adapters_ok()
+        if not ok:
+            raise StepFailed(f"the Apple adapter smoke did not pass: {why} ({out / AG.RECEIPT})")
+        return why
+
     def step_publish_macos(self):
+        AG = adapter_gate_module()
+        if AG.enabled() and not self.dry and not self.apple_adapters_ok()[0]:
+            raise StepFailed(f"no PASSED adapter smoke for this macOS wheel ({self.apple_adapters_ok()[1]}); "
+                             "run gate-apple")
         # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
         # The bundled-table gate is macos-smoke's own self-test job (same wheel,
         # same `verify --self-test`); its PASSED receipt for these bytes is
@@ -2565,10 +2629,14 @@ class Release:
         if (not m.get('expected') or m.get('expected') != m.get('planned_whole_plan')
                 or not (m.get('pairs') or {}).get('matched')):
             return False, 'candidate gate lacks complete measured-plan/pair evidence'
+        if adapter_gate_module().enabled() and doc.get("adapters_enabled") is False:
+            return False, "the gate ran without its adapter smoke, but this release ships the adapters"
         artifacts = doc.get('autograd_artifacts') or {}
         if artifacts.get('source_commit') != self.commit or artifacts.get('vendor') != vendor or len(artifacts.get('files', [])) != 8:
             return False, 'candidate gate lacks the eight source-matched autograd artifacts'
-        return True, (f"PASS: smoke {doc.get('smoke_lines')} lines {doc.get('counts')}, measured "
+        adapters = dict(doc.get("adapters") or {}, enabled=doc.get("adapters_enabled", True))
+        return True, (f"PASS: smoke {doc.get('smoke_lines')} lines {doc.get('counts')}, "
+                      f"{adapter_gate_module().summary(adapters)}, measured "
                       f"{m.get('expected')} lines (board {m.get('board')})")
 
     def run_gate(self, vendor):
@@ -2591,6 +2659,8 @@ class Release:
                "--max-job-hours", "40", "--max-wait-hours", "72"]
         for wheel in self.candidate_gate_wheels(vendor):
             cmd += ['--candidate-wheel', str(wheel)]
+        if not adapter_gate_module().enabled():
+            cmd.append("--no-adapters")  # no adapters ship: the gate records its adapter stage as disabled
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
         self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate on lq box {box}")

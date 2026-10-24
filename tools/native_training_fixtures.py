@@ -54,3 +54,36 @@ def analytic(outputs):
     np.testing.assert_array_equal(outputs[0], np.array([1.25, .75], np.float32))
     np.testing.assert_array_equal(outputs[4], np.array([10.], np.float32))
     assert outputs[3].view(np.int64)[1:3].tolist() == [1, 1]
+
+
+def api_case(epochs=4, seed=873):
+    """The adapters' whole-training input built FROM the public Python API, and that API's own result.
+
+    mojolearn.Sequential describes and fits a small dropout MLP with Adam, a step schedule and shuffled
+    batches; the adapter call receives the program, layer table and options the same model hands its native
+    fit (Sequential._program/_table/_options, nothing re-derived here), so a front-end that loads and
+    dispatches correctly returns the Python API's bytes. Returns (arrays, model, options, scalars, expected),
+    expected being the five adapter outputs as the API holds them: params_, both optimizer moments, the 12
+    Int64 fit-state words as 24 int32 words, and loss_curve_ as float32. Test glue only: no arithmetic.
+    """
+    import mojolearn
+    from mojolearn._x_sequence_model import _LOSS
+    x = ((np.arange(21, dtype=np.float32).reshape(7, 3) % 11) - 5) / 8
+    y = np.stack((x[:, 0] + x[:, 1], x[:, 2] - x[:, 0]), axis=1)
+    model = mojolearn.Sequential(numeric_mode="identical").linear(4).relu().dropout(.25).linear(2)
+    model = model.compile(loss="mse", optimizer="adam", lr=.03125, beta1=.9, beta2=.99, eps=1e-8,
+                          weight_decay=.01, schedule="step", step_size=2, gamma=.5)
+    model.fit(x, y, epochs=epochs, batch_size=3, shuffle=True, seed=seed)
+    fields = vars(model)
+    o = fields["_options"]
+    program = [int(w) for w in model._program(x.shape[1], None)]
+    options = [_LOSS[o["loss"]], 0, int(o["opt"]), int(o["flags"]), int(o["sched"]), int(o["step_size"]), 3,
+               epochs, 1, seed & 0xFFFFFFFF, seed >> 32, int(o["n_iter_no_change"]), 1]
+    scalars = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0., o["tol"], o["gamma"],
+               o["huber_delta"]] + [float(f) for f in model._table()]
+    params = np.ascontiguousarray(fields["params_"], dtype=np.float32)
+    expected = [params, np.ascontiguousarray(fields["_opt_m"], dtype=np.float32),
+                np.ascontiguousarray(fields["_opt_v"], dtype=np.float32),
+                np.ascontiguousarray(fields["_fit_state"], dtype=np.int64).view(np.int32),
+                np.asarray(model.loss_curve_, dtype=np.float32)]
+    return [x, y, np.zeros(params.size, np.float32)], program, options, scalars, expected

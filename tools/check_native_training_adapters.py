@@ -21,7 +21,7 @@ def main():
     try:
         import numpy as np
         import torch
-        from native_training_fixtures import CASES, fixture, identical, analytic
+        from native_training_fixtures import CASES, fixture, identical, analytic, api_case
         torch.ops.load_library(str(args.extension.resolve()))
         device = torch.device(args.device)
         if device.type == "cuda":
@@ -66,6 +66,14 @@ def main():
                     identical(full, [saved[f"output_{i}"] for i in range(5)])
                 report["checks"].append(name + ": reference transport exact")
             report["checks"].append(name + ": ownership, finite outputs, repeatability")
+        # The adapter is the Python API in another format: the same fit through mojolearn.Sequential and
+        # through torch.ops.mojolearn.train must return the same bytes (all five outputs), smoke included.
+        arrays, model, options, scalars, expected = api_case()
+        through_adapter = run(arrays, model, options, scalars)
+        np.savez(args.out / "python_api.npz", **{f"output_{i}": v for i, v in enumerate(through_adapter)},
+                 **{f"expected_{i}": v for i, v in enumerate(expected)})
+        identical(through_adapter, expected)
+        report["checks"].append("python_api: Sequential.fit and the adapter return the same bytes (five outputs)")
         if not args.smoke:
             arrays, model, options, scalars = fixture("analytic_sgd")
             ts = [torch.from_numpy(a.copy()).to(device) for a in arrays]

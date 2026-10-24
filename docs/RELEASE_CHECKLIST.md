@@ -929,13 +929,18 @@ rented). On the box, `python3 tools/gate_smoke_box.py <vendor> <version> <out> a
 2. smoke: the 5 s "does it start" check of EVERY line of the vendor's plan (`--cpu-fallback`: CPU-opponent
    and ours-only lines included);
 3. autograd: the autograd smoke entries;
-4. measure: one scored run per arm of every plan line, IDENTICAL, one seed, against the peers the plan names
+4. adapters: the gate also runs the installed-wheel framework adapter smoke on each vendor (`tools/adapter_gate.py`:
+   the Torch and MAX adapters the wheel ships, frameworks installed from the shipped pins in a fresh venv, every
+   phase compared byte for byte with the Python API; only PASSED passes, NO_FRAMEWORK fails), on NVIDIA and AMD
+   here and on the Mac in the `gate-apple` step (`--device mps`) before `publish-macos`; `MOJOLEARN_RELEASE_ADAPTERS=0`
+   skips it with the adapters themselves;
+5. measure: one scored run per arm of every plan line, IDENTICAL, one seed, against the peers the plan names
    with the same explicit parameters; opponents already scored on the box are reused from its opponent store,
    only missing ones are scored. Each line's evidence is uploaded to R2 as it finishes, and the lines' boards
    are merged into `measure-*/board/board.json` (put on the rolling main board with
    `tools/main_board_ingest.py --gate-board <box>=<path>`).
 
-The step is done only on verdict PASS (no FAILED smoke line, autograd exit 0, every plan line measured, every
+The step is done only on verdict PASS (no FAILED smoke line, autograd exit 0, adapter smoke PASSED, every plan line measured, every
 opponent pair MATCHED). The
 `record` step refuses while a published Linux vendor has no passing gate, so a release cannot skip it. To run
 a gate by hand on a held box: `lq add nv CMD main gate-<version>-nvidia 'python3 tools/gate_smoke_box.py nvidia
