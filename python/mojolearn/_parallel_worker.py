@@ -323,26 +323,8 @@ def execute(request):
         if type(state) is not RBFSampler:
             raise TypeError('requires mojolearn.RBFSampler')
         return state.transform(args[0])
-    if operation in ('cholesky_fit', 'cholesky_solve'):
-        import os
-        native = state._extension()
-        if (not callable(getattr(native, 'cholesky_parallel_available', None))
-                or native.cholesky_parallel_available() != 1):
-            raise ImportError('rebuild GP binding for operation-level multi-GPU Cholesky')
-        # Scoped to this operation: the GP and GaussianMixture workers keep
-        # their own root factorization paths.
-        previous = os.environ.get('MOJOLEARN_CHOLESKY_DEVICE_COUNT')
-        os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = os.environ.get('MOJOLEARN_GP_DEVICE_COUNT', '1')
-        try:
-            if operation == 'cholesky_fit':
-                state.fit(*args)
-                return state
-            return state.solve(*args)
-        finally:
-            if previous is None:
-                os.environ.pop('MOJOLEARN_CHOLESKY_DEVICE_COUNT', None)
-            else:
-                os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = previous
+    # 'cholesky_fit' / 'cholesky_solve' moved into one native call each
+    # (bindings/linalg_native.mojo `family_chol_par_*`, 2026-10-24).
     if operation in ('gp_fit', 'gp_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gp_parallel_available', None))

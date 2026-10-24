@@ -47,6 +47,7 @@ import sys
 from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import as_f32_c
 from . import kernel_methods as _km
+from . import _cholesky_impl as _chol
 
 #: The plain method whose public conversion `apply_kernel_method` applies.
 _APPLY_METHOD = {_km.KernelRidge: 'predict', _km.Nystroem: 'transform'}
@@ -762,14 +763,6 @@ def fit_hdbscan(estimator, X, *, devices=(0,)):
     return estimator
 
 
-def _admit_cholesky(estimator):
-    from ._cholesky_impl import Cholesky
-    if type(estimator) is not Cholesky:
-        raise TypeError('requires mojolearn.Cholesky')
-    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
-        raise ValueError('parallel Cholesky requires IDENTICAL numeric mode')
-
-
 def fit_cholesky(estimator, A, *, devices=(0,)):
     """Factor a symmetric positive-definite matrix with ``Cholesky``, the trailing updates spread across GPUs.
 
@@ -787,20 +780,11 @@ def fit_cholesky(estimator, A, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Factor with whole trailing-update output rows on the selected GPUs.
-    #
+    # One native call (bindings/linalg_native.mojo `family_chol_par_fit`).
     # Each panel's factorization, info read-back, panel solve and subtraction
-    # stay on the root in the original panel order; only the rows of each
-    # panel's L21 L21^T product move. The full matrix stays on the root.
-    _admit_cholesky(estimator)
-    A, _ = as_f32_c(A, ndim=2, name='A')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('cholesky_fit', estimator, (A,))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    # stay on the root, devices[0], in the original panel order; only the rows
+    # of each panel's L21 L21^T product move.
+    return _chol._NATIVE(estimator, 'family_chol_par_fit', (A, devices), _chol._NATIVE_CONTEXT)
 
 
 def solve_cholesky(estimator, B, *, devices=(0,)):
@@ -820,18 +804,10 @@ def solve_cholesky(estimator, B, *, devices=(0,)):
     Array
         Equal to ``estimator.solve(B)``.
     """
-    # Solve with whole right-hand-side columns on the selected GPUs.
-    #
-    # A single right-hand side is sequential in its rows and runs on one GPU.
-    _admit_cholesky(estimator)
-    if not hasattr(estimator, 'L_'):
-        raise ValueError('Cholesky is not fitted')
-    B, _ = as_f32_c(B, ndim=None, name='B')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        return pool.map([('cholesky_solve', estimator, (B,))])[0]
-    finally:
-        pool.close()
+    # One native call (`family_chol_par_solve`): whole right-hand-side columns
+    # on the selected GPUs; a single right-hand side is sequential in its rows
+    # and runs on one GPU.
+    return _chol._NATIVE(estimator, 'family_chol_par_solve', (B, devices), _chol._NATIVE_CONTEXT)
 
 
 def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):

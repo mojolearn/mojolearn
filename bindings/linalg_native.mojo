@@ -15,6 +15,9 @@ from bindings.family_common import (
     FAMILY_F64P, family_repr, family_call, family_entry, family_array, family_as_f32, family_field,
     family_shape_repr,
 )
+from bindings.py_balanced import py_contains, py_type
+from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_attr, plan_require_identical
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 
 
 def _chol_extension(model: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -84,9 +87,90 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = scalars^
 
 
+def _chol_solve(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`Cholesky.solve(B)`: A X = B from the factor, in the method's refusal
+    order and wording; args (binding, B)."""
+    classical_connect_numpy(context)
+    var fields = py_fields(model)
+    if not py_contains(fields, PythonObject("L_")):
+        raise Error("ValueError: mojolearn Cholesky: call fit before solve")
+    var b = family_as_f32(args[1], -1, "B", context)
+    var rank = Int(py=b.ndim)
+    var rows: Int
+    var nrhs: Int
+    if rank == 1:
+        rows = Int(py=b.shape[0])
+        nrhs = 1
+    elif rank == 2:
+        rows = Int(py=b.shape[0])
+        nrhs = Int(py=b.shape[1])
+    else:
+        raise Error("ValueError: mojolearn Cholesky: B must be 1-D or 2-D, got " + String(rank) + "-D")
+    var n = Int(py=family_field(fields, "n_"))
+    if rows != n:
+        raise Error("ValueError: mojolearn Cholesky: B has " + String(rows) + " rows, the factor is "
+                    + String(n) + " x " + String(n))
+    if nrhs < 1:
+        raise Error("ValueError: mojolearn Cholesky: B must have at least one column")
+    var l = family_as_f32(family_field(fields, "L_"), 2, "L_", context)
+    var x_out = family_array(Python.tuple(n) if rank == 1 else Python.tuple(n, nrhs), "<f4", context)
+    var solve = family_entry(_chol_extension(model, args[0], context), "cholesky_solve", context)
+    # ORDER MATCHES bindings/_mojolearn_gp.mojo::cholesky_solve_binding:
+    # l, b, x_out; n, nrhs, info, nb, logdet, jitter.
+    _ = family_call(solve, Python.list(classical_address(l), classical_address(b), classical_address(x_out)),
+                    Python.list(PythonObject(n), PythonObject(nrhs), family_field(fields, "info_"),
+                                family_field(fields, "nb_"), family_field(fields, "_logdet"),
+                                family_field(fields, "jitter_")))
+    _ = x_out  # keep the Python object alive through the native call above
+    _ = l^
+    _ = b^
+    return x_out
+
+
+# ---------------------------------------------------------------------------
+# parallel_classical.fit_cholesky / solve_cholesky, one native call each
+# (lane/native-parallel-driver-20261024). The old cooperative worker set
+# MOJOLEARN_CHOLESKY_DEVICE_COUNT for these two operations only; the plan
+# carries the same families (the worker's environment plus Cholesky).
+# ---------------------------------------------------------------------------
+
+comptime _CHOL_REBUILD = "rebuild GP binding for operation-level multi-GPU Cholesky"
+
+
+def _chol_par_admit(model: PythonObject, context: PythonObject) raises:
+    """`parallel_classical._admit_cholesky`."""
+    if py_type(model) is not context["family_chol_par_class"]:
+        raise Error("TypeError: requires mojolearn.Cholesky")
+    plan_require_identical(model, "parallel Cholesky requires IDENTICAL numeric mode")
+
+
+def _chol_par(model: PythonObject, args: PythonObject, solve: Bool, context: PythonObject) raises -> PythonObject:
+    """args (A or B, devices)."""
+    _chol_par_admit(model, context)
+    if solve and not py_contains(py_fields(model), PythonObject("L_")):
+        raise Error("ValueError: Cholesky is not fitted")
+    var devices = plan_devices(args[1], String("cholesky_solve") if solve else String("cholesky_fit"), True, context)
+    var binding = family_call(plan_attr(model, "_door_binding"))
+    var out = PythonObject(None)
+    plan_enter(binding, devices, _CHOL_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
+    try:
+        if solve:
+            out = _chol_solve(model, Python.tuple(binding, args[0]), context)
+        else:
+            _chol_fit(model, Python.tuple(binding, args[0]), context)
+            out = model
+    finally:
+        plan_exit(binding)
+    return out
+
+
 def linalg_operation(model: PythonObject, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     if operation == "family_chol_fit":
         _chol_fit(model, args, context)
         return model
+    if operation == "family_chol_par_fit":
+        return _chol_par(model, args, False, context)
+    if operation == "family_chol_par_solve":
+        return _chol_par(model, args, True, context)
     raise Error("RuntimeError: unknown linalg operation " + operation)
