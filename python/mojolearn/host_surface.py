@@ -3663,9 +3663,9 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
     # New owner lanes: no execution/reference admission is implied by registration.
-    "native-schedule-series": "no reference",
-    "optim-owner-lifecycle": "no reference",
-    "optim-io-capability": "no reference",
+    "native-schedule-series": "unwatched",
+    "optim-owner-lifecycle": "unwatched",
+    "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
     # resident buffers, so no CPU column can state these two.
     "optim-resident-io": "no cpu route",
@@ -3953,28 +3953,28 @@ PUBLIC_PENDING_LANES = {
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
-    "gp-lml-theta": "no reference",
-    "cross-vendor-fold": "no reference",
-    "transformer-decode-load-state": "no reference",
-    "safetensors-widen-f16": "no reference",
-    "hf-causal-lm-stream": "no reference",
-    "ivf-short-fill": "no reference",
+    "gp-lml-theta": "unwatched",
+    "cross-vendor-fold": "unwatched",
+    "transformer-decode-load-state": "unwatched",
+    "safetensors-widen-f16": "unwatched",
+    "hf-causal-lm-stream": "unwatched",
+    "ivf-short-fill": "unwatched",
     # lane verify-coverage-owed (2026-10-21): the rows the audit left owed to
     # the migration lanes; no release record yet.
-    "mamba2-decode-session": "no reference",
-    "mamba3-decode-session": "no reference",
-    "training-chunked-lm-head": "no reference",
-    "training-mlp-sessions": "no reference",
-    "samba-optimizer-state": "no reference",
+    "mamba2-decode-session": "unwatched",
+    "mamba3-decode-session": "unwatched",
+    "training-chunked-lm-head": "unwatched",
+    "training-mlp-sessions": "unwatched",
+    "samba-optimizer-state": "unwatched",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
-    "saved-model-host-infer-trees": "no reference",
-    "hf-causal-lm-text": "no reference",
-    "hf-model-surface": "no reference",
+    "saved-model-host-infer-trees": "unwatched",
+    "hf-causal-lm-text": "unwatched",
+    "hf-model-surface": "unwatched",
     # GPU only (tools/identity_lanes/coverage.py GPU_ONLY_LANES): the CPU
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
-    "classical-float16-sequences": "no reference",
+    "classical-float16-sequences": "unwatched",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped

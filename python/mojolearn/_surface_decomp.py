@@ -69,4 +69,4 @@ TRAINING_LANE_NAMES = {"x-decomp-rsvd-rank-deficient": "randomized SVD of a rank
                        "x-decomp-eigh-wide-factor-analysis": "FactorAnalysis with fewer rows than features at 64 or more features",
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
                        "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
-PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "no reference"}
+PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "unwatched"}

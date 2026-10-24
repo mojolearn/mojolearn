@@ -143,6 +143,6 @@ TRAINING_LANE_NAMES = {
     "x-metrics-permutation-test-score": "permutation_test_score, with and without groups",
 }
 PUBLIC_PENDING_LANES = {
-    "x-metrics-classification-report": "no reference",
-    "x-metrics-permutation-test-score": "no reference",
+    "x-metrics-classification-report": "unwatched",
+    "x-metrics-permutation-test-score": "unwatched",
     }
