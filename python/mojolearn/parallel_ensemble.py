@@ -410,6 +410,10 @@ class ParallelForestPredictor:
     def __init__(self, estimator, *, devices=(0, 1)):
         import threading
         self._classifier = _admit_forest_predictor(estimator)
+        # The estimator's class decides the public conversion of a result
+        # (`_estimator_type`, a class attribute); the snapshot keeps no
+        # reference to the source estimator itself.
+        self._public_kind = type(estimator)
         self.devices = tuple(devices)
         if len(self.devices) > 64:
             raise ValueError('ParallelForestPredictor supports at most 64 devices')
@@ -428,7 +432,7 @@ class ParallelForestPredictor:
             self._pool.close()
             raise
 
-    def _predict(self, X, method):
+    def _predict(self, X, method, frame):
         with self._lock:
             if self._closed:
                 raise RuntimeError('pooled forest predictor is closed')
@@ -441,25 +445,28 @@ class ParallelForestPredictor:
                 raise ValueError('X has %d features, fit saw %d' %
                                  (X.shape[1], self.n_features_in_))
             try:
-                return self._pool.map([('forest_predict', None, (method, X))])[0]
+                result = self._pool.map([('forest_predict', None, (method, X))])[0]
             except BaseException:
                 # DevicePool closes on a failed RPC. Never restart a fresh
                 # worker that has lost this predictor's prepared snapshot.
                 self._closed = True
                 self._pool.close()
                 raise
+        # the worker's raw result (it is internal, 2026-10-24 par-kernel-ridge
+        # dtype flip); the plain method's public conversion for our caller
+        return public_method_result(self._public_kind, method, result, frame)
 
     def predict(self, X):
         """Predict labels (classifiers) or values (regressors), as ``estimator.predict(X)``.
         """
         # Predict using the snapshot's original label decoding/output dtype.
-        return self._predict(X, 'predict')
+        return self._predict(X, 'predict', sys._getframe(1))
 
     def predict_proba(self, X):
         """Class probabilities, as ``estimator.predict_proba(X)``; classifiers only.
         """
         # Classifier probabilities: RF float32, ExtraTrees float64.
-        return self._predict(X, 'predict_proba')
+        return self._predict(X, 'predict_proba', sys._getframe(1))
 
     def close(self):
         """Release the forest from the GPUs and stop the workers.

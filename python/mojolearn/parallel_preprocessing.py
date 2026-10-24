@@ -20,7 +20,9 @@ __all__ = [
     'transform_scaler',
 ]
 
-from ._parallel_pool import DevicePool, driver_read_shift
+import sys
+
+from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import empty, addr, addr_ro
 from ._bufcheck import memcopy
 
@@ -161,4 +163,7 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
     # the shards' column blocks joined into one row-major matrix by the
     # device (x_prep `colblock`), not row by row in Python
     from ._expansion_prep import join_column_blocks
-    return join_column_blocks(parts, ranges, n, d)
+    out = join_column_blocks(parts, ranges, n, d)
+    # the joined raw columns; the plain method's public conversion for our caller
+    return public_method_result(estimator, 'inverse_transform' if inverse else 'transform',
+                                out, sys._getframe(1))

@@ -21,7 +21,9 @@ __all__ = [
     'transform_umap',
 ]
 
-from ._parallel_pool import DevicePool
+import sys
+
+from ._parallel_pool import DevicePool, public_method_result
 
 
 def _binding(estimator):
@@ -112,6 +114,9 @@ def transform_umap(estimator, X, *, devices=(0,)):
         raise ValueError('requires an IDENTICAL fitted UMAP')
     pool = DevicePool(devices, cooperative=True)
     try:
-        return pool.map([('umap_transform', estimator, (X,))])[0]
+        result = pool.map([('umap_transform', estimator, (X,))])[0]
     finally:
         pool.close()
+    # the worker's raw result (it is internal, 2026-10-24 par-kernel-ridge
+    # dtype flip); the plain method's public conversion for our caller
+    return public_method_result(estimator, 'transform', result, sys._getframe(1))

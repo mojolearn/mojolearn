@@ -22,8 +22,9 @@ __all__ = [
 ]
 
 import itertools
+import sys
 
-from ._parallel_pool import DevicePool, driver_read_shift
+from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
 
@@ -184,7 +185,9 @@ class ParallelQueries:
                             **result[1])
                        for i, ((start, end), result) in enumerate(zip(ranges, results))]  # glue: one diagnostics record per shard
         self.last_shards_ = diagnostics
-        return output
+        # the worker's raw result (it is internal, 2026-10-24 par-kernel-ridge
+        # dtype flip); the plain method's public conversion for our caller
+        return public_method_result(self.estimator, method, output, sys._getframe(1))
 
     def _shards(self, data, ranges, token, method, kwargs):
         # The READ is shifted by `driver_read_shift` (0 unless the driver
