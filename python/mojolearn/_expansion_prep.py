@@ -2086,8 +2086,8 @@ def _class_counts(codes, K):
 # match sklearn up to each component's sign. 'lsqr' is the pooled class
 # covariance then lstsq's minimum-norm solve through its eigendecomposition
 # (sklearn's `_solve_lstsq`); 'eigen' solves Sb v = e Sw v as
-# Sw^-1/2 Sb Sw^-1/2 (`_solve_eigen`). covariance_estimator runs in Python on
-# host rows; its covariances enter the device solve as float32.
+# Sw^-1/2 Sb Sw^-1/2 (`_solve_eigen`). A covariance_estimator object is
+# refused at fit (its Python `fit` would run inside the runtime).
 class LinearDiscriminantAnalysis(_Classifier):
     """Linear discriminant analysis classifier and supervised dimensionality reduction.
 
@@ -2265,10 +2265,8 @@ class QuadraticDiscriminantAnalysis(_Classifier):
     tol : float, default 1e-4
         A class whose scalings are not all above ``tol`` is rejected with ``ValueError`` (its
         covariance is not full rank).
-    covariance_estimator : object, default None
-        An estimator with ``fit`` and a ``covariance_`` attribute, used instead of the empirical
-        covariance with ``solver='eigen'`` (``ValueError`` with ``'svd'`` or with ``shrinkage`` set). It
-        is fitted on the host on each class's float32 rows.
+    covariance_estimator : None, default None
+        Choose native covariance estimation with ``solver`` and ``shrinkage``.
 
     Attributes
     ----------
