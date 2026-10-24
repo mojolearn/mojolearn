@@ -338,9 +338,10 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
                                                   Python.tuple(shard_rows(data, lo - shift, hi - shift, context))))
     var parts = shard_run(requests, devices, _CHILD)
     var merged = b.dict()
-    for name in [String("params_"), String("x_"), String("x0_"), String("n_iter_"), String("retcode_"),
-                 String("llf_"), String("fx_"), String("aic_"), String("bic_")]:  # small-loop(the nine series-major fitted arrays)
-        py_setitem(merged, name, shard_concat(parts, name, batch, context))
+    var names = [String("params_"), String("x_"), String("x0_"), String("n_iter_"), String("retcode_"),
+                 String("llf_"), String("fx_"), String("aic_"), String("bic_")]
+    for i in range(len(names)):  # small-loop(the nine series-major fitted arrays)
+        py_setitem(merged, names[i], shard_concat(parts, names[i], batch, context))
     # `result = ARIMA(**params); result.__dict__.update(parts[0].__dict__)`,
     # the merged arrays, then the whole batch's series state
     _ = py_call(fields.clear)
