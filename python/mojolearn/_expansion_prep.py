@@ -4425,139 +4425,10 @@ class SelectKBest(_SelectorMixin):
         return _ENCODE_CALL(self, "fit_transform", (X, y), _ENCODE_CONTEXT)
 
 
-def _mi_discrete_mask(discrete_features, d):
-    """The reference's discrete_features: 'auto' (dense X: none), a bool for
-    every column, a bool mask of length d, or column indices (negative ones
-    count from the end)."""
-    if isinstance(discrete_features, str):
-        if discrete_features != "auto":
-            raise ValueError("mojolearn: Invalid string value for discrete_features.")
-        return [False] * d
-    if isinstance(discrete_features, bool) or type(discrete_features).__name__ == "bool_":
-        return [bool(discrete_features)] * d
-    vals = discrete_features.tolist() if hasattr(discrete_features, "tolist") else list(discrete_features)
-    if isinstance(vals, bool):
-        return [vals] * d
-    if vals and all(isinstance(v, bool) for v in vals):  # glue: validates the discrete_features argument (vals-sized: user discrete_features argument)
-        if len(vals) != d:
-            raise ValueError(f"mojolearn: discrete_features mask has {len(vals)} entries; X has {d} features")
-        return list(vals)
-    mask = [False] * d
-    for v in vals:  # glue: converts the discrete_features argument (vals-sized: user discrete_features argument)
-        if isinstance(v, bool) or not isinstance(v, numbers.Integral):
-            raise ValueError("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
-        j = int(v)
-        if not -d <= j < d:
-            raise IndexError(f"mojolearn: discrete_features index {j} is out of bounds for {d} features")
-        mask[j % d] = True
-    return mask
-
-
-#: lane/apple-fast-mi (2026-10-03): the A/B switch MOJOLEARN_MI_WORK=1 (opt-in,
-#: FAST only, read once at import): `_mutual_info` keeps the noised columns, their
-#: noise words and the per-point terms (3 n d words) as device-only scratch
-#: (`_Prog.work`) instead of arena words that the host zeroes and the device
-#: copies back (265 MB on Istella). Where a word lives moves no bit.
-_MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
-
-
-def _plus1(off):
-    """off + 1 for an arena offset or a `_Scratch` (the units' offset + 1 noise words)."""
-    return _Scratch(off.off + 1, off.kind) if isinstance(off, _Scratch) else off + 1
-
-
-def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
-    """The reference's `_estimate_mi`: continuous columns are scaled and
-    noised (row-major over the continuous columns only, as the reference's
-    draw of shape (n, n_continuous)), the 1e-10-scaled noise kept as a
-    second word that breaks exact ties as the reference's float64 sum does
-    (DEVIATION 5407); each column then takes the estimator
-    its kinds name: Kraskov (continuous x, continuous y), Ross (one side
-    discrete: the classes, or a discrete feature's categories against the
-    noised target) or the contingency table (both discrete)."""
-    k = int(n_neighbors)
-    if not 1 <= k <= 32:
-        raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
-    arr = _x2d(X)
-    n, d = arr.shape
-    mask = _mi_discrete_mask(discrete_features, d)
-    cont = [j for j in range(d) if not mask[j]]  # glue: continuous column index list (d-sized: feature count)
-    disc = [j for j in range(d) if mask[j]]  # glue: discrete column index list (d-sized: feature count)
-    mode = _mode()
-    seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
-    pr = _Prog()
-    work = pr.work if (_MI_WORK and mode == "fast") else pr.alloc
-    if discrete_target:
-        classes, codes = encode_labels(y)
-        if codes.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        counts = _class_counts(codes, len(classes))
-        if cont and max(counts) < 2:  # glue: raises when every class has one sample (counts-sized: class counts from the binding)
-            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
-                             "neighbour search over the classes with more than one finds 0 samples)")
-        yo, lc = pr.put_codes(codes), pr.put_list(counts)
-    else:
-        yv = as_f32_c(y, ndim=1, name="y")[0]
-        if yv.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-    outc = outd = None
-    if cont:
-        dc = len(cont)
-        xo = pr.put(arr if not disc else _gather(arr, cont, mode))
-        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), work(n * dc), work(n * dc)
-        _cs(pr, mode, xo, n, dc, st)
-        pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
-        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, _plus1(zs))
-    if not discrete_target:
-        yo = pr.put(yv)
-        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), work(n), work(n)
-        _cs(pr, mode, yo, n, 1, sty)
-        pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, _plus1(zys))
-    if cont:
-        term, outc = work(n * dc), pr.alloc(dc)
-        if discrete_target:
-            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, _plus1(zs))
-            # the rows of the classes with more than one (KIND 3: summed on the device)
-            pr.stage("mi_reduce", dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
-        else:
-            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, _plus1(zs), _plus1(zys))
-            pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
-    if disc:
-        dd = len(disc)
-        xd = _gather(arr, disc, mode)
-        cats = _fit_categories(mode, xd)
-        kx = [c.size for c in cats]  # glue: per-column category counts (cats-sized: per-column category arrays)
-        kmax = max(kx)  # glue: largest category count for the program layout (kx-sized: per-column category counts)
-        if not discrete_target and n in kx:
-            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
-                             "value (the reference's neighbour search finds 0 samples)")
-        xc, _neg = _codes(pr, xd, cats)
-        outd = pr.alloc(dd)
-        if discrete_target:
-            ky = len(classes)
-            stride = kmax * ky + kmax + ky
-            tb = pr.alloc(dd * stride)
-            pr.stage("mi_dd", dd, xc, n, dd, yo, ky, pr.put_list(kx), tb, stride, outd)
-        else:
-            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), work(n * dd)
-            pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
-            pr.stage("i2f", dd * kmax, cnti, cntf)
-            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, _plus1(zys))
-            pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
-    pr.run(mode)
-    if not disc:
-        return pr.get(outc, d)
-    vals = [0.0] * d
-    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):  # glue: scatters device MI values to their columns (cont-sized: continuous column indices)
-        vals[j] = v
-    for j, v in zip(disc, pr.values(outd, len(disc))):  # glue: scatters device MI values to their columns (disc-sized: discrete column indices)
-        vals[j] = v
-    return Array.from_list(vals, "<f4")
-
-
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
+# from random_state by splitmix64 (sklearn draws numpy's). One native call:
+# bindings/prep_encode_native.mojo `_mutual_info` admits the arguments,
+# builds and runs the programs and assembles the per-feature result.
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
     """Estimate the mutual information between each feature and a discrete target.
@@ -4600,11 +4471,13 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
     >>> y = (X[:, 0] > 0.5).astype(np.int64)
     >>> mi = mojolearn.mutual_info_classif(X, y, random_state=0)
     """
-    return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
+    return _ENCODE_CALL(None, "mutual_info", (X, y, True, discrete_features, n_neighbors, random_state),
+                        _ENCODE_CONTEXT)
 
 
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
+# from random_state by splitmix64 (sklearn draws numpy's). One native call
+# (bindings/prep_encode_native.mojo `_mutual_info`).
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
     """Estimate the mutual information between each feature and a continuous target.
@@ -4646,7 +4519,8 @@ def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, cop
     >>> y = (X[:, 0] ** 2 + 0.1 * rng.random(1000)).astype(np.float32)
     >>> mi = mojolearn.mutual_info_regression(X, y, random_state=0)
     """
-    return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
+    return _ENCODE_CALL(None, "mutual_info", (X, y, False, discrete_features, n_neighbors, random_state),
+                        _ENCODE_CONTEXT)
 
 
 def _gather(arr, cols, mode):
