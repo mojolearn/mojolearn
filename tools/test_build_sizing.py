@@ -97,6 +97,18 @@ class BoxReading(unittest.TestCase):
                                                 'memory.max': str(62 * GIB), 'memory.current': str(2 * GIB)})
         self.assertEqual(self.read(meminfo, cg, 128), (16, 60 * GIB))
 
+    def test_cgroup_page_cache_is_reclaimable_headroom(self):
+        # An 8-CPU/128 GiB build container whose usage is mostly inactive file
+        # cache (source tree, Pixi env) still has its limit minus working set.
+        meminfo, cg = self.box(1024 * 2 ** 20, {'cpu.max': '800000 100000',
+                                                'memory.max': str(128 * GIB), 'memory.current': str(70 * GIB),
+                                                'memory.stat': 'anon %d\ninactive_file %d\n' % (10 * GIB, 60 * GIB)})
+        self.assertEqual(self.read(meminfo, cg, 128), (8, 118 * GIB))
+        meminfo, cg = self.box(1024 * 2 ** 20, {'memory/memory.limit_in_bytes': str(40 * GIB),
+                                                'memory/memory.usage_in_bytes': str(30 * GIB),
+                                                'memory/memory.stat': 'total_inactive_file %d\n' % (20 * GIB)})
+        self.assertEqual(self.read(meminfo, cg, 64)[1], 30 * GIB)
+
     def test_cgroup_v1_limits(self):
         meminfo, cg = self.box(1024 * 2 ** 20, {'cpu/cpu.cfs_quota_us': '800000', 'cpu/cpu.cfs_period_us': '100000',
                                                 'memory/memory.limit_in_bytes': str(40 * GIB),

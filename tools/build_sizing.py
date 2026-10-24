@@ -77,18 +77,37 @@ def cgroup_cpu_limit(root='/sys/fs/cgroup'):
     return None
 
 
+def _inactive_file(stat_text, key):
+    for line in (stat_text or '').splitlines():
+        name, _, value = line.partition(' ')
+        if name == key and value.strip().isdigit():
+            return int(value)
+    return 0
+
+
 def cgroup_memory_headroom(root='/sys/fs/cgroup'):
-    """Bytes a cgroup memory limit still allows (limit minus usage), or None."""
-    for limit_name, usage_name in (('memory.max', 'memory.current'),
-                                   ('memory/memory.limit_in_bytes', 'memory/memory.usage_in_bytes'),
-                                   ('memory.limit_in_bytes', 'memory.usage_in_bytes')):
+    """Bytes a cgroup memory limit still allows (limit minus working set), or None.
+
+    memory.current / usage_in_bytes count the page cache. Its inactive file
+    pages are reclaimed before the cgroup OOMs, so they are subtracted, the
+    same working-set rule docker stats and the kubelet use. Without this, an
+    8-CPU/128 GiB build container that has read the source tree and the Pixi
+    env looks short of memory, and the guard's available-memory floor can stop
+    a healthy compile while its own file cache grows.
+    """
+    for limit_name, usage_name, stat_name, stat_key in (
+            ('memory.max', 'memory.current', 'memory.stat', 'inactive_file'),
+            ('memory/memory.limit_in_bytes', 'memory/memory.usage_in_bytes',
+             'memory/memory.stat', 'total_inactive_file'),
+            ('memory.limit_in_bytes', 'memory.usage_in_bytes', 'memory.stat', 'total_inactive_file')):
         limit = _read(Path(root) / limit_name)
         if limit is None:
             continue
         if limit == 'max' or int(limit) >= 2 ** 60:
             return None
         usage = int(_read(Path(root) / usage_name) or 0)
-        return max(0, int(limit) - usage)
+        reclaimable = min(usage, _inactive_file(_read(Path(root) / stat_name), stat_key))
+        return max(0, int(limit) - (usage - reclaimable))
     return None
 
 

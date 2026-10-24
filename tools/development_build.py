@@ -46,6 +46,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -68,6 +69,15 @@ BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
 # bincache.KEY_ENV_PREFIXES and removed before starting any child process.
 GUARD_ENV = "_MOJOLEARN_DEVELOPMENT_GUARD"
 MEMORY_FRACTION = 0.8
+# Version banners are read from stdout only. On the NVIDIA L4 (2026-10-24,
+# source 50de0f93a) `mojo --version` wrote a tcmalloc mbind warning to stderr
+# ahead of its banner, carrying the PID and a random address; with stderr
+# merged that line became toolchain.version and every key recomputation
+# differed, so a correct 183 s compile was refused as "inputs changed".
+VERSION_LINE = re.compile(r"^\s*(mojo|pixi)\s+\S", re.I)
+# Files that tools, editors or the OS write next to inputs and that never
+# reach the compiler: bytecode, editor swap/backup files, Finder metadata.
+NON_INPUT_SUFFIXES = (".pyc", ".pyo", ".swp", ".swo", ".tmp", ".orig", ".rej", "~")
 
 
 class BuildError(RuntimeError):
@@ -168,10 +178,45 @@ class SourceGraph:
         # sources and the declared Unicode pin are inputs before it exists too.
         if any(str(p.relative_to(self.repo)).startswith("tokenizer/") for p in files):
             files.update(p.resolve() for p in (self.repo / "tokenizer/tools").rglob("*")
-                         if p.is_file() and "__pycache__" not in p.parts)
+                         if p.is_file() and generator_input(p))
             files.add(self.repo / "tokenizer/impl/unicode_class.mojo")
         hashes = {str(p.relative_to(self.repo)): bincache.sha256_file(p) for p in sorted(files)}
         return {"scope": scope, "files": hashes, "unresolved": unresolved}
+
+
+def generator_input(path):
+    """True for a generator source; False for files tools write beside it."""
+    if "__pycache__" in path.parts or path.name.startswith("."):
+        return False
+    return not path.name.endswith(NON_INPUT_SUFFIXES)
+
+
+def version_banner(argv):
+    """The tool's version line from stdout; stderr noise never enters a key."""
+    try:
+        run = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = run.stdout.decode(errors="replace").splitlines()
+    return next((line.strip() for line in lines if VERSION_LINE.match(line)), None)
+
+
+def changed_fields(before, after, prefix=""):
+    """Dotted key-field paths that differ; the refusal names what moved."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        out = []
+        for name in sorted(set(before) | set(after)):
+            out.extend(changed_fields(before.get(name), after.get(name),
+                                      f"{prefix}.{name}" if prefix else str(name)))
+        return out
+    return [] if before == after else [prefix or "<root>"]
+
+
+def input_change_reason(label, before, after):
+    moved = changed_fields(before, after)
+    shown = ", ".join(moved[:8]) + (f" (+{len(moved) - 8} more)" if len(moved) > 8 else "")
+    return f"{label}: {shown or 'group missing from recomputed plan'}"
 
 
 def build_environment(mode, env, plat=None):
@@ -217,12 +262,12 @@ def toolchain_facts(repo):
     config = repo / "pixi.toml"
     return {"available": available, "compiler": str(compiler.resolve()),
             "compiler_sha256": bincache.sha256_file(compiler) if available else None,
-            "version": bincache.first_line([str(compiler), "--version"]) if available else None,
+            "version": version_banner([str(compiler), "--version"]) if available else None,
             "locked": bincache.toolchain(repo), "installed": bincache.installed_toolchain(repo),
             "pixi_configuration": hashlib.sha256(bincache.pixi_toml_build_part(config.read_text()).encode()).hexdigest()
                 if config.is_file() else None,
             "precompiled_packages": packages, "os": bincache.os_fields(),
-            "apple": bincache.darwin_toolchain(), "pixi": bincache.first_line(["pixi", "--version"])}
+            "apple": bincache.darwin_toolchain(), "pixi": version_banner(["pixi", "--version"])}
 
 
 def cached_artifact(cache, row):
@@ -399,7 +444,9 @@ def compile_group(row, repo, cache, env, evidence):
                                       facts=toolchain_facts(repo), plat=row["fields"]["platform"])
                     current = next((r for r in after["groups"] if r["stem"] == row["stem"]), None)
                     if current is None or current["key"] != row["key"]:
-                        result.update(exit_code=1, reason="build inputs changed during compilation")
+                        result.update(exit_code=1, reason=input_change_reason(
+                            "build inputs changed during compilation", row["fields"],
+                            current["fields"] if current else {}))
                     elif not artifact.is_file() or artifact.stat().st_size == 0:
                         result.update(exit_code=1, reason="compiler returned success without nonempty declared output")
                     else:
@@ -571,7 +618,10 @@ def main(argv=None):
                 raise BuildError("one or more group builds failed; existing loader indexes were preserved")
             final_plan = make_plan(REPO, cache, modes, env, args.group)
             if [r["key"] for r in final_plan["groups"]] != [r["key"] for r in plan["groups"]]:
-                raise BuildError("build inputs changed; refusing to activate mixed-source outputs")
+                before = {r["mode"] + ":" + r["stem"]: r["fields"] for r in plan["groups"]}
+                after = {r["mode"] + ":" + r["stem"]: r["fields"] for r in final_plan["groups"]}
+                raise BuildError(input_change_reason(
+                    "build inputs changed; refusing to activate mixed-source outputs", before, after))
             if build_process.cancelled():
                 raise KeyboardInterrupt("development build cancelled before activation")
             report.update(activate(final_plan, REPO, cache, limits["lock_seconds"]))

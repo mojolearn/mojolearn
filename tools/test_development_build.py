@@ -266,6 +266,75 @@ def test_compile_failure_and_source_change_do_not_enter_cache(repo, tmp_path, mo
     assert dev.cached_artifact(tmp_path / "cache", row) is None
 
 
+def test_unrelated_writes_during_compile_do_not_trip_the_input_guard(repo, tmp_path, monkeypatch):
+    path = repo / f"bindings/{A}.mojo"
+    path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
+    write(repo, "tokenizer/impl/unicode_class.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/generate.py", "# generator\n")
+    row = next(r for r in plan(repo, tmp_path)["groups"] if r["stem"] == "_mojolearn_dev_trees")
+    evidence = tmp_path / "evidence"
+
+    def noisy_build(command, *_):
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (row["stem"] + ".so")).write_bytes(b"completed")
+        # What compilers, Python, editors and this tool write while a group
+        # compiles: none of it reaches the compiler, so none of it is a key.
+        write(repo, "core/__pycache__/shared.cpython-314.pyc", "bytecode")
+        write(repo, "tokenizer/tools/__pycache__/generate.cpython-314.pyc", "bytecode")
+        write(repo, "tokenizer/tools/generate.py.swp", "editor swap")
+        write(repo, "tokenizer/tools/.DS_Store", "finder")
+        write(repo, "notes/README.txt", "not an input")
+        write(repo, "python/mojolearn/identical/_mojolearn_merged.json", "{}")
+        write(repo, "unrelated/never_imported.mojo", "comptime other = 2\n")
+        (evidence / "sibling-receipt.json").write_text("{}")
+        shared = repo / "core/shared.mojo"
+        os.utime(shared, (shared.stat().st_atime + 60, shared.stat().st_mtime + 60))  # mtime only
+        return 0
+    monkeypatch.setattr(dev, "run_logged", noisy_build)
+    evidence.mkdir()
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, evidence)
+    assert result["state"] == "built", result.get("reason")
+    assert dev.cached_artifact(tmp_path / "cache", row) is not None
+
+
+def test_source_edit_during_compile_still_trips_the_guard_and_names_it(repo, tmp_path, monkeypatch):
+    row = plan(repo, tmp_path)["groups"][0]
+
+    def editing_build(command, *_):
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (row["stem"] + ".so")).write_bytes(b"completed")
+        write(repo, "tree/leaf.mojo", "comptime leaf = 2\n")
+        return 0
+    monkeypatch.setattr(dev, "run_logged", editing_build)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")
+    assert result["exit_code"] == 1
+    assert "inputs changed" in result["reason"]
+    assert "source.files.tree/leaf.mojo" in result["reason"]
+    assert dev.cached_artifact(tmp_path / "cache", row) is None
+
+
+def test_version_banner_ignores_stderr_noise(tmp_path):
+    # The L4 failure: tcmalloc printed a PID- and address-bearing warning on
+    # stderr before the banner, and that line became part of every key.
+    tool = tmp_path / "mojo"
+    tool.write_text("#!/bin/sh\n"
+                    "echo \"$$ external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] "
+                    "Warning: Unable to mbind memory (errno=1, base=0x$$00000000)\" >&2\n"
+                    "echo 'Mojo 1.0.0 (ed45d567)'\n")
+    tool.chmod(0o755)
+    first = dev.version_banner([str(tool), "--version"])
+    assert first == "Mojo 1.0.0 (ed45d567)"
+    assert dev.version_banner([str(tool), "--version"]) == first
+    assert dev.version_banner([str(tmp_path / "missing"), "--version"]) is None
+
+
+def test_changed_fields_names_only_moved_inputs():
+    before = {"source": {"files": {"a.mojo": "1", "b.mojo": "2"}}, "toolchain": {"version": "Mojo 1"}}
+    after = {"source": {"files": {"a.mojo": "1", "b.mojo": "3"}}, "toolchain": {"version": "Mojo 1"}}
+    assert dev.changed_fields(before, after) == ["source.files.b.mojo"]
+    assert dev.changed_fields(before, before) == []
+
+
 def test_successful_build_is_cached_without_reinvoking_compiler(repo, tmp_path, monkeypatch):
     row = plan(repo, tmp_path)["groups"][0]
     commands = []
