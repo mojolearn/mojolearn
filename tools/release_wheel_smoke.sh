@@ -122,6 +122,18 @@
 #                        (dists.txt) and results.json come home in --out (default
 #                        ~/mojolearn-evidence/index-install/<V>/<I>/<stamp>-<vendor>).
 #                        tools/index_install_check.sh runs both vendors at once.
+#   --adapters           also smoke the FRAMEWORK ADAPTERS the wheel ships (local wheel
+#                        only): a venv with the box's site packages, the wheel and its
+#                        plugins installed, then tools/adapter_wheel_smoke.py runs the
+#                        adapters' own checkers (Torch, Torch training, MAX, MAX
+#                        training) against the INSTALLED files for every framework
+#                        that imports there. Its tools travel as one tarball, sha256
+#                        checked on the box; the receipt is <out>/adapter-smoke.json:
+#                        PASSED, NO_FRAMEWORK (nothing to run; reported, not passed)
+#                        or FAILED (fails this smoke).
+#   --adapter-install L  with --adapters: pip-install first the framework releases
+#                        the shipped adapters.json names, L = torch, max or torch,max
+#                        (Torch from the index the registration was built against).
 #
 # A RENTED RUNPOD RUN, IN ORDER: Mac dead-man armed BEFORE the create (lease +
 # ready timeout + 10 min, by id or by name); create; wait for ssh (600 s); arm
@@ -177,6 +189,7 @@ VENDOR=cuda; SELECTION=""; REFS=(); GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
 PROVIDER=auto
 PLUGINS=(); PLUGIN=""; PLUGIN_SHA=""
 FROM_INDEX=""; IDX_VERSION=""; FETCH_EXTRA=""; INDEX_ARGS=""; INDEX_CHECK_SHA=""
+ADAPTERS=0; ADAPTER_INSTALL=""; ADAPTER_BUNDLE=""; ADAPTER_BUNDLE_SHA=""
 DO_SIZE="${MOJOLEARN_SMOKE_DO_SIZE:-gpu-mi325x1-256gb}"
 DO_REGIONS="${MOJOLEARN_SMOKE_DO_REGIONS:-tor1,nyc2}"
 DO_IMAGE="${MOJOLEARN_SMOKE_DO_IMAGE:-188571990}"
@@ -229,6 +242,8 @@ while [ $# -gt 0 ]; do
         --smoke-seconds) shift; SMOKE_SECONDS="${1:-}" ;;
         --ssh) shift; SSH_GIVEN="${1:-}" ;;
         --local) LOCAL=1 ;;
+        --adapters) ADAPTERS=1 ;;
+        --adapter-install) shift; ADAPTER_INSTALL="${1:-}" ;;
         --rent) RENT=1 ;;
         -h|--help) sed -n '2,/^set -u$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) die "unknown option '$1' (see --help)" ;;
@@ -385,6 +400,21 @@ for _b in $PLUGIN_BASES; do
 done
 fi
 QUALIFY_SHA=$(shasum -a 256 "$QUALIFY" | cut -d' ' -f1)
+# THE FRAMEWORK ADAPTERS' SMOKE (--adapters): its controller and the adapters'
+# own checkers, as one tarball (the checkers import native_training_fixtures).
+if [ "$ADAPTERS" = 1 ]; then
+    [ -z "$FROM_INDEX" ] || die "--adapters smokes a local wheel; it is refused with --from-index"
+    [ -z "$ADAPTER_INSTALL" ] || printf '%s' "$ADAPTER_INSTALL" | grep -Eq '^(torch|max)(,(torch|max))?$' \
+        || die "--adapter-install must be torch, max or torch,max"
+    ADAPTER_BUNDLE="$TMPD/adapter-smoke.tgz"
+    tar czf "$ADAPTER_BUNDLE" -C "$ROOT" tools/adapter_wheel_smoke.py tools/check_native_adapters.py \
+        tools/check_native_training_adapters.py tools/native_training_fixtures.py \
+        tools/check_max_native_adapters.py tools/check_max_training_adapters.py || die "could not pack the adapter smoke tools"
+    ADAPTER_BUNDLE_SHA=$(shasum -a 256 "$ADAPTER_BUNDLE" | cut -d' ' -f1)
+    FETCH_EXTRA="$FETCH_EXTRA adapters adapter_smoke.log adapter_smoke.exit adapter_venv.log"
+elif [ -n "$ADAPTER_INSTALL" ]; then
+    die "--adapter-install goes with --adapters"
+fi
 STAMP=$(date -u +%Y%m%d-%H%M%S)
 # The vendor and this process's pid are in the name: the release launches the
 # NVIDIA and AMD columns in the same second, and 0.8.24's two legs shared one
@@ -442,6 +472,16 @@ rm -rf /tmp/mojolearn-venv-probe
 timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py "$RDIR/$(basename "$WHEEL")"$PLUGIN_BOX_ARGS \\
     --scope expanded --python "\$PY" --expected-source-commit $COMMIT --output $RDIR/out > smoke.log 2>&1
 echo \$? > smoke.exit
+fi
+if [ "$ADAPTERS" = 1 ]; then
+  # The framework adapters from the INSTALLED wheel (tools/adapter_wheel_smoke.py):
+  # the box's own torch/max are visible through --system-site-packages.
+  mkdir -p $RDIR/adapter-tools && tar xzf $RDIR/adapter-smoke.tgz -C $RDIR/adapter-tools
+  "\$PY" -m venv --system-site-packages $RDIR/av > adapter_venv.log 2>&1 || { (apt-get -o DPkg::Lock::Timeout=120 update -qq && apt-get -o DPkg::Lock::Timeout=120 install -y -qq python3-venv) >> adapter_venv.log 2>&1 && "\$PY" -m venv --system-site-packages $RDIR/av >> adapter_venv.log 2>&1; }
+  $RDIR/av/bin/pip install --disable-pip-version-check "$RDIR/$(basename "$WHEEL")"$PLUGIN_BOX_PATHS numpy >> adapter_venv.log 2>&1
+  timeout -k 20 $SMOKE_SECONDS "\$PY" $RDIR/adapter-tools/tools/adapter_wheel_smoke.py --python $RDIR/av/bin/python \\
+      --out $RDIR/adapters${ADAPTER_INSTALL:+ --install $ADAPTER_INSTALL} > adapter_smoke.log 2>&1
+  echo \$? > adapter_smoke.exit
 fi
 if [ -n "$LANES" ]; then
   # The release column from the INSTALLED wheel, run outside any checkout.
@@ -1165,6 +1205,12 @@ printf '%s\n' "$_remote" | grep -q "^$QUALIFY_SHA " || die "driver sha256 differ
 say "both files landed, sha256 verified on the box"
 fi
 
+if [ "$ADAPTERS" = 1 ]; then
+    bx 60 "cat > $RDIR/adapter-smoke.tgz" < "$ADAPTER_BUNDLE" || die "adapter smoke tools upload failed"
+    bx 60 "cd $RDIR && sha256sum adapter-smoke.tgz" < /dev/null 2>&1 | grep -q "^$ADAPTER_BUNDLE_SHA " \
+        || die "adapter smoke tools sha256 differs on the box"
+    say "adapter smoke tools landed, sha256 verified on the box"
+fi
 say "starting the smoke (detached; bound ${SMOKE_SECONDS}s)"
 bx 60 "$BOX_START" < /dev/null | grep -q STARTED \
     || die "the smoke did not start"
@@ -1298,6 +1344,18 @@ if [ -n "$LANES" ]; then
             fi
         fi
     fi
+fi
+# The framework adapters, judged here: FAILED fails the smoke; NO_FRAMEWORK
+# (no torch or max on the box to run them with) is said, not passed.
+if [ "$ADAPTERS" = 1 ]; then
+    [ -f "$OUT/remote/adapters/adapter-smoke.json" ] && cp "$OUT/remote/adapters/adapter-smoke.json" "$OUT/adapter-smoke.json"
+    _as=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status"))' "$OUT/adapter-smoke.json" 2>/dev/null)
+    tail -1 "$OUT/remote/adapter_smoke.log" 2>/dev/null | sed 's/^/  /'
+    case "$_as" in
+        PASSED) say "adapters: PASSED ($OUT/adapter-smoke.json)" ;;
+        NO_FRAMEWORK) say "adapters: NO_FRAMEWORK: neither torch nor max imports on this box; nothing ran (give --adapter-install)" ;;
+        *) say "adapters: FAILED (${_as:-no receipt}); logs in $OUT/remote/adapters"; _v=1 ;;
+    esac
 fi
 [ "$_v" = 0 ] && say "PASSED. Evidence: $OUT" || say "FAILED. Logs: $OUT/remote"
 exit "$_v"

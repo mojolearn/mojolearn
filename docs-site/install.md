@@ -37,6 +37,14 @@ pip install "mojolearn[numpy]"    # NumPy-backed conveniences (ANN filtering, TS
 
 A plain `pip install mojolearn` is NumPy-free; APIs that need NumPy say so and name the install command.
 
+The `torch` and `max` extras install the framework for the optional
+[PyTorch and MAX adapters](user_guide/framework_adapters.md) (on Linux, on `mojolearn-core`):
+
+```sh
+pip install "mojolearn[torch]"                  # macOS
+pip install mojolearn "mojolearn-core[torch]"   # Linux
+```
+
 ## GPU architectures in this release
 
 Device code is architecture specific. A GPU architecture the release does not carry needs a source

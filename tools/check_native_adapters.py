@@ -25,7 +25,12 @@ def main():
     p.add_argument("--stage", choices=["both", "build", "test"], default="both")
     p.add_argument("--host-staging", action="store_true",
                    help="test artifact only: force the MPS transport path on a CUDA/HIP GPU")
+    p.add_argument("--installed", action="store_true",
+                   help="check the adapters an installed mojolearn wheel ships (mojolearn.adapters.torch), "
+                        "nothing built; --out receives the results only")
     args = p.parse_args()
+    if args.installed and (args.fault != "none" or args.host_staging or args.stage != "both"):
+        p.error("--installed checks the shipped registration as it is: no --fault, --host-staging or --stage")
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     report = {"complete": False, "scope": "adapter functionality on one machine", "checks": [], "failures": [],
@@ -37,9 +42,22 @@ def main():
         report["torch"] = torch.__version__
         report["hip"] = torch.version.hip
         report["device"] = args.device
-        report["native_sha256"] = hashlib.sha256((out / "libmojolearn_adapter.so").read_bytes()).hexdigest()
         report["fault"] = args.fault
-        if args.stage != "test":
+        if args.installed:
+            # THE INSTALLED WHEEL'S ADAPTERS: the shipped manifest, the shipped
+            # library's digest, and the registration loaded the way a user
+            # loads it (importing mojolearn.adapters.torch), never this tree's.
+            from mojolearn.adapters import _shipped
+            native = Path(_shipped.path("native"))
+            report["installed"] = {k: _shipped.manifest().get(k) for k in ("vendor", "arch", "torch", "max", "files")}
+            report["native_sha256"] = hashlib.sha256(native.read_bytes()).hexdigest()
+            assert report["native_sha256"] == report["installed"]["files"]["native"]["sha256"], \
+                "the installed adapter library differs from its adapters.json"
+            from mojolearn.adapters import torch as installed_adapter
+            report["registration"] = installed_adapter.library_path()
+            report["compiled"] = False
+        elif args.stage != "test":
+            report["native_sha256"] = hashlib.sha256((out / "libmojolearn_adapter.so").read_bytes()).hexdigest()
             source = (root / "adapters/torch/registration.cpp").read_text()
             if args.fault == "wrong-operation":
                 original = "device.is_cpu() ? -1 : 0, code,"
@@ -98,6 +116,7 @@ def main():
                 print(json.dumps({"compiled": True, "fault": args.fault}))
                 return 0
         else:
+            report["native_sha256"] = hashlib.sha256((out / "libmojolearn_adapter.so").read_bytes()).hexdigest()
             build_command = json.loads((out / "torch-build-command.json").read_text())
             assert ("-DMOJOLEARN_ADAPTER_TEST_HOST_STAGING=1" in build_command) == args.host_staging
             torch.ops.load_library(str(out / "mojolearn_torch.so"))
