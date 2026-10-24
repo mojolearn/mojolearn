@@ -1228,7 +1228,8 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "transformer-forward-tape", "public-cnn-classifier-predict", "public-cnn-layer-fit",
                        "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
                        "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
-                       "public-validation-learning-curves"})
+                       "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
+                       "x-ridge-cv-kfold"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -1294,6 +1295,10 @@ NEW_LANE_PURPOSE = {
     "public-sparse-encode": "sparse_encode (threshold, lasso_cd, omp)",
     "public-theta-variants": "DynamicTheta and OptimizedTheta fit and predict",
     "public-validation-learning-curves": "model_selection.validation_curve and learning_curve",
+    "scaler-fit-transform": "StandardScaler and MinMaxScaler fit_transform: `standard_fit_transform`, "
+                            "`minmax_fit_transform`",
+    "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
+    "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
 }
 
 
@@ -2173,6 +2178,26 @@ def triage(row):
     return "GAP", [], "no lane reaches it"
 
 
+#: Registrations whose whole job is a lifecycle step or a metadata answer:
+#: a value fault has nothing to move, whatever helper their closure shares
+#: (lane verify-coverage-20261024, each checked in the source). Only consulted
+#: when no arm reaches the row.
+_LIFECYCLE = "a lifecycle step (allocates, opens, frees or closes a resident object); no value leaves it"
+_METADATA = "a metadata answer (a profile word, count or flag of the build or the object); no data value"
+SABOTAGE_NA_ENTRIES = {
+    **{e: _LIFECYCLE for e in (
+        "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
+        "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
+        "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
+        "msel_alloc", "msel_free", "x_metrics_dev_free", "x_prep_dev_free", "seq_tensor_alloc",
+        "mlp_resident_open", "mlp_resident_close", "rf_data_session_open", "rf_data_session_close")},
+    **{e: _METADATA for e in (
+        "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
+        "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_metrics_dev_live", "x_prep_dev_live",
+        "gbdt_model_dim")},
+}
+
+
 def sabotage_of(row):
     """(status, text) of one native row's fault-injection arm."""
     gate = sorted(set(row["sabotage_defines"]) & GATE_DEFINES)
@@ -2193,6 +2218,8 @@ def sabotage_of(row):
         bits.append(f"{len(seam)} seam patch(es)")
     if bits:
         return "armed", "; ".join(bits)
+    if row["entry"] in SABOTAGE_NA_ENTRIES:
+        return "n/a", SABOTAGE_NA_ENTRIES[row["entry"]]
     if not row.get("n_changed", 1) and "closure_kernel" in row:
         # an unchanged row (the whole-surface audit, --all): its closure decides
         if not row["closure_kernel"]:
@@ -2338,7 +2365,7 @@ def render_markdown(audit, path):
         st, lanes, why = py_triage(r, by_entry)
         pst[st] += 1
         prow.append((r, st, lanes, why))
-    w(f"Public Python methods whose call path changed: {len(py)} "
+    w(f"Public Python methods{' (every public operation method)' if audit.get('scope') == 'all' else ' whose call path changed'}: {len(py)} "
       + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())) + ".")
     w("")
     w("`covered` describes static reach only. It does not mean that a lane was run, recorded or admitted. "
