@@ -155,7 +155,8 @@ def test_graph_quality_against_networkx():
     ("resnet-block", "torch-eager-fp32"), ("pagerank", "networkx-cpu"),
     ("connected-components", "networkx-cpu"), ("lof", "sklearn-cpu"), ("ocsvm", "sklearn-cpu"),
     ("kpss", "statsmodels-cpu"), ("select-d", "statsmodels-cpu"),
-    ("lion", None), ("lamb", None), ("radius-neighbors", None),
+    # 50aad5102: Lion races lion-pytorch and LAMB races timm's Lamb, so both have a peer reference
+    ("lion", "torch-eager-fp32"), ("lamb", "torch-eager-fp32"), ("radius-neighbors", None),
 ])
 def test_independent_reference_arm(lane, arm):
     assert A.independent_reference_arm(lane) == arm
