@@ -499,6 +499,7 @@ TRAINING_LANE_NAMES = {
     # through the preprocessing family's own host binding.
     "standard-scaler": "the standard scaler",
     "minmax-scaler": "the min-max scaler",
+    "scaler-fit-transform": "the standard and min-max scalers' fit_transform",
     # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
     # arm of the quasi-Newton solver, exported as qn_fit from the
     # estimators host binding.
@@ -2150,6 +2151,8 @@ FAMILIES = (
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
             "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
+            # lane verify-coverage-20261024: fit_transform's one-upload entries
+            "scaler-fit-transform",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -3967,6 +3970,7 @@ PUBLIC_PENDING_LANES = {
     "cross-vendor-fold": "no reference",
     "transformer-decode-load-state": "no reference",
     "transformer-forward-tape": "no reference",
+    "scaler-fit-transform": "no reference",
     "safetensors-widen-f16": "no reference",
     "hf-causal-lm-stream": "no reference",
     "ivf-short-fill": "no reference",

@@ -1290,6 +1290,34 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("scaler-fit-transform")
+def _(ml, X, yc, yr, Xh=None):
+    """StandardScaler.fit_transform and MinMaxScaler.fit_transform: the
+    one-upload combined entries (`standard_fit_transform`,
+    `minmax_fit_transform`), which no other lane calls. Their documented
+    claim is the same kernels on the same words as fit then transform; the
+    `agree` part holds that equality (a flag, so a build that breaks it reads
+    DIVERGENT rather than REFUSED), beside the transformed words and the
+    fitted statistics."""
+    d = _coverage_digester(ml)
+    x = np.ascontiguousarray(X[:2048], dtype=np.float32)
+    parts, agree = {}, []
+    for tag, make, attrs in (("standard", lambda: ml.StandardScaler(), ("mean_", "var_", "scale_")),  # glue: two scalers
+                             ("minmax", lambda: ml.MinMaxScaler(feature_range=(-1.0, 2.0)),
+                              ("data_min_", "data_max_", "scale_", "min_"))):
+        one = make()
+        t = np.asarray(one.fit_transform(x), dtype=np.float32)
+        two = make().fit(x)
+        u = np.asarray(two.transform(x), dtype=np.float32)
+        stats = np.concatenate([np.asarray(getattr(one, a), dtype=np.float64).reshape(-1) for a in attrs])
+        again = np.concatenate([np.asarray(getattr(two, a), dtype=np.float64).reshape(-1) for a in attrs])
+        agree += [int(t.tobytes() == u.tobytes()), int(stats.tobytes() == again.tobytes())]
+        parts[f"{tag}_transform"] = d(t)
+        parts[f"{tag}_stats"] = d(stats)
+    parts["agree"] = d(np.asarray(agree, dtype=np.int64))
+    return _fit(parts)
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape")
+            "transformer-forward-tape", "scaler-fit-transform")

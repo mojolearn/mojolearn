@@ -102,3 +102,8 @@ sequence/opt_public.mojo:W_PRISTINE	a state-word index (layout constant), no val
 sequence/opt_public.mojo:seq_optimizer_state_on	the host entry's wrapper of state_read_host
 sequence/opt_public.mojo:state_read_host	on a host binding nothing is resident: it records that the host copies are the newest, and there is no other copy a fault could make a step read
 sequence/opt_public.mojo:seq_optimizer_close_on	nothing is resident on a host binding: a null check, no value
+cluster/resident_centers.mojo:_DEVCTX_SLOT	a DeviceContext slot name (a handle)
+cluster/resident_centers.mojo:KMEANS_CENTERS_REGISTRY	the resident-centers registry storage (a process global), no value
+kernel_methods/krr_resident.mojo:KRR_RESIDENT_REGISTRY	the resident kernel-ridge registry storage (a process global), no value
+mamba/host/mamba_host_shell_impl.mojo:_m3_owned_export_run	opt-in experiment only: weights are owned only after an install, which the host binding refuses unless built with -D MOJOLEARN_NN40_OWNED_WEIGHTS (default off), so no default build exports any
+core/user_objects.mojo:_fnv1a	the open-addressing slot hash of group_run_sizes: every hash gives the same runs (keys are compared whole), so a fault moves no value

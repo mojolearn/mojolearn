@@ -1,0 +1,11 @@
+--- a/preprocessing/estimator.mojo
++++ b/preprocessing/estimator.mojo
+@@ -451,7 +451,7 @@
+     _prep_rows_emit(ctx,res,5*d,stats)
+     # row 3 the scale, row 4 min_ (the rows fit keeps as scale_ / min_, the
+     # operands the transform passes)
+-    var ds = res.create_sub_buffer[DType.float32](3*d, d)
++    var ds = res.create_sub_buffer[DType.float32](4*d, d)  # SABOTAGE: the min_ row read as the scale
+     var dm = res.create_sub_buffer[DType.float32](4*d, d)
+     var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+     minmax_transform_into(ctx,dx,ds,dm,dout,n,d,0,clip,lower,upper)
