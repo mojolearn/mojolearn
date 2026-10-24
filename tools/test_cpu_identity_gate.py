@@ -749,7 +749,9 @@ class SabotageDefinesTests(unittest.TestCase):
                                         '-D', 'MOJOLEARN_GBDT_EVAL_SABOTAGE=1'],
                                'linalg': ['-D', 'MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1'],
                                'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1',
-                                             '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1']})
+                                             '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1'],
+                               # f2f654953: model selection's own native owner and its arm
+                               'runtime_model_selection': ['-D', 'MOJOLEARN_RUNTIME_MODEL_SELECTION_SABOTAGE=1']})
 
     def test_lanes_resting_on_their_own_define_are_covered(self):
         covered = self.manifest['covered_lanes']()
