@@ -501,7 +501,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var source = priors
         if Bool(py=py_call(b.hasattr, priors, PythonObject("tolist"))):
             source = family_call(py_call(b.getattr, priors, PythonObject("tolist")))
-        var given = py_call(b.list, source)
+        var given = family_call(b.list, source)
         var values = List[Float64]()
         for i in range(len(given)):  # driver-loop: over the user priors argument (k sized)
             values.append(Float64(py=family_call(b.float, given[i])))
@@ -526,6 +526,8 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                 raise Error("OverflowError: math range error")
             raise Error("-inf + inf in fsum")
         var rescale = not _isclose(tot, 1.0, 1e-5, 1e-8)
+        if rescale and tot == 0.0:
+            raise Error("ZeroDivisionError: float division by zero")
         for i in range(C):  # driver-loop: over the user priors argument (rescaled to sum one)
             pp[i] = values[i] / tot if rescale else values[i]
     _ = prior  # keep the Python object alive through the writes above

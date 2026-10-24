@@ -104,7 +104,7 @@ def _reduce(addr: Int, code: Int, count: Int, what: Int, context: PythonObject) 
                        PythonObject(count), PythonObject(what))
 
 
-def _door(binding: PythonObject, name: String) raises -> PythonObject:
+def knn_door(binding: PythonObject, name: String) raises -> PythonObject:
     """`NearestNeighbors._resident_door`: the binding's entry `name`, or None
     where the loaded binding has no such door (an absent name is ImportError
     on a host binding, AttributeError on a module); any other exception the
@@ -117,8 +117,8 @@ def _door(binding: PythonObject, name: String) raises -> PythonObject:
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GetAttr")(binding._obj_ptr, key._obj_ptr)
     _ = key^
     if not pointer:
-        var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
-        if matches(import_error._obj_ptr) != 0 or matches(attribute_error._obj_ptr) != 0:
+        if (cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(import_error._obj_ptr) != 0
+                or cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(attribute_error._obj_ptr) != 0):
             cpy.lib.get_function[NoneType]("PyErr_Clear")()
             return PythonObject(None)
         var failure = stash_python_error()
@@ -168,7 +168,7 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     while the index keeps its address and shape; None where the binding has
     no `knn_index_prepare`."""
     var b = _b()
-    var prepare = _door(binding, "knn_index_prepare")
+    var prepare = knn_door(binding, "knn_index_prepare")
     if prepare is None:
         return PythonObject(None)
     var fields = py_fields(model)
@@ -201,10 +201,22 @@ def _refuse_inert_p(cls_name: String, metric: PythonObject, p: PythonObject) rai
     var b = _b()
     var is_default = False
     if not family_isinstance(p, b.bool):
-        try:
-            is_default = Float64(py=py_call(b.float, p)) == 2.0
-        except:
-            is_default = False
+        # `float(p)`; only its TypeError or ValueError reads as "not the
+        # default", any other exception reaches the caller unchanged.
+        ref cpy = Python().cpython()
+        var type_error = b.TypeError
+        var value_error = b.ValueError
+        var envelope = Python.tuple(p)
+        var result = cpy.PyObject_Call(b.float._obj_ptr, envelope._obj_ptr, PyObjectPtr())
+        _ = envelope^
+        if result:
+            is_default = Float64(py=PythonObject(from_owned=result)) == 2.0
+        elif (cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(type_error._obj_ptr) != 0
+                or cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(value_error._obj_ptr) != 0):
+            cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        else:
+            var failure = stash_python_error()
+            raise failure^
     if not is_default:
         raise Error("mojolearn " + cls_name + ": p is read only by metric='minkowski' "
                     + "(or 'lp'); metric=" + family_repr(metric) + " never reads it, so p=" + family_repr(p)
@@ -382,8 +394,16 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) 
 
 
 def _y_shape(y: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Int]:
-    """`_shape_of(y)` with the k-NN fits' rank and row-count refusals."""
-    var shape = labels_shape_of(y, context)
+    """`_shape_of(y)` with the k-NN fits' rank and row-count refusals. An
+    object with neither a `shape` nor list/tuple nesting reads `(len(y),)`
+    when it has a length and `()` otherwise, as `_buffer.shape_of` did."""
+    var b = _b()
+    var shape = List[Int]()
+    if (y is not None and (family_isinstance(y, Python.tuple(b.list, b.tuple))
+                           or _truth(py_call(b.hasattr, y, PythonObject("shape"))))):
+        shape = labels_shape_of(y, context)
+    elif y is not None and _truth(py_call(b.hasattr, y, PythonObject("__len__"))):
+        shape.append(Int(py=family_call(b.len, y)))
     if len(shape) != 1 and len(shape) != 2:
         raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
     var n_fit = family_field(fields, "n_samples_fit_")
@@ -440,13 +460,13 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
         return True
     var classes_store = family_array(Python.tuple(n), "<f8", context)
     var codes = family_array(Python.tuple(n), "<i4", context)
-    var k = Int(py=family_call(labels_helper(context, "prepare_targets"), PythonObject(view.addr),
+    var n_distinct = Int(py=family_call(labels_helper(context, "prepare_targets"), PythonObject(view.addr),
                                PythonObject(_CODE_F32 if view.typestr == "<f4" else _CODE_F64), PythonObject(n),
                                classical_address(classes_store), classical_address(codes),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
     _ = view  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    var integral = _truth(_reduce(Int(py=classical_address(classes_store)), _CODE_F64, k, _REDUCE_INTEGRAL, context))
+    var integral = _truth(_reduce(Int(py=classical_address(classes_store)), _CODE_F64, n_distinct, _REDUCE_INTEGRAL, context))
     _ = classes_store  # keep the Python object alive through the native call above
     return integral
 
@@ -639,7 +659,7 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     # THE INDEX STAYS ON THE DEVICE (DEVIATION 3002): the first call uploads
     # it, every later call classifies against the device copy; a binding
     # without that entry takes the per-call path.
-    var resident = _door(binding, "knn_classify_resident")
+    var resident = knn_door(binding, "knn_classify_resident")
     var handle = PythonObject(None)
     if resident is not None:
         handle = _resident_handle(model, binding, idx)
@@ -755,7 +775,7 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     var out = family_array(Python.tuple(nq, n_out), "<f4", context)
     var idx = family_field(fields, "_index")
     # DEVIATION 3002: the regressor's resident door; see the classifier.
-    var resident = _door(binding, "knn_regress_resident")
+    var resident = knn_door(binding, "knn_regress_resident")
     var handle = PythonObject(None)
     if resident is not None:
         handle = _resident_handle(model, binding, idx)

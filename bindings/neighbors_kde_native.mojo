@@ -33,23 +33,54 @@ from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_call, family_array, family_as_f32, family_sample_weight,
     family_field, family_is_str,
 )
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
+from bindings.native_buffer_owner import native_buffer_view
+from bindings.classical_labels import _any_contiguous_address
+from bindings.neighbors_knn_native import knn_door
 from core.family_cast_impl import family_all_finite_f32
+
+
+def _kde_sparse_f32(source: PythonObject, format: String) raises -> Bool:
+    """Whether `source.toarray()` is already float32 (the matrix's own
+    dtype, read from its stored fields as `host_sparse_dense` reads it)."""
+    var fields = _sparse_fields(source)
+    var dtype = fields["dtype"] if (format == "dok" or format == "lil") else fields["data"].dtype
+    return String(dtype.kind) == "f" and Int(py=dtype.itemsize) == 4
+
+
+def _kde_borrowed(source: PythonObject, x: PythonObject, context: PythonObject) raises -> Bool:
+    """`_materialize` borrowed `source` and the cast kept it: the converted
+    array reads the source's own memory (an Array, or a contiguous buffer
+    export); a list, a strided export or a cast is a copy."""
+    var b = native_loaded_module("builtins")
+    if py_type(source) is b.list or py_type(source) is b.tuple:
+        return False
+    var address = Int(py=classical_address(x))
+    if py_type(source) is context["array_class"]:
+        return address == Int(py=classical_address(source))
+    try:
+        var view = native_buffer_view(source)
+        var same = _any_contiguous_address(view) == address
+        _ = view^
+        return same
+    except:
+        return False
 
 
 def _kde_dense(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_buffer.as_f32_dense_c(source, ndim=2, name="X")`: `(x, copied)`.
     A scipy.sparse matrix is densified exactly first (`toarray()`), and
     `copied` is the conversion's flag for the dense array it was handed, as
-    `as_f32_c(obj.toarray())` reported it."""
-    var base = source
+    `as_f32_c(obj.toarray())` reported it: a copy unless the matrix holds
+    float32 (`toarray()` keeps its dtype)."""
     var sparse = host_sparse_format(source)
     if sparse.byte_length() > 0:
         if not py_contains(context, PythonObject("output_context")):
             py_setitem(context, "output_context", context)
-        base = host_sparse_dense(source, sparse, context)
-    var x = family_as_f32(base, 2, "X", context)
-    var copied = not (x is base)
+        var dense = family_as_f32(host_sparse_dense(source, sparse, context), 2, "X", context)
+        return Python.tuple(dense, PythonObject(not _kde_sparse_f32(source, sparse)))
+    var x = family_as_f32(source, 2, "X", context)
+    var copied = not _kde_borrowed(source, x, context)
     return Python.tuple(x, PythonObject(copied))
 
 
@@ -155,10 +186,8 @@ def _kde_handle(fields: PythonObject, binding: PythonObject) raises -> PythonObj
     `kde_fit_prepare`."""
     var b = native_loaded_module("builtins")
     var op = native_loaded_module("operator")
-    var prepare = PythonObject(None)
-    try:
-        prepare = py_call(b.getattr, binding, PythonObject("kde_fit_prepare"))
-    except:
+    var prepare = knn_door(binding, "kde_fit_prepare")
+    if prepare is None:
         return PythonObject(None)
     var x = family_field(fields, "_x")
     var w = family_field(fields, "_w")

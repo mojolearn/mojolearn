@@ -173,7 +173,7 @@ def _achi2_interval(fields: PythonObject) raises -> Float64:
     py_setitem(table, PythonObject(2), PythonObject(0.5))
     py_setitem(table, PythonObject(3), PythonObject(0.4))
     var steps = family_field(fields, "sample_steps")
-    if not py_contains(table, steps):
+    if not Bool(py=family_call(native_loaded_module("builtins").bool, family_call(native_loaded_module("operator").contains, table, steps))):
         raise Error("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
     return Float64(py=table[steps])
 
