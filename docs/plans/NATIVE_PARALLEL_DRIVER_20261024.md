@@ -58,8 +58,9 @@ for the length of that call:
 A plan also carries a **family mask** (`DEVICE_PLAN_*` bits): the old cooperative worker set every
 `DEVICE_COUNT_VARIABLES` count, and `MOJOLEARN_CHOLESKY_DEVICE_COUNT` only for the kernel-method and
 Cholesky operations, so `device_plan_setting(name)` answers the plan size only for the families the
-driver's worker enabled. A plan is per DSO: the driver binds it in every binding its plain owner may
-reach (`_backend.plan_bindings(names)`), each binding registering `device_plan_enter` /
+driver's worker enabled. The driver binds the plan in every binding its plain owner may reach (correct
+whether a `_Global` table is per DSO or shared by name across the process: entering the same plan
+again on one thread adds a level) (`_backend.plan_bindings(names)`), each binding registering `device_plan_enter` /
 `device_plan_exit` / `device_plan_log` (`bindings/device_plan_binding.mojo`).
 
 **Kind A (cooperative) doors.** `family_par_run` (`bindings/family_native.mojo`) takes (driver,
