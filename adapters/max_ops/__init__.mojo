@@ -171,3 +171,111 @@ struct Operation3:
         append_descriptor(inputs, descriptor(Int(z.unsafe_ptr()), z.shape(), z.strides(), tensor_kind[z.dtype]()))
         var out = descriptor(Int(output.unsafe_ptr()), output.shape(), output.strides(), tensor_kind[output.dtype]())
         execute_operation[target, code, library, options, scalars](inputs, 3, out, ctx)
+
+
+# Whole Sequential training is a custom operation, not MAX graph autodiff.
+# Its tape, optimizer and all epochs execute inside the frozen native library.
+def execute_training[
+    target: StaticString, library: StaticString, model: StaticString,
+    options: StaticString, scalars: StaticString,
+](inputs: List[Int], count: Int, outputs: List[Int], ctx: DeviceContext) raises:
+    var lib = OwnedDLHandle(String(library))
+    if lib.get_function[Int]("mojolearn_adapter_abi")() != 1:
+        raise Error("training adapter: incompatible native ABI")
+    var device = -1
+    comptime if target == "gpu":
+        device = Int(ctx.id())
+        if device != 0:
+            raise Error("training adapter: only visible GPU zero is supported")
+        ctx.synchronize()
+    elif target != "cpu":
+        raise Error("training adapter: unsupported target")
+    var program = List[Int]()
+    var ints = List[Int]()
+    var floats = List[Float64]()
+    for field in String(model).split(","):  # driver-loop: model metadata
+        program.append(Int(field))
+    for field in String(options).split(","):  # driver-loop: training metadata
+        ints.append(Int(field))
+    for field in String(scalars).split(","):  # driver-loop: scalar configuration
+        floats.append(Float64(field))
+    var error = List[UInt8](length=2048, fill=0)
+    var status = lib.get_function[Int]("mojolearn_adapter_train")(
+        device, Int(0), Int(inputs.unsafe_ptr()), count, Int(outputs.unsafe_ptr()),
+        Int(program.unsafe_ptr()), len(program), Int(ints.unsafe_ptr()), len(ints),
+        Int(floats.unsafe_ptr()), len(floats), Int(error.unsafe_ptr()), len(error))
+    _ = inputs
+    _ = outputs
+    _ = program
+    _ = ints
+    _ = floats
+    if status != 0:
+        raise Error(String(unsafe_from_utf8_ptr=error.unsafe_ptr()))
+
+
+@extensibility.register("mojolearn_train")
+struct Train:
+    @staticmethod
+    def execute[
+        target: StaticString, model: StaticString, options: StaticString, scalars: StaticString,
+        library: StaticString = "libmojolearn_adapter.so",
+    ](
+        parameters_out: OutputTensor,
+        moment1_out: OutputTensor,
+        moment2_out: OutputTensor,
+        state_out: OutputTensor,
+        curve_out: OutputTensor,
+        x: InputTensor,
+        y: InputTensor,
+        parameters: InputTensor,
+        ctx: DeviceContext,
+    ) raises:
+        var inputs = List[Int]()
+        var outputs = List[Int]()
+        append_descriptor(inputs, descriptor(Int(x.unsafe_ptr()), x.shape(), x.strides(), tensor_kind[x.dtype]()))
+        append_descriptor(inputs, descriptor(Int(y.unsafe_ptr()), y.shape(), y.strides(), tensor_kind[y.dtype]()))
+        append_descriptor(inputs, descriptor(Int(parameters.unsafe_ptr()), parameters.shape(), parameters.strides(), tensor_kind[parameters.dtype]()))
+        append_descriptor(outputs, descriptor(Int(parameters_out.unsafe_ptr()), parameters_out.shape(), parameters_out.strides(), tensor_kind[parameters_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(moment1_out.unsafe_ptr()), moment1_out.shape(), moment1_out.strides(), tensor_kind[moment1_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(moment2_out.unsafe_ptr()), moment2_out.shape(), moment2_out.strides(), tensor_kind[moment2_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(state_out.unsafe_ptr()), state_out.shape(), state_out.strides(), tensor_kind[state_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(curve_out.unsafe_ptr()), curve_out.shape(), curve_out.strides(), tensor_kind[curve_out.dtype]()))
+        execute_training[target, library, model, options, scalars](inputs, 3, outputs, ctx)
+
+
+@extensibility.register("mojolearn_train_resume")
+struct TrainResume:
+    @staticmethod
+    def execute[
+        target: StaticString, model: StaticString, options: StaticString, scalars: StaticString,
+        library: StaticString = "libmojolearn_adapter.so",
+    ](
+        parameters_out: OutputTensor,
+        moment1_out: OutputTensor,
+        moment2_out: OutputTensor,
+        state_out: OutputTensor,
+        curve_out: OutputTensor,
+        x: InputTensor,
+        y: InputTensor,
+        parameters: InputTensor,
+        moment1: InputTensor,
+        moment2: InputTensor,
+        state: InputTensor,
+        previous_curve: InputTensor,
+        ctx: DeviceContext,
+    ) raises:
+        var inputs = List[Int]()
+        var outputs = List[Int]()
+        append_descriptor(inputs, descriptor(Int(x.unsafe_ptr()), x.shape(), x.strides(), tensor_kind[x.dtype]()))
+        append_descriptor(inputs, descriptor(Int(y.unsafe_ptr()), y.shape(), y.strides(), tensor_kind[y.dtype]()))
+        append_descriptor(inputs, descriptor(Int(parameters.unsafe_ptr()), parameters.shape(), parameters.strides(), tensor_kind[parameters.dtype]()))
+        append_descriptor(inputs, descriptor(Int(moment1.unsafe_ptr()), moment1.shape(), moment1.strides(), tensor_kind[moment1.dtype]()))
+        append_descriptor(inputs, descriptor(Int(moment2.unsafe_ptr()), moment2.shape(), moment2.strides(), tensor_kind[moment2.dtype]()))
+        append_descriptor(inputs, descriptor(Int(state.unsafe_ptr()), state.shape(), state.strides(), tensor_kind[state.dtype]()))
+        append_descriptor(inputs, descriptor(Int(previous_curve.unsafe_ptr()), previous_curve.shape(), previous_curve.strides(), tensor_kind[previous_curve.dtype]()))
+        append_descriptor(outputs, descriptor(Int(parameters_out.unsafe_ptr()), parameters_out.shape(), parameters_out.strides(), tensor_kind[parameters_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(moment1_out.unsafe_ptr()), moment1_out.shape(), moment1_out.strides(), tensor_kind[moment1_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(moment2_out.unsafe_ptr()), moment2_out.shape(), moment2_out.strides(), tensor_kind[moment2_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(state_out.unsafe_ptr()), state_out.shape(), state_out.strides(), tensor_kind[state_out.dtype]()))
+        append_descriptor(outputs, descriptor(Int(curve_out.unsafe_ptr()), curve_out.shape(), curve_out.strides(), tensor_kind[curve_out.dtype]()))
+        execute_training[target, library, model, options, scalars](inputs, 7, outputs, ctx)
