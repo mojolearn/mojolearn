@@ -19,6 +19,10 @@ class Rows:
     pass
 
 
+class Scope:
+    pass
+
+
 class Resident:
     def take(self):
         raise AssertionError("import-time metadata must never call take")
@@ -39,6 +43,7 @@ def connect(native_entry=len, store_binding=None, backend_fields=None):
     arena = ModuleType('mojolearn._arena_io')
     arena.DeviceRows = Rows
     arena.DeviceCache = Cache
+    arena._Scope = Scope
     arena._LOCAL = threading.local()
     selection = ModuleType('mojolearn.model_selection')
     selection._Resident = Resident
