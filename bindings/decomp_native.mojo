@@ -76,6 +76,11 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
         elif family == "FactorAnalysis":
             if operation == "fit":
                 result = fa_fit(model, args[0], context)
+            elif operation == "fit_transform":
+                # `_Base.fit_transform`: fit, then transform(X), the same two
+                # steps in this one call
+                _ = fa_fit(model, args[0], context)
+                result = fa_query(model, args[0], 0, context)
             elif operation == "transform":
                 result = fa_query(model, args[0], 0, context)
             elif operation == "get_covariance":

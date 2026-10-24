@@ -2476,6 +2476,21 @@ class FactorAnalysis(_Base):
         """
         return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
+    def fit_transform(self, X, y=None):
+        """Fit to X, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
+        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
+
     def get_covariance(self):
         """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
 
