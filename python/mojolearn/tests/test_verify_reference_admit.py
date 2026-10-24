@@ -574,5 +574,5 @@ def test_the_cpu_column_must_equal_the_gpu_reference(tmp_path, monkeypatch, case
     else:
         # an older cpu value stays VISIBLE as a pair, and the guard refuses it
         assert ent['ref'] == 'a' * 16 and ent['cols']['cpu'][1] == 'b' * 16
-        assert problems == [f"x/base/train: cpu disagrees with the GPU reference "
-                            f"(cpu={'b' * 16}, gpu={'a' * 16})"]
+        assert problems == [f"x/base/train: cpu column older than the GPU reference "
+                            f"(cpu@{'b' * 9} vs gpu@{'a' * 9}); re-record the cpu column"]

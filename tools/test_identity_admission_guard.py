@@ -62,6 +62,31 @@ def test_cpu_disagreement_refuses_naming_the_cell(superseded):
         f"selected/base/train: cpu disagrees with the GPU reference (cpu={OTHER}, gpu={HASH})"]
 
 
+def _timed(base, candidate, cpu_time, gpu_time):
+    for table in (base, candidate):
+        for record in table["records"]:
+            record["commit_time"] = cpu_time if record["class"] == "cpu" else gpu_time
+    candidate["cells"]["selected/base"]["train"]["cols"]["cpu"] = [3, OTHER]
+
+
+def test_older_cpu_record_asks_for_a_re_record():
+    base, candidate = tables()
+    _timed(base, candidate, 1, 2)
+    report = GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)
+    assert report["problems"] == [
+        "selected/base/train: cpu column older than the GPU reference "
+        f"(cpu@{'0' * 9} vs gpu@{'1' * 9}); re-record the cpu column"]
+
+
+@pytest.mark.parametrize("cpu_time", [2, 3])
+def test_same_or_newer_cpu_record_is_a_disagreement_to_debug(cpu_time):
+    base, candidate = tables()
+    _timed(base, candidate, cpu_time, 2)
+    report = GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)
+    assert report["problems"] == [
+        f"selected/base/train: cpu disagrees with the GPU reference (cpu={OTHER}, gpu={HASH})"]
+
+
 def test_missing_cpu_column_refuses():
     base, candidate = tables()
     del candidate["cells"]["selected/odd"]["infer"]["cols"]["cpu"]

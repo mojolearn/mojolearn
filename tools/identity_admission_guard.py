@@ -62,7 +62,7 @@ def gpu_only_declarations(tools_dir=HERE):
     return frozenset(lanes), tuple(prefixes)
 
 
-def _cpu_problem(key, part, ref, cpu, gpu_only):
+def _cpu_problem(key, part, ref, cpu, gpu_only, cols=None, records=()):
     """None when the cpu column of one numerical part is admissible."""
     if type(cpu) is int:
         return None                       # carries `ref`, the GPU reference
@@ -73,6 +73,19 @@ def _cpu_problem(key, part, ref, cpu, gpu_only):
         if gpu_only or (part == "model" and value.startswith(CPU_MODEL_NA)):
             return None
         return f"{key}/{part}: cpu N/A is not declared for this lane (cpu={value}, gpu={ref})"
+    # An older cpu record means the lane moved and the cpu column was not
+    # re-recorded; the same (or a newer) commit is a real disagreement to debug.
+    # Both refuse; the line tells the operator which one it is.
+    def record(idx):
+        return records[idx] if type(idx) is int and 0 <= idx < len(records) else {}
+    gpu = [record(v) for c, v in (cols or {}).items() if c in GPU_CLASSES and type(v) is int]
+    cpu_rec = record(cpu[0] if isinstance(cpu, list) and cpu else None)
+    if gpu and cpu_rec:
+        newest = max(gpu, key=lambda r: r.get("commit_time") or 0)
+        if (cpu_rec.get("commit_time") or 0) < (newest.get("commit_time") or 0):
+            return (f"{key}/{part}: cpu column older than the GPU reference "
+                    f"(cpu@{str(cpu_rec.get('commit'))[:9]} vs gpu@{str(newest.get('commit'))[:9]}); "
+                    "re-record the cpu column")
     return f"{key}/{part}: cpu disagrees with the GPU reference (cpu={value}, gpu={ref})"
 
 
@@ -156,7 +169,8 @@ def validate(base, candidate, lanes, gpu_only=None):
                 if absent:
                     problems.append(f"{key}/{part}: no agreeing GPU columns {absent}")
                 cpu_problem = _cpu_problem(key, part, ref, cols.get(CPU_CLASS),
-                                           lane in only_lanes or lane.startswith(tuple(only_prefixes)))
+                                           lane in only_lanes or lane.startswith(tuple(only_prefixes)),
+                                           cols, records)
                 if cpu_problem:
                     problems.append(cpu_problem)
     return dict(lanes=len(selected), checked_parts=checked, numerical_parts=numerical,
