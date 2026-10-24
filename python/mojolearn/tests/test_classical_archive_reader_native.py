@@ -522,6 +522,17 @@ try:
     audit=audit_native_call(loader,stream)
 finally:
     if name:setattr(builtins,name,original)
+if name:
+    # A replaced connected builtin export is refused before any callback
+    # (bindings/native_loaded_module.mojo, contract of 31fc85981 and
+    # test_native_cv_module_connections.py); the restored export then loads.
+    assert type(audit.exception) is TypeError,audit.report()
+    assert str(audit.exception)=="native module connection export changed: builtins."+name,str(audit.exception)
+    assert not audit.report()["python_frames"],audit.report()
+    assert touched==[],touched
+    assert not stream.closed
+    stream.seek(0)
+    audit=audit_native_call(loader,stream)
 model=audit.assert_native()
 assert touched==[],touched
 assert "numpy" not in sys.modules
