@@ -86,7 +86,7 @@ MAP_HOURS = 8
 MAP_PREFIX = "bincache/gha-maps"
 #: tools/release_linux_build.sh's route overlay (a test holds them equal).
 OVERLAY = ("tools/release061_remote_build.sh", "tools/cpu_build_guard.py", "tools/release_linux_cpu_box.sh",
-           "tools/bincache.py")
+           "tools/bincache.py", "tools/release_modes.py")
 #: Files whose committed bytes the runners use; a dirty one refuses the dispatch.
 ROUTE_FILES = OVERLAY + ("tools/gha_release_box.sh", "tools/release_github_build.py",
                          ".github/workflows/" + WORKFLOW)
