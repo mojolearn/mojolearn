@@ -49,7 +49,14 @@ SOURCE_ROOTS = ("adapters", "packaging/adapters")
 #: A qualification-only route; refused in every shipped build command.
 TEST_ONLY = "MOJOLEARN_ADAPTER_TEST_HOST_STAGING"
 VENDORS = {"cuda": "linux", "hip": "linux", "metal": "macos"}
-ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+|apple)$")
+# Each vendor names its own architecture family: a set is (vendor, arch, platform)
+# with the arch in that vendor's family, so cuda/gfx942 or hip/apple is no set.
+ARCH_RES = {"cuda": re.compile(r"^sm_[0-9]+a?$"), "hip": re.compile(r"^gfx[0-9a-f]+$"),
+            "metal": re.compile(r"^apple$")}
+
+
+def _is_set(vendor, arch, platform):
+    return vendor in VENDORS and VENDORS[vendor] == platform and bool(ARCH_RES[vendor].match(str(arch)))
 
 
 class ManifestError(ValueError):
@@ -99,7 +106,7 @@ def file_rows(directory):
 
 def record(out, vendor, arch, platform, logs, torch_build, pixi_prefix, mojo_version, source_commit):
     out, logs = pathlib.Path(out), pathlib.Path(logs)
-    if VENDORS.get(vendor) != platform or not ARCH_RE.match(arch) or (vendor == "metal") != (arch == "apple"):
+    if not _is_set(vendor, arch, platform):
         raise ManifestError(f"vendor {vendor}, arch {arch}, platform {platform} do not name one release set")
     if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
         raise ManifestError("a full source commit is required")
@@ -144,7 +151,7 @@ def validate(doc, digests, vendor=None, arch=None):
         raise ManifestError(f"the manifest names vendor {doc.get('vendor')}, the set is {vendor}")
     if arch is not None and doc.get("arch") != arch:
         raise ManifestError(f"the manifest names architecture {doc.get('arch')}, the set is {arch}")
-    if VENDORS.get(doc.get("vendor")) != doc.get("platform") or not ARCH_RE.match(str(doc.get("arch"))):
+    if not _is_set(doc.get("vendor"), doc.get("arch"), doc.get("platform")):
         raise ManifestError("the manifest names no valid vendor, platform and architecture")
     files = doc.get("files")
     if not isinstance(files, dict) or set(files) != set(FILES):
