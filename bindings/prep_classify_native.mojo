@@ -12,6 +12,7 @@
 # scoring program instead of a second program over a downloaded block (the same
 # matmul stage over the same words).
 from std.memory import memcpy
+from bindings.native_array_storage import native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -834,7 +835,7 @@ def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int
     """Per feature j, the (K, ncat[j]) float32 block of the (d, K, cmax) table."""
     var out = Python.list()
     for j in range(d):  # driver-loop: over the feature columns (model structure)
-        var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", context["output_context"]) if ncat[j] > 0 else classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(K, 0), "<f4", "C", context["output_context"])
+        var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", context["output_context"]) if ncat[j] > 0 else classical_wrap_array(native_array_empty("f"), Python.tuple(K, 0), "<f4", "C", context["output_context"])
         if ncat[j] > 0:
             var dest = F32P(unsafe_from_address=Int(py=classical_address(block)))
             _ = block  # keep the Python object alive through the native call above
@@ -1209,7 +1210,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     _set(fields, "xbar_", pr.get(xbar, d, 0, context))
     _set(fields, "_scal_full", pr.get(scal, d, d, context))
     # the rank columns of the (d, d) scalings (Array.__getitem__'s strided copy)
-    var scalings = classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(d, 0), "<f4", "C", context["output_context"])
+    var scalings = classical_wrap_array(native_array_empty("f"), Python.tuple(d, 0), "<f4", "C", context["output_context"])
     if rank2 > 0:
         scalings = classical_typed(Python.tuple(d, rank2), "<f4", context["output_context"])
         var dest = F32P(unsafe_from_address=Int(py=classical_address(scalings)))

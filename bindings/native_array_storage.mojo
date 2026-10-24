@@ -95,5 +95,12 @@ def native_array_from_values(code: String, source: PythonObject) raises -> Pytho
         if item_type is not b.int and item_type is not b.float and item_type is not b.bool:
             raise Error("TypeError: native array values cannot invoke scalar conversion hooks")
     var result = native_array_empty(code)
-    _ = py_call(result.extend, source)
+    # array(code, another_array) converts each scalar when their typecodes
+    # differ. array.extend(another_array) instead refuses that input. Preserve
+    # constructor conversion through an exact native list, whose leaves were
+    # admitted above; no Python iterator or scalar-conversion hook is called.
+    var values = source
+    if cls is native_array and String(source.typecode) != code:
+        values = py_call(b.list, source)
+    _ = py_call(result.extend, values)
     return result
