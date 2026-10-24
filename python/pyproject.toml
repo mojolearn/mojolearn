@@ -142,6 +142,10 @@ verify = ["numpy>=1.26.4"]
 torch = ["torch>=2.13,<2.14"]
 max = ["max==26.5.0"]
 
+# torch.compile(model, backend="mojolearn"): TorchDynamo finds the backend here without an import.
+[project.entry-points.torch_dynamo_backends]
+mojolearn = "mojolearn.adapters._torch_compile:backend"
+
 [project.urls]
 Paper = "https://mojolearn.org/paper.pdf"
 Homepage = "https://mojolearn.org"

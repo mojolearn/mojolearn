@@ -1,32 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Call mojolearn operations and whole-model training from a MAX graph.
+"""Train a mojolearn model from a MAX graph.
 
-mojolearn ships a MAX custom-operation package whose operations call the
-compiled mojolearn library: ``mojolearn_matmul``, ``mojolearn_relu``,
-``mojolearn_operation0`` to ``mojolearn_operation3`` (one generic operation of
-zero to three inputs), ``mojolearn_train`` and ``mojolearn_train_resume``.
-Give the graph the package with :func:`custom_extensions` and every
-operation the library with :func:`parameters`.
+mojolearn ships a MAX custom-operation package with two whole-training
+operations that call the compiled mojolearn library: ``mojolearn_train`` fits
+a mojolearn Sequential model in one call, and ``mojolearn_train_resume``
+continues a fit from its saved state. Give the graph the package with
+:func:`custom_extensions` and each operation its parameters with
+:func:`parameters`.
 
 Requires MAX: ``pip install "mojolearn[max]"`` (on Linux,
 ``pip install mojolearn "mojolearn-core[max]"``).
 
 Examples
 --------
->>> from max.driver import Accelerator
 >>> from max.dtype import DType
->>> from max.engine import InferenceSession
 >>> from max.graph import DeviceRef, Graph, TensorType, ops
 >>> from mojolearn.adapters import max as mojolearn_max
 >>> gpu = DeviceRef.GPU(0)
->>> t = TensorType(DType.float32, [2, 2], device=gpu)
->>> with Graph("relu", input_types=[t], custom_extensions=mojolearn_max.custom_extensions()) as g:
-...     y = ops.custom("mojolearn_relu", gpu, [g.inputs[0].tensor], out_types=[t],
-...                    parameters=mojolearn_max.parameters())[0].tensor
-...     g.output(y)
->>> model = InferenceSession(devices=[Accelerator(0)]).load(g)
+>>> x_t = TensorType(DType.float32, [8, 1], device=gpu)
+>>> p_t = TensorType(DType.float32, [2], device=gpu)
+>>> outs = [p_t, p_t, p_t, TensorType(DType.int32, [24], device=gpu),
+...         TensorType(DType.float32, [1], device=gpu)]
+>>> params = mojolearn_max.parameters(model="1,1,1,1,1,1,0",
+...                                   options="0,0,0,0,0,1,2,1,0,1,0,0,0",
+...                                   scalars="0.125,0,0,1e-8,0,0,0,1,1,0")
+>>> with Graph("fit", input_types=[x_t, x_t, p_t],
+...            custom_extensions=mojolearn_max.custom_extensions()) as g:
+...     fitted = ops.custom("mojolearn_train", gpu, [v.tensor for v in g.inputs],
+...                         out_types=outs, parameters=params)
+...     g.output(*[t.tensor for t in fitted])
 """
+# The package also holds per-operation building blocks (mojolearn_matmul, mojolearn_relu,
+# mojolearn_operation0..3). They stay for the trainer and the shipped adapter smoke but are not
+# documented (docs-site/api_exclude.txt): a building block; a whole model runs as one program
+# (mojolearn.import_model, or torch.compile(model, backend="mojolearn")).
 import importlib.metadata as _metadata
 
 from . import _shipped

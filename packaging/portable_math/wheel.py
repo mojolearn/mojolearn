@@ -105,7 +105,8 @@ SOURCE_TREE_LAZY_IMPORTS = {"mojolearn/_identity_break.py": {"lane_applicability
 MODEL_SOURCE_LAZY_IMPORTS = {"mojolearn/models/_catalog.py": {"torch", "torchvision", "transformers", "onnx"}}
 # The framework adapters (packaging/adapters/): each module imports its own framework, inside the function
 # that refuses with an install hint when it is missing; `import mojolearn` never reaches either.
-ADAPTER_LAZY_IMPORTS = {"mojolearn/adapters/torch.py": {"torch"}, "mojolearn/adapters/max.py": {"max"}}
+ADAPTER_LAZY_IMPORTS = {"mojolearn/adapters/torch.py": {"torch"}, "mojolearn/adapters/_torch_compile.py": {"torch"},
+                        "mojolearn/adapters/max.py": {"max"}}
 
 
 def sparse_output_adapter_imports(tree, relative):
