@@ -9,13 +9,14 @@
 MOJOLEARN_PAR_DEVICES must name at least two distinct devices. This runs
 tools/identity_break.py IN THIS PROCESS, exactly as `algos_lane_check.run_arm`
 would run it, and opens one `_verify_par.PoolWitness` PER CELL (lane/fixture):
-every `DevicePool` started and every native byte-LM session opened while that
+every native device plan bound, every native worker pool started and every
+native byte-LM session opened while that
 cell runs is inventoried, and the cell's witness refusal is the sentence
 `PoolWitness.refusal()` gives (no pool at all, a pool on other devices, two
 workers on one physical GPU, a stale ONE_DEVICE_BY_DESIGN declaration). The
 per-cell record goes to --witness-json; the column JSON is the harness's own.
 
-WHY IN PROCESS. The witness wraps `DevicePool._start` and the byte-LM trainers'
+WHY IN PROCESS. The witness reads the plan logs and the shard trace and wraps the byte-LM trainers'
 `_open` in the process that fits. A child that ran the harness would start its
 pools where no witness could see them. This is the same witness `verify --par`
 uses (`_verify_par.par_check`), lifted onto the lane check's column so that

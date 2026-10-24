@@ -23,41 +23,21 @@ __all__ = [
     'ReferenceShardedNeighbors',
 ]
 
-import array
-import copy
 import sys
 
-from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
-from ._buffer import _native, as_f32_c, empty, addr, addr_ro
-from .parallel_neighbors import _join
+from ._parallel_pool import public_method_result
+from ._buffer import _native, empty, addr, addr_ro
+from . import neighbors as _nb
+from . import _parallel_shard_ops
+from . import _native_parallel_shard as _shard
+from ._native_parallel_shard import _native_parallel_shard
 
-
-def _merge(parts, ranges, n_queries, k):
-    """The shards' candidates merged per query row in Mojo
-    (`shard_topk_merge_f32`, bindings/array_helpers.mojo): the native
-    IDENTICAL composite-key selection (distance bits, global index), then
-    estimator.mojo's host insertion sort, float bits unchanged from the
-    winning GPU slot."""
-    distances = empty((n_queries, k), '<f4')
-    indices = empty((n_queries, k), '<u4')
-    if not n_queries:
-        return distances, indices
-    table = array.array('q')
-    keep = []
-    for (first, end), (dist, ids) in zip(ranges, parts):  # glue: one address record per reference shard
-        dist = as_f32_c(dist, ndim=2, name='distance shard')[0]
-        ids = ids if ids.dtype == '<i8' else ids.astype('<i8')
-        keep.append((dist, ids))
-        table.extend((addr_ro(dist, name='distance shard'), addr_ro(ids, name='index shard'),
-                      first, end, dist.shape[1]))
-    rc = int(_native('shard_topk_merge_f32')(table.buffer_info()[0], len(keep), n_queries, k,
-                                             addr(distances, name='merged distances'),
-                                             addr(indices, name='merged indices')))
-    if rc == 1:
-        raise RuntimeError('reference worker returned an invalid neighbor index')
-    if rc == 2:
-        raise RuntimeError('reference shards returned too few neighbors')
-    return distances, indices
+# The reference-sharded queries' owner (bindings/parallel_shard_native.mojo
+# `reference_query`): the reference blocks, the waves, the candidate merge
+# and the join are native; a block's search and the vote run in the shard
+# workers (python/mojolearn/_parallel_shard_ops.py).
+_shard.register(knc_class=_nb.KNeighborsClassifier, knr_class=_nb.KNeighborsRegressor,
+                py_ops=_parallel_shard_ops.OPERATIONS)
 
 
 def _vote(model, distances, indices, method):
@@ -135,8 +115,7 @@ class ReferenceShardedNeighbors:
     # retain the complete target table on the voting GPU. Use a context manager.
     def __init__(self, estimator, *, devices=(0,), reference_rows_per_shard=None,
                  query_rows_per_shard=128):
-        from .neighbors import NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor
-        if type(estimator) not in (NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor):
+        if type(estimator) not in (_nb.NearestNeighbors, _nb.KNeighborsClassifier, _nb.KNeighborsRegressor):
             raise TypeError('reference shards require a brute-force KNN estimator')
         if estimator.algorithm not in ('auto', 'brute'):
             raise ValueError('reference sharding currently requires the IDENTICAL brute-force arm')
@@ -151,86 +130,8 @@ class ReferenceShardedNeighbors:
         self.estimator = estimator
         self.reference_rows_per_shard = reference_rows_per_shard
         self.query_rows_per_shard = query_rows_per_shard
-        self._pool = DevicePool(devices)
+        self._pool = _native_parallel_shard('pool_open', (devices,))
         self.last_shards_ = []
-
-    def _query(self, X, *, method, frame, n_neighbors=None, return_distance=True):
-        from .neighbors import KNeighborsClassifier, KNeighborsRegressor
-        model = self.estimator
-        if model.numeric_mode not in (None, 'identical') or model.algorithm not in ('auto', 'brute'):
-            raise ValueError('reference shards require IDENTICAL brute-force KNN')
-        if getattr(model, '_index', None) is None:
-            raise ValueError('fit the estimator before querying')
-        if method != 'kneighbors':
-            if type(model) not in (KNeighborsClassifier, KNeighborsRegressor):
-                raise TypeError('prediction requires a classifier or regressor')
-            if method == 'predict_proba' and type(model) is not KNeighborsClassifier:
-                raise TypeError('predict_proba requires a classifier')
-            if model._y_cols is None:
-                raise ValueError('fit the estimator before prediction')
-        data, _ = as_f32_c(X, ndim=2, name='X')
-        if data.shape[1] != model.n_features_in_:
-            raise ValueError('input feature count differs from fit')
-        n = model.n_samples_fit_
-        k = model.n_neighbors if n_neighbors is None else n_neighbors
-        if type(k) is not int or not 1 <= k <= n:
-            raise ValueError('n_neighbors must be an integer in [1, reference rows]')
-        if n > 0x7fffffff:
-            raise ValueError('reference row count exceeds the native signed-int32 shape contract')
-        cell_limit = 0x7fffffff // model.n_features_in_
-        if cell_limit < 1:
-            raise ValueError('feature count exceeds the native signed-int32 shape contract')
-        width = self.reference_rows_per_shard
-        if width is None:
-            width = min(cell_limit, (n + len(self._pool.devices) - 1) // len(self._pool.devices))
-        if min(width, n) > cell_limit:
-            raise ValueError('reference shard exceeds the native signed-int32 cell-count contract')
-        ranges = [(i, min(n, i + width)) for i in range(0, n, width)]  # glue: shard boundaries for the device pool
-        params = dict(n_neighbors=k, query_tile=model.query_tile, metric=model.metric,
-                      algorithm='brute', p=model.p, numeric_mode='identical')
-        outputs, diagnostics = [], []
-        vote_model = None
-        if method != 'kneighbors':
-            vote_model = copy.copy(model)
-            vote_model._index = None  # Never send the complete reference matrix.
-            vote_model.numeric_mode = 'identical'
-        for first in range(0, data.shape[0], self.query_rows_per_shard):  # glue: one query chunk per dispatch round
-            end = min(data.shape[0], first + self.query_rows_per_shard)
-            query = data[first:end]
-            parts = []
-            # Materialize only one device wave of reference slices on the host.
-            # Retain just its small candidate output before staging the next.
-            for wave in range(0, len(ranges), len(self._pool.devices)):  # glue: one device wave per dispatch round
-                # The READ is shifted by `driver_read_shift` (0 unless the
-                # driver sabotage switch is on, and 0 for the first reference
-                # range either way); the merge below still folds by the true
-                # `ranges`, and `stop-start` keeps every shard's width.
-                # glue: one worker request per reference shard of this device wave
-                parts.extend(self._pool.map([
-                    ('neighbor_reference', params,
-                     (model._index[start - driver_read_shift(index, start, self._pool.devices):
-                                   stop - driver_read_shift(index, start, self._pool.devices)],
-                      query, min(k, stop-start)))
-                    for index, (start, stop) in enumerate(ranges[wave:wave+len(self._pool.devices)],  # glue: one worker request per reference shard
-                                                          start=wave)]))
-            distances, indices = _merge(parts, ranges, end-first, k)
-            if method == 'kneighbors':
-                indices = indices.astype('<i8')
-                output = (distances, indices) if return_distance else indices
-            else:
-                output = self._pool.map([('neighbor_vote', vote_model, (distances, indices, method))])[0]
-            outputs.append(output)
-            # glue: one diagnostics record per reference shard
-            diagnostics.extend(dict(query_start=first, query_end=end, reference_start=start,
-                reference_end=stop, reference_bytes=(stop-start)*model.n_features_in_*4,
-                device=self._pool.devices[i % len(self._pool.devices)])
-                for i, (start, stop) in enumerate(ranges))  # glue: one diagnostics record per shard
-        result = _join(outputs)
-        self.last_shards_ = diagnostics
-        # the joined raw result; the plain method's public conversion for the
-        # caller (2026-10-24, the par-kernel-ridge dtype flip: drivers convert,
-        # workers never do)
-        return public_method_result(model, method, result, frame)
 
     def kneighbors(self, X, n_neighbors=None, return_distance=True):
         """Find the ``n_neighbors`` nearest reference rows of each query row.
@@ -250,23 +151,34 @@ class ReferenceShardedNeighbors:
             As ``estimator.kneighbors(X)``; only ``indices`` when
             ``return_distance=False``.
         """
-        return self._query(X, method='kneighbors', frame=sys._getframe(1), n_neighbors=n_neighbors,
-                           return_distance=return_distance)
+        # One native call (bindings/parallel_shard_native.mojo `reference_query`).
+        return public_method_result(self.estimator, 'kneighbors',
+                                    _native_parallel_shard('reference_query', (self, X, 'kneighbors', n_neighbors,
+                                                                               return_distance,
+                                                                               _native('shard_topk_merge_f32'))),
+                                    sys._getframe(1))
 
     def predict(self, X):
         """Predict labels (classifier) or values (regressor) for ``X``, as ``estimator.predict(X)``.
         """
-        return self._query(X, method='predict', frame=sys._getframe(1))
+        # One native call (bindings/parallel_shard_native.mojo `reference_query`).
+        return public_method_result(self.estimator, 'predict',
+                                    _native_parallel_shard('reference_query', (self, X, 'predict', None, True,
+                                                                               _native('shard_topk_merge_f32'))),
+                                    sys._getframe(1))
 
     def predict_proba(self, X):
         """Class probabilities for ``X`` from a ``KNeighborsClassifier``, as ``estimator.predict_proba(X)``.
         """
-        return self._query(X, method='predict_proba', frame=sys._getframe(1))
+        # One native call (bindings/parallel_shard_native.mojo `reference_query`).
+        return public_method_result(self.estimator, 'predict_proba',
+                                    _native_parallel_shard('reference_query', (self, X, 'predict_proba', None, True,
+                                                                               _native('shard_topk_merge_f32'))),
+                                    sys._getframe(1))
 
     def close(self):
-        """Stop the GPU workers.
-        """
-        self._pool.close()
+        """Stop the worker processes."""
+        _native_parallel_shard('pool_close', (self._pool,))
 
     def __enter__(self):
         return self

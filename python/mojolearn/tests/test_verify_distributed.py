@@ -20,7 +20,7 @@ def receipt():
                     pid=100+group*2+i
                     inventory.append(dict(kind='visible-device-inventory',vendor='cuda',pid=pid,
                         devices=[dict(ordinal=0,uuid=f'{device+1:032x}',pci_bus_id=f'0000:{device+1:02x}:00.0')]))
-                    value['worker_calls'].append(dict(group=group,pid=pid,operation={'arima':'forecast_predict','holtwinters':'forecast_predict','gpc':'gpc_class_predict','gpc_fit':'gpc_class_fit','ivf':'ivf_search_stored'}[case]))
+                    value['worker_calls'].append(dict(group=group,pid=pid,operation={'arima':'arima_predict_shard','holtwinters':'hw_predict_shard','gpc':'gpc_class_predict','gpc_fit':'gpc_class_fit','ivf':'ivf_search'}[case]))
                 value['worker_groups'].append(dict(group=group,devices=list(devices),inventory=inventory))
                 value['cells'].append(dict(case=case,layout=layout,devices=list(devices),repeat=repeat,
                     worker_groups=[group],actual=copy.deepcopy(parts),expected=copy.deepcopy(parts),match=True))
@@ -66,27 +66,33 @@ def test_incomplete_or_false_pass_evidence_rejected(fault):
         v.compare(a,b)
 
 
-@pytest.mark.parametrize('fault,expected',[('drop_result',[1,2]),('reverse_results',[3,2,1])])
-def test_transport_controls_change_actual_result_batches_and_restore(fault,expected):
-    class Pool:
-        def map(self,requests): return [1,2,3]
-    original=Pool.map; control={'triggered':False}
-    with v.transport_fault(Pool,fault,control):
-        assert Pool().map([('ivf_store',None,None)])==[1,2,3]
-        assert not control['triggered']
-        assert Pool().map([('ivf_search_stored',None,None)])==expected
-        assert Pool().map([('ivf_search_stored',None,None)])==[1,2,3]
-    assert control['triggered'] and Pool.map is original
+@pytest.mark.parametrize('fault', ['drop_result', 'reverse_results'])
+def test_transport_controls_set_and_restore_the_native_switch(fault, monkeypatch):
+    # the native pools read the switch (bindings/parallel_shard_common.mojo
+    # `shard_map`); the control sets it for its block and restores it
+    import os
+    calls = []
+    monkeypatch.setattr('mojolearn._native_parallel_shard._native_parallel_shard',
+                        lambda op, args: calls.append(op) or (1 if op == 'faults_take' and len(calls) > 1 else 0))
+    monkeypatch.delenv('MOJOLEARN_PAR_TRANSPORT_FAULT', raising=False)
+    monkeypatch.delenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', raising=False)
+    control = {'triggered': False}
+    with v.transport_fault(fault, control):
+        assert os.environ['MOJOLEARN_PAR_TRANSPORT_FAULT'] == fault
+        assert os.environ['MOJOLEARN_HOST_ALLOW_SABOTAGE'] == '1'
+    assert control['triggered']
+    assert 'MOJOLEARN_PAR_TRANSPORT_FAULT' not in os.environ
+    assert 'MOJOLEARN_HOST_ALLOW_SABOTAGE' not in os.environ
 
 
-def test_transport_restored_after_exception():
-    class Pool:
-        def map(self,requests): return [1,2]
-    original=Pool.map
+def test_transport_restored_after_exception(monkeypatch):
+    import os
+    monkeypatch.setattr('mojolearn._native_parallel_shard._native_parallel_shard', lambda op, args: 0)
+    monkeypatch.delenv('MOJOLEARN_PAR_TRANSPORT_FAULT', raising=False)
     with pytest.raises(RuntimeError):
-        with v.transport_fault(Pool,'drop_result',{'triggered':False}):
+        with v.transport_fault('drop_result', {'triggered': False}):
             raise RuntimeError('stop')
-    assert Pool.map is original
+    assert 'MOJOLEARN_PAR_TRANSPORT_FAULT' not in os.environ
 
 
 def test_invalid_device_arguments_do_not_start_workers(tmp_path):

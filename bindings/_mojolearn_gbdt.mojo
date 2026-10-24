@@ -46,6 +46,7 @@ released around the device work: nothing inside touches a Python object and
 the wrapper holds the caller's arrays for the length of the call.
 """
 
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from bindings.py_lists import py_list_int
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
@@ -892,6 +893,9 @@ def build__mojolearn_gbdt() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         m.def_function[ordered_doc_count_binding]("gbdt_ordered_doc_count")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[gbdt_parallel_available_binding]("gbdt_parallel_available")
         m.def_function[gbdt_parallel_available_binding]("pointwise_parallel_available")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")

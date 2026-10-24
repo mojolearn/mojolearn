@@ -260,6 +260,41 @@ def test_a_native_session_is_never_a_witness_on_the_cpu_route(monkeypatch):
     assert "NO device pool" in w.refusal()
 
 
+def test_a_native_plan_on_both_devices_is_a_witness(monkeypatch):
+    """A cooperative driver binds a device plan in its binding and runs its
+    owners in this process (lane native-parallel-driver-20261024); the plan's
+    ordinals must be distinct physical GPUs."""
+    w = _session_witness(monkeypatch)
+    w._admit_plans({"_mojolearn_svm": [(0, 1)]})
+    assert w.refusal() is None
+    s = w.summary()
+    assert (s["pools"], s["native_plans"]) == (0, 1)
+
+
+def test_a_native_plan_on_one_physical_gpu_twice_is_refused(monkeypatch):
+    same = [dict(_TWO_GPUS[0]), dict(_TWO_GPUS[0], ordinal=1)]
+    w = _session_witness(monkeypatch, inventory=same)
+    with pytest.raises(RuntimeError, match="one physical GPU twice"):
+        w._admit_plans({"_mojolearn_svm": [(0, 1)]})
+
+
+def test_a_native_plan_on_other_devices_is_refused(monkeypatch):
+    w = _session_witness(monkeypatch)
+    w._admit_plans({"_mojolearn_svm": [(0, 1)], "_mojolearn_gp": [(1, 0)]})
+    assert "device plan bound devices [1, 0]" in w.refusal()
+
+
+def test_a_native_pool_trace_is_admitted_by_the_worker_rule():
+    w = vpar.PoolWitness("hip", (0, 1))
+    w._admit_pools([dict(devices=[0, 1], calls=[],
+                         inventory=[_record(11, "a" * 32, "0000:01:00.0"), _record(12, "b" * 32, "0000:02:00.0")])])
+    assert w.refusal() is None and w.summary()["pools"] == 1
+    with pytest.raises(RuntimeError, match="repeated physical device or process"):
+        w._admit_pools([dict(devices=[0, 1], calls=[],
+                             inventory=[_record(11, "a" * 32, "0000:01:00.0"),
+                                        _record(12, "a" * 32, "0000:02:00.0")])])
+
+
 def test_one_device_by_design_is_checked_not_trusted(monkeypatch):
     driver = vpar.ONE_DEVICE_BY_DESIGN["par-byte-lm-offload"][0]
     w = _session_witness(monkeypatch, one_device_driver=driver)
@@ -311,7 +346,7 @@ def test_apple_is_refused_structurally_and_says_where_the_rule_lives():
     machine this code could never use. The refusal must name the line."""
     why = vpar.refuse_to_run("metal", (0, 1))
     assert why and "STRUCTURALLY" in why
-    assert "DevicePool._start" in why and "group == (0,)" in why
+    assert "plan_devices" in why and "group == (0,)" in why
 
 
 def test_the_device_count_door_exists_and_refuses_a_box_without_the_devices():
@@ -344,8 +379,8 @@ def test_par_devices_must_name_more_than_one_device():
 
 def test_the_env_var_is_set_per_column_and_restored():
     """The whole flip is this variable, which `identity_break._par_devices()`
-    reads at FIT time and `DevicePool._start` copies into each worker at spawn
-    time. Nothing else changes, and nothing is left behind."""
+    reads at FIT time and the lane hands the native drivers as their device
+    group. Nothing else changes, and nothing is left behind."""
     before = os.environ.get(vpar.PAR_DEVICES_ENV)
     with vpar.par_devices((0,)):
         assert os.environ[vpar.PAR_DEVICES_ENV] == "0"

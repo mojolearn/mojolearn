@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One complete CatBoost-compatible oblivious-tree level on the GPU. Kernel ordering is contractual: copy precedes subtract, and scan precedes scoring."""
 
+from core.device_plan import device_plan_setting
 from std.math import sqrt
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -3210,7 +3211,7 @@ def launch_histograms_for_blocks[
     default keeps every existing call site byte for byte.
     """
     comptime if distribute:
-        var requested = String(getenv("MOJOLEARN_GBDT_DEVICE_COUNT"))
+        var requested = device_plan_setting("MOJOLEARN_GBDT_DEVICE_COUNT")
         if requested != "" and requested != "1":
             var devices = Int(requested)
             if devices < 1 or devices > 64 or HIST_BUILD_MODE != NUMERIC_IDENTICAL:

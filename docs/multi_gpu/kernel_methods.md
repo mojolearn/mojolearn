@@ -9,19 +9,23 @@ multi-device result must have the exact bits of the one-device result.
 `kernel_methods/checks/kernel_matrix.mojo::km_kernel_matrix` forms the linear
 and RBF kernels through `svm/impl/distance/kernel_matrices.mojo::kernel_op`,
 and the polynomial and sigmoid kernels from the same call at a linear
-parameter block followed by a per-cell epilogue. `kernel_op` already reads
-`MOJOLEARN_SVM_DEVICE_COUNT` and moves whole output rows of `a . b^T` (plus
+parameter block followed by a per-cell epilogue. `kernel_op` reads its owner
+count from the calling thread's device plan (`core/device_plan.mojo`;
+`MOJOLEARN_SVM_DEVICE_COUNT` without one) and moves whole output rows of `a . b^T` (plus
 the RBF expansion on the original norm bytes) to owners, the path the SVC/SVR
 driver qualified. Each output row keeps every contraction term of its FP32-v1
 dot. The per-cell epilogues then run on the root over the gathered matrix.
 
-The drivers run the estimator's own `fit`, `predict` and `transform` inside a
-cooperative worker that sees all selected devices:
+The drivers are one native call each (`family_km_par_fit` /
+`family_km_par_apply`, `bindings/kernel_methods_native.mojo`): in the caller's
+process they bind the selected devices to the calling thread (rank r on
+`devices[r]`, the root on `devices[0]`) and run the estimator's own `fit`,
+`predict` and `transform` (docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md):
 
 - KernelRidge fit: kernel rows as above; the ridge on the root; the
   factorization with whole trailing-update rows and the multi-target solve
-  with whole target columns (`docs/multi_gpu/cholesky.md`). The worker sets
-  `MOJOLEARN_CHOLESKY_DEVICE_COUNT` for this operation only.
+  with whole target columns (`docs/multi_gpu/cholesky.md`). The Cholesky owners
+  read the same plan, bound for this operation only.
 - KernelRidge predict: cross-kernel rows `K(X, X_fit_)`; the dual product on
   the root.
 - Nystroem fit: basis indices from the device permutation (unchanged), the

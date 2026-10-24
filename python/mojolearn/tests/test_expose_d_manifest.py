@@ -31,8 +31,9 @@ NEW = {
     "_mojolearn_ivf": ("build_ivf.sh", "python/mojolearn/_ivf_impl.py"),
     "_mojolearn_embedding": ("build_embedding.sh", "python/mojolearn/embedding.py"),
 }
-#: the availability flag each workstream D binding exports, as
-#: python/mojolearn/_parallel_worker.py checks it before its driver runs
+#: the availability flag each workstream D binding exports (its multi-GPU
+#: driver binds a device plan through `device_plan_enter` since 2026-10-24,
+#: docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md)
 PARALLEL_FLAGS = {
     "kernel_methods": "kernel_methods_rows_parallel_available",
     "mixture": "gmm_parallel_available",
@@ -112,7 +113,8 @@ def test_binding_exports_match_python_calls():
             assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
         else:
             assert flag in exported, (binding, flag)
-            assert f"'{flag}'" in _read("python/mojolearn/_parallel_worker.py"), (flag, "no driver reads it")
+            # the native driver binds its device plan in this binding
+            assert "device_plan_enter" in exported and "device_plan_exit" in exported, (binding, "no plan entries")
     gp = _exports("bindings/_mojolearn_gp.mojo")
     chol = _calls("python/mojolearn/_cholesky_impl.py", r"_extension\(\)\.(\w+)\(")
     assert chol and chol <= gp, sorted(chol - gp)

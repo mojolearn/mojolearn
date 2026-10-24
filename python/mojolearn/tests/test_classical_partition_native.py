@@ -2,34 +2,17 @@
 """Opt-in native logical partition checks, not physical multi-GPU proof.
 
 Run under the shared native slot with MOJOLEARN_NATIVE_CLASSICAL_PARTITIONS=1.
-The sequential local transport deliberately isolates partition correctness.
+The drivers are native (the forecasting and shard owners on the native local
+process pool); these hold their partition and merge to the plain methods.
 """
 import os
-import pickle
 import numpy as np
 import pytest
 from mojolearn import parallel_forecasting as pf, parallel_gaussian_process as pg
-from mojolearn._parallel_worker import execute
 from mojolearn._cpu_reference import reference_training
 
 pytestmark = pytest.mark.skipif(os.environ.get('MOJOLEARN_NATIVE_CLASSICAL_PARTITIONS') != '1',
                                 reason='opt-in native check; requires shared slot')
-
-
-class LocalTransport:
-    def __init__(self, devices):
-        pass
-    def map(self, requests):
-        # Exercise serialization as a real subprocess transport would.
-        return [pickle.loads(pickle.dumps(execute(pickle.loads(pickle.dumps(r))))) for r in requests]
-    def close(self):
-        pass
-
-
-@pytest.fixture(autouse=True)
-def local_transport(monkeypatch):
-    monkeypatch.setattr(pf, 'DevicePool', LocalTransport)
-    monkeypatch.setattr(pg, 'DevicePool', LocalTransport)
 
 
 def same(a, b):

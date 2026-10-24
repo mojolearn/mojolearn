@@ -31,6 +31,7 @@ THE GIL IS RELEASED AROUND THE DEVICE WORK, and nothing inside a
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
@@ -271,6 +272,9 @@ def build__mojolearn_solver() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
         m.def_function[hierarchy_parallel_available_binding]("hierarchy_parallel_available")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[solver_vendor_binding]("solver_vendor")
         m.def_function[solver_numeric_mode_binding]("solver_numeric_mode")
         m.def_function[solver_parallel_available]("solver_parallel_available")

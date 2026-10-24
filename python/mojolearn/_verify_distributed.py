@@ -21,10 +21,13 @@ from contextlib import contextmanager
 __all__ = ["main", "compare", "validate_receipt"]
 PROTOCOL = "distributed-classical-v2"
 PROFILE_FILES = frozenset(('__init__.py', 'parallel_forecasting.py', 'parallel_gaussian_process.py',
-                           'parallel_ivf.py', '_verify_distributed.py', '_parallel_pool.py',
-                           '_parallel_worker.py', '_gpu_witness.py'))
+                           'parallel_ivf.py', '_verify_distributed.py', '_native_parallel_shard.py',
+                           '_parallel_shard_ops.py', '_gpu_witness.py'))
 CASES = ("arima", "holtwinters", "gpc", "ivf", "gpc_fit")
-NUMERICAL_OPERATIONS = frozenset(("forecast_predict", "gpc_class_fit", "gpc_class_predict", "ivf_search_stored"))
+#: the native shard workers' numerical operations (bindings/parallel_shard_native.mojo,
+#: parallel_forecast_native.mojo)
+NUMERICAL_OPERATIONS = frozenset(("arima_predict_shard", "hw_predict_shard", "gpc_class_fit", "gpc_class_predict",
+                                  "ivf_search"))
 
 
 def digest(value):
@@ -44,8 +47,8 @@ def _require_used_groups(receipt, group_ids, case):
     from ._gpu_witness import require_distinct_workers
     if not group_ids:
         raise ValueError('numerical cell used no inventoried workers')
-    operation = {'arima':'forecast_predict', 'holtwinters':'forecast_predict',
-                 'gpc':'gpc_class_predict', 'gpc_fit':'gpc_class_fit', 'ivf':'ivf_search_stored'}[case]
+    operation = {'arima': 'arima_predict_shard', 'holtwinters': 'hw_predict_shard',
+                 'gpc': 'gpc_class_predict', 'gpc_fit': 'gpc_class_fit', 'ivf': 'ivf_search'}[case]
     for group_id in group_ids:
         group = receipt['worker_groups'][group_id]
         require_distinct_workers(group['inventory'], receipt['vendor'], len(group['devices']))
@@ -57,24 +60,26 @@ def _require_used_groups(receipt, group_ids, case):
 
 
 @contextmanager
-def transport_fault(pool_class, fault, control):
-    """Perturb one actual numerical result batch; never report a native fault."""
+def transport_fault(fault, control):
+    """Perturb one actual numerical result batch of the native shard pools
+    (bindings/parallel_shard_common.mojo `shard_map`): its last result is
+    dropped or the batch is reversed, once. Never a native arithmetic fault."""
+    from ._native_parallel_shard import _native_parallel_shard
     if fault not in ('drop_result', 'reverse_results'):
         raise ValueError('unknown transport fault')
-    original = pool_class.map
-    def altered(pool, requests):
-        requests = list(requests)
-        values = original(pool, requests)
-        if (not control['triggered'] and len(values) > 1 and requests
-                and requests[0][0] in NUMERICAL_OPERATIONS):
-            control['triggered'] = True
-            return values[:-1] if fault == 'drop_result' else list(reversed(values))
-        return values
-    pool_class.map = altered
+    saved = {key: os.environ.get(key) for key in ('MOJOLEARN_PAR_TRANSPORT_FAULT', 'MOJOLEARN_HOST_ALLOW_SABOTAGE')}
+    _native_parallel_shard('faults_take', ())
+    os.environ['MOJOLEARN_PAR_TRANSPORT_FAULT'] = fault
+    os.environ['MOJOLEARN_HOST_ALLOW_SABOTAGE'] = '1'
     try:
         yield
     finally:
-        pool_class.map = original
+        for key, value in saved.items():  # glue: restores two environment variables
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        control['triggered'] = _native_parallel_shard('faults_take', ()) > 0
 
 
 def _valid_digests(values):
@@ -205,7 +210,7 @@ def main(argv=None):
         ap.error("distributed capture requires NumPy; install the optional mojolearn[test] extra")
     import mojolearn as ml
     from mojolearn import _backend
-    from mojolearn._parallel_pool import DevicePool
+    from mojolearn._native_parallel_shard import _native_parallel_shard
     from mojolearn import parallel_forecasting as pf, parallel_gaussian_process as pg
     from mojolearn.parallel_ivf import DistributedIVFIndex
     if _backend.numeric_mode() != 'identical':
@@ -238,9 +243,9 @@ def main(argv=None):
                'package': str(package), 'distribution': distribution,
                'devices': list(devices), 'cells': [], 'worker_calls': [],
                'bindings': {}, 'source_files': {}, 'worker_groups': [], 'controls': []}
-    from mojolearn import _parallel_pool, _parallel_worker, _gpu_witness
+    from mojolearn import _native_parallel_shard as _shard_module, _parallel_shard_ops, _gpu_witness
     for module in (ml, pf, pg, sys.modules[DistributedIVFIndex.__module__],
-                   sys.modules[__name__], _parallel_pool, _parallel_worker, _gpu_witness):
+                   sys.modules[__name__], _shard_module, _parallel_shard_ops, _gpu_witness):
         p = Path(module.__file__)
         receipt['source_files'][p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
     for name in ('_mojolearn_arima', '_mojolearn_tsa', '_mojolearn_gp', '_mojolearn_ivf'):
@@ -262,30 +267,22 @@ def main(argv=None):
         receipt['distribution']['source_record_hashes_match'] = True
         receipt['distribution']['native_record_hashes_match'] = True
     from mojolearn._gpu_witness import require_distinct_workers
-    original_call, original_start = DevicePool._call, DevicePool._start
-    worker_groups = {}
-    def start_pool(pool):
-        started = bool(pool._workers)
-        original_start(pool)
-        if started:
-            return
-        inventory = [original_call(w, ('device_inventory', None, ())) for w in pool._workers]
-        require_distinct_workers(inventory, vendor, len(pool.devices))
-        group = len(receipt['worker_groups'])
-        receipt['worker_groups'].append(dict(group=group, devices=list(pool.devices), inventory=inventory))
-        for w, witness in zip(pool._workers, inventory):
-            if witness['pid'] != w.pid:
-                raise RuntimeError('worker inventory PID differs from launched process')
-            worker_groups[id(w)] = group
-    def observe(worker, request):
-        answer = original_call(worker, request)
-        receipt['worker_calls'].append({'pid': worker.pid, 'operation': request[0], 'group': worker_groups[id(worker)]})
-        return answer
+
+    def collect():
+        # The native pools started since the last read: each pool's devices,
+        # its workers' own inventories (admitted natively at the pool's
+        # start) and every request it served (worker pid, operation).
+        for entry in _native_parallel_shard('trace_take', ()):  # glue: one receipt group per started pool
+            inventory = list(entry['inventory'])
+            require_distinct_workers(inventory, vendor, len(entry['devices']))
+            group = len(receipt['worker_groups'])
+            receipt['worker_groups'].append(dict(group=group, devices=list(entry['devices']), inventory=inventory))
+            for call in entry['calls']:  # glue: one receipt row per served request
+                receipt['worker_calls'].append({'pid': call['pid'], 'operation': call['operation'], 'group': group})
     args.out.parent.mkdir(parents=True, exist_ok=True)
     write(args.out, receipt)
     start = time.monotonic()
-    DevicePool._start = start_pool
-    DevicePool._call = staticmethod(observe)
+    _native_parallel_shard('trace_take', ())
     try:
         y = np.random.default_rng(42).normal(size=(5, 32)).astype(np.float32)
         arima = ml.ARIMA(order=(1, 1, 0), maxiter=3, numeric_mode='identical').fit(y)
@@ -327,6 +324,7 @@ def main(argv=None):
                 for case in CASES:
                     first_group = len(receipt['worker_groups'])
                     got = [digest(v) for v in run_case(case, selected)]
+                    collect()
                     groups = list(range(first_group, len(receipt['worker_groups'])))
                     _require_used_groups(receipt, groups, case)
                     cell = dict(case=case, devices=list(selected), layout=layout, repeat=repeat,
@@ -341,8 +339,9 @@ def main(argv=None):
             for fault in ('drop_result', 'reverse_results'):
                 control = dict(case=case, fault=fault, kind='transport', triggered=False, detected=False)
                 try:
-                    with transport_fault(DevicePool, fault, control):
+                    with transport_fault(fault, control):
                         got = [digest(v) for v in run_case(case, devices)]
+                    collect()
                     control['detected'] = got != expected[case]
                 except (ValueError, RuntimeError, IndexError) as exc:
                     control['detected'] = True
@@ -360,8 +359,6 @@ def main(argv=None):
     finally:
         receipt['elapsed_seconds'] = time.monotonic() - start
         write(args.out, receipt)
-        DevicePool._call = staticmethod(original_call)
-        DevicePool._start = original_start
     print(json.dumps({'status': receipt['status'], 'cells': len(receipt['cells']), 'out': str(args.out)}))
     return 0
 

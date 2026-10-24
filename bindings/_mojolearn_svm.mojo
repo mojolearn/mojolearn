@@ -45,6 +45,7 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
 from std.memory import memcpy
@@ -732,6 +733,9 @@ def build__mojolearn_svm() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_svm")
         m.def_function[svm_parallel_available]("svm_parallel_available")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[iforest_parallel_available]("iforest_parallel_available")
         m.def_function[svm_vendor_binding]("svm_vendor")
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")

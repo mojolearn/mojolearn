@@ -22,6 +22,7 @@ THE ABI IS THE GP'S: two length-checked lists, orders written out below
 and mirrored in `_ivf_impl.py`.
 """
 
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.sys.compile import is_defined
 from std.memory import memcpy
@@ -569,6 +570,9 @@ def build__mojolearn_ivf() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_ivf")
         m.def_function[ivf_vendor_binding]("ivf_vendor")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
         # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
         comptime if is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():

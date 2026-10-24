@@ -296,13 +296,18 @@ def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
-                out_kind: Int, context: PythonObject) raises -> PythonObject:
-    """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out])."""
+                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject = PythonObject(None)) raises -> PythonObject:
+    """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
+    `kernel_arrays`: the kernel's packed arrays when the caller already has
+    them (a multi-GPU shard worker, which holds no kernel object); else
+    `gp_kernel_arrays(fields["_kernel"])`."""
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var n_features = Int(py=xt.shape[1])
-    var arrays = gp_kernel_arrays(fields["_kernel"], context)
+    var arrays = kernel_arrays
+    if arrays is None:
+        arrays = gp_kernel_arrays(fields["_kernel"], context)
     var mean = family_array(Python.tuple(n_star), "<f4", context)
     var var_out = family_array(Python.tuple(n_star), "<f4", context)
     var proba = family_array(Python.tuple(n_star), "<f8", context)

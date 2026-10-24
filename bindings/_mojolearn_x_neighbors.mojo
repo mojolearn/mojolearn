@@ -1,5 +1,6 @@
 """THE NEIGHBORS EXPANSION LANE'S GPU BINDING:
 every export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -1106,6 +1107,9 @@ def louvain_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
+    m.def_function[device_plan_enter_binding]("device_plan_enter")
+    m.def_function[device_plan_exit_binding]("device_plan_exit")
+    m.def_function[device_plan_log_binding]("device_plan_log")
     m.def_function[l1dist_binding]("xn_l1dist")
     m.def_function[kernel_binding]("xn_kernel")
     m.def_function[matmul_binding]("xn_matmul")

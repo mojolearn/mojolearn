@@ -102,6 +102,7 @@ from bindings.parallel_mlp_native import parallel_mlp_c
 from bindings.small_mlp_native import small_mlp_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_forecast_native import parallel_forecast_c
+from bindings.parallel_shard_native import parallel_shard_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
 from bindings.optimizer_lifecycle import optimizer_finalize_binding, optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
@@ -1315,6 +1316,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(small_mlp_c, "small_mlp_call")
         module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
         module.def_py_c_function(parallel_forecast_c, "parallel_forecast_call")
+        module.def_py_c_function(parallel_shard_c, "parallel_shard_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
         module.def_function[optimizer_finalize_binding]("optimizer_finalize")
         module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")

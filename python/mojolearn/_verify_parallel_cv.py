@@ -23,7 +23,7 @@ __all__ = ['main', 'source_identity', 'validate_receipt', 'compare']
 PROTOCOL = 'parallel-cv-v3'
 PROFILE_FILES = frozenset(('__init__.py', '_verify_parallel_cv.py', '_parallel_cv_witness.py',
                            'model_selection.py', 'parallel_model_selection.py', '_parallel_pool.py',
-                           '_parallel_worker.py', '_gpu_witness.py', '_verify_distributed.py',
+                           '_gpu_witness.py', '_verify_distributed.py',
                            '_native_parallel_cv.py', '_native_parallel_cv_worker.py',
                            '_native_msel_dispatch.py', '_native_msel_more.py'))
 PARTS = ('model', 'predict', 'raw_predict', 'reload_predict', 'loss_curve', 'score')

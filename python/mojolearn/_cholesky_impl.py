@@ -306,3 +306,8 @@ _native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, (
 
 
 __all__ = ["Cholesky"]
+
+
+# The class the multi-GPU Cholesky drivers admit (bindings/linalg_native.mojo
+# `family_chol_par_*`).
+_native_family_bridge.tables(family_chol_par_class=Cholesky)

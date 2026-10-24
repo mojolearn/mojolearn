@@ -8,6 +8,7 @@ x_linear_decision(x_addr, wb_addr, dims, out_addr)
     dims = [n, d, k, link]; wb is k rows of (w_0..w_{d-1}, b)
 The host binding (_mojolearn_x_linear_host.mojo) exports the same names with
 the same address contract and runs the same x_linear/ source on the CPU."""
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -200,6 +201,9 @@ def build__mojolearn_x_linear() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
         comptime if XLIN_GLM_DEV_YDOM:
             m.def_function[glm_ydom_binding]("x_linear_glm_ydom")

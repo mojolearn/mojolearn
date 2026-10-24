@@ -685,5 +685,9 @@ del _bridge
 # host_archive_lifetime.mojo "entry" plans), held in `_resident_holder["index"]`.
 _native_archive_bridge.lifetime(KernelRidge, "kernel_ridge_resident_release", "_resident_holder")
 
+# The classes the multi-GPU kernel-method drivers admit
+# (bindings/kernel_methods_native.mojo `family_km_par_*`).
+_native_family_bridge.tables(family_km_par_classes=(KernelRidge, Nystroem))
+
 
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]

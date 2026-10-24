@@ -73,6 +73,7 @@ from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from cholesky.multi_gpu import CholSolveShard, chol_device_count, chol_gather_columns, chol_scatter_columns
+from core.device_plan import device_plan_device
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.chol_sabotage import (
@@ -1005,7 +1006,7 @@ def _cho_solve_columns(
         var packed = ctx.enqueue_create_host_buffer[DType.float32](n * width)
         ctx.enqueue_copy(dst_ptr=packed.unsafe_ptr(), src_buf=packed_dev)
         ctx.synchronize()
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var sb = device.enqueue_create_buffer[DType.float32](n * width)
         var sl = device.enqueue_create_buffer[DType.float32](n * n)
         device.enqueue_copy(dst_buf=sb, src_ptr=packed.unsafe_ptr())

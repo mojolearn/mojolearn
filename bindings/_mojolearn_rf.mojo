@@ -27,6 +27,7 @@ with the with-replacement `RowSampler` wired. This extension is that
 sampler's first Python caller.
 """
 
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.memory import memcpy
 from core.hostptr import copy_f32, list_f32, list_i32, store_f32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
@@ -1809,6 +1810,9 @@ def build__mojolearn_rf() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
         m.def_function[rf_dt_default_bins_binding]("rf_dt_default_bins")

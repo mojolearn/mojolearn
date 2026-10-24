@@ -103,6 +103,7 @@ can reach a bit, and `check_cd_is_launch_invariant` is what keeps that
 sentence true.
 """
 
+from core.device_plan import device_plan_setting
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
@@ -1711,7 +1712,7 @@ def cd_fit_traced(
     var three = False
     var part = contract_partition(n_rows)
     comptime if CD_THREE_LAUNCH:
-        var dc = String(getenv("MOJOLEARN_SOLVER_DEVICE_COUNT"))
+        var dc = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
         three = (
             launch.dot_plan < 0
             and (dc == "" or dc == "1")
@@ -1724,7 +1725,7 @@ def cd_fit_traced(
     # lane/gap-nv-classical2: the one-launch coordinate off Apple
     var fused = False
     comptime if CD_FUSED:
-        var dcf = String(getenv("MOJOLEARN_SOLVER_DEVICE_COUNT"))
+        var dcf = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
         fused = (
             launch.dot_plan < 0
             and (dcf == "" or dcf == "1")

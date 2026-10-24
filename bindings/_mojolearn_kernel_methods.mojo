@@ -41,6 +41,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.identity_trace import IdentityTrace
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from kernel_methods.estimator import (
     KernelRidgeModel,
     NystroemModel,
@@ -109,10 +110,12 @@ def kernel_methods_vendor_binding() raises -> PythonObject:
 
 
 def kernel_methods_rows_parallel_available() raises -> PythonObject:
-    """1: km_kernel_matrix reaches svm kernel_op, which reads
-    MOJOLEARN_SVM_DEVICE_COUNT, and potrf_lower/cho_solve read
-    MOJOLEARN_CHOLESKY_DEVICE_COUNT; parallel_classical.fit_kernel_method and
-    apply_kernel_method set both inside their cooperative worker."""
+    """1: km_kernel_matrix reaches svm kernel_op, which reads its owner count
+    through `core/device_plan.mojo::device_plan_setting`
+    (MOJOLEARN_SVM_DEVICE_COUNT without a plan), and potrf_lower/cho_solve
+    read MOJOLEARN_CHOLESKY_DEVICE_COUNT the same way;
+    parallel_classical.fit_kernel_method and apply_kernel_method bind a
+    device plan around the plain owners (`device_plan_enter`)."""
     return PythonObject(1)
 
 
@@ -793,6 +796,9 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         m.def_function[kernel_methods_rows_parallel_available](
             "kernel_methods_rows_parallel_available"
         )
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[kernel_methods_vendor_binding]("kernel_methods_vendor")
         m.def_function[kernel_methods_numeric_mode_binding](
             "kernel_methods_numeric_mode"

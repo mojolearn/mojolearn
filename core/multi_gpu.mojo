@@ -4,13 +4,14 @@
 These operations perform no floating-point arithmetic. Device contexts own
 their allocations; callers retain both contexts through every copy and join.
 """
+from core.device_plan import device_plan_device
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.info import has_amd_gpu_accelerator
 
 
-def gbdt_shard_device_id(rank: Int) -> Int:
+def gbdt_shard_device_id(rank: Int) raises -> Int:
     """The device a GBDT feature shard of `rank` runs on: `rank`, or 0 for
     every rank under `MOJOLEARN_GBDT_SHARD_ONE_DEVICE=1`.
 
@@ -27,10 +28,12 @@ def gbdt_shard_device_id(rank: Int) -> Int:
     """
     try:
         if String(getenv("MOJOLEARN_GBDT_SHARD_ONE_DEVICE")) == "1":
-            return 0
+            return device_plan_device(0)
     except:
         pass
-    return rank
+    # The calling thread's device plan maps the rank to its physical device
+    # (core/device_plan.mojo); without a plan the rank is the device.
+    return device_plan_device(rank)
 
 
 def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceContext,

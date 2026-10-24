@@ -46,8 +46,8 @@ LANES = ("arima", "arima-011", "arima-seasonal-c")
 EXOG_LANES = ("arima-exog", "arima-exog-seasonal")
 #: lane/forecast-predict-cpu-route (2026-09-19), declared last: the driver
 #: behind `parallel_forecasting.forecast_arima` / `.predict_arima`, which had
-#: no lane at all until `forecast_predict` joined `_parallel_pool
-#: .CPU_OPERATIONS`. Pinned here because this tuple is the arima family's
+#: no lane at all until `forecast_predict` joined the old pool's CPU route (the
+#: drivers are native since lane migrate-neural-2). Pinned here because this tuple is the arima family's
 #: CONTRACT, and a lane appearing in it without a test moving is how a family
 #: grows a member nobody checked.
 FORECAST_LANES = ("par-forecast-arima",)

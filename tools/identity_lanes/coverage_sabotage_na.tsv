@@ -188,3 +188,8 @@ tokenizer/encoding.mojo:string_bytes	a string's UTF-8 bytes (a view), no arithme
 adapters/native/*	same API in another format: the adapter library calls the kernels the Python API lanes already record and sabotage; no arm (Andrew, 2026-10-24)
 adapters/torch/*	same API in another format: Torch dispatcher glue over the same kernels; no arm (Andrew, 2026-10-24)
 adapters/max_ops/*	same API in another format: MAX custom-op glue over the same kernels; no arm (Andrew, 2026-10-24)
+core/device_plan.mojo:*	device placement only (lane native-parallel-driver-20261024): which device runs an owner and how many owners, bound to the calling thread; no data value is read or written, and identical bits do not depend on the device; each owner loop's own PARALLEL_SABOTAGE arm covers its partition
+bindings/device_plan_binding.mojo:*	the device-plan enter/exit entries (a thread-scoped placement handle), no data value
+bindings/parallel_plan_door.mojo:*	driver admission and the device-plan scope: argument checks and placement, no data value
+core/neural_context.mojo:_NeuralContext	the process DeviceContext slot (handles per device), no value
+core/neural_context.mojo:_NeuralContext.__init__	the empty process DeviceContext slot (no context, no device list), no value

@@ -15,6 +15,7 @@ one-device column has only rank 0. That is what makes a moved `par-cd` or
 device. Owed a two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding
 restates this driver, so no CPU column can watch it fire.
 """
+from core.device_plan import device_plan_device, device_plan_setting
 from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
@@ -53,7 +54,7 @@ def profile_dot_parallel(
     mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32], k: Int,
 ) raises -> Bool:
-    var value = String(getenv("MOJOLEARN_SOLVER_DEVICE_COUNT"))
+    var value = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
     if value == "" or value == "1":
         return False
     var count = Int(value)
@@ -79,7 +80,7 @@ def profile_dot_parallel(
                 source = start - 1
         var source_a = a.create_sub_buffer[DType.float32](source, rows)
         var source_b = b.create_sub_buffer[DType.float32](source, rows)
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var local_a = peer_clone(ctx, device, source_a)
         var local_b = peer_clone(ctx, device, source_b)
         var partials = device.enqueue_create_buffer[DType.float32](width)

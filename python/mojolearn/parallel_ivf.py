@@ -8,9 +8,17 @@ index and extending a distributed index are outside this API.
 """
 __all__ = ['DistributedIVFIndex']
 
-from ._parallel_pool import DevicePool
 from ._buffer import Array, as_f32_c, as_i32_c, empty, addr, addr_ro
 from ._ivf_impl import IVFIndex
+from . import _parallel_shard_ops
+from . import _native_parallel_shard as _shard
+from ._native_parallel_shard import _native_parallel_shard
+
+# The distributed index's owner (bindings/parallel_shard_native.mojo
+# `ivf_from_index` / `ivf_search`): the shard plan, the storage, the
+# scheduling and the merge are native; a shard's partial search runs in the
+# shard workers (python/mojolearn/_parallel_shard_ops.py).
+_shard.register(py_ops=_parallel_shard_ops.OPERATIONS)
 
 
 def _partial_search(index, queries):
@@ -85,103 +93,16 @@ class DistributedIVFIndex:
             raise ValueError('IVF original IDs must be a permutation of stored row IDs')
         if offs.shape[0] != n_lists + 1:
             raise ValueError('invalid global IVF list offsets')
-        devices = tuple(devices)
-        # Validation and the row split in one native pass (bindings/
-        # ivf_index_arrays.mojo `ivf_shard_plan`): the ids must be a
-        # permutation and the offsets 0 .. n nondecreasing BEFORE clipping
-        # (otherwise a corrupted saved index is silently repaired differently
-        # from the ordinary native search, which rejects its layout); then each
-        # shard's clipped offsets, local ids and ascending id map. It runs
-        # BEFORE any device worker starts: an invalid layout never reaches a
-        # GPU (test_corrupt_global_offsets_are_not_repaired_by_partition_clipping).
-        native = index._extension()
-        P = len(devices[:n])
-        soff = empty((P, n_lists + 1), '<i4')
-        local_all, map_all = empty((n,), '<i4'), empty((n,), '<i4')
-        status = int(native.ivf_shard_plan(
-            [addr_ro(ind, name='list_indices_'), addr_ro(offs, name='list_offsets_'),
-             addr(soff, name='shard offsets'), addr(local_all, name='local ids'),
-             addr(map_all, name='id map')], [n, n_lists, P]))
-        if status == 1:
-            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
-        if status != 0:
-            raise ValueError('invalid global IVF list offsets')
-        pool = DevicePool(devices)  # validates every requested device before slicing
-        pool.close()
-        devices = devices[:index.n_rows_]
-        pool = DevicePool(devices)
-        obj = object.__new__(cls)
-        obj._pool, obj._closed = pool, False
-        obj.n_features_in_, obj.n_neighbors = index.n_features_in_, index.n_neighbors
-        obj.metric_code_, obj.devices = index.metric_code_, devices
-        obj.n_candidates_ = None
-        obj._id_maps = []
-        obj._native = native
-        requests = []
-        for part in range(P):  # glue: one shard request per device
-            lo = part * n // P
-            hi = (part + 1) * n // P
-            shard = IVFIndex(index.n_lists_, index.n_probes, index.n_neighbors,
-                             metric=index.metric, numeric_mode='identical')
-            shard.n_rows_, shard.n_lists_ = hi - lo, index.n_lists_
-            shard.n_features_in_, shard.metric_code_ = index.n_features_in_, index.metric_code_
-            shard.centers_, shard.center_norms_ = index.centers_, index.center_norms_
-            shard.list_offsets_ = soff[part]
-            shard.list_indices_ = local_all[lo:hi]
-            shard.list_data_ = index.list_data_[lo:hi]
-            obj._id_maps.append(map_all[lo:hi] if hi > lo else empty((0,), '<i4'))
-            requests.append(('ivf_store', shard, ()))
-        try:
-            receipts = pool.map(requests)
-            if receipts != [len(ids) for ids in obj._id_maps]:  # glue: one receipt per device
-                raise ValueError('IVF storage receipts differ from shard sizes')
-        except BaseException:
-            obj.close()
-            raise
-        return obj
+        # One native call: the shard plan, one stored shard per device.
+        return _native_parallel_shard('ivf_from_index', (cls, index, devices, index._extension(), ind, offs))
 
     def search(self, queries):
-        if self._closed:
-            raise RuntimeError('distributed IVF index is closed')
-        q, _ = as_f32_c(queries, ndim=2, name='queries')
-        if q.shape[0] < 1:
-            raise ValueError('at least one query is required')
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError('query features differ from index')
-        try:
-            parts = self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])  # glue: one search request per device
-            if len(parts) != len(self._id_maps):
-                raise ValueError('incomplete IVF result shards')
-            m, k = q.shape[0], self.n_neighbors
-            for d, ix, count in parts:  # glue: checks each device's output shapes
-                if d.shape != (m, k) or ix.shape != d.shape or count.shape != (m,):
-                    raise ValueError('invalid IVF shard output shapes')
-            # THE MERGE (lane/py-dn-ann, 2026-09-28): one native pass
-            # (bindings/ivf_index_arrays.mojo `ivf_merge_shards`), the Python
-            # loop it replaces statement for statement: per query, each
-            # shard's first min(k, count) candidates mapped to original ids,
-            # ordered by (float32 distance, original id), the first k kept.
-            result, ids, counts = empty((m, k), '<f4'), empty((m, k), '<i4'), empty((m,), '<i4')
-            addrs = [addr(result, name='distances'), addr(ids, name='ids'), addr(counts, name='counts')]
-            for mapping, (d, ix, count) in zip(self._id_maps, parts):  # glue: addresses of each device's outputs
-                addrs += [addr_ro(d, name='shard distances'), addr_ro(ix, name='shard ids'),
-                          addr_ro(count, name='shard counts'),
-                          addr_ro(mapping, name='shard id map') if len(mapping) else addr_ro(count, name='shard id map')]
-            status, _row = self._native.ivf_merge_shards(
-                addrs, [len(parts), m, k] + [len(mapping) for mapping in self._id_maps])  # glue: row count of each device shard
-            if int(status) != 0:
-                raise ValueError(_MERGE_ERRORS.get(int(status), 'IVF shard merge failed'))
-            if self.metric_code_ == 1:
-                result = self._pool.map([('ivf_finalize', result, (self.metric_code_,))])[0]
-            self.n_candidates_ = counts
-            return result, ids
-        except BaseException:
-            self.close()
-            raise
+        # One native call (bindings/parallel_shard_native.mojo `ivf_search`).
+        return _native_parallel_shard('ivf_search', (self, queries))
 
     def close(self):
-        self._pool.close()
-        self._closed = True
+        """Stop the worker processes and release the stored shards."""
+        _native_parallel_shard('ivf_close', (self,))
 
     def __enter__(self):
         if self._closed:

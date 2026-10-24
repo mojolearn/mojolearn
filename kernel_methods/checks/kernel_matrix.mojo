@@ -128,6 +128,7 @@ from kernel_methods.impl.distance.kernel_matrices import (
     tanh_epilogue_kernel,
 )
 from std.os import getenv
+from core.device_plan import device_plan_setting
 
 from std.sys.compile import is_defined
 from checks.numerics import (
@@ -753,7 +754,7 @@ def _svm_kernel_op(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         if m <= 0 or n <= 0:
             return
-        var setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        var setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
         if setting != "" and setting != "1":
             # `kernel_op`'s refusal, which under FAST fires on every value
             # that parses (and `Int` raises on one that does not).

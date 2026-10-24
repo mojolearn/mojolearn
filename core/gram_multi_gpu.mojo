@@ -13,6 +13,7 @@ production bit can move, and it is INERT AT ONE DEVICE: the shift is guarded by
 to the define rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
+from core.device_plan import device_plan_device, device_plan_setting
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.gpu import block_idx, block_dim, thread_idx
@@ -86,7 +87,7 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32], mut x: DeviceBuffer[DType.float32],
     m: Int, k: Int,
 ) raises -> Bool:
-    var count = Int(getenv("MOJOLEARN_GRAM_DEVICE_COUNT", "1"))
+    var count = Int(device_plan_setting("MOJOLEARN_GRAM_DEVICE_COUNT", "1"))
     if count == 1:
         return False
     if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -109,7 +110,7 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
             # Check-only arm: later owners contract from one row early.
             if rank > 0:
                 source = first - 1
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var a: DeviceBuffer[DType.float32]
         var b: DeviceBuffer[DType.float32]
         var need = 1

@@ -1401,15 +1401,17 @@ ANNOTATIONS = {
                                   "byte_lm_session_next_bytes", "byte_lm_session_open",
                                   "byte_lm_session_rollback", "byte_lm_session_step")},
     "knn_classify_neighbors": ("covered", ["par-reference-knn"],
-                               "run in a worker process (_parallel_worker 'neighbor_vote' -> "
+                               "run in a native shard worker (_parallel_shard_ops 'reference_vote' -> "
                                "parallel_neighbors_reference._vote); par-* lanes run on two-device boxes"),
     "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
-                              "run in a worker process (_parallel_worker 'neighbor_vote')"),
+                              "run in a native shard worker (_parallel_shard_ops 'reference_vote')"),
     "fold_pair_f32": ("covered", ["cross-vendor-fold"],
                       "mojolearn.cross_vendor hands it to the native fold at import "
                       "(_buffer_native('fold_pair_f32')); every ordered_fold and fold_pair runs it"),
-    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run in a worker process (_parallel_worker)"),
-    "ivf_finalize_distances": ("covered", ["par-ivf"], "run in a worker process (_parallel_worker)"),
+    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run in a native shard worker (_parallel_shard_ops)"),
+    "ivf_finalize_distances": ("covered", ["par-ivf"],
+                               "called by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
+                               "`ivf_search`) on a cosine index"),
     "pca_fit": ("covered", ["pca", "pca-full-whiten", "pca-whiten"],
                 "the native PCA owner is handed it at connect (_native_pca_bridge.connect)"),
     "x_decomp_pca_mle_rank": ("covered", ["x-decomp-pca-randomized"],
@@ -1420,6 +1422,8 @@ ANNOTATIONS = {
        for e in ("fast_from_bf16", "fast_matmul_bf16", "fast_to_bf16", "public_fast_from_bf16",
                  "public_fast_to_bf16")},
     "ops_shape": ("n/a", [], "the verifier's own native-session boundary probe (_verify_graph)"),
+    "device_plan_log": ("n/a", [], "the verifier's own two-device placement witness read (_verify_par "
+                        "PoolWitness, lane native-parallel-driver-20261024): device groups, no data value"),
     "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
     **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_eigh_batch", "x_decomp_knn_select",
                                            "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},

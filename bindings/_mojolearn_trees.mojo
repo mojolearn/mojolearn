@@ -26,6 +26,7 @@ array/archive gates and a large-data export-only A/B on Metal. Retained List
 entrypoints are comparison arms; they do not run on the default fit path.
 """
 
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from ensemble.device_finite import FOREST_DEVICE_FINITE
 from ensemble.instruments import StageTimes
@@ -686,6 +687,9 @@ def build__mojolearn_trees() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
         m.def_function[trees_shap_pair_count_py]("trees_shap_pair_count")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[trees_vendor_binding]("trees_vendor")
         m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
         m.def_function[trees_device_finite_scan_binding]("trees_device_finite_scan")

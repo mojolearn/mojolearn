@@ -56,6 +56,7 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 ===================================================
 """
 
+from core.device_plan import device_plan_device, device_plan_setting
 from std.math import fma, log2
 from std.memory import bitcast, memcpy, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -968,7 +969,7 @@ struct IsolationForest(Movable):
         model.has_feature_indices = n_sampled_features < n_cols
 
         if distribute:
-            var setting = String(getenv("MOJOLEARN_IFOREST_DEVICE_COUNT"))
+            var setting = device_plan_setting("MOJOLEARN_IFOREST_DEVICE_COUNT")
             if setting != "" and setting != "1":
                 var count = Int(setting)
                 if count < 1 or count > 64:
@@ -1686,7 +1687,7 @@ def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
     for rank in range(active):
         var first = params.n_estimators * rank // active
         var width = params.n_estimators * (rank + 1) // active - first
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=device_plan_device(rank))
         var feature_indices = device.enqueue_create_buffer[DType.int32](1)
         var feature = device.enqueue_create_buffer[DType.int32](1)
         var threshold = device.enqueue_create_buffer[DType.float32](1)

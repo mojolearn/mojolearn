@@ -57,6 +57,15 @@ parts)`, which `_run_reference` catches and hashes.
 | `MOJOLEARN_HIERARCHY_PARALLEL_SABOTAGE` (existed) | `hierarchy/impl/cluster/detail/multi_gpu.mojo` | `par-hdbscan` |
 | `MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE` (existed) | `resample/estimator.mojo` | `par-resample` |
 
+Native drivers (2026-10-24, docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md).
+`fit_kernel_method` and `apply_kernel_method` no longer start a cooperative
+worker: one native call binds a thread-scoped device plan
+(`core/device_plan.mojo`) around the plain owners. The `MOJOLEARN_SVM_` and
+`MOJOLEARN_CHOLESKY_PARALLEL_SABOTAGE` arms are unchanged and remain the
+negative controls of `par-kernel-ridge` and `par-nystroem`: both shift on the
+owner RANK (`rank > 0`), never on the device the plan maps the rank to, so they
+stay inert at one device and move only in a two-device column.
+
 `MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE` is the one that is not a row
 offset. `isolation_forest`'s `shard.first` is a curand SUBSEQUENCE base and
 nothing else -- every buffer is indexed by the LOCAL tree id -- so the arm

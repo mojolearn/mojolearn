@@ -85,7 +85,7 @@ def main():
             devices = (1, 0) if trees == 65 else (0, 1)
             predictor = ParallelForestPredictor(model, devices=devices)
             with predictor:
-                worker_pid = predictor._pool._workers[0].pid
+                # one resident snapshot per predictor, built at its first predict
                 assert predictor.n_features_in_ == X.shape[1]
                 assert predictor.n_estimators_ == trees
                 if classification:
@@ -96,14 +96,16 @@ def main():
                         right = getattr(predictor, method)(query[:rows])
                         same(left, right)
                         receipts.append(dict(method=method, rows=rows, **digest(right)))
-                assert predictor._pool._workers[0].pid == worker_pid
+                from mojolearn._forest_protocol import held_resident_forest
+                snapshot = held_resident_forest(predictor._model)
+                assert snapshot is not None
                 refuse('shape-' + cls.__name__, lambda: predictor.predict(query[:, :4]))
-                refuse('method-' + cls.__name__, lambda: predictor._predict(query, 'fit'))
                 if not classification:
                     refuse('proba-' + cls.__name__, lambda: predictor.predict_proba(query))
                 same(predictor.predict(query), expected['predict'])
                 # Query shape/layout changes must not recreate the snapshot.
                 same(predictor.predict(query[::2]), model.predict(query[::2]))
+                assert held_resident_forest(predictor._model) is snapshot
                 empty = np.empty((0, X.shape[1]), dtype='<f4')
                 empty_outcomes = []
                 for method in methods:
@@ -112,13 +114,13 @@ def main():
                     except (ValueError, RuntimeError):
                         refuse('empty-' + cls.__name__, lambda: getattr(predictor, method)(empty))
                         empty_outcomes.append(dict(method=method, status='matching_refusal'))
-                        break  # Failed RPC correctly closes its snapshot worker.
+                        continue
                     else:
                         actual = getattr(predictor, method)(empty)
                         same(baseline, actual)
                         empty_outcomes.append(dict(method=method, status='PASS', **digest(actual)))
             predictor.close()
-            assert not predictor._pool._workers
+            assert predictor._model is None
             refuse('closed-' + cls.__name__, lambda: predictor.predict(query))
             refuse('reenter-' + cls.__name__, predictor.__enter__)
             if trees == 65:
@@ -151,9 +153,11 @@ def main():
     bad = query.copy()
     bad[0,0] = np.nan
     refuse('native_nonfinite', lambda: failed.predict(bad))
-    refuse('failure_does_not_restart', lambda: failed.predict(query))
-    assert failed._closed and not failed._pool._workers
+    # In-process native predictor (2026-10-24): a refused query leaves the
+    # snapshot usable; close() releases it and later calls are refused.
+    assert np.asarray(failed.predict(query)).shape[0] == query.shape[0]
     failed.close()
+    refuse('closed', lambda: failed.predict(query))
 
     args.report.write_text(json.dumps(dict(status='PASS', groups=groups,
         refusals=refusals, scope='RF/ET pooled inference across two GPUs versus single-GPU parallel_groves; exact original output widths, label decoding and 32-grove fold. No fit pooling or capacity measurement.'), indent=2)+'\n')

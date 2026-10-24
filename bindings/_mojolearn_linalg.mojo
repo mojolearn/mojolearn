@@ -56,6 +56,7 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort, getenv
 from std.time import perf_counter_ns
@@ -948,6 +949,9 @@ def build__mojolearn_linalg() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
         m.def_function[linalg_vendor_binding]("linalg_vendor")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
+        m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[gemm_binding]("gemm")
         m.def_function[linalg_numeric_mode_binding]("linalg_numeric_mode")
         m.def_function[linalg_profile_version_binding](

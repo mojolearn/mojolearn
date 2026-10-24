@@ -21,6 +21,8 @@
 from std.python import Python, PythonObject
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster import mcls_cluster_operation
+from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_field, plan_require_identical
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -199,8 +201,12 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, _HOLDER, Python.dict())
 
 
-def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`KernelRidge.predict(X)`: K(X, X_fit_) @ dual_coef_."""
+def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
+                 resident: Bool = True) raises -> PythonObject:
+    """`KernelRidge.predict(X)`: K(X, X_fit_) @ dual_coef_. `resident=False`
+    (the multi-GPU driver) skips the device copy of the fit: a copy minted on
+    a device plan's root would outlive the call on that device. The resident
+    and the per-call predict run the same kernels on the same bytes."""
     classical_connect_numpy(context)
     var where = String("KernelRidge")
     var b = Python.import_module("builtins")
@@ -227,7 +233,9 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var binding = _km_extension(model, args[0], where, context)
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
                              family_field(fields, "info_"), PythonObject(q))
-    var handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit, dual, n, d, t, context)
+    var handle = PythonObject(None)
+    if resident:
+        handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit, dual, n, d, t, context)
     if handle is not None:
         # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_resident_binding:
         # handle; x_new, out; the predict's ten params.
@@ -612,9 +620,84 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     return out
 
 
+# ---------------------------------------------------------------------------
+# The multi-GPU drivers parallel_classical.fit_kernel_method and
+# apply_kernel_method, one native call each (lane/native-parallel-driver-
+# 20261024, docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md). They used to send
+# the estimator by pickle to ONE cooperative worker process whose visibility
+# mask held the selected devices and whose MOJOLEARN_SVM_DEVICE_COUNT and
+# MOJOLEARN_CHOLESKY_DEVICE_COUNT held their number. Here the caller's thread
+# binds a device plan in the binding (core/device_plan.mojo) around the plain
+# owners above: the kernel rows, the factor's trailing rows and the solve's
+# columns go to the same owners with the same partition and join order, and
+# the root to devices[0]. No bit moves: par-kernel-ridge and par-nystroem
+# hash the same arrays (tools/identity_break.py).
+# ---------------------------------------------------------------------------
+
+
+def _km_par_admit(model: PythonObject, context: PythonObject) raises -> Bool:
+    """`parallel_classical._admit_kernel_method`, in its order and wording;
+    True for a KernelRidge, False for a Nystroem."""
+    var classes = context["family_km_par_classes"]
+    var cls = py_type(model)
+    var ridge = cls is classes[0]
+    if not ridge and cls is not classes[1]:
+        raise Error("TypeError: requires mojolearn.KernelRidge or Nystroem")
+    plan_require_identical(model, "parallel kernel methods require IDENTICAL numeric mode")
+    var kernel = plan_field(model, "kernel")
+    if family_is_str(kernel) and String(kernel) == "laplacian":
+        raise Error("ValueError: parallel kernel methods refuse kernel='laplacian' by name: its L1 "
+                    + "distance matrix has no distributed row seam in this lane")
+    return ridge
+
+
+comptime _KM_REBUILD = "rebuild kernel methods binding for distributed kernel rows"
+
+
+def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`fit_kernel_method(estimator, X, y, devices=...)`: args (binding, X, y,
+    devices), the binding the plain methods use (`_KernelMethodBase._bind`)."""
+    var ridge = _km_par_admit(model, context)
+    if ridge and args[2] is None:
+        raise Error("ValueError: KernelRidge fit requires y")
+    var devices = plan_devices(args[3], "km_fit", True, context)
+    var binding = args[0]
+    plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
+    try:
+        if ridge:
+            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context)
+        else:
+            _ = _nys_fit(model, Python.tuple(binding, args[1]), context)
+    finally:
+        plan_exit(binding)
+    return model
+
+
+def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`apply_kernel_method(estimator, X, devices=...)`: args (binding, X,
+    devices). The native result (float32 for KernelRidge.predict); the driver
+    applies the plain method's public conversion for its own caller."""
+    var ridge = _km_par_admit(model, context)
+    var devices = plan_devices(args[2], "km_apply", True, context)
+    var binding = args[0]
+    var out = PythonObject(None)
+    plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
+    try:
+        if ridge:
+            out = _krr_predict(model, Python.tuple(binding, args[1]), context, False)
+        else:
+            out = _nys_transform(model, Python.tuple(binding, args[1]), context)
+    finally:
+        plan_exit(binding)
+    return out
+
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """The kernel methods' public operations: args[0] is the resolved binding."""
+    if operation == "family_km_par_fit":
+        return _km_par_fit(model, args, context)
+    if operation == "family_km_par_apply":
+        return _km_par_apply(model, args, context)
     if operation == "family_km_krr_fit":
         _krr_fit(model, args, context)
         return model

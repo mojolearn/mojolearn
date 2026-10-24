@@ -151,6 +151,7 @@ from `R` alone -- but `raft`'s randomized SVD does (`rsvd.cuh:198`, `:218`,
 pieces it now waits on instead of the whole QR.
 """
 
+from core.device_plan import device_plan_device, device_plan_setting
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -717,7 +718,7 @@ def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
     Both its destroyed input and R tile return to their original addresses.
     Only row-panel memory is held on workers; the full root matrix remains.
     """
-    var count = Int(getenv("MOJOLEARN_QR_DEVICE_COUNT","1"))
+    var count = Int(device_plan_setting("MOJOLEARN_QR_DEVICE_COUNT", "1"))
     if count == 1:
         return False
     if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -726,7 +727,7 @@ def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
     ctx.synchronize()
     var devices = List[DeviceContext]()
     for rank in range(count):
-        devices.append(DeviceContext(device_id=rank))
+        devices.append(DeviceContext(device_id=device_plan_device(rank)))
     var panels = List[DeviceBuffer[DType.float32]]()
     var outputs = List[DeviceBuffer[DType.float32]]()
     for panel in range(ns):

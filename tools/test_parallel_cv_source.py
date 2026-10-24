@@ -20,7 +20,7 @@ class SourceIdentityTests(unittest.TestCase):
                 path.write_text('actual source')
             with patch.dict(os.environ, {'MOJOLEARN_COMMIT': 'a' * 40}):
                 before = source_identity(root)
-                (root / 'python/mojolearn/_parallel_worker.py').write_text('different source')
+                (root / 'python/mojolearn/_gpu_witness.py').write_text('different source')
                 after = source_identity(root)
             self.assertEqual(before['kind'], 'guarded-source-archive')
             self.assertNotEqual(before['source_sha256'], after['source_sha256'])

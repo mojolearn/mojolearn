@@ -142,7 +142,13 @@ def par_lanes(harness, scope="default"):
 # --------------------------------------------------------------------------
 
 class PoolWitness:
-    """Every `DevicePool` started inside the `watching()` block.
+    """Every native device plan bound and every native worker pool started
+    inside the `watching()` block (lane native-parallel-driver-20261024: the
+    multi-GPU drivers are native; a cooperative driver binds a device plan
+    in its binding, core/device_plan.mojo, and a Python-sharded driver starts
+    a native local pool whose workers answer an identity request first,
+    bindings/parallel_shard_common.mojo `shard_open`). Before that change it
+    wrapped the Python `DevicePool`, which no driver uses any more.
 
     `_verify_distributed.start_pool` proved this shape on the distributed
     capture: wrap `DevicePool._start`, and for each pool that actually spawns
@@ -292,53 +298,84 @@ class PoolWitness:
 
     # -- the wrapper --------------------------------------------------------
 
-    @contextlib.contextmanager
-    def watching(self):
-        from ._parallel_pool import DevicePool
-        original_start, original_call = DevicePool._start, DevicePool._call
-        undo = self._watch_sessions()
+    # -- native drivers (lane native-parallel-driver-20261024) --------------
 
-        def start(pool):
-            started = bool(pool._workers)
-            original_start(pool)
-            if started:
-                return
+    def _plan_logs(self):
+        """{binding name: [device tuple, ...]}: the device plans every plan
+        binding bound since the last read (`device_plan_log`,
+        core/device_plan.mojo), and an empty log."""
+        from . import _backend
+        from ._native_parallel_shard import PLAN_BINDINGS
+        logs = {}
+        for name in PLAN_BINDINGS:  # glue: one placement log per plan binding
             try:
-                if self.vendor in ("cuda", "hip"):
-                    # ASK THE WORKER, not the parent. `device_inventory` runs
-                    # after that worker's visibility mask is set, which is the
-                    # only place the answer means anything.
-                    inventory = [original_call(worker, ("device_inventory", None, ()))
-                                 for worker in pool._workers]
-                    for worker, record in zip(pool._workers, inventory):
-                        if record.get("pid") != worker.pid:
-                            raise RuntimeError("worker inventory pid differs from the launched "
-                                               "process")
-                else:
-                    # The CPU route has no driver to ask: `visible_gpu_inventory`
-                    # raises NotImplementedError there BY NAME, and sending it
-                    # anyway kills the column with an error about the witness
-                    # rather than about the work (measured, 2026-09-20).
-                    inventory = [dict(kind="process-only", pid=worker.pid, devices=[])
-                                 for worker in pool._workers]
-                self._admit(pool, inventory)
-            except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
-                self.errors.append(f"{type(exc).__name__}: {exc}")
-                raise
-            self.pools.append(dict(devices=list(pool.devices),
-                                   cooperative=bool(getattr(pool, "cooperative", False)),
+                binding = _backend.binding(name, "identical")
+            except (ImportError, AttributeError, ValueError, RuntimeError):
+                continue
+            read = getattr(binding, "device_plan_log", None)
+            if callable(read):
+                logs[name] = [tuple(group) for group in read()]  # glue: logged device groups
+        return logs
+
+    def _admit_plans(self, logs):
+        """One record per bound device plan. A cooperative driver runs its
+        owners in this process on the plan's devices: the rule is the native
+        session's, the plan's ordinals must be distinct physical GPUs by UUID
+        and PCI id in this process's driver inventory."""
+        groups = sorted({group for plans in logs.values() for group in plans})  # glue: distinct logged groups
+        inventory = None
+        for group in groups:  # glue: one admission per distinct device group
+            record = dict(kind="native-plan", devices=list(group), cooperative=True, placed=False, workers=[],
+                          bindings=sorted(n for n, plans in logs.items() if group in plans))
+            if group == self.devices and self.vendor in ("cuda", "hip"):
+                if inventory is None:
+                    inventory = {d["ordinal"]: d for d in self._physical_inventory()}
+                missing = [d for d in group if d not in inventory]
+                if missing:
+                    raise RuntimeError(f"this process's driver shows no device at ordinal(s) {missing}")
+                placed = [inventory[d] for d in group]
+                if (len({d["uuid"] for d in placed}) != len(placed)
+                        or len({d["pci_bus_id"] for d in placed}) != len(placed)):
+                    raise RuntimeError("a device plan's devices resolve to one physical GPU twice")
+                record.update(placed=True, workers=[dict(pid=os.getpid(), devices=[d["uuid"] for d in placed],
+                                                         visibility={})])
+            self.sessions.append(record)
+
+    def _admit_pools(self, trace):
+        """One record per native worker pool the sharded drivers started; its
+        placement was already admitted natively (`shard_open`) and is checked
+        again here by the same rule the old pools met."""
+        for entry in trace:  # glue: one record per started pool
+            pool = type("NativePool", (), dict(devices=tuple(entry["devices"]), cooperative=False))
+            inventory = list(entry["inventory"])
+            if self.vendor not in ("cuda", "hip"):
+                inventory = [dict(kind="process-only", pid=r.get("pid"), devices=[]) for r in inventory]  # glue: per-worker records
+            self._admit(pool, inventory)
+            self.pools.append(dict(devices=list(entry["devices"]), cooperative=False,
                                    workers=[dict(pid=r.get("pid"),
                                                  devices=[d.get("uuid") for d in (r.get("devices") or [])],
                                                  visibility=r.get("visibility", {}))
-                                            for r in inventory]))
+                                            for r in inventory]))  # glue: per-worker records
 
-        DevicePool._start = start
+    # -- the wrapper --------------------------------------------------------
+
+    @contextlib.contextmanager
+    def watching(self):
+        from ._native_parallel_shard import _native_parallel_shard
+        undo = self._watch_sessions()
+        # start from empty records: what the column binds or starts is what counts
+        self._plan_logs()
+        _native_parallel_shard("trace_take", ())
         try:
             yield self
         finally:
-            DevicePool._start = original_start
             for cls, original in undo:
                 cls._open = original
+            try:
+                self._admit_plans(self._plan_logs())
+                self._admit_pools(_native_parallel_shard("trace_take", ()))
+            except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
+                self.errors.append(f"{type(exc).__name__}: {exc}")
 
     # -- the verdict --------------------------------------------------------
 
@@ -354,7 +391,7 @@ class PoolWitness:
             if self.pools or any(s["devices"] != first for s in self.sessions):
                 return ("this lane is declared ONE_DEVICE_BY_DESIGN and its column opened more "
                         "than the first device; the declaration is stale, remove it")
-            if not any(s["driver"] == self.one_device_driver for s in self.sessions):
+            if not any(s.get("driver") == self.one_device_driver for s in self.sessions):
                 return (f"this lane is declared ONE_DEVICE_BY_DESIGN for {self.one_device_driver} "
                         "and the column never opened that driver, so nothing is known about "
                         "where it ran")
@@ -367,6 +404,9 @@ class PoolWitness:
         bad = [p for p in self.pools if tuple(p["devices"]) != self.devices]
         if bad:
             return f"a pool ran on devices {bad[0]['devices']}, not {list(self.devices)}"
+        stray = [s for s in self.sessions if s.get("kind") == "native-plan" and tuple(s["devices"]) != self.devices]
+        if stray:
+            return f"a device plan bound devices {stray[0]['devices']}, not {list(self.devices)}"
         return None
 
     def summary(self):
@@ -375,6 +415,7 @@ class PoolWitness:
         return dict(pools=len(self.pools),
                     workers=sum(len(p["workers"]) for p in self.pools),
                     native_sessions=sum(1 for s in self.sessions if s["placed"]),
+                    native_plans=sum(1 for s in self.sessions if s.get("kind") == "native-plan" and s["placed"]),
                     one_device_by_design=bool(self.one_device_driver),
                     devices=list(self.devices),
                     placement=("physical" if self.vendor in ("cuda", "hip") else "process-only"),
@@ -636,9 +677,10 @@ def refuse_to_run(vendor, devices):
     None. Structural reasons only; no policy lives here."""
     if vendor == "metal":
         return ("Apple is excluded STRUCTURALLY, not by policy: "
-                "`_parallel_pool.DevicePool._start` admits the metal vendor only at "
-                "`group == (0,)` and raises 'device selection is unavailable for this "
-                "vendor/device group' for any other group. No Mac can produce a "
+                "the native drivers' device admission (bindings/parallel_plan_door.mojo "
+                "`plan_devices`, the native local pool's `_process_environment`) admits the "
+                "metal vendor only at `group == (0,)` and raises 'device selection is "
+                "unavailable for this vendor/device group' for any other group. No Mac can produce a "
                 "two-device `par-*` column with this code, so there is no machine to go "
                 "looking for. Run this on a CUDA or HIP box with two GPUs.")
     if vendor not in ("cuda", "hip", "cpu"):
