@@ -7,6 +7,7 @@ import pytest
 
 from mojolearn import _training_impl as T
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connection_refusal import assert_connection_refusal
 
 
 def replacement(name, calls):
@@ -76,10 +77,14 @@ def test_tensor_preparation_never_admits_replaced_list_type(monkeypatch, operati
         patch.setattr(builtins, "list", cls)
         audit = audit_native_call(method, *args, **kwargs)
     if operation == "accumulate":
-        # Retained b638 public refusal. Since lane fix-p1 (py_typed_call)
-        # the nested accumulation binding keeps the callee's TypeError class
-        # instead of normalizing it to Exception. Preserve its full message;
-        # a missing context key cannot qualify.
+        # The accumulation door reads the connected builtins first, so the
+        # replaced list export refuses by name (commit 31fc85981) before the
+        # container admission sees the foreign value. py_typed_call keeps the
+        # TypeError class through the nested binding.
+        assert_connection_refusal(audit, "list", calls)
+        # With the setup-time export back, the foreign subclass itself is
+        # still refused by admission without entering its hooks.
+        audit = audit_native_call(method, *args, **kwargs)
         assert_native_refusal(audit, calls, TypeError,
                               "optimizer requires native buffers and lists/tuples; Python protocols and callbacks cannot execute")
     else:
@@ -108,8 +113,8 @@ def test_optimizer_state_uses_retained_list_constructor(monkeypatch):
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "list", cls)
         audit = audit_native_call(owner.state_dict)
-    state = audit.assert_native()
-    assert not calls
+    assert_connection_refusal(audit, "list", calls)
+    state = audit_native_call(owner.state_dict).assert_native()
     assert state["t"] == 0
     assert np.asarray(state["exp_avg"]).tobytes() == np.zeros(3, dtype="f4").tobytes()
     assert np.asarray(state["exp_avg_sq"]).tobytes() == np.zeros(3, dtype="f4").tobytes()
@@ -147,8 +152,9 @@ def test_native_optimizer_preparation_uses_retained_list_constructor(monkeypatch
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "list", cls)
         audit = audit_native_call(method, *args, **kwargs)
-    result = audit.assert_native()
-    assert not calls
+    # Refused before any state change; the clean call then runs once.
+    assert_connection_refusal(audit, "list", calls)
+    result = audit_native_call(method, *args, **kwargs).assert_native()
     if operation == "construct":
         assert np.asarray(result.params[0]).tobytes() == params.tobytes()
         assert result.t == 0
