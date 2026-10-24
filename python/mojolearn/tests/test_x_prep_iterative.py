@@ -39,10 +39,10 @@ def test_iterative_options():
     X = _data(2)
     Xh = _data(3)
     miss = np.isnan(X)
-    # add_indicator, and another estimator (the rounds in Python over its fit / predict)
+    # add_indicator, and another (mojolearn) estimator: the rounds over its fit / predict
     for kw, skw in ((dict(add_indicator=True), dict(add_indicator=True)),
-                    (dict(estimator=SkRidge(alpha=2.0)), dict(estimator=SkRidge(alpha=2.0))),
-                    (dict(estimator=SkRidge(alpha=2.0), add_indicator=True, max_iter=4),
+                    (dict(estimator=ml.Ridge(alpha=2.0)), dict(estimator=SkRidge(alpha=2.0))),
+                    (dict(estimator=ml.Ridge(alpha=2.0), add_indicator=True, max_iter=4),
                      dict(estimator=SkRidge(alpha=2.0), add_indicator=True, max_iter=4))):
         m, r = ml.IterativeImputer(**kw), SkII(**skw)
         a, b = np.asarray(m.fit_transform(X)), r.fit_transform(X.astype(np.float64))
@@ -71,10 +71,16 @@ def test_iterative_options():
         assert abs(A.mean() - B.mean()) < 0.05, (kw, A.mean(), B.mean())
         assert abs(A.std(0).mean() / B.std(0).mean() - 1) < 0.2, (kw, A.std(0).mean(), B.std(0).mean())
     try:
-        ml.IterativeImputer(estimator=SkRidge(), sample_posterior=True).fit(X)
+        ml.IterativeImputer(estimator=ml.Ridge(), sample_posterior=True).fit(X)
         raise AssertionError("no ValueError")
     except ValueError:
         pass
+    # a user estimator must be a mojolearn estimator
+    try:
+        ml.IterativeImputer(estimator=SkRidge()).fit(X)
+        raise AssertionError("no TypeError")
+    except TypeError as error:
+        assert "requires a mojolearn estimator; got Ridge" in str(error)
 
 
 if __name__ == "__main__":
