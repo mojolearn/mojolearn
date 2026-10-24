@@ -236,6 +236,29 @@ def parse_imports(text):
     return out
 
 
+#: Directory listings exact_source_file reads, keyed by directory, when a
+#: caller that knows the tree does not change under it opts in
+#: (cache_directory_listings; tools/lane_select.py resolves ~10^6 imports over
+#: one tree). None, the default, lists the directory on every call.
+_DIR_NAMES = None
+
+
+def cache_directory_listings(enabled=True):
+    """Opt in to (or out of, clearing it) the per-process listing cache."""
+    global _DIR_NAMES
+    _DIR_NAMES = {} if enabled else None
+
+
+def _names_in(directory):
+    if _DIR_NAMES is None:
+        return {p.name for p in directory.iterdir()}
+    key = str(directory)
+    names = _DIR_NAMES.get(key)
+    if names is None:
+        names = _DIR_NAMES[key] = frozenset(p.name for p in directory.iterdir())
+    return names
+
+
 def exact_source_file(path, root):
     """Require on-disk spelling even on a case-insensitive filesystem.
 
@@ -247,7 +270,7 @@ def exact_source_file(path, root):
         return False
     parent = root
     for part in path.relative_to(root).parts:
-        if part not in (".", "..") and part not in {p.name for p in parent.iterdir()}:
+        if part not in (".", "..") and part not in _names_in(parent):
             return False
         parent = parent / part
     return True

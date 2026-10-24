@@ -424,6 +424,7 @@ def reset_caches():
     global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
     for cache in _CACHES:
         cache.clear()
+    bincache.cache_directory_listings(False)    # a test may have added or removed files
     _GIT_SHOW.clear()
     _TRACKED = None
     _PYTHON_FILES = None
@@ -1879,6 +1880,10 @@ def _include_roots():
     return _INCLUDE_ROOTS
 
 
+_MODULE_FILES = {}
+_CACHES.append(_MODULE_FILES)
+
+
 def _mojo_module_files(dotted, rel, names=()):
     """Every repository file one Mojo import could mean, RESOLVED THE WAY THE
     BUILD RESOLVES IT (2026-09-23): `bincache.resolve` over the include roots
@@ -1910,11 +1915,16 @@ def _mojo_module_files(dotted, rel, names=()):
 
     `from max.gpu.host import ...` still resolves to nothing under either root
     and is still dropped, which is what makes the toolchain fall out."""
-    from pathlib import Path
-    found = bincache.resolve(dotted, list(names), Path(ROOT, rel), _include_roots())
-    if not found:
-        return set()
-    return {os.path.relpath(Path(f).resolve(), ROOT) for f in found}
+    # resolve() depends on the importing file's directory only, and the tree does not
+    # change inside one run (reset_caches clears this with every other memo).
+    key = (dotted, os.path.dirname(rel), tuple(names))
+    if key not in _MODULE_FILES:
+        from pathlib import Path
+        if bincache._DIR_NAMES is None:
+            bincache.cache_directory_listings()
+        found = bincache.resolve(dotted, list(names), Path(ROOT, rel), _include_roots())
+        _MODULE_FILES[key] = frozenset(os.path.relpath(Path(f).resolve(), ROOT) for f in found) if found else frozenset()
+    return set(_MODULE_FILES[key])
 
 
 @_by_path
@@ -3018,7 +3028,22 @@ def _binding_names(rel):
     return _binding_names_in(rel, list(tree.body) if tree is not None else [])
 
 
+_BINDING_NAMES_IN = {}
+_CACHES.append(_BINDING_NAMES_IN)
+
+
 def _binding_names_in(rel, nodes):
+    """`_binding_names_in_uncached`, memoized: a pure function of the file's
+    parsed tree (itself cached) and the region's statements, asked once per
+    lane that walks the file (2026-10-24: ~14k calls per lane_sources)."""
+    key = (rel, tuple(id(n) for n in nodes))
+    hit = _BINDING_NAMES_IN.get(key)
+    if hit is None or hit[0] is not nodes and list(hit[0]) != list(nodes):
+        hit = _BINDING_NAMES_IN[key] = (list(nodes), frozenset(_binding_names_in_uncached(rel, nodes)))
+    return set(hit[1])
+
+
+def _binding_names_in_uncached(rel, nodes):
     """`_binding_names` over the top-level statements `nodes` of `rel` (the
     module's constants and tables are read from the whole file)."""
     out = set()
@@ -3288,18 +3313,37 @@ def _generic_dispatch_exports(src):
     return found
 
 
+_DISPATCH_CANDIDATES = {}
+_CACHES.append(_DISPATCH_CANDIDATES)
+
+
+def _dispatch_candidates(top):
+    """(export name, node, role) for every attribute and string constant of one
+    top-level statement, computed once per parsed statement (the statement is
+    held with its entry, so its id cannot be reused while cached)."""
+    hit = _DISPATCH_CANDIDATES.get(id(top))
+    if hit is None or hit[0] is not top:
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        found = []
+        for node in ast.walk(top):
+            export = (node.attr if isinstance(node, ast.Attribute) else node.value
+                      if isinstance(node, ast.Constant) and isinstance(node.value, str) else None)
+            if export is None:
+                continue
+            parent = parents.get(node)
+            role = "call" if isinstance(parent, ast.Call) and parent.func is node else "retained-reference"
+            found.append((export, node, role))
+        hit = _DISPATCH_CANDIDATES[id(top)] = (top, found)
+    return hit[1]
+
+
 def _native_dispatch_references(rel, nodes, used, dispatchers):
     """Source evidence for unresolved dispatcher uses in one Python region."""
     records = {}
     for top in nodes:
-        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
-        for node in ast.walk(top):
-            export = (node.attr if isinstance(node, ast.Attribute) else node.value
-                      if isinstance(node, ast.Constant) and isinstance(node.value, str) else None)
+        for export, node, role in _dispatch_candidates(top):
             if export not in used or export not in dispatchers:
                 continue
-            parent = parents.get(node)
-            role = "call" if isinstance(parent, ast.Call) and parent.func is node else "retained-reference"
             for implementation, function, selector in dispatchers[export]:
                 key = (rel, node.lineno, export, implementation, function)
                 records[key] = dict(kind="unresolved-native-dispatch", source=rel, line=node.lineno,
