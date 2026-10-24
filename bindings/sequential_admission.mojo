@@ -45,12 +45,24 @@ def _ordinary_torch(cls: PythonObject, context: PythonObject) raises -> Bool:
 def sequential_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: Sequential input containers exceed the supported nesting depth")
-    var b = native_loaded_module("builtins")
+    if depth == 0:
+        # The connected-builtins check once per admitted value, not once per
+        # element: re-validating every builtins export for each of a list's
+        # 20000 labels made a forest fit on a Python-list y ~35 s slower
+        # (L4, tools/repro_par_forest.py --direct --inputs pool).
+        _ = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is py_type(Python.list()) or cls is py_type(Python.tuple()):
         for k in range(len(value)):  # driver-loop: over native input container owners and metadata
             sequential_admit_value(value[k], context, depth + 1)
         return
+    # Exact native values and scalars first (no memoryview is in either
+    # table, so the order of these checks does not change any outcome).
+    var native_values = py_get(context, "native_value_types")
+    var scalars = py_get(context, "scalar_types")
+    if (native_values is not None and _one_of(cls, native_values)) or (scalars is not None and _one_of(cls, scalars)):
+        return
+    var b = native_loaded_module("builtins")
     if _one_of(cls, context["mapping_types"]):
         if cls is context["defaultdict_class"]:
             # An exact C defaultdict can still call a Python default_factory
@@ -70,8 +82,6 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
         var owner_type = py_type(owner)
         if not _one_of(owner_type, context["buffer_owner_types"]) and not _ctypes_array_owner(owner_type, context):
             raise Error("TypeError: Sequential requires a memoryview over a native buffer owner")
-        return
-    if _one_of(cls, context["native_value_types"]) or _one_of(cls, context["scalar_types"]):
         return
     if _ordinary_torch(cls, context):
         native_torch_admit(value)

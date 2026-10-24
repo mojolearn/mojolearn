@@ -105,10 +105,21 @@ def test_lda_rejects_covariance_and_scalar_callbacks_without_touching_them():
             calls.append('float')
             return .2
 
-    clean(LinearDiscriminantAnalysis, solver='lsqr', covariance_estimator=Covariance(), error=TypeError)
+    x, y = data()
+    refusal = 'covariance_estimator cannot invoke Python callbacks'
+    # The constructor and set_params store a covariance_estimator object as
+    # the same reference and validate nothing (4c10a3cf6, scikit-learn's
+    # check_do_not_raise_errors_in_init_or_set_params; test_x_prep_parity
+    # relies on it); fit refuses it by name before touching it (a5f9cc738).
+    estimator = Covariance()
+    model = clean(LinearDiscriminantAnalysis, solver='lsqr', covariance_estimator=estimator)
+    assert clean(model.get_params)['covariance_estimator'] is estimator
+    assert refusal in str(clean(model.fit, x, y, error=TypeError))
+    # A Python scalar protocol is still refused by native admission at once.
     clean(LinearDiscriminantAnalysis, solver='lsqr', shrinkage=Scalar(), error=TypeError)
     model = LinearDiscriminantAnalysis()
-    clean(model.set_params, covariance_estimator=Covariance(), error=TypeError)
+    assert clean(model.set_params, covariance_estimator=Covariance()) is model
+    assert refusal in str(clean(model.fit, x, y, error=TypeError))
     assert calls == []
 
 
