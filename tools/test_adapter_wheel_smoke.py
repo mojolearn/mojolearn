@@ -93,4 +93,5 @@ def test_a_checker_with_any_failed_comparison_fails_the_smoke(tmp_path):
     assert smoke.main(["--python", checker_python(tmp_path, facts, 1), "--out", str(out)]) == 1
     report = json.loads((out / "adapter-smoke.json").read_text())
     assert report["status"] == "FAILED"
-    assert report["frameworks"] == dict(torch="failed", max="failed") or "torch adapter check failed" in report["problems"][0]
+    assert "torch adapter check failed" in report["problems"][0]
+    assert report["frameworks"].get("torch") != "ran" and report["frameworks"]["max"] == "failed"
