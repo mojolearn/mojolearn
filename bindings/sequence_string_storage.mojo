@@ -260,6 +260,16 @@ def sequence_string_leaf(source: Int, destination: Int, count: Int, stride: Int,
                 # Suppress that intermediate native error without swallowing
                 # callback-admission failures or altering warning delivery.
                 sequence_array_report(SEQ_CAST_INVALID, settings, context, "equal", True)
+        comptime if CompilationTarget.is_x86():
+            # A float32 never matches na_eq_cmp's float-only NaN shortcut, so
+            # NumPy's float_to_string formats every element through
+            # floattype_str (scalartypes.c.src), whose npy_isnan(val) test is
+            # a GCC x86 ucomiss: a signaling NaN raises FE_INVALID there,
+            # whatever the missing-value sentinel. Apple clang builds raise
+            # nothing on this path. The bit lands after the equality status
+            # above, so it survives to the outer cast like NumPy's flag.
+            if sequence_signaling(words[i]):
+                status |= SEQ_CAST_INVALID
         storage.write(words[i], destination + i * stride + offset, print_mode)
     _ = storage^
     return status

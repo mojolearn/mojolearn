@@ -96,7 +96,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import bincache  # noqa: E402  the build's own Mojo import resolver
-from mojo_registrations import registered_functions, sole_registration
+from mojo_registrations import registered_functions as _registered_functions_uncached, sole_registration
 from import_metadata_effects import metadata_only_call
 PKG = os.path.join("python", "mojolearn")
 HARNESS = os.path.join("tools", "identity_break.py")
@@ -399,6 +399,17 @@ UNIVERSAL_BASE_MAX_EXTENDERS = 3
 #: function of that file's CONTENT; the tree does not change inside one run,
 #: and nothing here writes a file. Same answers, 26x less of them.
 _CACHES = []
+_REGISTERED = {}
+_CACHES.append(_REGISTERED)
+
+
+def registered_functions(text):
+    """`mojo_registrations.registered_functions`, memoized by text: every lane
+    asks for the same bindings' registrations (read-only results)."""
+    hit = _REGISTERED.get(text)
+    if hit is None:
+        hit = _REGISTERED[text] = _registered_functions_uncached(text)
+    return hit
 
 
 def _by_path(fn):
@@ -889,6 +900,30 @@ def _module_has_dynamic_members(rel):
                for n in ast.walk(tree))
 
 
+_TOP_INDEX = {}
+_CACHES.append(_TOP_INDEX)
+
+
+def _top_index(top):
+    """(child -> parent, str constants, Name nodes by id, the calls of eval,
+    exec, globals, locals and vars) of one statement, in walk order."""
+    hit = _TOP_INDEX.get(top)
+    if hit is None:
+        parents, constants, names, calls = {}, set(), {}, []
+        for node in ast.walk(top):
+            for child in ast.iter_child_nodes(node):
+                parents[child] = node
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                constants.add(node.value)
+            elif isinstance(node, ast.Name):
+                names.setdefault(node.id, []).append(node)
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                  and node.func.id in ("eval", "exec", "globals", "locals", "vars")):
+                calls.append(node)
+        hit = _TOP_INDEX[top] = (parents, constants, names, calls)
+    return hit
+
+
 def _module_region_members(local, nodes, wanted):
     """Members a module object supplies, or None when the object escapes.
 
@@ -904,11 +939,13 @@ def _module_region_members(local, nodes, wanted):
     for top in nodes:
         if isinstance(top, (ast.Import, ast.ImportFrom)):
             continue
-        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
-        for node in ast.walk(top):
-            if isinstance(node, ast.Constant) and node.value == local:
-                return None  # a reflected reference or an explicit re-export
-            if isinstance(node, ast.Name) and node.id == local:
+        # One walk per statement, indexed (`_top_index`): this ran a full
+        # walk and parent map per statement for every imported module name.
+        parents, constants, names, calls = _top_index(top)
+        if local in constants:
+            return None  # a reflected reference or an explicit re-export
+        for node in names.get(local, []) + calls:
+            if isinstance(node, ast.Name):
                 parent = parents.get(node)
                 if (isinstance(node.ctx, ast.Load) and isinstance(parent, ast.Attribute)
                         and parent.value is node and isinstance(parent.ctx, ast.Load)):
@@ -2174,6 +2211,8 @@ _SYMBOL_STEPS = {}
 _CACHES.append(_SYMBOL_STEPS)
 _SYMBOL_NAMES = {}
 _CACHES.append(_SYMBOL_NAMES)
+_SYMBOL_REFS = {}            # (rel, name) -> the export call sites of those bodies
+_CACHES.append(_SYMBOL_REFS)
 
 
 def _mojo_named_imports(rel, idents):
@@ -2221,10 +2260,11 @@ def _mojo_symbol_step(rel, name):
     out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
     _SYMBOL_NAMES[key] = idents
+    _SYMBOL_REFS[key] = _mojo_export_refs("\n".join(bodies))
     return out
 
 
-def _mojo_symbol_reach(pending, names=None):
+def _mojo_symbol_reach(pending, names=None, refs=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
@@ -2250,6 +2290,8 @@ def _mojo_symbol_reach(pending, names=None):
         reached.add(node[0])
         if names is not None:
             names.update(_SYMBOL_NAMES.get(node, ()))
+        if refs is not None:
+            refs.update(_SYMBOL_REFS.get(node, ()))
         stack.extend(step)
     return reached, whole
 
@@ -2517,6 +2559,66 @@ def binding_additions(ref, path):
 MOJO_EDIT_WHY = {}
 
 _MOJO_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_MOJO_FULL_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_MOJO_REF_CACHE = {}
+_MOJO_TOKEN_RE = re.compile(
+    r'(?P<triple>"""(?:\\.|[^\\])*?"""|\'\'\'(?:\\.|[^\\])*?\'\'\')'
+    r'|(?P<comment>#[^\n]*)'
+    r'|"(?P<str>(?:\\.|[^"\\\n])*)"|\'(?P<sstr>(?:\\.|[^\'\\\n])*)\''
+    r'|(?P<code>[^"\'#]+)', re.S)
+
+
+def _mojo_export_refs(text):
+    """The names a Mojo text can RUN as another binding's export (2026-10-24).
+
+    Native owners reach a compiled export by name: an entry table or lookup
+    holds the export as a whole string literal (`_need(entries, "qn_sigmoid")`,
+    `_kernel_entry("qn_fit", context)`), a module attribute names it
+    (`module.qn_fit(...)`), or code calls it (`qn_fit(...)`, `qn_fit[...]`).
+    Those are the call sites. A word in a comment or docstring, inside a longer
+    message (`"qn_sigmoid: params must contain n_rows"`), a definition's own
+    name or a keyword argument runs nothing: matching every identifier of a
+    reached file made the fixed point below take any export whose name a
+    docstring mentioned, and glm/host/qn_oracle.mojo selected mamba1 and
+    transformer through `_mojolearn_estimators_host`'s export list in prose.
+    A text the scanner cannot read with certainty keeps every identifier."""
+    hit = _MOJO_REF_CACHE.get(text)
+    if hit is not None:
+        return hit
+    refs, code, covered = set(), [], 0
+    for match in _MOJO_TOKEN_RE.finditer(text):
+        covered += match.end() - match.start()
+        literal = match.group("str")
+        if literal is None:
+            literal = match.group("sstr")
+        if literal is not None:
+            if _MOJO_FULL_IDENT_RE.match(literal):
+                refs.add(literal)
+            code.append(" ")
+        elif match.group("code") is not None:
+            code.append(match.group("code"))
+        else:
+            code.append(" ")            # a comment or a docstring/block literal: prose
+    if covered != len(text):
+        # an unterminated string or docstring: not read with certainty
+        out = frozenset(_MOJO_IDENT_RE.findall(text))
+        _MOJO_REF_CACHE[text] = out
+        return out
+    flat = "".join(code)
+    for match in re.finditer(r"(\.\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\b(\s*[(\[])?", flat):
+        dotted, name, called = match.group(1), match.group(2), match.group(3)
+        if dotted:
+            refs.add(name)
+            continue
+        if not called:
+            continue
+        before = flat[max(0, match.start() - 16):match.start()]
+        if re.search(r"\b(?:def|fn|struct|trait|comptime|alias)\s+$", before):
+            continue
+        refs.add(name)
+    out = frozenset(refs)
+    _MOJO_REF_CACHE[text] = out
+    return out
 _MOJO_DEF_RE = re.compile(r"^(?:fn|def)\s+([A-Za-z_][A-Za-z0-9_]*)")
 _MOJO_TYPE_RE = re.compile(r"^(?:struct|trait)\s+([A-Za-z_][A-Za-z0-9_]*)")
 _MOJO_VALUE_RE = re.compile(r"^(?:comptime|alias|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:[:=\[]|$)")
@@ -3325,6 +3427,16 @@ def host_routes(hs=None):
     for table in (hs.routed_modules(), hs.inference_routes()):
         for gpu, host in table.items():
             out.setdefault(gpu, set()).add(host)
+    # IMPORT ALIASES ARE ROUTES TOO (2026-10-24). `load_host_module` connects
+    # the functions `HOST_IMPORT_ALIASES` lists from their alias binding:
+    # since 8188d819d `_mojolearn_tokenizer_host`'s `classical_native_call`
+    # is an unavailable stub and `_mojolearn_runtime_classical_host` serves
+    # it. Without this edge a lane calling it reached the stub only, and the
+    # k-means lane kept `cluster/host/kmeans_oracle.mojo` only because a
+    # docstring elsewhere spelled `kmeans_fit`.
+    for source, aliases in getattr(hs, "HOST_IMPORT_ALIASES", {}).items():
+        for alias in aliases:
+            out.setdefault(source, set()).add(alias["binding"])
     return out
 
 
@@ -3423,6 +3535,8 @@ def lane_sources():
     py_files = _python_files()
     symbols = _python_symbols(py_files)
     routed = host_routes(hs)                     # GPU binding -> host bindings, as _backend routes
+    alias_targets = {alias["binding"] for aliases in getattr(hs, "HOST_IMPORT_ALIASES", {}).values()
+                     for alias in aliases}
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
@@ -3482,12 +3596,12 @@ def lane_sources():
                 seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
                 read_by_name[key] = {src} if wide == "narrow" else set()
                 native_names[key] = set() if wide == "narrow" else set().union(*[
-                    set(_MOJO_IDENT_RE.findall(_read(f))) for f in seed_cache[key] if f.endswith(".mojo")])
+                    _mojo_export_refs(_read(f)) for f in seed_cache[key] if f.endswith(".mojo")])
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
-                seeds, pending, named = set(), [], set()
+                seeds, pending, named, refs = set(), [], set(), set()
                 for export in hit:
                     if export not in exports:
                         # REGISTERED BY A FUNCTION THE BINDING IMPORTS
@@ -3526,25 +3640,31 @@ def lane_sources():
                         if body is None:
                             continue
                         bodies.append(body)
+                        # the identifiers of the body, not a regex per block
+                        # (same word boundaries; it ran per file-local name)
+                        idents = set(_MOJO_IDENT_RE.findall(body))
                         for other in blocks:
-                            if other not in seen and re.search(
-                                    r"\b%s\b" % re.escape(other), body):
+                            if other not in seen and other in idents:
                                 stack.append(other)
                     body = "\n".join(bodies)
                     named.update(_MOJO_IDENT_RE.findall(body))
+                    refs.update(_mojo_export_refs(body))
                     pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending, named)
+                reached, whole = _mojo_symbol_reach(pending, named, refs)
                 closed = _mojo_closure(seeds | whole)
                 seed_cache[key] = closed | reached | {src}
                 read_by_name[key] = (reached | {src}) - closed
+                # The exports these bodies can run are their call sites
+                # (`_mojo_export_refs`), not every word; `named` stays the
+                # import-following input above.
                 for f in closed:
                     if f.endswith(".mojo"):
-                        named.update(_MOJO_IDENT_RE.findall(_read(f)))
-                native_names[key] = named
+                        refs.update(_mojo_export_refs(_read(f)))
+                native_names[key] = refs
         if mark and wide is not False:
             narrowed_files.update(read_by_name[key])
         return seed_cache[key]
@@ -3660,7 +3780,12 @@ def lane_sources():
             declared, whole = {b for b in declared if exists(b)}, {b for b in whole if exists(b)}
             for group in (declared, whole):
                 for b in list(group):
-                    group |= routed.get(b, set())    # the host bindings _backend routes it to
+                    # An import ALIAS serves a few named functions of `b`, not
+                    # the lane's whole door: never whole through `b`, so a
+                    # lane calling none of them takes its source, and one that
+                    # calls them takes those exports (tokenizer lanes took
+                    # every classical oracle through the alias otherwise).
+                    group |= routed.get(b, set()) - (alias_targets if group is whole else set())
                     if b in adapted:
                         group.add(f"_mojolearn_{adapted[b]}_host")
             own_cache[lane] = (declared, used, whole)
@@ -3917,40 +4042,38 @@ def _ls_identities():
     return ids
 
 
+#: How many derived maps are remembered (most recently used last). A test that
+#: probes an edited tree derives one map for the edit; the clean tree's map
+#: must survive that, or restoring the tree costs a second derivation.
+_LS_MEMO_SLOTS = 3
+
+
 def _remember_lane_sources():
     global _LS_MEMO
     import copy
     git = _ls_git_state()
     if git is None:
-        _LS_MEMO = None
         return
-    _LS_MEMO = dict(
+    entry = dict(
         result=copy.deepcopy((_LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS)),
         reads={path: _ls_digest(text) for path, text in _read.cache.items()},
         tree=_ls_tree_state(), git=git, ids=_ls_identities(),
         tracked=frozenset(_TRACKED) if _TRACKED is not None else None,
         python_files=list(_PYTHON_FILES) if _PYTHON_FILES is not None else None)
+    _LS_MEMO = ((_LS_MEMO or [])[-(_LS_MEMO_SLOTS - 1):] if _LS_MEMO_SLOTS > 1 else []) + [entry]
 
 
-def _reuse_lane_sources():
-    """Restore the remembered map when nothing it was derived from changed."""
-    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
-    memo = _LS_MEMO
-    if memo is None:
-        return False
+def _ls_memo_matches(memo, ids, git, tree):
     if _PYTHON_FILES is not None and list(_PYTHON_FILES) != memo["python_files"]:
         return False
     if _TRACKED is not None and frozenset(_TRACKED) != memo["tracked"]:
         return False
-    if _ls_identities() != memo["ids"]:
+    if ids != memo["ids"] or git != memo["git"]:
         return False
     # an entry a caller put into the read cache must be what the map read
     for path, text in _read.cache.items():
         if path not in memo["reads"] or _ls_digest(text) != memo["reads"][path]:
             return False
-    if _ls_git_state() != memo["git"]:
-        return False
-    tree = _ls_tree_state()
     if tree.keys() != memo["tree"].keys():
         return False
     for path, stat in tree.items():
@@ -3972,9 +4095,23 @@ def _reuse_lane_sources():
             return False
         if _ls_digest(text) != digest:
             return False
-    import copy
-    _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
     return True
+
+
+def _reuse_lane_sources():
+    """Restore a remembered map when nothing it was derived from changed."""
+    global _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LS_MEMO
+    if not _LS_MEMO:
+        return False
+    ids, git, tree = _ls_identities(), _ls_git_state(), _ls_tree_state()
+    for index in range(len(_LS_MEMO) - 1, -1, -1):
+        memo = _LS_MEMO[index]
+        if _ls_memo_matches(memo, ids, git, tree):
+            import copy
+            _LANE_SOURCES, _LANE_SEED_CALLS, _LANE_PRECISION_PATHS = copy.deepcopy(memo["result"])
+            _LS_MEMO = _LS_MEMO[:index] + _LS_MEMO[index + 1:] + [memo]
+            return True
+    return False
 
 
 _REVERSE = None

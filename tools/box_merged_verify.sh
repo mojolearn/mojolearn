@@ -44,7 +44,10 @@ die() { st "REFUSED $*"; exit 3; }
 st "START $V $SHA"
 cp "$CONTROLLER" "$O/controller.sh" || die "cannot retain controller source"
 sha256sum "$O/controller.sh" > "$O/controller-sha256.txt" || die "cannot hash controller source"
-export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH
+# The provisioned pixi and ROCm tools win over anything else on PATH. A box
+# that keeps them elsewhere (and the controller's tests, whose shims must not be
+# shadowed by a real /root/.pixi/bin on a GPU pod) names them in BOX_TOOL_PATH.
+export PATH="${BOX_TOOL_PATH:-/root/.pixi/bin:/opt/rocm/bin}:$PATH"
 command -v git >/dev/null || die "git missing; provision the box first"
 command -v pixi >/dev/null || die "pixi missing; provision the box first"
 cd "${BOX_REPO_DIR:-${BOX_REPO:-/root/mojolearn}}" || die "checkout missing; prepare it at $SHA first"

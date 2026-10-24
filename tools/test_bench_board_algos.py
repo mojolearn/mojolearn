@@ -210,7 +210,6 @@ def test_tables_are_complete_and_stdlib_only():
         assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "sym", "images",
                                                           "corpus"), lane
         assert not tab or set(tab) == set(A.TAB), lane
-    # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned.
     # FAIRNESS FIX (2026-10-13 audit): the SGD lanes refuse scikit-learn's per-sample SGD (a
     # different algorithm from ours' minibatch SGD), so off NVIDIA they race ours alone too.
     # quantile: ours runs ADMM, no library does (its scikit-learn arm is refused).
@@ -225,7 +224,10 @@ def test_tables_are_complete_and_stdlib_only():
     # scikit-learn's Barnes-Hut (cuML method='exact' races on NVIDIA only), and cagra refuses
     # faiss's HNSW (cuVS on NVIDIA and hipVS on AMD are CAGRA), so off those vendors they race
     # ours alone. Results raced before this change were wrong for these lanes.
-    assert alone == {"lion", "lamb", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
+    # 50aad5102: Lion races lion-pytorch and LAMB races timm's Lamb, so neither is alone any more.
+    # 0c2c8e0a9 (measure-coverage): ann-refine has cuVS/hipVS on NVIDIA/AMD and no Apple opponent;
+    # lowbit-matmul-int15 has torch arms on NVIDIA/AMD and none on Apple: both race ours alone on Apple.
+    assert alone == {"ann-refine", "lowbit-matmul-int15", "sgd-clf", "sgd-reg", "incremental-pca", "tree-shap",
                      "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
                      "adaboost-clf", "adaboost-reg", "voting-clf", "voting-reg",
                      "stacking-clf", "stacking-reg", "quantile", "radius-neighbors", "tsne",
