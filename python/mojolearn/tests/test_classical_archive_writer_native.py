@@ -107,7 +107,14 @@ def test_archive_writer_ignores_replaced_builtin_helpers(tmp_path, monkeypatch, 
         patch.setattr(dis, name, original, raising=False)
         patch.setattr(builtins, name, foreign)
         audit = audit_native_call(model.save, filename)
-    assert audit.assert_native() == filename
+    # A replaced connected builtin export is refused before any callback
+    # (bindings/native_loaded_module.mojo, contract of 31fc85981 and
+    # test_native_cv_module_connections.py); the restored export then saves.
+    assert type(audit.exception) is TypeError, audit.report()
+    assert str(audit.exception) == "native module connection export changed: builtins." + name
+    assert not audit.report()["python_frames"], audit.report()
+    assert touched == []
+    assert audit_native_call(model.save, filename).assert_native() == filename
     assert Path(filename).read_bytes() == expected
     assert touched == []
 
@@ -212,6 +219,15 @@ try:
     audit=audit_native_call(model.save,output)
 finally:
     if name: setattr(builtins,name,original)
+if name:
+    # A replaced connected builtin export is refused before any callback
+    # (contract of 31fc85981); the restored export then saves.
+    assert type(audit.exception) is TypeError, audit.report()
+    assert str(audit.exception)=="native module connection export changed: builtins."+name, str(audit.exception)
+    assert not audit.report()["python_frames"], audit.report()
+    assert touched==[], touched
+    output=io.BytesIO()
+    audit=audit_native_call(model.save,output)
 audit.assert_native()
 assert touched==[], touched
 assert "numpy" not in sys.modules
