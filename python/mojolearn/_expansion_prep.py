@@ -1266,12 +1266,12 @@ class TargetEncoder(_PrepBase):
     smooth : 'auto' or float, default 'auto'
         Shrinkage toward the target mean: ``'auto'`` uses an empirical Bayes estimate, a float ``>= 0``
         sets it directly.
-    cv : int, splitter or iterable, default 5
+    cv : int, mojolearn splitter or list of index pairs, default 5
         Folds for ``fit_transform``. An int ``>= 2`` uses KFold for a continuous target and
-        StratifiedKFold otherwise. A splitter object (its ``split(X, y)``) or an iterable of
-        ``(train, test)`` index pairs is also accepted: the test folds must cover every row exactly once
-        (``ValueError`` otherwise), and each fold's training rows must be all the other rows
-        (``NotImplementedError`` otherwise).
+        StratifiedKFold otherwise. A mojolearn splitter (such as :class:`KFold`; its ``split(X, y)``) or
+        a list or tuple of ``(train, test)`` index arrays is also accepted; any other object raises
+        ``TypeError``. The test folds must cover every row exactly once (``ValueError`` otherwise), and
+        each fold's training rows must be all the other rows (``NotImplementedError`` otherwise).
     shuffle : bool, default True
         Shuffle the rows before splitting into folds.
     random_state : int or None, default None
@@ -1317,54 +1317,8 @@ class TargetEncoder(_PrepBase):
         self.shuffle = shuffle
         self.random_state = random_state
 
-    def _check(self):
-        if not _is_auto(self.categories) and not isinstance(self.categories, (list, tuple)):
-            raise ValueError("mojolearn: TargetEncoder categories must be 'auto' or a list of lists")
-        if self.target_type not in ("auto", "binary", "continuous", "multiclass"):
-            raise ValueError(f"mojolearn: invalid target_type {self.target_type!r}")
-        if not (self.smooth == "auto" or (isinstance(self.smooth, numbers.Real) and self.smooth >= 0)):
-            raise ValueError(f"mojolearn: invalid smooth {self.smooth!r}")
-        if isinstance(self.cv, numbers.Integral) and self.cv < 2:
-            raise ValueError("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
-
     def fit(self, X, y):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def _splitter_folds(self, X, y, n):
-        """Row -> fold (an int32 Array) from a splitter object or (train,
-        test) iterable, checked by the base binding's helpers (lane
-        cgr4-py-compute: no per-row Python): the test folds cover every row
-        exactly once, and each fold's training rows are every other row."""
-        from ._buffer import as_index_i64
-        splits = list(self.cv.split(X, y) if hasattr(self.cv, "split") else self.cv)
-        cover = ("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
-                 "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
-        if len(splits) < 1:
-            raise ValueError(cover)
-        fold = full((n,), -1, "<i4")
-        assign = _native_helper("assign_fold_i64")  # cpu-route: user cv splitter test index lists, one per fold, each read once by assign_fold_i64
-        trains = []
-        for k, (train, test) in enumerate(splits):  # cpu-route: user cv splitter (train, test) pairs, one per fold, each read once by assign_fold_i64
-            te = as_index_i64(test, name="test")
-            if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k,
-                          _addr_rw(fold, name="folds"))) != 0:
-                raise ValueError(cover)
-            trains.append(as_index_i64(train, name="train"))
-        if fold.min() < 0:
-            raise ValueError(cover)
-        sizes = _class_counts(fold, len(splits))
-        check = _native_helper("check_indices_i64")
-        hits = _native_helper("count_fold_hits_i64")  # cpu-route: user cv splitter train index lists, one per fold, each read once by count_fold_hits_i64
-        for k, tr in enumerate(trains):  # cpu-route: user cv splitter train index lists, one per fold, each read once by check_indices_i64
-            # every row outside fold k exactly once: as many as there are,
-            # distinct, in range and none in fold k
-            if (tr.size != n - sizes[k]
-                    or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
-                                    or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
-                                                n, k)) != 0)):
-                raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
-                                          "row outside the test fold are not implemented")
-        return fold, len(splits)
 
     def fit_transform(self, X, y):
         """Fit to ``X`` and ``y``, then encode ``X`` with cross fitting.
@@ -1374,12 +1328,6 @@ class TargetEncoder(_PrepBase):
         array
             The cross-fitted encodings of ``X``.
         """
-        if self.cv is not None and not isinstance(self.cv, numbers.Integral):
-            # cpu-route: a user cv splitter's index lists, the explicit input step before the one native fit
-            self._check()
-            arr = _x2d(X)
-            return _ENCODE_CALL(self, "fit_transform", (arr, y, self._splitter_folds(X, y, arr.shape[0])),
-                                _ENCODE_CONTEXT)
         return _ENCODE_CALL(self, "fit_transform", (X, y, None), _ENCODE_CONTEXT)
 
     def transform(self, X):
@@ -1387,10 +1335,6 @@ class TargetEncoder(_PrepBase):
 
 
 # ---------------------------------------------------------------- imputer
-def _is_auto(v):
-    return isinstance(v, str) and v == "auto"
-
-
 def _is_nan_value(v):
     return isinstance(v, float) and v != v
 
