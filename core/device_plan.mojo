@@ -278,6 +278,7 @@ def _log_lock() -> MutPointer[Int64, MutUntrackedOrigin]:
             failure_ordering=Ordering.RELAXED,
         ](lock, expected, Int64(1)):
             return lock
+    return lock
 
 
 def _log_plan(devices: List[Int]):
