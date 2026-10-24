@@ -22,16 +22,17 @@
      _ = d_src^
      _ = d_dst^
  
-@@ -466,7 +474,7 @@
+@@ -466,7 +474,8 @@
      )
      if n_side > 0:
          ctx.enqueue_function[_split_side_kernel](
 -            d_perm.unsafe_ptr(), Int64(m), Int64(n_test), Int64(n_side), d_counts.unsafe_ptr(),
-+            d_perm.unsafe_ptr(), Int64(m), Int64(n_test - 1 if n_test > 1 else n_test), Int64(n_side),  # SABOTAGE: one test group moved to train d_counts.unsafe_ptr(),
++            # SABOTAGE: one test group moved to train
++            d_perm.unsafe_ptr(), Int64(m), Int64(n_test - 1 if n_test > 1 else n_test), Int64(n_side), d_counts.unsafe_ptr(),
              d_table.unsafe_ptr(), d_sums.unsafe_ptr(), d_status.unsafe_ptr(),
              grid_dim=_grid(n_side), block_dim=MSEL_TPB,
          )
-@@ -540,9 +548,12 @@
+@@ -540,9 +549,12 @@
          ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_sizes)
          ctx.synchronize()
          # the n_folds fold sizes widened to the caller's int64 (k scalars)
