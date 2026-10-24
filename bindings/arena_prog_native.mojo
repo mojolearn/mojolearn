@@ -13,6 +13,7 @@
 # release of every device slot it acquired. It replaces the Python bodies of
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
+from bindings.native_array_storage import native_array_zeros
 from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -102,7 +103,7 @@ def _store(words: Int, code: String, mapped: Bool, context: PythonObject) raises
         var mapping = py_call(context["prog_mmap"], -1, 4 * n)
         store = py_call(py_call(types["memoryview"], mapping).cast, PythonObject(code))
     else:
-        store = py_call(context["array_type"], PythonObject(code), py_call(types["bytes"], 4 * n))
+        store = native_array_zeros(String(code), n)
     return Python.tuple(store, xprep_address(store))
 
 

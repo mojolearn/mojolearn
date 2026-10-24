@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Model-selection input preparation owns admission, byte copies and metadata.
 # Never ask caller objects for shape, len, __array__, or DLPack protocols.
+from bindings.native_array_storage import native_array_from_bytes, native_array_from_values
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
@@ -54,7 +56,7 @@ def _pandas_blocks(value: PythonObject) raises -> PythonObject:
 
 
 def _pandas_axis_count(axis: PythonObject, context: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(axis)
     if cls is _pd_class("pandas.core.indexes.range", "RangeIndex"):
         var values = py_get(_pd_fields(axis), "_range")
@@ -104,7 +106,7 @@ def _pandas_axis_count(axis: PythonObject, context: PythonObject) raises -> Int:
 
 
 def _pandas_empty_rows(value: PythonObject, context: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var manager = py_get(_pd_fields(value), "_mgr")
     var axes = _pd_get("pandas._libs.internals", "BlockManager", "axes", manager)
     if py_type(axes) is not b.list or len(axes) != 2 or _pandas_axis_count(axes[0], context) != 0:
@@ -116,7 +118,7 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
     # Preserve pandas' numeric promotion and column placement. The shared
     # estimator pandas_f32 reader narrows every column, which would change
     # float64 split outputs; this reader copies the original promoted width.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var series = py_type(value) is _pd_class("pandas.core.series", "Series")
     var blocks = _pandas_blocks(value)
     if len(blocks) == 0:
@@ -209,7 +211,7 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
     if native_torch_exact(cls):
         return _prepare(native_torch_numpy(value), rows)
     var sequence = value
-    if cls is Python.import_module("builtins").range:
+    if cls is native_loaded_module("builtins").range:
         sequence = py_call(b["list"], value)
         cls = py_type(sequence)
     if cls is b["list"] or cls is b["tuple"]:
@@ -223,16 +225,16 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
             return _cast(_owned(packed[3], shape, "<f2", rows), dtype, rows)
         # array.array's C iteration preserves the old list materializer's
         # float64/int64 promotion, including native scalar leaves.
-        var store = py_call(context["array_type"], "d" if kind == "f" else "q", packed[3])
+        var store = native_array_from_values(String("d" if kind == "f" else "q"), packed[3])
         return _owned(store, shape, dtype, rows)
     if cls is b["str"] or cls is b["bytes"]:
         raise Error("TypeError: " + name + " must be an array, not a string")
-    if py_get(context, "ndarray") is None and (cls is Python.import_module("builtins").memoryview or cls is context["array_type"]):
+    if py_get(context, "ndarray") is None and (cls is native_loaded_module("builtins").memoryview or cls is context["array_type"]):
         var view = native_buffer_view(value)
         var format = String(view.format)
         if format == "h" or format == "Q":
-            var packed = py_call(context["array_type"], format, py_call(view.tobytes, "C"))
-            var wide = py_call(context["array_type"], "i" if format == "h" else "q", packed)
+            var packed = native_array_from_bytes(String(format), py_call(view.tobytes, "C"))
+            var wide = native_array_from_values(String("i" if format == "h" else "q"), packed)
             return _owned(wide, view.shape, "<i4" if format == "h" else "<i8", rows)
     return _prepare(classical_input(value, context, name), rows)
 
@@ -240,7 +242,7 @@ def msel_input(value: PythonObject, name: String, context: PythonObject) raises 
 def msel_input_count(value: PythonObject, context: PythonObject) raises -> Int:
     msel_admit(value, context)
     var cls = py_type(value)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if cls is b.list or cls is b.tuple or cls is b.range or cls is context["array_type"]:
         return len(value)
     if cls is context["array_class"] or cls is py_get(context, "ndarray"):

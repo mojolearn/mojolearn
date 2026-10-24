@@ -9,6 +9,8 @@
 # working buffer is an Array assembled from its slots (no Python code runs).
 # The kernels see the same element values either way, so both installs
 # compute the same bits.
+from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_setattr
@@ -36,7 +38,7 @@ def classical_is_array(value: PythonObject, context: PythonObject) raises -> Boo
 def classical_address(value: PythonObject) raises -> PythonObject:
     """The data address of an ndarray or a mojolearn Array. An Array's is its
     `_addr` slot, read without running any of its Python properties."""
-    var module = py_get(Python.import_module("sys").modules, "mojolearn._array")
+    var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
     if module is not None and py_type(value) is module.Array:
         return value._addr
     return sequential_address(value)
@@ -67,7 +69,7 @@ def classical_wrap_array(store: PythonObject, shape: PythonObject, typestr: Stri
                          context: PythonObject) raises -> PythonObject:
     """A mojolearn Array owning `store`, an `array.array` of the dtype's store
     code laid out in `order`. Assembled from its slots, so no Python runs."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var item = Int(py=store.itemsize)
     var rank = len(shape)
     var size = 1
@@ -107,12 +109,12 @@ def classical_typed(shape: PythonObject, typestr: String, context: PythonObject)
     if classical_numpy(context):
         var key = String("float32") if typestr == "<f4" else (String("float64") if typestr == "<f8" else String("int64"))
         return sequential_array(shape, context[PythonObject(key)], context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
     var width = 4 if typestr == "<f4" else 8
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(context["native_bytes_type"], count * width))
+    var store = native_array_zeros(String(_store_code(typestr)), count)
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
@@ -164,12 +166,12 @@ def classical_input(value: PythonObject, context: PythonObject, name: String = "
         return sequential_input(value, context)
     if classical_is_array(value, context):
         return value
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
         var view = native_buffer_view(value)
         var typestr = _buffer_typestr(view, name)
         # memoryview.tobytes packs any strides in C order, in C.
-        var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(view.tobytes, "C"))
+        var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes, "C"))
         return classical_wrap_array(store, view.shape, typestr, "C", context)
     var packed = sequential_sequence(value, context)
     var kind = String(packed[1])
@@ -228,7 +230,7 @@ def classical_dtype_str(value: PythonObject, context: PythonObject) raises -> St
 def classical_c_bytes(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """The array's bytes in C order: a borrowed byte view of a C-ordered
     array, otherwise one copy."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if classical_is_array(value, context):
         if not classical_c_order(value, context):
             raise Error("TypeError: " + name + " must be a C-ordered Array to be saved without NumPy")
@@ -252,7 +254,7 @@ def classical_f64(value: PythonObject, index: Int) raises -> Float64:
 
 def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False) raises -> PythonObject:
     classical_admit_value(source, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context)

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Direct native estimator ABI calls. Python only connects these fixed plans
 # at package import; CV never calls a constructor, method or clone callback.
+from bindings.native_array_storage import native_array_empty
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
@@ -13,7 +15,7 @@ from bindings.sequential_admission import sequential_admit_value
 
 
 def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native cross-validation refuses Python estimator metaclass hooks")
@@ -57,7 +59,7 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
 
 def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
                         context: PythonObject, scorer_response: Bool = False) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     var entry = plan["entry"]
     if entry is None or py_type(entry) is not py_type(b.len):
@@ -104,7 +106,7 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
 
 
 def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if value is None or kind is b.bool or kind is b.int or kind is b.float or kind is b.complex or kind is b.str or kind is b.bytes or kind is b.range:
         return value
@@ -129,7 +131,7 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> P
     if kind is context["array_class"]:
         sequential_admit_value(value, context)
         var packed = msel_input(value, "constructor parameter", context)
-        var store = py_call(context["array_type"], _store_code(String(packed.dtype)))
+        var store = native_array_empty(String(_store_code(String(packed.dtype))))
         _ = py_call(store.frombytes, py_call(packed._mv.tobytes))
         _ = packed  # keep the native buffer owner alive through the copy
         return classical_wrap_array(store, packed.shape, String(packed.dtype), "C", context)
@@ -146,7 +148,7 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> P
         var cls = native_numpy_type("ndarray", context)
         return py_call(cls, view.shape, dtype=value.dtype, buffer=store, order=order)
     if kind is context["array_type"]:
-        var result = py_call(context["array_type"], value.typecode)
+        var result = native_array_empty(String(value.typecode))
         var view = native_buffer_view(value)
         _ = py_call(result.frombytes, py_call(view.tobytes))
         _ = view  # keep the acquired native buffer alive through the copy
@@ -163,7 +165,7 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> P
 
 
 def msel_native_clone(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     var names = plan["parameters"]
     var given: PythonObject
@@ -202,7 +204,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
 
 def msel_native_set_params(model: PythonObject, params: PythonObject,
                            context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     if py_type(params) is not b.dict:
         raise Error("TypeError: native estimator parameters require a native dict")

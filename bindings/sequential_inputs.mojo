@@ -2,6 +2,8 @@
 # Native array-like admission preserving ndarray, standard buffer, and
 # rectangular scalar/array sequence inputs. Container traversal and scalar
 # serialization are host ABI work; existing kernels still own model math.
+from bindings.native_array_storage import native_array_empty, native_array_from_values, native_array_zeros
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view
@@ -44,7 +46,7 @@ def _promote(mut kind: String, mut size: Int, incoming: String, width: Int) rais
 
 
 def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var view = native_buffer_view(value)
     if samples and Int(py=view.ndim) > 2 and not Bool(py=view.c_contiguous):
         raise Error("X with more than two dimensions must be C-contiguous")
@@ -106,20 +108,20 @@ def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_d
 
 def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                   mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var view = native_buffer_view(value)
     _leaf_shape(view.shape, depth, dims, leaf_depth)
     var dtype = value.dtype
     var incoming = String(dtype.kind)
     var width = Int(py=dtype.itemsize)
     _promote(kind, size, incoming, width)
-    var packed = py_call(context["array_type"], context["buffer_codes"][Python.tuple(incoming, width)])
+    var packed = native_array_empty(String(context["buffer_codes"][Python.tuple(incoming, width)]))
     py_call(packed.frombytes, py_call(view.tobytes, "C"))
     if not Bool(py=dtype.isnative) and width > 1:
         packed.byteswap()
     if incoming == "f" and width == 2:
         var count = len(packed)
-        var wide = py_call(context["array_type"], "f", py_call(b.bytes, 4 * count))
+        var wide = native_array_zeros(String("f"), count)
         sequence_widen_halves(Int(py=packed.buffer_info()[0]), Int(py=wide.buffer_info()[0]), count)
         py_call(values.extend, wide)
         _ = wide^
@@ -130,7 +132,7 @@ def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut valu
 
 def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                      mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     # A NumPy-free context connects no ndarray: its sequences hold Python
     # numbers only, and an array leaf is refused below as a non-number.
     var numpy = py_get(context, "ndarray") is not None
@@ -175,7 +177,7 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
 
 
 def sequential_input(value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if Bool(py=py_call(b.isinstance, value, context["ndarray"])):
         return value
     if py_type(value) is context["array_class"]:
@@ -195,7 +197,7 @@ def sequential_sequence(value: PythonObject, context: PythonObject) raises -> Py
     """A rectangular nest of numbers as (shape, kind, size, storage): the
     shape list, the promoted element kind letter and width, and a C-order
     `array.array` holding the elements in that type."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var dims = List[Int]()
     var values = Python.list()
     var kind = String()
@@ -209,10 +211,10 @@ def sequential_sequence(value: PythonObject, context: PythonObject) raises -> Py
     var storage = PythonObject(None)
     if kind == "f" and size == 2:
         var count = len(values)
-        var wide = py_call(context["array_type"], "d", values)
-        storage = py_call(context["array_type"], "H", py_call(b.bytes, 2 * count))
+        var wide = native_array_from_values(String("d"), values)
+        storage = native_array_zeros(String("H"), count)
         sequence_narrow_halves(Int(py=wide.buffer_info()[0]), Int(py=storage.buffer_info()[0]), count)
         _ = wide^
     else:
-        storage = py_call(context["array_type"], code, values)
+        storage = native_array_from_values(String(code), values)
     return Python.tuple(shape, kind, size, storage)

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Fixed native CV wire records. No Python class/function, pickle reducer or
 # import name from the request is executed. Import-time maps select all owners.
+from bindings.native_array_storage import native_array_empty
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
@@ -24,14 +26,14 @@ def _record_size(record: PythonObject, size: Int) raises:
 
 
 def _sequence(record: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(record) is not b.list and py_type(record) is not b.tuple:
         raise Error("TypeError: native CV wire sequences require exact list/tuple metadata")
 
 
 def _dtype_pack(dtype: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     _depth(depth)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if Bool(py=dtype.hasobject):
         raise Error("TypeError: native CV parameters cannot contain Python object references")
     var metadata = dtype.metadata
@@ -71,7 +73,7 @@ def _dtype_pack(dtype: PythonObject, context: PythonObject, depth: Int = 0) rais
 
 def _dtype_unpack(record: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     _depth(depth)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _sequence(record)
     _record_size(record, 3)
     if py_type(record[1]) is not b.bool:
@@ -141,7 +143,7 @@ def _numpy_buffer(value: PythonObject, scalar: Bool, context: PythonObject, dept
 
 def msel_wire_pack(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     _depth(depth)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes:
         return Python.tuple("atom", value)
@@ -187,7 +189,7 @@ def msel_wire_pack(value: PythonObject, context: PythonObject, depth: Int = 0) r
 
 
 def msel_wire_needs_numpy(value: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is b.tuple or cls is b.list:
         if len(value) and py_type(value[0]) is b.str:
@@ -206,7 +208,7 @@ def msel_wire_needs_numpy(value: PythonObject) raises -> Bool:
 
 def msel_wire_unpack(record: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     _depth(depth)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(record) is not b.tuple or len(record) < 2 or py_type(record[0]) is not b.str:
         raise Error("ValueError: malformed native CV value record")
     var tag = String(record[0])
@@ -241,7 +243,7 @@ def msel_wire_unpack(record: PythonObject, context: PythonObject, depth: Int = 0
         _record_size(record, 3)
         if py_type(record[1]) is not b.str or py_type(record[2]) is not b.bytes:
             raise Error("TypeError: native array record requires typecode and bytes")
-        var result = py_call(context["array_type"], record[1])
+        var result = native_array_empty(String(record[1]))
         _ = py_call(result.frombytes, record[2])
         return result
     if tag == "numpy_scalar" or tag == "ndarray":
@@ -309,7 +311,7 @@ def msel_parallel_model_pack(model: PythonObject, context: PythonObject, depth: 
 
 def msel_parallel_model_unpack(record: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     _depth(depth)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(record) is not b.tuple or len(record) != 4:
         raise Error("ValueError: incompatible native CV estimator record")
     if py_type(record[0]) is not b.str or py_type(record[1]) is not b.str or String(record[0]) != MSEL_WIRE_VERSION:
@@ -352,7 +354,7 @@ def msel_parallel_scorer_pack(scorer: PythonObject, context: PythonObject) raise
     var fields = msel_scorer_fields(scorer, context)
     var function = fields["_score_func"]
     _ = msel_metric_plan(function, context)
-    var copied = py_call(Python.import_module("builtins").dict, fields)
+    var copied = py_call(native_loaded_module("builtins").dict, fields)
     _ = py_call(copied.pop, "_score_func")
     return Python.tuple(context["family_msel_parallel"]["metric_ids"][function], msel_wire_pack(copied, context))
 
@@ -360,7 +362,7 @@ def msel_parallel_scorer_pack(scorer: PythonObject, context: PythonObject) raise
 def msel_parallel_scorer_unpack(record: PythonObject, context: PythonObject) raises -> PythonObject:
     if record is None:
         return record
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(record) is not b.tuple or len(record) != 2 or py_type(record[0]) is not b.str:
         raise Error("TypeError: malformed native CV scorer record")
     var function = py_get(context["family_msel_parallel"]["metrics"], record[0])

@@ -19,6 +19,8 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points and C builtins connected at import
 # (python/mojolearn/_native_labels_bridge.py `label_context`).
+from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros
+from bindings.native_loaded_module import native_loaded_module
 from std.math import isfinite
 from std.memory import bitcast, memcpy
 from std.os import getenv
@@ -46,7 +48,7 @@ comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
 def labels_builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def labels_table(context: PythonObject, mode: String, name: String) raises -> PythonObject:
@@ -125,8 +127,7 @@ def labels_empty(shape: PythonObject, typestr: String, context: PythonObject, or
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
     var width = labels_itemsize(typestr)
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)),
-                        py_call(context["native_bytes_type"], count * width))
+    var store = native_array_zeros(String(_store_code(typestr)), count)
     return classical_wrap_array(store, shape, typestr, order, context)
 
 
@@ -137,7 +138,7 @@ def labels_vector(count: Int, typestr: String, context: PythonObject) raises -> 
 def labels_full_f32(count: Int, value: Float64, context: PythonObject) raises -> PythonObject:
     """`_buffer.full((count,), value, '<f4')`: one float32 conversion of
     `value`, the store repeated in C (`array.array.__mul__`)."""
-    var one = py_call(context["array_type"], PythonObject("f"), Python.list(PythonObject(value)))
+    var one = native_array_from_values(String("f"), Python.list(PythonObject(value)))
     var store = py_call(py_attr(one, "__mul__"), PythonObject(count))
     return classical_wrap_array(store, Python.tuple(count), "<f4", "C", context)
 
@@ -267,7 +268,7 @@ def _view_of_buffer(value: PythonObject, name: String, context: PythonObject) ra
     if not Bool(py=view.c_contiguous) and not Bool(py=view.f_contiguous):
         # `_materialize`: a strided export is linearized in C order once
         # (`memoryview.tobytes()`, in C) into an Array of its dtype.
-        var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(view.tobytes, "C"))
+        var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes, "C"))
         var pyshape = Python.list()
         for k in range(len(shape)):  # driver-loop: over array rank metadata
             _ = py_call(pyshape.append, shape[k])
@@ -313,7 +314,7 @@ def labels_view(source: PythonObject, name: String, context: PythonObject) raise
         var store = packed[3]
         if kind == "b":
             # A bool leaf is the int 0 or 1 (`_materialize` lists it as int64).
-            store = py_call(context["array_type"], "q", store)
+            store = native_array_from_values(String("q"), store)
         var array = classical_wrap_array(store, packed[0], typestr, "C", context)
         return _view_of_array(array)
     try:
@@ -759,7 +760,7 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
         return None
     var store = PythonObject(None)
     try:
-        store = py_call(context["array_type"], "q" if all_int else "d", y)
+        store = native_array_from_values(String("q" if all_int else "d"), y)
     except:
         return None  # an int outside int64: a class only Python can hold
     var array = classical_wrap_array(store, Python.tuple(n), "<i8" if all_int else "<f8", "C", context)
@@ -1229,7 +1230,7 @@ def _native_classification(values: PythonObject, context: PythonObject) raises -
                 return None
         var store = PythonObject(None)
         try:
-            store = py_call(context["array_type"], "q", values)
+            store = native_array_from_values(String("q"), values)
         except:
             return None
         view = _view_of_array(classical_wrap_array(store, Python.tuple(n), "<i8", "C", context))
@@ -1407,7 +1408,7 @@ def _run(var program: _Program, mode: PythonObject, context: PythonObject) raise
     """`_run(prog, numeric_mode)`: the shared native program runner over a
     program object holding these fields. Returns the arena store."""
     var b = labels_builtins()
-    var sys = Python.import_module("sys")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "mojolearn._expansion_metrics")
     if module is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")

@@ -6,6 +6,8 @@ shape, physical order and bytes. Bounds are checked before allocation; tensor
 ranges must cover the payload exactly in traversal order. Object identity and
 arbitrary Python classes are deliberately outside this private wire format.
 """
+from bindings.native_array_storage import native_array_empty
+from bindings.native_loaded_module import native_loaded_module
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -38,8 +40,8 @@ comptime CODEC_BOUNDARY = _Global[
 
 def codec_initialize(array_cls: PythonObject, bf16_cls: PythonObject, int8_cls: PythonObject) raises:
     var c = CODEC_BOUNDARY.get_or_create_ptr()
-    c[].bi = Python.import_module("builtins")
-    c[].arrays = Python.import_module("array").array
+    c[].bi = native_loaded_module("builtins")
+    c[].arrays = native_loaded_module("array").array
     c[].array_cls = array_cls
     if bf16_cls is not None:
         c[].bf16_cls = bf16_cls
@@ -201,7 +203,7 @@ def _codec_array(item: PythonObject, raw: PythonObject, maximum: Int) raises -> 
     var bi = c[].bi
     var dtype = String(item["dtype"])
     var code = _codec_code(dtype)
-    var store = py_call(c[].arrays, code)
+    var store = native_array_empty(String(code))
     var itemsize = Int(py=store.itemsize)
     var shape = item["shape"]
     if py_type(shape) is not bi.list or len(shape) > 64:
