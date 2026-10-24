@@ -135,6 +135,7 @@ def record(out, vendor, arch, platform, logs, torch_build, pixi_prefix, mojo_ver
     doc = dict(schema=SCHEMA, abi=ABI, vendor=vendor, arch=arch, platform=platform,
                source_commit=source_commit, numeric_mode="identical",
                torch={k: torch.get(k) for k in ("version", "series", "backend", "backend_version", "cxx11_abi",
+                                                "cxx11_abi_source",
                                                 "wheel", "wheel_sha256", "index_url", "python_tag")},
                torch_version_built=torch.get("version"), torch_version_pin=pin["version"],
                max=dict(version=max_version), mojo=dict(version=mojo_version, conda=conda_version(pixi_prefix, "mojo")),

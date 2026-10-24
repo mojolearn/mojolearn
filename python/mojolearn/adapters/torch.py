@@ -55,6 +55,24 @@ _torch = _import_torch()
 _register_backend()
 
 
+def _torch_cxx11_abi(series):
+    """The C++ ABI (0 or 1) of the installed torch. torch reports it through
+    torch.compiled_with_cxx11_abi() (torch._C._GLIBCXX_USE_CXX11_ABI). A torch
+    that reports neither is taken as ABI 1 from 2.9 on: since 2.9 every Linux
+    wheel PyTorch publishes (manylinux_2_28) is built with the C++11 ABI and the
+    old-ABI builds are gone. Older or unparsable series give None (a mismatch)."""
+    probe = getattr(_torch, "compiled_with_cxx11_abi", None)
+    if callable(probe):
+        return int(bool(probe()))
+    flag = getattr(getattr(_torch, "_C", None), "_GLIBCXX_USE_CXX11_ABI", None)
+    if flag is not None:
+        return int(bool(flag))
+    parts = str(series).split(".")
+    if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        return None
+    return 1 if (int(parts[0]), int(parts[1])) >= (2, 9) else None
+
+
 def _refusal(record):
     """Why this torch cannot load the shipped registration, or None. The
     registration is a C++ extension built against one Torch minor series, one
@@ -72,7 +90,7 @@ def _refusal(record):
     if backend == "mps" and _platform.system() != "Darwin":
         return "the MPS build of the adapter loads on macOS only"
     abi = want.get("cxx11_abi")
-    if abi is not None and int(bool(_torch.compiled_with_cxx11_abi())) != abi:
+    if abi is not None and _torch_cxx11_abi(have) != abi:
         return f"torch {_torch.__version__} uses a different C++ ABI than the one the adapter was built with"
     return None
 

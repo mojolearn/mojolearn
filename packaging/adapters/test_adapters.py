@@ -214,15 +214,18 @@ def test_index_and_wheel_choice():
         fetch.choose_wheel(files, "2.14.0", "linux")
 
 
-def fake_torch_wheel(path, version="2.13.0", cuda="12.8", hip=None, abi=1, extra=()):
+def fake_torch_wheel(path, version="2.13.0", cuda="12.8", hip=None, abi=1, extra=(), libs=None):
+    """abi=None writes no define into torch/share/cmake (torch >= 2.9); libs
+    maps a torch/lib name to its bytes (the symbols the ABI is read from)."""
+    libs = libs or {}
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("torch/version.py", f"__version__ = '{version}'\ndebug = False\n"
                                        f"cuda: Optional[str] = {cuda!r}\nhip: Optional[str] = {hip!r}\n")
         z.writestr("torch/include/torch/extension.h", "// header\n")
-        z.writestr("torch/share/cmake/Torch/TorchConfig.cmake",
-                   f'set(TORCH_CXX_FLAGS "-D_GLIBCXX_USE_CXX11_ABI={abi}")\n')
+        flags = "" if abi is None else f"-D_GLIBCXX_USE_CXX11_ABI={abi}"
+        z.writestr("torch/share/cmake/Torch/TorchConfig.cmake", f'set(TORCH_CXX_FLAGS "{flags}")\n')
         for name in ("libtorch.so", "libtorch_cpu.so", "libc10.so", "libtorch_cuda.so", "libtorch.dylib"):
-            z.writestr("torch/lib/" + name, b"lib")
+            z.writestr("torch/lib/" + name, libs.get(name, b"lib"))
         z.writestr("torch/__init__.py", "")
         for name in extra:
             z.writestr(name, "x")
@@ -242,6 +245,51 @@ def test_extract_and_describe(tmp_path):
         ("2.13.0", "2.13", "cuda", "12.8", 1)
     with pytest.raises(SystemExit, match="rocm"):
         fetch.describe(dest, PINS["torch"]["build"]["hip"] | dict(version="2.13.0"), "linux", chosen, "d" * 64)
+
+
+NEW_ABI_LIB = b"\x7fELF\0_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4sizeEv\0_ZN3c106detail\0"
+OLD_ABI_LIB = b"\x7fELF\0_ZNKSs4sizeEv\0_ZN3c106detail\0"
+
+
+def abi_tree(tmp_path, abi, libs):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    wheel = tmp_path / "abi.whl"
+    fake_torch_wheel(wheel, abi=abi, libs=libs)
+    dest = tmp_path / "abi"
+    fetch.extract(wheel, dest, "linux")
+    return dest
+
+
+def describe_linux(dest):
+    return fetch.describe(dest, PINS["torch"]["build"]["cuda"], "linux",
+                          dict(wheel="w", url="u", python_tag="cp314"), "d" * 64)
+
+
+def test_abi_cmake_wins_over_symbols(tmp_path):
+    rec = describe_linux(abi_tree(tmp_path, 0, {"libtorch_cpu.so": NEW_ABI_LIB}))
+    assert (rec["cxx11_abi"], rec["cxx11_abi_source"]) == (0, "cmake")
+
+
+def test_abi_from_cxx11_symbols_when_cmake_is_silent(tmp_path):
+    rec = describe_linux(abi_tree(tmp_path, None, {"libtorch_cpu.so": NEW_ABI_LIB}))
+    assert (rec["cxx11_abi"], rec["cxx11_abi_source"]) == (1, "symbols:libtorch_cpu.so")
+    # libc10 decides when libtorch_cpu carries no std::string names
+    rec = describe_linux(abi_tree(tmp_path / "c10", None, {"libc10.so": NEW_ABI_LIB}))
+    assert (rec["cxx11_abi"], rec["cxx11_abi_source"]) == (1, "symbols:libc10.so")
+
+
+def test_abi_from_old_mangling_only(tmp_path):
+    rec = describe_linux(abi_tree(tmp_path, None, {"libtorch_cpu.so": OLD_ABI_LIB}))
+    assert (rec["cxx11_abi"], rec["cxx11_abi_source"]) == (0, "symbols:libtorch_cpu.so")
+
+
+def test_abi_undecided_refuses_with_both_facts(tmp_path):
+    dest = abi_tree(tmp_path, None, {})
+    with pytest.raises(SystemExit) as refused:
+        describe_linux(dest)
+    message = str(refused.value)
+    assert "torch/share/cmake names no _GLIBCXX_USE_CXX11_ABI" in message
+    assert "libtorch_cpu.so" in message and "libc10.so" in message and "std::__cxx11" in message
 
 
 def test_version_rule():

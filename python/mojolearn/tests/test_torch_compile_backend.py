@@ -376,3 +376,24 @@ def test_a_real_torch_compile_matches_eager_and_import_model_bit_for_bit():
     assert torch.allclose(got, ref, rtol=1e-4, atol=1e-5)
     direct = _program.import_model(net, example_inputs=x).run(x.numpy())
     assert np.array_equal(got.numpy().view(np.uint32), direct.view(np.uint32))
+
+
+def test_the_installed_torch_abi_probe(fake, monkeypatch):
+    # The registration's C++ ABI check: torch's own report wins; a torch >= 2.9
+    # that reports nothing is ABI 1 (every Linux wheel since 2.9 is C++11 ABI).
+    import importlib
+    import types
+    monkeypatch.delitem(sys.modules, "mojolearn.adapters.torch", raising=False)
+    adapter = importlib.import_module("mojolearn.adapters.torch")
+    monkeypatch.setattr(adapter, "_torch", types.SimpleNamespace(compiled_with_cxx11_abi=lambda: False))
+    assert adapter._torch_cxx11_abi("2.13") == 0
+    monkeypatch.setattr(adapter, "_torch", types.SimpleNamespace(_C=types.SimpleNamespace(_GLIBCXX_USE_CXX11_ABI=True)))
+    assert adapter._torch_cxx11_abi("2.13") == 1
+    monkeypatch.setattr(adapter, "_torch", types.SimpleNamespace(_C=types.SimpleNamespace()))
+    assert adapter._torch_cxx11_abi("2.13") == 1
+    assert adapter._torch_cxx11_abi("2.8") is None
+    monkeypatch.setattr(adapter, "_torch", types.SimpleNamespace(
+        __version__="2.13.0", version=types.SimpleNamespace(cuda="12.8", hip=None), _C=types.SimpleNamespace()))
+    record = {"torch": {"series": "2.13", "backend": "cuda", "cxx11_abi": 1}}
+    assert adapter._refusal(record) is None
+    assert "C++ ABI" in adapter._refusal({"torch": record["torch"] | {"cxx11_abi": 0}})

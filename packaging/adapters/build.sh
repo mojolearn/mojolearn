@@ -129,7 +129,7 @@ cxx_flags=(-std=c++20 -O2 -fPIC -I adapters/native -I "$TB/$TORCH_INC" -I "$TB/$
            # TORCH_CHECK embeds __FILE__: no build-host path in the shipped bytes
            "-ffile-prefix-map=$ROOT/=" "-ffile-prefix-map=$TB/=")
 if [[ "$PLATFORM" = linux ]]; then
-  [[ "$CXX11_ABI" =~ ^[01]$ ]] || die "the Torch wheel names no C++ ABI (TorchConfig.cmake)"
+  [[ "$CXX11_ABI" =~ ^[01]$ ]] || die "the Torch wheel names no C++ ABI (torch-build.json cxx11_abi: TorchConfig.cmake or the exported symbols)"
   # -z defs: every symbol resolves now, against this Torch and our library.
   # --as-needed before the libraries: no DT_NEEDED on a library nothing uses
   # (the wheel's platform-math audit refuses a stray libm). No RUNPATH here:

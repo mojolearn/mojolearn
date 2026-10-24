@@ -12,7 +12,8 @@ all three are read from the wheel itself and recorded:
 
     DIR/torch/include, DIR/torch/share/cmake, DIR/torch/version.py and the
     link libraries (libtorch, libtorch_cpu, libc10) of DIR/torch/lib
-    DIR/torch-build.json   version, series, backend and its version, C++ ABI,
+    DIR/torch-build.json   version, series, backend and its version, C++ ABI
+                           and where it was read (cmake, or symbols:<library>),
                            wheel file, URL and sha256, the include/library dirs
 
 The download is verified against the sha256 the index serves and, when
@@ -30,6 +31,7 @@ import os
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -177,6 +179,60 @@ def read_cxx11_abi(cmake_dir):
     return None
 
 
+#: The libraries whose exported symbols name the C++ ABI, in the order asked.
+ABI_LIBRARIES = ("libtorch_cpu.so", "libc10.so")
+#: std::__cxx11 in a mangled name (std::string is St7__cxx1112basic_string...).
+NEW_ABI_MANGLING = (b"St7__cxx11",)
+#: The pre-C++11 std::string (Ss) members and the unabbreviated basic_string.
+OLD_ABI_MANGLING = (b"_ZNSs", b"_ZNKSs", b"_ZNSt12basic_string")
+
+
+def _exported_symbols(library):
+    """The defined dynamic symbols of an ELF library as bytes (nm -D
+    --defined-only), or the whole file when nm is missing or cannot read it."""
+    nm = shutil.which("nm")
+    if nm:
+        done = subprocess.run([nm, "-D", "--defined-only", str(library)], capture_output=True)
+        if done.returncode == 0 and done.stdout.strip():
+            return done.stdout
+    return pathlib.Path(library).read_bytes()
+
+
+def abi_from_symbols(lib_dir):
+    """(abi, library) from the wheel's own binaries, or (None, None).
+
+    PyTorch >= 2.9 builds every manylinux_2_28 wheel with the C++11 ABI and no
+    longer writes -D_GLIBCXX_USE_CXX11_ABI into torch/share/cmake, so the ABI is
+    read from the mangled names libtorch_cpu (or libc10) exports: any
+    std::__cxx11 name means ABI 1; only old-ABI std::string names means ABI 0."""
+    for name in ABI_LIBRARIES:
+        library = pathlib.Path(lib_dir) / name
+        if not library.is_file():
+            continue
+        symbols = _exported_symbols(library)
+        if any(m in symbols for m in NEW_ABI_MANGLING):
+            return 1, name
+        if any(m in symbols for m in OLD_ABI_MANGLING):
+            return 0, name
+    return None, None
+
+
+def detect_cxx11_abi(dest):
+    """(abi, source) of an extracted Linux tree: Torch's CMake config first,
+    then the exported symbols of its libraries. Nothing else decides: a tree
+    neither names refuses with both facts."""
+    dest = pathlib.Path(dest)
+    abi = read_cxx11_abi(dest / "torch/share/cmake")
+    if abi is not None:
+        return abi, "cmake"
+    abi, library = abi_from_symbols(dest / "torch/lib")
+    if abi is not None:
+        return abi, f"symbols:{library}"
+    raise SystemExit("fetch_torch: the C++ ABI is undecided: torch/share/cmake names no _GLIBCXX_USE_CXX11_ABI, "
+                     f"and the exported symbols of torch/lib/{{{','.join(ABI_LIBRARIES)}}} carry neither "
+                     "std::__cxx11 nor old-ABI std::string mangling")
+
+
 def backend_of(info):
     if info.get("hip"):
         return "rocm", info["hip"]
@@ -219,11 +275,9 @@ def describe(dest, pin, system, chosen, digest):
         backend = "mps"
     elif backend != pin["backend"]:
         raise SystemExit(f"fetch_torch: the wheel is a {backend} build, pins.json asks for {pin['backend']}")
-    abi = read_cxx11_abi(dest / "torch/share/cmake") if system == "linux" else None
-    if system == "linux" and abi is None:
-        raise SystemExit("fetch_torch: torch/share/cmake names no _GLIBCXX_USE_CXX11_ABI")
+    abi, abi_source = detect_cxx11_abi(dest) if system == "linux" else (None, None)
     return dict(schema=SCHEMA, version=info["__version__"], version_pin=pin["version"], series=".".join(public_version(info["__version__"]).split(".")[:2]),
-                backend=backend, backend_version=backend_version, cxx11_abi=abi,
+                backend=backend, backend_version=backend_version, cxx11_abi=abi, cxx11_abi_source=abi_source,
                 wheel=chosen["wheel"], url=chosen["url"], wheel_sha256=digest, index_url=pin["index_url"],
                 python_tag=chosen["python_tag"], include_dir="torch/include",
                 api_include_dir="torch/include/torch/csrc/api/include", library_dir="torch/lib")
@@ -261,7 +315,7 @@ def main(argv=None):
     record = describe(a.dest, pin, system, chosen, digest)
     (a.dest / "torch-build.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
     print(f"fetch_torch: {count} members extracted; torch {record['version']} {record['backend']} "
-          f"{record['backend_version'] or ''} cxx11_abi={record['cxx11_abi']} sha256 {digest}")
+          f"{record['backend_version'] or ''} cxx11_abi={record['cxx11_abi']} ({record['cxx11_abi_source']}) sha256 {digest}")
     return 0
 
 
