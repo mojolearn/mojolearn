@@ -34,10 +34,7 @@ user `estimator` otherwise runs its data-sized plumbing as x_prep units
 the clipped float32 store; the stop is `ii_rowabs` / `ii_conv`).
 """
 import array
-import copy
 import ctypes
-import inspect
-import itertools
 from . import _portable_math as math
 import numbers
 import operator
@@ -49,7 +46,6 @@ from ._array import Array
 from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
-from ._labels import flatten_labels, sorted_classes, label_kind
 from ._mode import SklearnTagsMixin, available_if
 from ._native_robust_bridge import native_method as _native_robust_method
 
@@ -962,19 +958,6 @@ def _codes(pr, arr, categories, *, device_only=False):
     return codes, neg
 
 
-def _block_argmax(pr, arr, widths, drops, check):
-    """One code per (row, block): the block_argmax stage over a (n, sum(widths)) input."""
-    n, W = arr.shape
-    d = len(widths)
-    xo = pr.put(arr)
-    so = pr.put_list([sum(widths[:j]) for j in range(d)])  # glue: prefix offsets of the per-column block widths (d-sized: feature count)
-    wo = pr.put_list(widths)
-    do = pr.put_list(drops) if drops is not None else _NONE
-    codes = pr.alloc(n * d)
-    pr.stage("block_argmax", n * d, xo, n, W, d, so, wo, do, 1 if check else 0, codes)
-    return codes
-
-
 class OrdinalEncoder(_PrepBase):
     """Encode numeric categorical features as integer codes.
 
@@ -1159,14 +1142,6 @@ class OneHotEncoder(_PrepBase):
 
 
 # ---------------------------------------------------------------- target encoder
-def _splitmix64(state):
-    state = (state + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
-    z = state
-    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
-    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
-    return state, z ^ (z >> 31)
-
-
 def _stage_folds(pr, n, n_folds, seed, shuffle, codes=_NONE, n_classes=0):
     """Stages TargetEncoder's cross-fit fold of every row (lane cpu2-l3-prep:
     on the device, every tier; the host entries x_prep_kfold_folds /
@@ -1266,12 +1241,12 @@ class TargetEncoder(_PrepBase):
     smooth : 'auto' or float, default 'auto'
         Shrinkage toward the target mean: ``'auto'`` uses an empirical Bayes estimate, a float ``>= 0``
         sets it directly.
-    cv : int, splitter or iterable, default 5
+    cv : int, mojolearn splitter or list of index pairs, default 5
         Folds for ``fit_transform``. An int ``>= 2`` uses KFold for a continuous target and
-        StratifiedKFold otherwise. A splitter object (its ``split(X, y)``) or an iterable of
-        ``(train, test)`` index pairs is also accepted: the test folds must cover every row exactly once
-        (``ValueError`` otherwise), and each fold's training rows must be all the other rows
-        (``NotImplementedError`` otherwise).
+        StratifiedKFold otherwise. A mojolearn splitter (such as :class:`KFold`; its ``split(X, y)``) or
+        a list or tuple of ``(train, test)`` index arrays is also accepted; any other object raises
+        ``TypeError``. The test folds must cover every row exactly once (``ValueError`` otherwise), and
+        each fold's training rows must be all the other rows (``NotImplementedError`` otherwise).
     shuffle : bool, default True
         Shuffle the rows before splitting into folds.
     random_state : int or None, default None
@@ -1317,54 +1292,8 @@ class TargetEncoder(_PrepBase):
         self.shuffle = shuffle
         self.random_state = random_state
 
-    def _check(self):
-        if not _is_auto(self.categories) and not isinstance(self.categories, (list, tuple)):
-            raise ValueError("mojolearn: TargetEncoder categories must be 'auto' or a list of lists")
-        if self.target_type not in ("auto", "binary", "continuous", "multiclass"):
-            raise ValueError(f"mojolearn: invalid target_type {self.target_type!r}")
-        if not (self.smooth == "auto" or (isinstance(self.smooth, numbers.Real) and self.smooth >= 0)):
-            raise ValueError(f"mojolearn: invalid smooth {self.smooth!r}")
-        if isinstance(self.cv, numbers.Integral) and self.cv < 2:
-            raise ValueError("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
-
     def fit(self, X, y):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def _splitter_folds(self, X, y, n):
-        """Row -> fold (an int32 Array) from a splitter object or (train,
-        test) iterable, checked by the base binding's helpers (lane
-        cgr4-py-compute: no per-row Python): the test folds cover every row
-        exactly once, and each fold's training rows are every other row."""
-        from ._buffer import as_index_i64
-        splits = list(self.cv.split(X, y) if hasattr(self.cv, "split") else self.cv)
-        cover = ("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
-                 "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
-        if len(splits) < 1:
-            raise ValueError(cover)
-        fold = full((n,), -1, "<i4")
-        assign = _native_helper("assign_fold_i64")  # cpu-route: user cv splitter test index lists, one per fold, each read once by assign_fold_i64
-        trains = []
-        for k, (train, test) in enumerate(splits):  # cpu-route: user cv splitter (train, test) pairs, one per fold, each read once by assign_fold_i64
-            te = as_index_i64(test, name="test")
-            if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k,
-                          _addr_rw(fold, name="folds"))) != 0:
-                raise ValueError(cover)
-            trains.append(as_index_i64(train, name="train"))
-        if fold.min() < 0:
-            raise ValueError(cover)
-        sizes = _class_counts(fold, len(splits))
-        check = _native_helper("check_indices_i64")
-        hits = _native_helper("count_fold_hits_i64")  # cpu-route: user cv splitter train index lists, one per fold, each read once by count_fold_hits_i64
-        for k, tr in enumerate(trains):  # cpu-route: user cv splitter train index lists, one per fold, each read once by check_indices_i64
-            # every row outside fold k exactly once: as many as there are,
-            # distinct, in range and none in fold k
-            if (tr.size != n - sizes[k]
-                    or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
-                                    or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
-                                                n, k)) != 0)):
-                raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
-                                          "row outside the test fold are not implemented")
-        return fold, len(splits)
 
     def fit_transform(self, X, y):
         """Fit to ``X`` and ``y``, then encode ``X`` with cross fitting.
@@ -1374,12 +1303,6 @@ class TargetEncoder(_PrepBase):
         array
             The cross-fitted encodings of ``X``.
         """
-        if self.cv is not None and not isinstance(self.cv, numbers.Integral):
-            # cpu-route: a user cv splitter's index lists, the explicit input step before the one native fit
-            self._check()
-            arr = _x2d(X)
-            return _ENCODE_CALL(self, "fit_transform", (arr, y, self._splitter_folds(X, y, arr.shape[0])),
-                                _ENCODE_CONTEXT)
         return _ENCODE_CALL(self, "fit_transform", (X, y, None), _ENCODE_CONTEXT)
 
     def transform(self, X):
@@ -1387,25 +1310,6 @@ class TargetEncoder(_PrepBase):
 
 
 # ---------------------------------------------------------------- imputer
-def _is_auto(v):
-    return isinstance(v, str) and v == "auto"
-
-
-def _is_nan_value(v):
-    return isinstance(v, float) and v != v
-
-
-def _mark_missing(pr, xo, count, missing_values):
-    """Stages that turn a numeric `missing_values` into NaN; returns the offset
-    to read (the input itself when missing_values is NaN)."""
-    if missing_values is None or _is_nan_value(missing_values):
-        return xo
-    val = pr.put_scalar(missing_values)
-    out = pr.alloc(count)
-    pr.stage("mark_missing", count, xo, count, val, out)
-    return out
-
-
 # A callable strategy is sklearn's `strategy(masked_X[:, j].compressed())`: it
 # runs in Python on the host, over each column's non-NaN float32
 # values compacted on the device (p2m_sel_*); the fill runs on the device.
@@ -1688,6 +1592,13 @@ class _Classifier(_PrepBase):
             Fraction of rows classified correctly.
         """
         return _CLS_CALL(self, "score", (X, y), _CLS_CONTEXT)
+
+    # Only a subclass with `transform` has fit_transform (scikit-learn's
+    # TransformerMixin); LinearDiscriminantAnalysis defines its own one-call
+    # method, so on every other classifier here this one is unavailable.
+    @available_if(lambda self: hasattr(self, "transform"))
+    def fit_transform(self, X, y=None, **fit_params):
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
 
 #: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
@@ -2066,19 +1977,6 @@ class BernoulliNB(_DiscreteNB):
 
 
 # ---------------------------------------------------------------- discriminant analysis
-
-
-def _class_counts(codes, K):
-    """The count of each class code 0 .. K-1 of an int32 codes Array: one
-    program of p2m_ccount / p2m_cscan (lane apple-fast-py2mojo-prep)."""
-    mode = _mode()
-    n = int(codes.size)
-    if n == 0 or K <= 0:
-        return [0] * max(K, 0)
-    pr = _Prog()
-    _ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K, rows=False)
-    pr.run(mode)
-    return pr.get_i32(tot, K).tolist()
 
 
 # solver 'svd': sklearn's two SVDs are symmetric eigendecompositions of the
@@ -2726,99 +2624,6 @@ class Binarizer(_PrepBase):
 _F32_EXACT = 2 ** 24
 
 
-_INT_FLOAT = frozenset((int, float))
-_FLOAT_ONLY = frozenset((float,))
-_INT_ONLY = frozenset((int,))
-
-
-def _numeric_labels(values):
-    """The labels as floats when every one is a real number that float32
-    holds exactly (so the device's categories are the labels themselves),
-    else None (str labels, ints beyond 2**24: the Python route)."""
-    # every label read once natively (bindings/user_objects_native.mojo f32_exact)
-    from . import _user_objects
-    return _user_objects.call("f32_exact", values)
-
-
-def _label_classes(mode, values):
-    """(classes list in the reference's order, device categories Array or
-    None). Numeric labels: a device sort and run scan; else sorted()."""
-    nums = _numeric_labels(values)
-    if nums is None or not nums:
-        classes, _ = sorted_classes(values)
-        return classes, None
-    cats = _fit_categories(mode, Array._from_flat(nums, (len(nums), 1), "<f4"))[0]
-    from . import _user_objects
-    ints = _user_objects.kinds(values)[_user_objects.KIND_INTEGRAL] == len(values)
-    classes = [int(c) if ints else float(c) for c in cats.tolist()]  # glue: class list from the device categories (cats-sized: distinct class values)
-    return classes, cats
-
-
-def _label_codes(pr, values, cats):
-    """Stages: each label's index among `cats` (or -1). Returns the codes
-    offset and the unknown-count offset."""
-    from . import _user_objects
-    words = _user_objects.call("floats", values)
-    arr = Array._owned(words, (len(words), 1), "<f8", "C").astype("<f4")
-    return _codes(pr, arr, [cats])
-
-
-def _classes_array(classes):
-    kind = label_kind(classes)
-    if kind == "int":
-        return Array.from_list(classes, "<i8")
-    if kind == "float":
-        return Array.from_list(classes, "<f8")
-    return list(classes)
-
-
-def _multilabel_indicator(y):
-    """y as a float32 (n, K) Array when it is the reference's
-    `multilabel-indicator` (`type_of_target`): two-dimensional, more than one
-    column, at most two distinct values, all integral. A 2-D y of more
-    distinct values is `multiclass-multioutput`, refused as the reference
-    refuses it; anything else (1-D, one column) is None."""
-    shape = getattr(y, "shape", None)
-    if shape is not None:
-        if len(shape) != 2:
-            return None
-        return _multilabel_buffer(y, shape)
-    from . import _user_objects
-    if not (isinstance(y, (list, tuple)) and y and _user_objects.kinds(y)[_user_objects.KIND_SEQ] == len(y)):
-        return None
-    if len(y[0]) < 2:
-        return None
-    # the rows read once natively (bindings/user_objects_native.mojo indicator)
-    status, words, width = _user_objects.call("indicator", y)
-    if status == 1:
-        raise ValueError("mojolearn: y rows have different lengths")
-    if status == 2:
-        raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    return _x2d(Array._owned(words, (len(y), width), "<f4", "C"), "y")
-
-
-def _multilabel_buffer(y, shape):
-    """`_multilabel_indicator` of a 2-D buffer (lane py-runtime round 2: no
-    `tolist` walk): every value finite and integral (the core helper's
-    integral test), at most two distinct values (native min, max and two
-    equality counts), then float32 as the list route's `float(v)` made it."""
-    if not shape[0] or shape[1] < 2:
-        return None
-    if "bool" in str(getattr(y, "dtype", "")):
-        raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import as_f64_c
-    Y, _ = as_f64_c(y, ndim=2, name="y")
-    refuse = ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    if not int(Y._native_reduce(_REDUCE_INTEGRAL)):
-        raise refuse
-    lo, hi = Y.min(), Y.max()
-    hits = (Y == lo).sum() + ((Y == hi).sum() if hi != lo else 0)  # glue: native equality and native integer sums (Array helpers)
-    if hits != Y.size:
-        raise refuse
-    return _x2d(Y.astype("<f4"), "y")
-
-
 # lane neural-pass137: a numeric label BUFFER (an ndarray, an Array) takes the
 # device from its own bytes. The route it replaces built Python objects for
 # every label five times over (tolist, the float32 exactness test, the float
@@ -2829,6 +2634,8 @@ def _multilabel_buffer(y, shape):
 # the label, which sends the call back to the old route), the device sort, a
 # chunked run scan, and for fit_transform the codes in the same program.
 # The old route stays for labels no numeric buffer holds (str, bool, lists).
+# The label encoders' routes live in bindings/prep_labels_native.mojo; this
+# buffer view remains for preprocessing.py's integer counts.
 _LABEL_KIND = {"<f4": (0, 1), "<i4": (1, 1), "<u4": (2, 1), "<i8": (3, 2), "<f8": (4, 2)}
 
 
@@ -2883,126 +2690,10 @@ def _label_chunk(n):
     return max(1024, r + 1)
 
 
-def _label_load(pr, lb):
-    x = pr.work(lb.n)
-    pr.stage("lab_load", lb.n, pr.put_words(lb.words), lb.kind, x)
-    return x
-
-
-def _label_unique(pr, x, n):
-    """Stages: the sorted distinct words of x (sort_cols + a chunked run
-    scan: `unique_cols`' words). Returns (U offset, count offset)."""
-    s = pr.work(n)
-    pr.stage("sort_cols", 1, x, n, 1, s, 1)
-    ch = _label_chunk(n)
-    nch = -(-n // ch)
-    cnt, off = pr.work(nch), pr.work(nch)
-    u, k = pr.alloc(n), pr.alloc(1)
-    pr.stage("uniq_count", nch, s, n, ch, cnt)
-    pr.stage("uniq_scan", 1, cnt, nch, off, k)
-    pr.stage("uniq_write", nch, s, n, ch, off, u)
-    return u, k
-
-
-def _label_classes_of(pr, lb, u, k):
-    """(classes, cats) read back after the run, or None when a label has no
-    exact float32 word (NaN sorts last): the caller takes the old route."""
-    K = int(pr.values(k, 1)[0])
-    cats = pr.get(u, K)
-    vals = cats.tolist()
-    if not vals or vals[-1] != vals[-1]:
-        return None
-    classes = [float(c) for c in vals] if lb.is_float else [int(c) for c in vals]  # glue: class list from the device categories (vals-sized: distinct class values)
-    return classes, cats
-
-
-_LABEL_PRESENT = {}
-
-
-def _label_present_enabled(mode):
-    # FAST + Apple (LABEL_DIRECT) and, lane idn-int-prep, IDENTICAL on every
-    # vendor and the host column (IDN_LABEL): the binding's export is the switch
-    if mode not in ("fast", "identical"):
-        return False
-    binding = _prep_binding(mode)
-    key = id(binding)
-    if key not in _LABEL_PRESENT:
-        fn = _optional_prep_entry(binding, "x_prep_label_present")
-        _LABEL_PRESENT[key] = bool(fn()) if fn is not None else False
-    return _LABEL_PRESENT[key]
-
-
-def _label_fit_present(mode, lb, codes):
-    """Exact small-integer distinct labels on GPU, avoiding an n-row sort
-    and n-word download. A GPU BAD flag rejects values outside [0, 4096),
-    including fractional/inexact labels. The caller then uses its unchanged
-    general GPU sort. No host scan of the input or target values."""
-    n, R, ch = lb.n, _CAT_R, _CAT_CH
-    pr = _Prog()
-    x = _label_load(pr, lb)
-    fl, bad = pr.work(R), pr.alloc(1)
-    u, k = pr.alloc(R), pr.alloc(1)
-    nch = -(-R // ch)
-    cnt, off = pr.work(nch), pr.work(nch)
-    pr.stage("cat_zero", R, fl)
-    pr.stage("cat_present", n, x, n, 1, R, fl, bad)
-    pr.stage("pres_count", nch, fl, R, ch, cnt)
-    pr.stage("uniq_scan", 1, cnt, nch, off, k)
-    pr.stage("pres_write", nch, fl, R, ch, off, u)
-    out = None
-    if codes:
-        c = pr.work(n)
-        pr.stage("lookup", n, x, n, 1, u, R, k, c)
-        out = pr.output(n, "i")
-        pr.stage("f2i", n, c, out)
-    pr.run(mode)
-    if pr.get_i32(bad, 1).tolist()[0]:
-        return None
-    got = _label_classes_of(pr, lb, u, k)
-    if got is None:
-        return None
-    return got[0], got[1], (pr.get_i32(out, n) if codes else None)
-
-
-# TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
-def _label_fit_device(mode, lb, codes=False):
-    """One program: (classes, cats, int32 codes Array or None), or None for
-    the old route."""
-    if _label_present_enabled(mode):
-        got = _label_fit_present(mode, lb, codes)
-        if got is not None:
-            return got
-    n = lb.n
-    pr = _Prog()
-    x = _label_load(pr, lb)
-    u, k = _label_unique(pr, x, n)
-    out = None
-    if codes:
-        c = pr.work(n)
-        pr.stage("lookup", n, x, n, 1, u, n, k, c)
-        out = pr.output(n, "i")
-        pr.stage("f2i", n, c, out)
-    pr.run(mode)
-    got = _label_classes_of(pr, lb, u, k)
-    if got is None:
-        return None
-    return got[0], got[1], (pr.get_i32(out, n) if codes else None)
-
-
-def _label_codes_device(pr, lb, cats):
-    """Stages: each label's index among `cats` (-1 when absent). Returns the
-    float codes offset."""
-    x = _label_load(pr, lb)
-    K = cats.size
-    c = pr.work(lb.n)
-    pr.stage("lookup", lb.n, x, lb.n, 1, pr.put(cats), K, pr.put_scalar(K), c)
-    return c
-
-
-# Numeric labels run on the device (sort + run scan for classes_, a binary
-# search for transform); a numeric label buffer crosses as its raw words
-# (`_label_buffer`), so fit_transform is one program. str labels take Python.
+# Each public operation is one native call (bindings/prep_labels_native.mojo):
+# numeric labels run on the device (sort + run scan for classes_, a binary
+# search for transform), a numeric label buffer crossing as its raw words, so
+# fit_transform is one program; str labels take the native str-label lookup.
 class LabelEncoder(_PrepBase):
     """Encode target labels as integers ``0`` to ``n_classes - 1``.
 
@@ -3031,124 +2722,20 @@ class LabelEncoder(_PrepBase):
     _parameters = ()
 
     def fit(self, y):
-        self.numeric_mode_ = _mode()
-        lb = _label_buffer(y)
-        got = _label_fit_device(self.numeric_mode_, lb) if lb is not None else None
-        if got is not None:
-            self._classes, self._cats = got[0], got[1]
-        else:
-            values = flatten_labels(y)
-            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
-        self.classes_ = _classes_array(self._classes)
-        return self
+        return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
 
     def fit_transform(self, y):
-        # a numeric buffer: classes and codes in ONE program (lane neural-pass137)
-        lb = _label_buffer(y)
-        if lb is not None:
-            self.numeric_mode_ = _mode()
-            got = _label_fit_device(self.numeric_mode_, lb, codes=True)
-            if got is not None:
-                self._classes, self._cats = got[0], got[1]
-                self.classes_ = _classes_array(self._classes)
-                return got[2]
-        return self.fit(y).transform(y)
-
-    def _check_fitted(self):
-        if not hasattr(self, "_classes"):
-            raise RuntimeError("mojolearn: this LabelEncoder instance is not fitted yet")
+        return _ENCODE_CALL(self, "fit_transform", (y,), _ENCODE_CONTEXT)
 
     def transform(self, y):
-        self._check_fitted()
-        lb = _label_buffer(y) if self._cats is not None else None
-        if lb is not None:
-            n = lb.n
-            pr = _Prog()
-            codes = _label_codes_device(pr, lb, self._cats)
-            out = pr.output(n, "i")
-            pr.stage("f2i", n, codes, out)
-            ch = _label_chunk(n)
-            nch = -(-n // ch)
-            neg = pr.alloc(nch)
-            pr.stage("chunk_neg", nch, codes, n, ch, neg)
-            pr.run(self.numeric_mode_)
-            if not any(pr.get_i32(neg, nch).tolist()):
-                return pr.get_i32(out, n)
-            # an unknown label: the old route names the refusal
-        values = flatten_labels(y)
-        if not values:
-            return Array((0,), "<i4")
-        if self._cats is None or _numeric_labels(values) is None:
-            native = _labels.str_labels("lookup", list(self._classes), values, False)
-            if native is not None:
-                codes, missing, count = native
-                if count:
-                    raise ValueError(f"mojolearn: y contains previously unseen labels: {missing}")
-                return codes
-            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: non-str object labels, the explicit label input step
-            missing = [v for v in values if v not in index]  # cpu-route: non-str object labels, the explicit label input step
-            if missing:
-                raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
-            return Array.from_list([index[v] for v in values], "<i4")  # cpu-route: non-str object labels, the explicit label input step
-        n = len(values)
-        pr = _Prog()
-        codes, neg = _label_codes(pr, values, self._cats)
-        out = pr.alloc(n)
-        pr.stage("f2i", n, codes, out)
-        pr.run(self.numeric_mode_)
-        if pr.values(neg, 1)[0] > 0:
-            raise ValueError("mojolearn: y contains previously unseen labels")
-        return pr.get_i32(out, n)
-
-    def _inverse_device(self, y):
-        """An integer or float code buffer over numeric classes, one program
-        on every tier (lane fam2-prep-metrics; lane cpu2-l3-prep: FAST and
-        float code buffers too): each code checked (an integer in [0, K)) and
-        its class written as the int64 / float64 word returned
-        (f2_code_gather, x_prep/fam2.mojo). None: str classes or a code list
-        (the explicit input-prep route)."""
-        if self._cats is None:
-            return None
-        lb = _label_buffer(y)
-        if lb is None:
-            return None
-        n = lb.n
-        ints = label_kind(self._classes) == "int"
-        pr = _Prog()
-        out, neg = _stage_class_gather(pr, _label_load(pr, lb), n, self._cats, ints)
-        pr.run(self.numeric_mode_)
-        if pr.values(neg, 1)[0] > 0:
-            raise ValueError("mojolearn: y contains previously unseen labels")
-        return _class_words(pr, out, n, ints)
+        return _ENCODE_CALL(self, "transform", (y,), _ENCODE_CONTEXT)
 
     def inverse_transform(self, y):
-        self._check_fitted()
-        got = self._inverse_device(y)
-        if got is not None:
-            return got
-        # str classes or a Python code list: the explicit input-prep route (G5)
-        from . import _user_objects
-        # the codes read once natively, range-checked by the base helper
-        codes = _user_objects.call("ints", flatten_labels(y))
-        if len(codes) and int(_native_helper("check_indices_i64")(
-                codes.buffer_info()[0], len(codes), len(self._classes))) == 1:
-            raise ValueError("mojolearn: y contains previously unseen labels")
-        return _classes_array(_user_objects.take(self._classes, codes))
-
-
-def _stage_class_gather(pr, codes, n, cats, ints):
-    """Stages f2_code_gather (x_prep/fam2.mojo): the n float codes at `codes`
-    to their classes among `cats` as 64-bit words (int64 when ints, else
-    binary64), plus the count of codes that are not an integer in
-    [0, cats.size). Returns (words offset, count offset)."""
-    out, bad, neg = pr.alloc(2 * n), pr.work(n), pr.alloc(1)
-    pr.stage("f2_code_gather", n, codes, cats.size, pr.put(cats), 0 if ints else 1, out, bad)
-    pr.stage("count_neg", 1, bad, n, 1, neg)
-    return out, neg
+        return _ENCODE_CALL(self, "inverse_transform", (y,), _ENCODE_CONTEXT)
 
 
 def _class_words(pr, out, n, ints):
-    """The n 64-bit class words `_stage_class_gather` wrote, as an int64 or
+    """The n 64-bit class words a program wrote (f2_code_gather, c2_add_i64), as an int64 or
     float64 Array (one byte copy, no Python object per label)."""
     words = pr.get_i32(out, 2 * n)
     store = array.array("q" if ints else "d")
@@ -3156,7 +2743,8 @@ def _class_words(pr, out, n, ints):
     return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")
 
 
-# Numeric labels take the device route, str labels Python's.
+# One native call per public operation (bindings/prep_labels_native.mojo):
+# numeric labels take the device route, str labels the native lookup.
 class LabelBinarizer(_PrepBase):
     """Binarize labels in a one-vs-all fashion.
 
@@ -3211,176 +2799,21 @@ class LabelBinarizer(_PrepBase):
         self.sparse_output = sparse_output
 
     def fit(self, y):
-        if self.sparse_output:
-            raise NotImplementedError("mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
-        if not (isinstance(self.neg_label, numbers.Integral) and isinstance(self.pos_label, numbers.Integral)
-                and self.neg_label < self.pos_label):
-            raise ValueError("mojolearn: neg_label must be an integer below pos_label")
-        self.numeric_mode_ = _mode()
-        ind = _multilabel_indicator(y)
-        if ind is not None:
-            self._classes, self._cats = list(range(ind.shape[1])), None
-            self.classes_ = Array.from_list(self._classes, "<i8")
-            self.y_type_ = "multilabel-indicator"
-            return self
-        lb = _label_buffer(y)
-        got = _label_fit_device(self.numeric_mode_, lb) if lb is not None else None
-        if got is not None:
-            self._classes, self._cats = got[0], got[1]
-        else:
-            values = flatten_labels(y)
-            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
-        self.classes_ = _classes_array(self._classes)
-        self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
-        return self
+        return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
 
     def fit_transform(self, y):
-        return self.fit(y).transform(y)
-
-    def _check_fitted(self):
-        if not hasattr(self, "_classes"):
-            raise RuntimeError("mojolearn: this LabelBinarizer instance is not fitted yet")
+        return _ENCODE_CALL(self, "fit_transform", (y,), _ENCODE_CONTEXT)
 
     def transform(self, y):
-        self._check_fitted()
-        ind = _multilabel_indicator(y)
-        if ind is not None or self.y_type_ == "multilabel-indicator":
-            if self.y_type_ != "multilabel-indicator":
-                raise ValueError("mojolearn: The object was not fitted with multilabel input.")
-            if ind is None:
-                raise ValueError("mojolearn: y is not a multilabel indicator; the binarizer was fitted with one")
-            n, K = ind.shape
-            if K != len(self._classes):
-                raise ValueError(f"mojolearn: classes {self._classes} mismatch with the {K} label columns in y")
-            pr = _Prog()
-            out = pr.output(n * K, "i")
-            pr.stage("indicator", n * K, pr.put(ind), n * K, 0, _NONE, int(self.neg_label), int(self.pos_label),
-                     out)
-            pr.run(self.numeric_mode_)
-            return pr.get_i32(out, (n, K))
-        K = len(self._classes)
-        binary = K <= 2
-        W = 1 if binary else K
-        lb = _label_buffer(y) if self._cats is not None and K > 1 else None
-        if lb is not None:
-            # lane neural-pass137: the raw words up, the codes and the dense
-            # output on the device, no Python object per label
-            n = lb.n
-            pr = _Prog()
-            codes = _label_codes_device(pr, lb, self._cats)
-            out = pr.output(n * W, "i")
-            pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
-                     int(self.pos_label), W, out)
-            pr.run(self.numeric_mode_)
-            return pr.get_i32(out, (n, W))
-        values = flatten_labels(y)
-        n = len(values)
-        pr = _Prog()
-        if self._cats is None or _numeric_labels(values) is None:
-            native = _labels.str_labels("lookup", list(self._classes), values, True) if values else None
-            if native is not None:
-                codes = pr.put(native[0])
-            else:
-                index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: non-str object labels, the explicit label input step
-                codes = pr.put_list([index.get(v, -1) for v in values])  # cpu-route: non-str object labels, the explicit label input step
-        else:
-            codes, _neg = _label_codes(pr, values, self._cats)
-        if K == 1:
-            codes = pr.put_list([-1] * n)
-        out = pr.output(n * W, "i")
-        pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
-                 int(self.pos_label), W, out)
-        pr.run(self.numeric_mode_)
-        return pr.get_i32(out, (n, W))
+        return _ENCODE_CALL(self, "transform", (y,), _ENCODE_CONTEXT)
 
     def inverse_transform(self, Y, threshold=None):
-        self._check_fitted()
-        arr = _x2d(Y, "Y")
-        n, W = arr.shape
-        K = len(self._classes)
-        pr = _Prog()
-        if self.y_type_ == "multilabel-indicator":
-            if W != K:
-                raise ValueError(f"mojolearn: Y has {W} columns, expected {K}")
-            if threshold is None:
-                threshold = (self.pos_label + self.neg_label) / 2.0
-            out = pr.alloc(n * W)
-            pr.stage("indicator", n * W, pr.put(arr), n * W, 1, pr.put_scalar(threshold), 0, 1, out)
-            pr.run(self.numeric_mode_)
-            return pr.get_i32(out, (n, W))
-        if self.y_type_ == "multiclass":
-            if W != K:
-                raise ValueError(f"mojolearn: Y has {W} columns, expected {K}")
-            codes = _block_argmax(pr, arr, [K], None, False)
-        else:
-            if W > 2:
-                raise ValueError("mojolearn: output_type='binary', but y.shape = " + str((n, W)))
-            if threshold is None:
-                threshold = (self.pos_label + self.neg_label) / 2.0
-            # the last column against the threshold, one code per row (c2_bin_code)
-            codes = pr.alloc(n)
-            pr.stage("c2_bin_code", n, pr.put(arr), n, W, pr.put_scalar(threshold), codes)
-        if self._cats is None:
-            # str classes: the codes come back for the explicit object-label decode (G5)
-            pr.run(self.numeric_mode_)
-            from . import _user_objects
-            # one class object per code, placed natively (user_objects take)
-            idx = _user_objects.call("ints", pr.values(codes, n)) if K != 1 else array.array("q", bytes(8 * n))
-            return _classes_array(_user_objects.take(self._classes, idx))
-        # numeric classes (lane cpu2-l3-prep): each code's class gathered on the device
-        # (f2_code_gather); one class: both codes name it
-        ints = label_kind(self._classes) == "int"
-        cats = self._cats if K > 1 else Array._from_flat(self._cats.tolist() * 2, (2,), "<f4")
-        out, _neg = _stage_class_gather(pr, codes, n, cats, ints)
-        pr.run(self.numeric_mode_)
-        return _class_words(pr, out, n, ints)
+        return _ENCODE_CALL(self, "inverse_transform", (Y, threshold), _ENCODE_CONTEXT)
 
 
-#: lane gap-prep2 (2026-10-02): MultiLabelBinarizer's int label sets cross as
-#: ONE int64 buffer (two C-speed passes over the sets) and the rest is the
-#: device's: lab_load + the run scan for classes_ (LabelEncoder's route),
-#: lookup for the codes and one unit per row (`row_ones`) for the indicator.
-#: The Python route flattened the sets three times, converted every label to
-#: a float twice and built a float row-owner vector on the host. The same
-#: classes and the same int32 words. MOJOLEARN_MLB_DEVICE=0: the Python route.
-_MLB_ROW_TYPES = frozenset((list, tuple, set, frozenset))
-
-
-class _MLBFlat:
-    __slots__ = ("n", "lb", "offs")
-
-    def __init__(self, n, lb, offs):
-        self.n, self.lb, self.offs = n, lb, offs
-
-
-def _mlb_flat(y):
-    """y's label sets as one int64 label buffer and int32 row offsets, or
-    None (the Python route): rows that are not lists, tuples or sets, a
-    label that is not a plain int (bool, float, str, numpy scalars), no
-    label at all (lane pyglue-numeric deleted the MOJOLEARN_MLB_DEVICE
-    switch). glue: the walks below convert the caller's Python containers
-    into one buffer, in C (map, chain, array)."""
-    rows = y if isinstance(y, (list, tuple)) else None
-    if not rows or not set(map(type, rows)) <= _MLB_ROW_TYPES:
-        return None
-    if set(map(type, itertools.chain.from_iterable(rows))) != _INT_ONLY:
-        return None
-    try:
-        flat = array.array("q", itertools.chain.from_iterable(rows))
-    except OverflowError:
-        return None
-    if not flat or len(flat) > 2 ** 30:
-        return None
-    lb = _label_buffer(flat)
-    if lb is None:
-        return None
-    offs = Array._owned(array.array("i", itertools.accumulate(map(len, rows), initial=0)), (len(rows) + 1,),  # cpu-route: offsets of the user's Python label rows, the explicit label input step
-                        "<i4", "C")
-    return _MLBFlat(len(rows), lb, offs)
-
-
-# Numeric labels take the device route (a sort, a binary search, a scatter
-# of ones), str labels Python's.
+# One native call per public operation (bindings/prep_labels_native.mojo):
+# numeric labels take the device route (a sort, a binary search, a scatter
+# of ones), str labels the native lookup.
 class MultiLabelBinarizer(_PrepBase):
     """Convert sets of labels to a binary indicator matrix.
 
@@ -3424,128 +2857,19 @@ class MultiLabelBinarizer(_PrepBase):
         self.sparse_output = sparse_output
 
     def fit(self, y):
-        if self.sparse_output:
-            raise NotImplementedError("mojolearn: MultiLabelBinarizer(sparse_output=True) is not implemented")
-        self.numeric_mode_ = _mode()
-        if self.classes is not None:
-            self._classes = list(self.classes)
-            nums = _numeric_labels(self._classes)
-            self._given = True
-            self._cats = None
-        elif not self._fit_flat(_mlb_flat(y)):
-            flat = [v for row in y for v in row]  # cpu-route: Python iterables of labels, the explicit label input step
-            self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
-            self._given = False
-        self.classes_ = _classes_array(self._classes)
-        return self
-
-    def _fit_flat(self, fl):
-        """classes_ from the device route (`_mlb_flat`); False when it does
-        not apply (the caller takes the Python route)."""
-        if fl is None:
-            return False
-        got = _label_fit_device(self.numeric_mode_, fl.lb)
-        if got is None:
-            return False
-        self._classes, self._cats = got[0], got[1]
-        self._given = False
-        return True
-
-    def _transform_flat(self, fl):
-        """The int32 indicator from the device route: one program."""
-        n, K = fl.n, len(self._classes)
-        pr = _Prog()
-        codes = _label_codes_device(pr, fl.lb, self._cats)
-        offs = pr.put_words(fl.offs)
-        out = pr.output(n * max(K, 1), "i")
-        pr.stage("row_ones", n, codes, offs, K, out)
-        pr.run(self.numeric_mode_)
-        return pr.get_i32(out, (n, K))
+        return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
 
     def fit_transform(self, y):
-        if self.classes is None and not self.sparse_output:
-            fl = _mlb_flat(y)
-            if fl is not None:
-                self.numeric_mode_ = _mode()
-                if self._fit_flat(fl):
-                    self.classes_ = _classes_array(self._classes)
-                    return self._transform_flat(fl)
-        y = [list(row) for row in y]  # cpu-route: Python iterables of labels, the explicit label input step
-        return self.fit(y).transform(y)
-
-    def _check_fitted(self):
-        if not hasattr(self, "_classes"):
-            raise RuntimeError("mojolearn: this MultiLabelBinarizer instance is not fitted yet")
+        return _ENCODE_CALL(self, "fit_transform", (y,), _ENCODE_CONTEXT)
 
     def transform(self, y):
-        self._check_fitted()
-        if self._cats is not None and self._classes:
-            fl = _mlb_flat(y)
-            if fl is not None:
-                return self._transform_flat(fl)
-        rows = [list(r) for r in y]  # cpu-route: Python list-of-lists y, the explicit label input step
-        n, K = len(rows), len(self._classes)
-        flat = [v for r in rows for v in r]  # cpu-route: Python iterables of labels, the explicit label input step
-        owner = [i for i, r in enumerate(rows) for _ in r]  # cpu-route: Python iterables of labels, the explicit label input step
-        pr = _Prog()
-        if not flat:
-            out = pr.alloc(n * max(K, 1))
-            pr.run(self.numeric_mode_)
-            return pr.get_i32(out, (n, K))
-        if self._cats is None or _numeric_labels(flat) is None:
-            native = _labels.str_labels("lookup", list(self._classes), flat, True)
-            if native is not None:
-                codes = pr.put(native[0])
-            else:
-                index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: non-str object labels, the explicit label input step
-                codes = pr.put_list([index.get(v, -1) for v in flat])  # cpu-route: Python iterables of labels, the explicit label input step
-        else:
-            codes, _neg = _label_codes(pr, flat, self._cats)
-        ro = pr.put_list(owner)
-        out = pr.output(n * max(K, 1), "i")
-        pr.stage("scatter_ones", len(flat), codes, ro, K, out)
-        pr.run(self.numeric_mode_)
-        return pr.get_i32(out, (n, K))
+        return _ENCODE_CALL(self, "transform", (y,), _ENCODE_CONTEXT)
 
     def inverse_transform(self, yt):
-        self._check_fitted()
-        rows = yt.tolist() if hasattr(yt, "tolist") else list(yt)
-        return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]  # cpu-route: builds the user list of Python label tuples (object output)
+        return _ENCODE_CALL(self, "inverse_transform", (yt,), _ENCODE_CONTEXT)
 
 
 # ---------------------------------------------------------------- iterative imputer
-class _NeighbourDraws:
-    """IterativeImputer's n_nearest_features draws, one list per (round,
-    feature) step in fit order. Every step is drawn up front in one device
-    program (`_neighbours_device`, every tier: lane cpu2-l3-prep deleted the
-    host route that read the |corr| matrix back and called the base binding's
-    `weighted_pick_i32` per step); `next` then hands them out and moves the
-    instance's splitmix64 state past the words the steps taken so far own
-    (k per step: state + k * golden each)."""
-
-    def __init__(self, imp, Xf, n, dk, mode, orders):
-        self.imp, self.dk, self.at = imp, dk, 0
-        js = [j for order in orders for j in order]  # glue: the (round, feature) step list
-        self.k, self.start = int(imp.n_nearest_features), imp._rng
-        self.lists = imp._neighbours_device(Xf, n, dk, mode, js, self.k) if js else []
-
-    def next(self, j):
-        out = self.lists[self.at]
-        self.at += 1
-        self.imp._rng = (self.start + self.at * self.k * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
-        return out
-
-
-# With the default estimator (BayesianRidge, default priors, max_iter 300, tol
-# 1e-3) the whole fit is one device program; another estimator runs the same
-# rounds in Python over its fit / predict (predict(return_std=True) for
-# sample_posterior). The stop test is the matrix inf-norm of the round's change
-# < tol * max|X_observed|. Every draw (random order, neighbours, posterior
-# samples) comes from random_state by splitmix64 (sklearn draws numpy's; None
-# is seed 0).
-_INF = float("inf")
-
-
 class IterativeImputer(_PrepBase):
     """Impute missing values by modeling each feature from the others, round by round.
 
@@ -3561,14 +2885,15 @@ class IterativeImputer(_PrepBase):
 
     Parameters
     ----------
-    estimator : object, default None
-        Regressor with ``fit`` and ``predict``, cloned for each step and run on the host. None uses the
-        built-in Bayesian ridge regression.
+    estimator : mojolearn regressor, default None
+        A mojolearn regressor with ``fit`` and ``predict`` (for example :class:`BayesianRidge`,
+        :class:`Ridge` or :class:`LinearRegression`), cloned for each step. Any other estimator raises
+        ``TypeError``. None uses the built-in Bayesian ridge regression.
     missing_values : float, default NaN
         Value that marks a missing entry.
     sample_posterior : bool, default False
         Draw each imputed value from the predictive normal distribution, truncated to
-        ``[min_value, max_value]``, instead of using its mean. A custom ``estimator`` must then support
+        ``[min_value, max_value]``, instead of using its mean. An ``estimator`` must then support
         ``predict(X, return_std=True)`` (``ValueError`` otherwise).
     max_iter : int, default 10
         Maximum number of imputation rounds.
@@ -3652,443 +2977,21 @@ class IterativeImputer(_PrepBase):
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
 
-    def _refuse(self):
-        mi = self.max_iter
-        if isinstance(mi, bool) or not isinstance(mi, numbers.Integral) or mi < 0:
-            raise ValueError("The 'max_iter' parameter of IterativeImputer must be an int in the range "
-                             f"[0, inf). Got {mi!r} instead.")
-        if self.imputation_order not in ("ascending", "descending", "roman", "arabic", "random"):
-            raise ValueError(f"mojolearn: invalid imputation_order {self.imputation_order!r}")
-        nnf = self.n_nearest_features
-        if nnf is not None and (not isinstance(nnf, numbers.Integral) or nnf < 1):
-            raise ValueError(f"mojolearn: n_nearest_features must be an int >= 1; got {nnf!r}")
-        if self.sample_posterior and self.estimator is not None and \
-                "return_std" not in inspect.signature(self.estimator.predict).parameters:
-            raise ValueError("mojolearn: If 'sample_posterior' is True, the estimator must support "
-                             "'return_std' in its 'predict' method.")
-
-    def _bounds(self, d):
-        def per(v):
-            vals = list(v) if isinstance(v, (list, tuple)) or hasattr(v, "tolist") else [v] * d
-            vals = vals.tolist() if hasattr(vals, "tolist") else vals
-            return [float(x) for x in vals]  # glue: converts the min_value / max_value arguments (vals-sized: per-column bound arguments)
-        lo, hi = per(self.min_value), per(self.max_value)
-        return [v for pair in zip(lo, hi) for v in pair]  # glue: interleaves the bound arguments (lo-sized: per-column bound arguments)
-
-    def _prepare(self, pr, arr, Xf, inout=False):
-        """Arena: the filled block, its missing mask, the per-column bounds.
-        inout: the program imputes the filled block in place and returns it."""
-        n, d = arr.shape
-        dk = len(self._keep)
-        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        fo = pr.put(Xf, inout=inout)
-        ko = pr.put_list(self._keep)
-        mo = pr.alloc(n * dk)
-        pr.stage("nan_mask", n * dk, xo, n, d, ko, dk, mo)
-        bo = pr.put_list(self._bounds_k)
-        return fo, mo, bo
-
-    def _draw(self):
-        """The next splitmix64 word of the instance's draw stream."""
-        self._rng, z = _splitmix64(self._rng)
-        return z
-
-    def _neighbours_device(self, Xf, n, dk, mode, js, k):
-        """Lane fam2-prep-metrics (every tier since lane cpu2-l3-prep): every
-        (round, feature) step's n_nearest_features draw in ONE program: the
-        |corr| matrix (ii_mean, ii_gram, p2m_abscorr_*) stays on the device and one
-        thread per step draws its k features from it (f2_wpick,
-        x_prep/fam2.mojo; step c takes splitmix64 words c*k .. c*k + k - 1 of
-        the instance's stream). Returns each step's ascending picks."""
-        pr = _Prog()
-        fo, mz = pr.put(Xf), pr.alloc(n * dk)
-        means, cnt, g, flag = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk), pr.alloc(1)
-        pr.stage("ii_mean", dk, fo, n, dk, mz, 0, means, cnt, flag)
-        pr.stage("ii_gram", dk * dk, fo, n, dk, mz, 0, means, g, flag)
-        m = pr.alloc(dk * dk)
-        pr.stage("p2m_abscorr_cell", dk * dk, g, dk, m)
-        pr.stage("p2m_abscorr_norm", dk, m, dk)
-        calls = len(js)
-        fl, out = pr.work(calls * dk), pr.alloc(calls * (k + 1))
-        pr.stage("f2_wpick", calls, m, dk, pr.put_ints(js), k, _seed_words(pr, self._rng), fl, out)
-        pr.run(mode)
-        words = pr.get_i32(out, calls * (k + 1)).tolist()
-        lists = []
-        for c in range(calls):  # glue: one feature list per step
-            got = words[c * (k + 1) + k]
-            if got < k:
-                raise ValueError("mojolearn: IterativeImputer: no feature left to draw")
-            lists.append(words[c * (k + 1):c * (k + 1) + got])
-        return lists
-
     def fit_transform(self, X, y=None):
-        self._refuse()
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        self._rng = 0 if self.random_state is None else int(self.random_state) & 0xFFFFFFFFFFFFFFFF
-        self._post_step = 0
-        self.initial_imputer_ = SimpleImputer(missing_values=self.missing_values, strategy=self.initial_strategy,
-                                              fill_value=self.fill_value,
-                                              keep_empty_features=self.keep_empty_features).fit(arr)
-        Xf = self.initial_imputer_.transform(arr)
-        self._keep = list(self.initial_imputer_._keep)
-        dk = len(self._keep)
-        bounds = self._bounds(d)
-        self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]  # glue: per-kept-column bound arguments (_keep-sized: kept feature indices)
-        # missing counts per kept column, and the tolerance scale, from the device
-        pr = _Prog()
-        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        st = pr.alloc(6 * d)
-        _cs(pr, mode, xo, n, d, st)
-        rounds = int(self.max_iter)
-        # lane cpu2-l3-prep: the missing counts (c2_ii_miss), each round's imputation
-        # order (c2_ii_pos + c2_ii_ord, or c2_ii_rand: the reference's Fisher-Yates on the
-        # instance's splitmix64 stream, one round a thread) and the tolerance scale
-        # (c2_colmax) on the device; the orders come back as the fit's control lists
-        R = max(rounds, 1)
-        ordw, lens, sc = pr.alloc(max(R * dk, 1)), pr.alloc(R), pr.alloc(1)
-        pr.stage("c2_colmax", 1, st + 5 * d, d, sc)
-        if dk:
-            missd = pr.work(dk)
-            pr.stage("c2_ii_miss", dk, st, pr.put_ints(self._keep), n, missd)
-            if self.imputation_order == "random":
-                pr.stage("c2_ii_rand", R, missd, dk, 1 if self.skip_complete else 0, _seed_words(pr, self._rng),
-                         ordw, lens)
-            else:
-                pos = pr.work(dk)
-                mcode = {"ascending": 0, "descending": 1, "roman": 2, "arabic": 3}[self.imputation_order]
-                pr.stage("c2_ii_pos", dk, missd, dk, mcode, pos)
-                pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
-        pr.run(mode)
-        scale = pr.values(sc, 1)[0]
-        if scale == _INF:
-            # the device's largest |observed value| (c2_colmax) is infinite
-            # exactly when an observed entry is; scikit-learn refuses it
-            raise ValueError("Input X contains infinity or a value too large for dtype('float64').")
-        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []  # glue: indicator column index list from device counts (d-sized: feature count)
-        ln = pr.get_i32(lens, R).tolist() if dk else [0] * R
-        ow = pr.get_i32(ordw, R * dk).tolist() if dk else []
-        orders = [ow[r * dk:r * dk + ln[r]] for r in range(rounds)]  # glue: the device's orders as control lists
-        self.n_features_with_missing_ = ln[0]
-        if self.imputation_order == "random":
-            # the draws the rounds took: (m - 1) a round over m candidates
-            m = ln[0] if self.skip_complete else dk
-            self._rng = (self._rng + rounds * max(m - 1, 0) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        nnf = self.n_nearest_features
-        corr = _NeighbourDraws(self, Xf, n, dk, mode, orders) if nnf is not None and nnf < dk else None
-        if self.estimator is not None:
-            return self._with_indicator(arr, self._fit_user(arr, Xf, orders, corr, float(self.tol) * scale))
-        pr = _Prog()
-        fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
-        tol = pr.put_scalar(float(self.tol) * scale)
-        flag, niter = pr.alloc(1), pr.alloc(1)
-        prev = pr.alloc(n * dk)
-        cnt, g = pr.alloc(1), pr.alloc(dk * dk)
-        p1 = max(dk - 1, 1)
-        gs, eig, vec, w = pr.alloc(p1 * p1), pr.alloc(p1), pr.alloc(p1 * p1), pr.alloc(p1)
-        seq, extra = [], []
-        seed = self._rng & 0x7FFFFFFF
-        # the reference checks convergence only without sample_posterior
-        conv = not self.sample_posterior
-        rowabs = None
-        for r in range(rounds):  # glue: drives the device imputation rounds (rounds-sized: imputation rounds)
-            if orders[r] and conv:
-                pr.stage("ii_snapshot", n * dk, fo, prev, flag)
-            for j in orders[r]:  # glue: drives one device regression per feature (orders-sized: per-round feature orders)
-                coef, inter, means = pr.alloc(dk), pr.alloc(1), pr.alloc(dk)
-                nbl = corr.next(j) if corr is not None else None
-                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0  # glue: neighbor-feature mask of one step (dk-sized: kept feature count)
-                pp = len(nbl) if nbl is not None else dk - 1
-                al = pr.alloc(2) if self.sample_posterior else -1
-                seq.append((j, coef, inter))
-                pr.stage("ii_mean", dk, fo, n, dk, mo, j, means, cnt, flag)
-                pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
-                if pp > 0:
-                    pr.stage("ii_sub", 1, g, dk, j, gs, flag, nb1)
-                    pr.stage("eigh", 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
-                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
-                if self.sample_posterior:
-                    sig = pr.alloc(max(pp, 1) ** 2)
-                    pr.stage("ii_sigma", pp * pp, eig, vec, pp, al, sig, flag)
-                    key = pr.put_ints([seed, self._post_step])
-                    self._post_step += 1
-                    pr.stage("ii_post", n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
-                    extra.append((nbl, sig, al, means, pp))
-                else:
-                    pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
-            if orders[r] and conv:
-                if rowabs is None:
-                    rowabs = pr.alloc(n)
-                pr.stage("ii_rowabs", n, fo, prev, dk, rowabs, flag)
-                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk, rowabs + 1)
-        pr.run(mode)
-        any_order = any(orders)
-        done = (int(pr.values(niter, 1)[0]) if conv else rounds) if any_order else 0
-        self.n_iter_ = done if any_order else min(1, rounds)
-        steps = sum(len(o) for o in orders[:done])  # glue: count of finished imputation steps (orders-sized: per-round feature orders)
-        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in seq[:steps]]  # glue: fitted imputation sequence views (seq-sized: finished imputation steps)
-        self._posterior = [(nbl, pr.get(sg, max(pp, 1) ** 2), pr.get(al, 2), pr.get(mn, dk))
-                           for nbl, sg, al, mn, pp in extra[:steps]]  # glue: fitted imputation sequence views (extra-sized: finished imputation steps)
-        return self._with_indicator(arr, pr.get(fo, (n, dk)))
+        """Fit to ``X``, then impute it.
 
-    def _with_indicator(self, arr, Xt):
-        """Xt, then MissingIndicator's columns (add_indicator)."""
-        m = len(self._indicator)
-        if not m:
-            return Xt
-        n, d = arr.shape
-        pr = _Prog()
-        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        mo = pr.alloc(n * m)
-        pr.stage("nan_mask", n * m, xo, n, d, pr.put_list(self._indicator), m, mo)
-        dk = Xt.shape[1]
-        to = pr.put(Xt)
-        hc = pr.output(n * (dk + m))
-        pr.stage("hcat", n * (dk + m), to, dk, mo, m, hc)
-        pr.run(self.numeric_mode_)
-        return pr.get(hc, (n, dk + m))
-
-    def _fit_user(self, arr, Xf, orders, corr, tol):
-        """estimator=<any>: the reference's rounds over copies of the
-        estimator, its fit / predict on the float32 blocks. The data-sized
-        plumbing runs as x_prep units (`_ii_take`, `_ii_put`; the device on a
-        GPU install, the same units on the host on a CPU-only one): the
-        observed / missing rows of feature j by a chunked count, scan and
-        write, the estimator's blocks by a gather, the clipped predictions by
-        a scatter, and the round's stop by `ii_rowabs` / `ii_conv`, the
-        default estimator's own test (the matrix inf-norm of the round's
-        change < tol, float32)."""
-        n, d = arr.shape
-        dk = len(self._keep)
-        mode = _mode()
-        mask = self._mask_arr(arr)
-        Xt = as_f32_c(Xf, name="X")[0].copy()
-        seq = []
-        done = 0
-        for r, order in enumerate(orders):  # cpu-route: the user estimator, fitted once per imputation round (user code)
-            check = not self.sample_posterior and bool(order)
-            prev = Xt.copy() if check else None
-            for j in order:  # cpu-route: the user estimator, fitted once per feature (user code)
-                nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: the other feature ids
-                est = _clone(self.estimator)
-                Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)
-                est.fit(Xo, yo)
-                seq.append((j, nbl, est))
-                Xt = self._ii_put(Xt, Xm, rows, m, j, est, mode)
-            done = r + 1
-            if check and self._ii_stop(Xt, prev, tol, mode):
-                break
-        self.n_iter_ = done if any(orders) else min(1, len(orders))
-        self.imputation_sequence_ = seq
-        return Xt
-
-    def _ii_rows(self, pr, mo, n, dk, j, missing):
-        """Stages: the ascending rows whose mask word for feature j is (or is
-        not) zero, as int32 words, and their count (a float slot)."""
-        ch = max(_II_CH, -(-n // _II_CH))
-        nch = -(-n // ch)
-        cnt, off, tot, rows = pr.alloc(nch), pr.alloc(nch), pr.alloc(1), pr.alloc(n)
-        pr.stage("ii_rcount", nch, mo, n, dk, j, 1 if missing else 0, ch, cnt)
-        pr.stage("uniq_scan", 1, cnt, nch, off, tot)
-        pr.stage("ii_rwrite", nch, mo, n, dk, j, 1 if missing else 0, ch, off, rows)
-        return rows, tot
-
-    def _ii_take(self, Xt, mask, j, nbl, mode, fit):
-        """One program: feature j's missing rows and the estimator's predict
-        block Xt[mis][:, nbl] and, with fit, its training blocks
-        Xt[obs][:, nbl] and Xt[obs, j]. Returns (Xo, yo, Xm, mis rows as int32
-        words, m)."""
-        n, dk = Xt.shape
-        nc = len(nbl)
-        pr = _Prog()
-        xo, mo = pr.put(Xt), pr.put(mask)
-        co = pr.put_list(nbl or [0])
-        jo = pr.put_list([j])
-        rm, tm = self._ii_rows(pr, mo, n, dk, j, True)
-        gm = pr.alloc(n * nc)
-        if nc:
-            pr.stage("ii_gather", n * nc, xo, dk, rm, tm, co, nc, gm)
-        if fit:
-            ro, to = self._ii_rows(pr, mo, n, dk, j, False)
-            go, gy = pr.alloc(n * nc), pr.alloc(n)
-            if nc:
-                pr.stage("ii_gather", n * nc, xo, dk, ro, to, co, nc, go)
-            pr.stage("ii_gather", n, xo, dk, ro, to, jo, 1, gy)
-        pr.run(mode)
-        m = int(pr.values(tm, 1)[0])
-        Xo = yo = None
-        if fit:
-            mob = int(pr.values(to, 1)[0])
-            Xo, yo = self._ii_block(pr, go, gy, mob, nc)
-        Xm, _ = self._ii_block(pr, gm, None, m, nc)
-        rows = pr.get_i32(rm, (m,)) if m else None
-        return Xo, yo, Xm, rows, m
-
-    @staticmethod
-    def _ii_block(pr, xo, yo, m, nc):
-        """(X block (m, nc), y (m,)) as float32 Arrays; a 0-row block is
-        `from_list([])`, a 0-column one its m empty rows, as before."""
-        if m == 0:
-            return Array.from_list([], "<f4"), (Array.from_list([], "<f4") if yo is not None else None)
-        X = pr.get(xo, (m, nc)) if nc else Array((m, 0), "<f4")
-        return X, (pr.get(yo, (m,)) if yo is not None else None)
-
-    def _ii_put(self, Xt, Xm, rows, m, j, est, mode):
-        """Predict on the missing rows' block, then (one program) the clipped
-        float32 store into Xt[rows, j]. sample_posterior's truncated normal
-        draw stays Python float64 on the pinned normal cdf / inverse cdf
-        (DEVIATION 6902) and is stored unclipped."""
-        if not m:
-            return Xt
-        n, dk = Xt.shape
-        lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
-        if not self.sample_posterior:
-            v = _pred_f64(est.predict(Xm))
-            clip = 1
-        else:
-            mus, sig = est.predict(Xm, return_std=True)
-            v = self._truncnorm_draws(mus, sig, lo, hi)
-            clip = 0
-        k = min(v.size, m)      # the reference's zip stops at the shorter
-        if k == 0:
-            return Xt
-        if v.size != k:
-            v = Array._owned(array.array("d", v.tolist()[:k]), (k,), "<f8", "C")
-        pr = _Prog()
-        xo = pr.put(Xt, inout=True)
-        ro = pr.put_words(rows)
-        vo = pr.put(v.astype("<f4"))
-        bo = pr.put_list([lo, hi])
-        pr.stage("ii_scatter", k, xo, dk, ro, j, vo, bo, clip)
-        pr.run(mode)
-        return pr.get(xo, (n, dk))
-
-    def _ii_stop(self, Xt, prev, tol, mode):
-        """The round's stop: the inf-norm of Xt - prev below tol."""
-        n, dk = Xt.shape
-        pr = _Prog()
-        xo, po = pr.put(Xt), pr.put(prev)
-        to = pr.put_scalar(tol)
-        flag, niter, rowabs = pr.alloc(1), pr.alloc(1), pr.alloc(n)
-        pr.stage("ii_rowabs", n, xo, po, dk, rowabs, flag)
-        pr.stage("ii_conv", 1, xo, po, n * dk, to, flag, niter, dk, rowabs + 1)
-        pr.run(mode)
-        return pr.values(flag, 1)[0] != 0
-
-    def _mask_arr(self, arr):
-        """`_mask`'s words (1.0 missing, 0.0 observed) as the float32 (n, dk) Array."""
-        n, d = arr.shape
-        pr = _Prog()
-        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        mo = pr.alloc(n * len(self._keep))
-        pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
-        pr.run(_mode())
-        return as_f32_c(pr.get(mo, (n, len(self._keep))), name="mask")[0]
-
-    def _truncnorm_draws(self, mus, sig, lo, hi):
-        """`_impute_one_feature`'s rule per entry, in Mojo (the core helper
-        `truncnorm_draws`, bindings/normal_dist_helpers.mojo; lane py-runtime
-        round 3, it was Python float64 per entry): mu beyond a bound -> the
-        bound, sigma <= 0 -> mu, else the inversion of the truncated normal
-        at a 53-bit splitmix64 uniform on the pinned normal cdf / inverse cdf
-        (DEVIATION 6902), the instance's stream advanced by the entries that
-        draw. The reference's zip stops at the shorter of the two outputs."""
-        from ._buffer import _native
-        from . import _user_objects
-        # the user estimator's predictions read once natively (user_objects floats)
-        mu = _user_objects.call("floats", _user_objects.call("flatten", mus))
-        sd = _user_objects.call("floats", _user_objects.call("flatten", sig))
-        k = min(len(mu), len(sd))
-        out = array.array("d", bytes(8 * k))
-        st = int(self._rng)
-        hi_lo = _native("truncnorm_draws")(mu.buffer_info()[0], sd.buffer_info()[0], k, [float(lo), float(hi)],
-                                           [st >> 32, st & 0xFFFFFFFF], out.buffer_info()[0])
-        self._rng = (int(hi_lo[0]) << 32) | int(hi_lo[1])
-        return Array._owned(out, (k,), "<f8", "C")
+        Returns
+        -------
+        array
+            ``X`` with its missing entries imputed (plus the indicator columns with ``add_indicator``).
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
-        self.fit_transform(X)
-        return self
+        return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
     def transform(self, X):
-        if not hasattr(self, "imputation_sequence_"):
-            raise RuntimeError("mojolearn: this IterativeImputer instance is not fitted yet")
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        dk = len(self._keep)
-        Xf = self.initial_imputer_.transform(arr)
-        if self.estimator is not None:
-            mode = self.numeric_mode_
-            mask = self._mask_arr(arr)
-            Xt = as_f32_c(Xf, name="X")[0].copy()
-            for j, nbl, est in self.imputation_sequence_:  # glue: drives one device regression per step (imputation_sequence_-sized: fitted imputation steps)
-                _, _, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=False)
-                Xt = self._ii_put(Xt, Xm, rows, m, j, est, mode)
-            return self._with_indicator(arr, Xt)
-        pr = _Prog()
-        fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
-        seed = self._rng & 0x7FFFFFFF
-        for s, (j, coef, inter) in enumerate(self.imputation_sequence_):  # glue: drives one device regression per step (imputation_sequence_-sized: fitted imputation steps)
-            co, io = pr.put(coef), pr.put(inter)
-            if self.sample_posterior:
-                nbl, sig, al, means = self._posterior[s]
-                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0  # glue: neighbor-feature mask of one step (dk-sized: kept feature count)
-                key = pr.put_ints([seed, self._post_step])
-                self._post_step += 1
-                pr.stage("ii_post", n, fo, n, dk, mo, j, co, io, bo, _NONE, pr.put(means), pr.put(sig), pr.put(al),
-                         nb1, key)
-            else:
-                pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
-        pr.run(self.numeric_mode_)
-        return self._with_indicator(arr, pr.get(fo, (n, dk)))
-
-
-def _clone(est):
-    """A fresh unfitted copy (the reference's `clone`: the same class and
-    get_params(deep=False))."""
-    return type(est)(**est.get_params(deep=False)) if hasattr(est, "get_params") else copy.deepcopy(est)
-
-
-def _as_list(v):
-    from . import _user_objects
-    return _user_objects.call("floats", v.tolist() if hasattr(v, "tolist") else v).tolist()
-
-
-def _pred_f64(v):
-    """A user estimator's predictions as a float64 Array holding the values
-    `_as_list` reads (`float(x)` per element): a float32 or float64 vector
-    widened natively (exact), anything else through `_as_list`."""
-    from ._buffer import _materialize, _has_buffer, as_f64_c
-    if isinstance(v, Array) or (not isinstance(v, (list, tuple)) and _has_buffer(v)):
-        a, _ = _materialize(v, "predict")
-        if a.ndim == 1 and a.dtype in ("<f4", "<f8") and a.size:
-            return as_f64_c(a, ndim=1, name="predict")[0]
-    vals = _as_list(v)
-    return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
-
-
-def _key_words(values, d):
-    """(int32 words, c2_key64 KIND) of d values: a float32 / float64 / int32 /
-    int64 buffer as its own words; anything else (a user score function's
-    list) converted once to float64 (the explicit input-prep step)."""
-    lb = _label_buffer(values)
-    if lb is not None and lb.kind in (0, 1, 3, 4) and lb.n == d:
-        return lb.words, lb.kind
-    vals = values.tolist() if hasattr(values, "tolist") else values
-    flat = array.array("d", [float(v) for v in vals])  # glue: a user callable's scores, converted once
-    if len(flat) != d:
-        raise ValueError(f"mojolearn: expected {d} scores, got {len(flat)}")
-    w = array.array("i")
-    w.frombytes(flat.tobytes())
-    return Array._owned(w, (2 * d,), "<i4", "C"), 4
-
-
-def _mask_list(pr, off, d):
-    """A device 0.0 / 1.0 mask read back as the fitted bool list."""
-    return [v != 0.0 for v in pr.values(off, d)]  # glue: the device's mask as the fitted list
+        return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
 
 # ---------------------------------------------------------------- feature selection
@@ -4180,36 +3083,6 @@ class VarianceThreshold(_SelectorMixin):
         return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
-def _scores_classif(X, y, kind):
-    arr = _x2d(X)
-    n, d = arr.shape
-    classes, codes = encode_labels(y)
-    if codes.size != n:
-        raise ValueError("mojolearn: X and y have different numbers of rows")
-    K = len(classes)
-    pr = _Prog()
-    xo, yo = pr.put(arr), pr.put_codes(codes)
-    cnt, mean, sums = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
-    sc, pv, st = pr.alloc(d), pr.alloc(d), pr.alloc(6 * d)
-    mode = _mode()
-    _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, sums)
-    if kind == "chi2":
-        _cs(pr, mode, xo, n, d, st, var=False)
-        pr.stage("chi2", d, sums, K, d, cnt, n, sc, pv)
-    elif _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
-        # x_prep/select_blocked.mojo: the within-class squares by row blocks, then the score
-        nb = (n + _XB - 1) // _XB
-        ps = pr.work(nb * d)
-        pr.stage("fcb_part", nb * d, xo, n, d, yo, mean, ps, nb)
-        pr.stage("fcb_fin", d, ps, n, d, nb, K, cnt, mean, sc, pv)
-    else:
-        pr.stage("f_classif", d, xo, n, d, yo, K, cnt, mean, sc, pv)
-    pr.run(mode)
-    if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):  # glue: raises on a negative per-column minimum (d-sized: feature count)
-        raise ValueError("mojolearn: Input X must be non-negative.")
-    return pr.get(sc, d), pr.get(pv, d)
-
-
 def f_classif(X, y):
     """Compute the ANOVA F-value of each feature against the class labels.
 
@@ -4239,7 +3112,7 @@ def f_classif(X, y):
     >>> y = rng.integers(0, 3, 1000)
     >>> F, p = mojolearn.f_classif(X, y)
     """
-    return _scores_classif(X, y, "f")
+    return _ENCODE_CALL(None, "f_classif", (X, y), _ENCODE_CONTEXT)
 
 
 def chi2(X, y):
@@ -4271,34 +3144,7 @@ def chi2(X, y):
     >>> y = rng.integers(0, 2, 1000)
     >>> stat, p = mojolearn.chi2(X, y)
     """
-    return _scores_classif(X, y, "chi2")
-
-
-def _pearson(X, y, center, force_finite):
-    arr = _x2d(X)
-    n, d = arr.shape
-    yv = as_f32_c(y, ndim=1, name="y")[0]
-    if yv.size != n:
-        raise ValueError("mojolearn: X and y have different numbers of rows")
-    pr = _Prog()
-    xo, yo = pr.put(arr), pr.put(yv)
-    sc, pv, co = pr.alloc(d), pr.alloc(d), pr.alloc(d)
-    mode = _mode()
-    if _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
-        # x_prep/select_blocked.mojo: the sums and the centred products by row blocks
-        nb = (n + _XB - 1) // _XB
-        mx = my = _NONE
-        if center:
-            psx, psy, mx, my = pr.work(nb * d), pr.work(nb), pr.work(d), pr.work(1)
-            pr.stage("frb_part1", nb * d, xo, n, d, yo, psx, psy, nb)
-            pr.stage("frb_mean", d, psx, psy, nb, d, n, mx, my)
-        pxy, pxx, pyy = pr.work(nb * d), pr.work(nb * d), pr.work(nb)
-        pr.stage("frb_part2", nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
-        pr.stage("frb_fin", d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    else:
-        pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    pr.run(mode)
-    return pr.get(sc, d), pr.get(pv, d), pr.get(co, d)
+    return _ENCODE_CALL(None, "chi2", (X, y), _ENCODE_CONTEXT)
 
 
 def f_regression(X, y, *, center=True, force_finite=True):
@@ -4335,8 +3181,7 @@ def f_regression(X, y, *, center=True, force_finite=True):
     >>> y = (2 * X[:, 0] + rng.random(1000)).astype(np.float32)
     >>> F, p = mojolearn.f_regression(X, y)
     """
-    sc, pv, _ = _pearson(X, y, center, force_finite)
-    return sc, pv
+    return _ENCODE_CALL(None, "f_regression", (X, y, center, force_finite), _ENCODE_CONTEXT)
 
 
 def r_regression(X, y, *, center=True, force_finite=True):
@@ -4368,7 +3213,7 @@ def r_regression(X, y, *, center=True, force_finite=True):
     >>> y = X[:, 0] + rng.random(1000).astype(np.float32)
     >>> r = mojolearn.r_regression(X, y)
     """
-    return _pearson(X, y, center, force_finite)[2]
+    return _ENCODE_CALL(None, "r_regression", (X, y, center, force_finite), _ENCODE_CONTEXT)
 
 
 class SelectKBest(_SelectorMixin):
@@ -4425,139 +3270,11 @@ class SelectKBest(_SelectorMixin):
         return _ENCODE_CALL(self, "fit_transform", (X, y), _ENCODE_CONTEXT)
 
 
-def _mi_discrete_mask(discrete_features, d):
-    """The reference's discrete_features: 'auto' (dense X: none), a bool for
-    every column, a bool mask of length d, or column indices (negative ones
-    count from the end)."""
-    if isinstance(discrete_features, str):
-        if discrete_features != "auto":
-            raise ValueError("mojolearn: Invalid string value for discrete_features.")
-        return [False] * d
-    if isinstance(discrete_features, bool) or type(discrete_features).__name__ == "bool_":
-        return [bool(discrete_features)] * d
-    vals = discrete_features.tolist() if hasattr(discrete_features, "tolist") else list(discrete_features)
-    if isinstance(vals, bool):
-        return [vals] * d
-    if vals and all(isinstance(v, bool) for v in vals):  # glue: validates the discrete_features argument (vals-sized: user discrete_features argument)
-        if len(vals) != d:
-            raise ValueError(f"mojolearn: discrete_features mask has {len(vals)} entries; X has {d} features")
-        return list(vals)
-    mask = [False] * d
-    for v in vals:  # glue: converts the discrete_features argument (vals-sized: user discrete_features argument)
-        if isinstance(v, bool) or not isinstance(v, numbers.Integral):
-            raise ValueError("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
-        j = int(v)
-        if not -d <= j < d:
-            raise IndexError(f"mojolearn: discrete_features index {j} is out of bounds for {d} features")
-        mask[j % d] = True
-    return mask
-
-
-#: lane/apple-fast-mi (2026-10-03): the A/B switch MOJOLEARN_MI_WORK=1 (opt-in,
-#: FAST only, read once at import): `_mutual_info` keeps the noised columns, their
-#: noise words and the per-point terms (3 n d words) as device-only scratch
-#: (`_Prog.work`) instead of arena words that the host zeroes and the device
-#: copies back (265 MB on Istella). Where a word lives moves no bit.
+#: MOJOLEARN_MI_WORK=1: the mutual-information work blocks are device scratch on
+#: the FAST tier (read once at import; bindings/prep_select_native.mojo).
 _MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
 
 
-def _plus1(off):
-    """off + 1 for an arena offset or a `_Scratch` (the units' offset + 1 noise words)."""
-    return _Scratch(off.off + 1, off.kind) if isinstance(off, _Scratch) else off + 1
-
-
-def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
-    """The reference's `_estimate_mi`: continuous columns are scaled and
-    noised (row-major over the continuous columns only, as the reference's
-    draw of shape (n, n_continuous)), the 1e-10-scaled noise kept as a
-    second word that breaks exact ties as the reference's float64 sum does
-    (DEVIATION 5407); each column then takes the estimator
-    its kinds name: Kraskov (continuous x, continuous y), Ross (one side
-    discrete: the classes, or a discrete feature's categories against the
-    noised target) or the contingency table (both discrete)."""
-    k = int(n_neighbors)
-    if not 1 <= k <= 32:
-        raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
-    arr = _x2d(X)
-    n, d = arr.shape
-    mask = _mi_discrete_mask(discrete_features, d)
-    cont = [j for j in range(d) if not mask[j]]  # glue: continuous column index list (d-sized: feature count)
-    disc = [j for j in range(d) if mask[j]]  # glue: discrete column index list (d-sized: feature count)
-    mode = _mode()
-    seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
-    pr = _Prog()
-    work = pr.work if (_MI_WORK and mode == "fast") else pr.alloc
-    if discrete_target:
-        classes, codes = encode_labels(y)
-        if codes.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        counts = _class_counts(codes, len(classes))
-        if cont and max(counts) < 2:  # glue: raises when every class has one sample (counts-sized: class counts from the binding)
-            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
-                             "neighbour search over the classes with more than one finds 0 samples)")
-        yo, lc = pr.put_codes(codes), pr.put_list(counts)
-    else:
-        yv = as_f32_c(y, ndim=1, name="y")[0]
-        if yv.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-    outc = outd = None
-    if cont:
-        dc = len(cont)
-        xo = pr.put(arr if not disc else _gather(arr, cont, mode))
-        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), work(n * dc), work(n * dc)
-        _cs(pr, mode, xo, n, dc, st)
-        pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
-        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, _plus1(zs))
-    if not discrete_target:
-        yo = pr.put(yv)
-        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), work(n), work(n)
-        _cs(pr, mode, yo, n, 1, sty)
-        pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, _plus1(zys))
-    if cont:
-        term, outc = work(n * dc), pr.alloc(dc)
-        if discrete_target:
-            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, _plus1(zs))
-            # the rows of the classes with more than one (KIND 3: summed on the device)
-            pr.stage("mi_reduce", dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
-        else:
-            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, _plus1(zs), _plus1(zys))
-            pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
-    if disc:
-        dd = len(disc)
-        xd = _gather(arr, disc, mode)
-        cats = _fit_categories(mode, xd)
-        kx = [c.size for c in cats]  # glue: per-column category counts (cats-sized: per-column category arrays)
-        kmax = max(kx)  # glue: largest category count for the program layout (kx-sized: per-column category counts)
-        if not discrete_target and n in kx:
-            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
-                             "value (the reference's neighbour search finds 0 samples)")
-        xc, _neg = _codes(pr, xd, cats)
-        outd = pr.alloc(dd)
-        if discrete_target:
-            ky = len(classes)
-            stride = kmax * ky + kmax + ky
-            tb = pr.alloc(dd * stride)
-            pr.stage("mi_dd", dd, xc, n, dd, yo, ky, pr.put_list(kx), tb, stride, outd)
-        else:
-            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), work(n * dd)
-            pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
-            pr.stage("i2f", dd * kmax, cnti, cntf)
-            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, _plus1(zys))
-            pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
-    pr.run(mode)
-    if not disc:
-        return pr.get(outc, d)
-    vals = [0.0] * d
-    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):  # glue: scatters device MI values to their columns (cont-sized: continuous column indices)
-        vals[j] = v
-    for j, v in zip(disc, pr.values(outd, len(disc))):  # glue: scatters device MI values to their columns (disc-sized: discrete column indices)
-        vals[j] = v
-    return Array.from_list(vals, "<f4")
-
-
-# Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
     """Estimate the mutual information between each feature and a discrete target.
@@ -4600,11 +3317,12 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
     >>> y = (X[:, 0] > 0.5).astype(np.int64)
     >>> mi = mojolearn.mutual_info_classif(X, y, random_state=0)
     """
-    return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
+    return _ENCODE_CALL(None, "mutual_info_classif", (X, y, discrete_features, n_neighbors, random_state),
+                        _ENCODE_CONTEXT)
 
 
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See _mutual_info.
+# from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native.mojo.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
     """Estimate the mutual information between each feature and a continuous target.
@@ -4646,47 +3364,8 @@ def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, cop
     >>> y = (X[:, 0] ** 2 + 0.1 * rng.random(1000)).astype(np.float32)
     >>> mi = mojolearn.mutual_info_regression(X, y, random_state=0)
     """
-    return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
-
-
-def _gather(arr, cols, mode):
-    n, d = arr.shape
-    pr = _Prog()
-    xo, ko = pr.put(arr), pr.put_list(cols)
-    out = pr.alloc(n * len(cols))
-    pr.stage("gather_cols", n * len(cols), xo, n, d, ko, len(cols), out)
-    pr.run(mode)
-    return pr.get(out, (n, len(cols)))
-
-
-def _stage_importance_keys(pr, est, m, getter="auto"):
-    """Stages the ordered keys (c2_key64) of a fitted estimator's m column
-    importances: coef_ squared (summed over rows when 2-D, sqsum_cols) on the
-    device, else feature_importances_ as given (a monotone stand-in for its
-    square). A str getter (a dotted attribute path, as operator.attrgetter)
-    or a callable picks the importances instead; they are squared (summed
-    over rows when 2-D) on the device, as the reference's
-    transform_func='square'. Returns the keys' offset."""
-    if getter != "auto":
-        coef = operator.attrgetter(getter)(est) if isinstance(getter, str) else getter(est)
-    else:
-        coef = getattr(est, "coef_", None)
-    key = pr.work(2 * m)
-    if coef is None and getter == "auto":
-        imp = getattr(est, "feature_importances_", None)
-        if imp is None:
-            raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
-        words, kind = _key_words(imp, m)
-        pr.stage("c2_key64", m, pr.put_words(words), kind, key)
-        return key
-    c = as_f32_c(coef, ndim=None, name="coef_")[0]
-    rows, d = (1, c.shape[0]) if c.ndim == 1 else c.shape
-    if d != m:
-        raise ValueError(f"mojolearn: RFE importances have {d} columns, expected {m}")
-    out = pr.work(d)
-    pr.stage("sqsum_cols", d, pr.put(c), rows, d, out)
-    pr.stage("c2_key64", d, out, 0, key)
-    return key
+    return _ENCODE_CALL(None, "mutual_info_regression", (X, y, discrete_features, n_neighbors, random_state),
+                        _ENCODE_CONTEXT)
 
 
 class RFE(_SelectorMixin):
@@ -4704,9 +3383,10 @@ class RFE(_SelectorMixin):
 
     Parameters
     ----------
-    estimator : object
-        Estimator with ``fit`` that exposes ``coef_`` or ``feature_importances_`` (``ValueError``
-        otherwise, with ``importance_getter='auto'``).
+    estimator : mojolearn estimator
+        A mojolearn estimator whose ``fit`` exposes ``coef_`` or ``feature_importances_``, such as
+        :class:`LinearDiscriminantAnalysis`, :class:`LogisticRegression`, :class:`Ridge`,
+        :class:`LinearRegression` or the tree ensembles. Any other estimator raises ``TypeError``.
     n_features_to_select : int or float, default None
         Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
     step : int or float, default 1
@@ -4714,9 +3394,9 @@ class RFE(_SelectorMixin):
         ``(0, 1)``. Must be greater than 0.
     verbose : int, default 0
         Accepted for scikit-learn compatibility.
-    importance_getter : 'auto', str or callable, default 'auto'
-        ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path or a callable
-        taking the estimator picks the importances instead (they are squared).
+    importance_getter : 'auto' or str, default 'auto'
+        ``'auto'`` uses ``coef_`` or ``feature_importances_``; a dotted attribute path of the fitted
+        estimator picks the importances instead (they are squared).
 
     Attributes
     ----------
@@ -4751,65 +3431,30 @@ class RFE(_SelectorMixin):
         self.verbose = verbose
         self.importance_getter = importance_getter
 
-    def _clone(self):
-        est = self.estimator
-        return type(est)(**est.get_params()) if hasattr(est, "get_params") else est
-
     def fit(self, X, y, **fit_params):
-        g = self.importance_getter
-        if not (callable(g) or isinstance(g, str)):
-            raise ValueError("mojolearn: RFE importance_getter must be 'auto', a str or a callable")
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        nsel = self.n_features_to_select
-        if nsel is None:
-            nsel = d // 2
-        elif isinstance(nsel, float) and 0 < nsel < 1:
-            nsel = int(nsel * d)
-        nsel = max(1, int(nsel))
-        step = int(max(1, self.step * d)) if isinstance(self.step, float) and self.step < 1 else int(self.step)
-        if step <= 0:
-            raise ValueError("mojolearn: step must be > 0")
-        support = [True] * d
-        ranking = full((d,), 1, "<f4")
-        nsup = d
-        while nsup > nsel:
-            features = [j for j in range(d) if support[j]]  # glue: the supported column list (control)
-            est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-            # lane cpu2-l3-prep: the ranking and elimination on the device (c2_rfe_step: the
-            # `step` weakest by a stable ascending sort of the importance keys leave the
-            # support; c2_rfe_rank: every unsupported column's ranking + 1)
-            pr = _Prog()
-            key = _stage_importance_keys(pr, est, len(features), self.importance_getter)
-            sup = pr.put_list([1.0 if v else 0.0 for v in support], inout=True)  # glue: the support mask up
-            rk = pr.put(ranking, inout=True)
-            pr.stage("c2_rfe_step", len(features), key, pr.put_ints(features), len(features),
-                     min(step, nsup - nsel), sup)
-            pr.stage("c2_rfe_rank", d, sup, rk)
-            pr.run(mode)
-            support = _mask_list(pr, sup, d)
-            ranking = pr.get(rk, d)
-            nsup = len([1 for v in support if v])  # glue: the support size (control)
-        features = [j for j in range(d) if support[j]]  # glue: support index list (d-sized: feature count)
-        self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-        self._mask, self.support_ = support, list(support)
-        self.ranking_ = ranking.astype("<i8")
-        self.n_features_ = sum(support)  # glue: count of selected features (support-sized: feature support mask)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        return _ENCODE_CALL(self, "fit", (X, y, fit_params), _ENCODE_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X`` and ``y``, then keep the selected columns of ``X``.
+
+        Returns
+        -------
+        array of shape (n_samples, n_features_)
+            The selected columns, float32.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def predict(self, X):
-        return self.estimator_.predict(self.transform(X))
+        return _ENCODE_CALL(self, "predict", (X,), _ENCODE_CONTEXT)
 
     def predict_proba(self, X):
-        return self.estimator_.predict_proba(self.transform(X))
+        return _ENCODE_CALL(self, "predict_proba", (X,), _ENCODE_CONTEXT)
 
     def decision_function(self, X):
-        return self.estimator_.decision_function(self.transform(X))
+        return _ENCODE_CALL(self, "decision_function", (X,), _ENCODE_CONTEXT)
 
     def score(self, X, y):
-        return self.estimator_.score(self.transform(X), y)
+        return _ENCODE_CALL(self, "score", (X, y), _ENCODE_CONTEXT)
 
 
 class ComplementNB(_DiscreteNB):
@@ -4978,14 +3623,20 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
      PowerTransformer: "power"})
 
 
-# Import-time connection; the imputer, discretizer, encoders, SplineTransformer
-# and SelectKBest hand each public operation off once to Mojo
-# (bindings/prep_encode_native.mojo).
+# Import-time connection; the imputers, discretizer, encoders, SplineTransformer,
+# SelectKBest, RFE, the label encoders and the score functions hand each public
+# operation off once to Mojo (bindings/prep_owner_native.mojo, the family door).
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
      OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline", SelectKBest: "select_kbest"},
-    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"})
+    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"},
+    {LabelEncoder: "label_encoder",
+     LabelBinarizer: "label_binarizer",
+     MultiLabelBinarizer: "multilabel_binarizer",
+     IterativeImputer: "iterative_imputer",
+     RFE: "rfe"},
+    {"SimpleImputer": SimpleImputer})
 
 
 # Import-time connection; the naive Bayes and discriminant-analysis classifiers
@@ -4994,3 +3645,6 @@ from ._native_prep_classify_bridge import connect as _connect_classify
 _CLS_CALL, _CLS_CONTEXT = _connect_classify(
     {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",
      LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
+# RFE and the mutual-information functions (bindings/prep_select_native.mojo) run
+# their programs on the classifier owner's arena-runner context.
+_ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK)

@@ -32,7 +32,7 @@ from bindings.jl_native import jl_c
 from bindings.ipca_native import ipca_c
 from bindings.tsvd_native import tsvd_c
 from bindings.prep_classify_native import prep_classify_c
-from bindings.prep_encode_native import prep_encode_c
+from bindings.prep_owner_native import prep_owner_c
 from bindings.x_linear_native import x_linear_c
 from bindings.str_labels_native import str_labels_c
 from bindings.robust_native import robust_lifecycle_c
@@ -89,7 +89,7 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         module.def_py_c_function(ipca_c, "ipca_native_call")
         module.def_py_c_function(tsvd_c, "tsvd_native_call")
         module.def_py_c_function(prep_classify_c, "prep_classify_native_call")
-        module.def_py_c_function(prep_encode_c, "prep_encode_native_call")
+        module.def_py_c_function(prep_owner_c, "prep_encode_native_call")
         module.def_py_c_function(x_linear_c, "x_linear_native_call")
         module.def_py_c_function(str_labels_c, "str_labels_native_call")
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")

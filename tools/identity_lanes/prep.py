@@ -556,7 +556,7 @@ def _(ml, X, yc, yr, Xh=None):
     """The reference's NaN / +inf score edges (f_classif of a constant and of
     a within-class-constant feature, chi2 of an all-zero feature),
     f_regression / r_regression with force_finite on and off, and RFE with
-    importance_getter as a dotted path and as a callable."""
+    importance_getter as a dotted path."""
     y3 = _prep_three_class(X, yr)
     Xe = np.array(X[:, :6], dtype=np.float32)
     Xe[:, 1] = 2.5
@@ -570,7 +570,8 @@ def _(ml, X, yc, yr, Xh=None):
     for ff in (True, False):
         parts[f"fr{int(ff)}"] = _h(*ml.f_regression(Xr, yr, force_finite=ff))
         parts[f"rr{int(ff)}"] = _h(ml.r_regression(Xe, yr, force_finite=ff))
-    for j, g in enumerate(("coef_", lambda e: e.coef_[0])):
+    # importance_getter: an attribute path (a callable getter is refused: user Python code)
+    for j, g in enumerate(("coef_",)):
         m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
                    importance_getter=g).fit(X, y3)
         parts[f"rfe{j}"] = _h(m.ranking_, m.transform(X[:256]))
@@ -692,7 +693,8 @@ def _(ml, X, yc, yr, Xh=None):
     for j in range(Xq.shape[1]):
         num = [float(v) for v in np.unique(Xq[:, j])]
         cats.append(sorted(num[:1] + num[2:] + [float(np.float32(max(num) + 7.5))]))
-    t = ml.TargetEncoder(categories=cats, cv=_prep_Splits())
+    # the splitter's folds cross as (train, test) pairs: only mojolearn splitters run in the door
+    t = ml.TargetEncoder(categories=cats, cv=list(_prep_Splits().split(Xq, yr)))
     parts["te_split"] = _h(t.fit_transform(Xq, yr), *t.encodings_)
     pairs = [(np.flatnonzero(np.arange(len(yc)) % 4 != k), np.flatnonzero(np.arange(len(yc)) % 4 == k))
              for k in range(4)]
@@ -868,25 +870,11 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_first_four), "x-prep-spline-options")
 
 
-class _prep_MeanReg:
-    """A regressor for IterativeImputer(estimator=...): the float32 mean of y."""
-
-    def get_params(self, deep=True):
-        return {}
-
-    def fit(self, X, y):
-        self.m = np.float32(np.asarray(y, dtype=np.float32).mean(dtype=np.float64))
-        return self
-
-    def predict(self, X):
-        return np.full(np.asarray(X).shape[0], self.m, dtype=np.float32)
-
-
 @lane("x-prep-iterative-options")
 def _(ml, X, yc, yr, Xh=None):
     """IterativeImputer: the random order, n_nearest_features, sample_posterior
     (truncated), add_indicator, the reference's matrix inf-norm stop, and
-    another estimator (the Python rounds)."""
+    another (mojolearn) estimator: the rounds over its fit / predict."""
     Xm = _prep_nan_first_six(X[:1500])
     parts = {}
     m = ml.IterativeImputer(imputation_order="random", random_state=1, max_iter=6, add_indicator=True)
@@ -897,7 +885,7 @@ def _(ml, X, yc, yr, Xh=None):
     parts["post"] = _h(e.fit_transform(Xm), e.transform(_prep_nan_first_six(Xh[:256])))
     e = ml.IterativeImputer(max_iter=12, tol=1e-4)
     parts["stop"] = _h(e.fit_transform(Xm), np.array([e.n_iter_]))
-    e = ml.IterativeImputer(estimator=_prep_MeanReg(), max_iter=2)
+    e = ml.IterativeImputer(estimator=ml.Ridge(alpha=2.0), max_iter=2)
     parts["est"] = _h(e.fit_transform(Xm))
     return _fit(parts, m, lambda e: (e.transform(_prep_nan_first_six(Xh[:256])),))
 

@@ -169,6 +169,7 @@ struct EncProg(Movable):
     var program: List[Int32]
     var inputs: PythonObject
     var out_words: Int
+    var inout_ranges: List[Int]
 
     def __init__(out self) raises:
         self.host = 0
@@ -177,6 +178,7 @@ struct EncProg(Movable):
         self.program = List[Int32]()
         self.inputs = Python.list()
         self.out_words = 0
+        self.inout_ranges = List[Int]()
 
     def alloc(mut self, words: Int) -> Int:
         # `_Prog.alloc`: host arena words.
@@ -213,6 +215,15 @@ struct EncProg(Movable):
         var offset = self.alloc(words)
         if words > 0:
             _ = py_call(self.inputs.append, Python.tuple(offset, Python.tuple(0, value, PythonObject(None), words, 1)))
+        return offset
+
+    def put_inout(mut self, value: PythonObject, words: Int) raises -> Int:
+        # `_Prog.put(arr, inout=True)`: a stage rewrites these words and the
+        # caller reads them after the run, so they come back from the device.
+        var offset = self.put(value, words)
+        if words > 0:
+            self.inout_ranges.append(offset)
+            self.inout_ranges.append(offset + words)
         return offset
 
     def put_x(mut self, values: PythonObject) raises -> Int:
@@ -258,7 +269,8 @@ struct EncProg(Movable):
         var device_scratch = scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
         var arena = xprep_storage(host + (0 if device_scratch else scratch), context)
         var store = xprep_storage(self.out_words, context) if self.out_words > 0 else PythonObject(None)
-        xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words)
+        xprep_run(arena, host, scratch, store, self.out_words, program^, self.inputs, entries, context, self.out_words,
+                  self.inout_ranges.copy())
         return Python.tuple(arena, store)
 
 
@@ -2533,6 +2545,125 @@ def _target_fit(model: PythonObject, values: PythonObject, y: PythonObject, cont
     _ = _target_run(model, values, info, PythonObject(None), 0, 0, 0, False, False, context)
 
 
+struct IndexI64(Copyable, Movable):
+    """`_buffer.as_index_i64(values)`: the int64 words of a user index list
+    (`array('q', values)`, in C) or of a numeric buffer (its own int64 words,
+    else the native `astype('<i8')` cast), with the owner kept alive."""
+    var keep: PythonObject
+    var addr: Int
+    var size: Int
+
+    def __init__(out self, values: PythonObject, name: String, context: PythonObject) raises:
+        var b = Python.import_module("builtins")
+        var cls = py_type(values)
+        if cls is b.list or cls is b.tuple or cls is b.range:
+            var store = py_call(Python.import_module("array").array, "q", values)
+            self.keep = store
+            self.size = len(store)
+            self.addr = Int(py=py_call(store.buffer_info)[0])
+            return
+        var view = labels_view(values, name, context)
+        var count = view.size()
+        if view.typestr == "<i8":
+            self.keep = view.keep
+            self.addr = view.addr
+            self.size = count
+            return
+        var out = labels_vector(count, "<i8", context)
+        labels_cast(view.addr, view.typestr, labels_address(out), "<i8", count, context)
+        _ = view  # keep the Python object alive through the native call above
+        self.keep = out
+        self.addr = labels_address(out)
+        self.size = count
+
+
+def _assign_fold(idx: IndexI64, rows: Int, fold: Int, folds: I32P) -> Int:
+    # `assign_fold_i64`: 0, 1 when an index is outside [0, rows), 2 when the row already has a fold.
+    var ip = I64P(unsafe_from_address=idx.addr)
+    for i in range(idx.size):  # cpu-route: one user cv test index list, read once (its rows)
+        var r = Int(ip[i])
+        if r < 0 or r >= rows:
+            return 1
+        if folds[r] != -1:
+            return 2
+        folds[r] = Int32(fold)
+    return 0
+
+
+def _check_train(idx: IndexI64, rows: Int, fold: Int, folds: I32P) -> Bool:
+    # `check_indices_i64` (all in [0, rows) and distinct) and
+    # `count_fold_hits_i64` (none in `fold`): True when the list passes.
+    var ip = I64P(unsafe_from_address=idx.addr)
+    for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
+        var r = Int(ip[i])
+        if r < 0 or r >= rows:
+            return False
+    var seen = List[Bool](length=rows, fill=False)
+    for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
+        var r = Int(ip[i])
+        if seen[r]:
+            return False
+        seen[r] = True
+    for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
+        if folds[Int(ip[i])] == Int32(fold):
+            return False
+    return True
+
+
+def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject, n: Int,
+                           context: PythonObject) raises -> PythonObject:
+    """`TargetEncoder._splitter_folds`: (row -> fold int32 Array, n_splits)
+    from a user cv splitter (`cv.split(X, y)`) or (train, test) iterable: the
+    test folds cover every row exactly once, and each fold's training rows
+    are every other row."""
+    var b = Python.import_module("builtins")
+    var cv = py_fields(model)["cv"]
+    # Only data and native splitters cross: a list or tuple of (train, test)
+    # index arrays, or a mojolearn splitter (its split is one native call).
+    # Any other splitter or iterable is user Python code and is refused by name.
+    var cls = py_type(cv)
+    var splits = PythonObject(None)
+    if cls is b.list or cls is b.tuple:
+        splits = py_call(b.list, cv)
+    elif Bool(py=py_call(b.hasattr, cv, "split")) and String(py_call(b.getattr, cls, "__module__", "")).startswith("mojolearn."):
+        splits = py_call(b.list, py_call(cv.split, x, y))
+    else:
+        raise Error("TypeError: mojolearn: TargetEncoder cv must be an integer, a mojolearn splitter or a list of "
+                    + "(train, test) index arrays; got " + String(py_call(b.getattr, cls, "__name__")))
+    var cover = String("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
+                       + "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+    var F = len(splits)
+    if F < 1:
+        raise Error(cover)
+    var fold = labels_vector(n, "<i4", context)
+    var fp = I32P(unsafe_from_address=labels_address(fold))
+    for i in range(n):  # cpu-route: the row -> fold table the user splits fill (rows)
+        fp[i] = -1
+    var trains = List[IndexI64]()
+    for k in range(F):  # cpu-route: user cv splitter (train, test) pairs, one per fold
+        var pair = py_call(b.tuple, splits[k])
+        if len(pair) > 2:
+            raise Error("too many values to unpack (expected 2)")
+        if len(pair) < 2:
+            raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
+        var te = IndexI64(pair[1], "test", context)
+        if _assign_fold(te, n, k, fp) != 0:
+            raise Error(cover)
+        _ = te^
+        trains.append(IndexI64(pair[0], "train", context))
+    var sizes = List[Int](length=F, fill=0)
+    for i in range(n):  # cpu-route: the row -> fold table the user splits filled (rows)
+        if fp[i] < 0:
+            raise Error(cover)
+        sizes[Int(fp[i])] += 1
+    for k in range(F):  # cpu-route: user cv splitter train index lists, one per fold
+        if trains[k].size != n - sizes[k] or (trains[k].size > 0 and not _check_train(trains[k], n, k, fp)):
+            raise Error("NotImplementedError: mojolearn: TargetEncoder cv folds whose training rows are not every "
+                        + "row outside the test fold are not implemented")
+    _ = trains^
+    return Python.tuple(fold, F)
+
+
 def _target_fit_transform(model: PythonObject, values: PythonObject, y: PythonObject, splits: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """TargetEncoder.fit_transform: `splits` (fold int32 Array, n_splits)
@@ -2612,10 +2743,9 @@ def _scores_classif(mut p: EncProg, values: PythonObject, y: PythonObject, chi: 
 
 
 def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: PythonObject, entries: PythonObject,
-             context: PythonObject) raises -> Tuple[Int, Int, Int]:
-    """`_pearson(X, y, center=True, force_finite=True)`'s stages
-    (f_regression, or the blocked frb_* order). Returns (scores, p-values,
-    correlations)."""
+             context: PythonObject, center: Bool = True, force_finite: Bool = True) raises -> Tuple[Int, Int, Int]:
+    """`_pearson(X, y, center, force_finite)`'s stages (f_regression, or the
+    blocked frb_* order). Returns (scores, p-values, correlations)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var target = labels_f32(y, 1, "C", "y", context)
@@ -2633,19 +2763,23 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
     if blocked and (_fam(mode, entries) & IDN_SELECT_BLOCKED) != 0:
         var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-        var psx = p.work(nb * d)
-        var psy = p.work(nb)
-        var mx = p.work(d)
-        var my = p.work(1)
-        _stage(p.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
-        _stage(p.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
+        # the Python's `mx = my = _NONE` unless centred
+        var mx = NONE
+        var my = NONE
+        if center:
+            var psx = p.work(nb * d)
+            var psy = p.work(nb)
+            mx = p.work(d)
+            my = p.work(1)
+            _stage(p.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
+            _stage(p.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
         var pxy = p.work(nb * d)
         var pxx = p.work(nb * d)
         var pyy = p.work(nb)
         _stage(p.program, OP_FRB_PART2, nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
-        _stage(p.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1, sc, pv, co, 1)
+        _stage(p.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     else:
-        _stage(p.program, OP_F_REGRESSION, d, xo, n, d, yo, 1, sc, pv, co, 1)
+        _stage(p.program, OP_F_REGRESSION, d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     _ = target^
     return (sc, pv, co)
 
@@ -2790,6 +2924,36 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     py_setitem(fields, "n_features_in_", d)
 
 
+def prep_encode_scores_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """f_classif(X, y), chi2(X, y), f_regression(X, y, center, force_finite)
+    and r_regression(X, y, center, force_finite): `_scores_classif` /
+    `_pearson`'s one program, the scores (and p-values) as float32 Arrays."""
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var values = xprep_values(args[0], entries, context)
+    var d = Int(py=values[4])
+    var p = EncProg()
+    var result = PythonObject(None)
+    if operation == "f_classif" or operation == "chi2":
+        var chi = operation == "chi2"
+        var offs = _scores_classif(p, values, args[1], chi, mode, entries, context)
+        var ran = p.run(entries, context)
+        if chi:
+            for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
+                if _word(ran, offs[2] + 3 * d + j) < 0:
+                    raise Error("mojolearn: Input X must be non-negative.")
+        result = Python.tuple(_take1(ran, offs[0], d, context), _take1(ran, offs[1], d, context))
+    else:
+        var offs = _pearson(p, values, args[1], mode, entries, context, _truth(args[2]), _truth(args[3]))
+        var ran = p.run(entries, context)
+        if operation == "r_regression":
+            result = _take1(ran, offs[2], d, context)
+        else:
+            result = Python.tuple(_take1(ran, offs[0], d, context), _take1(ran, offs[1], d, context))
+    _ = values^
+    return result
+
+
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
@@ -2922,7 +3086,14 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
                 _target_fit(model, values, args[1], context)
                 result = model
             else:
-                result = _target_fit_transform(model, values, args[1], args[2], context)
+                # fit_transform(X, y, None): a cv that is neither None nor an
+                # integer is a user splitter, its folds read here once
+                var cv = py_fields(model)["cv"]
+                var splits = PythonObject(None)
+                if cv is not None and not Bool(py=py_call(Python.import_module("builtins").isinstance, cv,
+                                                          Python.import_module("numbers").Integral)):
+                    splits = _target_splitter_folds(model, args[0], args[1], Int(py=values[3]), context)
+                result = _target_fit_transform(model, values, args[1], splits, context)
             _ = values^
         elif (operation == "fit" or operation == "fit_transform") and kind == "select_kbest":
             # SelectKBest: fit(X, y); fit_transform(X, y) keeps the support's columns

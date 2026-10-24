@@ -144,7 +144,9 @@ def test_target_encoder_cv_categories():
     cats = [[0.0, 1.0, 2.0, 3.0, 4.0, 9.0], [0.0, 1.0, 2.0, 3.0, 4.0]]
     for target, cv in ((y, skm.KFold(4)), (yb, skm.StratifiedKFold(3)),
                        (y, list(skm.KFold(5).split(X)))):
-        m = ml.TargetEncoder(categories=cats, cv=cv, smooth=2.0)
+        # mojolearn takes a scikit-learn splitter's folds as a list of (train, test) pairs
+        pairs = cv if isinstance(cv, list) else list(cv.split(X, target))
+        m = ml.TargetEncoder(categories=cats, cv=pairs, smooth=2.0)
         r = skp.TargetEncoder(categories=cats, cv=cv, smooth=2.0)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -152,6 +154,16 @@ def test_target_encoder_cv_categories():
                                        rtol=1e-5, atol=1e-6)
         for a, b in zip(m.encodings_, r.encodings_):
             np.testing.assert_allclose(np.asarray(a), b, rtol=1e-5, atol=1e-6)
+    try:
+        ml.TargetEncoder(cv=skm.KFold(4)).fit_transform(X, y)
+    except TypeError as error:
+        assert "got KFold" in str(error)
+    else:
+        raise AssertionError("TargetEncoder accepted a scikit-learn splitter object")
+    m = ml.TargetEncoder(categories=cats, cv=ml.KFold(4), smooth=2.0)
+    np.testing.assert_array_equal(np.asarray(m.fit_transform(X, y)),
+                                  np.asarray(ml.TargetEncoder(categories=cats, cv=list(ml.KFold(4).split(X, y)),
+                                                              smooth=2.0).fit_transform(X, y)))
     try:
         ml.TargetEncoder(cv=[(np.arange(100), np.arange(100))]).fit_transform(X, y)
     except ValueError:

@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Prep lane sanity: feature selection against scikit-learn."""
 import numpy as np
+import pytest
 try:
     import pytest
     pytest.importorskip("sklearn")
@@ -130,7 +131,7 @@ if __name__ == "__main__":
 
 def test_score_edges_and_rfe_getter():
     """The reference's NaN / inf score edges, f_regression / r_regression
-    force_finite, RFE importance_getter as a str and a callable."""
+    force_finite, RFE importance_getter as a str (a callable is refused)."""
     import warnings
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as SkLDA
     rng = np.random.default_rng(11)
@@ -175,7 +176,9 @@ def test_score_edges_and_rfe_getter():
         r = skfs.SelectKBest(k=2).fit(X.astype(np.float64), y)
     assert list(m.get_support()) == list(r.get_support())
     Xg = (rng.standard_normal((n, 8)) + y[:, None] * np.linspace(0, 1.4, 8)).astype(np.float32)
-    for g in ("coef_", lambda e: e.coef_[0]):
+    with pytest.raises(TypeError, match="a callable is not supported"):
+        ml.RFE(ml.LinearDiscriminantAnalysis(), importance_getter=lambda e: e.coef_[0]).fit(Xg, y)
+    for g in ("coef_",):
         m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=3, step=2, importance_getter=g).fit(Xg, y)
         r = skfs.RFE(SkLDA(), n_features_to_select=3, step=2, importance_getter=g).fit(Xg.astype(np.float64), y)
         np.testing.assert_array_equal(np.asarray(m.ranking_), r.ranking_)
