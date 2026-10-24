@@ -256,9 +256,12 @@ def native_rows(ls, base, reach, whole_surface=False):
                     patches.add(p)
             users = ls.binding_users(name, exports=[export])
             precise = {lane for lane, (_, ents, _) in reach.items() if NameClosure.names_entry(ents, export)}
-            files = {n[1] for n in reached}
+            # an owner entry whose own impl file holds a dispatch branch the
+            # lane reaches (OwnerDispatch) is reached by the lane
+            files = {n[1] for n in roots}
             precise |= {lane for lane, owned in OWNER_FILES.items() if owned & files}
-            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots,
+            probe = any(constant_probe(graph.text(n)) for n in graph.resolve(src, impl))
+            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots, constant_probe=probe,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
                              lanes_precise=sorted(precise), lanes_wide=sorted(set(users) - precise),
@@ -266,6 +269,23 @@ def native_rows(ls, base, reach, whole_surface=False):
                              sabotage_defines=sorted(sab_defs), sabotage_sites=sorted(sab_sites)[:4],
                              sabotage_patches=sorted(patches)))
     return rows
+
+
+_PROBE_RETURN = re.compile(r'^return PythonObject\((?:-?\d+(?:\.\d+)?|True|False|None|"[^"]*"|'
+                           r'String\((?:"[^"]*"|[A-Z][A-Z0-9_]*)\)|[A-Z][A-Z0-9_]*)\)$')
+
+
+def constant_probe(text):
+    """True for a registration whose whole body returns one constant: a
+    contract-version probe (`kmeans_parallel_available` -> 1), a compiled
+    vendor or flag (`preprocessing_vendor` -> COMPILED_VENDOR). It reads no
+    data and computes nothing, so no lane digest can carry it."""
+    if not text:
+        return False
+    body = re.sub(r'"""[\s\S]*?"""', "", text)
+    lines = [ln.split("#", 1)[0].strip() for ln in body.splitlines()[1:]]
+    lines = [ln for ln in lines if ln]
+    return len(lines) == 1 and bool(_PROBE_RETURN.match(lines[0]))
 
 
 def closure(graph, roots, ls):
@@ -375,6 +395,14 @@ class Walker:
         return out
 
 
+class ReachedSet(set):
+    """A name closure's reached names, with the string constants (`.strings`)
+    and class names (`.classes`) among them kept apart: a native owner's
+    dispatch value is matched against those, never against every identifier."""
+    strings = frozenset()
+    classes = frozenset()
+
+
 class NameClosure:
     """A scoped definition closure over the package, the second reach. The
     walker resolves calls by type and stops at what it cannot type (`k.ew(...)`
@@ -399,6 +427,7 @@ class NameClosure:
         self.methods = {}                    # Cls.key -> {name: Func}
         self.top = {}                        # module -> [Func] it calls at import
         self.bound_calls = {}                # module -> {name: [("func", Func)] its assignment calls}
+        self.bound_strings = {}              # module -> {name: the string arguments of that call}
         for mod in [m for m in self.index.mods.values() if m is not None]:
             local = mod.defs
             calls = []
@@ -426,12 +455,18 @@ class NameClosure:
                     target = None
                 if not (target and target[0] == "func"):
                     continue
+                # `_connect_decomp_kit("als_native_call", ...)`: the entry the
+                # connect binds is named by the call's own string arguments
+                said = frozenset(a.value for a in ast.walk(node.value)
+                                 if isinstance(a, ast.Constant) and isinstance(a.value, str)
+                                 and self.IDENT.match(a.value))
                 for t in node.targets:
                     for n in ast.walk(t):
                         if isinstance(n, ast.Name):
                             bound.setdefault(n.id, []).append(target)
+                            self.bound_strings.setdefault(mod.name, {}).setdefault(n.id, set()).update(said)
             self.bound_calls[mod.name] = bound
-        self._facts = {}
+        self._facts, self._strs = {}, {}
 
     def methods_of(self, cls):
         if cls.key not in self.methods:
@@ -447,7 +482,7 @@ class NameClosure:
         key = (kind, obj.key)
         if key in self._facts:
             return self._facts[key]
-        defs, names = [], set()
+        defs, names, strs = [], set(), set()
         if kind == "f":
             nodes, scope = [obj.node], obj
         else:
@@ -460,6 +495,9 @@ class NameClosure:
                 if isinstance(n, ast.Name):
                     names.add(n.id)
                     defs.extend(self.bound_calls.get(obj.mod.name, {}).get(n.id, ()))
+                    said = self.bound_strings.get(obj.mod.name, {}).get(n.id, ())
+                    names |= set(said)
+                    strs |= set(said)
                     try:
                         target = self.index.resolve_expr(n, obj.mod.name, scope)
                     except Exception:
@@ -472,6 +510,7 @@ class NameClosure:
                         target = None
                 elif isinstance(n, ast.Constant) and isinstance(n.value, str) and self.IDENT.match(n.value):
                     names.add(n.value)
+                    strs.add(n.value)
                 elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add) and \
                         isinstance(n.right, ast.Constant) and isinstance(n.right.value, str) and \
                         self.IDENT.match(n.right.value) and n.right.value.startswith("_"):
@@ -482,6 +521,7 @@ class NameClosure:
                 elif isinstance(n, ast.Name):
                     names |= self.table_names(obj.mod, n.id)
         self._facts[key] = (defs, frozenset(names))
+        self._strs[key] = frozenset(strs)
         return self._facts[key]
 
     def table_names(self, mod, name, depth=0):
@@ -505,7 +545,8 @@ class NameClosure:
         return frozenset(out)
 
     def closure(self, seeds):
-        reached = set(seeds) | HARNESS_OPS
+        reached = ReachedSet(set(seeds) | HARNESS_OPS)
+        strings = set()
         seen, mods, classes = set(), set(), {}
         queue = []
         for name in seeds:
@@ -537,6 +578,7 @@ class NameClosure:
                 mods.add(obj.mod.name)
                 queue.extend(("func", f) for f in self.top.get(obj.mod.name, ()))
             defs, names = self.facts(k[0], obj)
+            strings |= self._strs.get(k, frozenset())
             fresh = names - reached
             reached |= names
             queue.extend(defs)
@@ -553,6 +595,8 @@ class NameClosure:
             for name in fresh:
                 for func in pending.pop(name, ()):
                     queue.append(("func", func))
+        reached.strings = frozenset(strings)
+        reached.classes = frozenset(c.name for c in classes.values())
         return reached
 
     @classmethod
@@ -675,6 +719,11 @@ def spec_names(spec, depth=0, seen=None):
     return out
 
 
+#: lane -> the entries its typed walk and its own code reach, before the name
+#: closure widens them: the owner entries a generic dispatch branch is credited through
+TYPED_ENTRIES = {}
+
+
 def lane_reach(ls, walker, closer=None):
     """lane -> (set of (public key, op) roots, set of entry names reached, name closure)."""
     ib = ls.identity_break()
@@ -697,6 +746,7 @@ def lane_reach(ls, walker, closer=None):
                         roots.add((obj.key, op))
                         entries |= ent
         entries |= names                        # a lane that calls a binding entry by name
+        TYPED_ENTRIES[lane] = frozenset(entries)
         reached = closer.closure(symbols) if closer is not None else set()
         entries |= reached
         out[lane] = (roots, entries, reached)
@@ -710,12 +760,17 @@ def lane_reach(ls, walker, closer=None):
 #: `if operation == "fit":` (bindings/decomp_native.mojo), `kind == "..."`.
 DISPATCH_VARS = ("operation", "op", "family", "kind", "kind_name", "method", "command", "name")
 _COND_RE = re.compile(r'\b(?:%s)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*)"' % "|".join(DISPATCH_VARS))
+_OP_RE = re.compile(r'\b(?:operation|op)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*_[A-Za-z0-9_]+)"')
 _LIT_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"')
 _PREFIX_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*_)"\s*\+')
 _CALLEE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*[\[(]")
 #: How far a branch's callees are followed for the entry names they hold: the
 #: branch's handler (`_croston_fit`) and the helpers it hands the names to.
 OWNER_DEPTH = 4
+#: An owner file held by more than this many owner entries' closures is shared
+#: plumbing (an owner entry's GPU binding and host twin, and one alias, hold
+#: their own owner file)
+SHARED_OWNER_FILE = 3
 
 
 class OwnerDispatch:
@@ -736,10 +791,10 @@ class OwnerDispatch:
     GENERIC (a value several owners dispatch on, `fit`, `transform`) credits
     no lane: `fit` alone does not say which owner ran."""
 
-    def __init__(self, ls, exports):
+    def __init__(self, ls, exports, methods=frozenset()):
         self.ls, self.exports = ls, frozenset(exports)
         self.graph = ls._MojoDefGraph()
-        self._memo, self._prefix_memo = {}, {}
+        self._memo, self._prefix_memo, self.op_values = {}, {}, set()
         self.records = []                  # (conds: tuple[frozenset], entries: frozenset, file)
         files = [p for p in git("ls-files", "*.mojo").split() if p]
         seen_in = defaultdict(set)
@@ -754,56 +809,97 @@ class OwnerDispatch:
             if units is None:
                 continue
             for unit, utext in ls._mojo_unit_texts(units).items():
-                for conds, ents in self._branches(path, utext):
-                    self.records.append((conds, ents, path))
+                for conds, ents, lits in self._branches(path, utext):
+                    self.records.append((conds, ents, path, lits))
                     for alt in conds:
                         for v in alt:
                             seen_in[v].add(path)
-        self.generic = frozenset(v for v, fs in seen_in.items() if len(fs) >= 3)
-        # owner entry -> the owner files its registration's closure holds: a
+        # GENERIC: a value several owners dispatch on (`fit`, `transform`), a
+        # plain lowercase word (`target`, `column`: any lane's code holds one)
+        # or a short code (`M`, `O`). Only a specific value (`croston_fit`,
+        # `FastICA`) says which owner branch a lane reaches. A value that is a
+        # method name of a package class (`fit_predict`, `predict_proba`) is
+        # generic too: every estimator lane names it.
+        self.generic = frozenset(v for v, fs in seen_in.items()
+                                 if len(fs) >= 3 or len(v) < 4 or ("_" not in v and v.islower())
+                                 or v in methods)
+        # owner entry -> the owner file its registration's impl is in: a
         # branch on generic values alone (`operation == "fit"` in
         # bindings/ipca_native.mojo) is credited to a lane that reaches the
-        # owner entry itself (`ipca_native_call`), whose closure holds it
+        # owner entry itself (`ipca_native_call`)
         self.owner_files = defaultdict(set)
-        record_files = {p for _, _, p in self.records}
+        record_files = {r[2] for r in self.records}
+        # a branch that names another branch's dispatch value relays to it
+        # (`msel_split` hands its lazy iterator the owner operation
+        # "family_msel_split_loo_at", bindings/msel_split.mojo): the value
+        # joins the lane's reached names. Generic values never relay.
+        values = set(self.op_values) - self.generic
+        self.records = [(c, e, p, frozenset(l & values)) for c, e, p, l in self.records]
         for src in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split():
             regs = registrations(ls._read(src))
             for export, (impl, params) in regs.items():
                 if not export.endswith("_call"):
                     continue
+                # the owner's own entry file: the one its registered impl is in
+                # (`ipca_c` and its `operation == "fit"` branch, bindings/ipca_native.mojo);
+                # an umbrella owner's other files are reached by their own values
                 roots = set(self.graph.resolve(src, impl))
-                for prm in params:
-                    roots |= self.graph.resolve(src, prm)
-                files = {n[1] for n in closure(self.graph, roots, ls)} & record_files
-                self.owner_files[export] |= files
+                self.owner_files[export] |= {n[1] for n in roots} & record_files
+        # a file in many owners' closures is shared plumbing (the codec, the
+        # process pool), not the owner: reaching a branch there says nothing
+        # about which owner ran, so it credits no owner entry
+        holders = defaultdict(set)
+        for export, fs in self.owner_files.items():
+            for f in fs:
+                holders[f].add(export)
+        self.shared_files = frozenset(f for f, es in holders.items() if len(es) > SHARED_OWNER_FILE)
 
     def _strings(self, node, depth):
-        """(literals, prefixes) over `node` and its callees to `depth`: every
-        identifier-shaped string literal, and every literal a name is composed
-        from (`near["xn_" + name]`, bindings/kpca_native.mojo)."""
+        """(literals, prefixes) over `node` and what it calls, to `depth`
+        calls deep: every identifier-shaped string literal, and every literal a
+        name is composed from (`near["xn_" + name]`, bindings/kpca_native.mojo).
+        A reached type's method is followed when a reached definition names it
+        (a kit's `self.fn("x_decomp_dev_gemm")`, bindings/mani_kit.mojo). Only
+        the Python-facing Mojo under bindings/ is read: a kernel names no entry."""
         key = (node, depth)
         if key in self._memo:
             return self._memo[key]
-        self._memo[key] = (frozenset(), frozenset())
-        try:
-            text = self.graph.text(node) or ""
-        except Exception:
-            text = ""
-        lits, pres = set(_LIT_RE.findall(text)), set(_PREFIX_RE.findall(text))
-        if depth > 0:
-            # the audit's own closure, which follows a reached type's methods
-            # by name (a kit's `self.fn("x_decomp_dev_gemm")`, bindings/mani_kit.mojo),
-            # kept to the Python-facing Mojo under bindings/
-            for t in closure(self.graph, {node}, self.ls):
-                if t == node or not t[1].startswith("bindings/") or \
-                        os.path.basename(t[1]).startswith("_mojolearn"):
-                    continue
+        lits, pres, mentioned = set(), set(), set()
+        seen, frontier, waiting = {node}, [node], defaultdict(list)
+        for level in range(depth + 1):
+            nxt = []
+            for n in frontier:
                 try:
-                    sub = self.graph.text(t) or ""
+                    text = self.graph.text(n) or ""
                 except Exception:
-                    sub = ""
-                lits |= set(_LIT_RE.findall(sub))
-                pres |= set(_PREFIX_RE.findall(sub))
+                    text = ""
+                lits |= set(_LIT_RE.findall(text))
+                pres |= set(_PREFIX_RE.findall(text))
+                fresh = set(self.graph.idents(n)) - mentioned
+                mentioned |= fresh
+                if level == depth:
+                    continue
+                cands = list(self.graph.targets(n))
+                for ident in fresh:
+                    cands.extend(waiting.pop(ident, ()))
+                for t in cands:
+                    if t in seen or not t[1].startswith("bindings/") or \
+                            os.path.basename(t[1]).startswith("_mojolearn"):
+                        continue
+                    seen.add(t)
+                    nxt.append(t)
+                    if t[0] == "t":
+                        units = self.graph.units(t[1]) or {}
+                        for meth in units.get("methods", {}).get(t[2], {}):
+                            m = ("m", t[1], t[2], meth)
+                            if m in seen:
+                                continue
+                            if meth in mentioned:
+                                seen.add(m)
+                                nxt.append(m)
+                            else:
+                                waiting[meth].append(m)
+            frontier = nxt
         self._memo[key] = (frozenset(lits), frozenset(pres))
         return self._memo[key]
 
@@ -831,11 +927,12 @@ class OwnerDispatch:
                 a, b = self._strings(n, OWNER_DEPTH - 1)
                 lits |= a
                 pres |= b
-        return self._named(lits, pres)
+        return self._named(lits, pres), lits
 
     def _branches(self, path, text):
         stack = []                         # [(indent, frozenset alternatives | None)]
         acc = defaultdict(set)
+        lit_acc = defaultdict(set)
         for raw in text.splitlines():
             body = raw.rstrip()
             cut = body.find("#")
@@ -851,6 +948,7 @@ class OwnerDispatch:
             if head in ("if", "elif") and stripped.endswith(":"):
                 # `a == "x" or a == "y"` is one requirement with two
                 # alternatives; `... and b == "z"` adds a second requirement
+                self.op_values |= set(_OP_RE.findall(stripped))
                 parts = [frozenset(_COND_RE.findall(p)) for p in stripped[len(head):-1].split(" and ")]
                 parts = [p for p in parts if p]
                 stack.append((indent, tuple(parts) or None))
@@ -861,24 +959,35 @@ class OwnerDispatch:
             conds = tuple(alt for _, c in stack if c for alt in c)
             if not conds:
                 continue
-            ents = self._line_entries(path, stripped)
-            if ents:
+            ents, lits = self._line_entries(path, stripped)
+            if ents or lits:
                 acc[conds] |= ents
-        return [(c, frozenset(e)) for c, e in acc.items()]
+                lit_acc[conds] |= lits
+        return [(c, frozenset(acc[c]), frozenset(lit_acc[c])) for c in acc]
 
-    def reached(self, names):
+    def reached(self, names, owners=None):
         """(entry names, owner files): what the owners' branches reach for a
         lane whose reached names are `names`, and the files of those branches."""
         out, files = set(), set()
         owned = set()
         for export, fs in self.owner_files.items():
-            if export in names:
-                owned |= fs
-        for conds, ents, path in self.records:
-            if all(alt & names for alt in conds) and (
-                    path in owned or any(alt - self.generic for alt in conds)):
-                out |= ents
-                files.add(path)
+            if export in (owners if owners is not None else names):
+                owned |= fs - self.shared_files
+        names, done = set(names), set()
+        grew = True
+        while grew:
+            grew = False
+            for k, (conds, ents, path, relay) in enumerate(self.records):
+                if k in done:
+                    continue
+                if all(alt & names for alt in conds) and (
+                        path in owned or any((alt & names) - self.generic for alt in conds)):
+                    done.add(k)
+                    out |= ents
+                    files.add(path)
+                    if relay - names:
+                        names |= relay
+                        grew = True
         return out, files
 
 
@@ -887,12 +996,38 @@ def owner_reach(ls, reach):
     exports = set()
     for src in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split():
         exports |= set(registrations(ls._read(src)))
-    od = OwnerDispatch(ls, exports)
+    methods = set()
+    for path in git("ls-files", "python/mojolearn").split():
+        if not path.endswith(".py") or "/tests/" in path:
+            continue
+        try:
+            tree = ast.parse(open(os.path.join(ROOT, path)).read())
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                methods |= {n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    od = OwnerDispatch(ls, exports, frozenset(methods))
+    # an owner entry that most lanes' name closures hold (an umbrella owner the
+    # shared mixins name: `classical_native_call`) credits its generic branches
+    # only to the lanes whose typed walk or own code reaches it; any other owner
+    # entry (`ipca_native_call`, named by its class's bridge connect) credits
+    # them to every lane whose closure names it
+    held = defaultdict(int)
+    for lane, (_, entries, _) in reach.items():
+        for export in od.owner_files:
+            if export in entries:
+                held[export] += 1
+    umbrella = {e for e, n in held.items() if n > len(reach) // 4}
     out = {}
     for lane, (roots, entries, reached) in reach.items():
-        extra, files = od.reached(frozenset(entries))
+        owners = (set(entries) - umbrella) | (set(TYPED_ENTRIES.get(lane, ())) & umbrella)
+        dispatch = set(getattr(reached, "strings", ())) | set(getattr(reached, "classes", ())) | \
+            (set(entries) - set(reached))
+        extra, files = od.reached(frozenset(dispatch), frozenset(owners))
         out[lane] = (roots, entries | extra, reached)
-        OWNER_FILES[lane] = frozenset(f for f in files if "native" in os.path.basename(f))
+        OWNER_FILES[lane] = frozenset(f for f in files if "native" in os.path.basename(f)
+                                      and f not in od.shared_files)
     return out, od
 
 
@@ -1892,6 +2027,9 @@ def triage(row):
         return status, sorted(set(lanes) | set(row["lanes_precise"])), why
     if row["lanes_precise"]:
         return "covered", row["lanes_precise"], ""
+    if row.get("constant_probe"):
+        return "n/a", [], ("a constant probe: the body returns one compiled constant (a contract version, "
+                           "vendor or capability flag), reads no data and computes nothing")
     if not row["py_files"]:
         return "n/a", [], "no Python caller in the package (manifest, tests or Mojo-internal dispatch only)"
     return "GAP", [], "no lane reaches it"
