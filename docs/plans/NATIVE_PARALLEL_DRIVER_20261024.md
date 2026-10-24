@@ -55,12 +55,39 @@ for the length of that call:
   a process-lifetime context of its own in the same slot, so no context is created and destroyed per
   call on the root.
 
-A kind A driver's door: validate, `device_plan_enter(devices)`, run the plain estimator owner (the
-same `family_*` code the plain method runs), `device_plan_exit()` in a `finally`, return. A kind B
-driver's door lives in the estimator's binding DSO (its typed run functions, no Python call inside a
-thread): it computes the same shard boundaries in Mojo, runs `host_parallelize` over the devices,
-each thread entering a one-device plan `[d]` and running the plain kernels on its shards in wave
-order, and copies results into the output in input order on the host or the root device.
+A plan also carries a **family mask** (`DEVICE_PLAN_*` bits): the old cooperative worker set every
+`DEVICE_COUNT_VARIABLES` count, and `MOJOLEARN_CHOLESKY_DEVICE_COUNT` only for the kernel-method and
+Cholesky operations, so `device_plan_setting(name)` answers the plan size only for the families the
+driver's worker enabled. A plan is per DSO: the driver binds it in every binding its plain owner may
+reach (`_backend.plan_bindings(names)`), each binding registering `device_plan_enter` /
+`device_plan_exit` / `device_plan_log` (`bindings/device_plan_binding.mojo`).
+
+**Kind A (cooperative) doors.** `family_par_run` (`bindings/family_native.mojo`) takes (driver,
+devices, owner operation, owner args, owner entry, owner context, plan bindings). The driver's
+Python shell makes the type and mode refusals and resolves the plain method's entry, context and
+bindings (binding acquisition, no Python frame in the door); the door admits the devices as the old
+pool did (`bindings/parallel_plan_door.mojo` `plan_devices`, the CPU route refused by name), checks
+the owner operation against the driver's spec (`bindings/parallel_plan_specs.mojo`: allowed owners,
+families, the old rebuild refusal), binds the plan in every binding, runs the plain owner (a family
+operation in place, any other through its own compiled entry) and releases the plans in a `finally`.
+The kernel-method and Cholesky drivers have their own doors (`family_km_par_*`, `family_chol_par_*`).
+
+**Kind B (Python-sharded) doors.** Running shards on host threads in one process was rejected: the
+bindings' process caches (resident registries, context-keyed workspace caches, `process_ctx` slots)
+are not written for concurrent plain owners. Kind B keeps one worker process per device, as the old
+pool did, on the native local pool (`bindings/native_process_pool.mojo`, the `cross_val_score`
+pattern): `parallel_shard_call` (`bindings/parallel_shard_native.mojo`) and the forecasting owner
+(`bindings/parallel_forecast_native.mojo`) compute the old shard boundaries, send each shard's state
+record and data through the native codec in waves of `len(devices)` (shard i on worker i % D, the
+old `DevicePool.map` order), run the plain native owner in the worker (a model rebuilt from its
+fields without a constructor) and place every block at its offset. Every pool's workers first answer
+an identity request and are admitted by `native_require_worker_inventory` (distinct processes and,
+on CUDA and HIP, distinct physical GPUs, one per worker); the pool and its served requests are
+recorded for the verifier (`shard_open`, `shard_map`). `ReferenceShardedNeighbors`,
+`ParallelQueries` and `DistributedIVFIndex` keep one such pool for their lifetime; their per-shard
+work is the plain neighbor and IVF query methods (`python/mojolearn/_parallel_shard_ops.py`), which
+are not one native call each yet: that is the neighbors family's own migration (inventory section
+`neighbors`), not this one.
 
 ### What the worker processes were for, and what replaces each
 
@@ -75,7 +102,7 @@ order, and copies results into the output in input order on the host or the root
 | CPU quota | `worker_cpu_threads` split `MOJOLEARN_CPU_THREADS` across workers | one process, one budget: the owner threads are `host_parallelize` over at most `len(devices)` owners |
 | NumPy parity (`MOJOLEARN_POOL_IMPORT_NUMPY`) and raw-vs-public results (`__mojolearn_internal__`) | the worker imported NumPy when the parent had it; the parent re-applied the public conversion | gone: the owner runs in the caller with the caller's connected types; the driver applies `_parallel_pool.public_method_result` (the conversion every plain method's wrapper applies) |
 | Metal | one child, `devices=(0,)` | `devices=(0,)` only, in process |
-| CPU-only installs | logical per-device CPU workers for `CPU_OPERATIONS`; cooperative drivers refused | kind B: the host binding runs the same shards on host threads; kind A: refused by name, as now |
+| CPU-only installs | logical per-device CPU workers for `CPU_OPERATIONS`; cooperative drivers refused | kind B: one CPU worker process per device index on the native pool, the host bindings' plain owners; kind A: refused by name, as before |
 
 ### Capability check (Mojo/MAX)
 
@@ -93,11 +120,15 @@ atomics (`std.atomic.Atomic`, `core/device_mutex.mojo`). No Mojo or Modular gap 
   par-* lanes hash model arrays and outputs (for example `par-kernel-ridge`: `dual`, `info`,
   `predict`; `par-nystroem`: `components`, `indices`, `normalization`, `eigenvalues`, `eigenvectors`,
   `sweeps`, `transform`), never process or shard traces, so no lane code or record changes.
-- **Kind B keeps every bit if the Mojo shard plan transcribes the Python one exactly**: the same
-  `*_per_shard` boundaries, wave assignment `rank = index % len(devices)`, and join by input order.
-  The Python driver negative control (`MOJOLEARN_PAR_DRIVER_SABOTAGE` with
-  `MOJOLEARN_HOST_ALLOW_SABOTAGE`, `driver_read_shift`) moves into the native shard plan with the
-  same rank rule (shift only above rank 0, merge at the unshifted offset).
+- **Kind B keeps every bit**: the Mojo shard plans transcribe the Python ones (the same `*_per_shard`
+  boundaries, wave assignment `rank = index % len(devices)`, join by input order), and each shard runs
+  the plain native owner the old worker ran. The Python driver negative control
+  (`MOJOLEARN_PAR_DRIVER_SABOTAGE` with `MOJOLEARN_HOST_ALLOW_SABOTAGE`, `driver_read_shift`) is native
+  with the same rank rule (`bindings/parallel_shard_common.mojo` `shard_read_shift`: shift only above
+  rank 0, merge at the unshifted offset). Two deliberate differences: the Holt-Winters and ARIMA
+  merges store the fit through the plain native setters, so the merged model is a plain fit's (the
+  lanes' arrays are unchanged); `fit_kmeans` refuses a non-default `metric` or `oversampling_factor`
+  where the old worker silently fitted the defaults.
 - No par-* lane is declared moving. If a later migration finds a kind B driver whose shard plan
   cannot be transcribed, its lane moves on every vendor in the same commit, recorded with the change.
 
@@ -106,40 +137,75 @@ for the kernel-row seam: `par-svm`, `par-svm-svr`, `par-kernel-ridge`, `par-nyst
 `-D MOJOLEARN_CHOLESKY_PARALLEL_SABOTAGE=1` for factor rows and solve columns). Both read the rank,
 not the device id, so they stay inert at one device.
 
-## 4. Migration order
+## 4. Migration record (all on `lane/native-parallel-driver-20261024`)
 
-1. **Pilot: kernel methods** (`fit_kernel_method`, `apply_kernel_method`). Kind A, two owner loops
-   (SVM kernel rows, Cholesky factor rows and solve columns), one binding. Done on
-   `lane/native-parallel-driver-20261024`.
-2. The other kind A drivers in `parallel_classical` that share those loops: `fit_cholesky`,
-   `solve_cholesky`, `fit_svm`, `predict_svm`, `fit_gaussian_process`, `predict_gaussian_process`.
-3. The remaining kind A drivers, one owner family per lane (each replaces its family's
-   `getenv("MOJOLEARN_<FAMILY>_DEVICE_COUNT")` and `device_id=rank` sites): logistic and GLM, Gram
-   estimators, KMeans, coordinate descent, DBSCAN, HDBSCAN, Gaussian mixture, resampling,
-   `parallel_graph`, cooperative `parallel_ensemble` (boosting, isolation forest).
-4. Kind B drivers, with their shard plans in Mojo: `transform_rbf_sampler`, `parallel_preprocessing`
-   scalers, `parallel_gaussian_process`, `fit_forest`, `fit_arima`, `fit_exponential_smoothing`,
-   `ParallelQueries`, `parallel_ivf`, `parallel_neighbors_reference`.
-5. Remove `_parallel_pool.DevicePool`, `_parallel_worker.py` and their tests once no driver uses them.
+1. Kernel methods (pilot): `fit_kernel_method`, `apply_kernel_method`.
+2. Cholesky, SVM and GP regressor: `fit_cholesky`, `solve_cholesky`, `fit_svm`, `predict_svm`,
+   `fit_gaussian_process`, `predict_gaussian_process`.
+3. The other cooperative drivers through `family_par_run`: `fit_logistic`, `fit_coordinate_descent`,
+   `fit_gram_estimator`, `fit_kmeans`, `fit_dbscan`, `fit_gaussian_mixture`,
+   `predict_gaussian_mixture`, `fit_hdbscan`, `bootstrap`, `permutation_test`,
+   `monte_carlo_integrate`, `parallel_graph.fit_graph` / `transform_umap`,
+   `parallel_ensemble.fit_boosting` / `fit_feature_freq` / `fit_ordered_rmse` /
+   `fit_isolation_forest` / `score_isolation_forest`, `ParallelForestPredictor` (an in-process snapshot
+   whose first predict builds its parallel_groves pool on the plan's devices).
+4. Python-sharded drivers: `fit_arima`, `fit_exponential_smoothing`, `transform_rbf_sampler`,
+   `fit_scaler`, `transform_scaler`, the GPC fit and predict, `fit_forest`, `ReferenceShardedNeighbors`,
+   `ParallelQueries`, `DistributedIVFIndex`.
+5. `DevicePool` and `_parallel_worker.py` removed (`_parallel_pool.py` keeps `public_method_result`);
+   the verifier's two-device witness (`_verify_par.PoolWitness`) reads the plan logs and the pool trace;
+   `_verify_distributed` reads the trace and drives the native transport negative control
+   (`MOJOLEARN_PAR_TRANSPORT_FAULT` with `MOJOLEARN_HOST_ALLOW_SABOTAGE`: the first numerical batch of
+   more than one result dropped or reversed, once).
 
-Each migrated family's bindings must be rebuilt: the shared owner loops (`svm/impl/distance/
-kernel_matrices.mojo`, `cholesky/multi_gpu.mojo`, `cholesky/checks/trsm.mojo`) are compiled into every
-binding that imports them, with no change in behavior while no plan is bound.
+## 5. Bindings to build
 
-## 5. Pilot record
+Every GPU binding that compiles an owner loop changed (counts and device ids from the plan) and
+registers the plan entries: `_mojolearn` (base), `_mojolearn_estimators`, `_mojolearn_gbdt`,
+`_mojolearn_hdbscan`, `_mojolearn_ivf`, `_mojolearn_linalg`, `_mojolearn_metrics`,
+`_mojolearn_mixture`, `_mojolearn_resample`, `_mojolearn_rf`, `_mojolearn_solver`, `_mojolearn_trees`,
+`_mojolearn_x_ann`, `_mojolearn_x_cluster`, `_mojolearn_x_decomp`, `_mojolearn_x_linear`,
+`_mojolearn_x_neighbors`, `_mojolearn_kernel_methods`, `_mojolearn_gp`, `_mojolearn_svm`.
+`core/neural_context.mojo` changed (the root follows the plan): every binding that takes a process
+context rebuilds (the rebuild fence lists 31). The tokenizer host binding (`_mojolearn_tokenizer_host`,
+the classical owner: `family_native`, `kernel_methods_native`, `linalg_native`, `gp_classifier_native`,
+`parallel_forecast_native`, the new `parallel_shard_native` and its `parallel_shard_call` entry) and
+`_mojolearn_runtime_classical_host`. Host twins compile the changed shared modules too. No bit moves
+with no plan bound.
 
-- `core/device_plan.mojo`: the thread-scoped plan.
-- `core/neural_context.mojo::process_ctx`: one process-lifetime context per root device.
-- `svm/impl/distance/kernel_matrices.mojo`, `cholesky/multi_gpu.mojo`, `cholesky/checks/trsm.mojo`,
-  `kernel_methods/checks/kernel_matrix.mojo`: counts from `device_plan_setting`, device ids from
-  `device_plan_device`.
-- `bindings/_mojolearn_kernel_methods.mojo`: `kernel_methods_device_plan_enter` / `_exit` entries.
-- `bindings/kernel_methods_native.mojo`: `family_km_par_fit` / `family_km_par_apply` doors (admission,
-  device validation, plan scope, the plain owners with the resident predict bypassed).
-- `python/mojolearn/parallel_classical.py`: the two drivers are one `_NATIVE` call each.
-- Identity lanes `par-kernel-ridge` / `par-nystroem`: parts unchanged, bits unchanged.
-- RUN OWED: an nv and amd two-device column (`MOJOLEARN_PAR_DEVICES=0,1`) of `par-kernel-ridge` and
-  `par-nystroem` against the one-device column, with the default build and the
-  `MOJOLEARN_SVM_PARALLEL_SABOTAGE` / `MOJOLEARN_CHOLESKY_PARALLEL_SABOTAGE` arms (they must move only at
-  two devices), plus `tools/parallel_kernel_methods_check.py --devices 0,1`, including two driver calls
-  in one process (the per-call owner contexts are created and destroyed in a long-lived process now).
+## 6. Runs owed
+
+Nothing here has been compiled or run. On the integrated, compiled branch:
+
+- **One-device identity, every vendor (Apple, nv, amd)**: the par-* lanes' one-device columns and the
+  plain lanes must hash as recorded (no plan bound: nothing moves). The table admit covers it.
+- **Two-device columns, nv and amd** (`python -m mojolearn verify --par --par-devices 0,1`, then the
+  default scope on a two-GPU box): every par-* lane below must hash equal to its one-device column, and
+  the witness must read a placed native plan (cooperative) or an admitted native pool (Python-sharded)
+  on both devices.
+  - cooperative (device plan): par-kernel-ridge, par-nystroem, par-cholesky, par-svm, par-svm-svr,
+    par-gp, par-logistic, par-cd, par-cd-elasticnet, par-gram, par-gram-ols, par-gram-pca,
+    par-gram-tsvd, par-kmeans, par-dbscan, par-gmm, par-hdbscan, par-resample,
+    par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-boosting, par-boosting-clf,
+    par-boosting-reg, par-boosting-pointwise, par-border-types, par-feature-freq, par-ordered,
+    par-ordered-rmse, par-iforest, par-forest-pool.
+  - Python-sharded (native pool): par-arima, par-holtwinters, par-forecast-arima,
+    par-forecast-holtwinters, par-rbf-sampler, par-scaler, par-scaler-minmax, par-gpc-fit,
+    par-gpc-predict, par-forest, par-forest-reg, par-forest-et, par-forest-et-clf, par-ivf,
+    par-queries-knn, par-queries-nn, par-queries-radius, par-queries-kde, par-reference-knn,
+    par-reference-knn-reg.
+  - unchanged native drivers, as a control: par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload,
+    par-causal-lm, par-cross-val, par-mlp, par-samba, par-samba-clip.
+- **Negative controls, nv and amd, one- and two-device columns** (each must move only at two devices):
+  the compile-time arms `-D MOJOLEARN_<X>_PARALLEL_SABOTAGE=1` for GBDT, GRAM, QR, SVM, SOLVER,
+  NEIGHBORS, KMEANS, GLM, DBSCAN, GP, ISOLATION_FOREST, FOREST_POOL, CHOLESKY, GMM, HIERARCHY and
+  RESAMPLE against their lanes (docs/multi_gpu/PAR_SABOTAGE_ARMS.md); the driver arm
+  `MOJOLEARN_PAR_DRIVER_SABOTAGE=1 MOJOLEARN_HOST_ALLOW_SABOTAGE=1` against the Python-sharded lanes;
+  `python -m mojolearn._verify_distributed --devices 0,1` (its transport controls now drive the native
+  `MOJOLEARN_PAR_TRANSPORT_FAULT` switch).
+- **Checks**: `tools/parallel_kernel_methods_check.py`, `parallel_cholesky_check.py`,
+  `parallel_graph_check.py`, `parallel_neighbors_check.py`, `parallel_forest_pool_check.py` with
+  `--devices 0,1`, including two driver calls in one process (per-call owner contexts are now created
+  in a long-lived process), and the CPU-only route tests (`test_cpu_training_par_classical`,
+  `test_cpu_parallel_rbf_sampler`, `test_parallel_gaussian_process`, `test_distributed_ivf`,
+  `test_numpy_free_features`) on a CPU-only install.
