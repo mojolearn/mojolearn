@@ -1,9 +1,24 @@
 #!/usr/bin/env python3
 """External qualification controller, never imported by product execution.
 
-Build/load the optional native PyTorch registration and check its real public
-dispatcher. Keep logs and result JSON under the caller's retained run directory.
-No performance or cross-vendor qualification is inferred from this one machine.
+The torch-compile phase of the adapter smoke. Builds (or, with --installed,
+loads the shipped) PyTorch registration and checks the WHOLE-MODEL PyTorch
+surface on one device:
+
+  * torch.compile(model, backend="mojolearn") on several models: the output is
+    close to eager PyTorch (torch sums in another order) and BIT FOR BIT the
+    output of mojolearn.import_model(model, example_inputs=x).run(x), on the
+    input's device, the same bits on every repeated call, re-imported after an
+    in-place weight change;
+  * a model with an operation the import does not support is refused, nothing
+    runs eagerly;
+  * the registration defines torch.ops.mojolearn.train and nothing else: the
+    per-operation torch.ops.mojolearn.operation was removed on 2026-10-24
+    (docs/TOMBSTONES.md) and its return is a failure here.
+
+--stage build compiles the registration only (the training checks and their
+fault controls load it). Keep logs and result JSON under the caller's retained
+run directory. No performance or cross-vendor qualification is inferred here.
 """
 from __future__ import annotations
 
@@ -21,7 +36,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--out", required=True, type=Path)
     p.add_argument("--device", default="cuda:0")
-    p.add_argument("--fault", choices=["none", "wrong-operation", "stall", "training-wrong-lr", "training-stall"], default="none")
+    p.add_argument("--fault", choices=["none", "training-wrong-lr", "training-stall"], default="none")
     p.add_argument("--stage", choices=["both", "build", "test"], default="both")
     p.add_argument("--host-staging", action="store_true",
                    help="test artifact only: force the MPS transport path on a CUDA/HIP GPU")
@@ -59,18 +74,7 @@ def main():
         elif args.stage != "test":
             report["native_sha256"] = hashlib.sha256((out / "libmojolearn_adapter.so").read_bytes()).hexdigest()
             source = (root / "adapters/torch/registration.cpp").read_text()
-            if args.fault == "wrong-operation":
-                original = "device.is_cpu() ? -1 : 0, code,"
-                assert source.count(original) == 1
-                source = source.replace(original, "device.is_cpu() ? -1 : 0, code == 2 ? 3 : code,")
-            elif args.fault == "stall":
-                source = "#include <chrono>\n#include <thread>\n#include <cstdio>\n" + source
-                original = "const auto status = entry("
-                assert source.count(original) == 1
-                source = source.replace(original,
-                    'std::fputs("ADAPTER_FAULT_STALL_ENTERED\\n", stderr); std::fflush(stderr);\n'
-                    "  for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));\n  " + original)
-            elif args.fault.startswith("training-"):
+            if args.fault.startswith("training-"):
                 original = "const auto train_status = mojolearn_adapter_train("
                 assert source.count(original) == 1
                 if args.fault == "training-wrong-lr":
@@ -120,7 +124,6 @@ def main():
             build_command = json.loads((out / "torch-build-command.json").read_text())
             assert ("-DMOJOLEARN_ADAPTER_TEST_HOST_STAGING=1" in build_command) == args.host_staging
             torch.ops.load_library(str(out / "mojolearn_torch.so"))
-        operation = torch.ops.mojolearn.operation
         device = torch.device(args.device)
         if device.type == "cuda":
             assert torch.cuda.is_available(), "GPU qualification cannot fall back to CPU"
@@ -132,7 +135,7 @@ def main():
             report["hardware"] = subprocess.check_output(["system_profiler", "SPDisplaysDataType"], text=True)
         if args.host_staging:
             assert device.type == "cuda", "forced staging checks require a real CUDA/HIP GPU"
-        report["transport"] = "host_buffers_gpu_math" if device.type == "mps" or args.host_staging else "native_device_buffers"
+        report["surface"] = "whole-model: torch.compile backend, import_model, torch.ops.mojolearn.train"
 
         def checked(name, fn):
             try:
@@ -141,233 +144,122 @@ def main():
             except Exception:
                 report["failures"].append({"name": name, "traceback": traceback.format_exc()})
 
-        def equal(actual, expected):
-            assert actual.device == expected.device
-            assert actual.dtype == expected.dtype
-            assert tuple(actual.shape) == tuple(expected.shape)
-            # Test oracle/inspection only: compare raw words after byte copies.
-            assert torch.equal(actual.cpu().contiguous().view(torch.int32),
-                               expected.cpu().contiguous().view(torch.int32)), "output words differ"
-
-        x = torch.tensor([[1., -2., 0.5], [-0.25, 2., -1.]], device=device)
-        y = torch.tensor([[0.5, 1., 2.], [1., 0.5, -0.25]], device=device)
-        checked("add", lambda: equal(operation([x, y], 2, [2, 3]), x + y))
-        checked("subtract", lambda: equal(operation([x, y], 3, [2, 3]), x - y))
-        checked("multiply", lambda: equal(operation([x, y], 4, [2, 3]), x * y))
-        checked("relu", lambda: equal(operation([x], 6, [2, 3]), torch.relu(x)))
-        checked("copy", lambda: equal(operation([x], 31, [2, 3]), x))
-        w = torch.tensor([[0.5, 1.], [-1., 2.], [0.25, -0.5]], device=device)
-        checked("matmul", lambda: equal(operation([x, w], 1, [2, 2]), x @ w))
-        checked("transpose_materialization", lambda: equal(operation([x], 13, [3, 2]), x.t().contiguous()))
-        checked("reshape", lambda: equal(operation([x], 14, [3, 2], [3, 2]), x.reshape(3, 2)))
-        checked("broadcast", lambda: equal(operation([x, y[:1].contiguous()], 2, [2, 3]), x + y[:1]))
-        ids = torch.tensor([1, 0], dtype=torch.int32, device=device)
-        checked("int32_copy", lambda: equal(operation([ids], 31, [2], integer_output=True), ids))
-        special = torch.tensor([-2147483648, 1, 2143289410, 2139095040, -8388608], dtype=torch.int32, device=device).view(torch.float32)
-        checked("copy_preserves_special_float_words", lambda: equal(operation([special], 31, [5]), special))
-        checked("embedding_indices", lambda: equal(operation([x, ids], 32, [2, 3], [-1]), x[[1, 0]]))
-        checked("take_indices", lambda: equal(operation([x, ids], 41, [2, 2], [1]), x[:, [1, 0]]))
-        checked("int32_argmax", lambda: equal(operation([x], 72, [2], [1, 0, 0], integer_output=True), x.argmax(1).int()))
-        checked("concat", lambda: equal(operation([x, y], 39, [4, 3], [0]), torch.cat([x, y])))
-        checked("scale", lambda: equal(operation([x], 12, [2, 3], scalars=[.5]), x * .5))
-        checked("full_without_inputs", lambda: equal(operation([], 30, [2, 3], [2, 3], [.5], device=device), torch.full_like(x, .5)))
-        checked("clip", lambda: equal(operation([x], 56, [2, 3], scalars=[-1., 1.]), x.clamp(-1., 1.)))
-
-        # The adapter is the Python API in another format: the same operation through mojolearn.ops.Session
-        # (the plain Python API, on this install's GPU) must return the same words. Required for --installed;
-        # a source-tree run checks it when mojolearn is importable.
-        try:
-            import numpy as np
-            from mojolearn import ops as ml_ops
-        except ImportError:
-            ml_ops = None
-            if args.installed:
-                raise
-        if ml_ops is None:
-            report["not_applicable"].append("python_api: mojolearn is not importable in this environment")
-        else:
-            session = ml_ops.Session(numeric_mode="identical")
-            host = lambda t: t.detach().cpu().contiguous().numpy()  # glue: framework tensor to host bytes
-            X, Y, W = session.tensor(host(x)), session.tensor(host(y)), session.tensor(host(w))
-            ids_host = host(ids)
-
-            def api_equal(actual, handle, integer=False):
-                # Test oracle/inspection only: compare raw words; the Session keeps matrices 2-D, so a 1-D
-                # adapter result is compared as the same words in row-major order.
-                expected = np.ascontiguousarray(session.numpy(handle))
-                words = actual.detach().cpu().contiguous().view(torch.int32).numpy().reshape(-1)
-                assert actual.device == device
-                assert words.size == expected.size, (tuple(actual.shape), expected.shape)
-                assert np.array_equal(words, expected.view(np.int32).reshape(-1)), "adapter and Python API words differ"
-
-            api = [
-                ("add", lambda: operation([x, y], 2, [2, 3]), lambda: session.add(X, Y)),
-                ("subtract", lambda: operation([x, y], 3, [2, 3]), lambda: session.sub(X, Y)),
-                ("multiply", lambda: operation([x, y], 4, [2, 3]), lambda: session.mul(X, Y)),
-                ("relu", lambda: operation([x], 6, [2, 3]), lambda: session.relu(X)),
-                ("copy", lambda: operation([x], 31, [2, 3]), lambda: session.copy(X)),
-                ("matmul", lambda: operation([x, w], 1, [2, 2]), lambda: session.matmul(X, W)),
-                ("transpose", lambda: operation([x], 13, [3, 2]), lambda: session.transpose(X)),
-                ("reshape", lambda: operation([x], 14, [3, 2], [3, 2]), lambda: session.reshape(X, (3, 2))),
-                ("broadcast", lambda: operation([x, y[:1].contiguous()], 2, [2, 3]),
-                 lambda: session.add(X, session.tensor(host(y[:1])))),
-                ("embedding", lambda: operation([x, ids], 32, [2, 3], [-1]), lambda: session.embedding(X, ids_host)),
-                ("take", lambda: operation([x, ids], 41, [2, 2], [1]), lambda: session.take(X, ids_host, axis=1)),
-                ("int32_argmax", lambda: operation([x], 72, [2], [1, 0, 0], integer_output=True),
-                 lambda: session.argmax(X, axis=1, int32=True)),
-                ("concat", lambda: operation([x, y], 39, [4, 3], [0]), lambda: session.concat([X, Y], axis=0)),
-                ("scale", lambda: operation([x], 12, [2, 3], scalars=[.5]), lambda: session.scale(X, .5)),
-                ("full", lambda: operation([], 30, [2, 3], [2, 3], [.5], device=device),
-                 lambda: session.full((2, 3), .5)),
-                ("clip", lambda: operation([x], 56, [2, 3], scalars=[-1., 1.]), lambda: session.clip(X, -1., 1.)),
-                ("linear_relu_composition", lambda: operation([operation([x, w], 1, [2, 2])], 6, [2, 2]),
-                 lambda: session.relu(session.matmul(X, W))),
-            ]
-            for name, through_adapter, through_api in api:
-                checked("python_api:" + name, lambda a=through_adapter, b=through_api: api_equal(a(), b()))
-
-            def api_negative_control():
-                changed = operation([x, y], 2, [2, 3]).cpu().clone()
-                changed.view(torch.int32).flatten()[0] ^= 1
-                try:
-                    api_equal(changed.to(device), session.add(X, Y))
-                except AssertionError:
-                    return
-                raise AssertionError("Python API comparator failed to detect injected output corruption")
-            checked("python_api:negative_control", api_negative_control)
-            report["python_api"] = "mojolearn.ops.Session(numeric_mode='identical')"
-
-        def unchanged_and_lifetime():
-            before = x.clone()
-            result = operation([x], 31, [2, 3])
-            assert result.data_ptr() != x.data_ptr()
-            equal(x, before)
-            temporary = x.clone()
-            copied = operation([temporary], 31, [2, 3])
-            del temporary
-            equal(copied, before)
-        checked("ownership_and_input_unchanged", unchanged_and_lifetime)
-
-        def alternate_stream():
-            if device.type != "cuda":
+        def registration():
+            # The registration is whole-model only: train, never a per-operation entry.
+            assert hasattr(torch.ops.mojolearn, "train"), "torch.ops.mojolearn.train is not registered"
+            table = torch._C._dispatch_dump_table("mojolearn::train")
+            (out / "dispatch-table.txt").write_text(table)
+            assert "registration.cpp" in table
+            try:
+                torch.ops.mojolearn.operation
+            except (AttributeError, RuntimeError):
                 return
-            stream = torch.cuda.Stream(device=device)
-            stream.wait_stream(torch.cuda.current_stream(device))
-            with torch.cuda.stream(stream):
-                produced = x * 2
-                result = operation([produced, y], 2, [2, 3])
-            torch.cuda.current_stream(device).wait_stream(stream)
-            equal(result, x * 2 + y)
-        if device.type == "cuda":
-            checked("producer_on_nondefault_stream", alternate_stream)
-        else:
-            report["not_applicable"].append("producer_on_nondefault_stream: CUDA/HIP-specific API")
+            raise AssertionError("torch.ops.mojolearn.operation is registered again: per-op surfaces were removed "
+                                 "on 2026-10-24 and must not come back")
+        checked("registration_is_whole_model_only", registration)
 
-        def producer_consumer():
-            produced = x * 2
-            result = operation([produced, y], 2, [2, 3])
-            equal(result * 2, (x * 2 + y) * 2)
-        checked("queued_producer_and_consumer", producer_consumer)
+        import numpy as np
+        if not args.installed:  # --installed: importing mojolearn.adapters.torch registered the backend
+            from mojolearn.adapters import _torch_compile
+            _torch_compile.register()
+        from mojolearn import import_model
 
-        def offset_storage():
-            base = torch.arange(30, dtype=torch.float32, device=device).reshape(10, 3)
-            part = base[3:5]
-            assert part.is_contiguous() and part.storage_offset() != 0
-            before = base.clone()
-            equal(operation([part], 31, [2, 3]), part)
-            equal(base, before)
-        checked("nonzero_storage_offset", offset_storage)
+        def words(t):
+            # Test oracle/inspection only: the raw 32-bit words of a result.
+            a = t.detach().cpu().contiguous().numpy() if hasattr(t, "detach") else np.ascontiguousarray(t)
+            return a.view(np.uint32 if a.dtype.itemsize == 4 else np.uint8)
 
-        def refuse(name, fn, message):
-            def call():
-                try:
-                    fn()
-                except (RuntimeError, ValueError) as error:
-                    assert message in str(error), str(error)
-                else:
-                    raise AssertionError("unsupported call was accepted")
-            checked(name, call)
+        def same_bits(actual, expected, what):
+            a, e = words(actual), words(expected)
+            assert a.shape == e.shape and np.array_equal(a, e), what + ": words differ"
 
-        refuse("shape_mismatch", lambda: operation([x], 31, [3, 2]), "output shape")
-        refuse("strided_input", lambda: operation([x.t()], 31, [3, 2]), "contiguous")
-        refuse("unsupported_dtype", lambda: operation([x.half()], 31, [2, 3]), "float32 or int32")
-        refuse("unsupported_backward", lambda: operation([x.clone().requires_grad_()], 6, [2, 3]), "no registered backward")
-        refuse("pointer_index_form", lambda: operation([x], 32, [2, 3], [0]*8), "tensor indices")
-        refuse("unknown_operation", lambda: operation([x], 47, [2, 3]), "unknown operation")
-        refuse("integer_arithmetic", lambda: operation([ids, ids], 2, [2]), "requires float32")
-        refuse("integer_value_table", lambda: operation([x.int(), ids], 32, [2, 3], [-1], integer_output=True), "requires float32")
-        refuse("integer_concatenation", lambda: operation([ids, ids], 39, [4], [0], integer_output=True), "requires float32")
-        refuse("float_indices", lambda: operation([x, ids.float()], 32, [2, 3], [-1]), "indices must be int32")
-        refuse("wrong_output_dtype", lambda: operation([x], 31, [2, 3], integer_output=True), "output dtype")
-        bad_ids = torch.tensor([99], dtype=torch.int32, device=device)
-        refuse("out_of_bounds_indices", lambda: operation([x, bad_ids], 32, [1, 3], [-1]), "embedding")
-        refuse("session_only_gather", lambda: operation([x, ids], 22, [2, 3], [0, 2]), "permutation provenance")
-        if device.type != "cpu":
-            refuse("mixed_devices", lambda: operation([x, y.cpu()], 2, [2, 3]), "share the output device")
-        if device.type == "mps":
-            checked("mps_implicit_index_no_inputs", lambda: equal(
-                operation([], 30, [2, 3], [2, 3], [.5], device=torch.device("mps")), torch.full_like(x, .5)))
+        class TwoHeads(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.body = torch.nn.Sequential(torch.nn.Linear(6, 8), torch.nn.Tanh())
+                self.a, self.b = torch.nn.Linear(8, 3), torch.nn.Linear(8, 2)
 
-        def repeated():
-            for _ in range(20):
-                equal(operation([x, y], 2, [2, 3]), x + y)
-            # A failed call must leave the next successful execution usable.
-            equal(operation([x, w], 1, [2, 2]), x @ w)
-        checked("repeated_and_after_error", repeated)
+            def forward(self, x):
+                h = self.body(x)
+                return self.a(h), torch.sigmoid(self.b(h))
 
-        def capture():
-            def model(a, b):
-                return operation([a, b], 2, [2, 3])
-            compiled = torch.compile(model, backend="eager", fullgraph=True)
-            equal(compiled(x, y), model(x, y))
-        checked("torch_fullgraph_capture", capture)
+        rng = np.random.default_rng(0)
+        torch.manual_seed(0)
+        models = {
+            "mlp": (torch.nn.Sequential(torch.nn.Linear(3, 16), torch.nn.ReLU(), torch.nn.Linear(16, 2)), (32, 3)),
+            "conv": (torch.nn.Sequential(torch.nn.Conv2d(1, 4, 3, padding=1), torch.nn.ReLU(), torch.nn.Flatten(),
+                                         torch.nn.Linear(4 * 6 * 6, 5)), (8, 1, 6, 6)),
+            "layernorm_softmax": (torch.nn.Sequential(torch.nn.Linear(5, 12), torch.nn.LayerNorm(12), torch.nn.GELU(),
+                                                      torch.nn.Linear(12, 4), torch.nn.Softmax(dim=-1)), (16, 5)),
+            "two_outputs": (TwoHeads(), (10, 6)),
+        }
 
-        def inductor():
-            def model(a, b):
-                return operation([a, b], 2, [2, 3])
-            compiled = torch.compile(model, backend="inductor", fullgraph=True)
-            equal(compiled(x, y), x + y)
-        checked("torch_inductor_custom_op", inductor)
+        def whole_model(name, net, shape):
+            net = net.eval().to(device)
+            x = torch.from_numpy(rng.standard_normal(shape, dtype=np.float32)).to(device)
+            torch._dynamo.reset()
+            compiled = torch.compile(net, backend="mojolearn", fullgraph=True, dynamic=False)
+            with torch.no_grad():
+                got = compiled(x)
+                eager = net(x)
+                again = compiled(x)
+            got = got if isinstance(got, tuple) else (got,)
+            eager = eager if isinstance(eager, tuple) else (eager,)
+            again = again if isinstance(again, tuple) else (again,)
+            direct = import_model(net, example_inputs=x).run(x.detach().cpu().numpy())
+            direct = direct if isinstance(direct, tuple) else (direct,)
+            assert len(got) == len(eager) == len(direct), (len(got), len(eager), len(direct))
+            for k, (g, e, d, r) in enumerate(zip(got, eager, direct, again)):
+                assert g.device == x.device, f"output {k} on {g.device}, input on {x.device}"
+                assert tuple(g.shape) == tuple(e.shape) and g.dtype == e.dtype
+                # torch sums in another order: close to eager, never claimed to be its bits
+                assert torch.allclose(g.cpu(), e.cpu(), rtol=1e-4, atol=1e-5), f"{name} output {k} far from eager"
+                same_bits(g, d, f"{name} output {k}: compiled vs import_model")
+                same_bits(r, g, f"{name} output {k}: repeated call")
+            np.savez(out / f"torch-compile-{name}.npz", x=x.cpu().numpy(),
+                     **{f"compiled_{k}": g.cpu().numpy() for k, g in enumerate(got)},
+                     **{f"import_model_{k}": np.asarray(d) for k, d in enumerate(direct)})
+            # an in-place weight change re-imports: the compiled output follows import_model on the new weights
+            with torch.no_grad():
+                first = next(net.parameters())
+                first.mul_(0.5)
+                changed = compiled(x)
+            changed = changed if isinstance(changed, tuple) else (changed,)
+            fresh = import_model(net, example_inputs=x).run(x.detach().cpu().numpy())
+            fresh = fresh if isinstance(fresh, tuple) else (fresh,)
+            for k, (c, f) in enumerate(zip(changed, fresh)):
+                same_bits(c, f, f"{name} output {k}: after an in-place weight change")
+        for name, (net, shape) in models.items():
+            checked("torch_compile:" + name, lambda n=name, m=net, s=shape: whole_model(n, m, s))
 
-        def scripted_composition():
-            def model(a, b):
-                product = operation([a, b], 1, [2, 2])
-                return operation([product], 6, [2, 2])
-            compiled = torch.jit.trace(model, (x, w))
-            compiled.save(str(out / "torch-composition.pt"))
-            for _ in range(4):
-                equal(compiled(x, w), torch.relu(x @ w))
-        checked("native_torchscript_composition", scripted_composition)
-
-        def exported_composition():
-            class Model(torch.nn.Module):
-                def forward(self, a, b):
-                    product = operation([a, b], 1, [2, 2])
-                    return operation([product], 6, [2, 2])
-            exported = torch.export.export(Model(), (x, w), strict=True)
-            torch.export.save(exported, out / "torch-composition.pt2")
-            equal(exported.module()(x, w), torch.relu(x @ w))
-        checked("torch_export_custom_ops", exported_composition)
+        def refuses_unsupported():
+            class TopK(torch.nn.Module):
+                def forward(self, x):
+                    return torch.topk(x, 2, dim=1).values
+            torch._dynamo.reset()
+            compiled = torch.compile(TopK(), backend="mojolearn", fullgraph=True, dynamic=False)
+            try:
+                with torch.no_grad():
+                    compiled(torch.ones(4, 5, device=device))
+            except Exception as error:  # torch wraps the backend's UnsupportedModel
+                text = "%s: %s" % (type(error).__name__, error)
+                assert "UnsupportedModel" in text or "TopK" in text or "topk" in text, text
+                return
+            raise AssertionError("an unsupported model compiled: something ran outside mojolearn")
+        checked("torch_compile:refuses_unsupported_model", refuses_unsupported)
 
         def negative_control():
-            actual = operation([x, y], 2, [2, 3])
-            changed = actual.cpu().clone()
-            changed.view(torch.int32).flatten()[0] ^= 1
+            net = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.ReLU()).eval()
+            x = torch.from_numpy(rng.standard_normal((4, 3), dtype=np.float32))
+            direct = import_model(net, example_inputs=x).run(x.numpy())
+            changed = np.array(direct, copy=True)
+            changed.view(np.uint32).flat[0] ^= 1
             try:
-                equal(changed.to(device), actual)
+                same_bits(changed, direct, "negative control")
             except AssertionError:
                 return
             raise AssertionError("word comparator failed to detect injected output corruption")
         checked("output_word_negative_control", negative_control)
-
-        def native_boundary():
-            # OpOverload itself is framework Python binding code, so qualify
-            # the registered C++ implementation separately via dispatch dump.
-            # Do not call a Python frame trace a whole-native-runtime pass.
-            table = torch._C._dispatch_dump_table("mojolearn::operation")
-            (out / "dispatch-table.txt").write_text(table)
-            assert "registration.cpp" in table
-        checked("native_registration_present", native_boundary)
         report["complete"] = not report["failures"]
     except Exception:
         report["failures"].append({"name": "setup", "traceback": traceback.format_exc()})

@@ -24,7 +24,6 @@ mkdir -p "$out/host-staging"
 cp "$out/native/libmojolearn_adapter.so" "$out/host-staging/"
 phase staging-build-test 600 "$python" tools/check_native_adapters.py --out "$out/host-staging" --host-staging
 phase staging-training 600 "$python" tools/check_native_training_adapters.py --extension "$out/host-staging/mojolearn_torch.so" --out "$out/staging-training" --reference "$out/training"
-phase max-regression 600 pixi run python tools/check_max_native_adapters.py --library "$out/mojolearn_ops.mojoc" --native-library "$out/native/libmojolearn_adapter.so" --out "$out/max-regression"
 phase max-training 600 pixi run python tools/check_max_training_adapters.py --library "$out/mojolearn_ops.mojoc" --native-library "$out/native/libmojolearn_adapter.so" --torch-results "$out/training" --out "$out/max-training"
 phase training-faults 600 "$python" tools/check_training_adapter_faults.py --qualified-out "$out/native" --out "$out/training-faults"
 phase staging-training-faults 600 "$python" tools/check_training_adapter_faults.py --qualified-out "$out/host-staging" --out "$out/staging-training-faults" --host-staging
