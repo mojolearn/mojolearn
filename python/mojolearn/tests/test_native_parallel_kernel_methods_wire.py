@@ -73,7 +73,7 @@ def test_door_dispatches_and_scopes_the_device_plan():
         leave = body.index("plan_exit(binding)")
         assert enter < guarded < final < leave, name
     # the parallel predict bypasses the resident device copy
-    assert "_krr_predict(model, Python.tuple(binding, args[0]), context, False)" in door
+    assert "_krr_predict(model, Python.tuple(binding, args[1]), context, False)" in door
     # the classes the door admits are connected at kernel_methods' import
     assert "family_km_par_classes=(KernelRidge, Nystroem)" in (PKG / "kernel_methods.py").read_text(encoding="utf-8")
 
