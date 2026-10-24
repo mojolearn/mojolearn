@@ -2,46 +2,51 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## 0.8.56 (unreleased)
+## 0.8.56 (published 2026-10-24)
 
-- `mojolearn.import_model` takes an ONNX file. To import a PyTorch model, export it first with
-  `torch.onnx.export(model, args, "model.onnx")` and pass the file; passing a torch object raises `ValueError` with
-  that instruction.
-- `PCA.fit` and `PCA.fit_transform` run as one native call for every solver, including `n_components="mle"`, a
-  variance fraction and `svd_solver="randomized"`; results are unchanged. With `whiten=True`, non-finite data or fitted
-  arrays are refused by the transform itself.
-- `Sequential` supports dropout: add `.dropout(rate)` between layers. Prediction and validation use every activation, and the
-  seeded masks continue across resumed training.
-- `Sequential.fit` takes `validation_data=(X, y)` and `restore_best_weights`: early stopping watches the held-out loss, and
-  restoring the best epoch also restores its optimizer, shuffle and schedule state. `validation_loss_curve_`, `best_epoch_` and
-  `epochs_run_` report each call. Classification labels are matched to the training classes on the GPU.
-- `Program.fit` trains a captured graph in one native call (shuffling, minibatches, forward and backward passes, optimizer
-  updates), with the `mse`, `mae`, `huber`, `bce_with_logits` and `cross_entropy` losses or a captured scalar loss.
-- `Session.run` and `Program.run` take `dynamic_shapes=True` to vary input dimensions, such as batch size or sequence length,
-  while the rank stays fixed.
-- `layer_norm` records gradients through its input, scale and bias, so second derivatives pass through it.
-- Linux wheels build their AMD kernels with eight compiler workers by default; `MOJOLEARN_AMD_COMPILE_JOBS=1` keeps one.
-  Results are unchanged.
-- Linux wheel packaging accepts the merged-binding indexes in the PTX slot and refuses a wheel that mixes merged and
-  per-binding layouts with a clear error.
-- A new release check runs 37 standalone native programs, covering the estimators, preprocessing, the tokenizer, `Sequential`
-  and the optimizers, with no Python interpreter present. Its first runs corrected the KDE, IVF and UMAP check programs.
-- Release uploads read the stored R2 credential file before reporting missing keys.
-- `parallel_classical.apply_kernel_method` returns the same float64 array as the estimator's own `predict` and
-  `transform`; it returned a float32 array with the same values before.
-- Native kernels import no Python and the binding shells hold no compute: every Python door now lives in a
-  `*_pyapi.mojo` or `bindings/` shell that only converts arguments and calls one typed Mojo entry. Two checks run on
-  every push: no Python in kernels, no compute in shells.
-- IVF-flat search pads a query whose probed lists hold fewer than `k` vectors with distance `inf` and id `-1` after
-  the real neighbours instead of raising.
-- Importing `mojolearn` no longer loads NumPy. Results come back as native arrays; when NumPy is imported before or
-  after `mojolearn`, the same calls return NumPy arrays with the same bits.
-- `HostLinearRegression` and `HostRidge` fit on the CPU binaries again, with weighted, no-intercept and one-column fits;
-  `fit`, `predict`, `score`, `save`, `load` and `model_sha256` match the public classes run with `MOJOLEARN_VENDOR=cpu`.
-- `LinearRegression`, `Ridge`, `SmallMLP` training, the optimizers and the Mamba-3 blocks run as one native call per
-  public method. Results are unchanged.
-- `tokenizer` vocabulary export no longer reads a freed buffer; the tokenizer, the shared helpers and the host bindings
-  release every Python reference they take, so long sessions hold steady memory.
+- **Same bits everywhere.** In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. This
+  release keeps that contract for every changed method; `fast` remains Apple only.
+- **Native runtime.** Public methods across the classical estimators, preprocessing, decomposition, neighbors, manifold
+  learning, metrics, model selection, `Sequential` and the optimizers now run as one native call that validates,
+  prepares, computes and returns the result. No Python runs in the runtime, kernels import no Python, and the binding
+  shells only convert arguments. Results are unchanged. `PCA.fit` and `PCA.fit_transform` cover every solver, including
+  `n_components="mle"`, a variance fraction and `svd_solver="randomized"`.
+- **Saved models.** Prediction from a saved model on the CPU runs natively, and `HostLinearRegression` and `HostRidge`
+  fit on the CPU binaries again with weighted, no-intercept and one-column fits; `fit`, `predict`, `score`, `save`,
+  `load` and `model_sha256` match the public classes run with `MOJOLEARN_VENDOR=cpu`.
+- **Torch and MAX.** Optional Torch and MAX adapters, built from source in `adapters/` and not part of the wheels, run
+  on the same native library. Whole-training entry points (`torch.ops.mojolearn.train`, and the MAX `mojolearn_train`
+  and `mojolearn_train_resume` operations) fit a `Sequential` model end to end in one call, with resumable optimizer
+  and schedule state.
+- **Training.** `Sequential` supports dropout (`.dropout(rate)`), `validation_data=(X, y)` and `restore_best_weights`,
+  with `validation_loss_curve_`, `best_epoch_` and `epochs_run_`. `Program.fit` trains a captured graph in one native
+  call with the `mse`, `mae`, `huber`, `bce_with_logits` and `cross_entropy` losses or a captured scalar loss.
+  `Session.run` and `Program.run` take `dynamic_shapes=True`, and `layer_norm` supports second derivatives.
+- **Model import.** `mojolearn.import_model` takes an ONNX file; export a PyTorch model first with
+  `torch.onnx.export(model, args, "model.onnx")`. Passing a torch object raises `ValueError` with that instruction.
+- **Verification.** `python -m mojolearn verify` gains lanes for every new or changed public method, and each one is
+  paired with a fault injection that the check is shown to catch. A release check also runs the estimators,
+  preprocessing, the tokenizer, `Sequential` and the optimizers as standalone native programs with no Python present.
+- **Measurements.** The measurement board covers every public API that computes, including all `mojolearn.metrics`
+  functions, and compares each one with its opponent at the same explicit parameters; a pair whose parameters do not
+  match is listed without a ratio.
+- **Faster pooled fits.** Forest and other pooled fits with Python-list labels are about four times faster: labels are
+  admitted once per value, and pool workers share the available CPU quota instead of oversubscribing it.
+- **Imports.** `import mojolearn` works on Python 3.13 and no longer loads NumPy. Results come back as native arrays;
+  when NumPy is imported, the same calls return NumPy arrays with the same bits.
+- **Fixes.** `metrics.max_error`, `SpectralEmbedding` with a precomputed graph, `QuadraticDiscriminantAnalysis`,
+  ordered-target RMSE boosting and tokenizer vocabulary export no longer read freed memory. Gaussian process fit and
+  predict read the kernel size natively. IVF-flat search pads a query whose probed lists hold fewer than `k` vectors with
+  distance `inf` and id `-1` instead of raising. `parallel_classical.apply_kernel_method` returns float64, like the
+  estimator's own `predict` and `transform`. Long sessions hold steady memory.
+- **Clearer refusals.** `LinearDiscriminantAnalysis` and `QuadraticDiscriminantAnalysis` store a `covariance_estimator`
+  object and refuse it at `fit` by name; use the built-in `solver` and `shrinkage` options. Gradient boosting on CUDA
+  refuses `max_depth` outside 0 to 16 before training starts, and `LinearRegression` and `Ridge` name the accepted types
+  when they refuse a `sample_weight`.
+- **Contributors.** A new incremental development build (`tools/development_build.py`) rebuilds only the binding groups
+  whose sources changed and reuses content-addressed artifacts for the rest. Linux wheels build their AMD kernels with
+  eight compiler workers by default (`MOJOLEARN_AMD_COMPILE_JOBS=1` keeps one), and wheel packaging refuses a wheel that
+  mixes merged and per-binding layouts.
 
 ## 0.8.55 (published 2026-10-20)
 
