@@ -12,8 +12,10 @@
 #                             with the IDENTICAL tier's flags for this set's target, the same
 #                             kernels the set's bindings run
 #   mojolearn_torch.so        the PyTorch dispatcher registration (adapters/torch/registration.cpp)
-#                             linked against the pinned Torch wheel of this vendor (pins.json)
-#   mojolearn_ops.mojoc       the MAX custom-operation package (adapters/max_ops)
+#                             linked against the pinned Torch wheel of this vendor (pins.json):
+#                             torch.ops.mojolearn.train only
+#   mojolearn_ops.mojoc       the MAX custom-operation package (adapters/max_ops): the
+#                             whole-model training ops mojolearn_train and mojolearn_train_resume
 #   adapters-build.json       commands, toolchain, Torch and source provenance; turned into the
 #                             shipped adapters.json by `manifest.py finalize` once the files are
 #                             staged (RUNPATH / install names rewritten, signatures redone)
@@ -92,8 +94,12 @@ else
   got=$({ strings -a "$NATIVE" 2>/dev/null || true; } | grep -oE '\b(sm_[0-9]+[a-z]*|gfx[0-9a-f]+)\b' | sort -u | tr '\n' ',' | sed 's/,$//')
   [[ "$got" = "$ARCH" ]] || die "the native adapter library carries '$got', the set is $ARCH"
 fi
-for sym in mojolearn_adapter_abi mojolearn_adapter_operation mojolearn_adapter_operation_host_buffers mojolearn_adapter_train; do
+for sym in mojolearn_adapter_abi mojolearn_adapter_train; do
   grep -Eq "[[:space:]]T _?$sym\$" "$LOGDIR/native-symbols.txt" || die "the native adapter library does not export $sym"
+done
+# Whole-model only (Andrew, 2026-10-24): the per-operation entries were removed and must not come back.
+for sym in mojolearn_adapter_operation mojolearn_adapter_operation_host_buffers; do
+  if grep -Eq "[[:space:]]T _?$sym\$" "$LOGDIR/native-symbols.txt"; then die "the native adapter library exports the removed per-operation entry $sym"; fi
 done
 # A standalone C ABI library: no interpreter dependency.
 if grep -Eq 'libpython|[[:space:]]U _?Py[A-Za-z_]' "$LOGDIR/native-libraries.txt" "$LOGDIR/native-symbols.txt"; then
