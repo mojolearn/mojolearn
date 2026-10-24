@@ -19,6 +19,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
+from bindings.prep_native_estimator import prep_native_split
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
 from bindings.scaler_native import _stage, _ptr, _input
@@ -2593,14 +2594,16 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
     var b = Python.import_module("builtins")
     var cv = py_fields(model)["cv"]
     # Only data and native splitters cross: a list or tuple of (train, test)
-    # index arrays, or a mojolearn splitter (its split is one native call).
-    # Any other splitter or iterable is user Python code and is refused by name.
+    # index arrays, or a mojolearn splitter, whose folds come from the
+    # model-selection owner's `family_msel_split` operation directly (the
+    # operation its Python `split` calls; that method is not called). Any
+    # other splitter or iterable is user Python code and is refused by name.
     var cls = py_type(cv)
     var splits = PythonObject(None)
     if cls is b.list or cls is b.tuple:
         splits = py_call(b.list, cv)
     elif Bool(py=py_call(b.hasattr, cv, "split")) and String(py_call(b.getattr, cls, "__module__", "")).startswith("mojolearn."):
-        splits = py_call(b.list, py_call(cv.split, x, y))
+        splits = py_call(b.list, prep_native_split(cv, x, y, context))
     else:
         raise Error("TypeError: mojolearn: TargetEncoder cv must be an integer, a mojolearn splitter or a list of "
                     + "(train, test) index arrays; got " + String(py_call(b.getattr, cls, "__name__")))
