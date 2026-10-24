@@ -109,3 +109,9 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(regression=_h(regression.predict(rows), np.float64(regression.score(rows, target))),
                      probability=_h(classifier.predict_proba(rows)), decision=_h(classifier.decision_function(rows)),
                      transformed=_h(transformer.transform(rows))))
+
+
+_batch_decl("n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "public-theta-variants", "public-numeric-metadata", "public-sparse-encode", "public-residual-dropout",
+            "public-scorer-factories", "public-validation-learning-curves", "public-randomized-search")

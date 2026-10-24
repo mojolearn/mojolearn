@@ -134,6 +134,9 @@ TABLE = os.path.join(ROOT, "python", "mojolearn", "verify_reference", "table.jso
 #: table on 2026-10-21 (lane verify-coverage-owed): the coverage lanes
 #: `training-chunked-lm-head` and `training-mlp-sessions`
 #: (tools/identity_lanes/coverage.py) reach them, pending a release record.
+#: `training.residual_dropout` and `training.residual_dropout_backward` left
+#: it on 2026-10-24 (lane verify-coverage-20261024): the public-residual-dropout
+#: lane (tools/identity_lanes/public_gap_methods.py) reaches both.
 DECLARED_LANELESS = {
     # `training.residual_dropout` and `training.residual_dropout_backward`
     # left this table on 2026-10-24: the public-residual-dropout lane

@@ -1,0 +1,20 @@
+--- a/training/residual_dropout_host.mojo
++++ b/training/residual_dropout_host.mojo
+@@ -45,4 +45,6 @@
+         first[i] = output[i]
+         comptime if BACKWARD:
+             second[i] = dside[i]
++    if n > 0:  # SABOTAGE: the first output moved by 1/128
++        first[0] = first[0] + Float32(0.0078125)
+     return n
+--- a/training/residual_dropout.mojo
++++ b/training/residual_dropout.mojo
+@@ -77,6 +77,8 @@
+         comptime if BACKWARD:
+             ctx.enqueue_copy(dst_ptr=second,src_buf=dside)
+         ctx.synchronize()
++        if n > 0:  # SABOTAGE: the first output moved by 1/128
++            first[0] = first[0] + Float32(0.0078125)
+     except error:
+         ctx.synchronize()
+         raise error

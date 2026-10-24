@@ -1,0 +1,18 @@
+--- a/svm/impl/scale_gamma_device.mojo
++++ b/svm/impl/scale_gamma_device.mojo
+@@ -118,6 +118,7 @@
+     )
+     ctx.enqueue_copy(dst_ptr=dst, src_buf=d_out)
+     ctx.synchronize()
++    dst[0] = dst[0] ^ Int64(1)  # SABOTAGE: the first exact-sum limb one unit off
+     _ = d_x^
+     _ = d_part^
+     _ = d_out^
+--- a/svm/host/scale_gamma_host.mojo
++++ b/svm/host/scale_gamma_host.mojo
+@@ -30,4 +30,5 @@
+         i = end
+     for k in range(SG_SLOTS):
+         dst[k] = acc[k]
++    dst[0] = dst[0] ^ Int64(1)  # SABOTAGE: the first exact-sum limb one unit off
+ 

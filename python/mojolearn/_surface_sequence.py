@@ -45,7 +45,8 @@ FAMILIES = (
                         "sequence-optimizer-state",
                         # lane verify-gaps-20261022: the functional layer_norm_backward
                         "sequence-layernorm-backward",
-                        # lane testfix-neural-20261024: the public-method lane of 8188d769f
+                        # lane verify-coverage-20261024: DynamicTheta and OptimizedTheta
+                        # (tools/identity_lanes/public_gap_methods.py)
                         "public-theta-variants"),
         inference_lanes=(),
         forest_kinds=(),

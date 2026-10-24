@@ -1,0 +1,16 @@
+--- a/x_neighbors/kfeat_rng.mojo
++++ b/x_neighbors/kfeat_rng.mojo
+@@ -126,9 +126,13 @@
+         kfeat_schi2_draw_item(t, seed, count, zp, off)
+     for t in range(count):
+         skew_weights_item(t, zp, w, count)
++    if count > 0:  # SABOTAGE: the first skewed-chi2 weight doubled
++        w[0] = w[0] * Float32(2.0)
+     _ = z^
+ 
+ 
+ def op_kfeat_pcs_draw_idn_host(seed: UInt32, nc: Int, total: Int, idx: IP, sgn: IP):
+     for t in range(total):
+         kfeat_pcs_draw_item(t, seed, nc, idx, sgn)
++    if total > 0:  # SABOTAGE: the first sketch sign negated
++        sgn[0] = -sgn[0]

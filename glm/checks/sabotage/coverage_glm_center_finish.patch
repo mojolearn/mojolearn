@@ -1,0 +1,102 @@
+--- a/glm/impl/lm_finish.mojo
++++ b/glm/impl/lm_finish.mojo
+@@ -94,6 +94,8 @@
+             m = m * r / total
+         mean64[j] = m
+         mean32[j] = Float32(m)
++    if cols > 0:  # SABOTAGE: the first float32 mean moved by 1/128
++        mean32[0] = mean32[0] + Float32(0.0078125)
+ 
+ 
+ def lm_intercept(
+@@ -132,4 +134,4 @@
+         dot = _exact_sum(terms)
+         if isinf(dot):
+             raise Error("intermediate overflow in fsum")
+-    return y_mean - dot
++    return y_mean - dot + Float64(0.0078125)  # SABOTAGE: the intercept moved by 1/128
+--- a/glm/impl/center_device.mojo
++++ b/glm/impl/center_device.mojo
+@@ -139,6 +139,8 @@
+                                          grid_dim=cols, block_dim=CS_TPB)
+     ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=dst), src_buf=d_o)
+     ctx.synchronize()
++    var sab = U64P(unsafe_from_address=dst)  # SABOTAGE: the first column sum one ulp off
++    sab[0] = sab[0] ^ UInt64(1)
+     _ = d_x^
+     _ = d_p^
+     _ = d_o^
+@@ -158,6 +160,8 @@
+                                         grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
+     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
+     ctx.synchronize()
++    var sab = F32P(unsafe_from_address=dst)  # SABOTAGE: the first centered cell moved by 1/128
++    sab[0] = sab[0] + Float32(0.0078125)
+     _ = d_x^
+     _ = d_m^
+     _ = d_o^
+@@ -177,6 +181,8 @@
+                                             grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
+     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
+     ctx.synchronize()
++    var sab = F32P(unsafe_from_address=dst)  # SABOTAGE: the first scaled cell moved by 1/128
++    sab[0] = sab[0] + Float32(0.0078125)
+     _ = d_x^
+     _ = d_w^
+     _ = d_o^
+@@ -333,6 +339,8 @@
+     ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sx), src_buf=dsx)
+     ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sy), src_buf=dsy)
+     ctx.synchronize()
++    var sab = U64P(unsafe_from_address=sx)  # SABOTAGE: the first X column sum one ulp off
++    sab[0] = sab[0] ^ UInt64(1)
+     _ = dx^
+     _ = dy^
+     _ = dsx^
+--- a/glm/host/center_host.mojo
++++ b/glm/host/center_host.mojo
+@@ -20,6 +20,7 @@
+         for r in range(rows):
+             exact_add(acc, xp.unsafe_load(r * cols + c))
+         op.unsafe_store(c, exact_finish(acc))
++    op.unsafe_store(0, op.unsafe_load(0) ^ UInt64(1))  # SABOTAGE: the first column sum one ulp off
+ 
+ 
+ def center_on_cpu(x: Int, mu: Int, dst: Int, rows: Int, cols: Int):
+@@ -28,6 +29,8 @@
+     var op = _F32P(unsafe_from_address=dst)
+     for i in range(rows * cols):
+         op.unsafe_store(i, center_cell(xp.unsafe_load(i), mp.unsafe_load(i % cols)))
++    if rows * cols > 0:  # SABOTAGE: the first centered cell moved by 1/128
++        op.unsafe_store(0, op.unsafe_load(0) + Float32(0.0078125))
+ 
+ 
+ def scale_rows_on_cpu(x: Int, w: Int, dst: Int, rows: Int, cols: Int):
+@@ -36,3 +39,5 @@
+     var op = _F32P(unsafe_from_address=dst)
+     for i in range(rows * cols):
+         op.unsafe_store(i, scale_cell(xp.unsafe_load(i), wp.unsafe_load(i // cols)))
++    if rows * cols > 0:  # SABOTAGE: the first scaled cell moved by 1/128
++        op.unsafe_store(0, op.unsafe_load(0) + Float32(0.0078125))
+--- a/glm/estimator.mojo
++++ b/glm/estimator.mojo
+@@ -407,6 +407,8 @@
+     var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+     ctx.synchronize()
++    if n_rows > 0:  # SABOTAGE: the first prediction moved by 1/128
++        hout.unsafe_ptr()[0] = hout.unsafe_ptr()[0] + Float32(0.0078125)
+     for i in range(n_rows):
+         out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
+ 
+--- a/glm/impl/ridge_multi.mojo
++++ b/glm/impl/ridge_multi.mojo
+@@ -218,6 +218,8 @@
+     var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
+     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out_buf)
+     ctx.synchronize()
++    if n_rows * n_targets > 0:  # SABOTAGE: the first prediction moved by 1/128
++        hout.unsafe_ptr()[0] = hout.unsafe_ptr()[0] + Float32(0.0078125)
+     for i in range(n_rows * n_targets):
+         out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
+     _ = hout^

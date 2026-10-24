@@ -73,6 +73,13 @@ the table's `3d1d7c30b12d9872`). In order, from one pushed commit:
    `tools/record_identity_column.sh <gpu-label> <outdir> --models`; then here
    `tools/admit_identity_columns.sh --models <outdir>/models`. Commit and push.
 
+Before step 1, the coverage gate (static, on the Mac): `python3 tools/verify_coverage_audit.py --base <last
+release source> --json <file> --markdown docs/plans/VERIFY_COVERAGE_<date>.md` for the endpoints changed
+since the release, and again with `--all` (`VERIFY_COVERAGE_ALL_<date>.md`) for the whole public surface.
+Both must show native GAP 0 and Python GAP 0; every new lane they name goes into the column records, and every
+`coverage-*` arm in `tools/identity_lanes/coverage_sabotage.tsv` not yet in `coverage_sabotage_proven.tsv` is
+proven with `tools/coverage_sabotage.py plan --arm <arm>` / `check` (`apply-check` first).
+
 macos-smoke's self-test job fails a wheel whose table is stale; it cannot
 regenerate one. Re-record only what changed: `ONLY_CHANGED=table
 tools/record_identity_column.sh ...` records just the lanes whose closure moved

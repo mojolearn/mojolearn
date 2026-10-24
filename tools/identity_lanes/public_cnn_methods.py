@@ -39,3 +39,8 @@ def _(ml, X, yc, yr, Xh=None):
     np.testing.assert_array_equal(predicted, np.asarray(model.classes_)[np.asarray(probabilities).argmax(axis=1)])
     return _fit(dict(predicted=_h(predicted), probabilities=_h(probabilities)), model,
                 lambda e: (e.predict(np.ascontiguousarray(Xh[:33, :16], dtype=np.float32)),))
+
+
+_batch_decl("n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; "
+            "its outputs are train parts, digested whole)",
+            "public-cnn-layer-fit", "public-cnn-classifier-predict")

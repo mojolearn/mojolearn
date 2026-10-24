@@ -1,0 +1,137 @@
+--- a/metrics/estimator.mojo
++++ b/metrics/estimator.mojo
+@@ -131,7 +131,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float32(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def rand_score_host(
+@@ -150,7 +150,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def adjusted_rand_score_host(
+@@ -169,7 +169,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def entropy_host(
+@@ -193,7 +193,7 @@
+     _ = dl^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def mutual_info_score_host(
+@@ -220,7 +220,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def accuracy_score_weighted_host(
+@@ -241,7 +241,7 @@
+     _ = dw^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float32(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def r2_score_weighted_host(
+@@ -261,7 +261,7 @@
+     _ = dw^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float32(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def fowlkes_mallows_score_host(
+@@ -284,7 +284,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def homogeneity_score_host(
+@@ -305,7 +305,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def completeness_score_host(
+@@ -330,7 +330,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def v_measure_score_host(
+@@ -353,7 +353,7 @@
+     _ = dp^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float64(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ # ===========================================================================
+@@ -382,7 +382,7 @@
+     _ = dh^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float32(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ def kl_divergence_host(
+@@ -399,7 +399,7 @@
+     _ = dq^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return out
++    return out + Float32(0.0078125)  # SABOTAGE: the score moved by 1/128
+ 
+ 
+ # ===========================================================================
+@@ -527,7 +527,7 @@
+     _ = y^
+     _ = prediction^
+     _ = ctx^
+-    return result
++    return result + Float32(0.0078125)  # SABOTAGE: the error moved by 1/128
+ 
+ 
+ def _check_classification[matrix: Bool](y: List[Int32], p: List[Int32], n: Int, k: Int) raises:
+@@ -597,7 +597,7 @@
+     _ = dy^
+     _ = dp^
+     _ = ctx^
+-    return result
++    return result + Float32(0.0078125)  # SABOTAGE: the error moved by 1/128
+ 
+ 
+ def binary_ranking_host[curve: Bool](y: List[Int32], scores: List[Float32], n: Int) raises -> Tuple[List[Float32], Int]:

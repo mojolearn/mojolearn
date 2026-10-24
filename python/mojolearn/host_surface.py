@@ -499,6 +499,7 @@ TRAINING_LANE_NAMES = {
     # through the preprocessing family's own host binding.
     "standard-scaler": "the standard scaler",
     "minmax-scaler": "the min-max scaler",
+    "scaler-fit-transform": "the standard and min-max scalers' fit_transform",
     # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
     # arm of the quasi-Newton solver, exported as qn_fit from the
     # estimators host binding.
@@ -592,6 +593,7 @@ TRAINING_LANE_NAMES = {
     "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
+    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
     "par-causal-lm": "the layer-owned causal language model",
     "par-cross-val": "the fold-dispatched cross-validation",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
@@ -909,11 +911,11 @@ TRAINING_LANE_NAMES = {
     "native-schedule-series": "native learning-rate arrays and lists",
     "optim-owner-lifecycle": "bare optimizer moment replacement, checkpoint resume and zeroing",
     "optim-io-capability": "native optimizer IO query and unavailable-transfer refusal",
-    "public-residual-dropout": "residual_dropout and residual_dropout_backward",
-    "public-numeric-metadata": "catboost_auto_learning_rate, johnson_lindenstrauss_min_dim and vendor_used",
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "training-chunked-lm-head": "the chunked language-model head loss and its gradients",
     "training-mlp-sessions": "the multi-session MLP inference",
+    "public-residual-dropout": "residual_dropout and residual_dropout_backward",
+    "public-numeric-metadata": "vendor_used, catboost_auto_learning_rate and johnson_lindenstrauss_min_dim",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
@@ -2149,6 +2151,8 @@ FAMILIES = (
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
             "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
+            # lane verify-coverage-20261024: fit_transform's one-upload entries
+            "scaler-fit-transform",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2807,7 +2811,9 @@ FAMILIES = (
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
                         "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
-                        # lane testfix-neural-20261024: the public-method lanes of 8188d769f
+                        # lane verify-coverage-20261024: residual_dropout and its backward,
+                        # vendor_used and the numeric helpers the 2026-10-23 audit found
+                        # no lane for (tools/identity_lanes/public_gap_methods.py)
                         "public-residual-dropout", "public-numeric-metadata"),
         inference_lanes=(),
         forest_kinds=(),
@@ -3235,7 +3241,10 @@ FAMILIES = (
                         # the same entries the `transformer` lane hashes
                         "transformer-decode-session",
                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
-                        "transformer-decode-load-state"),
+                        "transformer-decode-load-state",
+                        # lane verify-coverage-20261024: forward_with_tape,
+                        # backward_from_tape and the tape's close
+                        "transformer-forward-tape"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3670,9 +3679,6 @@ PUBLIC_PENDING_LANES = {
     "native-schedule-series": "unwatched",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
-    # Public-method lanes (8188d769f): registered, not yet recorded.
-    "public-residual-dropout": "no reference",
-    "public-numeric-metadata": "no reference",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
     # resident buffers, so no CPU column can state these two.
     "optim-resident-io": "no cpu route",
@@ -3963,6 +3969,8 @@ PUBLIC_PENDING_LANES = {
     "gp-lml-theta": "unwatched",
     "cross-vendor-fold": "unwatched",
     "transformer-decode-load-state": "unwatched",
+    "transformer-forward-tape": "no reference",
+    "scaler-fit-transform": "no reference",
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",
     "ivf-short-fill": "unwatched",
@@ -3973,6 +3981,10 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "unwatched",
     "training-mlp-sessions": "unwatched",
     "samba-optimizer-state": "unwatched",
+    # lane verify-coverage-20261024: the public-gap lanes of the training
+    # family; no release record yet.
+    "public-residual-dropout": "no reference",
+    "public-numeric-metadata": "no reference",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
     "saved-model-host-infer-trees": "unwatched",

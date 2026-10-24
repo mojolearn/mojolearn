@@ -1,0 +1,20 @@
+--- a/core/dense_coo.mojo
++++ b/core/dense_coo.mojo
+@@ -53,4 +53,6 @@
+                 cp.unsafe_store(k, Int32(c))
+                 vp.unsafe_store(k, v)
+                 k += 1
++    if k > 0:  # SABOTAGE: the first stored nonzero doubled
++        vp.unsafe_store(0, vp.unsafe_load(0) * Float32(2.0))
+     return k
+--- a/core/dense_coo_host.mojo
++++ b/core/dense_coo_host.mojo
+@@ -108,6 +108,8 @@
+             var t = Int(C[i * n + j]) + Int(C[j * n + i])
+             # the Python loop: 0.5 if t == 1 else t / 2 (t in {0, 2})
+             aff.unsafe_store(i * n + j, Float32(0.5) if t == 1 else (Float32(1) if t == 2 else Float32(0)))
++    if n > 1:  # SABOTAGE: affinity (0, 1) set to a value the rule never writes
++        aff.unsafe_store(1, Float32(0.25))
+     status.unsafe_store(0, Int32(0))
+     status.unsafe_store(1, Int32(0))
+     status.unsafe_store(2, Int32(0))

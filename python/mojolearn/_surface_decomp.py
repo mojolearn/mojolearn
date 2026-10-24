@@ -26,7 +26,8 @@ FAMILIES = (
                         "x-decomp-eigh-wide-linalg", "x-decomp-eigh-wide-fastica", "x-decomp-eigh-wide-rotation", "x-decomp-eigh-wide-factor-analysis", "x-decomp-eigh-wide-mincovdet", "x-decomp-eigh-wide-kpca",
                         # lane run-sabotage-arms (2026-10-21): a sketch wider than the rank
                         "x-decomp-rsvd-rank-deficient",
-                        # lane testfix-neural-20261024: the public-method lane of 8188d769f
+                        # lane verify-coverage-20261024: the public sparse_encode function
+                        # (tools/identity_lanes/public_gap_methods.py)
                         "public-sparse-encode"),
         inference_lanes=(),
         forest_kinds=(),

@@ -102,3 +102,86 @@ sequence/opt_public.mojo:W_PRISTINE	a state-word index (layout constant), no val
 sequence/opt_public.mojo:seq_optimizer_state_on	the host entry's wrapper of state_read_host
 sequence/opt_public.mojo:state_read_host	on a host binding nothing is resident: it records that the host copies are the newest, and there is no other copy a fault could make a step read
 sequence/opt_public.mojo:seq_optimizer_close_on	nothing is resident on a host binding: a null check, no value
+cluster/resident_centers.mojo:_DEVCTX_SLOT	a DeviceContext slot name (a handle)
+cluster/resident_centers.mojo:KMEANS_CENTERS_REGISTRY	the resident-centers registry storage (a process global), no value
+kernel_methods/krr_resident.mojo:KRR_RESIDENT_REGISTRY	the resident kernel-ridge registry storage (a process global), no value
+mamba/host/mamba_host_shell_impl.mojo:_m3_owned_export_run	opt-in experiment only: weights are owned only after an install, which the host binding refuses unless built with -D MOJOLEARN_NN40_OWNED_WEIGHTS (default off), so no default build exports any
+core/user_objects.mojo:_fnv1a	the open-addressing slot hash of group_run_sizes: every hash gives the same runs (keys are compared whole), so a fault moves no value
+cluster/resident_centers.mojo:KMeansCentersRegistry	the resident-centers registry type (storage), no value
+kernel_methods/krr_resident.mojo:KernelRidgeResidentRegistry	the resident kernel-ridge registry type (storage), no value
+core/user_objects.mojo:_same_key	only group_run_sizes calls it, behind the user-objects operation "group_runs", which no caller in the package asks for
+core/user_objects.mojo:group_run_sizes	behind the user-objects operation "group_runs", which no caller in the package asks for
+# lane verify-coverage-20261024: the whole-surface audit's infrastructure (no data value)
+checks/numerics.mojo:_checked_numeric_mode	the build's numeric-mode word, checked against the requested mode: a refusal, no data value
+core/neural_context.mojo:process_ctx	the process DeviceContext getter (a handle), no value
+core/neural_context.mojo:neural_ctx	the process DeviceContext getter under its neural slot name (a handle), no value
+core/package_profile.mojo:identical_mode_enabled	the build's identical-mode flag, no data value
+x_metrics/device.mojo:metrics_ctx	the metrics DeviceContext getter (a handle), no value
+x_prep/device.mojo:x_prep_ctx	the x_prep DeviceContext getter (a handle), no value
+kernel_methods/estimator.mojo:_family_ctx	the family DeviceContext getter (a handle), no value
+svm/estimator.mojo:_family_ctx	the family DeviceContext getter (a handle), no value
+checks/kernel_matrix.mojo:column_name	the column's name string, no data value
+x_decomp/device.mojo:DevExec.vendor	the compiled vendor string, no data value
+core/msel_convert.mojo:msel_is_int	a dtype test on the caller's array, no data value
+core/step_glue.mojo:step_glue_arm_from_env	reads an experiment arm name from the environment, no data value
+core/identity_trace.mojo:IdentityTrace.__init__	an empty trace record's construction, no value
+core/msel_host.mojo:MselHostStore.__init__	the host snapshot store's empty construction, no value
+core/device_store.mojo:DeviceStore.__init__	the resident store's empty construction, no value
+core/forest_host_groves.mojo:HostGroveRegistry.__init__	the grove registry's empty construction, no value
+cluster/resident_centers.mojo:KMeansCentersRegistry.__init__	the resident-centers registry's empty construction, no value
+kernel_methods/krr_resident.mojo:KernelRidgeResidentRegistry.__init__	the resident kernel-ridge registry's empty construction, no value
+mamba/host/mamba_host_shell_impl.mojo:M3OwnedHostSession.__init__	the owned-weight session's empty construction, no value
+tokenizer/impl/tokenizer_host_shell_impl.mojo:BpeHandle.__init__	the BPE handle's construction from a built table, no arithmetic
+transformer/transformer_binding_impl.mojo:CausalLMSession.__deinit__	a session's teardown (frees buffers), no value leaves it
+training/byte_lm_config.mojo:ByteConfig.__init__	the byte LM configuration record's construction, no arithmetic
+core/hostptr.mojo:f32_ptr	an address-to-pointer cast, no value
+core/hostptr.mojo:f64_ptr	an address-to-pointer cast, no value
+core/hostptr.mojo:i32_ptr	an address-to-pointer cast, no value
+core/hostptr.mojo:u32_ptr	an address-to-pointer cast, no value
+core/hostptr.mojo:u16_ptr	an address-to-pointer cast, no value
+core/hostptr.mojo:i8_ptr	an address-to-pointer cast, no value
+core/six_lane_experiment_guards.mojo:_check_configuration	compile-time asserts over the experiment defines, no runtime value
+core/six_lane_experiment_guards.mojo:*	compile-time experiment-define guards, no runtime value
+transformer/experiments/profile.mojo:*	the transformer's arithmetic-profile words (build metadata), no data value
+training/neural_arithmetic_profile.mojo:neural_training_profile	the neural arithmetic-profile word (build metadata), no data value
+training/byte_lm_config.mojo:byte_lm_arithmetic_suffix	the byte LM's arithmetic-profile suffix (build metadata), no data value
+training/byte_lm_config.mojo:ByteConfig.profile	the byte LM configuration's profile string, no data value
+x_cnn/ops.mojo:idn2_flags	a compile-time route-flag word, no data value
+x_cnn/ops.mojo:neural_tape_budget_bytes	a configured byte budget, no data value
+x_cnn/ops.mojo:neural_numerical_profile	the CNN arithmetic-profile word (build metadata), no data value
+core/py2mojo_linear.mojo:py2mojo_linear_flags	a compile-time route-flag word, no data value
+resample/estimator.mojo:resample_fast_defines	the fast-tier define list (build metadata), no data value
+core/forest_inference_model.mojo:forest_ordered_resident_policy	a compile-time route policy flag, no data value
+arima/impl/fast_order_search.mojo:fast_search_mode	a compile-time route-mode word, no data value
+gbdt/estimator.mojo:gbdt_fit_row_major_available	a capability flag, no data value
+core/step_glue.mojo:step_glue_arm_name	an experiment arm's name, no data value
+x_decomp/exec_trait.mojo:Exec.vendor	the compiled vendor string, no data value
+experiments/apple_fast/gemm/scoped_dispatch.mojo:*	fast tier only (Apple) GEMM dispatch probe; the verifier runs identical
+core/device_store.mojo:DeviceStore.free	frees a resident slot's buffer; no value leaves it
+core/msel_host.mojo:MselHostStore.alloc	allocates a host snapshot slot; no value leaves it
+core/msel_host.mojo:MselHostStore.free	frees a host snapshot slot; no value leaves it
+core/msel_device.mojo:MselStore.alloc	allocates a device snapshot slot; no value leaves it
+core/msel_device.mojo:MselStore.free	frees a device snapshot slot; no value leaves it
+transformer/transformer_binding_impl.mojo:CausalLMSession.release	a session's teardown (frees buffers); no value leaves it
+core/forest_host_groves.mojo:HostGroveRegistry.release	frees a saved forest's groves; no value leaves it
+xtrees/dart_device.mojo:dart_open	opens the DART fit's scratch state; no value leaves it
+xtrees/dart_device.mojo:dart_close	frees the DART fit's scratch state; no value leaves it
+xtrees/dart_host.mojo:dart_close	frees the DART fit's host scratch state; no value leaves it
+xtrees/shap_device.mojo:shap_cache_release	frees the TreeSHAP cache; no value leaves it
+xtrees/shap_host.mojo:shap_cache_release	frees the host TreeSHAP cache; no value leaves it
+kde/resident_fit.mojo:kde_fit_release	frees the resident KDE fit; no value leaves it
+neighbors/resident_index.mojo:knn_index_release	frees the resident kNN index; no value leaves it
+cluster/resident_centers.mojo:ResidentKMeansCenters	the resident-centers record type (a handle), no value
+kernel_methods/krr_resident.mojo:ResidentKernelRidge	the resident kernel-ridge record type (a handle), no value
+sequence/moe_weights.mojo:moe_weights_free	frees resident MoE weights; no value leaves it
+ensemble/flatnode.mojo:SparseTreeNode.CreateLeafNode	reached only by forest_export_release's teardown of an exported forest; no value leaves it
+core/device_zero.mojo:enqueue_fill	the zero fill of a freshly allocated buffer, overwritten before any read
+training/neural_arithmetic_profile.mojo:neural_arithmetic_suffix	the neural arithmetic-profile suffix (build metadata), no data value
+arima/impl/fast_arima_quality.mojo:quality_mode	a compile-time route-mode word, no data value
+x_cnn/device.mojo:idn_flags	a compile-time route-flag word, no data value
+core/step_glue.mojo:step_glue_trial_build	an experiment arm's build switch, no data value
+training/byte_lm_config.mojo:ByteConfig.validate	a configuration refusal, no data value
+cholesky/host/chol_oracle.mojo:chol_host_jitter_pinned	the pinned jitter profile constant the host oracle reports (build metadata), no data value
+cholesky/checks/potrf.mojo:chol_jitter_pinned	the pinned jitter profile constant (build metadata), no data value
+tokenizer/encoding.mojo:BpeTokenizer.n_vocab	the vocabulary size of a built tokenizer (metadata), no arithmetic
+tokenizer/encoding.mojo:string_bytes	a string's UTF-8 bytes (a view), no arithmetic
