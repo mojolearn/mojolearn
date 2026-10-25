@@ -70,6 +70,9 @@ def repo(tmp_path):
     put(root / 'adapters/native/c_api.mojo', 'fn c_api(): pass\n')
     put(root / 'adapters/torch/registration.cpp', 'int r;\n')
     put(root / 'x_linear/ops.mojo', 'fn ops(): pass\n')
+    # Reached from adapters/native/c_api.mojo by import, outside adapters/ and every device
+    # closure (the real 0.8.57 pack shape: core/host_predict_threads.mojo, sequence/*.mojo).
+    put(root / 'core/host_predict_threads.mojo', 'fn threads(): pass\n')
     put(root / 'bindings/native.mojo', 'fn native(): pass\n')
     put(root / 'bindings/merged_build.sh', 'mojo build merged\n')
     put(root / 'bindings/build_host_family.sh', 'host family\n')
@@ -353,7 +356,7 @@ def pack(tmp_path, repo):
 
     def originals(binding=host):
         key = compiled.binding_key(binding)
-        srcs = adapter_sources(repo)
+        srcs = dict(adapter_sources(repo), **{'core/host_predict_threads.mojo': sha(repo / 'core/host_predict_threads.mojo')})
         return dict([
             row(revision, 'compile-apple/' + key, dict(unit=unit, binding=binding), [compiled.BASE_COVERAGE, key],
                 rels + list(binding['builders'])),
@@ -380,10 +383,13 @@ def test_apple_pack_refuses_hits_other_sources_flags_and_closures(tmp_path, repo
     use(monkeypatch, wanted)
     ledger = ledger_for(tmp_path, wanted)
     host_id = next(k for k in wanted if '/host/' in k)
-    # a cache hit is not a compilation in this run: only the adapters are admitted
+    # a cache hit is not a compilation in this run, and without a compiled whole-tree key
+    # nothing binds the adapter's imported Mojo sources outside adapters/
     pack['write'](outcome='hit')
-    review = admission.prepare('apple-pack', repo, ledger.path, tmp_path / 'a', dict(pack=pack['dir']))
-    assert review['admitted'] == ['compile-apple/adapters/apple']
+    with pytest.raises(ValueError, match='no requirement could be admitted'):
+        admission.prepare('apple-pack', repo, ledger.path, tmp_path / 'a', dict(pack=pack['dir']))
+    reasons = json.loads((tmp_path / 'a/review.json').read_text())['refused']
+    assert 'core/host_predict_threads.mojo' in reasons['compile-apple/adapters/apple']
     pack['write'](fields=pack['key_fields'](source=dict(scope='tree', digest='0' * 64, files=1)))
     with pytest.raises(ValueError, match='does not reproduce'):
         admission.prepare('apple-pack', repo, ledger.path, tmp_path / 'b', dict(pack=pack['dir']))

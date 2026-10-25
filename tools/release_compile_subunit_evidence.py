@@ -217,13 +217,21 @@ def _check_torch(manifest, pins, vendor):
             "adapter framework requirements differ from the pins")
 
 
-def _check_sources(tree, wanted, manifest_sources, compiled):
-    """Every requirement adapter source is bound to the bytes this producer compiled."""
+def _check_sources(tree, wanted, manifest_sources, compiled, tree_mojo=None):
+    """Every requirement adapter source is bound to the bytes this producer compiled.
+
+    ``tree_mojo`` (Apple pack) names compile keys of the same producer run whose
+    whole-tree Mojo source digest reproduced from the tested revision. That binds
+    every tracked ``.mojo`` file the adapter build can import, not only those
+    under adapters/ (recorded by the adapter manifest) or a device closure.
+    """
     for rel, sha in manifest_sources.items():
         require(tree.sha256(rel) == sha, "adapter manifest source differs from the tested revision: " + rel)
     for rel, sha in wanted["inputs"]["adapter_sources"].items():
         require(sha is not None and tree.sha256(rel) == sha, "adapter source differs from the tested revision: " + rel)
         found = manifest_sources.get(rel, compiled.get(rel))
+        if found is None and tree_mojo and rel in _tree_mojo_rels(tree):
+            found = tree.sha256(rel)
         require(found == sha, "adapter source is not bound to the compiled bytes: " + rel)
 
 
@@ -405,6 +413,12 @@ PACK_ROUTING = {"MOJOLEARN_MERGED_BINDINGS": "1", "MOJOLEARN_REUSE_DIR": "", "MO
 TIER_DIRS = {"host": "host", "identical": "identical"}
 
 
+def _tree_mojo_rels(tree):
+    """The tracked .mojo files bincache's whole-tree walk hashes."""
+    skip = {".pixi", ".git", "__pycache__"}
+    return {r for r in tree.files if r.endswith(".mojo") and not skip & set(PurePosixPath(r).parts[:-1])}
+
+
 def _tree_digest(tree, script, generated=None):
     """bincache.source_digest's whole-tree scope over the tracked bytes of the tested revision.
 
@@ -413,8 +427,7 @@ def _tree_digest(tree, script, generated=None):
     host compile and walked by every later tree-scope key); each sha256 must be
     the exact output of its tracked generator (_generated_shas)."""
     import bincache
-    skip = {".pixi", ".git", "__pycache__"}
-    rels = {r for r in tree.files if r.endswith(".mojo") and not skip & set(PurePosixPath(r).parts[:-1])}
+    rels = _tree_mojo_rels(tree)
     rels |= {r for r in (script, "bindings/build_host_family.sh", "pixi.toml", "pixi.lock") if r in tree.files}
     generated = dict(generated or {})
     require(not set(generated) & rels, "a generated source is tracked at the tested revision")
@@ -589,8 +602,13 @@ def _pack_check(requirement_id, wanted, facts, unit):
     _check_invocations(manifest, environment["flags"], "apple")
     _check_versions(manifest, environment["toolchain"])
     _check_torch(manifest, json.loads(tree.text("packaging/adapters/pins.json")), "metal")
-    _check_sources(tree, wanted, manifest["sources"], facts["compiled_sources"])
-    return coverage_rows(wanted), list(facts["evidence"][:3])
+    # Each compiled group's key reproduced the whole tracked Mojo tree of the tested
+    # revision in this run (_pack_groups), and the packer refuses a dirty tracked tree
+    # before and after packing (apple_retained_groups.validate_admission). Derived
+    # from the verified facts, so earlier reports of this adapter keep verifying.
+    tree_mojo = sorted(g["key"] for g in facts["groups"].values())
+    _check_sources(tree, wanted, manifest["sources"], facts["compiled_sources"], tree_mojo)
+    return coverage_rows(wanted), list(facts["evidence"][:3]) + [g["key_ref"] for g in facts["groups"].values()]
 
 
 class _Adapter:
