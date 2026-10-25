@@ -633,3 +633,28 @@ def test_unsupported_producer_keeps_exact_input_change_reasons(native_ledger, tm
     assert 'changed input: native_sources/core/shared.mojo' in row['reasons']
     assert 'added input: unit/build_flags/CXXFLAGS' in row['reasons']
     assert any('previous attempt failed' in reason for reason in row['reasons'])
+
+
+def test_unadapted_source_audit_requires_admission_before_new_execution(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, 'producer_admission_available', PRODUCTION_PRODUCER_ADMISSION)
+    target = manifest()
+    wanted = target['requirements'].pop('identity')
+    wanted['inputs']['contract'] = {'id': 'coverage-source', 'kind': 'source'}
+    wanted['fingerprint'] = R.digest(wanted['inputs'])
+    target['requirements'] = {'coverage-source': wanted}
+    ledger = R.RequirementsLedger(tmp_path / 'ledger.json')
+    ledger.sync(target)
+    row = ledger.plan()['coverage-source']
+    assert row['action'] == 'complete-provenance'
+    assert row['producer_admission'] == 'unsupported'
+    with pytest.raises(ValueError, match='producer report adapter unavailable'):
+        ledger.begin('coverage-source')
+    assert not ledger.read()['runs']
+
+    # A real supported source producer can still start its first assessment.
+    wanted['inputs']['contract']['id'] = 'runtime-source'
+    wanted['fingerprint'] = R.digest(wanted['inputs'])
+    target['requirements'] = {'runtime-source': wanted}
+    ledger.sync(target)
+    assert ledger.plan()['runtime-source']['action'] == 'run'
+    assert ledger.begin('runtime-source')

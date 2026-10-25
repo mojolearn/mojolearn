@@ -58,11 +58,15 @@ def build_flags(environ=None):
 def producer_admission_available(wanted):
     """Require a real report adapter before scheduling new execution.
 
-    Source and candidate producers have parsers. Other kinds first need
+    The public-runtime source gate and candidate producers have parsers. Other
+    source checks and execution kinds first need
     adapters and reconciliation of retained evidence; no rerun is implied.
     Each actual receipt still undergoes its producer/coverage validation.
     """
-    return wanted.get("kind") in ("source", "candidate")
+    if wanted.get("kind") == "candidate":
+        return True
+    return (wanted.get("kind") == "source"
+            and wanted.get("inputs", {}).get("contract", {}).get("id") == "runtime-source")
 
 
 def source_files(root, revision):
