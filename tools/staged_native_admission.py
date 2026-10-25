@@ -244,6 +244,9 @@ def validate_staged(proof, source_root=None):
 def complete_native_proof(proof, source_root=None):
     """Keep traditional complete-build admission unchanged; add explicit staging."""
     try:
+        from retained_release_composition import SCHEMA as RETAINED_SCHEMA, validate as validate_retained
+        if proof.get('schema') == RETAINED_SCHEMA:
+            return validate_retained(proof, source_root)
         if proof.get('schema')==SCHEMA:
             return validate_staged(proof,source_root)
         return (proof.get('schema')==BUILD_SCHEMA and proof.get('complete') is True
