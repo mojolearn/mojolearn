@@ -1,4 +1,0 @@
-COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-priority-pass/tools/transformer_session_check.py", "--binding", "/root/priority-pass/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_transformer.so", "--backend", "cuda", "--group", "budget", "--out", "/root/priority-pass/session-budget.json"] ENV {}
-10357 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7840c0000000, nodemask=2)
-10357 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x520680000000, nodemask=1)
-{"backend": "cuda", "group": "budget", "reverse_order": false, "arrays": 2, "ownership": [1, 2, false, 0], "warm_baseline_median_ms": null, "warm_retained_median_ms": null, "binding_sha256": "b5b1a7f7c7dc65ff03940afa99059a85e24989ff0cb0755cc85f698233d0dcdb"}
