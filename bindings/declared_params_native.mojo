@@ -106,7 +106,9 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject) 
         var descriptor = _resolved(cls, name, context["missing"])
         if descriptor is not context["missing"]:
             var descriptor_type = py_type(descriptor)
-            if py_type(descriptor_type) is not b.type or _resolved(descriptor_type, PythonObject("__set__"), context["missing"]) is not context["missing"]:
+            if (py_type(descriptor_type) is not b.type
+                    or _resolved(descriptor_type, PythonObject("__set__"), context["missing"]) is not context["missing"]
+                    or _resolved(descriptor_type, PythonObject("__delete__"), context["missing"]) is not context["missing"]):
                 raise Error("TypeError: native parameter assignment cannot invoke Python parameter descriptors")
         var value = pairs[i][1]
         if py_contains(fields, name):

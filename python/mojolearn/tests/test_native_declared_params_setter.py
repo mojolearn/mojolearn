@@ -163,6 +163,23 @@ def test_custom_setattr_is_refused_before_hook(family):
 
 
 @pytest.mark.parametrize('family', ['prep', 'decomp'])
+def test_delete_only_data_descriptor_cannot_redirect_assignment(family, monkeypatch):
+    model, name, _ = example(family)
+    operation = model.set_params
+    calls = []
+    previous = model.__dict__[name]
+    class Descriptor:
+        def __get__(self, instance, owner=None):
+            calls.append('get')
+        def __delete__(self, instance):
+            calls.append('delete')
+    with monkeypatch.context() as patch:
+        patch.setattr(type(model), name, Descriptor(), raising=False)
+        clean(operation, **{name: 3}, expected_error=TypeError)
+    assert not calls and model.__dict__[name] is previous
+
+
+@pytest.mark.parametrize('family', ['prep', 'decomp'])
 def test_dictionary_subclass_is_refused_without_iteration(family):
     model, name, _ = example(family)
     operation = model.set_params
