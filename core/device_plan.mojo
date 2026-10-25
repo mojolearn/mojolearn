@@ -166,7 +166,7 @@ def _words(mut list: List[Int64]) -> MutPointer[Int64, MutUntrackedOrigin]:
     return rebind[MutPointer[Int64, MutUntrackedOrigin]](list.unsafe_ptr())
 
 
-def _own_slot() -> Int:
+def _own_slot() raises -> Int:
     """The calling thread's slot, or -1 when it has no plan."""
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
     var active = _words(table[].active)
@@ -247,7 +247,7 @@ def device_plan_exit() raises:
     Atomic.store[ordering=Ordering.RELEASE](_words(table[].owners) + slot, Int64(0))
 
 
-def device_plan_size() -> Int:
+def device_plan_size() raises -> Int:
     """The number of devices in the calling thread's plan, 0 without one."""
     var slot = _own_slot()
     if slot < 0:
@@ -270,7 +270,7 @@ def device_plan_device(rank: Int) raises -> Int:
     return Int(_words(table[].ids)[slot * DEVICE_PLAN_MAX_DEVICES + rank])
 
 
-def device_plan_root() -> Int:
+def device_plan_root() raises -> Int:
     """The calling thread's plan's first device (its root), -1 without a plan."""
     var slot = _own_slot()
     if slot < 0:
@@ -279,7 +279,7 @@ def device_plan_root() -> Int:
     return Int(_words(table[].ids)[slot * DEVICE_PLAN_MAX_DEVICES])
 
 
-def device_plan_setting(name: String, default: String = "") -> String:
+def device_plan_setting(name: String, default: String = "") raises -> String:
     """What an owner loop parses as its device count: the plan's size as text
     while a plan driving `name`'s family is bound to the calling thread, else
     `getenv(name, default)`."""
@@ -291,7 +291,7 @@ def device_plan_setting(name: String, default: String = "") -> String:
     return String(getenv(name, default))
 
 
-def _log_lock() -> MutPointer[Int64, MutUntrackedOrigin]:
+def _log_lock() raises -> MutPointer[Int64, MutUntrackedOrigin]:
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
     var lock = _words(table[].log_lock)
     while True:  # driver-loop: spin on the placement log's lock word
@@ -304,7 +304,7 @@ def _log_lock() -> MutPointer[Int64, MutUntrackedOrigin]:
     return lock
 
 
-def _log_plan(devices: List[Int]):
+def _log_plan(devices: List[Int]) raises:
     """Append one bound plan to the placement log (dropped when full)."""
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
     var lock = _log_lock()
@@ -318,7 +318,7 @@ def _log_plan(devices: List[Int]):
     Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
 
 
-def device_plan_log_take() -> List[List[Int]]:
+def device_plan_log_take() raises -> List[List[Int]]:
     """The plans bound since the last take, in order, and an empty log."""
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
     var lock = _log_lock()
