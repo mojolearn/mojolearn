@@ -39,6 +39,11 @@ def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
     raise Error(missing_error + ": constructor parameter is not stored under its own name: " + String(name))
 
 
+def lookup(model: PythonObject, fields: PythonObject, name: PythonObject,
+           context: PythonObject, missing_error: PythonObject) raises -> PythonObject:
+    return _value(model, fields, name, context, String(missing_error))
+
+
 def direct_lookup(fields: PythonObject, name: PythonObject) raises -> PythonObject:
     return fields[name]
 
@@ -61,7 +66,7 @@ def cpython_lookup(fields: PythonObject, name: PythonObject) raises -> PythonObj
 def PyInit__mojo_item_lookup() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojo_item_lookup")
-        module.def_function[_value]("lookup")
+        module.def_function[lookup]("lookup")
         module.def_function[direct_lookup]("direct_lookup")
         module.def_function[cpython_lookup]("cpython_lookup")
         return module.finalize()
