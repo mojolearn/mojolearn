@@ -65,7 +65,7 @@ def supports_requirement(wanted):
                 or (unit.get("vendor") == "cpu" and binding.get("tier") == "host"))
     if binding.get("target") == LINUX:
         return (binding.get("tier") == "host" and unit.get("vendor") in ("cpu", "nvidia", "amd")
-                and isinstance(unit.get("compiler_sha256"), str) and HEX64.fullmatch(unit["compiler_sha256"]))
+                and isinstance(unit.get("compiler_sha256"), str) and HEX64.fullmatch(unit["compiler_sha256"]) is not None)
     return False
 
 
@@ -212,6 +212,8 @@ def _dev_facts(root, producer):
 
 def _dev_collect(root, document, producer):
     facts = _dev_facts(root, producer)
+    # compile-cpu names one target; a macOS host build cannot qualify Linux CPU.
+    cpu_target = (document or {}).get("configuration", {}).get("dependency_context", {}).get("cpu_target")
     units, flags, apple = {}, set(), set()
     for stem, group in facts["groups"].items():
         flags.add(json.dumps(derived_build_flags(group["environment"], DEV_ROUTING), sort_keys=True))
@@ -219,7 +221,7 @@ def _dev_collect(root, document, producer):
         for name in group["members"]:
             if group["mode"] == "host":
                 key = f"{MAC}/host/-/host/{name}"
-                specs = ("compile-apple", "compile-cpu")
+                specs = ("compile-apple", "compile-cpu") if cpu_target == MAC else ("compile-apple",)
             else:
                 key = f"{MAC}/metal/apple/{group['mode']}/{name}"
                 specs = ("compile-apple",)

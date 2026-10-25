@@ -21,11 +21,12 @@ attempts to the ledger. Requirements absent from the ledger are reported and
 skipped, never added.
 
 Adapters (``--adapter``):
-  mac-development-build   compile-apple / compile-cpu (osx-arm64) bindings from a
-                          tools/development_build.py result.json   (--producer result=)
+  mac-development-build   compile-apple bindings (and compile-cpu when the ledger's
+                          cpu_target is osx-arm64) from a tools/development_build.py
+                          result.json   (--producer result=)
   apple-retained-device   compile-apple Metal bindings from an original production
                           device subset run (apple_retained_groups)   (--producer run=)
-  linux-host-build        Linux host-tier compile bindings from a
+  linux-host-build        Linux host-tier bindings of compile-cpu/nvidia/amd from a
                           tools/release_host_build.py output   (--producer build=)
   gate-adapters           adapters-nvidia/amd from a release gate directory
                           holding gate-smoke.json   (--producer gate=)
@@ -338,7 +339,11 @@ def main(argv=None):
             if not sep or not key or key in producer:
                 ap.error("--producer takes distinct KEY=PATH values")
             producer[key] = value
-        review = prepare(args.adapter, args.root, args.ledger, args.out, producer, args.dependency_log_dir)
+        try:
+            review = prepare(args.adapter, args.root, args.ledger, args.out, producer, args.dependency_log_dir)
+        except ValueError as error:
+            print("REFUSED: " + str(error))
+            return 1
         print(json.dumps(dict(admitted=len(review["admitted"]), refused=len(review["refused"]),
             reusable=sum(row["reusable"] for row in review["comparison"].values()), out=str(args.out))))
         return 0

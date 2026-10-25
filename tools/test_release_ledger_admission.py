@@ -245,6 +245,7 @@ def closure_digest(root, rels):
     return value.hexdigest()
 
 
+MAC_CPU = {'dependency_context': {'cpu_target': 'osx-arm64'}}
 TOOLCHAIN = dict(platform='osx-arm64', packages=['mojo-1.0.0-release'], pixi_lock_sha256='c' * 64)
 APPLE = dict(xcode='Xcode 26.6', sdk='26.5')
 
@@ -310,7 +311,7 @@ def development(tmp_path, repo, monkeypatch):
 def test_development_host_build_admits_apple_and_cpu_host_bindings(tmp_path, repo, development):
     wanted = development['originals']
     assert all(producer_admission_available(w) for w in wanted.values())
-    ledger = ledger_for(tmp_path, copy.deepcopy(wanted))
+    ledger = ledger_for(tmp_path, copy.deepcopy(wanted), MAC_CPU)
     review = admission.prepare('mac-development-build', repo, ledger.path, tmp_path / 'review',
                                dict(result=development['result']))
     assert review['admitted'] == sorted(wanted) and not review['refused']
@@ -321,12 +322,20 @@ def test_development_host_build_admits_apple_and_cpu_host_bindings(tmp_path, rep
     assert all(plan[name]['status'] == 'passed' for name in wanted)
 
 
+def test_development_build_never_qualifies_a_linux_cpu_column(tmp_path, repo, development):
+    linux = {'dependency_context': {'cpu_target': 'linux-64'}}
+    ledger = ledger_for(tmp_path, copy.deepcopy(development['originals']), linux)
+    review = admission.prepare('mac-development-build', repo, ledger.path, tmp_path / 'review',
+                               dict(result=development['result']))
+    assert review['admitted'] == [name for name in sorted(development['originals']) if name.startswith('compile-apple/')]
+
+
 def test_development_build_refuses_flag_and_closure_mismatches(tmp_path, repo, development, monkeypatch):
     bad = dict([development['row']('compile-apple', flags=dict(numeric_mode='identical', target_column='cpu',
         gpu_archs=None, compile_jobs='2', package_byte_lm='1'))])
     bad.update([development['row']('compile-cpu', closure='0' * 64)])
     monkeypatch.setattr(admission, 'reconstruct', lambda *a, **k: copy.deepcopy(bad))
-    ledger = ledger_for(tmp_path, copy.deepcopy(bad))
+    ledger = ledger_for(tmp_path, copy.deepcopy(bad), MAC_CPU)
     with pytest.raises(ValueError, match='no requirement could be admitted'):
         admission.prepare('mac-development-build', repo, ledger.path, tmp_path / 'review',
                           dict(result=development['result']))

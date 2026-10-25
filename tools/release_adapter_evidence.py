@@ -34,7 +34,7 @@ def supports_requirement(wanted):
     vendor = str(wanted.get("inputs", {}).get("contract", {}).get("id", "")).rpartition("-")[2]
     return (wanted.get("kind") == "adapters" and vendor in ("nvidia", "amd", "apple")
             and wanted.get("inputs", {}).get("contract", {}).get("id") == "adapters-" + vendor
-            and wanted.get("coverage") == list(COVERAGE) and not wanted.get("missing_inputs"))
+            and wanted.get("coverage") == list(COVERAGE))
 
 
 def _smoke(directory, vendor, version):

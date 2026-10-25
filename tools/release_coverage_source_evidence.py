@@ -47,8 +47,7 @@ print(json.dumps(dict(
 
 def supports_requirement(wanted):
     return (wanted.get("kind") == "source" and wanted.get("coverage") == [COVERAGE]
-            and wanted.get("inputs", {}).get("contract", {}).get("id") == "coverage-source"
-            and not wanted.get("missing_inputs"))
+            and wanted.get("inputs", {}).get("contract", {}).get("id") == "coverage-source")
 
 
 def _version(text):
