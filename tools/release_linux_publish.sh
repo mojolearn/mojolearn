@@ -12,12 +12,10 @@
 # for that one platform. The full native Linux certification route is opt-in
 # with --full. With neither, the script refuses: until 0.8.12 an omitted flag
 # silently chose the full route.
-# --preverified (Linux or macOS; tools/release.py's default since 2026-10-13) is
-# docs/RELEASE_CHECKLIST.md "Releasing changes already checked before merge":
-# the manifest records qualification_reuse {source_commit, basis "completed
-# checks on merged main", new_runtime_verification false}, no receipt is
-# attached, and the workflow runs validation_profile=preverified (artifact
-# integrity only).
+# Every route requires MOJOLEARN_REQUIREMENTS_LEDGER. The source-bound canonical
+# pre gate and exact artifact hashes are validated locally and again in CI from
+# private R2 evidence. --preverified retains the legacy artifact-format marker;
+# that marker supplies no qualification and cannot bypass the ledger gate.
 # MOJOLEARN_ARTIFACT_SOURCE_COMMIT optionally pins an older frozen artifact
 # source when only pack/publish tools changed; defaults to HEAD. The release
 # tag still names the current tools, while the wheel and receipt keep their
@@ -45,6 +43,10 @@
 # qualification-sources set only when installed qualification is attached.
 # Create the tag explicitly at the build commit when main has moved on.
 set -euo pipefail
+# Every route, including GitHub-only publish=none, uses the canonical ledger.
+# The private bundle is verified again in CI; legacy manifest fields alone do
+# not authorize publication or waive any requirement.
+: "${MOJOLEARN_REQUIREMENTS_LEDGER:?set MOJOLEARN_REQUIREMENTS_LEDGER to the canonical release requirements.json}"
 WHL=$(cd "$(dirname "${1:?final wheel}")" && pwd)/$(basename "$1")
 TAG="${2:?tag, e.g. alpha-api-0.7.0-20260909}"
 PUBLISH="${3:?none|testpypi|pypi}"
@@ -65,7 +67,7 @@ case "${5:-}" in
     [ -z "${MOJOLEARN_QUAL_SM89:-}" ] || { echo "--preverified attaches no installed qualification; unset MOJOLEARN_QUAL_SM89" >&2; exit 2; }
     VALIDATION_PROFILE=preverified; PREVERIFIED=1 ;;
   "")
-    echo "REFUSING: the light route is the default and needs --light-smoke <results.json> (tools/qualify_verifier_wheel.py --scope expanded on this exact wheel); pass --full to choose the full certification route, or --preverified to publish on completed checks on merged main" >&2
+    echo "REFUSING: the light route is the default and needs --light-smoke <results.json>; pass --full for full certification or --preverified for retained evidence. Every route also requires the canonical release ledger." >&2
     exit 2 ;;
   *) echo "expected --light-smoke <results.json>, --full or --preverified" >&2; exit 2 ;;
 esac
@@ -85,10 +87,18 @@ ARTIFACT_SOURCE_COMMIT="${MOJOLEARN_ARTIFACT_SOURCE_COMMIT:-$HEAD_SHA}"
 [[ "$ARTIFACT_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
   echo "MOJOLEARN_ARTIFACT_SOURCE_COMMIT must be a full lowercase commit SHA" >&2; exit 2;
 }
-VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
 mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
 ART="$WORK/artifact"; rm -rf "$ART"; mkdir -p "$ART"; cp "$WHL" "$ART/"
 WSHA=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
+# The retained producer bytes are uploaded only to private R2. No raw
+# ledger/evidence is attached to the public GitHub release.
+BUNDLE="$WORK/requirements-admission.tar.gz"
+ADMISSION="$WORK/requirements-admission.json"
+python3 tools/release_publish_admission.py bundle --ledger "$MOJOLEARN_REQUIREMENTS_LEDGER" \
+  --root "$REPO" --source "$ARTIFACT_SOURCE_COMMIT" --wheel "$ART/$(basename "$WHL")" \
+  --output "$BUNDLE" --upload > "$ADMISSION"
+VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$ADMISSION")
+BUNDLE_SHA=$(shasum -a 256 "$BUNDLE" | cut -d' ' -f1)
 
 LIGHT_ASSET=""; LSHA=""
 if [ -n "$LIGHT_SMOKE" ]; then
@@ -116,15 +126,16 @@ if [ -n "${MOJOLEARN_QUAL_SM89:-}" ]; then
 fi
 
 echo "== manifest =="
-python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$ARTIFACT_SOURCE_COMMIT" "$LSHA" "$(basename "$LIGHT_ASSET")" "$PREVERIFIED" <<'EOF'
+python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$ARTIFACT_SOURCE_COMMIT" "$LSHA" "$(basename "$LIGHT_ASSET")" "$PREVERIFIED" "$BUNDLE_SHA" <<'EOF'
 import json, sys
-out, version, wheel, wsha, tsha, source, smoke_sha, smoke_name, preverified = sys.argv[1:]
+out, version, wheel, wsha, tsha, source, smoke_sha, smoke_name, preverified, bundle_sha = sys.argv[1:]
 doc = {"schema": "mojolearn.alpha-release.v1", "version": version, "release_profile": "alpha-api",
-       "files": {wheel: wsha}}
+       "files": {wheel: wsha}, "requirements_admission": {"bundle_sha256": bundle_sha, "source_commit": source}}
 if smoke_sha:
     doc["light_smoke"] = {"source_commit": source, "receipts": {smoke_name: smoke_sha}}
 if preverified:
-    # packaging/verify_alpha_artifacts.py --preverified-source checks exactly these three fields
+    # Legacy artifact-format metadata only; never publication authorization.
+    # The canonical ledger bundle above and CI guard supply actual qualification.
     doc["qualification_reuse"] = {"source_commit": source, "basis": "completed checks on merged main",
                                   "new_runtime_verification": False}
 if tsha:
@@ -152,6 +163,9 @@ fi
 
 echo "== GitHub release $TAG =="
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { git tag -a "$TAG" -m "mojolearn $VERSION $LIGHT_PLATFORM wheel" "$HEAD_SHA"; git push origin "refs/tags/$TAG"; }
+# Check the exact staged bytes again immediately before any public upload.
+python3 tools/release_publish_admission.py wheels --bundle "$BUNDLE" --bundle-sha256 "$BUNDLE_SHA" \
+  --ledger "$MOJOLEARN_REQUIREMENTS_LEDGER" --source "$ARTIFACT_SOURCE_COMMIT" --wheel "$ART/$(basename "$WHL")"
 if ! gh release view "$TAG" >/dev/null 2>&1; then
   NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast and identical modes, built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
@@ -166,7 +180,7 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   esac
   [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
-  [ -z "$PREVERIFIED" ] || NOTES="$NOTES Published on the checks completed on merged main (NVIDIA, AMD, Apple and CPU); the release checked artifact integrity and ran no new runtime verification."
+  [ -z "$PREVERIFIED" ] || NOTES="$NOTES Publication requires the canonical release ledger and its private source-bound evidence bundle; CI independently revalidates that ledger and these exact wheel bytes."
   [ -z "${MOJOLEARN_ALPHA_SMOKE_NOTES:-}" ] || NOTES="$NOTES Installed smoke per native set: $MOJOLEARN_ALPHA_SMOKE_NOTES (alpha-manifest.json smoke)."
   # shellcheck disable=SC2086
   gh release create "$TAG" --latest --target "$HEAD_SHA" --title "$(basename "$WHL" | cut -d- -f1 | tr _ -) $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
@@ -184,7 +198,7 @@ fi
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
 # Choose explicitly: old calls keep full certification, receipts use bounded admission.
 DISPATCHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f artifact_source_commit="$ARTIFACT_SOURCE_COMMIT" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
+gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f artifact_source_commit="$ARTIFACT_SOURCE_COMMIT" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA" -f requirements_bundle_sha256="$BUNDLE_SHA"
 sleep 20
 RUN=$(gh run list --workflow release-provenance.yml --branch "$TAG" --event workflow_dispatch \
   --created ">=$DISPATCHED_AT" --limit 1 --json databaseId --jq '.[0].databaseId')

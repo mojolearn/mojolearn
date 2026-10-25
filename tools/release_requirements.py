@@ -28,8 +28,8 @@ def digest(value):
 
 
 def file_digest(path):
-    with Path(path).open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+    from release_evidence import sha256
+    return sha256(path)
 
 
 def stamp():
@@ -145,7 +145,7 @@ def evidence_errors(evidence):
         try:
             if file_digest(item["path"]) != item["sha256"]:
                 errors.append("evidence digest differs: " + item["path"])
-        except (OSError, KeyError):
+        except (OSError, KeyError, TypeError, ValueError):
             errors.append("evidence unavailable: " + str(item.get("path")))
     return errors
 

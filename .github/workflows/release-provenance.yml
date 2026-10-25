@@ -93,6 +93,11 @@ on:
         required: false
         default: ''
         type: string
+      requirements_bundle_sha256:
+        description: SHA256 of the private R2 canonical ledger/evidence bundle; required for any publication or prepared candidate.
+        required: false
+        default: ''
+        type: string
       validation_profile:
         description: Light installed smoke for prepared alpha API artifacts (default), or explicit full native build/certification.
         required: true
@@ -140,16 +145,50 @@ jobs:
         env:
           VALIDATION_PROFILE: ${{ inputs.validation_profile }}
           CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+          PUBLISH: ${{ inputs.publish }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: |
+          if [ "$PUBLISH" != none ] || [ -n "$CANDIDATE_TAG" ]; then
+            [[ "$BUNDLE_SHA" =~ ^[0-9a-f]{64}$ ]] || {
+              echo '::error::Publication requires the private canonical ledger bundle SHA256; preverified metadata alone is insufficient.'
+              exit 2
+            }
+          fi
           if [ "$VALIDATION_PROFILE" != full ] && [ -z "$CANDIDATE_TAG" ]; then
             echo '::error::Light releases need alpha_candidate_tag and its manifest SHA. Select full only when a fresh native build/certification is intended.'
             exit 2
           fi
 
+  ledger_admission:
+    name: Revalidate the canonical frozen release ledger
+    needs: validate_inputs
+    if: inputs.publish != 'none' || inputs.alpha_candidate_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify private retained evidence and every pre-publication requirement
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py verify --root "$GITHUB_WORKSPACE" --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA"
+
   cpu_certification:
     name: Full CPU reference certification
-    needs: validate_inputs
-    if: inputs.publish != 'none' && inputs.validation_profile == 'full'
+    needs: [validate_inputs, ledger_admission]
+    if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
+      inputs.publish != 'none' && inputs.validation_profile == 'full'
+      )
     uses: ./.github/workflows/cpu-identity-gate.yml
     with:
       confirm: RUN-HEAVY
@@ -158,8 +197,11 @@ jobs:
 
   build:
     name: Build and verify the wheel
-    needs: validate_inputs
-    if: inputs.alpha_candidate_tag == '' && inputs.validation_profile == 'full'
+    needs: [validate_inputs, ledger_admission]
+    if: >-
+      always() && !cancelled() && needs.validate_inputs.result == 'success' && (needs.ledger_admission.result == 'success' || (inputs.publish == 'none' && inputs.alpha_candidate_tag == '' && needs.ledger_admission.result == 'skipped')) && (
+      inputs.alpha_candidate_tag == '' && inputs.validation_profile == 'full'
+      )
     # Self-hosted and ephemeral. See the header: a hosted runner produces a
     # wheel with no GPU kernels in it.
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
@@ -631,8 +673,9 @@ jobs:
     name: Publish to ${{ inputs.publish }}
     # LAST (the Linux `mojolearn` wheel requires the core and both vendors):
     # only when every core and plugin upload succeeded, or the build staged none.
-    needs: [build, cpu_certification, publish_core, publish_payloads, publish_plugins]
+    needs: [build, cpu_certification, publish_core, publish_payloads, publish_plugins, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() &&
       inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile == 'full' &&
       needs.build.result == 'success' && needs.cpu_certification.result == 'success' &&
@@ -642,6 +685,7 @@ jobs:
        (needs.publish_payloads.result == 'skipped' && needs.build.outputs.linux_payloads == '[]')) &&
       (needs.publish_plugins.result == 'success' ||
        (needs.publish_plugins.result == 'skipped' && needs.build.outputs.linux_plugins == '[]'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The environment name is what the Trusted Publisher on PyPI and TestPyPI
@@ -731,6 +775,15 @@ jobs:
           TARGET: ${{ inputs.publish }}
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
 
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -745,8 +798,11 @@ jobs:
   publish_core:
     name: Publish mojolearn-core to ${{ inputs.publish }}
     # FIRST: every vendor package requires mojolearn-core at its version.
-    needs: [build, cpu_certification]
-    if: inputs.publish != 'none' && needs.build.outputs.linux_core == 'true'
+    needs: [build, cpu_certification, ledger_admission]
+    if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
+      inputs.publish != 'none' && needs.build.outputs.linux_core == 'true'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # ITS OWN TRUSTED PUBLISHER ENVIRONMENT: `pypi-core` (`testpypi-core`).
@@ -787,6 +843,15 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/math-audit"
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -798,12 +863,14 @@ jobs:
   publish_payloads:
     name: Publish mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
     # SECOND: after mojolearn-core; vendor packages wait for native payload uploads.
-    needs: [build, cpu_certification, publish_core]
+    needs: [build, cpu_certification, publish_core, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() && inputs.publish != 'none' &&
       needs.build.result == 'success' && needs.build.outputs.linux_payloads != '[]' &&
       (needs.publish_core.result == 'success' ||
        (needs.publish_core.result == 'skipped' && needs.build.outputs.linux_core != 'true'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -853,6 +920,15 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/math-audit"
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -864,8 +940,9 @@ jobs:
   publish_plugins:
     name: Publish mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
     # THIRD: mojolearn-core and native payload uploads finish before vendor packages.
-    needs: [build, cpu_certification, publish_core, publish_payloads]
+    needs: [build, cpu_certification, publish_core, publish_payloads, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() && inputs.publish != 'none' &&
       needs.build.result == 'success' && needs.cpu_certification.result == 'success' &&
       needs.build.outputs.linux_plugins != '[]' &&
@@ -873,6 +950,7 @@ jobs:
        (needs.publish_core.result == 'skipped' && needs.build.outputs.linux_core != 'true')) &&
       (needs.publish_payloads.result == 'success' ||
        (needs.publish_payloads.result == 'skipped' && needs.build.outputs.linux_payloads == '[]'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -926,6 +1004,15 @@ jobs:
         env:
           TARGET: ${{ inputs.publish }}
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -936,7 +1023,7 @@ jobs:
 
   alpha_stage:
     name: Admit explicitly alpha API artifacts
-    needs: validate_inputs
+    needs: [validate_inputs, ledger_admission]
     outputs:
       linux_qualification: ${{ steps.linux_qualification.outputs.required }}
       # Which PyPI projects this candidate carries: `mojolearn` is true when a
@@ -947,7 +1034,10 @@ jobs:
       core: ${{ steps.projects.outputs.core }}
       plugins: ${{ steps.projects.outputs.plugins }}
       payloads: ${{ steps.projects.outputs.payloads }}
-    if: inputs.alpha_candidate_tag != ''
+    if: >-
+      always() && !cancelled() && needs.validate_inputs.result == 'success' && (needs.ledger_admission.result == 'success' || (inputs.publish == 'none' && inputs.alpha_candidate_tag == '' && needs.ledger_admission.result == 'skipped')) && (
+      inputs.alpha_candidate_tag != ''
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1069,8 +1159,9 @@ jobs:
     name: Publish alpha API artifacts to ${{ inputs.publish }}
     # LAST: after the candidate's core and plugins, if it carries any (the
     # Linux `mojolearn` requires them); a failed upload holds it.
-    needs: [alpha_stage, cpu_certification, publish_alpha_core, publish_alpha_payloads, publish_alpha_plugins]
+    needs: [alpha_stage, cpu_certification, publish_alpha_core, publish_alpha_payloads, publish_alpha_plugins, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.mojolearn == 'true' &&
       (needs.publish_alpha_core.result == 'success' ||
@@ -1081,6 +1172,7 @@ jobs:
        (needs.publish_alpha_plugins.result == 'skipped' && needs.alpha_stage.outputs.plugins == '[]')) &&
       ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -1151,6 +1243,15 @@ jobs:
           TARGET: ${{ inputs.publish }}
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
 
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha API wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
@@ -1162,12 +1263,14 @@ jobs:
   publish_alpha_core:
     name: Publish alpha mojolearn-core to ${{ inputs.publish }}
     # FIRST: every vendor package (and the Linux mojolearn) requires mojolearn-core.
-    needs: [alpha_stage, cpu_certification]
+    needs: [alpha_stage, cpu_certification, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.core == 'true' &&
       ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # ITS OWN TRUSTED PUBLISHER ENVIRONMENT: `pypi-core` (`testpypi-core`).
@@ -1233,6 +1336,15 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/math-audit"
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha core wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
@@ -1244,14 +1356,16 @@ jobs:
   publish_alpha_payloads:
     name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
     # SECOND: after mojolearn-core; vendor packages wait for native payload uploads.
-    needs: [alpha_stage, cpu_certification, publish_alpha_core]
+    needs: [alpha_stage, cpu_certification, publish_alpha_core, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.payloads != '[]' &&
       (needs.publish_alpha_core.result == 'success' ||
        (needs.publish_alpha_core.result == 'skipped' && needs.alpha_stage.outputs.core != 'true')) &&
       ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -1324,6 +1438,15 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/math-audit"
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha plugin wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
@@ -1336,8 +1459,9 @@ jobs:
     # THIRD: vendor packages publish after mojolearn-core and the PTX
     # dependency, and before the Linux mojolearn. Architecture sets stay
     # together in each vendor wheel.
-    needs: [alpha_stage, cpu_certification, publish_alpha_core, publish_alpha_payloads]
+    needs: [alpha_stage, cpu_certification, publish_alpha_core, publish_alpha_payloads, ledger_admission]
     if: >-
+      always() && !cancelled() && needs.ledger_admission.result == 'success' && (
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.plugins != '[]' &&
       (needs.publish_alpha_core.result == 'success' ||
@@ -1346,6 +1470,7 @@ jobs:
        (needs.publish_alpha_payloads.result == 'skipped' && needs.alpha_stage.outputs.payloads == '[]')) &&
       ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -1422,6 +1547,15 @@ jobs:
         env:
           TARGET: ${{ inputs.publish }}
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
+      - name: Verify the exact publication bytes against admitted ledger artifacts
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
+          BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
+        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha plugin wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
