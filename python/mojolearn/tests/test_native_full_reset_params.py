@@ -259,13 +259,15 @@ def test_nested_native_entry_identity_does_not_exempt_owned_python_finalizers(cl
     child = cls()
     owner = Owner()
     vars(child)['caller_owned'] = owner
+    witness = weakref.ref(owner)
+    del owner
     model = ml.BaggingRegressor(estimator=child)
     key, value = next(iter(child.get_params(deep=False).items()))
-    before = dict(vars(child))
-    # A clear/update helper must refuse even when an external reference keeps
-    # this particular fixture alive: native ownership cannot depend on that.
+    before = tuple(vars(child))
+    # Do not retain the old owner in a snapshot: a missing native admission
+    # must expose the actual __del__ callback, not merely an expected refusal.
     clean(model.set_params, **{'estimator__' + key: value}, error=TypeError)
-    assert vars(child) == before and calls == []
+    assert tuple(vars(child)) == before and witness() is not None and calls == []
     vars(child).pop('caller_owned')
 
 
