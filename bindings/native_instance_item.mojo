@@ -14,7 +14,6 @@ def native_instance_item(fields: PythonObject, name: PythonObject) raises -> Pyt
     # or standard-library defect is not established. Original source/failures:
     # experiments/python_object_item_lookup/MODULAR_REPORT.md and
     # ~/mojolearn-evidence/native-params-crash-20261025/standalone-stdlib/.
-    # Reported upstream: https://github.com/modular/modular/issues/7399
     # Codex's automated cybersecurity screening blocked delegated debugging
     # turns and directed us to Daybreak access. Its exact trigger is unknown;
     # these interruptions are separate from the reproduced runtime failure.

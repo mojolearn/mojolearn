@@ -283,6 +283,19 @@ same bits is the double work the release cost rules forbid. Treat them different
 
 ## No Python in the runtime
 
+Owner override (2026-10-25, after the lookup crash and Codex screening
+interruptions): narrow Python fallbacks are authorized where a working native
+path cannot be completed. Document each affected operation INLINE, the exact
+Python work invoked, the reason, and retained evidence. Preserve supported
+behavior and test the actual public operation. Record it explicitly as a
+fallback in release evidence; do not label that path Python-free or silently
+exempt unrelated paths. Prefer a supported native repair when it works.
+Document Codex cybersecurity/Daybreak interruptions separately from technical
+Mojo failures: screening alone does not prove a Mojo defect. Submit reproducible
+Mojo failures upstream and include the screening context requested by Andrew.
+This overrides the absolute no-callback/no-fallback wording below only for
+those documented fallback paths; it does not authorize toolchain patches.
+
 Owner clarification (2026-10-24): scikit-learn tag metadata is a narrow
 compatibility-layer exception to the rules below.
 

@@ -2,6 +2,13 @@
 # Native public boundary for Voting, Stacking, MultiOutput, OneVsRest and
 # CalibratedClassifierCV. Internal trees_meta_* calls keep Array results;
 # public doors preserve validation, fitted metadata and output conversion.
+# 2026-10-25: Codex cybersecurity screening halted the delegated repair turn
+# and directed it to Daybreak access. This interruption did not establish a
+# Mojo defect: the observed problems were our inherited Python decorators
+# and ClassLabels handling. The root agent continued the supported API repair.
+# See docs/plans/NATIVE_SCREENING_AND_FALLBACKS_20261025.md. Andrew authorizes
+# documented Python fallbacks if needed; this implementation introduces none
+# and still requires integrated compilation and public-runtime validation.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
