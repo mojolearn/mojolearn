@@ -126,10 +126,7 @@ def is_fitted(est):
     sets `model_ = None` placeholders does not count). While a `fit` is running on the
     instance, its own calls to `predict` or `transform` are let through.
     """
-    state = vars(est)
-    if state.get("_mojolearn_fitted") or state.get("_mojolearn_fitting"):
-        return True
-    return any(k.endswith("_") and not k.startswith("_") and v is not None for k, v in state.items())  # glue: scans fitted attribute names
+    return _MODE_METADATA(est, "is_fitted", _MODE_METADATA_CONTEXT)
 
 
 def _track_fit(method):
@@ -467,7 +464,7 @@ class SklearnTagsMixin(PublicOutputsMixin):
         return sklearn_tags(self)
 
     def __sklearn_is_fitted__(self):
-        return is_fitted(self)
+        return _MODE_METADATA(self, "is_fitted", _MODE_METADATA_CONTEXT)
 
 
 class ClassifierScoreMixin:
@@ -682,21 +679,7 @@ class NumericModeMixin(ParamsMixin):
             ``'identical'`` or ``'fast'``, read from the compiled
             binary the estimator uses, not from the argument it was given.
         """
-        module = self._bind()
-        name = module.__name__.rsplit(".", 1)[-1]
-        getter_name = _backend._vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"
-        getter = getattr(module, getter_name, None)
-        # Older metrics modules expose the same compile-time constant under
-        # UMAP's original name. A DSO's __name__ need not retain its tier path.
-        if getter is None and name == "_mojolearn_metrics":
-            getter = getattr(module, "umap_numeric_mode", None)
-        if getter is not None:
-            code = getter()
-            if code not in _backend._CODE_MODE:
-                raise RuntimeError(f"mojolearn: {name} returned unknown numeric mode {code!r}")
-            return _backend._CODE_MODE[code]
-        # Legacy artifacts without readback retain the historical path hint.
-        return module.__name__.split(".")[-2]
+        return _MODE_METADATA(self, "numeric_mode_used", _MODE_METADATA_CONTEXT)
 
     # Read back from the binary's own compile-time constant (`<prefix>_vendor()`, checks/vendor.mojo), not
     # from the directory it was loaded from or the platform; None for a binary built before the read-back.
@@ -709,4 +692,11 @@ class NumericModeMixin(ParamsMixin):
             ``'metal'``, ``'cuda'`` or ``'hip'``, read from the compiled binary the
             estimator uses.
         """
-        return _backend.read_vendor(self._bind())
+        return _MODE_METADATA(self, "vendor_used", _MODE_METADATA_CONTEXT)
+
+
+# Import-time ABI connection precedes every estimator subclass definition.
+# The final package connection supplies exact class/binary routes later, without
+# replacing any method identities captured by other native owner layouts.
+from ._native_mode_metadata import connect as _connect_mode_metadata
+_MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
