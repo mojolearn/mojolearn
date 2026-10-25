@@ -31,7 +31,6 @@ __all__ = [
 import sys
 
 from ._parallel_pool import public_method_result
-from ._buffer import _native
 from . import _backend, _native_family_bridge
 from . import ensemble as _ens
 from . import _gbdt_adapters as _gba
@@ -138,10 +137,7 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     # device i % len(devices)); the trees joined in ID order and their node
     # offsets rebased natively. A tree is a pure function of its global ID,
     # so the joined forest is the one-device forest.
-    if type(trees_per_shard) is not int or trees_per_shard < 1:
-        raise ValueError('trees_per_shard must be a positive integer')
-    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard,
-                                                 _native('msel_rebase_offsets_i32')))
+    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard))
 
 
 def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None):

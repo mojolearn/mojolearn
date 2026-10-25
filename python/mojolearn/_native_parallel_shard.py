@@ -9,6 +9,41 @@ from .tokenizer import _binding
 
 _native_parallel_shard = _binding()._module.parallel_shard_call
 
+
+def _connect_binding(name, required, optional=()):
+    # Connection only, before any operation or worker request. Resolve lazy
+    # host proxies here and retain exclusively compiled entries. Native workers
+    # must never invoke a module __getattr__ to resolve a missing entry.
+    from types import BuiltinFunctionType, SimpleNamespace
+    try:
+        module = _backend.binding(name, "identical")
+        entries = {"__name__": name}
+        for key in required + optional:
+            try:
+                entry = getattr(module, key)
+            except (ImportError, AttributeError):
+                if key in required:
+                    raise
+                continue
+            if type(entry) is not BuiltinFunctionType:
+                raise TypeError(f"parallel native binding requires compiled {name}.{key}")
+            entries[key] = entry
+        return SimpleNamespace(**entries)
+    except (ImportError, AttributeError) as error:
+        # A partial install stays importable; its native door reports this
+        # error when the corresponding family is actually requested.
+        return str(error)
+
+
+_WORKER_BINDINGS = {
+    "_mojolearn_kernel_methods": _connect_binding(
+        "_mojolearn_kernel_methods", ("rbf_sampler_transform",), ("kernel_methods_numeric_mode",)),
+    "_mojolearn_gp": _connect_binding(
+        "_mojolearn_gp", ("gpc_fit", "gpc_predict", "gpc_ovr_combine"), ("gp_numeric_mode",)),
+    "_mojolearn": _connect_binding(
+        "_mojolearn", ("prepare_targets", "gather_i64", "gather_f64", "msel_rebase_offsets_i32")),
+}
+
 #: Every GPU binding whose owner loops read a device plan and which registers
 #: `device_plan_enter` / `device_plan_exit` / `device_plan_log`
 #: (bindings/device_plan_binding.mojo).
@@ -22,4 +57,4 @@ PLAN_BINDINGS = ('_mojolearn', '_mojolearn_estimators', '_mojolearn_gbdt', '_moj
 def register(**fixed):
     """Add one driver module's fixed tables to the owner, once, at import."""
     # glue: import-time connection of compiled entries, classes and contexts
-    _native_parallel_shard('register', dict(fixed, binding_getter=_backend.binding))
+    _native_parallel_shard('register', dict(fixed, worker_bindings=_WORKER_BINDINGS))
