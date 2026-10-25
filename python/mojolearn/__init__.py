@@ -615,6 +615,11 @@ from ._native_trees_bridge import connect_cpu_prediction as _connect_cpu_tree_pr
 _connect_cpu_tree_prediction()
 del _connect_cpu_tree_prediction
 
+# Field-only constructors must precede every method/storage identity snapshot.
+from ._native_linear_constructors import install as _install_linear_constructors
+_install_linear_constructors()
+del _install_linear_constructors
+
 # Connect CV's fixed native estimator ABIs after every public class exists.
 from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
 from . import _mode as _mode_metadata_owner
@@ -660,3 +665,9 @@ _connect_declared_params(_params_metadata_sys.modules[__name__], model_selection
                          _params_metadata_owner._PARAMS_METADATA_CONTEXT)
 del _connect_declared_params
 del _connect_params_metadata_classes, _params_metadata_owner, _params_metadata_sys
+
+# Complete constructor ownership only after the native setter layouts exist.
+from ._native_linear_constructors import connect as _connect_linear_constructors
+from ._native_params_setter import _CONTEXT as _linear_constructor_setters
+_connect_linear_constructors(_linear_constructor_setters)
+del _connect_linear_constructors, _linear_constructor_setters
