@@ -33,8 +33,8 @@ def _native_ops(function):
     """The operation names of every `<module>._NATIVE(...)` call in `function`."""
     ops = []
     for node in ast.walk(function):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "_NATIVE"):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "_FAMILY"):
             assert isinstance(node.args[1], ast.Constant), ast.dump(node)
             ops.append(node.args[1].value)
     return ops
@@ -45,7 +45,8 @@ def test_drivers_make_exactly_one_native_call_and_open_no_pool():
     for name, op in (("fit_kernel_method", "family_km_par_fit"),
                      ("apply_kernel_method", "family_km_par_apply")):
         function = _function(source, name)
-        assert _native_ops(function) == [op], name
+        assert _native_ops(function) == ["family_par_public"], name
+        assert repr(op) in _read("python/mojolearn/_native_parallel_public.py")
         text = ast.get_source_segment(source, function)
         assert "DevicePool" not in text and "pool" not in text.split('"""')[-1], name
         loops = [n for n in ast.walk(function) if isinstance(n, (ast.For, ast.While, ast.comprehension))]

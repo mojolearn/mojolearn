@@ -2,9 +2,8 @@
 """Every multi-GPU driver is one native call (source contracts).
 
 docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md. Each driver's body is a single
-`<module>._NATIVE(...)` call naming its door operation (argument checks and
-the plain method's public conversion through `_parallel_pool`'s shell
-function aside); the door dispatches that operation and, for a cooperative
+`<module>._NATIVE(...)` call naming its door operation; admission and public
+result conversion belong to the native boundary; the door dispatches that operation and, for a cooperative
 driver, binds the device plan in its family's binding around the plain owner
 and releases it in a `finally`. The family's GPU binding registers the plan
 entries. Read without importing the package or loading a binding; the
@@ -160,7 +159,8 @@ def _native_ops(function):
 def test_each_driver_is_one_native_call_with_no_pool_or_loop():
     for module, name, op, _, _ in DRIVERS:
         function = _function(module, name)
-        assert _native_ops(function) == [op], (module, name)
+        migrated = module in ("parallel_classical", "parallel_graph", "parallel_ensemble") and name not in ("fit_arima", "fit_exponential_smoothing", "fit_forest")
+        assert _native_ops(function) == ["family_par_public" if migrated else op], (module, name)
         names = {n.id for n in ast.walk(function) if isinstance(n, ast.Name)}
         assert "DevicePool" not in names, (module, name)
         loops = [n for n in ast.walk(function) if isinstance(n, (ast.For, ast.While, ast.comprehension))]
@@ -168,6 +168,7 @@ def test_each_driver_is_one_native_call_with_no_pool_or_loop():
 
 
 def test_each_door_dispatches_its_operation():
+    assert 'operation == "family_par_public"' in _read("bindings/family_native.mojo")
     for module, name, op, door, _ in DRIVERS:
         assert 'operation == "' + op + '"' in _read(door), (op, door)
 
@@ -226,15 +227,13 @@ def test_par_run_drivers_name_only_their_spec_owners():
         block = block[:block.index("\n    if ") if "\n    if " in block[1:] else len(block)]
         for owner in owners:
             assert '"' + owner + '"' in block, (driver, owner)
-        # every driver's shell names the driver and one of its owners
-        found = False
-        for module, name, op, _, _ in DRIVERS:
-            if op != "family_par_run":
-                continue
-            text = ast.unparse(_function(module, name))
-            if "'" + driver + "'" in text:
-                found = True
-        assert found, driver
+        # Fixed import-time plans name the driver; the compiled predictor
+        # constructs its forest plan directly. The Python shell hands raw
+        # arguments to that boundary, with no preparation or result helper.
+        connected = _read("python/mojolearn/_native_parallel_public.py")
+        native = _read("bindings/parallel_public_native.mojo")
+        assert repr(driver) in connected or ('"' + driver + '"') in native, driver
+
 
 
 def test_worker_serves_no_migrated_operation():
