@@ -23,15 +23,15 @@ def connect(context, register, registry):
         plan = registry[cls]
         plan['initial_fields'] = {} if initial is None else initial
         plan['keywords'] = {
-            name: tuple(item[1] for item in recipe if item[0] == 'keyword')
-            for name, (_, recipe) in methods.items()
+            name: tuple(item[1] for item in recipe if item[0] == 'keyword')  # glue: fixed ABI metadata connected once during package import
+            for name, (_, recipe) in methods.items()  # glue: fixed ABI metadata connected once during package import
         }
         return plan
 
     # Restore every linear expansion that accepts a matrix and exposes a
     # supervised fit. IsotonicRegression accepts a vector, so was never a
     # supported RFE/IterativeImputer estimator; SGDOneClassSVM has no target.
-    for name, fit, classifier, weighted in (
+    for name, fit, classifier, weighted in (  # glue: fixed ABI metadata connected once during package import
         ('SGDClassifier', 'fit_sgd_classifier', True, True),
         ('SGDRegressor', 'fit_sgd_regressor', False, True),
         ('PoissonRegressor', 'fit_glm', False, True),
@@ -65,7 +65,7 @@ def connect(context, register, registry):
         if not classifier:
             plan['method_entries'] = {'score': (linear._LINEAR_SCORE, linear._LINEAR_SCORE_CONTEXT)}
 
-    for cls in (cd.ElasticNet, cd.Lasso):
+    for cls in (cd.ElasticNet, cd.Lasso):  # glue: fixed ABI metadata connected once during package import
         add(cls, cd._CD_CALL, cd._CD_CONTEXT, {
             'fit': ('cd_fit', (arg(0), arg(1), keyword('sample_weight'))),
             'predict': ('cd_predict', (arg(0),)),
@@ -78,7 +78,7 @@ def connect(context, register, registry):
         'score': ('score', (arg(0), arg(1))),
     })
 
-    for name in ('BaggingClassifier', 'BaggingRegressor', 'AdaBoostClassifier', 'AdaBoostRegressor',
+    for name in ('BaggingClassifier', 'BaggingRegressor', 'AdaBoostClassifier', 'AdaBoostRegressor',  # glue: fixed ABI metadata connected once during package import
                  'DARTClassifier', 'DARTRegressor'):
         methods = {
             'fit': ('trees_boost_fit', (arg(0), arg(1), constant(None) if name.startswith('DART') else keyword('sample_weight'))),
@@ -91,7 +91,7 @@ def connect(context, register, registry):
             methods['decision_function'] = ('trees_boost_decision_function', (arg(0),))
         add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods)
 
-    for cls, prefix in ((svm.SVC, 'svc'), (svm.SVR, 'svr')):
+    for cls, prefix in ((svm.SVC, 'svc'), (svm.SVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
         native = binding('_mojolearn_svm')
         methods = {
             'fit': ('family_svc_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
@@ -104,7 +104,7 @@ def connect(context, register, registry):
                            predict_proba=('family_svc_svc_proba', (native, arg(0))))
         add(cls, svm._NATIVE, svm._NATIVE_CONTEXT, methods)
 
-    for cls, prefix in ((linear_svm.LinearSVC, 'svc'), (linear_svm.LinearSVR, 'svr')):
+    for cls, prefix in ((linear_svm.LinearSVC, 'svc'), (linear_svm.LinearSVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
         native = binding('_mojolearn_estimators')
         methods = {
             'fit': ('family_svc_linear_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
@@ -124,7 +124,7 @@ def connect(context, register, registry):
     })
     # Kernel objects are immutable constructor specifications copied through
     # native instance dictionaries, never _nodes/_replace/deepcopy callbacks.
-    for cls, names in (
+    for cls, names in (  # glue: fixed ABI metadata connected once during package import
         (gp.ConstantKernel, ('constant_value', 'constant_value_bounds')),
         (gp.WhiteKernel, ('noise_level', 'noise_level_bounds')),
         (gp.RBF, ('length_scale', 'length_scale_bounds')),
@@ -140,7 +140,7 @@ def connect(context, register, registry):
         'predict': ('family_km_krr_predict', (native, arg(0))),
         'score': ('family_km_krr_score', (native, arg(0), arg(1), constant(None), binding('_mojolearn_metrics'))),
     })
-    for cls, prefix in ((neighbors.KNeighborsClassifier, 'clf'), (neighbors.KNeighborsRegressor, 'reg')):
+    for cls, prefix in ((neighbors.KNeighborsClassifier, 'clf'), (neighbors.KNeighborsRegressor, 'reg')):  # glue: fixed ABI metadata connected once during package import
         methods = {
             'fit': ('family_xn_knn_' + prefix + '_fit', (binding('_mojolearn_x_neighbors'), arg(0), arg(1))),
             'predict': ('family_xn_knn_' + prefix + '_predict', (binding('_mojolearn'), arg(0))),
@@ -153,7 +153,7 @@ def connect(context, register, registry):
 
     # Existing plans used to discard these fit parameters unconditionally.
     # Match each public fit's ABI, including forest importances and boost eval.
-    for cls, plan in tuple(registry.items()):
+    for cls, plan in tuple(registry.items()):  # glue: fixed ABI metadata connected once during package import
         name = cls.__name__.removeprefix('Host')
         params = {'sample_weight': (2, None)} if name in (
             'LinearRegression', 'Ridge', 'LogisticRegression', 'GaussianNB',
@@ -170,17 +170,17 @@ def connect(context, register, registry):
             continue
         operation, old = plan['methods']['fit']
         recipe = list(old)
-        for key, (position, default) in params.items():
+        for key, (position, default) in params.items():  # glue: fixed ABI metadata connected once during package import
             recipe[position] = keyword(key, default)
         plan['methods']['fit'] = (operation, tuple(recipe))
         plan.setdefault('keywords', {})['fit'] = tuple(params)
 
-    wanted = {item[1] for plan in registry.values() for _, recipe in plan['methods'].values()
-              for item in recipe if item[0] == 'binding'}
+    wanted = {item[1] for plan in registry.values() for _, recipe in plan['methods'].values()  # glue: fixed ABI metadata connected once during package import
+              for item in recipe if item[0] == 'binding'}  # glue: fixed ABI metadata connected once during package import
     modules = {}
-    for basename in sorted(wanted):
+    for basename in sorted(wanted):  # glue: fixed ABI metadata connected once during package import
         modes = {}
-        for mode in ('identical', 'fast'):
+        for mode in ('identical', 'fast'):  # glue: fixed ABI metadata connected once during package import
             try:
                 modes[mode] = _backend.binding(basename, mode)
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
