@@ -16,13 +16,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class PublishCommandTests(unittest.TestCase):
     def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False, split=None, preverified=False,
-               meta=False):
+               meta=False, ledger=True, admission_failed=False):
         with tempfile.TemporaryDirectory(prefix='release publish ') as directory:
             root = Path(directory)
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
                 (root / name).mkdir(parents=True)
             (root / 'python/mojolearn/_version.py').write_text('__version__ = "0.8.9"\n')
             shutil.copy(ROOT / 'tools/check_light_release.py', root / 'tools')
+            # Route/staging tests mock only the admission subprocess. The real
+            # canonical ledger, off-machine resolver and archive validation are
+            # exercised independently in test_release_publish_admission.py.
+            (root / 'tools/release_publish_admission.py').write_text(
+                'import json,sys\nfrom pathlib import Path\n'
+                + ('raise SystemExit("canonical release ledger blocks publication")\n' if admission_failed else '')
+                + 'if sys.argv[1] == "bundle":\n'
+                  '    Path(sys.argv[sys.argv.index("--output")+1]).write_bytes(b"test private bundle")\n'
+                  '    print(json.dumps({"version":"0.8.9"}))\n')
+            (root / 'requirements.json').write_text('{}')
             shutil.copy(ROOT / 'python/mojolearn/gpu_plugins.py', root / 'python/mojolearn')
             # This is a staging/dispatch test, not native artifact admission.
             (root / 'packaging/verify_alpha_artifacts.py').write_text('print("{}")\n')
@@ -68,6 +78,8 @@ class PublishCommandTests(unittest.TestCase):
             env = {k: v for k, v in os.environ.items() if not k.startswith('MOJOLEARN_')}
             env.update(PATH=str(root / 'bin') + os.pathsep + env['PATH'],
                        MOJOLEARN_REPO=str(root), COMMAND_RECORD=str(root / 'commands'))
+            if ledger:
+                env['MOJOLEARN_REQUIREMENTS_LEDGER'] = str(root / 'requirements.json')
             if artifact_source is not None:
                 env['MOJOLEARN_ARTIFACT_SOURCE_COMMIT'] = artifact_source
             command = ['bash', str(ROOT / 'tools/release_linux_publish.sh'), str(wheel),
@@ -84,6 +96,13 @@ class PublishCommandTests(unittest.TestCase):
             manifest_path = root / 'work/artifact/alpha-manifest.json'
             manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
             return result, calls, manifest
+
+    def test_missing_or_failed_canonical_ledger_never_reaches_github(self):
+        for options in ({"ledger": False}, {"admission_failed": True}):
+            with self.subTest(options=options):
+                result, calls, _ = self.invoke('linux', **options)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(calls, '')
 
     def test_both_platforms_stage_receipt_and_select_their_light_batch(self):
         for platform in ('linux', 'macos'):

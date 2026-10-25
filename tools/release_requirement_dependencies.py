@@ -397,8 +397,12 @@ def evidence_restoration(evidence):
     """Missing retained bytes require restoration, not a new execution."""
     restore = []
     for item in evidence:
-        path = Path(item["path"])
-        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item.get("sha256"):
+        from release_evidence import sha256
+        try:
+            available = sha256(item["path"]) == item.get("sha256")
+        except (OSError, ValueError):
+            available = False
+        if not available:
             restore.append(dict(item))
     return dict(status="restore-required" if restore else "available", restore=restore)
 

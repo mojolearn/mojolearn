@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 from collections import Counter
+import release_evidence
 
 SCHEMA = "mojolearn.release-requirement-receipt.v1"
 PROVENANCE_SCHEMA = "mojolearn.release-producer-inputs.v1"
@@ -19,8 +20,7 @@ SOURCE_SCOPE = "all public and returned endpoints; static connections only, no p
 
 
 def sha256(path):
-    with Path(path).open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+    return release_evidence.sha256(path)
 
 
 def _count(value):
@@ -31,7 +31,7 @@ def _producer_stamp(requirement_id, wanted, report_path, provenance):
     """Retained controller inputs, bound to the original report bytes."""
     path = Path(report_path).resolve().parent / "producer-inputs.json"
     try:
-        actual = json.loads(path.read_text())
+        actual = json.loads(release_evidence.read_text(path))
     except (OSError, ValueError) as error:
         raise ValueError("producer input provenance evidence is unavailable") from error
     if actual != provenance or not isinstance(actual, dict) or actual.get("schema") != PROVENANCE_SCHEMA:
@@ -53,7 +53,7 @@ def _producer_stamp(requirement_id, wanted, report_path, provenance):
 def _source_payload(requirement_id, wanted, report_path, provenance):
     """Parse the full endpoint gate, never its historical selected-method TSV."""
     report_path = Path(report_path).resolve()
-    report = json.loads(report_path.read_text())
+    report = json.loads(release_evidence.read_text(report_path))
     if (requirement_id != "runtime-source" or wanted.get("kind") != "source"
             or wanted.get("coverage") != list(SOURCE_COVERAGE)):
         raise ValueError("full endpoint source gate has another requirement/coverage contract")
@@ -115,7 +115,7 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
             raise ValueError("producer provenance evidence does not belong to this retained report")
         provenance = receipt["producer_provenance"]
         if pair[0] == "candidate":
-            raw = json.loads(report_path.read_text())
+            raw = json.loads(release_evidence.read_text(report_path))
             actual = _candidate_payload(requirement_id, wanted, report_path, raw.get("candidate"), provenance)
         else:
             actual = _source_payload(requirement_id, wanted, report_path, provenance)
@@ -309,7 +309,7 @@ def _candidate_payload(requirement_id, wanted, report_path, identity, provenance
 
     report_path = Path(report_path).resolve()
     report_hash = sha256(report_path)
-    gate = json.loads(report_path.read_text())
+    gate = json.loads(release_evidence.read_text(report_path))
     errors = candidate_gate_errors(gate, identity)
     if (not isinstance(provenance, dict) or provenance.get("schema") != PROVENANCE_SCHEMA
             or provenance.get("report_sha256") != report_hash):
