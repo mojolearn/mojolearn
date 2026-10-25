@@ -10,6 +10,7 @@ def connect(context, register, registry):
     from . import _backend, _expansion_linear as linear, _solver_impl as cd
     from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp
     from . import kernel_methods as km, neighbors, linear_model, _expansion_trees as trees
+    from . import model_selection as ms, _metrics_impl as metrics
 
     arg = lambda n: ('arg', n)
     constant = lambda value: ('constant', value)
@@ -151,6 +152,42 @@ def connect(context, register, registry):
         add(cls, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, methods,
             initial={'_index': None, '_y_cols': None})
 
+    for name in ('VotingClassifier', 'VotingRegressor', 'StackingClassifier', 'StackingRegressor',  # glue: fixed meta-estimator ABIs at import
+                 'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV'):  # glue: exact meta-estimator ABIs at import
+        methods = {
+            'fit': ('trees_meta_fit', (arg(0), arg(1), constant(None) if name in ('OneVsRestClassifier', 'CalibratedClassifierCV') else keyword('sample_weight'))),
+            'predict': ('trees_meta_predict', (arg(0),)),
+            'score': ('trees_meta_score', (arg(0), arg(1), constant(None))),
+        }
+        if name.endswith('Classifier') or name == 'CalibratedClassifierCV':
+            methods['predict_proba'] = ('trees_meta_predict_proba', (arg(0),))
+        if name.startswith(('Voting', 'Stacking')):
+            methods['transform'] = ('trees_meta_transform', (arg(0),))
+        add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods,
+            initial={'stack_method': 'predict'} if name == 'StackingRegressor' else None)
+
+    splitter_fields = {
+        'KFold': ('n_splits', 'shuffle', 'random_state'),
+        'StratifiedKFold': ('n_splits', 'shuffle', 'random_state'),
+        'GroupKFold': ('n_splits', 'shuffle', 'random_state'),
+        'StratifiedGroupKFold': ('n_splits', 'shuffle', 'random_state'),
+        'TimeSeriesSplit': ('n_splits', 'max_train_size', 'test_size', 'gap'),
+        'LeaveOneOut': (), 'LeavePOut': ('p',), 'LeaveOneGroupOut': (), 'LeavePGroupsOut': ('n_groups',),
+        'RepeatedKFold': ('cv', 'n_repeats', 'random_state', 'cvargs'),
+        'RepeatedStratifiedKFold': ('cv', 'n_repeats', 'random_state', 'cvargs'),
+        'ShuffleSplit': ('n_splits', 'test_size', 'train_size', 'random_state'),
+        'StratifiedShuffleSplit': ('n_splits', 'test_size', 'train_size', 'random_state'),
+        'GroupShuffleSplit': ('n_splits', 'test_size', 'train_size', 'random_state'),
+        'PredefinedSplit': ('test_fold', '_folds'), '_IterableCV': ('_pairs',),
+    }
+    for cls in context['family_msel_splitter_layouts']:  # glue: native CV configurations for composite cloning
+        if cls.__name__ in splitter_fields:
+            add(cls, ms._NATIVE, context, {}, parameters=splitter_fields[cls.__name__])
+    trees._TREES_CONTEXT['native_estimator_defaults'] = {
+        'Ridge': linear_model.Ridge(), 'LogisticRegression': linear_model.LogisticRegression(),
+        'LinearSVC': linear_svm.LinearSVC(),
+    }
+
     # Existing plans used to discard these fit parameters unconditionally.
     # Match each public fit's ABI, including forest importances and boost eval.
     for cls, plan in tuple(registry.items()):  # glue: fixed ABI metadata connected once during package import
@@ -187,3 +224,5 @@ def connect(context, register, registry):
                 modes[mode] = type(error).__name__ + ': ' + str(error)
         modules[basename] = modes
     context['family_msel_bindings'] = modules
+    trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE, metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
+    linear._XL_CONTEXT.update(native_estimator_entry=ms._NATIVE, native_estimator_context=context)

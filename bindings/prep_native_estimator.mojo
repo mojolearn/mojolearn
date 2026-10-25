@@ -60,6 +60,8 @@ def prep_estimator_admit(est: PythonObject, owner: String, context: PythonObject
     """Refuse an estimator without a connected native plan: a user class, a
     subclass of a mojolearn estimator, or a built-in whose native schema is
     still pending. Its methods would be Python code in the runtime."""
+    if py_type(py_type(est)) is not native_loaded_module("builtins").type:
+        raise Error("TypeError: native estimator admission refuses Python metaclass hooks")
     if prep_estimator_plan(est, context) is None:
         raise Error("TypeError: mojolearn: " + owner + " requires a mojolearn estimator; got "
                     + String(py_type(est).__name__))

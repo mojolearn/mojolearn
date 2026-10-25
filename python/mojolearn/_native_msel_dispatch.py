@@ -24,7 +24,7 @@ def connect(context, package):
     protected = ('__new__', '__init__', '__getattribute__', '__getattr__', '__setattr__', '__del__',
                  '__hash__', '__eq__', '__ne__',
                  '__sklearn_clone__', 'get_params', 'set_params', 'fit', 'predict', 'predict_proba',
-                 'decision_function', 'transform', 'score', '_parameter_names',
+                 'decision_function', 'transform', 'score', 'split', 'get_n_splits', '_parameter_names',
                  '_has_constructor_parameters', '_BINDING', '_mojolearn_device_rows', '_estimator_type')
     class_fields = ('coef_', 'feature_importances_', '_power', '_loss_name', '_nodes', '_hyper', '_replace')
 
@@ -61,6 +61,8 @@ def connect(context, package):
         # float32 kernel output. A native scorer has no Python package frame;
         # select that same output explicitly without changing public predict.
         registry[cls]['scorer_predict_operation'] = 'predict_score'
+        if cls is linear_model.Ridge:
+            registry[cls]['methods']['validate_params'] = ('validate_params', ())
     register(decomposition.PCA, decomposition._PCA_ENTRY, decomposition._PCA_CONTEXT,
              ('n_components', 'copy', 'whiten', 'svd_solver', 'tol', 'iterated_power', 'n_oversamples',
               'power_iteration_normalizer', 'random_state', 'numeric_mode'), 'initialize', {

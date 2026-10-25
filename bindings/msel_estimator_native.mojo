@@ -62,6 +62,11 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
                         keywords: PythonObject = PythonObject(None)) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
+    if method == "__admit__":
+        # Validate constructor configuration without executing any of its
+        # Python protocols. Native clone owns the recursive value schemas.
+        _ = msel_native_clone(model, context)
+        return PythonObject(None)
     var entry = plan["entry"]
     if entry is None or py_type(entry) is not py_type(b.len):
         raise Error("ImportError: native cross-validation estimator binding is unavailable")
@@ -142,23 +147,28 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
     return family_call(entry, model, operation, envelope, plan["context"])
 
 
-def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def msel_clone_parameter(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
+    if depth > 64:
+        raise Error("TypeError: native estimator configuration exceeds the supported nesting depth")
     var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if value is None or kind is b.bool or kind is b.int or kind is b.float or kind is b.complex or kind is b.str or kind is b.bytes or kind is b.range:
+        return value
+    if kind is b.type and py_contains(context["family_msel_splitter_layouts"], value):
+        # Repeated splitters store their exact native splitter class as data.
         return value
     if kind is b.dict:
         var result = Python.dict()
         var pairs = py_call(b.list, value.items())
         for k in range(len(pairs)):  # driver-loop: native constructor parameter mapping
-            var key = msel_clone_parameter(pairs[k][0], context)
-            py_setitem(result, key, msel_clone_parameter(pairs[k][1], context))
+            var key = msel_clone_parameter(pairs[k][0], context, depth + 1)
+            py_setitem(result, key, msel_clone_parameter(pairs[k][1], context, depth + 1))
         return result
     if kind is b.list or kind is b.tuple or kind is b.set or kind is b.frozenset:
         var items = py_call(b.list, value)
         var result = Python.list()
         for k in range(len(items)):  # driver-loop: native constructor parameter containers
-            _ = py_call(result.append, msel_clone_parameter(items[k], context))
+            _ = py_call(result.append, msel_clone_parameter(items[k], context, depth + 1))
         return result if kind is b.list else py_call(kind, result)
     classical_connect_numpy(context)
     var scalars = context["scalar_types"]
@@ -193,7 +203,7 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> P
     if kind is b.bytearray:
         return py_call(b.bytearray, value)
     if py_type(kind) is b.type and py_contains(context["family_msel_estimators"], kind):
-        return msel_native_clone(value, context)
+        return msel_native_clone(value, context, depth + 1)
     # Never invoke deepcopy/__reduce__/buffer protocols of an arbitrary
     # object. Additional native buffer/schema migration remains explicit
     # debt rather than sharing mutable constructor or fitted state.
@@ -201,7 +211,9 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> P
     raise Error("RuntimeError: native cloning of this constructor parameter remains pending migration")
 
 
-def msel_native_clone(model: PythonObject, context: PythonObject) raises -> PythonObject:
+def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
+    if depth > 64:
+        raise Error("TypeError: native estimator configuration exceeds the supported nesting depth")
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     var names = plan["parameters"]
@@ -217,7 +229,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
     for k in range(len(names)):  # driver-loop: fixed constructor parameters, no fitted state
         if not py_contains(given, names[k]):
             raise Error("TypeError: native constructor parameter is missing from estimator state")
-        var value = msel_clone_parameter(given[names[k]], context)
+        var value = msel_clone_parameter(given[names[k]], context, depth + 1)
         py_setitem(parameters, names[k], value)
         _ = py_call(args.append, value)
     var result = native_storage_allocate(py_type(model))
@@ -254,6 +266,24 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
             raise Error("TypeError: native estimator parameter names must be exact strings")
         sequential_admit_value(params[keys[k]], context)
     if len(keys) == 0:
+        return model
+    if plan["init"] is None and plan["forest"] is None and not py_contains(plan["methods"], PythonObject("set_params")):
+        # These exact constructors only assign their stored parameter schema.
+        # Native search can reset them without a Python ParamsMixin call.
+        var fields = py_call(plan["fields_get"], model, py_type(model))
+        var names = plan["parameters"]
+        var given = Python.dict()
+        for k in range(len(names)):  # driver-loop: retain constructor configuration only
+            py_setitem(given, names[k], fields[names[k]])
+        for k in range(len(keys)):  # driver-loop: validate all names before mutating state
+            if not py_contains(names, keys[k]):
+                raise Error("ValueError: invalid native estimator parameter " + String(keys[k]))
+            py_setitem(given, keys[k], msel_clone_parameter(params[keys[k]], context))
+        _ = py_call(fields.clear)
+        _ = py_call(fields.update, given)
+        var fixed = py_get(plan, "initial_fields")
+        if fixed is not None:
+            _ = py_call(fields.update, msel_clone_parameter(fixed, context))
         return model
     if plan["forest"] is None:
         return msel_estimator_call(model, "set_params", Python.tuple(params), context)

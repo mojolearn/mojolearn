@@ -627,3 +627,7 @@ from . import _expansion_prep as _prep_owner
 _prep_owner._ENCODE_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
                                    native_estimator_context=model_selection._NATIVE_CONTEXT)
 del _prep_owner
+from . import _expansion_trees as _tree_owner
+_tree_owner._TREES_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
+                                 native_estimator_context=model_selection._NATIVE_CONTEXT)
+del _tree_owner
