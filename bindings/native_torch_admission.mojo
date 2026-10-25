@@ -87,8 +87,8 @@ def _torch_connect() raises:
         raise Error("TypeError: Torch lacks native TensorBase metadata")
     var base_fields = _torch_type_fields(base)
     var methods = Python.dict()
-    for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride"),
-                 String("contiguous"), String("cpu"), String("to")]:  # small-loop(the fixed native tensor method names)
+    for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride"),  # small-loop(the fixed native tensor method names)
+                 String("contiguous"), String("cpu"), String("to")]:
         var entry = py_get(base_fields, name)
         if entry is None or py_type(entry) is not py_type(bi.list.append):
             raise Error("TypeError: Torch tensor conversion requires native method " + name)
