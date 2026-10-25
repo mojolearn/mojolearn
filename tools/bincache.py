@@ -986,7 +986,12 @@ def cmd_build_local(script, args, environ, cache_dir):
     cache_dir = Path(cache_dir)
     rec = Record(environ.get("MOJOLEARN_BINCACHE_OUT") or str(cache_dir / "provenance"))
     outputs = [o for o in environ.get("MOJOLEARN_BINCACHE_OUTPUTS", "").split() if o]
+    retained_device = (environ.get("MOJOLEARN_BINCACHE_RETAINED_APPLE")
+                       and Path(script).name == "merged_build.sh" and args[:1] == ["gpu"])
     if not outputs or not all(safe_rel(o) for o in outputs):
+        if retained_device:
+            rec.row(rel_script, "retained-refused:no-declared-outputs", "", time.time() - t0, [])
+            return 2
         rc = subprocess.call(plain, env=environ)
         rec.row(rel_script, "refused:no-declared-outputs", "", time.time() - t0, [])
         return rc
@@ -994,16 +999,37 @@ def cmd_build_local(script, args, environ, cache_dir):
         cache_dir.mkdir(parents=True, exist_ok=True)
         fields = local_fields(repo, script, args, environ, outputs, shell)
     except Exception as exc:                                   # never lose a build over the cache
+        if retained_device:
+            rec.row(rel_script, "retained-refused:error-key:" + type(exc).__name__, "", time.time() - t0, [])
+            return 2
         rc = subprocess.call(plain, env=environ)
         rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
         return rc
     why = refusal(fields, environ)
     if why:
+        if retained_device:
+            rec.row(rel_script, "retained-refused:" + why, "", time.time() - t0, [])
+            return 2
         rc = subprocess.call(plain, env=environ)
         rec.row(rel_script, "refused:" + why, "", time.time() - t0, [])
         return rc
     key = key_of(fields)
     rec.key(key, fields)
+    if environ.get("MOJOLEARN_BINCACHE_RETAINED_APPLE"):
+        # Explicit source reconciliation may admit an unchanged Apple device
+        # output while a host edit changes the broad merged tree key. Preserve
+        # its original proof/key/source and never write a new cache archive.
+        # An invalid explicit admission fails; it must not trigger an expensive
+        # replacement compile or silently relabel retained bytes as new.
+        try:
+            from apple_retained_groups import try_place
+            admitted = try_place(repo, script, args, environ, outputs, fields, key, rec, t0)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            rec.row(rel_script, "retained-refused:" + type(exc).__name__, key, time.time() - t0, [])
+            print("retained device admission refused: " + str(exc), file=sys.stderr)
+            return 2
+        if admitted is not None:
+            return admitted
     arc = cache_dir / (key + ".tar.gz")
     miss = "miss"
     if arc.is_file():
@@ -1101,6 +1127,11 @@ def cmd_build(argv, environ=None):
         print("usage: bincache.py build <bindings/build_X.sh> [args...]", file=sys.stderr)
         return 2
     script, args = argv[0], argv[1:]
+    if (environ.get("MOJOLEARN_BINCACHE_RETAINED_APPLE") and Path(script).name == "merged_build.sh"
+            and args[:1] == ["gpu"] and (environ.get("MOJOLEARN_BINCACHE") == "0"
+            or not environ.get("MOJOLEARN_BINCACHE_DIR") or environ.get("MOJOLEARN_BINCACHE_SHARD_ONLY"))):
+        print("explicit retained Apple admission requires the unsharded local-cache route", file=sys.stderr)
+        return 2
     # ONE SHARD OF A SET (the GitHub build route, tools/release_github_build.py,
     # 2026-09-27). MOJOLEARN_BINCACHE_SHARD_ONLY lists the builds this runner
     # compiles, each "<numeric mode>:<script file name>"; every other build of
