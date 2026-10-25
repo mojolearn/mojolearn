@@ -233,22 +233,14 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-calibrated")
 
 
-class _trees_Shuffled3:
-    """A splitter object (sklearn's `split(X, y)` protocol): three folds of a
-    fixed row permutation, so the cv-object path runs without sklearn."""
-
-    def split(self, X, y=None):
-        n = len(X)
-        perm = np.random.RandomState(11).permutation(n)
-        for f in range(3):
-            te = np.sort(perm[f::3])
-            yield np.setdiff1d(np.arange(n), te), te
-
-
 @lane("trees-oob-cv-link")
 def _(ml, X, yc, yr, Xh=None):
     """Bagging oob_score (classifier and regressor), cv as a splitter object and
-    as (train, test) pairs (stacking, calibration), Kernel SHAP with link='logit'."""
+    as (train, test) pairs (stacking, calibration), Kernel SHAP with link='logit'.
+    Revised 2026-10-25 (lane verify-lane-contracts-20261025): calibration's
+    splitter object was a Python class with split(X, y), which the native
+    owner refuses (no Python protocol in the runtime) and the lane read
+    REFUSED; it is now the native splitter KFold(3, shuffle=True)."""
     bc = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=5), n_estimators=6, max_features=0.8,
                               oob_score=True, random_state=7).fit(X, yc)
     br = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=5), n_estimators=6, max_samples=0.8,
@@ -258,7 +250,8 @@ def _(ml, X, yc, yr, Xh=None):
     st = ml.StackingRegressor([("dt", ml.DecisionTreeRegressor(max_depth=4))],
                               final_estimator=ml.DecisionTreeRegressor(max_depth=3), cv=pairs).fit(X, yr)
     ca = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="isotonic",
-                                   cv=_trees_Shuffled3(), ensemble=False).fit(X, yc)
+                                   cv=ml.model_selection.KFold(3, shuffle=True, random_state=11),
+                                   ensemble=False).fit(X, yc)
     y2 = (np.asarray(yc) % 2).astype(np.int64)
     X6 = np.ascontiguousarray(X[:, :6])
     dm = ml.DARTClassifier(n_estimators=4, num_leaves=7, max_depth=3, min_child_samples=5, random_state=7).fit(X6, y2)
