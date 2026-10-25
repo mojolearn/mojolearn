@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """External MAX whole-training checks against independent SGD and retained Torch results.
 
-TWO PROCESSES, ON PURPOSE. Importing mojolearn loads its bundled Mojo runtime, which creates the AsyncRT CPU
-device with its own options; a MAX InferenceSession in the same process then asks for the CPU device with
-different options and LLVM aborts the whole process ("AsyncRT::getOrCreateCPUDevice called requesting
-different options to those used to create the existing CPUDevice", exit -6; the 0.8.56 Apple gate). So:
+TWO PROCESSES, ON PURPOSE. The 0.8.56 Apple gate aborted in AsyncRT CPU-device initialization, including
+after splitting MAX from mojolearn. Isolation avoids mixing the test oracles' runtime imports; it is not
+a runtime repair. Persist the current stage before entering MAX so a native abort cannot erase its phase.
 
     parent  never imports MAX. Fits the Python API case (native_training_fixtures.api_case: mojolearn.Sequential)
             and writes its adapter inputs to OUT/max-side/python_api-input.npz + .json, keeping the API's five
@@ -22,6 +21,13 @@ import sys
 import traceback
 
 SIDE = "max-side"
+
+
+def record_stage(report, out, stage):
+    """Retain the last attempted framework boundary even if native code aborts."""
+    report["stage"] = stage
+    (out / "max-side.json").write_text(json.dumps(report, indent=2) + "\n")
+    print("MAX stage: " + stage, flush=True)
 
 
 def byte_diff(actual, expected):
@@ -50,15 +56,19 @@ def max_side(args):
     out.mkdir(parents=True, exist_ok=True)
     report = {"complete": False, "checks": [], "failures": []}
     try:
+        record_stage(report, out, "import MAX")
         import numpy as np
         from max.driver import Accelerator, Buffer
         from max.dtype import DType
         from max.engine import InferenceSession
         from max.graph import DeviceRef, Graph, TensorType, ops
         from native_training_fixtures import CASES, fixture, identical, analytic
+        record_stage(report, out, "create accelerator")
         device, dev = Accelerator(0), DeviceRef.GPU(0)
+        record_stage(report, out, "create inference session")
         session = InferenceSession(devices=[device])
         def run(name, arrays, program, options, scalars):
+            record_stage(report, out, name + ": construct graph")
             types = [TensorType(DType.int32 if a.dtype == np.int32 else DType.float32,
                                 a.shape, device=dev) for a in arrays]
             capacity = int(options[7]) + (arrays[-1].size if len(arrays) == 7 else 0)
@@ -72,10 +82,16 @@ def max_side(args):
                                 "options": ",".join(map(str, options)),
                                 "scalars": ",".join(map(str, scalars))})
                 graph.output(*[v.tensor for v in result])
+            record_stage(report, out, name + ": load graph")
             compiled = session.load(graph)
+            record_stage(report, out, name + ": prepare input buffers")
             values = [Buffer.from_numpy(a).to(device) for a in arrays]
-            actual = [v.to_numpy().copy() for v in compiled.execute(*values)]
+            record_stage(report, out, name + ": execute")
+            result = compiled.execute(*values)
+            record_stage(report, out, name + ": read outputs")
+            actual = [v.to_numpy().copy() for v in result]
             identical([v.to_numpy() for v in values], arrays)
+            record_stage(report, out, name + ": repeat execution")
             identical([v.to_numpy() for v in compiled.execute(*values)], actual)
             return actual
         for name in (("analytic_sgd",) if args.smoke else CASES):
@@ -97,6 +113,7 @@ def max_side(args):
         # The Python API case's inputs, written by the parent (which fitted mojolearn.Sequential); the parent
         # compares these outputs with the API's. Program, options and scalars are kept as the exact strings the
         # parent's values print as, so the op receives what it would have in one process.
+        record_stage(report, out, "load Python API oracle inputs")
         spec = json.loads((out / "python_api-input.json").read_text())
         with np.load(out / "python_api-input.npz") as saved:
             arrays = [saved[f"input_{i}"] for i in range(spec["arrays"])]
@@ -104,6 +121,7 @@ def max_side(args):
         np.savez(out / "python_api.npz", **{f"output_{i}": v for i, v in enumerate(actual)})
         report["checks"].append("python_api: MAX op executed on the Sequential.fit inputs")
         report["complete"] = True
+        report["stage"] = "complete"
     except Exception:
         report["failures"].append(traceback.format_exc())
     (out / "max-side.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -156,10 +174,11 @@ def main(argv=None):
             doc = {}
         report["checks"] += list(doc.get("checks") or [])
         report["failures"] += [str(f) for f in doc.get("failures") or []]
+        report["max_side"]["stage"] = doc.get("stage")
         if child.returncode != 0 or not doc.get("complete"):
             tail = (args.out / (SIDE + ".log")).read_text(errors="replace").splitlines()[-5:]
-            report["failures"].append("MAX side exit %s, complete=%s; last log lines: %s"
-                                      % (child.returncode, doc.get("complete"), " | ".join(tail)))
+            report["failures"].append("MAX side exit %s, complete=%s, stage=%s; last log lines: %s"
+                                      % (child.returncode, doc.get("complete"), doc.get("stage"), " | ".join(tail)))
         if expected is not None:
             try:
                 with np.load(side / "python_api.npz") as saved:
