@@ -29,6 +29,7 @@ from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
 from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
+from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
 from ._mode import RegressorScoreMixin
 
 
@@ -1551,11 +1552,7 @@ class _Base(SklearnTagsMixin):
         -------
         self
         """
-        for k, v in params.items():  # glue: estimator keyword arguments (set_params)
-            if k not in self._parameters:
-                raise ValueError(f"Invalid {type(self).__name__} parameter: {k}")
-            setattr(self, k, v)
-        return self
+        return _DECLARED_PARAMS_SET(self, params, _DECLARED_PARAMS_CONTEXT)
 
     # Only a class with a `transform` has `fit_transform` (scikit-learn's
     # TransformerMixin): a classifier or detector on this base has neither.

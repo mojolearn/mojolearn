@@ -47,6 +47,7 @@ from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, e
 from . import _labels
 from . import _arena_io
 from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
+from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
 from ._native_robust_bridge import native_method as _native_robust_method
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
@@ -611,11 +612,7 @@ class _PrepBase(SklearnTagsMixin):
         -------
         self
         """
-        for k, v in params.items():  # glue: copies estimator keyword arguments
-            if k not in self._parameters:
-                raise ValueError(f"mojolearn: invalid parameter {k!r} for {type(self).__name__}")
-            setattr(self, k, v)
-        return self
+        return _DECLARED_PARAMS_SET(self, params, _DECLARED_PARAMS_CONTEXT)
 
     # Only a class with a `transform` has `fit_transform` (scikit-learn's
     # TransformerMixin): a classifier or detector on this base has neither.
