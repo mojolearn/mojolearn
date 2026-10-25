@@ -23,9 +23,12 @@ def connect(session, program, imported, graph, unsupported):
     from .. import ops, _backend
     from array import array
     from collections import OrderedDict, defaultdict
-    import numpy as np
-    # Session import already initializes its native NumPy array boundary. Only
+    from .._optional_numpy import require_numpy
+    # ONNX import already depends on NumPy (the onnx package requires it); the
+    # optional guard keeps `import mojolearn` NumPy-free. Session import already
+    # initializes its native NumPy array boundary. Only
     # exact C types are retained here; no array conversion runs in this module.
+    np = require_numpy("mojolearn.import_model")
     scalar_types = tuple(np.dtype(name).type for name in  # glue: fixed native scalar ABI types
         ('bool', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32', 'int64',
          'uint64', 'float16', 'float32', 'float64', 'longdouble')) + (np.str_, np.bytes_)
