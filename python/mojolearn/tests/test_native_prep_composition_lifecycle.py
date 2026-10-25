@@ -46,15 +46,48 @@ def test_composition_runs_without_inherited_python_lifecycle(owner):
     previous = sys.getprofile()
     sys.setprofile(record)
     try:
-        result = model.fit_transform(x, y)
+        result = model.fit_transform(x, y) if owner == 'rfe' else model.fit_transform(x)
         again = model.transform(x)
         if owner == 'rfe':
-            assert model.get_support(indices=True) == [i for i, keep in enumerate(model.get_support()) if keep]
+            mask = model.get_support()
+            indices = model.get_support(indices=True)
+            assert type(mask) is list and type(indices) is list
+            assert all(type(keep) is bool for keep in mask)
+            assert indices == [i for i, keep in enumerate(mask) if keep]
     finally:
         sys.setprofile(previous)
     assert calls == []
     assert type(result) is np.ndarray and type(again) is np.ndarray
     np.testing.assert_array_equal(result, again)
+
+
+@pytest.mark.parametrize('owner', ['rfe', 'imputer'])
+def test_composition_refuses_instance_dictionary_subclasses_before_hooks(owner):
+    calls = []
+
+    class State(dict):
+        def __iter__(self):
+            calls.append('iter')
+            return super().__iter__()
+
+        def __getitem__(self, key):
+            calls.append('getitem')
+            return super().__getitem__(key)
+
+    x = np.arange(32, dtype=np.float32).reshape(8, 4) / 32
+    model = ml.RFE(ml.Ridge(alpha=1), n_features_to_select=2) if owner == 'rfe' else ml.IterativeImputer(max_iter=1)
+    # Resolve the public method before assigning the foreign state so this
+    # exercises composition admission rather than attribute-owner admission.
+    fit = model.fit
+    original = object.__getattribute__(model, '__dict__')
+    state = State(original)
+    object.__setattr__(model, '__dict__', state)
+    try:
+        with pytest.raises(TypeError, match='exact dict'):
+            fit(x, x[:, 0])
+    finally:
+        object.__setattr__(model, '__dict__', original)
+    assert calls == []
 
 
 def test_selector_rejects_python_truth_hooks_inside_object_array_flag():
