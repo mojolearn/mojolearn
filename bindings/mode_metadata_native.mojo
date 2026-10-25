@@ -68,6 +68,22 @@ def _fitted(model: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
     if _truth(py_get(fields, "_mojolearn_fitted")) or _truth(py_get(fields, "_mojolearn_fitting")):
         return PythonObject(True)
+    var reset = py_get(fields, "_mojolearn_params_reset")
+    if reset is not None:
+        # A native setter keeps unrelated user fields, including names ending
+        # in '_'. After reset only the owner's learned fields establish fitted
+        # state; a subsequent legacy fit need not set an explicit fitted flag.
+        var b = native_loaded_module("builtins")
+        if py_type(reset) is not b.tuple:
+            raise Error("TypeError: native parameter reset metadata requires an ordinary tuple")
+        for i in range(len(reset)):  # driver-loop: connected fitted-field names, never user output hooks
+            if py_type(reset[i]) is not b.str:
+                raise Error("TypeError: native parameter reset metadata requires exact string names")
+            var name = String(reset[i])
+            if (name.endswith("_") and not name.startswith("_")
+                    and py_contains(fields, reset[i]) and fields[reset[i]] is not None):
+                return PythonObject(True)
+        return PythonObject(False)
     var names = py_call(native_loaded_module("builtins").list, fields.keys())
     for i in range(len(names)):  # driver-loop: fitted public attribute names, including legacy models
         var name = String(names[i])

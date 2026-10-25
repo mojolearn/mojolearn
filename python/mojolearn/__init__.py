@@ -646,6 +646,11 @@ del _tree_owner
 
 # Parameter-read schemas capture the final built-in installers' method and
 # descriptor identities; the connection changes only this private plan table.
+from ._native_params_setter import connect as _connect_params_setter
+from . import _mode as _params_setter_owner
+_connect_params_setter(model_selection._NATIVE_CONTEXT, _params_setter_owner._PARAMS_METADATA_CONTEXT)
+del _connect_params_setter, _params_setter_owner
+
 from ._native_params_metadata import connect_classes as _connect_params_metadata_classes
 from . import _mode as _params_metadata_owner
 import sys as _params_metadata_sys
