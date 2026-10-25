@@ -107,6 +107,7 @@ import hashlib
 import json
 import os
 import pathlib
+import tempfile
 import re
 import subprocess
 import sys
@@ -1212,6 +1213,14 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                     validate_ptx(doc, adir)
             except (ValueError, OSError, TypeError, KeyError) as exc:
                 raise SystemExit(f"pack_wheel: invalid PTX set manifest: {exc}") from exc
+            if "retained_composition" in doc:
+                # The composition block is the assembly witness, validated above and
+                # retained with the assembly proof; the wheel ships the PTX manifest
+                # itself, which the final-bytes audit recomputes field for field.
+                shipped = json.loads(baseline_path.read_text())
+                shipped.pop("retained_composition")
+                baseline_path = pathlib.Path(tempfile.mkdtemp(prefix="ptx-manifest-")) / gpu_plugins.BASELINE_MANIFEST
+                baseline_path.write_text(json.dumps(shipped, indent=2, sort_keys=True) + "\n")
             files[f"{vendor}/{arch}/{gpu_plugins.BASELINE_MANIFEST}"] = baseline_path
         elif baseline_path.exists():
             raise SystemExit("pack_wheel: PTX manifest on a native architecture set")
