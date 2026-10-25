@@ -18,7 +18,7 @@ def _connect_binding(name, required, optional=()):
     try:
         module = _backend.binding(name, "identical")
         entries = {"__name__": name}
-        for key in required + optional:
+        for key in required + optional:  # glue: import-time connection of a fixed set of compiled binding entries
             try:
                 entry = getattr(module, key)
             except (ImportError, AttributeError):
