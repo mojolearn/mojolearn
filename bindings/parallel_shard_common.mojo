@@ -154,7 +154,7 @@ def shard_trace_take() raises -> PythonObject:
     return shard_b().list() if out is None else out
 
 
-def shard_faults_take() -> Int:
+def shard_faults_take() raises -> Int:
     """How many transport faults the verifier's switch injected since the
     last take (`shard_map`), and zero."""
     var t = SHARD_TRACE.get_or_create_ptr()

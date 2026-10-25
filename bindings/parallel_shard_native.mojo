@@ -873,7 +873,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     py_setitem(state, "numeric_mode", "identical")
     var counter = Int(py=py_get(holder, PythonObject("_native_tokens"), PythonObject(0))) + 1
     py_setitem(holder, "_native_tokens", counter)
-    var token = String("nq-") + String(external_call[Int32]("getpid")) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
+    var token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
     var devices = pool["devices"]
     var workers = len(devices)
     var name = py_type(model).__name__
@@ -967,7 +967,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     py_setitem(own, "devices", devices)
     py_setitem(own, "n_candidates_", PythonObject(None))
     py_setitem(own, "_native", native)
-    var token = String("ivf-") + String(external_call[Int32]("getpid")) + "-" + String(Int(py=py_call(b.id, obj)))
+    var token = String("ivf-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, obj)))
     py_setitem(own, "_token", token)
     var maps = b.list()
     var requests = b.list()
