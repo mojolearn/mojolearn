@@ -68,6 +68,7 @@ from autograd.ops_api import OPS_HOST
 from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
 from autograd.import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
+from autograd.import_frontend_pyapi import ops_import_model_c
 from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint_pyapi import (
@@ -888,6 +889,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[onnx_close_binding]("onnx_close")
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
+        m.def_py_c_function(ops_import_model_c, "ops_import_model")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))

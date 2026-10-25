@@ -1197,7 +1197,9 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     """The former importers/_program.py import_model: read, check, one
     inference Session, lower (one Session call per operation), capture."""
     from mojolearn.importers._graph import GraphIR
-    from mojolearn.importers._program import ImportedProgram, _dtype_name
+    from mojolearn.importers._program import ImportedProgram
+    dtype_names = {"f32": "float32", "f16": "float16", "bf16": "bfloat16", "f64": "float64",
+                   "i64": "int64", "i32": "int32", "bool": "bool"}
     from mojolearn.ops import Session
     if isinstance(source, GraphIR):
         g = source
@@ -1209,7 +1211,7 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     try:
         low = lower(g, G, s)
         info = s._b.ops_capture(s._sid(), Session._handles(low.input_handles), Session._handles(low.output_handles))
-        inputs = [(name, G.shape(name), _dtype_name(dt)) for name, dt, _ in G.inputs]
+        inputs = [(name, G.shape(name), dtype_names.get(dt, dt)) for name, dt, _ in G.inputs]
         outputs = [(name, G.shape(name), "int32" if name in low.int32_outputs else "float32")
                    for name, _, _ in g.outputs]
         prog = ImportedProgram(s, info, inputs, outputs)

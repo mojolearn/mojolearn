@@ -1,27 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """``import_model``: a model file or object as a captured program
 (docs/plans/MODEL_IMPORT.md section 6)."""
-# Engineering note: an ONNX path is one onnx_import_file call (the Mojo
-# reader opens and reads the file, keeps its bytes, and the lowering runs on
-# them; no GraphIR is built in Python). A graph onnx.read returned (its
-# handle in the Mojo reader) goes through one onnx_import call into an
-# inference Session (autograd/import_lower.mojo: shape resolution, the
-# refusal pass before any upload, the uploads, the import-time prologue, one
-# session call per operation, the capture, the release of unread uploads).
-# Python passes names, shapes and buffer addresses only. The program keeps
-# its session; run() is one native call (ops_imported_run): the inputs'
-# admission against the declared shapes, a rank-0/1 model value read as the
-# session's (1, 1)/(1, n) row through the caller's own buffer, the run, and
-# the outputs allocated in their declared shapes and dtypes.
-# A torch.nn.Module or an onnx.ModelProto is written to a temporary ONNX file
-# (torch.onnx.export, or the proto's own bytes) and imported from it: a
-# conversion at the API boundary, no arithmetic on the model's values.
+# Artifact admission, Session setup, file/GraphIR import, status translation,
+# output descriptors and program allocation live in import_frontend_pyapi.mojo.
+# The public source-kind dispatcher below is still Python runtime debt.
+# Torch export executes module.eval()/forward via torch.onnx.export; ModelProto
+# serialization also remains here. Neither is an allowed runtime exception.
+# ImportedProgram.run retains the existing one-call native executor.
 from __future__ import annotations
 
 import os
 
 from ..ops import Program, Session
-from ._graph import GraphIR, UnsupportedModel, buffer_address, bytes_view
+from ._graph import GraphIR, UnsupportedModel
 
 __all__ = ["import_model", "ImportedProgram"]
 
@@ -109,21 +100,6 @@ def _export_torch(module, path, shapes, example_inputs):
     return label
 
 
-# autograd/import_lower.mojo onnx_import statuses
-_IMPORT_OK, _IMPORT_BAD_VALUE, _IMPORT_PROBLEMS, _IMPORT_READ_FAILED = 0, 4, 5, 6
-
-
-def _shape_words(shapes):
-    """``shapes`` as onnx_resolve takes it: the names and (rank, dims...) runs."""
-    names, flat = [], []
-    for name, dims in dict(shapes or {}).items():  # glue: the shapes argument, one entry per named input
-        dims = tuple(int(d) for d in dims)  # glue: at most eight dimensions
-        names.append(str(name))
-        flat.append(len(dims))
-        flat.extend(dims)
-    return names, flat
-
-
 class ImportedProgram(Program):
     """An imported model, run in one call.
 
@@ -166,11 +142,6 @@ class ImportedProgram(Program):
         :attr:`outputs`.
         """
         return self._run_native(self, arrays, named)
-
-
-def _dtype_name(ir_dtype):
-    return {"f32": "float32", "f16": "float16", "bf16": "bfloat16", "f64": "float64", "i64": "int64",
-            "i32": "int32", "bool": "bool"}.get(ir_dtype, ir_dtype)
 
 
 def import_model(source, *, shapes=None, example_inputs=None, numeric_mode=None):
@@ -259,51 +230,11 @@ def import_model(source, *, shapes=None, example_inputs=None, numeric_mode=None)
 
 
 def _import(source, label, shapes, numeric_mode):
-    s = Session(record=False, numeric_mode=numeric_mode)
-    b = s._b
-    keep = ()
-    try:
-        if not hasattr(b, "onnx_import_file") or not hasattr(b, "ops_imported_run"):
-            raise RuntimeError("mojolearn: this install's x_sequence binding has no model import (onnx_import_file, "
-                               "ops_imported_run); rebuild the x_sequence bindings")
-        names, flat = _shape_words(shapes)
-        if isinstance(source, (str, bytes, os.PathLike)):
-            # an ONNX file: read, resolved, refused and lowered in one Mojo call
-            path = os.fsdecode(os.fspath(source))
-            src = path if label is None else label
-            res = b.onnx_import_file(path, s._sid(), names, flat, src)
-        else:
-            g = _read(source)
-            src = g.source
-            native = g._native
-            if native.b is not b:
-                raise ValueError("the graph was read by another binding than this session's; "
-                                 "pass the ONNX file's path instead")
-            # a graph the Mojo reader holds in this session's module: its buffers by address
-            keep = [bytes_view(v) for v in native.views]  # glue: one view per model file or data buffer
-            handle = native.h
-            # one call: every problem is listed before anything reaches the device
-            res = b.onnx_import(handle, s._sid(), names, flat, [buffer_address(a) for a in keep], str(src))  # glue: one address per tensor buffer
-        status = int(res[0])
-        if status == _IMPORT_READ_FAILED:
-            from .onnx import reader_error
-            reader_error(int(res[1]), str(res[2]), bool(int(res[3])), src)
-        if status == _IMPORT_PROBLEMS:
-            raise UnsupportedModel(src, [(str(name), None if op is None else str(op), str(why))
-                                         for name, op, why in res[1]])  # glue: one entry per problem
-        if status == _IMPORT_BAD_VALUE:
-            raise ValueError(f"the model graph: {res[1]}")
-        if status != _IMPORT_OK:
-            raise RuntimeError("mojolearn: the x_sequence binding's model import has another result layout; "
-                               "rebuild the x_sequence bindings")
-        inputs = [(str(name), tuple(int(d) for d in dims), _dtype_name(str(dt)))  # glue: at most eight dimensions
-                  for name, dims, dt in res[2]]  # glue: one entry per model input
-        outputs = [(str(name), tuple(int(d) for d in dims), "int32" if int(flag) else "float32")  # glue: at most eight dimensions
-                   for name, dims, flag in res[3]]  # glue: one entry per model output
-        prog = ImportedProgram(s, res[1], inputs, outputs)
-    except BaseException:
-        s.close()
-        raise
-    finally:
-        del keep
-    return prog
+    # Artifact setup is one compiled call. The public dispatcher/export above
+    # remains Python runtime debt; this does not qualify generic Torch import.
+    return _IMPORT_NATIVE(source, label, shapes, numeric_mode, _IMPORT_CONTEXT)
+
+
+from . import _native_import_bridge  # noqa: E402
+_IMPORT_NATIVE, _IMPORT_CONTEXT = _native_import_bridge.connect(
+    Session, Program, ImportedProgram, GraphIR, UnsupportedModel)
