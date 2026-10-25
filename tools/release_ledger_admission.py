@@ -152,11 +152,20 @@ def reconstruct(root, revision, version, spec_ids, configuration, log_dir=None):
 
 
 _VERIFIED = {}
+_REPORTS = {}
 
 
-def verified_facts(report):
+def load_report(path):
+    """Parse each exact report once per process; its bytes are hashed on every use."""
+    key = (str(Path(path).resolve()), evidence.sha256(path))
+    if key not in _REPORTS:
+        _REPORTS[key] = load(path)
+    return _REPORTS[key], key[1]  # read-only: adapters never mutate reports
+
+
+def verified_facts(report, report_sha256):
     """Light re-derivation of the retained producer facts, once per process."""
-    key = (report["adapter"], digest(report["facts"]))
+    key = (report["adapter"], report_sha256)
     if key not in _VERIFIED:
         actual = adapter(report["adapter"]).verify(report)
         require(actual == report["facts"], "retained producer facts differ from the original producer artifacts")
@@ -168,7 +177,7 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
     """Rebuild a receipt from the retained report; the ledger compares it field by field."""
     from release_requirement_receipts import SCHEMA
     report_path = Path(report_path).resolve()
-    report = load(report_path)
+    report, report_sha256 = load_report(report_path)
     name = report.get("adapter")
     require(report.get("schema") == REPORT_SCHEMA and name in ADAPTERS
             and report.get("tool") == tool_of(name), "not a retained-producer admission report")
@@ -178,7 +187,7 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
     require(load(proof_path) == provenance and provenance.get("schema") == PROOF_SCHEMA
             and provenance.get("mode") == "retrospective" and "original_run_id" in provenance
             and provenance["original_run_id"] is None and provenance.get("adapter") == name
-            and provenance.get("report_sha256") == evidence.sha256(report_path),
+            and provenance.get("report_sha256") == report_sha256,
             "admission requires its explicit retrospective reconciliation")
     fingerprint = provenance.get("requirements", {}).get(requirement_id)
     require(fingerprint is not None and fingerprint == wanted.get("fingerprint")
@@ -188,7 +197,7 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
             == report.get("source_revision") == report["facts"].get("source_revision"),
             "tested source revision differs from the reconstructed requirement")
     require(requirement_id in report.get("units", {}), "requirement is not covered by this retained report")
-    facts = verified_facts(report)
+    facts = verified_facts(report, report_sha256)
     rows, refs = adapter(name).check_unit(requirement_id, wanted, facts, report["units"][requirement_id])
     require([row["id"] for row in rows] == list(wanted.get("coverage", [])),
             "producer coverage differs from the declared requirement coverage")
