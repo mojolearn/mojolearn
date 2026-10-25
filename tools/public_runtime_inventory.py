@@ -51,7 +51,7 @@ probes and native-callee audits remain separate qualification requirements.
   python3 tools/public_runtime_inventory.py                 # TSV on stdout, summary on stderr
   python3 tools/public_runtime_inventory.py --summary       # per-family numbers only
   python3 tools/public_runtime_inventory.py --baseline      # rewrite tools/hooks/public_runtime_baseline.tsv
-  python3 tools/public_runtime_inventory.py --check         # fail if the non-native count grows
+  python3 tools/public_runtime_inventory.py --check         # require zero prohibited public source paths
 """
 from __future__ import annotations
 

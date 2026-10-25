@@ -1420,9 +1420,8 @@ class Mamba3Block(_MambaBase):
         y : mojolearn.Array, shape (B, L, d_model)
             Block output, residual included. ``numpy.asarray(y)`` is zero-copy.
         """
-        y, self.h_last_, self.k_last_, self.v_last_, self.theta_last_ = _native_neural_bridge.RUNTIME.mamba_native_call(
-            "forward", (self, x, state, lengths), _native_neural_bridge.CONTEXT)
-        return y
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "forward_public", (self, x, state, lengths), _native_neural_bridge.CONTEXT)
 
     def _forward_with_tape(self, x):
         return _native_neural_bridge.RUNTIME.neural_prefill_call(
@@ -1477,9 +1476,8 @@ class Mamba3Block(_MambaBase):
         -------
         y : mojolearn.Array, shape (B, 1, d_model)
         """
-        y, self.h_last_, self.k_last_, self.v_last_, self.theta_last_ = _native_neural_bridge.RUNTIME.mamba_native_call(
-            "step", (self, x, state), _native_neural_bridge.CONTEXT)
-        return y
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "step_public", (self, x, state), _native_neural_bridge.CONTEXT)
 
     def _decode_session(self, state):
         """Keep Mamba-3 weights and recurrent state resident for repeated

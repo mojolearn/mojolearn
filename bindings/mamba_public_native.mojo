@@ -12,17 +12,16 @@ compiled mamba entries reached here are the ones the retired Python drivers in
 order and the same parameters, so no output bit moves. No Python callable of the
 package is invoked: only builtins, buffer exporters and compiled entries.
 
-Lifetime (docs/MODULAR_ASKS.md, PythonObject attribute assignment): where a
-result is a new object the caller keeps (y, the Mamba3 reports, the prefill
-session handle), this module RETURNS it and the Python glue assigns it. The
-session object itself is created here because a decode session is opened by
-one native call; its state marker is the immortal `True`, never the session.
+Public forward/step retain reports in the instance dictionary natively and
+return only the output. Internal tuple-returning operations remain available
+for other compiled owners. Dictionary insertion retains each report before
+the temporary tuple is released.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type, py_fields
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints,
 )
@@ -695,6 +694,20 @@ def mamba_session_repr(session: PythonObject) raises -> PythonObject:
 
 def mamba_native_call(operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
+    if operation == "forward_public" or operation == "step_public":
+        var step = operation == "step_public"
+        var lengths = PythonObject(None)
+        if not step:
+            lengths = values[3]
+        var result = mamba3_forward(values[0], values[1], values[2], lengths, step, context)
+        # Retain report objects through dictionary insertion before releasing
+        # the tuple. No Python assignment or user __setattr__ runs on return.
+        var fields = py_fields(values[0])
+        py_setitem(fields, "h_last_", result[1])
+        py_setitem(fields, "k_last_", result[2])
+        py_setitem(fields, "v_last_", result[3])
+        py_setitem(fields, "theta_last_", result[4])
+        return result[0]
     if operation == "forward":
         return mamba3_forward(values[0], values[1], values[2], values[3], False, context)
     if operation == "step":
