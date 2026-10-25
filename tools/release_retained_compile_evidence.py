@@ -34,7 +34,8 @@ MAC, LINUX = "osx-arm64", "linux-64"
 DEV_SCHEMA = "mojolearn.development-build.v1"
 DEV_KEY_SCHEMA = "mojolearn.development-group.v1"
 # Generated from tracked generator inputs that are themselves in the closure.
-GENERATED = {"tokenizer/impl/unicode_table_generated.mojo"}
+from generated_sources import GENERATED as GENERATED_SOURCES  # noqa: E402
+GENERATED = set(GENERATED_SOURCES)
 # Binding identity flag -> the environment variable each builder exports.
 FLAG_ENV = {"numeric_mode": "MOJOLEARN_NUMERIC_MODE", "target_column": "MOJOLEARN_TARGET_COLUMN",
             "gpu_archs": "MOJOLEARN_GPU_ARCHS", "linux_cpu": "MOJOLEARN_LINUX_CPU",
@@ -97,6 +98,17 @@ class Tree:
     def text(self, rel):
         import subprocess
         return subprocess.check_output(["git", "-C", self.root, "show", self.revision + ":" + rel], text=True)
+
+
+def generated_sha(tree, rel, checkout):
+    """The sha256 the tested revision's tracked generator gives build-time
+    generated source REL (generated_sources.expected_sha: regenerated here, or
+    the checkout's copy verified byte for byte against the tracked generator)."""
+    import generated_sources as gs
+    require(all(name in tree.files for name in gs.GENERATED[rel]),
+            "generated source has no tracked generator at the tested revision: " + rel)
+    return gs.expected_sha(rel, {name: tree.text(name).encode() for name in gs.GENERATED[rel]},
+                           [Path(checkout) / rel])
 
 
 def closure_digest(tree, rels):
@@ -183,7 +195,7 @@ def _dev_group(row, repo, cache, tree):
     binary_ref = reference(binary)
     require(binary_ref["sha256"] == receipt["sha256"], "compiled binary differs from its receipt: " + row["stem"])
     for path, sha in source["files"].items():
-        require(path in GENERATED or tree.sha256(path) == sha,
+        require(generated_sha(tree, path, repo) == sha if path in GENERATED else tree.sha256(path) == sha,
                 "compiled source bytes differ from the tested revision: " + path)
     from development_build import recipe_text
     for path, sha in fields["builders"]["scripts"].items():
@@ -353,6 +365,10 @@ def _host_facts(root, producer):
             "source-inventory.json", "binding-stamp.json", "stage.json", "readback.json", "runtime-source.json")]
     refs += [reference(set_root / rhb.HOST_PATH), reference(set_root / rhb.HOST_INDEX),
              reference(directory / "raw" / hc.HOST_FILE)]
+    import generated_sources as gs
+    for rel in sorted(contract["generated_sources"]):  # retained, verified in rhb.record
+        refs += [reference(directory / "generated" / rel)]
+        refs += [reference(directory / "generated-inputs" / name) for name in gs.GENERATED[rel]]
     return dict(producer="linux-host-build", source_root=str(Path(root).resolve()),
                 source_revision=contract["source_commit"], compiler_sha256=compiler,
                 binding_identities=contract["host_identities"], build_environment=capture["build_environment"],

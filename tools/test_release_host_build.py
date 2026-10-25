@@ -10,9 +10,12 @@ import release_host_composition as hc
 import retained_release_composition as rc
 from test_retained_release_composition import fixture, OLD, NEW, COMPILER
 import binding_stamps
+import generated_sources as gs
+
+REAL = json.loads((hb.Path(__file__).resolve().parent / 'test_release_host_build_tokenizer_0857.json').read_text())
 
 
-def host_only(fixture, tmp_path):
+def host_only(fixture, tmp_path, generated=False):
     source, old, _, before, current = fixture
     # The older fixture did not need complete source stamp fields; these inputs
     # describe all host closures independently of any device output.
@@ -32,6 +35,23 @@ def host_only(fixture, tmp_path):
     index = dict(format=1,files={hc.HOST_FILE:sorted(hc.expected_names())})
     hb.write(staged / hb.HOST_INDEX,index)
     inventory = current['source_inventory']
+    closures, generated_sources = {}, {}
+    if generated:
+        # The real 0.8.57 tokenizer host member: committed identity, stamp row,
+        # closure rows, generated table and its tracked generator inputs.
+        ident = next(i for i in identities.values() if i['name'] == REAL['member'])
+        ident.update(closure=dict(REAL['identity']['closure']), generators=REAL['identity']['generators'])
+        tracked = dict(REAL['inventory'])
+        inventory[:] = [r for r in inventory if r[0] not in tracked] + [list(r) for r in REAL['inventory']]
+        closures[REAL['member']] = REAL['closure_rows']
+        for rel, text in REAL['generated'].items():
+            (out / 'generated' / rel).parent.mkdir(parents=True, exist_ok=True)
+            (out / 'generated' / rel).write_text(text)
+            for name in gs.GENERATED[rel]:
+                (out / 'generated-inputs' / name).parent.mkdir(parents=True, exist_ok=True)
+                (out / 'generated-inputs' / name).write_text(REAL['generator_inputs'][name])
+            generated_sources[rel] = dict(sha256=hc.file_sha(out / 'generated' / rel),
+                inputs={name: hc.file_sha(out / 'generated-inputs' / name) for name in gs.GENERATED[rel]})
     for name in binding_stamps.MERGED_INPUTS:
         if name not in dict(inventory):
             inventory.append([name, 'e' * 64])
@@ -48,6 +68,8 @@ def host_only(fixture, tmp_path):
     hb.write(out / 'compile-inputs.json',capture)
     stamp = dict(schema=2,binding=hb.HOST_PATH,script='merged_build.sh',commit=NEW,
         members={i['name']:dict(script=i['script'],scope='closure',digest=i['closure']['digest']) for i in identities.values()})
+    if generated:
+        stamp['members'][REAL['member']] = dict(REAL['stamp_member'])
     merged_hash = hc.hashlib.sha256()
     for name in binding_stamps.MERGED_INPUTS:
         merged_hash.update(name.encode()+b'\0'+merged_inputs[name].encode()+b'\n')
@@ -68,6 +90,8 @@ def host_only(fixture, tmp_path):
         merged_indexes={hb.PREFIX+hb.HOST_INDEX:dict(sha256=hc.file_sha(staged / hb.HOST_INDEX),files=index['files'])},
         stamp_sha256=hc.file_sha(out / 'binding-stamp.json'),stage_sha256=hc.file_sha(out / 'stage.json'),
         readback_sha256=hc.file_sha(out / 'readback.json'),runtime_identity=current['runtime_identity'])
+    if generated:
+        proof.update(generated_sources=generated_sources, generated_closures=closures)
     hb.write(out / 'host-build-proof.json',proof)
     return out
 
@@ -140,3 +164,94 @@ def test_missing_original_compiler_bytes_and_changed_staged_host_are_refused(fix
     with pytest.raises(ValueError,match='staged host bytes'): hb.validate_bytes(source,staged,COMPILER)
     (host/'raw'/hc.HOST_FILE).unlink()
     with pytest.raises(FileNotFoundError): hb.inspect(host)
+
+
+def test_real_0857_tokenizer_stamp_is_the_identity_plus_the_verified_generated_table():
+    """The droplet refusal: stamp 36ef4c6a.. vs identity f6b98a9e.. for the tokenizer host."""
+    ident, row, rows = REAL['identity'], REAL['stamp_member'], REAL['closure_rows']
+    assert row['digest'] != ident['closure']['digest']  # the old equality refused this build
+    assert gs.closure_hash(rows) == row['digest']
+    assert gs.closure_hash([r for r in rows if r[0] not in gs.GENERATED]) == ident['closure']['digest']
+    data = REAL['generated'][gs.UNICODE_TABLE].encode()
+    inputs = {k: v.encode() for k, v in REAL['generator_inputs'].items()}
+    sha = gs.verify(gs.UNICODE_TABLE, data, inputs)
+    assert [r[1] for r in rows if r[0] == gs.UNICODE_TABLE] == [sha]
+    assert ident['generators'] == hb.generator_dir_digest(REAL['inventory'], 'tokenizer/tools')
+    hb.check_member_stamp(REAL['member'], row, ident, {REAL['member']: rows}, {gs.UNICODE_TABLE: sha}, REAL['inventory'])
+    with pytest.raises(ValueError, match='stamp source closure differs'):
+        hb.check_member_stamp(REAL['member'], row, ident, {}, {}, REAL['inventory'])
+
+
+@pytest.mark.parametrize('edit', [b'L\\t0041', b'unicodedata 16.0.0', b'GENERATED at build time'])
+def test_generated_table_must_be_what_the_tracked_generator_writes(edit):
+    data = REAL['generated'][gs.UNICODE_TABLE].encode()
+    inputs = {k: v.encode() for k, v in REAL['generator_inputs'].items()}
+    assert edit in data
+    with pytest.raises(ValueError):
+        gs.verify(gs.UNICODE_TABLE, data.replace(edit, edit[:-1] + b'X', 1), inputs)
+    pin = inputs[gs.UNICODE_PIN].replace(b'UNICODE_TABLE_SHA256_PINNED = "a', b'UNICODE_TABLE_SHA256_PINNED = "b', 1)
+    assert pin != inputs[gs.UNICODE_PIN]
+    with pytest.raises(ValueError):
+        gs.verify(gs.UNICODE_TABLE, data, dict(inputs, **{gs.UNICODE_PIN: pin}))
+
+
+def test_host_proof_with_generated_tokenizer_table_composes(fixture, tmp_path):
+    host = host_only(fixture, tmp_path, generated=True)
+    record, directory = hb.inspect(host)
+    assert hb.validate_bytes(record, directory, COMPILER)
+    contract, _, _, _ = hb.record(record, COMPILER)
+    assert set(contract['generated_sources']) == {gs.UNICODE_TABLE}
+    source, old, _, _, _ = fixture
+    result = rc.prepare(old[0], host, source, COMPILER, tmp_path / 'assembled')
+    assert rc.validate(result, source)
+
+
+REFUSALS = [('no-closure-rows', 'stamp source closure differs'), ('table-bytes', 'not the pinned sha256'),
+            ('generator-input', 'retained generator input differs'),
+            ('inventory-generator', 'not the tracked generator'),
+            ('committed-row', 'closure differs (with generated sources)'),
+            ('identity-generators', 'identity generator inputs differ'),
+            ('extra-member', 'closure differs (with generated sources)'), ('missing-table', '')]
+
+
+@pytest.mark.parametrize('changed', [c for c, _ in REFUSALS])
+def test_generated_tokenizer_table_cannot_hide_other_source_changes(fixture, tmp_path, changed):
+    host = host_only(fixture, tmp_path, generated=True)
+    proof_path = host / 'host-build-proof.json'
+    proof = json.loads(proof_path.read_text())
+    table = host / 'generated' / gs.UNICODE_TABLE
+    if changed == 'no-closure-rows':
+        proof['generated_closures'] = {}
+        proof['generated_sources'] = {}
+        shutil.rmtree(host / 'generated'); shutil.rmtree(host / 'generated-inputs')
+    elif changed == 'table-bytes':
+        table.write_text(table.read_text().replace('L\\t0041', 'L\\t0042', 1))
+        proof['generated_sources'][gs.UNICODE_TABLE]['sha256'] = hc.file_sha(table)
+    elif changed == 'generator-input':
+        f = host / 'generated-inputs' / gs.UNICODE_GENERATOR
+        f.write_text(f.read_text() + '\n')
+    elif changed == 'inventory-generator':
+        proof['generated_sources'][gs.UNICODE_TABLE]['inputs'][gs.UNICODE_GENERATOR] = 'f' * 64
+    elif changed == 'committed-row':
+        rows = proof['generated_closures'][REAL['member']]
+        rows[0][1] = 'f' * 64
+    elif changed == 'identity-generators':
+        capture_path = host / 'compile-inputs.json'
+        capture = json.loads(capture_path.read_text())
+        next(i for i in capture['binding_identities'].values() if i['name'] == REAL['member'])['generators'] = 'f' * 64
+        hb.write(capture_path, capture)
+        proof['compile_inputs_sha256'] = hc.file_sha(capture_path)
+    elif changed == 'extra-member':
+        other = sorted(hc.expected_names() - {REAL['member']})[0]
+        proof['generated_closures'][other] = REAL['closure_rows']
+    else:
+        table.unlink()
+    hb.write(proof_path, proof)
+    if changed == 'missing-table':
+        with pytest.raises(FileNotFoundError):
+            hb.inspect(host)
+        return
+    source, _ = hb.inspect(host)
+    with pytest.raises(ValueError) as caught:
+        hb.record(source, COMPILER)
+    assert dict(REFUSALS)[changed] in str(caught.value)

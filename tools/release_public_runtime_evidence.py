@@ -44,7 +44,8 @@ REPORT_SCHEMA = "mojolearn.retained-public-runtime-report.v1"
 RECONCILIATION_SCHEMA = "mojolearn.retained-public-runtime-reconciliation.v1"
 CONFIG_KEY = "retained_public_runtime_profiles"
 SCOPE = "source development freeze; not installed-wheel release qualification"
-GENERATED = {"tokenizer/impl/unicode_table_generated.mojo"}
+from generated_sources import GENERATED as GENERATED_SOURCES  # noqa: E402
+GENERATED = set(GENERATED_SOURCES)
 
 
 def require(condition, message):
@@ -199,7 +200,7 @@ def inspect(root, suites):
     build_inputs = {}
     executions = 0; revision = None; dependencies = None; interpreter = None; timestamps = []; notes = []
     controller_hashes = {}
-    recipes = {}
+    recipes, generated = {}, {}
     blob_hashes = BlobHashes(root)
     try:
         for label, directory in sorted(suites.items()):
@@ -276,7 +277,18 @@ def inspect(root, suites):
                     require(fields.get("platform") == "darwin" and fields.get("source", {}).get("scope") == "closure"
                             and not fields["source"].get("unresolved"), "native source closure unresolved or not Apple")
                     for path, sha in fields["source"]["files"].items():
-                        require((path in tree and blob_hashes.sha(tree[path]) == sha) or path in GENERATED,
+                        if path in GENERATED:
+                            # Exactly what the tested revision's tracked generator writes.
+                            if path not in generated:
+                                import generated_sources as gs
+                                require(all(name in tree for name in gs.GENERATED[path]),
+                                        "generated source has no tracked generator at the tested revision: " + path)
+                                generated[path] = gs.expected_sha(path, {
+                                    name: subprocess.check_output(["git", "-C", str(root), "show", revision + ":" + name])
+                                    for name in gs.GENERATED[path]}, [Path(build["plan"]["repo"]) / path])
+                            require(generated[path] == sha, "compiled generated source differs from its tracked generator: " + path)
+                            continue
+                        require(path in tree and blob_hashes.sha(tree[path]) == sha,
                                 "compiled source bytes differ from tested revision: " + path)
                         if path in tree:
                             sources.add(path)
