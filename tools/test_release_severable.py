@@ -61,7 +61,10 @@ class Base(unittest.TestCase):
     def release(self, commit=Y, **kw):
         def runner(cmd, env, log, detach=False):
             if detach:
-                self.spawned.append((cmd, env))
+                # Assertions must not print the real process's credentials.
+                recorded_env = {k: v for k, v in env.items() if k.startswith(("MOJOLEARN_", "MOJO_", "MODULAR_"))
+                                and not any(word in k for word in ("KEY", "TOKEN", "SECRET", "PASSWORD"))}
+                self.spawned.append((cmd, recorded_env))
                 return 999999          # not a live pid: the leg reads as finished once its exit file exists
             return 0
         r = release.Release(args(state_dir=str(self.tmp / "state"), **kw), runner=runner)
@@ -213,6 +216,12 @@ def plan(legs):
                 runtime=dict(decision="BUILD"))
 
 
+def set_identity(vendor, arch, label):
+    import release_reuse
+    fields = dict(set=f"{vendor}/{arch}", bindings={"fixture": sha(label.encode())}, runtime=sha(b"runtime"))
+    return dict(fields, digest=release_reuse.digest_of(fields))
+
+
 class Legs(Base):
     def cpu_leg(self, r, name):
         (leg,) = [l for l in release.cpu_legs(r) if l.name == name]
@@ -254,12 +263,12 @@ class Legs(Base):
         (old / f"{name}.exit").write_text("0\n")
         (old / f"{name}.provenance.json").write_text(json.dumps(dict(
             leg=name, vendor=vendor, arch=arch, source_commit=X, tooling_commit="1" * 40, tooling_digest=tooling,
-            overlay=None, set_identity=dict(digest=digest), release_build=str(rb), out_dir=str(out),
+            overlay=None, set_identity=set_identity(vendor, arch, digest), release_build=str(rb), out_dir=str(out),
             exit_file=str(old / f"{name}.exit"))))
         return rb
 
     def identities(self, r, table, tooling="T" * 64):
-        r.set_identity = lambda vendor, arch: {"digest": table[f"{vendor}-{arch}"]} if f"{vendor}-{arch}" in table else None
+        r.set_identity = lambda vendor, arch: set_identity(vendor, arch, table[f"{vendor}-{arch}"]) if f"{vendor}-{arch}" in table else None
         r.tooling = lambda: dict(commit=HEAD, digest=tooling, dirty=[], files={})
 
     def test_an_unchanged_set_takes_its_completed_leg_and_a_changed_one_rebuilds(self):
@@ -275,7 +284,7 @@ class Legs(Base):
         doc = json.loads(r.admission_path("cuda-sm_89").read_text())
         self.assertEqual((doc["built_from"], doc["admitted_for"]), (X, Y))
         self.assertIn("set identity", doc["because"])
-        self.assertEqual(doc["set_identity_digest"], "D90")
+        self.assertEqual(doc["set_identity_digest"], set_identity("cuda", "sm_89", "D90")["digest"])
         self.assertTrue(any("TAKEN, not launched: built from aaaaaaaaaaaa" in l for l in r.lines), r.lines)
         self.assertTrue(any("hip-gfx942" in l and "set identity differs" in l for l in r.lines), r.lines)
         self.assertEqual(set(r.admitted_legs()), {"cuda-sm_89"})
@@ -340,21 +349,23 @@ class Legs(Base):
         r = self.release()
         r._plan = plan(["cuda-sm_89"])
         self.identities(r, {"cuda-sm_89": "D89"})
-        r.ledger().put(release_ledger.build_key("cuda", "sm_89", "D89", "T" * 64), dict(
+        ident = set_identity("cuda", "sm_89", "D89")
+        r.ledger().put(release_ledger.build_key("cuda", "sm_89", ident["digest"], "T" * 64), dict(
             verdict="PASS", provenance=dict(leg="cuda-sm_89", source_commit=X, tooling_digest="T" * 64,
-                                            set_identity=dict(digest="D89"), release_build=str(rb),
+                                            set_identity=ident, release_build=str(rb),
                                             out_dir=str(rb.parent), exit_file=str(self.tmp / "elsewhere" / "cuda-sm_89.exit"))))
         r.step_linux_builds()
         self.assertEqual(self.spawned, [])
-        self.assertIn("ledger build/cuda-sm_89/D89/", r.admitted_leg("cuda-sm_89")["provenance"])
+        self.assertIn("ledger build/cuda-sm_89/" + ident["digest"] + "/", r.admitted_leg("cuda-sm_89")["provenance"])
 
         # a leg built at this freeze goes into the ledger keyed by what it built, with both commits
         leg = self.cpu_leg(r, "cuda-sm_89")
         self.finished(leg, Y)
-        leg.provenance_file.write_text(json.dumps(dict(set_identity=dict(digest="D90"), tooling_digest="T" * 64,
+        ident = set_identity("cuda", "sm_89", "D90")
+        leg.provenance_file.write_text(json.dumps(dict(set_identity=ident, tooling_digest="T" * 64,
                                                        tooling_commit=HEAD, source_commit=Y)))
         r.record_leg(leg)
-        (entry,) = r.ledger().find("build/cuda-sm_89/D90/")
+        (entry,) = r.ledger().find("build/cuda-sm_89/" + ident["digest"] + "/")
         self.assertEqual((entry["source_commit"], entry["tooling_commit"], entry["verdict"]), (Y, HEAD, "PASS"))
 
 
@@ -503,6 +514,21 @@ class SourceAndTooling(Base):
             r.step_publish_macos()
         self.assertEqual(calls, [])
         r.gate_ok = lambda vendor: (True, "")
+        # Candidate gates alone no longer establish whole-release readiness.
+        import release_requirements as requirements
+        inputs = {"artifact": release.sha256(whl)}
+        declaration = dict(schema=requirements.SCHEMA, version=r.version, source_revision=Y,
+                           requirements={"qualification": dict(source_revision=Y, inputs=inputs,
+                           fingerprint=requirements.digest(inputs), scope="fixture", coverage=["fixture"],
+                           kind="source", stage="pre", missing_inputs=[], required=True)})
+        r.readiness_manifest = lambda: declaration
+        with self.assertRaisesRegex(release.StepFailed, "requirements ledger blocks publication"):
+            r.step_publish_macos()
+        self.assertEqual(calls, [])
+        run = r.readiness().begin("qualification")
+        from test_release_requirements import receipt_for
+        producer_receipt = receipt_for(r.readiness(), run, receipt)
+        r.readiness().record(run, "passed", [receipt], "fixture qualification", 0, 1, 1, receipt=producer_receipt)
         out = r.step_publish_macos()
         (cmd, env), = calls
         self.assertEqual(cmd[:2], ["bash", "tools/release_linux_publish.sh"])

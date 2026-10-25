@@ -1,0 +1,650 @@
+{
+  "schema": "mojolearn.release-requirements-catalog.v1",
+  "requirements": [
+    {
+      "id": "runtime-source",
+      "scope": "All public and returned API operations; source classification is necessary, not transitive proof",
+      "coverage": [
+        "zero prohibited source paths"
+      ],
+      "source_inputs": {
+        "checker": [
+          "tools/public_runtime_inventory.py",
+          "tools/hooks/no_python_in_kernels.py",
+          "tools/hooks/no_compute_in_shells.py"
+        ]
+      },
+      "configuration": [
+        "release_modes"
+      ],
+      "kind": "source",
+      "stage": "pre",
+      "drop_source_inputs": [
+        "numerical_source"
+      ]
+    },
+    {
+      "id": "coverage-source",
+      "scope": "Changed registrations reconciled; no missing required lanes or fault arms",
+      "coverage": [
+        "coverage mapping and exclusions reviewed"
+      ],
+      "source_inputs": {
+        "checker": [
+          "tools/verify_coverage_audit.py",
+          "tools/identity_lanes/*"
+        ]
+      },
+      "configuration": [
+        "release_modes"
+      ],
+      "kind": "source",
+      "stage": "pre"
+    },
+    {
+      "id": "compile-apple",
+      "scope": "Integrated identical build for apple",
+      "coverage": [
+        "all selected native bindings and required enabled/disabled switches"
+      ],
+      "source_inputs": {
+        "build_tools": [
+          "tools/build*.sh",
+          "tools/build*.py",
+          "packaging/*",
+          "packaging/**/*",
+          "bindings/build*.sh",
+          "bindings/*build*.sh",
+          "adapters/*.cpp",
+          "adapters/**/*.cpp",
+          "adapters/*.h",
+          "adapters/**/*.h"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "compile",
+      "stage": "pre",
+      "drop_source_inputs": [
+        "public_runtime"
+      ]
+    },
+    {
+      "id": "runtime-apple",
+      "scope": "Public operations and transitive callback refusals on apple",
+      "coverage": [
+        "constructors",
+        "input preparation",
+        "workers and callbacks",
+        "consumed outputs",
+        "supported built-in estimator combinations"
+      ],
+      "source_inputs": {
+        "tests": [
+          "python/mojolearn/_verify*.py",
+          "python/tests/*.py",
+          "tools/test_native_runtime_audit.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "runtime",
+      "stage": "pre"
+    },
+    {
+      "id": "identity-apple",
+      "scope": "Affected identical identity cells on apple with compatible retained cells reused",
+      "coverage": [
+        "all affected lanes admitted; common Apple/NVIDIA/AMD/CPU reference contract"
+      ],
+      "source_inputs": {
+        "verifier": [
+          "python/mojolearn/_verify*.py",
+          "tools/lane_select.py",
+          "tools/identity_lanes/*",
+          "tools/admit_identity_columns.sh"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "identity",
+      "stage": "pre"
+    },
+    {
+      "id": "compile-nvidia",
+      "scope": "Integrated identical build for nvidia",
+      "coverage": [
+        "all selected native bindings and required enabled/disabled switches"
+      ],
+      "source_inputs": {
+        "build_tools": [
+          "tools/build*.sh",
+          "tools/build*.py",
+          "packaging/*",
+          "packaging/**/*",
+          "bindings/build*.sh",
+          "bindings/*build*.sh",
+          "adapters/*.cpp",
+          "adapters/**/*.cpp",
+          "adapters/*.h",
+          "adapters/**/*.h"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "compile",
+      "stage": "pre",
+      "drop_source_inputs": [
+        "public_runtime"
+      ]
+    },
+    {
+      "id": "runtime-nvidia",
+      "scope": "Public operations and transitive callback refusals on nvidia",
+      "coverage": [
+        "constructors",
+        "input preparation",
+        "workers and callbacks",
+        "consumed outputs",
+        "supported built-in estimator combinations"
+      ],
+      "source_inputs": {
+        "tests": [
+          "python/mojolearn/_verify*.py",
+          "python/tests/*.py",
+          "tools/test_native_runtime_audit.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "runtime",
+      "stage": "pre"
+    },
+    {
+      "id": "identity-nvidia",
+      "scope": "Affected identical identity cells on nvidia with compatible retained cells reused",
+      "coverage": [
+        "all affected lanes admitted; common Apple/NVIDIA/AMD/CPU reference contract"
+      ],
+      "source_inputs": {
+        "verifier": [
+          "python/mojolearn/_verify*.py",
+          "tools/lane_select.py",
+          "tools/identity_lanes/*",
+          "tools/admit_identity_columns.sh"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "identity",
+      "stage": "pre"
+    },
+    {
+      "id": "compile-amd",
+      "scope": "Integrated identical build for amd",
+      "coverage": [
+        "all selected native bindings and required enabled/disabled switches"
+      ],
+      "source_inputs": {
+        "build_tools": [
+          "tools/build*.sh",
+          "tools/build*.py",
+          "packaging/*",
+          "packaging/**/*",
+          "bindings/build*.sh",
+          "bindings/*build*.sh",
+          "adapters/*.cpp",
+          "adapters/**/*.cpp",
+          "adapters/*.h",
+          "adapters/**/*.h"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "compile",
+      "stage": "pre",
+      "drop_source_inputs": [
+        "public_runtime"
+      ]
+    },
+    {
+      "id": "runtime-amd",
+      "scope": "Public operations and transitive callback refusals on amd",
+      "coverage": [
+        "constructors",
+        "input preparation",
+        "workers and callbacks",
+        "consumed outputs",
+        "supported built-in estimator combinations"
+      ],
+      "source_inputs": {
+        "tests": [
+          "python/mojolearn/_verify*.py",
+          "python/tests/*.py",
+          "tools/test_native_runtime_audit.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "runtime",
+      "stage": "pre"
+    },
+    {
+      "id": "identity-amd",
+      "scope": "Affected identical identity cells on amd with compatible retained cells reused",
+      "coverage": [
+        "all affected lanes admitted; common Apple/NVIDIA/AMD/CPU reference contract"
+      ],
+      "source_inputs": {
+        "verifier": [
+          "python/mojolearn/_verify*.py",
+          "tools/lane_select.py",
+          "tools/identity_lanes/*",
+          "tools/admit_identity_columns.sh"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "identity",
+      "stage": "pre"
+    },
+    {
+      "id": "compile-cpu",
+      "scope": "Integrated identical build for cpu",
+      "coverage": [
+        "all selected native bindings and required enabled/disabled switches"
+      ],
+      "source_inputs": {
+        "build_tools": [
+          "tools/build*.sh",
+          "tools/build*.py",
+          "packaging/*",
+          "packaging/**/*",
+          "bindings/build*.sh",
+          "bindings/*build*.sh",
+          "adapters/*.cpp",
+          "adapters/**/*.cpp",
+          "adapters/*.h",
+          "adapters/**/*.h"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "compile",
+      "stage": "pre",
+      "drop_source_inputs": [
+        "public_runtime"
+      ]
+    },
+    {
+      "id": "runtime-cpu",
+      "scope": "Public operations and transitive callback refusals on cpu",
+      "coverage": [
+        "constructors",
+        "input preparation",
+        "workers and callbacks",
+        "consumed outputs",
+        "supported built-in estimator combinations"
+      ],
+      "source_inputs": {
+        "tests": [
+          "python/mojolearn/_verify*.py",
+          "python/tests/*.py",
+          "tools/test_native_runtime_audit.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "runtime",
+      "stage": "pre"
+    },
+    {
+      "id": "identity-cpu",
+      "scope": "Affected identical identity cells on cpu with compatible retained cells reused",
+      "coverage": [
+        "all affected lanes admitted; common Apple/NVIDIA/AMD/CPU reference contract"
+      ],
+      "source_inputs": {
+        "verifier": [
+          "python/mojolearn/_verify*.py",
+          "tools/lane_select.py",
+          "tools/identity_lanes/*",
+          "tools/admit_identity_columns.sh"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "identity",
+      "stage": "pre"
+    },
+    {
+      "id": "adapters-apple",
+      "scope": "Installed candidate whole-model adapters on apple",
+      "coverage": [
+        "torch-inference",
+        "torch-training",
+        "max-train",
+        "max-train-resume"
+      ],
+      "source_inputs": {
+        "adapter_harness": [
+          "tools/adapter_gate.py",
+          "tools/adapter_wheel_smoke.py",
+          "tools/check_*adapter*.py",
+          "tools/check_*training*.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:apple",
+        "build_flags"
+      ],
+      "kind": "adapters",
+      "stage": "pre"
+    },
+    {
+      "id": "adapters-nvidia",
+      "scope": "Installed candidate whole-model adapters on nvidia",
+      "coverage": [
+        "torch-inference",
+        "torch-training",
+        "max-train",
+        "max-train-resume"
+      ],
+      "source_inputs": {
+        "adapter_harness": [
+          "tools/adapter_gate.py",
+          "tools/adapter_wheel_smoke.py",
+          "tools/check_*adapter*.py",
+          "tools/check_*training*.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:nvidia",
+        "build_flags"
+      ],
+      "kind": "adapters",
+      "stage": "pre"
+    },
+    {
+      "id": "adapters-amd",
+      "scope": "Installed candidate whole-model adapters on amd",
+      "coverage": [
+        "torch-inference",
+        "torch-training",
+        "max-train",
+        "max-train-resume"
+      ],
+      "source_inputs": {
+        "adapter_harness": [
+          "tools/adapter_gate.py",
+          "tools/adapter_wheel_smoke.py",
+          "tools/check_*adapter*.py",
+          "tools/check_*training*.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:amd",
+        "build_flags"
+      ],
+      "kind": "adapters",
+      "stage": "pre"
+    },
+    {
+      "id": "multi-gpu-nvidia",
+      "scope": "Two physical GPUs for nvidia",
+      "coverage": [
+        "native device placement",
+        "consumed outputs",
+        "wrong-device and callback negative controls"
+      ],
+      "source_inputs": {
+        "tests": [
+          "python/mojolearn/_verify*parallel*",
+          "tools/*parallel*.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "multi",
+      "stage": "pre"
+    },
+    {
+      "id": "performance-nvidia",
+      "scope": "Affected full-dataset end-to-end workloads on nvidia",
+      "coverage": [
+        "transfer costs",
+        "fit/training",
+        "inference",
+        "cold and repeated execution",
+        "quality and opponents with compatible clocks"
+      ],
+      "source_inputs": {
+        "harness": [
+          "tools/bench*.py",
+          "tools/race_fairness.py",
+          "experiments/performance_ideas/*"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "performance",
+      "stage": "pre"
+    },
+    {
+      "id": "candidate-nvidia",
+      "scope": "Actual packed candidate artifacts on nvidia",
+      "coverage": [
+        "install",
+        "whole-plan-smoke",
+        "autograd-artifacts",
+        "adapters",
+        "measured-plan-pairs"
+      ],
+      "source_inputs": {
+        "gate": [
+          "tools/gate_smoke_box.py",
+          "tools/candidate_wheel_install.py",
+          "tools/adapter_gate.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:nvidia",
+        "build_flags"
+      ],
+      "kind": "candidate",
+      "stage": "pre"
+    },
+    {
+      "id": "multi-gpu-amd",
+      "scope": "Two physical GPUs for amd",
+      "coverage": [
+        "native device placement",
+        "consumed outputs",
+        "wrong-device and callback negative controls"
+      ],
+      "source_inputs": {
+        "tests": [
+          "python/mojolearn/_verify*parallel*",
+          "tools/*parallel*.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "multi",
+      "stage": "pre"
+    },
+    {
+      "id": "performance-amd",
+      "scope": "Affected full-dataset end-to-end workloads on amd",
+      "coverage": [
+        "transfer costs",
+        "fit/training",
+        "inference",
+        "cold and repeated execution",
+        "quality and opponents with compatible clocks"
+      ],
+      "source_inputs": {
+        "harness": [
+          "tools/bench*.py",
+          "tools/race_fairness.py",
+          "experiments/performance_ideas/*"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "build_flags"
+      ],
+      "kind": "performance",
+      "stage": "pre"
+    },
+    {
+      "id": "candidate-amd",
+      "scope": "Actual packed candidate artifacts on amd",
+      "coverage": [
+        "install",
+        "whole-plan-smoke",
+        "autograd-artifacts",
+        "adapters",
+        "measured-plan-pairs"
+      ],
+      "source_inputs": {
+        "gate": [
+          "tools/gate_smoke_box.py",
+          "tools/candidate_wheel_install.py",
+          "tools/adapter_gate.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:amd",
+        "build_flags"
+      ],
+      "kind": "candidate",
+      "stage": "pre"
+    },
+    {
+      "id": "published-apple",
+      "kind": "published",
+      "stage": "post",
+      "scope": "Installed published wheels on apple",
+      "coverage": [
+        "index-install",
+        "published-artifact-hashes",
+        "installed-smoke",
+        "installed-adapters"
+      ],
+      "source_inputs": {
+        "published_harness": [
+          "tools/gate_smoke_box.py",
+          "tools/adapter_gate.py",
+          "tools/check_light_release.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:apple",
+        "build_flags"
+      ]
+    },
+    {
+      "id": "published-nvidia",
+      "kind": "published",
+      "stage": "post",
+      "scope": "Installed published wheels on nvidia",
+      "coverage": [
+        "index-install",
+        "published-artifact-hashes",
+        "installed-smoke",
+        "installed-adapters"
+      ],
+      "source_inputs": {
+        "published_harness": [
+          "tools/gate_smoke_box.py",
+          "tools/adapter_gate.py",
+          "tools/check_light_release.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:nvidia",
+        "build_flags"
+      ]
+    },
+    {
+      "id": "published-amd",
+      "kind": "published",
+      "stage": "post",
+      "scope": "Installed published wheels on amd",
+      "coverage": [
+        "index-install",
+        "published-artifact-hashes",
+        "installed-smoke",
+        "installed-adapters"
+      ],
+      "source_inputs": {
+        "published_harness": [
+          "tools/gate_smoke_box.py",
+          "tools/adapter_gate.py",
+          "tools/check_light_release.py"
+        ]
+      },
+      "configuration": [
+        "release_modes",
+        "artifacts:amd",
+        "build_flags"
+      ]
+    }
+  ],
+  "source_inputs": {
+    "numerical_source": [
+      "*.mojo",
+      "**/*.mojo"
+    ],
+    "public_runtime": [
+      "python/mojolearn/*.py"
+    ],
+    "toolchain_dependencies": [
+      "pixi.lock",
+      "packaging/adapters/pins.json"
+    ]
+  },
+  "source_exclude": [
+    "python/mojolearn/_version.py",
+    "python/mojolearn/verify_reference/*",
+    "python/mojolearn/identity_columns/*"
+  ]
+}
