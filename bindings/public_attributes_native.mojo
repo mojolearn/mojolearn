@@ -8,7 +8,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_caller_frame import native_frame_globals
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
-from bindings.classical_attributes import _type_mro, _descriptor_slot, _classical_descriptor_get, classical_connect_numpy
+from bindings.classical_attributes import _type_mro, _classical_descriptor_get, classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value, _one_of, _ctypes_array_owner
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -83,6 +83,14 @@ def _plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
     return plan
 
 
+def _has_slot(cls: PythonObject, name: String) raises -> Bool:
+    var ancestry = _type_mro(cls)
+    for i in range(len(ancestry)):  # driver-loop: descriptor metadata without foreign key equality hooks
+        if py_contains(_class_fields(ancestry[i]), name):
+            return True
+    return False
+
+
 def _member(model: PythonObject, name: PythonObject) raises -> PythonObject:
     var mro = _type_mro(py_type(model))
     for i in range(len(mro)):  # driver-loop: exact native attribute resolution
@@ -124,8 +132,8 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
     var member = found[1]
     var cls = py_type(model)
     var member_type = py_type(member)
-    var descriptor = present and _descriptor_slot(member_type, "__get__")
-    var data = descriptor and (_descriptor_slot(member_type, "__set__") or _descriptor_slot(member_type, "__delete__"))
+    var descriptor = present and _has_slot(member_type, "__get__")
+    var data = descriptor and (_has_slot(member_type, "__set__") or _has_slot(member_type, "__delete__"))
     var binding = py_get(plan["bindings"], name)
     var known = binding is not None and member is binding[0]
     if data:
