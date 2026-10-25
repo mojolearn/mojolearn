@@ -246,6 +246,28 @@ def fake_wheel(path, commit=None, data=b"x"):
 
 
 class ColumnsAndPublish(SplitBase):
+    def qualify_fixture(self, r):
+        # These package-routing tests use inert wheels and a stub runner. Give
+        # the independent readiness gate an explicit synthetic contract instead
+        # of accidentally expanding the real release catalog on a fake commit.
+        # Only producer semantics are patched by the two tests below; ledger
+        # fingerprints, coverage and retained-evidence checks still execute.
+        import release_requirements as requirements
+        from test_release_requirements import receipt_for
+        inputs = {"artifacts": {p.name: release.sha256(p) for p in r.split_finals().values()}}
+        declaration = dict(schema=requirements.SCHEMA, version=r.version, source_revision=sev.Y,
+            requirements={"qualification": dict(source_revision=sev.Y, inputs=inputs,
+                fingerprint=requirements.digest(inputs), scope="synthetic package-routing fixture", coverage=["fixture"],
+                kind="source", stage="pre", missing_inputs=[], required=True)})
+        r.readiness_manifest = lambda: declaration
+        log = self.tmp / 'package-routing-qualification.txt'
+        log.write_text('Synthetic package routing fixture; no native qualification.\n')
+        ledger = r.readiness()
+        ledger.sync(declaration)
+        run = ledger.begin('qualification')
+        receipt = receipt_for(ledger, run, log)
+        ledger.record(run, 'passed', [log], 'synthetic test qualification', 0, 1, 1, receipt=receipt)
+
     def finals(self, r):
         final = r.rel / "linux" / "final"
         core = fake_wheel(final / "mojolearn_core-0.8.99-py3-none-manylinux_2_35_x86_64.whl", sev.Y)
@@ -324,13 +346,16 @@ class ColumnsAndPublish(SplitBase):
         (r.rel / "column-amd" / "results.json").unlink()
         self.assertEqual(r.core_receipt(), r.rel / "smoke-linux" / "results.json", "no Hopper or AMD needed")
 
-    def test_each_package_is_its_own_publication(self):
+    @mock.patch('release_requirement_receipts.validate_producer_receipt', return_value=[])
+    @mock.patch('release_requirements.producer_admission_available', return_value=True)
+    def test_each_package_is_its_own_publication(self, _fixture_available, _fixture_producer):
         calls = []
         r = self.release(publish="testpypi")
         r.runner = lambda cmd, env, log, detach=False: calls.append([str(c) for c in cmd]) or 0
         r.on_pypi = lambda wheel: False
         r.gate_ok = lambda vendor: (True, "")      # both candidate gates passed (e1f7f8e24)
         core, cuda, rocm = self.finals(r)
+        self.qualify_fixture(r)
         self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda")
         self.receipt(r.rel / "column-amd", core, self.plugins, "hip")
         self.receipt(r.rel / "column-nvidia-hopper", core, self.plugins, "cuda", "sm_90a")
@@ -377,12 +402,15 @@ class ColumnsAndPublish(SplitBase):
         with self.assertRaisesRegex(release.StepFailed, "mojolearn-amd==0.8.99 .* does not resolve exactly"):
             r.finish_resolve(venv, "amd")
 
-    def test_a_plugin_is_not_published_on_a_receipt_that_did_not_install_it(self):
+    @mock.patch('release_requirement_receipts.validate_producer_receipt', return_value=[])
+    @mock.patch('release_requirements.producer_admission_available', return_value=True)
+    def test_a_plugin_is_not_published_on_a_receipt_that_did_not_install_it(self, _fixture_available, _fixture_producer):
         r = self.release(publish="testpypi")
         r.runner = lambda cmd, env, log, detach=False: 0
         r.on_pypi = lambda wheel: False
         r.gate_ok = lambda vendor: (True, "")      # both candidate gates passed (e1f7f8e24)
         core, cuda, rocm = self.finals(r)
+        self.qualify_fixture(r)
         self.receipt(r.rel / "column-amd", core, cuda, "hip")
         with self.assertRaisesRegex(release.StepFailed, "did not install mojolearn_amd"):
             r.step_publish_amd()

@@ -383,7 +383,7 @@ RELEASE_REGISTERED_SETS = {tuple(k.split("/")) for k in REGISTERED_ARCHES}  # gl
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO, required=None,
-                      profile=None):
+                      profile=None, host_composition=None):
     """Bind the explicit release-linux3 payload to complete per-architecture builds.
 
     File inspection only. Build provenance is not installed/runtime admission.
@@ -416,6 +416,15 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                             else ', '.join('/'.join(k) for k in sorted(required)))
                          + ' (optional registered sets of a complete vendor allowed, each slot once); given '
                          + (', '.join('/'.join(k) for k in sorted(keys)) or 'none'))
+    composition = None
+    if host_composition is not None:
+        from release_host_composition import validate_assembly
+        document = json.loads(pathlib.Path(host_composition).read_text())
+        try:
+            composition = validate_assembly(document,
+                {f'{s.vendor}/{s.arch}': next(iter(s.hosts.values())).parent.parent for s in sets}, proof_paths, source_root)
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            raise SystemExit('Invalid retained host composition: ' + str(error)) from error
     # ONE BINDING LAYOUT PER WHEEL (merged bindings): every set merged, or
     # every set per-binding; load_set already held each set to one.
     layouts = {s.layout or 'per-binding' for s in sets}
@@ -537,6 +546,18 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
             raise SystemExit(f'The build proof of {"/".join(key)} records the binding layout '
                              f'{proof.get("binding_layout", "per-binding")!r}; the set is {binding_layout}')
         check_proof_indexes(proof, the_set, reused_of[key])
+        # A canonical common host is explicit assembly, never evidence that
+        # every leg produced its bytes. Without that validated receipt, retain
+        # exact proof-to-artifact equality for each non-reused host file.
+        prefix = f'mojolearn/{key[0]}/{key[1]}/'
+        for path in set((the_set.hosts or {}).values()):
+            relative = 'host/' + path.name
+            if relative in reused_of[key]:
+                continue
+            original = proof.get('host_extension', {}).get(prefix + relative)
+            if original != sha(path).hex() and composition is None:
+                raise SystemExit('Host artifact differs from its original build proof; '
+                                 'an explicit validated host composition is required')
         # The framework adapters the set carries are the bytes this leg built.
         akey = f'mojolearn/{key[0]}/{key[1]}/{adapter_manifest.DIRECTORY}'
         shipped_adapters = adapter_records([the_set]).get(akey)
@@ -620,9 +641,19 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
             set_records['/'.join(key)] = dict(origin='reused', from_release=s.reuse['origin'],
                                               reused=sorted(reused_of[key]),
                                               **({'from_legs': s.reuse['legs']} if s.reuse.get('legs') else {}))
+    if composition is not None:
+        for record in host_record.values():
+            record.update(origin='retained-host-composition', built_by=[composition['selected_leg']],
+                          reused_in=sorted('/'.join(k) for k in keys if '/'.join(k) != composition['selected_leg']),
+                          original_build_proof_sha256=composition['selected_proof_sha256'],
+                          composition_receipt_sha256=composition['receipt_sha256'])
+        for member in {r['archive_path'] for r in host_record.values()}:
+            origin[member].update(origin='retained-host-composition', built_by=[composition['selected_leg']],
+                                  composition_receipt_sha256=composition['receipt_sha256'])
     n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
     n_admitted = sum(1 for o in origin.values() if o['origin'] == 'staged-admission')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
+                **({'host_composition': composition} if composition is not None else {}),
                 release_profile='alpha-api', assembly_profile=profile, release_modes=list(modes),
                 source_commit=commit, source_inventory=inventory,
                 sets=set_records,
@@ -1284,14 +1315,14 @@ def require_shipped_python_at_commit(entries, commit, repo=REPO):
             raise SystemExit(f"pack_wheel: shipped {arcname} ({rel}) {state} build commit {commit}")
 
 
-def python_package_entries():
+def python_package_entries(python_root=PY_DIR):
     """Use the same explicit Python package inventory as the macOS wheel."""
-    config = tomllib.loads((PY_DIR / "pyproject.toml").read_text())
+    config = tomllib.loads((python_root / "pyproject.toml").read_text())
     entries = {}
     for package in config["tool"]["setuptools"]["packages"]:
-        directory = PY_DIR.joinpath(*package.split("."))
+        directory = python_root.joinpath(*package.split("."))
         for source in sorted(directory.glob("*.py")):
-            entries[source.relative_to(PY_DIR).as_posix()] = source
+            entries[source.relative_to(python_root).as_posix()] = source
     return entries
 
 
@@ -1328,7 +1359,14 @@ def main(argv=None, _gates=True):
                     help="a macOS wheel whose METADATA must match this one's")
     ap.add_argument("--portable-math-helper", type=pathlib.Path,
                     help="Linux-built libMojolearnMath.so; required when packing on macOS")
+    ap.add_argument('--host-composition', type=pathlib.Path,
+                    help='explicit retained common-host assembly receipt; original build proofs remain required')
+    ap.add_argument('--source-root', type=pathlib.Path, default=REPO,
+                    help='frozen package source checkout; packing tools may be newer than that source')
     a = ap.parse_args(argv)
+    source_root = a.source_root.resolve()
+    python_root = source_root / 'python'
+    package_root = python_root / 'mojolearn'
     if a.profile in RELEASE_PROFILES:
         a.profile = RELEASE_PROFILE  # DEVIATION 2290: the alias maps to the same path
     split = a.profile in SPLIT_PROFILES
@@ -1337,13 +1375,15 @@ def main(argv=None, _gates=True):
         raise SystemExit("pack_wheel: --wheels needs a split profile (split, release-split)")
     plat = a.plat or (SPLIT_PLAT if split else "linux_x86_64")
 
-    proj = tomllib.loads((PY_DIR / "pyproject.toml").read_text())["project"]
-    version = read_version()
+    proj = tomllib.loads((python_root / "pyproject.toml").read_text())["project"]
+    version = read_version(source_root)
     if proj["version"] != version:
         raise SystemExit(f"pack_wheel: pyproject says {proj['version']}, "
                          f"_version.py says {version}")
-    readme = (REPO / "README.md").read_text()
+    readme = (source_root / "README.md").read_text()
 
+    if a.host_composition and not strict:
+        raise SystemExit('--host-composition requires an explicit release profile')
     witnesses = host_witnesses(a.set)
     sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses)]
     keys = [(s.vendor, s.arch) for s in sets]
@@ -1399,7 +1439,7 @@ def main(argv=None, _gates=True):
         except ValueError as exc:
             raise SystemExit(f"pack_wheel: invalid PTX set: {exc}") from exc
     if a.profile == RELEASE_PROFILE:
-        inventory = release_inventory(sets, a.build_proof, version)
+        inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, host_composition=a.host_composition)
     elif a.profile == RELEASE_SPLIT_PROFILE:
         plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k not in NON_VENDOR_KINDS}
         # A plugin is packed from its own vendor's sets and nothing else; the
@@ -1417,7 +1457,8 @@ def main(argv=None, _gates=True):
                 package_slots.update((package["vendor"], slot[0]) for slot in package["slots"])
         required = (package_slots if plugin_vendors
                     else set(keys) & RELEASE_REGISTERED_SETS)
-        inventory = release_inventory(sets, a.build_proof, version, required=required,
+        inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, required=required,
+                                      host_composition=a.host_composition,
                                       profile=RELEASE_SPLIT_PROFILE)
     else:
         inventory = None
@@ -1464,10 +1505,10 @@ def main(argv=None, _gates=True):
             "(mojolearn/.libs in the core); these sets' closures differ: "
             + ", ".join(f"{v}/{arch}" for v, arch in keys))
     entries = {}  # archive path -> filesystem path
-    entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
-    entries.update(python_package_entries())
-    entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
-    entries["mojolearn/models/catalog.json"] = PKG / "models" / "catalog.json"  # mojolearn.models.catalog()
+    entries["mojolearn_diagnostics.py"] = python_root / "mojolearn_diagnostics.py"
+    entries.update(python_package_entries(python_root))
+    entries["mojolearn/ALPHA_API.md"] = package_root / "ALPHA_API.md"
+    entries["mojolearn/models/catalog.json"] = package_root / "models" / "catalog.json"  # mojolearn.models.catalog()
     seen_vendor_libs = set()
     for s in sets:
         vendor, files, libs = s.vendor, s.files, s.libs
@@ -1542,40 +1583,40 @@ def main(argv=None, _gates=True):
     # training GPU columns the manifest names and a commit witness for
     # `python -m mojolearn identity`. Read straight from their single sources
     # in this checkout; the wheel has no second implementation of anything.
-    entries["mojolearn/_identity_trace_diff.py"] = REPO / "tools" / "identity_trace_diff.py"
-    entries["mojolearn/_identity_break.py"] = REPO / "tools" / "identity_break.py"
+    entries["mojolearn/_identity_trace_diff.py"] = source_root / "tools" / "identity_trace_diff.py"
+    entries["mojolearn/_identity_break.py"] = source_root / "tools" / "identity_break.py"
     # The expansion lanes' identity lanes (lane/algos-prep, 2026-09-27): the
     # harness copy loads `_identity_lane_<lane>.py` beside itself.
-    for fragment in sorted((REPO / "tools" / "identity_lanes").glob("*.py")):
+    for fragment in sorted((source_root / "tools" / "identity_lanes").glob("*.py")):
         entries[f"mojolearn/_identity_lane_{fragment.stem}.py"] = fragment
-    for card in sorted((PKG / "reference_cards").iterdir()):
+    for card in sorted((package_root / "reference_cards").iterdir()):
         if card.is_file():
             entries[f"mojolearn/reference_cards/{card.name}"] = card
     # `python -m mojolearn verify --all` (2026-09-15): the reference hash
     # table and the portable models, tracked files, the same globs as
     # pyproject.toml's package-data.
-    verify_ref = PKG / "verify_reference"
+    verify_ref = package_root / "verify_reference"
     if not (verify_ref / "table.json").is_file():
         raise SystemExit("pack_wheel: python/mojolearn/verify_reference/table.json is missing")
     for src in sorted(verify_ref.glob("*.json")) + sorted((verify_ref / "models").glob("*")):
         if src.is_file():
-            entries[f"mojolearn/{src.relative_to(PKG).as_posix()}"] = src
+            entries[f"mojolearn/{src.relative_to(package_root).as_posix()}"] = src
     # The shared stager validates every fixture digest before either platform packs it.
     from verification_ctr_payload import model_entries
-    for name, src in model_entries(REPO).items():
+    for name, src in model_entries(source_root).items():
         entries[f"mojolearn/verify_reference/ctr_models/{name}"] = src
     record_dir = host_surface.training_gpu_column_record()
     for col in host_surface.TRAINING_GPU_COLUMNS:
-        src = REPO / col
+        src = source_root / col
         if not src.is_file():
             raise SystemExit(f"pack_wheel: the manifest names {col}, which is not in this checkout")
         entries[f"mojolearn/identity_columns/{record_dir}/{src.name}"] = src
     if inventory is not None:
         witness = inventory["source_commit"]
-        require_shipped_python_at_commit(entries, witness)
+        require_shipped_python_at_commit(entries, witness, repo=source_root)
     else:
         import subprocess
-        witness = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
+        witness = subprocess.run(["git", "-C", str(source_root), "rev-parse", "HEAD"],
                                  capture_output=True, text=True, timeout=10).stdout.strip()
     if not re.fullmatch("[0-9a-f]{40}", witness or ""):
         raise SystemExit("pack_wheel: no commit witness for the identity columns "
@@ -1608,7 +1649,7 @@ def main(argv=None, _gates=True):
         generated[f'{dist}/LINUX_PAYLOAD.json'] = (
             json.dumps(inventory, sort_keys=True, indent=2) + '\n').encode()
     for lf in proj.get("license-files", []):
-        generated[f"{dist}/licenses/{lf}"] = (REPO / lf).read_bytes()
+        generated[f"{dist}/licenses/{lf}"] = (source_root / lf).read_bytes()
 
     # THE CITATION SHIPS TOO, and it is generated here rather than relied on
     # from the tree. This packer writes the Linux wheel itself instead of
@@ -1619,7 +1660,7 @@ def main(argv=None, _gates=True):
     # install` gave a user the licence and no way to cite the work. The
     # `[project.urls]` DOI and Citation entries need no help here, because
     # METADATA is generated from `proj` a few lines above.
-    generated["mojolearn/CITATION.cff"] = (REPO / "CITATION.cff").read_bytes()
+    generated["mojolearn/CITATION.cff"] = (source_root / "CITATION.cff").read_bytes()
     generated["mojolearn/identity_columns/COMMIT"] = (witness + "\n").encode()
 
     # The split core's METADATA is the combined wheel's plus exactly the two
@@ -1673,7 +1714,7 @@ def main(argv=None, _gates=True):
             # got) and not rewritten: its bytes stay exactly the sets' bytes.
             import subprocess
             for whl, vendor in built:
-                command = [sys.executable, str(REPO / "packaging/portable_math/wheel.py"), str(whl)]
+                command = [sys.executable, str(source_root / "packaging/portable_math/wheel.py"), str(whl)]
                 if vendor is not None:
                     command.append("--audit-only")
                 elif a.portable_math_helper:
