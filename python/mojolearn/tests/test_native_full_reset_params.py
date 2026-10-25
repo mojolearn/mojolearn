@@ -206,7 +206,7 @@ def test_parameter_descriptors_are_refused_without_invocation(field):
     model = Changed()
     setattr(Changed, field, Descriptor())
     try:
-        clean(model.set_params, alpha=2.0, error=TypeError)
+        clean(NativeFullResetParams.set_params, model, alpha=2.0, error=TypeError)
         assert calls == []
     finally:
         delattr(Changed, field)
@@ -219,7 +219,7 @@ def test_fixed_extra_field_descriptor_is_refused_without_invocation():
     model = Changed()
     Changed._index = property(lambda self: calls.append('get'), lambda self, value: calls.append('set'))
     try:
-        clean(model.set_params, n_neighbors=2, error=TypeError)
+        clean(NativeFullResetParams.set_params, model, n_neighbors=2, error=TypeError)
         assert calls == []
     finally:
         del Changed._index
