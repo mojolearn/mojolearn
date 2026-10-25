@@ -44,6 +44,33 @@
 - Keep explicit per-run result retention and archive-before-teardown checks.
   Active build and measurement controllers are not background watcher services.
 
+## Lightweight release verification and incremental builds (Andrew, 2026-10-25)
+
+- Bitwise identity is required across supported devices within one release,
+  never against a previous release's outputs. Comparing source fingerprints
+  with an older build decides which evidence can be reused; it is not a
+  requirement to keep the implementation or its results unchanged.
+- Development builds and separately compiled groups are valid for runtime and
+  identity verification of the paths they actually execute. A monolithic or
+  production-layout rebuild is not required merely to count that verification.
+  Retain source closures, compiler, flags, dependencies, target, binary hashes,
+  actual coverage and results. Do not promote source checks or compilation to
+  runtime success, or extend a partial result to untested paths or devices.
+- Reuse those results during release. Require an explicit relevant input change
+  or observed failure for each rerun; a version, commit name, packaging step or
+  unchanged group assembled beside a changed one is not sufficient by itself.
+  If assembly changes linking, loading or dispatch, test that affected boundary.
+- Release verification uses bounded correctness fixtures and focused installed
+  artifact, loader, dependency and adapter smokes. Full-dataset performance
+  measurements, opponent races and repeated broad qualification are separate
+  campaigns, not automatic publication prerequisites. Preserve required
+  within-release identity evidence and negative controls; run missing or
+  invalidated checks only. Full-workload evidence remains required to promote
+  performance defaults or make performance claims.
+- NVIDIA PTX verification may run on a suitable RunPod NVIDIA GPU with a
+  compatible driver. Record actual GPU/driver and the selected PTX route;
+  executing a native architecture image does not qualify the PTX route.
+
 ## Results leave the box (Andrew, 2026-10-18)
 
 Every run on a rented box keeps its logs and results on the Mac and in R2, not only on the box.
