@@ -21,6 +21,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
+from ._native_neighbor_queries import native_method as _native_query_method
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from .linear_model import _dtype_name, _is_integer_labels, _shape_of
 from ._metrics_impl import _get_binding as _metrics_binding
@@ -779,6 +780,7 @@ class NearestNeighbors(NumericModeMixin):
     # The copy is keyed on the index array's address and shape, released at
     # refit and when the instance is collected. The CPU host binding has no
     # resident entry and reads the caller's memory on every call.
+    @_native_query_method
     def kneighbors(self, X, n_neighbors=None, return_distance=True):
         """Find the nearest fitted points to each query, nearest first.
 
@@ -814,102 +816,7 @@ class NearestNeighbors(NumericModeMixin):
             If the model is not fitted, `X` has the wrong number of features,
             or `n_neighbors` is out of range.
         """
-        if self._index is None:
-            raise ValueError("mojolearn: call fit before kneighbors")
-        k = self.n_neighbors if n_neighbors is None else n_neighbors
-        q, _ = as_f32_dense_c(X, ndim=2, name="X")
-        if self.algorithm != "rbc":
-            _check_metric_input(type(self).__name__, self._dist_params()[0], q)
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn: X has {q.shape[1]} features, index has "
-                f"{self.n_features_in_}"
-            )
-        if k < 1 or k > self.n_samples_fit_:
-            raise ValueError(
-                f"mojolearn: n_neighbors must be in [1, {self.n_samples_fit_}]"
-                f", got {k}"
-            )
-
-        nq = q.shape[0]
-
-        if self.algorithm == "rbc":
-            # THE INDEXED ARM. Same answer, computed by pruning instead of
-            # by comparing every pair: `neighbors/impl/ball_cover/
-            # knn.mojo` proves each bound exact and
-            # `neighbors/checks/ball_cover_knn_check.mojo` gates it against
-            # a host brute force with no tolerance.
-            mvalue, marg = _resolve_rbc_metric(
-                type(self).__name__, self.metric, self.p
-            )
-            idx = self._index
-            rind = empty((nq, k), "<i4")
-            rdist = empty((nq, k), "<f4")
-            self.n_candidate_distances_ = self._bind(
-                "_mojolearn"
-            ).rbc_knn_search(
-                addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(rind, name="rind"), addr(rdist, name="rdist"),
-                # ORDER MATCHES bindings/_mojolearn.mojo::
-                # rbc_knn_search_binding. n_index, n_queries, n_features, k,
-                # metric, metric_arg
-                [idx.shape[0], nq, idx.shape[1], k, mvalue, marg],
-            )
-            # The index is built inside the call, so `used_query_tile_` has
-            # no meaning on this arm and is set to None rather than left
-            # holding a stale value from a previous brute-force call.
-            self.used_query_tile_ = None
-            if rind.min() < 0:
-                raise RuntimeError(
-                    "mojolearn NearestNeighbors(algorithm='rbc'): the query "
-                    "returned an unfilled neighbour slot, which can only "
-                    "happen when k exceeds the index size. The Mojo side "
-                    "refuses that before launching, so this means the "
-                    "arrays changed under the call."
-                )
-            if return_distance:
-                return rdist, rind.astype("<i8")
-            return rind.astype("<i8")
-
-        dist = empty((nq, k), "<f4")
-        ind = empty((nq, k), "<u4")
-
-        # Every array named here stays in a local for the whole call. That is
-        # the contract `_buffer` documents and the reason it is spelled out.
-        idx = self._index
-        binding = self._bind("_mojolearn")
-        handle = self._resident_index_handle(binding, idx)
-        # ORDER MATCHES bindings/_mojolearn.mojo::knn_search_binding and
-        # ::knn_search_resident_binding.
-        # n_index, n_queries, n_features, k, return_sqrt, query_tile
-        params = [idx.shape[0], nq, idx.shape[1], k, 1, self.query_tile]
-        if handle is not None:
-            self.used_query_tile_ = binding.knn_search_resident(
-                handle,
-                addr_ro(idx, name="idx"),
-                addr_ro(q, name="q"),
-                addr(dist, name="dist"),
-                addr(ind, name="ind"),
-                params,
-                # metric, metric_arg, weights -- see _dist_triple there.
-                self._dist_params(),
-            )
-        else:
-            self.used_query_tile_ = binding.knn_search(
-                addr_ro(idx, name="idx"),
-                addr_ro(q, name="q"),
-                addr(dist, name="dist"),
-                addr(ind, name="ind"),
-                params,
-                self._dist_params(),
-            )
-
-        if return_distance:
-            # an inner-product search hands back the products themselves:
-            # the binding negates its selection keys on the device before
-            # the readback (the host binding in its copy loop; lane
-            # pyglue-numeric, the negation was a second call here)
-            return dist, ind.astype("<i8")
-        return ind.astype("<i8")
+        return _NATIVE_QUERY(self, "kneighbors", (X, n_neighbors, return_distance), _QUERY_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring):
@@ -1524,6 +1431,7 @@ class RadiusNeighbors(NumericModeMixin):
     # kept because the ball cover returns it, DBSCAN counts on it, and
     # dropping it would make this surface disagree with the CSR every other
     # consumer sees.
+    @_native_query_method
     def radius_neighbors(
         self, X=None, radius=None, return_distance=True, sort_results=False
     ):
@@ -1567,96 +1475,7 @@ class RadiusNeighbors(NumericModeMixin):
             wrong number of features, or ``sort_results=True`` with
             ``return_distance=False``.
         """
-        if self._index is None:
-            raise ValueError(
-                "mojolearn RadiusNeighbors: call fit() before "
-                "radius_neighbors()"
-            )
-        r = float(self.radius if radius is None else radius)
-        if not math.isfinite(r) or r <= 0:
-            raise ValueError(
-                f"mojolearn RadiusNeighbors: radius={radius!r} is refused; "
-                "it must be positive and finite"
-            )
-        if sort_results and not return_distance:
-            raise ValueError(
-                "mojolearn RadiusNeighbors: sort_results=True requires "
-                "return_distance=True; there is nothing to sort by otherwise"
-            )
-
-        idx = self._index
-        if X is None:
-            q = idx
-        else:
-            q, _ = as_f32_dense_c(X, ndim=2, name="X")
-            if q.shape[1] != idx.shape[1]:
-                raise ValueError(
-                    f"mojolearn RadiusNeighbors: X has {q.shape[1]} features "
-                    f"but the index was fit on {idx.shape[1]}"
-                )
-        nq = q.shape[0]
-
-        indptr = empty((nq + 1,), "<i4")
-        nnz = self._bind("_mojolearn").radius_neighbors_count(
-            addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(indptr, name="indptr"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::
-            # radius_neighbors_count_binding. n_index, n_queries, n_features,
-            # radius, metric, metric_arg
-            [idx.shape[0], nq, idx.shape[1], r,
-             self._metric_value, self._metric_arg],
-        )
-        cols = empty((nnz,), "<i4")
-        dists = empty((nnz,), "<f4")
-        # NO NEIGHBOUR IN THE WHOLE CALL (2026-09-14 night, found by the
-        # batch part of tools/identity_break.py): a zero-length `cols` has no
-        # address, and the fill binding refused it with "null int32 buffer
-        # address", so a query row with no neighbour raised when asked ALONE
-        # and answered an empty row inside a larger batch (base fixture,
-        # held-out rows 1 and 7 of the radius lane). The counting pass has
-        # already written every indptr entry (all zero), so there is nothing
-        # to fill.
-        got = 0 if nnz == 0 else self._bind("_mojolearn").radius_neighbors_fill(
-            addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr(indptr, name="indptr"), addr(cols, name="cols"),
-            addr(dists, name="dists"),
-            # n_index, n_queries, n_features, radius, nnz_capacity,
-            # return_sqrt, metric, metric_arg. The metric MUST be the same
-            # value both passes saw: the index is built inside each call, so
-            # a metric that differed between them would count under one
-            # cover and fill under another.
-            [idx.shape[0], nq, idx.shape[1], r, nnz, 1,
-             self._metric_value, self._metric_arg],
-        )
-        # The Mojo side already refuses `got > nnz`. This asserts the other
-        # direction too, because a SHORT fill would leave the tail of `cols`
-        # uninitialised and every row after it wrong, and nothing downstream
-        # would notice.
-        if got != nnz:
-            raise RuntimeError(
-                f"mojolearn RadiusNeighbors: the counting pass found {nnz} "
-                f"neighbours and the filling pass found {got}, on the same "
-                "arrays. The two passes rebuild the index independently, so "
-                "this means the input arrays changed between them"
-            )
-
-        # DEVIATION 2375 -- API CHANGE: the ragged containers are Python
-        # LISTS of Arrays (int64 indices, float32 distances), one per query
-        # row, where they were object-dtype ndarrays. Same per-row contents,
-        # indexed with `[i]` as before; `len()` is the query count.
-        if sort_results and nnz:
-            # every row's stable sort by distance as one segmented sort on
-            # the device (`xn_p2m_row_sort`, key (row, distance, position);
-            # the rows arrive in ascending index order under `identical`, so
-            # the result is (distance, index) lexicographic)
-            from ._expansion_neighbors import _p2m_sort_rows
-            cols, dists = _p2m_sort_rows(self, indptr, cols, dists, _XN)
-        ptr = indptr.tolist()
-        cols64 = cols.astype("<i8")
-        # glue: one view per query row, the ragged API's list of Arrays
-        ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]  # glue: ragged API: one index view per query
-        dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]  # glue: ragged API: one index view per query
-        if return_distance:
-            return dst, ind
-        return ind
+        return _NATIVE_QUERY(self, "radius_neighbors", (X, radius, return_distance, sort_results), _QUERY_CONTEXT)
 
 
 _native_archive_bridge.register(
@@ -1720,6 +1539,12 @@ _native_archive_bridge.register(KNeighborsRegressor, _KNN_FORMAT, _knn_schema(
 # dictionary `_resident_holder["index"]`.
 _native_archive_bridge.lifetime(NearestNeighbors, "knn_index_release", "_resident_holder")
 
+
+from ._native_neighbor_queries import connect as _connect_queries
+_NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
+    {NearestNeighbors: "knn", KNeighborsClassifier: "knn", KNeighborsRegressor: "knn", RadiusNeighbors: "radius"},
+    _NATIVE_CONTEXT, _ARCHIVE_CONTEXT, ("base", "sort"))
+_QUERY_CONTEXT["neighbor_query_classifier_classes"] = {KNeighborsClassifier: True}
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
 # the package at first use (`_sklearn_modules`), so `from mojolearn.neighbors import ...`
