@@ -76,6 +76,20 @@ def test_slots_sets_the_build_jobs_and_nothing_else(env, tmp_path):
         assert p.returncode == 2, bad
 
 
+@pytest.mark.parametrize("mode", ["run", "metal"])
+@pytest.mark.parametrize("inherited", [None, "123"])
+def test_scheduler_does_not_choose_framework_busy_wait(env, mode, inherited):
+    # No framework import or GPU work: exercise the actual spawned environment.
+    env.pop("MODULAR_THREAD_BUSY_WAIT_US", None)
+    if inherited is not None:
+        env["MODULAR_THREAD_BUSY_WAIT_US"] = inherited
+    p = launch(env, mode, sys.executable, "-c",
+               "import os; print(repr(os.environ.get('MODULAR_THREAD_BUSY_WAIT_US')))")
+    out, err = p.communicate(timeout=10)
+    assert p.returncode == 0, err
+    assert out.strip() == repr(inherited)
+
+
 def test_live_legacy_and_unpublished_locks_not_stolen(env):
     s = Scheduler(env)
     s.metal.mkdir()

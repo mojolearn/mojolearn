@@ -357,8 +357,11 @@ def main(argv=None):
         print(f"mac_slot: admitted after {admitted - started:.3f}s", file=sys.stderr, flush=True)
         env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
                    VECLIB_MAXIMUM_THREADS="1", MOJOLEARN_CPU_THREADS="1",
-                   MOJOLEARN_COMPILE_JOBS="1", MOJOLEARN_BUILD_JOBS=str(args.slots),
-                   MODULAR_THREAD_BUSY_WAIT_US="0")
+                   MOJOLEARN_COMPILE_JOBS="1", MOJOLEARN_BUILD_JOBS=str(args.slots))
+        # Runtime wait policy belongs to the application. Forcing
+        # MODULAR_THREAD_BUSY_WAIT_US=0 made a bare MAX 26.5 InferenceSession
+        # abort while reconciling CPU-device options (2026-10-25). Preserve an
+        # explicit caller setting, but do not inject one from this scheduler.
         # --slots N (2026-09-21): N slots held, N single-worker builds. The
         # macOS release build under one slot compiled its 61 extensions one
         # after another (0.8.13: 2370 s of compile in a 2666 s run); see
