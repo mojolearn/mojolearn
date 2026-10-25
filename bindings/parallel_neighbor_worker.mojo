@@ -11,7 +11,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
 from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense
-from bindings.parallel_shard_common import shard_model, shard_rows
+from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from bindings.neighbors_knn_native import (
     _nn_fit, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
@@ -58,7 +58,7 @@ def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bo
 
 def _wide(source: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     var result = family_array(shape, "<i8", context)
-    labels_cast(Int(py=classical_address(source)), String(source.dtype), Int(py=classical_address(result)),
+    labels_cast(Int(py=classical_address(source)), shard_dtype(source), Int(py=classical_address(result)),
                 "<i8", Int(py=source.size), context)
     _ = source
     return result

@@ -671,3 +671,10 @@ from ._native_linear_constructors import connect as _connect_linear_constructors
 from ._native_params_setter import _CONTEXT as _linear_constructor_setters
 _connect_linear_constructors(_linear_constructor_setters)
 del _connect_linear_constructors, _linear_constructor_setters
+
+# The public parallel drivers' class/storage snapshots are taken last: every
+# import-time class connection above (native attribute slots, constructors)
+# precedes them, so a correct call is not refused as a changed hook.
+from ._native_parallel_public import refresh as _refresh_parallel_public
+_refresh_parallel_public(parallel_ensemble._FAMILY_CONTEXT)
+del _refresh_parallel_public
