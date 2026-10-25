@@ -18,6 +18,7 @@ from bindings.sequential_inputs import sequential_input
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_kind, forest_get_params, forest_check_fit_device
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast
+from bindings.trees_public_auxiliary import forest_auxiliary
 
 
 def _outside() raises -> Bool:
@@ -91,6 +92,12 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     classical_check_layout(model, context)
     if operation == "trees_public_forest_set_params":
         return _set_params(model, args[0], context)
+    if operation == "trees_public_forest_apply" or operation == "trees_public_forest_predict_with_leaves" or operation == "trees_public_forest_staged_predict" or operation == "trees_public_forest_auxiliary":
+        var method = operation[len("trees_public_forest_"):]
+        # Retained e087692fd public baseline: these auxiliary APIs return
+        # Array/tuple-of-Arrays even externally with NumPy loaded. Preserve
+        # that boundary and Float32 means, including regressors.
+        return forest_auxiliary(model, method, args, context)
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
     var names = py_type(model)._parameter_names

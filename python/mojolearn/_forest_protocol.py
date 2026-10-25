@@ -247,34 +247,11 @@ class ForestProtocol:
 
     def _forest_auxiliary(self, X, *, leaves=False, prefixes=False, prediction=False):
         """T39 buffer/argument plumbing; all walks and reductions are Mojo."""
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        if not hasattr(self, "_offsets"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        rows, features = Xa.shape
-        if features != self.n_features_in_:
-            raise ValueError(f"X has {features} features, fit saw {self.n_features_in_}")
-        trees, outputs = int(self._n_trees), int(self._num_outputs)
-        leaf = empty((rows, trees), "<i4") if leaves else None
-        prefix = empty((rows, trees, outputs), "<f4") if prefixes else None
-        raw = empty((rows, outputs), "<f4") if prediction else None
-        native = self._bind("_mojolearn_x_trees")
-        entry = getattr(native, "x_trees_forest_auxiliary", None)
-        if not callable(entry):
-            raise NotImplementedError("this tree binding does not expose combined auxiliary outputs")
-        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)  # glue: five forest buffers
-        wrote = entry([_addr_ro(a) for a in arrays], _addr_ro(Xa),  # glue: five model addresses
-                      0 if leaf is None else _addr(leaf),
-                      0 if prefix is None else _addr(prefix),
-                      0 if raw is None else _addr(raw),
-                      [rows, features, trees, outputs, int(self._BINDING == "_mojolearn_rf")])
-        if wrote != rows:
-            raise RuntimeError(f"forest auxiliary wrote {wrote} of {rows} rows")
-        return raw, leaf, prefix
+        return _TREES(self, "trees_public_forest_auxiliary", (X, leaves, prefixes, prediction), _TREES_CONTEXT)
 
     def apply(self, X):
         """Return tree-relative leaf IDs, shape (rows, trees), from the native walk."""
-        return self._forest_auxiliary(X, leaves=True)[1]
+        return _TREES(self, "trees_public_forest_apply", (X,), _TREES_CONTEXT)
 
     def predict_with_leaves(self, X):
         """Return ordered raw mean scores (rows, outputs) and leaf IDs (rows, trees).
@@ -282,8 +259,7 @@ class ForestProtocol:
         Classifier scores are undecoded class votes. This auxiliary ordered
         contract is independent of an explicitly selected groves engine.
         """
-        scores, leaves, _ = self._forest_auxiliary(X, leaves=True, prediction=True)
-        return scores, leaves
+        return _TREES(self, "trees_public_forest_predict_with_leaves", (X,), _TREES_CONTEXT)
 
     def staged_predict(self, X):
         """Return eager mean prefixes, shape (rows, trees, outputs), in tree order.
@@ -291,7 +267,7 @@ class ForestProtocol:
         Each prefix uses the fixed increasing-tree fold through that tree.
         Only this requested API allocates the complete prefix buffer.
         """
-        return self._forest_auxiliary(X, prefixes=True)[2]
+        return _TREES(self, "trees_public_forest_staged_predict", (X,), _TREES_CONTEXT)
 
     def _prepare_resident_forest(self, native=None):
         """Prepare the existing immutable parallel-groves snapshot without a query."""

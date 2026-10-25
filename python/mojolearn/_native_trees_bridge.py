@@ -202,7 +202,7 @@ def _connect_public_forest(cls, context):
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     from ._native_classical_bridge import _layout
-    for name in ('fit', '_fit_with_tree_start', 'predict', 'predict_proba', 'score'):  # glue: fixed public tree doors
+    for name in ('fit', '_fit_with_tree_start', 'predict', 'predict_proba', 'score', 'apply', 'predict_with_leaves', 'staged_predict'):  # glue: fixed public tree doors
         method = getattr(cls, name, None)
         if inspect.isfunction(method):
             setattr(cls, name, inspect.unwrap(method))
