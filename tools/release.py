@@ -1343,9 +1343,22 @@ class Release:
         return release_requirements.RequirementsLedger(self.base / "requirements.json")
 
     def readiness_manifest(self):
-        configuration = {"release_modes": list(self.release_modes),
-                         "build_flags": release_requirements.build_flags()}
+        configuration = dict(self.readiness().read().get("configuration", {}))
+        configuration_path = getattr(self.args, "requirements_configuration", None)
+        if configuration_path:
+            supplied = json.loads(Path(configuration_path).read_text())
+            if not isinstance(supplied, dict):
+                raise ValueError("requirements configuration must be a JSON object")
+            configuration.update(supplied)
+        configuration.update(release_modes=list(self.release_modes),
+                             build_flags=release_requirements.build_flags())
+        context = dict(configuration.get("dependency_context", {}))
+        apple_toolchain = release_reuse.darwin_toolchain()
+        if apple_toolchain is not None:
+            context["apple_toolchain"] = apple_toolchain
+        configuration["dependency_context"] = context
         for vendor in GATE_VENDORS:
+            configuration.pop("artifacts:" + vendor, None)
             try:
                 identity = self.candidate_gate_identity(vendor)
                 # Source revision is provenance, not an invalidation input.
@@ -1353,6 +1366,7 @@ class Release:
             except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile):
                 pass
         try:
+            configuration.pop("artifacts:apple", None)
             wheel = self.macos_wheel()
             if wheel and Path(wheel).is_file():
                 configuration["artifacts:apple"] = {Path(wheel).name: sha256(wheel)}
@@ -3195,6 +3209,8 @@ def main(argv=None):
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
     ap.add_argument("--rerun-reason", help="specific invalidation/failure reason required with --redo")
+    ap.add_argument("--requirements-configuration", metavar="JSON",
+                    help="explicit qualification inputs (CPU target, full-workload recipes); retained in the release ledger")
     ap.add_argument("--refreeze", action="store_true",
                     help="move the frozen source commit to HEAD (the only way it moves); completed legs and "
                          "columns are kept where what they built or tested is unchanged")
