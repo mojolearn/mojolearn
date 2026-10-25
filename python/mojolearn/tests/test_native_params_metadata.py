@@ -235,8 +235,13 @@ def test_all_public_generic_getters_have_connected_schemas():
         if (getattr(module, '__name__', '').startswith('mojolearn')
                 and not getattr(module, '__name__', '').startswith('mojolearn.tests')):
             for cls in vars(module).values():
-                if (type(cls) is type and cls not in seen and cls.__module__.startswith('mojolearn')
-                        and not cls.__module__.startswith('mojolearn.tests')):
+                # Native extension types need not declare __module__. Inspect
+                # passive metadata just as the import-time connector does;
+                # the public-export loop above still checks every public class.
+                module_name = vars(cls).get('__module__') if type(cls) is type else None
+                if (type(cls) is type and cls not in seen and type(module_name) is str
+                        and module_name.startswith('mojolearn')
+                        and not module_name.startswith('mojolearn.tests')):
                     seen.add(cls)
                     declared = next((vars(base)['get_params'] for base in cls.__mro__ if 'get_params' in vars(base)), None)
                     if declared is _mode.ParamsMixin.get_params:
