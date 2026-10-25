@@ -47,10 +47,11 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
             connected[mode] = entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
-    gather = _backend.binding("_mojolearn", "identical").gather_rows_bytes
+    base = _backend.binding("_mojolearn", "identical")
+    gather, finite32, finite64 = base.gather_rows_bytes, base.all_finite_f32, base.all_finite_f64
     call = _binding()._module.prep_encode_native_call
-    if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, gather)):  # glue: fixed native ABI identity
-        raise TypeError("the encode prep owner requires compiled prep_encode_native_call and row-gather entries")
+    if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, gather, finite32, finite64)):  # glue: fixed native ABI identity
+        raise TypeError("the encode prep owner requires compiled prep_encode_native_call, row-gather and finite-check entries")
     # The owners read the process mode from _backend's namespace.
     _backend.default_mode()
     context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
@@ -58,6 +59,8 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
                    arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
                    scaler_bindings=connected, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
+                   # Shared composition target validation preserves both widths.
+                   maxabs_finite_f32=finite32, maxabs_finite_f64=finite64,
                    classical_getframe=sys._getframe, prep_encode_kinds=dict(kinds),
                    prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores),
                    prep_owner_kinds=dict(owner_kinds or {}), prep_owner_classes=dict(owner_classes or {}))
