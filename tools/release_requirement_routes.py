@@ -1,5 +1,6 @@
 """Source witnesses for mode and CPU binding routes; never load product code."""
 import ast
+from collections import Counter
 import hashlib
 from pathlib import Path
 
@@ -109,8 +110,12 @@ def loader_routes(root, surface):
 
     default_mode = functions.get("default_mode")
     known_default = default_mode is not None and _body_matches(default_mode, DEFAULT_MODE)
-    for path in sorted((root / "python/mojolearn").rglob("*.py")):
-        tree = ast.parse(path.read_bytes(), filename=str(path))
+    parsed = [(path, ast.parse(path.read_bytes(), filename=str(path)))
+              for path in sorted((root / "python/mojolearn").rglob("*.py"))]
+    literals = Counter(node.value for _, tree in parsed for node in ast.walk(tree)
+                       if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                       and node.value.startswith("_mojolearn"))
+    for path, tree in parsed:
         backend_import = any(isinstance(node, ast.ImportFrom) and node.level == 1 and node.module is None
             and any(alias.name == "_backend" and alias.asname in (None, "_backend") for alias in node.names)
             for node in tree.body)
@@ -143,7 +148,17 @@ def loader_routes(root, surface):
                     continue
                 symbol = call.args[1].id
                 binding = constants.get(symbol)
-                if not binding or not binding.startswith("_mojolearn"):
+                if not binding or not binding.startswith("_mojolearn") or literals[binding] != 1:
+                    continue
+                # A local guard cannot exclude another module's direct or
+                # imported use of the same binding. Unknown external use is
+                # retained as a missing route, never assumed unreachable.
+                if any((isinstance(node, ast.ImportFrom) and any(alias.name == symbol or
+                        (alias.name == "*" and (node.module or "").split(".")[-1] == path.stem)
+                        for alias in node.names))
+                        or (isinstance(node, ast.Attribute) and node.attr == symbol)
+                        or (isinstance(node, ast.Constant) and node.value == symbol)
+                        for other_path, other in parsed if other_path != path for node in ast.walk(other)):
                     continue
                 if sum(isinstance(node, ast.Name) and node.id == symbol and isinstance(node.ctx, ast.Store)
                        for node in ast.walk(tree)) != 1:

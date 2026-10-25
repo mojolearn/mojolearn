@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import textwrap
+import pytest
 
 import release_requirement_dependencies as D
 import release_requirement_routes as R
@@ -88,3 +89,14 @@ def test_witness_changes_with_loader_source_bytes(tmp_path):
     path.write_text(path.read_text() + '\n# retained loader source change\n')
     second = R.loader_routes(tmp_path, surface)
     assert first['sources'] != second['sources']
+
+
+@pytest.mark.parametrize('other', [
+    'from . import _backend\nx = _backend._load_member("fast", "_mojolearn_tokenizer_fast", "path")',
+    'from .tokenizer import _FAST_EXTENSION\nx = load(_FAST_EXTENSION)',
+    'from . import tokenizer\nx = load(tokenizer._FAST_EXTENSION)',
+])
+def test_an_unrelated_guard_cannot_hide_another_modules_loader_use(tmp_path, other):
+    package, surface = fixture(tmp_path)
+    (package / 'other.py').write_text(other)
+    assert not R.loader_routes(tmp_path, surface)['mode_exclusions']
