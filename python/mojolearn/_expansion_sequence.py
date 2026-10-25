@@ -79,6 +79,8 @@ def __getattr__(name):
         from . import _mode
         from ._native_params_metadata import connect_classes
         if _mode._PARAMS_METADATA_CONTEXT['ready']:
+            from ._native_public_attributes import connect_classes as connect_attributes
+            connect_attributes(sys.modules[__package__])
             connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])
         value = getattr(loaded, attribute)
     except ModuleNotFoundError as exc:

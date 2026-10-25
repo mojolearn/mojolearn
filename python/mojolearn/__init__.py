@@ -622,6 +622,12 @@ import sys as _mode_metadata_sys
 _connect_mode_metadata_classes(_mode_metadata_owner._MODE_METADATA_CONTEXT, _mode_metadata_sys.modules[__name__])
 del _connect_mode_metadata_classes, _mode_metadata_owner, _mode_metadata_sys
 
+# Native attribute slots precede the estimator and parameter layout snapshots.
+from ._native_public_attributes import connect_classes as _connect_public_attributes
+import sys as _attribute_sys
+_connect_public_attributes(_attribute_sys.modules[__name__])
+del _connect_public_attributes, _attribute_sys
+
 from ._native_msel_dispatch import connect as _connect_native_cv
 import sys as _cv_sys
 _connect_native_cv(model_selection._NATIVE_CONTEXT, _cv_sys.modules[__name__])
