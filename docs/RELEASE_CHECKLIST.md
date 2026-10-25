@@ -232,12 +232,17 @@ its overlay verified; `<legs>/<leg>.reused.json` says built from X, admitted
 for Y and why, and the pack names those files in `reuse.json` with that
 origin. A GPU column is taken only for a byte-identical wheel (sha256) and the
 same lane selection, and is diffed again against this release's references.
-Anything unequal, unreadable or uncommitted rebuilds or reruns. Every leg and
-column PASS is recorded once in the ledger in R2
+Changed relevant inputs require the affected check; the requirements ledger
+records the specific invalidation before that work starts. Unreadable evidence
+requires restoration from its archive, and uncommitted inputs require a frozen
+source record. Neither condition alone authorizes repeating completed work.
+Every leg and column PASS is retained in the artifact cache in R2
 (`tools/release_ledger.py`, `release-ledger/v1/` in `mojolearn-data`, keyed
 by set identity and tooling digest, or wheel sha256, vendor and lane
-selection); the release consults it before launching, and admits a ledger
-PASS only when its evidence is on this machine and verifies.
+selection). This cache supplies evidence to the canonical requirements ledger;
+it is not a separate readiness decision. The release consults retained results
+before launching and admits a PASS only when its evidence is available and
+verifies against the requirement's inputs and coverage.
 
 It is resumable: rerun the same command after any stop, and only what is not
 done runs. State lives in `~/mojolearn-evidence/release/<version>/state.json`,
