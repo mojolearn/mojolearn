@@ -691,16 +691,17 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
     # POLICY 7: the implementation's class set against ours, made visible:
     # `uniq` split at the running class counts.
     var flat = py_call(native_buffer_view(uniq._mv).tolist)
+    var list_item = py_call(b.getattr, b.list, "__getitem__")
     var off = 0
     for i in range(len(classes_list)):  # driver-loop: over the class set check per output column
         var count = len(classes_list[i])
-        var found = py_call(flat.__getitem__, py_call(b.slice, PythonObject(off), PythonObject(off + count)))
+        var found = py_call(list_item, flat, py_call(b.slice, PythonObject(off), PythonObject(off + count)))
         off += count
         var expected = classes_list[i]
         if _ne(found, expected):
             var eight = py_call(b.slice, PythonObject(8))
             raise Error("RuntimeError: mojolearn: output " + String(i) + ": the implemented getUniquelabels found "
-                        + "classes " + family_str(py_call(found.__getitem__, eight)) + "..., the host sort found "
+                        + "classes " + family_str(py_call(list_item, found, eight)) + "..., the host sort found "
                         + family_str(family_call(py_call(b.getattr, expected, PythonObject("__getitem__")), eight))
                         + "...; the two class sets disagree")
     return Python.tuple(labels, proba, n_classes)
