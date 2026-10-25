@@ -42,6 +42,7 @@ from bindings.prep_native_estimator import (
     prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
 )
 from bindings.classical_labels import _label_list
+from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_array_storage import native_array_from_values
@@ -158,9 +159,12 @@ def _int_list(values: PythonObject) raises -> PythonObject:
     return py_call(trees_builtins().list, py_call(trees_builtins().map, trees_builtins().int, values))
 
 
-def _codes_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
+def _codes_array(var values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list([int(c) for c in values], "<i4")`."""
     var b = trees_builtins()
+    # A fitted native classifier may expose ClassLabels. Read its verified
+    # list storage instead of asking it for a buffer or invoking list hooks.
+    values = classifier_label_list(values, context)
     var listed = values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context)
     var store = py_call(context["array_type"], PythonObject("i"), _int_list(listed))
     return classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
@@ -174,7 +178,7 @@ def _sub_cols(member: PythonObject, context: PythonObject) raises -> PythonObjec
 def _index_of_one(member: PythonObject, context: PythonObject) raises -> Int:
     """`[int(c) for c in member.classes_].index(1)`, or -1 when 1 is absent."""
     var b = trees_builtins()
-    var values = _attr(member, "classes_", PythonObject(None))
+    var values = classifier_label_list(_attr(member, "classes_", PythonObject(None)), context)
     var subs = _int_list(values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context))
     for i in range(len(subs)):  # driver-loop: over the member's fitted classes
         if Int(py=subs[i]) == 1:

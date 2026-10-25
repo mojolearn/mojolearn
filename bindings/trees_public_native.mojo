@@ -14,6 +14,7 @@ from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
 from bindings.trees_public_boost import boost_operation
 from bindings.trees_public_meta import meta_operation
+from bindings.trees_public_meta_lifecycle import meta_public_operation
 from bindings.trees_public_mixin_score import boost_score, gbdt_adapter_score
 from bindings.trees_public_gbdt_fit import (
     gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
@@ -36,6 +37,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return forest_construct(model, args, context)
     if operation.startswith("trees_public_forest_"):
         return forest_public_operation(model, operation, args, context)
+    if operation.startswith("trees_public_meta_"):
+        return meta_public_operation(model, operation, args, context)
     if py_get(context, "cv_fixed_owner") is not None:
         context = fixed_owner_context(context)
         _ = fixed_owner_fields(model, context)

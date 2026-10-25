@@ -1797,7 +1797,7 @@ class _FitTransformMixin:
         array of shape (n_samples, n_output_features), float64
             The transformed training data.
         """
-        return _TREES(self, "trees_meta_fit_transform", (X, y, fit_params), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit_transform", (X, y, fit_params), _TREES_CONTEXT)
 
 
 class _MetaClassifierScore:
@@ -1822,7 +1822,7 @@ class _MetaClassifierScore:
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _MetaRegressorScore:
@@ -1846,7 +1846,7 @@ class _MetaRegressorScore:
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _TREES(self, "trees_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _TreesWrapperBase(_TreesEnsembleBase):
@@ -1946,7 +1946,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         -------
         self
         """
-        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     @available_if(lambda self: self.voting != "hard")
     def predict_proba(self, X):
@@ -1959,7 +1959,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels by weighted vote (hard) or averaged probabilities (soft).
@@ -1969,7 +1969,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """The members' outputs side by side.
@@ -1981,7 +1981,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
             (n_samples, n_estimators * n_classes); with ``voting="hard"``, every
             member's predicted class code, shape (n_samples, n_estimators).
         """
-        return _TREES(self, "trees_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
 
 
 class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
@@ -2054,7 +2054,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         self
         """
-        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted average of the members' predictions.
@@ -2063,7 +2063,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         array of shape (n_samples,), float64
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """Every member's prediction side by side.
@@ -2072,7 +2072,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         array of shape (n_samples, n_estimators), float64
         """
-        return _TREES(self, "trees_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
 
 
 # ---------------------------------------------------------------- Stacking
@@ -2109,7 +2109,7 @@ class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_meta_features), float64
         """
-        return _TREES(self, "trees_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
 
 
 class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBase):
@@ -2206,7 +2206,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
             When a member's output width differs between folds (a class missing
             from a fold's training rows).
         """
-        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels with the final estimator on the stacked outputs.
@@ -2216,7 +2216,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """The final estimator's class probabilities on the stacked outputs.
@@ -2225,7 +2225,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
 
 
 class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase):
@@ -2308,7 +2308,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         -------
         self
         """
-        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict with the final estimator on the stacked member predictions.
@@ -2317,7 +2317,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         -------
         array of shape (n_samples,)
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- MultiOutput
@@ -2388,7 +2388,7 @@ class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapp
         -------
         self
         """
-        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Every target's prediction, one column per output.
@@ -2397,7 +2397,7 @@ class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapp
         -------
         array of shape (n_samples, n_outputs)
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
 
 class MultiOutputClassifier(_TreesWrapperBase):
@@ -2462,7 +2462,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
         -------
         self
         """
-        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict every output's labels.
@@ -2473,7 +2473,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             For numeric labels, int64 when every output's labels are integers,
             else float64.
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Every output's class probabilities.
@@ -2484,7 +2484,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             One float64 array of shape (n_samples, n_classes_j) per output, its
             columns in the order of ``classes_[j]``.
         """
-        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Subset accuracy: the fraction of rows whose every output is
@@ -2505,7 +2505,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             Fraction of rows with all outputs correct (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 
 # --------------------------------------------------------------- OneVsRest
@@ -2580,7 +2580,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         -------
         self
         """
-        return _TREES(self, "trees_meta_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class whose binary classifier scores highest.
@@ -2590,7 +2590,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities.
@@ -2603,7 +2603,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- Calibration
@@ -2713,7 +2713,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         ValueError
             When ``cv`` asks for more folds than some class has members.
         """
-        return _TREES(self, "trees_meta_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_fit", (X, y, None), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Calibrated class probabilities.
@@ -2725,7 +2725,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         -------
         array of shape (n_samples, n_classes)
         """
-        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest calibrated probability.
@@ -2735,7 +2735,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
 
 
 # The meta-estimators' native owner (bindings/trees_public_meta.mojo): each

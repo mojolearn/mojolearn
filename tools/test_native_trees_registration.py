@@ -85,3 +85,34 @@ def test_missing_forest_constructor_metadata_refuses_before_partial_registration
         module.register(Forest, "rf_classifier")
     assert context == dict(trees_classes={}, trees_defaults={}, trees_constructors={})
     assert "_mojolearn_native_public" not in vars(Forest)
+
+
+def test_meta_registration_removes_only_public_lifecycle_decorators(bridge):
+    import functools
+    module, context = bridge
+    context['trees_meta_classes'] = {}
+    def original(self, value):
+        raise AssertionError('registration must not execute a method')
+    @functools.wraps(original)
+    def decorated(self, value):
+        raise AssertionError('registration must not execute a decorator')
+    class Meta:
+        fit = predict = score = decorated
+        __init__ = set_params = decorated
+    module.register_meta(Meta, 'voting_regressor')
+    assert context['trees_meta_classes'][Meta] == 'voting_regressor'
+    assert Meta.fit is Meta.predict is Meta.score is original
+    assert Meta.__init__ is Meta.set_params is decorated
+    assert Meta._mojolearn_native_public is True
+
+
+def test_unavailable_meta_owner_does_not_partially_unwrap(bridge):
+    module, context = bridge
+    context['trees_unavailable'] = True
+    class Meta:
+        def fit(self, value):
+            raise AssertionError('unavailable registration must not call fit')
+    before = Meta.fit
+    module.register_meta(Meta, 'voting_regressor')
+    assert Meta.fit is before
+    assert '_mojolearn_native_public' not in vars(Meta)
