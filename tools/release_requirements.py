@@ -43,7 +43,13 @@ def build_flags(environ=None):
     environ = os.environ if environ is None else environ
     flags = bincache.build_env(environ)
     flags.update({k: environ[k] for k in ("CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS") if k in environ})
-    return flags
+    # Provisioning credentials never affect compiler output and must not be
+    # retained in a release manifest. Preserve ordinary numerical/build flags.
+    secret_suffixes = tuple("_" + name + suffix
+        for name in ("TOKEN", "PASSWORD", "SECRET", "ACCESS_KEY", "PRIVATE_KEY")
+        for suffix in ("", "_FILE", "_PATH"))
+    return {key: value for key, value in flags.items()
+        if key != "MOJOLEARN_RUNPOD_KEY_FILE" and not key.upper().endswith(secret_suffixes)}
 
 
 def source_files(root, revision):
@@ -59,11 +65,20 @@ def source_files(root, revision):
     return result
 
 
-def requirements(root, revision, version, catalog=None, configuration=None):
-    """Materialize declared input closures. Never hash the commit or whole tree."""
-    catalog = catalog or json.loads((Path(root) / "tools/release_requirements.json").read_text())
+def requirements(root, revision, version, catalog=None, configuration=None, *,
+                 expand_dependencies=None, evidence_log_dir=None):
+    """Materialize frozen units; explicitly supplied fixture catalogs opt out."""
+    default_catalog = catalog is None
+    catalog = (json.loads((Path(root) / "tools/release_requirements.json").read_text())
+               if default_catalog else copy.deepcopy(catalog))
+    config = copy.deepcopy(configuration or {})
+    if expand_dependencies is None:
+        expand_dependencies = default_catalog
+    if expand_dependencies:
+        from release_requirement_dependencies import expand_catalog
+        catalog = expand_catalog(root, revision, catalog, config, log_dir=evidence_log_dir)
+        revision = catalog.get("dependency_provenance", {}).get("source_revision", revision)
     files = source_files(root, revision)
-    config = configuration or {}
     result = {}
     for spec in catalog["requirements"]:
         inputs = copy.deepcopy(spec.get("resolved_inputs", {}))
@@ -88,9 +103,18 @@ def requirements(root, revision, version, catalog=None, configuration=None):
                                   fingerprint=digest(inputs), scope=spec["scope"],
                                   coverage=spec["coverage"], missing_inputs=missing,
                                   kind=spec.get("kind", "source"), stage=spec.get("stage", "pre"),
-                                  provenance_sources=spec.get("provenance_sources", []),
+                                  provenance_sources=copy.deepcopy(spec.get("provenance_sources", [])),
                                   required=spec.get("required", True))
-    return dict(schema=SCHEMA, version=version, source_revision=revision, requirements=result)
+        for key in ("parent_requirement", "dependency_limitations", "dependency_provenance", "recipe_discovery"):
+            if key in spec:
+                result[spec["id"]][key] = copy.deepcopy(spec[key])
+    manifest = dict(schema=SCHEMA, version=version, source_revision=revision, requirements=result,
+                    source_root=str(Path(root).resolve()), configuration=config)
+    if "dependency_provenance" in catalog:
+        manifest["dependency_provenance"] = copy.deepcopy(catalog["dependency_provenance"])
+    if evidence_log_dir is not None:
+        manifest["dependency_log_dir"] = str(Path(evidence_log_dir).resolve())
+    return manifest
 
 
 def changes(old, new, prefix=""):
@@ -127,8 +151,10 @@ def evidence_errors(evidence):
 
 
 class RequirementsLedger:
-    def __init__(self, path):
+    def __init__(self, path, *, source_root=None, evidence_log_dir=None):
         self.path = Path(path)
+        self.source_root = source_root
+        self.evidence_log_dir = evidence_log_dir
 
     def read(self):
         if not self.path.exists():
@@ -161,71 +187,249 @@ class RequirementsLedger:
             if doc.get("version") not in (None, manifest["version"]):
                 raise ValueError("ledger belongs to another release version")
             doc.update(copy.deepcopy(manifest), updated_at=stamp())
-            doc["status"] = self.evaluate(doc)
+            doc["status"] = self._evaluate(doc)
         return doc["status"]
 
     @staticmethod
-    def evaluate(doc):
+    def _attempt_requirement(attempt):
+        """Reconstruct original inputs, including runs begun before expanded manifests."""
+        old = copy.deepcopy(attempt.get("manifest", {}))
+        for key in ("source_revision", "fingerprint"):
+            if key in old and old[key] != attempt.get(key):
+                raise ValueError("attempt " + key + " differs from its original run manifest")
+            old[key] = attempt.get(key)
+        old["inputs"] = copy.deepcopy(attempt.get("inputs", {}))
+        if old["fingerprint"] != digest(old["inputs"]):
+            raise ValueError("attempt fingerprint does not match its recorded inputs")
+        contract = old["inputs"].get("contract", {})
+        for key in ("kind", "stage", "scope", "coverage"):
+            if key in old and key in contract and old[key] != contract[key]:
+                raise ValueError("attempt " + key + " differs from its fingerprinted contract")
+            if key not in old and key in contract:
+                old[key] = copy.deepcopy(contract[key])
+        old.setdefault("missing_inputs", [])
+        return old
+
+    @staticmethod
+    def _retained_attempt(name, attempt, row):
+        """Verify the actual old execution, never a receipt relabelled for this revision."""
+        from release_requirement_receipts import validate_receipt
+        row.update(evidence=copy.deepcopy(attempt.get("evidence", [])),
+                   tested_revision=attempt.get("source_revision"), attempt=attempt["id"],
+                   receipt=copy.deepcopy(attempt.get("receipt")))
+        errors = evidence_errors(attempt.get("evidence", []))
+        if errors:
+            row.update(action="restore-evidence", reasons=errors)
+            return None
+        try:
+            old = RequirementsLedger._attempt_requirement(attempt)
+        except (ValueError, TypeError, KeyError) as error:
+            row.update(action="complete-provenance", reasons=[str(error)])
+            return None
+        if attempt["status"] == "passed":
+            errors = validate_receipt(name, old, attempt.get("receipt"))
+            if old.get("missing_inputs"):
+                errors.append("original passed attempt has unresolved requirement inputs")
+            if not errors:
+                from release_requirement_receipts import coverage_summary
+                receipt = attempt["receipt"]
+                if attempt.get("exit_code") != receipt["exit_code"] or attempt.get("coverage") != coverage_summary(receipt):
+                    errors.append("recorded attempt outcome differs from its original producer receipt")
+            if errors:
+                restoration = any("evidence" in error and ("unavailable" in error or "digest" in error)
+                                  for error in errors)
+                row.update(action="restore-evidence" if restoration else "complete-provenance", reasons=errors)
+                return None
+        return old
+
+    @staticmethod
+    def _equivalence(doc, name, old, wanted, row, *, root=None, log_dir=None):
+        """Only changed native source bytes can be justified by a frozen selector."""
+        row["dependency_decision"] = "affected"
+        if old.get("missing_inputs"):
+            row.update(action="complete-provenance", dependency_decision="blocked",
+                       reasons=["original execution has unresolved requirement inputs"])
+            return
+        before, after = copy.deepcopy(old["inputs"]), copy.deepcopy(wanted["inputs"])
+        old_sources, new_sources = before.pop("native_sources", None), after.pop("native_sources", None)
+        if before != after or old.get("kind") != wanted.get("kind"):
+            row["dependency_reason"] = "execution, coverage, recipe, flags or build inputs changed"
+            return
+        if not isinstance(old_sources, dict) or not isinstance(new_sources, dict):
+            row.update(action="complete-provenance", dependency_decision="blocked",
+                       reasons=["dependency equivalence requires recorded native source closures"])
+            return
+        root = root or doc.get("source_root")
+        if root is None:
+            row.update(action="complete-provenance", dependency_decision="blocked",
+                       reasons=["dependency equivalence source root is unavailable"])
+            return
+        from release_requirement_dependencies import equivalence_proofs, validate_equivalence_proof
+        previous = doc.get("status", {}).get(name, {})
+        cached = (previous.get("source_revision") == wanted["source_revision"]
+                  and previous.get("input_fingerprint") == wanted["fingerprint"]
+                  and previous.get("attempt") == row["attempt"]
+                  and "equivalence_proof" in previous)
+        try:
+            if cached:
+                proof = copy.deepcopy(previous["equivalence_proof"])
+            else:
+                plan = equivalence_proofs(root,
+                    dict(source_revision=old["source_revision"], requirements={name: old}),
+                    dict(source_revision=wanted["source_revision"], requirements={name: wanted}),
+                    log_dir=log_dir)
+                decision = plan["units"][name]
+                row.update(dependency_decision=decision["decision"], dependency_reason=decision["reason"])
+                if decision["decision"] == "blocked":
+                    row.update(action="complete-provenance", reasons=["dependency equivalence blocked: " + decision["reason"]])
+                    return
+                if decision["decision"] != "retained":
+                    row["reasons"].append("dependency equivalence affected: " + decision["reason"])
+                    return
+                proof = decision.get("reuse_proof")
+            # Keep a rejected proof in the status record so another sync does
+            # not silently replace tampering with a newly generated pass.
+            row["equivalence_proof"] = copy.deepcopy(proof)
+            if not isinstance(proof, dict):
+                raise ValueError("retained source change has no equivalence proof")
+            errors = validate_equivalence_proof(root, proof, old, wanted, log_dir=log_dir)
+            if errors:
+                raise ValueError("; ".join(errors))
+        except (ValueError, OSError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as error:
+            row.update(action="complete-provenance", dependency_decision="blocked",
+                       dependency_reason="equivalence proof invalid or unavailable",
+                       reasons=["dependency equivalence proof invalid or unavailable: " + str(error)])
+            return
+        row.update(status="passed", action="reuse", dependency_decision="retained",
+                   dependency_reason="validated frozen dependency equivalence",
+                   equivalence_proof=proof,
+                   reasons=["original passed execution retained under validated frozen dependency equivalence"])
+
+    @staticmethod
+    def _conflicting_failure(doc, name, failures, wanted, row, *, root=None, log_dir=None):
+        """A failure of changed arithmetic does not invalidate an exact input revert."""
+        for failure in reversed(failures):
+            try:
+                old = RequirementsLedger._attempt_requirement(failure)
+                before, after = copy.deepcopy(old["inputs"]), copy.deepcopy(wanted["inputs"])
+                a, b = before.pop("native_sources", None), after.pop("native_sources", None)
+                if before != after:
+                    row.setdefault("unrelated_failures", []).append(dict(attempt=failure["id"],
+                        source_revision=old["source_revision"], reason="different execution or build inputs"))
+                    continue
+                if old["fingerprint"] != wanted["fingerprint"]:
+                    source_root = root or doc.get("source_root")
+                    if (wanted.get("kind") not in ("identity", "performance") or not source_root
+                            or not isinstance(a, dict) or not isinstance(b, dict)):
+                        raise ValueError("later failed run has unresolved dependency equivalence")
+                    from release_requirement_dependencies import equivalence_proofs, validate_equivalence_proof
+                    decision = equivalence_proofs(source_root,
+                        dict(source_revision=old["source_revision"], requirements={name: old}),
+                        dict(source_revision=wanted["source_revision"], requirements={name: wanted}),
+                        log_dir=log_dir)["units"][name]
+                    if decision["decision"] == "affected":
+                        row.setdefault("unrelated_failures", []).append(dict(attempt=failure["id"],
+                            source_revision=old["source_revision"], reason=decision["reason"]))
+                        continue
+                    if decision["decision"] != "retained":
+                        raise ValueError("later failed run dependency equivalence blocked: " + decision["reason"])
+                    proof = decision.get("reuse_proof")
+                    if not isinstance(proof, dict):
+                        raise ValueError("later failed run has no dependency equivalence proof")
+                    errors = validate_equivalence_proof(source_root, proof, old, wanted, log_dir=log_dir)
+                    if errors:
+                        raise ValueError("; ".join(errors))
+                    # This proves contradictory inputs, never a passed result.
+                    row["failure_equivalence_proof"] = proof
+                row.update(action="repair", reasons=["later failure on equivalent inputs prevents older evidence reuse: " + failure["summary"]])
+                RequirementsLedger._retained_attempt(name, failure, row)
+                return True
+            except (ValueError, OSError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as error:
+                row.update(action="complete-provenance", dependency_decision="blocked",
+                    reasons=["cannot scope later failed run: " + str(error)])
+                return True
+        return False
+
+    @staticmethod
+    def evaluate(doc, *, root=None, log_dir=None):
         rows = {}
+        positions = {run["id"]: index for index, run in enumerate(doc.get("runs", []))}
+        finished = {a["run_id"] for a in doc.get("attempts", [])}
         for name, wanted in doc["requirements"].items():
-            attempts = [a for a in doc.get("attempts", []) if a["requirement"] == name]
+            # Begin order wins over finish order: an older in-flight result
+            # cannot replace the result of a newer source freeze/run.
+            attempts = [(index, a) for index, a in enumerate(doc.get("attempts", [])) if a["requirement"] == name]
+            attempts.sort(key=lambda pair: (positions.get(pair[1]["run_id"], -1), pair[0]))
+            attempts = [a for _, a in attempts]
+            runs = [run for run in doc.get("runs", []) if run["requirement"] == name]
+            latest = attempts[-1] if attempts else None
             matching = [a for a in attempts if a["fingerprint"] == wanted["fingerprint"]]
+            candidate = matching[-1] if matching else latest
             row = dict(status="untested", source_revision=wanted["source_revision"],
-                       evidence=[], reasons=[], action="run", required=wanted["required"])
-            row["stage"] = wanted.get("stage", "pre")
-            if wanted.get("missing_inputs"):
+                       input_fingerprint=wanted["fingerprint"], evidence=[], reasons=[],
+                       action="run", required=wanted["required"], stage=wanted.get("stage", "pre"))
+            for key in ("parent_requirement", "dependency_limitations", "provenance_sources", "dependency_provenance", "recipe_discovery"):
+                if key in wanted:
+                    row[key] = copy.deepcopy(wanted[key])
+            if runs and runs[-1]["id"] not in finished:
+                active = runs[-1]
+                row.update(action="resume", active_run=active["id"], active_revision=active["source_revision"],
+                           active_input_fingerprint=active["fingerprint"],
+                           reasons=[("unfinished recorded run for current inputs: " if active["fingerprint"] == wanted["fingerprint"]
+                                     else "unfinished recorded run for different inputs at " + active["source_revision"] + ": ")
+                                    + active["id"], *active["reasons"]])
+            elif wanted.get("fingerprint") != digest(wanted.get("inputs")):
+                row.update(action="complete-provenance", reasons=["requirement fingerprint does not match its inputs"])
+            elif wanted.get("missing_inputs"):
                 row.update(action="complete-provenance", reasons=["missing input: " + k for k in wanted["missing_inputs"]])
-            elif matching:
-                attempt = matching[-1]
-                errors = evidence_errors(attempt["evidence"])
-                if attempt["status"] == "passed":
-                    from release_requirement_receipts import validate_receipt
-                    errors += validate_receipt(name, attempt.get("manifest", {}), attempt.get("receipt"))
-                row.update(evidence=attempt["evidence"], tested_revision=attempt["source_revision"],
-                           attempt=attempt["id"])
-                if errors:
-                    row.update(action="restore-evidence" if attempt.get("receipt") or attempt["status"] == "failed"
-                               else "complete-provenance", reasons=errors)
-                else:
-                    row.update(status=attempt["status"], action="reuse" if attempt["status"] == "passed" else "repair",
-                               reasons=["same declared inputs and verified retained evidence"] if attempt["status"] == "passed"
-                               else ["previous attempt failed: " + attempt["summary"]])
-            elif attempts:
-                row["reasons"] = changes(attempts[-1]["inputs"], wanted["inputs"])
+            elif candidate is not None:
+                later_failures = [a for a in attempts[attempts.index(candidate) + 1:] if a["status"] == "failed"]
+                conflicting = (candidate["status"] == "passed" and RequirementsLedger._conflicting_failure(
+                    doc, name, later_failures, wanted, row, root=root, log_dir=log_dir))
+                if not conflicting:
+                    old = RequirementsLedger._retained_attempt(name, candidate, row)
+                    if old is not None:
+                        if candidate["fingerprint"] == wanted["fingerprint"]:
+                            row.update(status=candidate["status"], action="reuse" if candidate["status"] == "passed" else "repair",
+                                reasons=["same declared inputs and verified retained evidence"] if candidate["status"] == "passed"
+                                else ["previous attempt failed: " + candidate["summary"]])
+                        else:
+                            row["reasons"] = changes(old["inputs"], wanted["inputs"])
+                            if candidate["status"] != "passed":
+                                row["reasons"].append("previous attempt failed: " + candidate["summary"])
+                            elif wanted.get("kind") in ("identity", "performance"):
+                                RequirementsLedger._equivalence(doc, name, old, wanted, row, root=root, log_dir=log_dir)
             else:
                 row["reasons"] = ["no qualification evidence recorded for this requirement"]
-            finished = {a["run_id"] for a in doc.get("attempts", [])}
-            pending = [r for r in doc.get("runs", []) if r["requirement"] == name
-                       and r["fingerprint"] == wanted["fingerprint"] and r["id"] not in finished]
-            if pending:
-                row.update(status="untested", action="resume", active_run=pending[-1]["id"],
-                           reasons=["unfinished recorded run: " + pending[-1]["id"], *pending[-1]["reasons"]])
             rows[name] = row
         return rows
+
+    def _evaluate(self, doc):
+        return self.evaluate(doc, root=self.source_root or doc.get("source_root"),
+                             log_dir=self.evidence_log_dir or doc.get("dependency_log_dir"))
 
     def plan(self, manifest=None):
         doc = self.read()
         if manifest is not None:
             doc.update(copy.deepcopy(manifest))
-        return self.evaluate(doc)
+        return self._evaluate(doc)
 
     def begin(self, requirement, reason=None):
         """Persist the reason before work starts; unchanged passes are reused."""
         with self.edit() as doc:
             wanted = doc["requirements"][requirement]
-            row = self.evaluate(doc)[requirement]
+            row = self._evaluate(doc)[requirement]
             if row["action"] == "resume":
                 raise ValueError("resume or record the existing run " + row["active_run"]
                                  + "; another launch would duplicate work")
             if row["action"] == "reuse" and not reason:
                 return None
-            if row["action"] in ("restore-evidence", "complete-provenance") and not reason:
+            if row["action"] in ("restore-evidence", "complete-provenance"):
                 raise ValueError("; ".join(row["reasons"]) + "; restore provenance before rerunning")
             run = dict(id=digest([requirement, stamp(), len(doc["runs"])]), requirement=requirement,
                        source_revision=wanted["source_revision"], fingerprint=wanted["fingerprint"],
                        inputs=copy.deepcopy(wanted["inputs"]), started_at=stamp(),
-                       manifest={k: copy.deepcopy(wanted[k]) for k in
-                                 ("source_revision", "fingerprint", "coverage", "kind", "stage") if k in wanted},
+                       manifest={k: copy.deepcopy(value) for k, value in wanted.items() if k != "inputs"},
                        reasons=[reason] if reason else row["reasons"])
             doc["runs"].append(run)
         return run["id"]
@@ -249,7 +453,7 @@ class RequirementsLedger:
                 raise ValueError("run already recorded; historical results are immutable")
             if status == "passed" or receipt is not None:
                 from release_requirement_receipts import validate_receipt, coverage_summary
-                errors = validate_receipt(run["requirement"], run.get("manifest", {}), receipt,
+                errors = validate_receipt(run["requirement"], dict(run.get("manifest", {}), inputs=run["inputs"]), receipt,
                                           require_pass=status == "passed")
                 if errors:
                     raise ValueError("; ".join(errors))
@@ -265,7 +469,7 @@ class RequirementsLedger:
                            exit_code=exit_code, coverage=dict(expected=expected, completed=completed,
                                                             failed=failed, skipped=skipped))
             doc["attempts"].append(attempt)
-            doc["status"] = self.evaluate(doc)
+            doc["status"] = self._evaluate(doc)
         return attempt
 
     def gate(self, manifest=None, stage=None):
@@ -286,6 +490,7 @@ def main(argv=None):
     ap.add_argument("--revision", default="HEAD")
     ap.add_argument("--version")
     ap.add_argument("--configuration", type=Path)
+    ap.add_argument("--dependency-log-dir", type=Path, help="retain frozen dependency analysis logs here")
     ap.add_argument("--requirement")
     ap.add_argument("--reason")
     ap.add_argument("--run-id")
@@ -301,7 +506,7 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--stage", choices=("pre", "post"))
     args = ap.parse_args(argv)
-    ledger = RequirementsLedger(args.ledger)
+    ledger = RequirementsLedger(args.ledger, source_root=args.root, evidence_log_dir=args.dependency_log_dir)
     if args.command == "begin":
         print(ledger.begin(args.requirement, args.reason) or "REUSE: no run required")
         return 0
@@ -314,9 +519,15 @@ def main(argv=None):
     manifest = None
     if args.version:
         revision = subprocess.check_output(["git", "-C", str(args.root), "rev-parse", args.revision], text=True).strip()
-        configuration = json.loads(args.configuration.read_text()) if args.configuration else {}
-        configuration.setdefault("build_flags", build_flags())
-        manifest = requirements(args.root, revision, args.version, configuration=configuration)
+        configuration = copy.deepcopy(ledger.read().get("configuration", {}))
+        if args.configuration:
+            supplied = json.loads(args.configuration.read_text())
+            if not isinstance(supplied, dict):
+                ap.error("configuration must be a JSON object")
+            configuration.update(supplied)
+        configuration["build_flags"] = build_flags()
+        manifest = requirements(args.root, revision, args.version, configuration=configuration,
+                                evidence_log_dir=args.dependency_log_dir)
     if args.command == "sync":
         if manifest is None:
             ap.error("sync requires --version")

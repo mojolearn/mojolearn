@@ -245,8 +245,11 @@ def _binding_context(snapshot, vendor, lane, context):
     names = set(lane["bindings"])
     matched = [b for b in snapshot["bindings"] if b["target"] == target
         and b["name"] in names and (b["vendor"] == VENDORS[vendor] or b["tier"] == "host")]
-    # Some host routes are recorded using the GPU binding name; preserve target
-    # toolchain/flags even when the host alias is not itself a registry binding.
+    # Every declared binding needs a target identity. A partially matched lane
+    # cannot prove an unmapped helper's ABI/flags; host aliases need explicit
+    # mapping evidence rather than inheriting whichever binding matched first.
+    missing += ["no native binding context mapped for binding: " + name
+                for name in sorted(names - {b["name"] for b in matched})]
     toolchain = snapshot.get("toolchains", {}).get(target)
     if not toolchain:
         missing.append("missing execution target toolchain")
@@ -297,6 +300,12 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
         common_missing = [] if "build_flags" in configuration else ["build_flags"]
         if kind == "compile":
             target = "osx-arm64" if vendor == "apple" else "linux-64"
+            if vendor == "cpu":
+                target = context.get("cpu_target")
+                if target not in ("osx-arm64", "linux-64"):
+                    expanded.append(_unit(spec, "unresolved", dict(unit=common), [],
+                        common_missing + ["dependency_context.cpu_target is required"], spec["coverage"]))
+                    continue
             rows = [b for b in snapshot["bindings"] if b["target"] == target
                 and (b["vendor"] == VENDORS[vendor] or b["tier"] == "host")]
             for binding in rows:

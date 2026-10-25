@@ -65,6 +65,61 @@ class Dependencies(unittest.TestCase):
         cpp = next(r for r in rows if "/adapters/" in r["id"])
         self.assertIn("adapters/torch/registration.cpp", cpp["resolved_inputs"]["adapter_sources"])
 
+    def test_cpu_compile_uses_explicit_execution_target(self):
+        snap = snapshot()
+        host = binding("host_one", "bytes", vendor="host", arch="", target="osx-arm64")
+        host["tier"] = "host"
+        linux = copy.deepcopy(host)
+        linux.update(target="linux-64", key="linux-64/host/host_one")
+        linux["identity"]["target"] = "linux-64"
+        snap["bindings"] = [host, linux]
+        row = dict(spec("compile"), id="compile-cpu")
+        config = dict(self.config, dependency_context=dict(cpu_target="osx-arm64"))
+        with patch.object(d, "frozen_snapshot", return_value=snap):
+            expanded = d.expand_catalog(".", "HEAD", dict(requirements=[row]), config)
+        self.assertEqual(len(expanded["requirements"]), 1)
+        result = expanded["requirements"][0]
+        self.assertEqual(result["resolved_inputs"]["binding"]["target"], "osx-arm64")
+        self.assertEqual(result["parent_requirement"], "compile-cpu")
+        self.assertNotIn("runtime", result["id"])
+
+    def test_cpu_compile_without_target_blocks_instead_of_guessing_linux(self):
+        for target in (None, "unknown"):
+            row = dict(spec("compile"), id="compile-cpu")
+            config = dict(self.config, dependency_context=dict(cpu_target=target))
+            with patch.object(d, "frozen_snapshot", return_value=snapshot()):
+                expanded = d.expand_catalog(".", "HEAD", dict(requirements=[row]), config)
+            self.assertEqual(len(expanded["requirements"]), 1)
+            self.assertEqual(expanded["requirements"][0]["unresolved_inputs"],
+                             ["dependency_context.cpu_target is required"])
+
+    def test_apple_adapter_uses_actual_apple_arch_and_builder_view(self):
+        import release_reuse as rr
+        arches = {row.arch for row in rr.bindings(rr.MACOS, ["identical"]) if not row.host}
+        self.assertEqual(arches, {"apple"})
+        snap = snapshot()
+        snap["bindings"] = [binding("one", "bytes", vendor="metal", arch="apple", target="osx-arm64")]
+        snap["adapters"]["builder_views"] = {"osx-arm64": {"tools/build_macos.sh": "filtered-adapter-builder"}}
+        with patch.object(d, "frozen_snapshot", return_value=snap):
+            expanded = d.expand_catalog(".", "HEAD", dict(requirements=[dict(spec("compile"), id="compile-apple")]), self.config)
+        adapter = next(row for row in expanded["requirements"] if "/adapters/" in row["id"])
+        self.assertEqual(adapter["id"], "compile-apple/adapters/apple")
+        self.assertFalse(adapter["unresolved_inputs"])
+        self.assertEqual(adapter["resolved_inputs"]["environment"]["arch"], "apple")
+        self.assertEqual(adapter["resolved_inputs"]["environment"]["builders"],
+                         {"tools/build_macos.sh": "filtered-adapter-builder"})
+
+    def test_partial_lane_binding_context_does_not_hide_unmapped_helper(self):
+        snap = snapshot()
+        snap["lanes"]["one"]["bindings"].append("unmapped_helper")
+        expanded = self.expand(("identity",), snap)
+        one = next(row for row in expanded["requirements"] if row["id"] == "identity-nvidia/one")
+        self.assertIn("no native binding context mapped for binding: unmapped_helper", one["unresolved_inputs"])
+        environment = one["resolved_inputs"]["execution_environment"]["one"]
+        self.assertTrue(environment["bindings"])
+        two = next(row for row in expanded["requirements"] if row["id"] == "identity-nvidia/two")
+        self.assertFalse(two["unresolved_inputs"])
+
     def test_isolated_wrapper_changes_only_its_lane_not_compilation(self):
         before = manifest(self.expand(), "a" * 40)
         changed = snapshot()
