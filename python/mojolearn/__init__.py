@@ -620,6 +620,11 @@ from ._native_linear_constructors import install as _install_linear_constructors
 _install_linear_constructors()
 del _install_linear_constructors
 
+# Full-reset setters precede every class-layout snapshot; the linear subset keeps its separate contract.
+from ._native_full_reset_params import install as _install_full_reset_params
+_install_full_reset_params()
+del _install_full_reset_params
+
 # Connect CV's fixed native estimator ABIs after every public class exists.
 from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
 from . import _mode as _mode_metadata_owner
@@ -671,3 +676,12 @@ from ._native_linear_constructors import connect as _connect_linear_constructors
 from ._native_params_setter import _CONTEXT as _linear_constructor_setters
 _connect_linear_constructors(_linear_constructor_setters)
 del _connect_linear_constructors, _linear_constructor_setters
+
+# Connect full-reset ownership and nested routes after all getter/setter plans.
+from ._native_full_reset_params import connect as _connect_full_reset_params
+from ._native_params_setter import _CONTEXT as _full_reset_linear
+from ._native_declared_params import CONTEXT as _full_reset_declared
+from . import _mode as _full_reset_mode
+_connect_full_reset_params(_full_reset_mode._PARAMS_METADATA_CONTEXT, _full_reset_linear,
+                           _full_reset_declared, model_selection._NATIVE_CONTEXT)
+del _connect_full_reset_params, _full_reset_linear, _full_reset_declared, _full_reset_mode
