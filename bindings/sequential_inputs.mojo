@@ -7,6 +7,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
@@ -181,11 +182,9 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
     if Bool(py=py_call(b.isinstance, value, context["ndarray"])):
         return value
     if py_type(value) is context["array_class"]:
-        var view = py_call(context["array_fields"]["_mv"], value, context["array_class"])
-        var shape = py_call(context["array_fields"]["shape"], value, context["array_class"])
-        var dtype = py_call(context["array_fields"]["dtype"], value, context["array_class"])
-        var order = py_call(context["array_fields"]["order"], value, context["array_class"])
-        return py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
+        # Views returned from input preparation may escape into fitted state
+        # or public outputs. Array._mv can be ownerless; retain its exporter.
+        return native_array_ndarray_view(value, context)
     if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
         return _buffer(value, context, samples)
     var packed = sequential_sequence(value, context)

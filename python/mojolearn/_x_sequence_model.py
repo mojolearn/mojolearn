@@ -651,7 +651,7 @@ def _connect_sequential_bindings():
     import mmap
     import sys
     from array import array
-    from ._array import Array
+    from ._array import Array, SUPPORTED_DTYPES
     from ._version import __version__
     selected = _backend.default_mode()
     entries = {}
@@ -673,7 +673,9 @@ def _connect_sequential_bindings():
     scalar_types = tuple(dtype.type for dtype in class_dtypes.values())  # glue: connect exact native scalar types once at package import
     integer_types = (int,) + tuple(dtype.type for (kind, _), dtype in class_dtypes.items() if kind in (0, 1))  # glue: connect exact native integer types once at package import
     array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")}  # glue: retain native slot descriptors once at package import
+    array_storage_slots = {name: vars(Array)[name] for name in ("_store", "_mv", "_addr", "_readonly", "shape", "dtype", "order")}  # glue: fixed native storage layout retained at package import
     return {
+        "array_storage_slots": array_storage_slots, "array_storage_dtypes": SUPPORTED_DTYPES,
         "sequential_class": Sequential, "module_type": ModuleType, "modules": sys.modules,
         "mapping_types": (dict, OrderedDict, defaultdict), "scalar_types": scalar_types, "integer_types": integer_types,
         "native_bytes_type": bytes, "native_bytearray_type": bytearray,
