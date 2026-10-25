@@ -134,7 +134,12 @@ class Admission(unittest.TestCase):
 
     def test_wrong_mode_and_unregistered_architecture_waiver(self):
         self.change_stage(lambda s:s['outputs'][0]['readback'].update(mode=2));self.refused()
-        self.proof=fixture();self.change_stage(lambda s:s['outputs'][0].update(embedded_architectures=[]));self.refused()
+        # expected_outputs follows sets of binding names. Its first entry may
+        # legitimately be a host or the registered device-glue waiver, so pick
+        # a row that actually requires embedded architecture evidence.
+        self.proof=fixture()
+        self.change_stage(lambda s:next(r for r in s['outputs'] if r['embedded_architectures']).update(embedded_architectures=[]))
+        self.refused()
 
     def test_canonical_hosts_are_explicit_and_cannot_replace_device_outputs(self):
         self.proof=canonicalize(self.proof);self.assertTrue(a.validate_staged(self.proof))

@@ -26,6 +26,48 @@ The current core-source association is explicit; its target, arithmetic
 metadata, device bytes, and merged-index bytes remain unchanged and pass the
 existing PTX manifest validator.
 
+## One host compile without a GPU build
+
+The merged compile cache keys the whole Mojo source tree. A host source change
+can therefore miss the GPU cache even when every device closure is unchanged.
+Running a new complete architecture leg is not the minimal route.
+
+On the Linux build machine, use a clean frozen Git checkout containing the
+original runtime donor revision and the target revision. Keep the same pinned
+compiler environment as the donor. Run the host-only producer from that
+checkout (the output directory and `python/mojolearn/host/_mojolearn_native_host.so`
+must not already exist):
+
+```sh
+python3 tools/release_host_build.py build \
+  --root "$PWD" \
+  --runtime-build /retained/cuda-sm_89/release-build/build \
+  --output /root/results-0857-host \
+  --pixi-env gbmbench \
+  --compiler-sha256 ORIGINAL_AND_CURRENT_COMPILER_SHA256 \
+  > /root/results-0857-host-controller.log 2>&1
+```
+
+This invokes exactly `pixi run -e gbmbench bash bindings/merged_build.sh host`
+with the production CPU column, `identical`, x86-64-v3, two compiler workers,
+and the complete byte-LM/host surface. It invokes neither `build_sets.sh` nor
+a GPU build. The producer records source and compiler inputs before execution,
+retains the raw output and binding stamp, and stages a separate host copy with
+the existing ELF helper's normal host RUNPATH. It copies the original runtime
+libraries unchanged, checks their complete dependency closure, and reads back
+all 46 host members' vendor, numeric mode, and CPU column. Failures retain logs
+and exit statuses and produce no complete host proof.
+
+`mojolearn.linux.host-build.v1` records only this actual host compile and its
+staging/readback phases. Its `mojolearn/cpu/host/` paths are a neutral proof
+namespace; it contains no device outputs, GPU target, adapter build, or GPU
+readback. The wheel still installs the host at `mojolearn/host/`. The borrowed
+runtime has its own unchanged original proof. This metadata readback is not
+the public runtime suite or installed-wheel gate.
+
+Retain the complete output directory and controller log from a rented build
+machine on the Mac and in R2 before teardown.
+
 ## Invocation after the host build
 
 Run this for each retained device leg, using the same independently built host:
@@ -33,7 +75,7 @@ Run this for each retained device leg, using the same independently built host:
 ```sh
 python3 tools/retained_release_composition.py \
   --device-build /retained/device-leg/release-build/build \
-  --host-build /new/host-containing-leg/release-build/build \
+  --host-build /retained/results-0857-host \
   --source-root /clean/frozen/release-checkout \
   --compiler-sha256 ORIGINAL_AND_CURRENT_COMPILER_SHA256 \
   --out /new/assembled-leg
@@ -47,8 +89,9 @@ files does not increment its new-compilation count. The stage manifest remains
 the original witness, while the assembly proof owns the replacement host.
 
 This tool does not use an arbitrary standalone `.so` as a host witness. The
-host must come from an independently proven complete build with retained
-before-build inputs and actual host compiler/cache provenance. It does not
+host must come from the explicit host-only producer above or an independently
+proven complete build with retained before-build inputs and actual compiler
+provenance. It does not
 qualify runtime behavior, cross-vendor identity, or installed-wheel adapters.
 Those checks remain separately required where their inputs changed or valid
 evidence is missing.

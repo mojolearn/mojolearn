@@ -66,6 +66,7 @@ def fixture(tmp_path, monkeypatch):
     old_capture = json.loads((old[0] / 'compile-inputs.json').read_text())
     before = dict(binding_identities={**identities, **old_capture['binding_identities']},
                   runtime_identity={'runtime': 'd' * 64}, adapter_sources={'adapter.mojo': 'e' * 64},
+                  merged_build_inputs={'builder': 'd' * 64},
                   adapter_builders={'builder': 'f' * 64}, source_inventory=json.loads((old[0] / 'source-inventory.json').read_text()))
     (source / 'sample.mojo').write_text('new host source\n')
     monkeypatch.setattr(old_fixture, 'COMMIT', NEW)
@@ -113,7 +114,7 @@ def test_retains_original_producers_and_independent_new_host(fixture, tmp_path):
 
 
 @pytest.mark.parametrize('changed', ['device-closure','device-flags','device-target','host-closure',
-                                    'runtime','adapter','current-inventory','invented-build-exit'])
+                                    'runtime','adapter','current-inventory','invented-build-exit','merged-generator'])
 def test_different_inputs_cannot_be_admitted(fixture, tmp_path, changed):
     proof, _ = assembled(fixture, tmp_path)
     current = proof['admitted_inputs']
@@ -139,6 +140,8 @@ def test_different_inputs_cannot_be_admitted(fixture, tmp_path, changed):
     elif changed == 'current-inventory':
         proof['source_inventory'][0][1] = 'f' * 64
         proof['source_sha256'] = rc.sha_inventory(proof['source_inventory'])
+    elif changed == 'merged-generator':
+        current['merged_build_inputs']['builder'] = 'f' * 64
     else:
         proof['build_exit'] = 0
     with pytest.raises(ValueError):
