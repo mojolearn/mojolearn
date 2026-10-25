@@ -47,10 +47,13 @@ def connect_classes(context, package):
     for name, module in tuple(sys.modules.items()):  # glue: loaded built-in class identities only
         if (name == package.__name__ or name.startswith(package.__name__ + '.')) and not name.startswith(package.__name__ + '.tests'):
             if type(module) is ModuleType:
+                # Raw declared metadata skips extension types without a module
+                # and never invokes a descriptor or string-subclass protocol.
                 classes.update(value for value in vars(module).values()  # glue: fixed product class declarations; imported external/test callbacks are not built-in debt
                                if type(value) is type
-                               and (value.__module__ == package.__name__ or value.__module__.startswith(package.__name__ + '.'))
-                               and not value.__module__.startswith(package.__name__ + '.tests'))
+                               and type(owner := vars(value).get('__module__')) is str
+                               and (owner == package.__name__ or owner.startswith(package.__name__ + '.'))
+                               and not owner.startswith(package.__name__ + '.tests'))
     for cls in classes:  # glue: native parameter schemas, never product-time introspection
         if cls in context['plans'] or cls in context['pending']:
             continue  # Never bless changes to a previously pinned class.
