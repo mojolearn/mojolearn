@@ -416,7 +416,7 @@ class CurrentFrozenSource(unittest.TestCase):
             self.snapshot()
         self.assert_no_retained_result_or_worktree()
 
-    def test_source_edit_during_worker_is_rejected(self):
+    def test_original_source_edit_does_not_invalidate_frozen_worker(self):
         worker = d._run_snapshot_worker
 
         def mutate(tree, temporary, request, log):
@@ -424,11 +424,12 @@ class CurrentFrozenSource(unittest.TestCase):
             return worker(tree, temporary, request, log)
 
         with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
-            with self.assertRaisesRegex(ValueError, "differs from requested revision"):
-                self.snapshot()
-        self.assert_no_retained_result_or_worktree()
+            result = self.snapshot()
+        self.assertEqual(result["revision"], self.revision)
+        self.assertEqual(result["extra_sources"]["recipe.json"],
+                         d.hashlib.sha256(b"frozen recipe").hexdigest())
 
-    def test_source_edit_then_restore_during_worker_is_rejected(self):
+    def test_original_source_edit_then_restore_keeps_frozen_result(self):
         worker = d._run_snapshot_worker
 
         def mutate(tree, temporary, request, log):
@@ -440,11 +441,12 @@ class CurrentFrozenSource(unittest.TestCase):
             return worker(tree, temporary, request, log)
 
         with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
-            with self.assertRaisesRegex(ValueError, "changed during analysis"):
-                self.snapshot()
-        self.assert_no_retained_result_or_worktree()
+            result = self.snapshot()
+        self.assertEqual(result["revision"], self.revision)
+        self.assertEqual(result["extra_sources"]["recipe.json"],
+                         d.hashlib.sha256(b"frozen recipe").hexdigest())
 
-    def test_head_change_during_worker_is_rejected(self):
+    def test_original_head_change_does_not_relabel_frozen_result(self):
         worker = d._run_snapshot_worker
 
         def mutate(tree, temporary, request, log):
@@ -452,8 +454,21 @@ class CurrentFrozenSource(unittest.TestCase):
             return worker(tree, temporary, request, log)
 
         with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
-            with self.assertRaisesRegex(ValueError, "HEAD changed"):
+            result = self.snapshot()
+        self.assertEqual(result["revision"], self.revision)
+        self.assertNotEqual(self.git("rev-parse", "HEAD"), result["revision"])
+
+    def test_symlink_to_original_checkout_cannot_escape_frozen_view(self):
+        link = self.root / "recipe-link.json"
+        link.unlink()
+        link.symlink_to(self.root / "recipe.json")
+        self.git("add", "recipe-link.json")
+        self.git("commit", "-m", "external source link")
+        self.revision = self.git("rev-parse", "HEAD")
+        with patch.object(d, "_run_snapshot_worker") as worker:
+            with self.assertRaisesRegex(ValueError, "symlink escapes frozen view"):
                 self.snapshot()
+            worker.assert_not_called()
         self.assert_no_retained_result_or_worktree()
 
     def test_view_write_and_chmod_cannot_change_original_source(self):
@@ -469,6 +484,22 @@ class CurrentFrozenSource(unittest.TestCase):
 
         with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
             with self.assertRaisesRegex(ValueError, "differs from requested revision"):
+                self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_frozen_view_edit_then_restore_is_still_rejected(self):
+        worker = d._run_snapshot_worker
+
+        def mutate(tree, temporary, request, log):
+            source = tree / "recipe.json"
+            before = source.stat()
+            source.write_text("temporary edit")
+            source.write_text("frozen recipe")
+            os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+            return worker(tree, temporary, request, log)
+
+        with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "frozen dependency view changed"):
                 self.snapshot()
         self.assert_no_retained_result_or_worktree()
 

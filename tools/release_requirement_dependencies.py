@@ -310,15 +310,19 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
                 added = True
                 if clone_current:
                     _clone_tracked_tree(root, tree, before, log)
-                    view_before = _tracked_state(tree, revision)
+                view_before = _tracked_state(tree, revision)
+                # The detached view is the analysis input. Later edits or new
+                # commits in the integration checkout cannot invalidate it.
+                # Links must stay inside that view, otherwise an outside edit
+                # could change the bytes consumed despite an unchanged link.
+                for name, (mode, _, _) in view_before.items():
+                    if mode == "120000" and not (tree / name).resolve().is_relative_to(tree.resolve()):
+                        raise ValueError("dependency symlink escapes frozen view: " + name)
                 snapshot = _run_snapshot_worker(tree, temporary, request, log)
                 if snapshot.get("revision") != revision:
                     raise ValueError("frozen dependency snapshot revision mismatch")
-                if clone_current:
-                    if _tracked_state(tree, revision) != view_before:
-                        raise ValueError("frozen dependency view changed during analysis")
-                    if _tracked_state(root, revision) != before:
-                        raise ValueError("dependency source changed during analysis")
+                if _tracked_state(tree, revision) != view_before:
+                    raise ValueError("frozen dependency view changed during analysis")
             finally:
                 # Failed `worktree add` can leave a registration too. Remove
                 # only this unique temporary tree; never prune other sessions.
