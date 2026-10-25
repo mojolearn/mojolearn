@@ -203,3 +203,39 @@ in a pipe read (no spin) while workers fit; each worker's host loops get `MOJOLE
 budget (min of affinity, cgroup quota, an explicit MOJOLEARN_CPU_THREADS) divided by the worker count
 (`_parallel_pool.effective_cpu_budget` / `worker_cpu_threads`). That bounds our own host splits; the Mojo runtime's
 own worker count stays the runtime's until Modular ships the knob.
+
+
+## Conditional PythonObject dictionary lookup receives a stale key (2026-10-25)
+
+**Observed.** The supported Mojo 1.0.0 (`ed45d567`) Apple arm64 build at
+`cc6ee39cc12f27e8daf44f83870b9321021e70d4` crashes on public
+`KMeans(n_clusters=3, numeric_mode="identical").get_params(False)`, including
+without Torch or the runtime auditor. The instance-field branch in
+`bindings/params_metadata_native.mojo::_value` is `return fields[name]`.
+Its compiled subscript receives stale String storage as its argument area;
+`Py_NewRef` dereferences `0x736e69746c697562` (ASCII `builtins`).
+
+**Reduced execution.** `experiments/python_object_item_lookup/` preserves that
+helper body and imports its unchanged dependencies. The root's ordinary
+supported build reproduces the same fault and address under CPython 3.14.6.
+Class-value return, missing-field refusal and property refusal pass. A bare
+subscript instance control and the documented CPython dictionary control pass.
+The first bare-subscript missing-key assertion mismatched the wrapper's error
+class; that test-oracle failure is retained separately. Full sources, commands,
+binaries, logs and per-case exits are in
+`~/mojolearn-evidence/native-params-crash-20261025/`; the experiment README gives
+the binary hash and remaining reduction/validation scope.
+
+**Need.** Correct supported argument materialization for this PythonObject
+lookup, with unchanged behavior for the success/refusal branches and owned
+returned references. The smaller fixture remains a source-preserving reduction
+with project helper imports; an independent minimal upstream reduction is still
+owed. `bindings/public_attributes_native.mojo` has a separately observed
+instance-field failure at the same direct-return pattern; untested uses of
+PythonObject subscripting are not assumed broken.
+
+**Meanwhile.** No product alternate accessor, compiler/stdlib patch, optimization
+flag workaround or reference compensation is installed. The direct CPython API
+is a test-only control at this checkpoint. The affected runtime qualification
+remains failed; successful build evidence and unrelated completed cases remain
+retained.

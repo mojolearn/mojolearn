@@ -43,8 +43,14 @@ def main():
     except Exception as error:
         if args.case not in ('descriptor', 'missing'):
             raise
-        assert ('constructor parameter' in str(error) or 'Python properties' in str(error)
-                or 'missing native dictionary key' in str(error) or isinstance(error, KeyError)), repr(error)
+        if args.path == 'direct' and args.case == 'missing':
+            # PythonModuleBuilder's ordinary def_function converts the native
+            # error envelope to Exception, retaining the missing key text.
+            # This is a diagnostic control, not the product C error boundary.
+            assert type(error) is Exception and str(error) == repr('value'), repr(error)
+        else:
+            assert ('constructor parameter' in str(error) or 'Python properties' in str(error)
+                    or 'missing native dictionary key' in str(error)), repr(error)
     else:
         assert args.case in ('instance', 'class')
         assert result is token

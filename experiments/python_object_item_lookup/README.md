@@ -2,8 +2,9 @@
 
 Testing-only reduction seed and documented CPython control; no product repair,
 compiler change, compiler flag workaround, or reference compensation is present.
-The four-case reduction has not yet been compiled or executed. Root owns that
-single frozen build; lanes must not compile it.
+The root compiled the reduction at `01ee4347bbf25ac3f85768d90fcdc89d90adb087`
+with the supported toolchain. The original instance-field case reproduces the
+same segmentation fault. Lanes must not compile this fixture.
 
 The original complete tokenizer binary at source
 `cc6ee39cc12f27e8daf44f83870b9321021e70d4` segfaults in public
@@ -17,8 +18,9 @@ segfaults. These diagnostic contexts are never installed in the product.
 The raw crash reports `Py_NewRef` receiving `0x736e69746c697562` (ASCII
 `builtins`). In the retained binary, `_value`'s present-field branch reaches
 `PythonObject.__getitem__` at offset `0x6ce314`, using a stack argument area
-which still contains an earlier String. This is evidence of bad argument
-materialization, not yet a confirmed minimal compiler bug or an accepted repair.
+which still contains an earlier String. The reduced extension reproduces the same invalid address, consistent with bad
+argument materialization. The reduced body still imports unchanged helper
+dependencies; further standalone minimization and an accepted repair remain owed.
 
 `_mojo_item_lookup.mojo` preserves the exact original `_value` body. It imports
 only its unchanged helper dependencies and exports two test controls: a bare
@@ -61,3 +63,23 @@ Original complete-binary evidence is retained at
 `raw-crash.ips`, `value-disassemble.log`, `fields.log`, `class.log`,
 `descriptor.log`, `missing.log`, and per-process `.rc` files. Failed debugger
 launches are retained separately and were terminated; no service was installed.
+
+## Retained reduced execution, 2026-10-25
+
+The first fixture build failed before code generation because `def_function`
+requires PythonObject argument envelopes. The second freeze adds only that
+wrapper and builds successfully. Binary SHA-256:
+`408268488ec4750c511850c078f419184cb9172ec387acfc5ee487eae3b7d176`.
+
+The original instance case exits with SIGSEGV, while the original class,
+property-refusal and missing-field cases pass. The bare-subscript instance
+and both documented CPython controls pass. The initial bare-subscript missing
+case correctly raises `Exception("'value'")` through `def_function`, but the
+first Python oracle expected KeyError and failed. That oracle is now corrected
+to require the exact wrapper exception and key text; its rerun is pending.
+This is not another product failure, and the original assertion is retained.
+
+Complete logs, per-case exits and binary provenance:
+`~/mojolearn-evidence/native-params-crash-20261025/standalone/run-v2/result.json`.
+The reduced OS crash report is retained as `reduced-crash.ips` beside the
+original evidence. No product replacement has been made or qualified.
