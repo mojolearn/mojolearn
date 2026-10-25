@@ -493,7 +493,10 @@ class SourceAndTooling(Base):
         for step in ("publish-core-linux", "publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertIn(step, release.AFTER["finish-line"])
 
-    def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self):
+    @mock.patch("release_requirement_receipts.validate_producer_receipt", return_value=[])
+    def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self, producer_admission):
+        # This controller fixture uses a synthetic requirement. Actual producer
+        # schemas/admission are exercised independently by their receipt tests.
         r = self.release(commit=Y, publish="pypi")
         calls = []
         r.runner = lambda cmd, env, log, detach=False: calls.append((cmd, env)) or 0
