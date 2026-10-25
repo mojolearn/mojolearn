@@ -1569,3 +1569,10 @@ def _host_archive_prediction_bindings():
 
 from ._native_host_archive_predict import connect as _connect_archive_prediction
 _connect_archive_prediction(_CLASSICAL, globals(), _host_archive_prediction_bindings())
+
+# Complete saved-model query ownership uses fixed CPU entries connected here.
+from ._native_neighbor_queries import connect_host as _connect_neighbor_host
+_connect_neighbor_host({HostNearestNeighbors: NearestNeighbors,
+                        HostKNeighborsClassifier: KNeighborsClassifier,
+                        HostKNeighborsRegressor: KNeighborsRegressor,
+                        HostRadiusNeighbors: RadiusNeighbors, HostIVFIndex: IVFIndex}, _HOST_BASENAMES)

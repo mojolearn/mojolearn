@@ -29,7 +29,7 @@ def host_inference_primitive_number(value: PythonObject, context: PythonObject,
 
 
 def host_inference_scalar(value: PythonObject, context: PythonObject, truth: Bool = False) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if _one_of(cls, Python.tuple(b.str, b.bytes, b.bytearray, b.int, b.float, b.bool, py_type(PythonObject(None)))) or _one_of(cls, context["scalar_types"]):
         return

@@ -8,6 +8,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays import classical_address
+from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
 from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense
 from bindings.parallel_shard_common import shard_model, shard_rows
@@ -18,6 +19,7 @@ from bindings.neighbors_knn_native import (
 )
 from bindings.neighbors_kde_native import _kde_scores, _kde_release
 from bindings.neighbors_ann_native import _ivf_metric, _ann_key_entry
+from bindings.host_inference_scalars import host_inference_scalar
 
 
 struct NeighborSnapshots(Defaultable, Movable):
@@ -47,9 +49,10 @@ def neighbor_binding(tables: PythonObject, name: String) raises -> PythonObject:
     return result
 
 
-def _flag(value: PythonObject, name: String) raises -> Bool:
-    if py_type(value) is not native_loaded_module("builtins").bool:
-        raise Error("TypeError: " + name + " must be a bool; Python truth hooks are unsupported")
+def _flag(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
+    # Retain ordinary native scalar truth semantics (including NumPy bool),
+    # while refusing Python-defined __bool__ before it can execute.
+    host_inference_scalar(value, context, True)
     return Bool(py=value)
 
 
@@ -63,13 +66,18 @@ def _wide(source: PythonObject, shape: PythonObject, context: PythonObject) rais
 
 def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: PythonObject,
                         distance_arg: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var index = py_get(fields, "_index")
     if index is None:
         raise Error("ValueError: mojolearn: call fit before kneighbors")
     var k_obj = fields["n_neighbors"] if k_arg is None else k_arg
-    if py_type(k_obj) is not b.int:
+    var integral = py_type(k_obj) is b.bool
+    var integers = context["integer_types"]
+    for i in range(len(integers)):  # driver-loop: connected native integer scalar identities
+        integral = integral or py_type(k_obj) is integers[i]
+    if not integral:
         raise Error("TypeError: n_neighbors must be an int")
     var k = Int(py=k_obj)
     var q = family_as_f32_dense(source, 2, "X", context)
@@ -82,7 +90,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
         raise Error("ValueError: input feature count differs from fit")
     if k < 1 or k > Int(py=fields["n_samples_fit_"]):
         raise Error("ValueError: n_neighbors must be in [1, reference rows]")
-    var return_distance = _flag(distance_arg, "return_distance")
+    var return_distance = _flag(distance_arg, "return_distance", context)
     var nq = Int(py=q.shape[0])
     var dist = family_array(Python.tuple(nq, k), "<f4", context)
     var ids = family_array(Python.tuple(nq, k), "<i4" if rbc else "<u4", context)
@@ -116,6 +124,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
 
 def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
             binding: PythonObject, tables: PythonObject, context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     var index = py_get(fields, "_index")
@@ -123,13 +132,12 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
         raise Error("ValueError: fit the estimator before radius_neighbors")
     var radius = py_get(kwargs, "radius")
     radius = fields["radius"] if radius is None else radius
-    if py_type(radius) is not b.float and py_type(radius) is not b.int:
-        raise Error("TypeError: radius must be an ordinary float or int")
+    host_inference_scalar(radius, context)
     var r = Float64(py=radius)
     if not isfinite(r) or r <= 0:
         raise Error("ValueError: radius must be positive and finite")
-    var distances = _flag(py_get(kwargs, "return_distance", True), "return_distance")
-    var sort = _flag(py_get(kwargs, "sort_results", False), "sort_results")
+    var distances = _flag(py_get(kwargs, "return_distance", True), "return_distance", context)
+    var sort = _flag(py_get(kwargs, "sort_results", False), "sort_results", context)
     if sort and not distances:
         raise Error("ValueError: sort_results=True requires return_distance=True")
     var q = index if source is None else family_as_f32_dense(source, 2, "X", context)

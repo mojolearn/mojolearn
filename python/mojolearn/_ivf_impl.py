@@ -52,6 +52,7 @@ searches the metric; the identity_break lane is `ivf-euclidean`.
 from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
 from ._mode import NumericModeMixin
+from ._native_neighbor_queries import native_method as _native_query_method
 
 # The compiled saved-model owner, connected once at import (`save`/`load`).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -235,14 +236,6 @@ class IVFIndex(NumericModeMixin):
         d = self.__dict__
         return "list_data_" in d or "_device_list_data" in d
 
-    def __getattr__(self, name):
-        # `list_data_` of a RESIDENT build (lane gap-ivf, 2026-10-08) is made
-        # on first read, outside fit and search: `save`, a pickle, `extend`,
-        # `_clone` and the shard split read it through here.
-        if name == "list_data_" and "_device_list_data" in self.__dict__:
-            self._materialize_list_data()
-            return self.__dict__["list_data_"]
-        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
 
     def _materialize_list_data(self):
         """Write the resident index's list vectors into a new numpy array
@@ -372,6 +365,7 @@ class IVFIndex(NumericModeMixin):
     # filter: cuVS's sample filter, applied to the merged candidates of the
     # probed lists before any distance (DEVIATION 5863); a short query is
     # short-filled in Mojo (their kOutOfBoundsRecord, DEVIATION 1794 lifted).
+    @_native_query_method
     def search(self, queries, filter=None):
         """Find the nearest indexed rows of each query within the probed lists.
 
@@ -401,57 +395,7 @@ class IVFIndex(NumericModeMixin):
             number of features, `metric` no longer names the metric the index
             was built under, or `filter` has the wrong shape or dtype.
         """
-        if not self._is_built():
-            raise ValueError("mojolearn IVFIndex: call fit (or load) before search")
-        q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = q.shape
-        if dim != self.n_features_in_:
-            raise ValueError(f"mojolearn IVFIndex: queries have {dim} features, the index has {self.n_features_in_}")
-        for name in ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state"):  # glue: checks five parameter names
-            _int_param(name, getattr(self, name))
-        if self._metric_code() != self.metric_code_:
-            raise ValueError(
-                f"mojolearn IVFIndex: metric {self.metric!r} does not name the metric this index was "
-                f"built under ({_METRIC_NAMES[self.metric_code_]!r}); a built index has one metric"
-            )
-        n, k = self.n_rows_, int(self.n_neighbors)
-        dist = empty((m * k,), "<f4")
-        idx = empty((m * k,), "<i4")
-        cand = empty((m,), "<i4")
-        native = self._extension()
-        handle = self._resident_handle(native)
-        if handle is not None:
-            addrs = [addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices"),
-                     addr(cand, name="n_candidates_")]
-            keep = self._search_filter(filter, n)   # held: the binding reads it below
-            if keep is not None:
-                addrs.append(addr_ro(keep, name="filter"))
-            native.ivf_flat_index_search(
-                # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_index_search).
-                handle, addrs,
-                # n, dim, n_lists, metric, m, k, n_probes, partial_storage
-                [n, dim, self.n_lists_, self.metric_code_, m, k, int(self.n_probes), 0],
-            )
-            self.n_candidates_ = cand
-            return dist.reshape((m, k)), idx.reshape((m, k))
-        centers = self.centers_.reshape((self.n_lists_ * dim,))
-        data = self.list_data_.reshape((n * dim,))
-        addrs = [addr_ro(centers, name="centers_"), addr_ro(self.center_norms_, name="center_norms_"),
-                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-                 addr_ro(data, name="list_data_"), addr_ro(q, name="queries"),
-                 addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")]
-        keep = self._search_filter(filter, n)   # held: the binding reads it below
-        if keep is not None:
-            addrs.append(addr_ro(keep, name="filter"))
-        self._entry(native, "ivf_flat_search")(
-            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_search).
-            # centers, center_norms, offsets, indices, list_data, queries, dist_out, idx_out, cand_out[, filter]
-            addrs,
-            # n, dim, n_lists, metric, m, k, n_probes
-            [n, dim, self.n_lists_, self.metric_code_, m, k, int(self.n_probes)],
-        )
-        self.n_candidates_ = cand
-        return dist.reshape((m, k)), idx.reshape((m, k))
+        return _NATIVE_QUERY(self, "search", (queries, filter), _QUERY_CONTEXT)
 
     # -- extend (lane/inference-embedding-ivf-cholesky stage 2, 2026-09-15) --
 
@@ -629,6 +573,10 @@ _native_archive_bridge.register(IVFIndex, _IVF_FORMAT, (
 # binding's `ivf_flat_index_release` (the resident tuple's binding).
 _native_archive_bridge.lifetime(IVFIndex, "ivf_flat_index_release")
 
+
+from ._native_neighbor_queries import connect as _connect_queries
+_NATIVE_QUERY, _QUERY_CONTEXT = _connect_queries(
+    {IVFIndex: "ivf"}, _FAMILY_CONTEXT, _ARCHIVE_CONTEXT, ("ivf",))
 
 IVFFlat = IVFIndex
 
