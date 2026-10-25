@@ -79,7 +79,14 @@ def _modules(meta: PythonObject, names: PythonObject) raises -> PythonObject:
     if not Bool(py=meta["cpu_only"]):
         for i in range(len(names)):  # driver-loop: the owner's fixed binding list
             var module = meta["modules"][names[i]]["identical"]
-            if py_type(module) is not b.str:
+            if py_type(module) is b.str:
+                # Match plan_bindings' optional-module refusals. A readable
+                # mode mismatch or invalid native export must still stop the
+                # operation even if another listed module is available.
+                var error = String(module)
+                if not error.startswith("ImportError:") and not error.startswith("AttributeError:") and not error.startswith("ValueError:"):
+                    raise Error(error)
+            else:
                 _ = py_call(result.append, module)
     return py_call(b.tuple, result)
 
