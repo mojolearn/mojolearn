@@ -20,10 +20,10 @@ whose driver modules register their classes, entries and contexts here at
 import, and enters `shard_worker`. A worker rebuilds each shard's model from
 its state record without a Python constructor. Bindings are connected before
 any request and retained as namespaces of compiled entries; workers never
-call the Python binding loader. The neighbor/IVF `py` operation below remains
-separate unresolved callback debt and is not qualified by this repair.
+call the Python binding loader. Neighbor and IVF requests dispatch to the
+native handlers in parallel_neighbor_worker; no estimator callback is stored.
 """
-from std.ffi import _Global
+from std.ffi import _Global, external_call
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -34,6 +34,8 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.scaler_lifecycle_native import _public_result
+from bindings.parallel_public_result import parallel_public_result
+from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit
 from bindings.family_common import family_call, family_as_f32, family_view
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
@@ -571,9 +573,8 @@ def _rebase_offsets(arrays: PythonObject, entry: PythonObject, context: PythonOb
 # ReferenceShardedNeighbors, ParallelQueries and DistributedIVFIndex keep one
 # native local pool for their lifetime (the old `DevicePool` they held): the
 # workers start at the first request and keep their snapshots until close.
-# Their per-shard work is the plain estimators' own query methods, which are
-# not one native call each yet (python/mojolearn/_parallel_shard_ops.py);
-# the partition, scheduling, merge and join here are native.
+# Their per-shard work calls the same native search/vote kernels directly;
+# partition, scheduling, resident snapshots, merge and join are native.
 
 def _pool_open(devices: PythonObject) raises -> PythonObject:
     _ = shard_devices(devices)
@@ -587,8 +588,45 @@ def _map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
     return result
 
 
-def _py_request(name: String, args: PythonObject) raises -> PythonObject:
-    return Python.tuple("py", name, args)
+def _native_request(name: String, args: PythonObject) raises -> PythonObject:
+    return Python.tuple(name, PythonObject(None), args)
+
+
+def _driver_fields(obj: PythonObject, class_key: String) raises -> PythonObject:
+    if py_type(obj) is not _t(class_key):
+        raise Error("TypeError: parallel driver requires its exact connected class")
+    return py_fields(obj)
+
+
+def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
+    var b = shard_b()
+    var own = _driver_fields(args[0], "reference_driver_class" if reference else "query_driver_class")
+    var estimator = args[1]
+    var cls = py_type(estimator)
+    if reference:
+        if cls is not _t("nearest_class") and cls is not _t("knc_class") and cls is not _t("knr_class"):
+            raise Error("TypeError: reference shards require a brute-force KNN estimator")
+    elif len(py_get(_t("query_methods"), cls, Python.tuple())) == 0:
+        raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
+    var fields = py_fields(estimator)
+    if reference:
+        var algorithm = py_get(fields, "algorithm")
+        if py_type(algorithm) is not b.str or (String(algorithm) != "auto" and String(algorithm) != "brute"):
+            raise Error("ValueError: reference sharding requires the IDENTICAL brute-force arm")
+    if not _identical(fields):
+        raise Error("ValueError: parallel neighbors require IDENTICAL numeric mode")
+    if reference and args[3] is not None:
+        _ = shard_ranges(0, args[3], "reference_rows_per_shard", "")
+    _ = shard_ranges(0, args[4] if reference else args[3], "query_rows_per_shard" if reference else "rows_per_shard", "")
+    py_setitem(own, "estimator", estimator)
+    if reference:
+        py_setitem(own, "reference_rows_per_shard", args[3])
+        py_setitem(own, "query_rows_per_shard", args[4])
+    else:
+        py_setitem(own, "rows_per_shard", args[3])
+    py_setitem(own, "_pool", _pool_open(args[2]))
+    py_setitem(own, "last_shards_", Python.list())
+    return PythonObject(None)
 
 
 def _join(parts: PythonObject, ragged: Bool, context: PythonObject) raises -> PythonObject:
@@ -607,7 +645,7 @@ def _join(parts: PythonObject, ragged: Bool, context: PythonObject) raises -> Py
         return py_call(b.tuple, out)
     if py_type(first) is b.list:
         var out = b.list()
-        if ragged:
+        if ragged or (len(first) > 0 and (py_type(first[0]) is b.str or py_type(first[0]) is b.bool)):
             for p in range(len(parts)):  # driver-loop: one ragged row list per query shard
                 _ = py_call(out.extend, parts[p])
             return out
@@ -624,7 +662,7 @@ def _join(parts: PythonObject, ragged: Bool, context: PythonObject) raises -> Py
 
 
 def _reference_query(args: PythonObject) raises -> PythonObject:
-    """args (sharded, X, method, n_neighbors, return_distance, merge entry):
+    """args (sharded, X, method, n_neighbors, return_distance):
     `ReferenceShardedNeighbors._query`. Reference rows in blocks of
     `reference_rows_per_shard` (or an even split over the devices), queried
     in waves of len(devices) per block of `query_rows_per_shard` query rows;
@@ -633,12 +671,14 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     the first worker."""
     var b = shard_b()
     var context = _ctx()
-    var holder = py_fields(args[0])
+    var holder = _driver_fields(args[0], "reference_driver_class")
     var model = holder["estimator"]
     var pool = holder["_pool"]
     var method = String(args[2])
-    var fields = py_fields(model)
     var cls = py_type(model)
+    if cls is not _t("nearest_class") and cls is not _t("knc_class") and cls is not _t("knr_class"):
+        raise Error("TypeError: reference shards require an exact KNN estimator")
+    var fields = py_fields(model)
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     var algorithm = py_get(fields, PythonObject("algorithm"), PythonObject(None))
     if (not _identical(fields) or py_type(algorithm) is not b.str
@@ -664,6 +704,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     if py_type(k_obj) is not b.int or Int(py=k_obj) < 1 or Int(py=k_obj) > n:
         raise Error("ValueError: n_neighbors must be an integer in [1, reference rows]")
     var k = Int(py=k_obj)
+    if py_type(args[4]) is not b.bool:
+        raise Error("TypeError: return_distance must be a bool")
     if n > 2147483647:
         raise Error("ValueError: reference row count exceeds the native signed-int32 shape contract")
     var cell_limit = 2147483647 // d
@@ -672,6 +714,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     var devices = pool["devices"]
     var n_devices = len(devices)
     var width_obj = holder["reference_rows_per_shard"]
+    if width_obj is not None and (py_type(width_obj) is not b.int or Int(py=width_obj) < 1):
+        raise Error("ValueError: reference_rows_per_shard must be a positive integer")
     var width = min(cell_limit, (n + n_devices - 1) // n_devices) if width_obj is None else Int(py=width_obj)
     if min(width, n) > cell_limit:
         raise Error("ValueError: reference shard exceeds the native signed-int32 cell-count contract")
@@ -689,6 +733,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
         py_setitem(vote_state, "_index", PythonObject(None))
         py_setitem(vote_state, "numeric_mode", "identical")
     var rows = Int(py=data.shape[0])
+    _ = shard_ranges(0, holder["query_rows_per_shard"], "query_rows_per_shard", "")
     var step = Int(py=holder["query_rows_per_shard"])
     var n_ranges = len(ranges) // 2
     var outputs = b.list()
@@ -705,20 +750,23 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 var start = ranges[2 * r]
                 var stop = ranges[2 * r + 1]
                 var shift = shard_read_shift(r, start, n_devices)
-                _ = py_call(requests.append, _py_request("reference_shard", Python.tuple(
+                _ = py_call(requests.append, _native_request("reference_shard", Python.tuple(
                     params, shard_rows(index, start - shift, stop - shift, context), query, min(k, stop - start))))
             _ = py_call(parts.extend, _map(pool, requests))
             wave += n_devices
-        var merged = _merge_candidates(parts, ranges, end - first, k, args[5], context)
+        var merge = _t("reference_merge")
+        if py_type(merge) is b.str:
+            raise Error("ImportError: " + String(merge))
+        var merged = _merge_candidates(parts, ranges, end - first, k, merge, context)
         var output = PythonObject(None)
         if method == "kneighbors":
             var wide = shard_array("<i8", Python.tuple(end - first, k), (end - first) * k, context)
             _ = cast_elements(Int(py=classical_address(merged[1])), HP_U32, Int(py=classical_address(wide)), HP_I64,
                               (end - first) * k)
             _ = wide  # keep the Python object alive through the native call above
-            output = Python.tuple(merged[0], wide) if Bool(py=py_call(b.bool, args[4])) else wide
+            output = Python.tuple(merged[0], wide) if Bool(py=args[4]) else wide
         else:
-            var vote = Python.list(_py_request("reference_vote", Python.tuple(cls.__name__, vote_state, merged[0],
+            var vote = Python.list(_native_request("reference_vote", Python.tuple(cls.__name__, vote_state, merged[0],
                                                                                merged[1], method)))
             output = _map(pool, vote)[0]
         _ = py_call(outputs.append, output)
@@ -734,7 +782,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
         first = end
     var result = _join(outputs, False, context)
     py_setitem(holder, "last_shards_", diagnostics)
-    return result
+    var kind = PythonObject("regressor") if cls is _t("knr_class") else PythonObject(None)
+    return parallel_public_result(result, method, kind, context)
 
 
 def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k: Int, entry: PythonObject,
@@ -787,14 +836,16 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     released; the blocks joined in input order."""
     var b = shard_b()
     var context = _ctx()
-    var holder = py_fields(args[0])
+    var holder = _driver_fields(args[0], "query_driver_class")
     var model = holder["estimator"]
     var pool = holder["_pool"]
-    var fields = py_fields(model)
     var methods = py_get(_t("query_methods"), py_type(model), Python.tuple())
     if len(methods) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
+    var fields = py_fields(model)
     var method = methods[0] if args[2] is None else args[2]
+    if py_type(method) is not b.str:
+        raise Error("TypeError: query method must be an ordinary string")
     if not Bool(py=py_call(py_attr(methods, "__contains__"), method)):
         raise Error("ValueError: unsupported parallel query method: " + String(py=py_call(b.str, method)))
     if not _identical(fields):
@@ -822,13 +873,13 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     py_setitem(state, "numeric_mode", "identical")
     var counter = Int(py=py_get(holder, PythonObject("_native_tokens"), PythonObject(0))) + 1
     py_setitem(holder, "_native_tokens", counter)
-    var token = String("nq-") + String(Int(py=Python.import_module("os").getpid())) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
+    var token = String("nq-") + String(external_call[Int32]("getpid")) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
     var devices = pool["devices"]
     var workers = len(devices)
     var name = py_type(model).__name__
     var stores = b.list()
     for i in range(workers):  # driver-loop: one snapshot request per worker
-        _ = py_call(stores.append, _py_request("query_state", Python.tuple(token, name, state)))
+        _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
     _ = _map(pool, stores)
     var results = PythonObject(None)
     var n_devices = workers
@@ -838,14 +889,14 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
             var lo = ranges[2 * r]
             var hi = ranges[2 * r + 1]
             var shift = shard_read_shift(r, lo, n_devices)
-            _ = py_call(requests.append, _py_request("query_rows", Python.tuple(
+            _ = py_call(requests.append, _native_request("query_rows", Python.tuple(
                 token, shard_rows(data, lo - shift, hi - shift, context), method, args[3])))
         results = _map(pool, requests)
     finally:
         if not Bool(py=pool["closed"]):
             var releases = b.list()
             for i in range(workers):  # driver-loop: one release request per worker
-                _ = py_call(releases.append, _py_request("query_state", Python.tuple(token, name, PythonObject(None))))
+                _ = py_call(releases.append, _native_request("query_state", Python.tuple(token, name, PythonObject(None))))
             try:
                 _ = _map(pool, releases)
             except:
@@ -862,24 +913,30 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         _ = py_call(diagnostics.append, record)
     var output = _join(outputs, String(method) == "radius_neighbors", context)
     py_setitem(holder, "last_shards_", diagnostics)
-    return output
+    if String(method) == "radius_neighbors":
+        return output  # The plain ragged API is not an _mode public-output method.
+    var kind = PythonObject("regressor") if py_type(model) is _t("knr_class") else PythonObject(None)
+    return parallel_public_result(output, String(method), kind, context)
 
 
 def _ivf_from_index(args: PythonObject) raises -> PythonObject:
-    """args (class, index, devices, ivf binding, int32 list_indices_, int32
-    list_offsets_): `DistributedIVFIndex.from_index`
-    after its shell's checks. The native shard plan (`ivf_shard_plan`) gives
+    """args (class, index, devices): `DistributedIVFIndex.from_index`.
+    Native admission and the shard plan (`ivf_shard_plan`) give
     every device its contiguous stored rows with list offsets and local IDs;
     each worker stores its shard under the object's token."""
     var b = shard_b()
     var context = _ctx()
     var index = args[1]
+    if args[0] is not _t("distributed_ivf_class"):
+        raise Error("TypeError: distributed IVF requires its exact connected class")
+    var admitted = parallel_ivf_admit(index, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     var fields = py_fields(index)
-    var native = args[3]
+    var native = admitted[0]
     var n = Int(py=fields["n_rows_"])
     var n_lists = Int(py=fields["n_lists_"])
-    var ind = args[4]
-    var offs = args[5]
+    var ind = admitted[1]
+    var offs = admitted[2]
+    _ = shard_devices(args[2])
     var all_devices = py_call(b.tuple, args[2])
     _ = shard_devices(all_devices)
     var parts_count = min(len(all_devices), n)
@@ -910,7 +967,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     py_setitem(own, "devices", devices)
     py_setitem(own, "n_candidates_", PythonObject(None))
     py_setitem(own, "_native", native)
-    var token = String("ivf-") + String(Int(py=Python.import_module("os").getpid())) + "-" + String(Int(py=py_call(b.id, obj)))
+    var token = String("ivf-") + String(external_call[Int32]("getpid")) + "-" + String(Int(py=py_call(b.id, obj)))
     py_setitem(own, "_token", token)
     var maps = b.list()
     var requests = b.list()
@@ -926,7 +983,7 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         py_setitem(state, "list_indices_", shard_rows(local_all, lo, hi, context))
         py_setitem(state, "list_data_", shard_rows(fields["list_data_"], lo, hi, context))
         _ = py_call(maps.append, shard_rows(map_all, lo, hi, context))
-        _ = py_call(requests.append, _py_request("ivf_store", Python.tuple(token, state)))
+        _ = py_call(requests.append, _native_request("ivf_store", Python.tuple(token, state)))
     py_setitem(own, "_id_maps", maps)
     try:
         var receipts = _map(pool, requests)
@@ -946,7 +1003,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     distances finalized natively)."""
     var b = shard_b()
     var context = _ctx()
-    var own = py_fields(args[0])
+    var own = _driver_fields(args[0], "distributed_ivf_class")
     if Bool(py=own["_closed"]):
         raise Error("RuntimeError: distributed IVF index is closed")
     var q = family_as_f32(args[1], 2, "queries", context)
@@ -960,7 +1017,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     try:
         var requests = b.list()
         for i in range(len(own["devices"])):  # driver-loop: one search request per stored shard
-            _ = py_call(requests.append, _py_request("ivf_search", Python.tuple(own["_token"], q)))
+            _ = py_call(requests.append, _native_request("ivf_search", Python.tuple(own["_token"], q)))
         var parts = _map(pool, requests)
         if len(parts) != len(maps):
             raise Error("ValueError: incomplete IVF result shards")
@@ -1011,7 +1068,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
 
 
 def _ivf_close(obj: PythonObject) raises:
-    var own = py_fields(obj)
+    var own = _driver_fields(obj, "distributed_ivf_class")
     py_setitem(own, "_closed", True)
     var pool = py_get(own, PythonObject("_pool"), PythonObject(None))
     if pool is not None and not Bool(py=pool["closed"]):
@@ -1079,13 +1136,9 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         var fields = py_call(b.dict, py_fields(model))
         _ = py_call(fields.pop, "_resident_holder", PythonObject(None))
         return shard_state(fields, b.frozenset(), context)
-    if operation == "py":
-        # the neighbor and IVF drivers' per-shard plain query methods
-        # (python/mojolearn/_parallel_shard_ops.py), by name
-        var function = py_get(_t("py_ops"), state, PythonObject(None))
-        if function is None:
-            raise Error("parallel shards: unknown worker query operation")
-        return py_call(function, args)
+    if (operation == "reference_shard" or operation == "reference_vote" or operation == "query_state"
+            or operation == "query_rows" or operation == "ivf_store" or operation == "ivf_search" or operation == "release"):
+        return parallel_neighbor_worker(operation, args, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     raise Error("parallel shards: unsupported worker operation " + operation)
 
 
@@ -1123,7 +1176,9 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
     if operation == "fit_scaler":
         return _fit_scaler(args)
     if operation == "transform_scaler":
-        return _transform_scaler(args)
+        var result = _transform_scaler(args)
+        return parallel_public_result(result, "inverse_transform" if Bool(py=args[4]) else "transform",
+                                      PythonObject(None), _ctx())
     if operation == "fit_gaussian_process_classifier":
         return _fit_gpc(args)
     if operation == "predict_gaussian_process_classifier":
@@ -1138,6 +1193,25 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         return PythonObject(shard_faults_take())
     if operation == "pool_open":
         return _pool_open(args[0])
+    if operation == "reference_init" or operation == "queries_init":
+        return _holder_init(args, operation == "reference_init")
+    if operation == "holder_enter":
+        if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
+            raise Error("TypeError: parallel driver requires its exact connected class")
+        return args[0]
+    if operation == "holder_close":
+        if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
+            raise Error("TypeError: parallel driver requires its exact connected class")
+        var pool = py_fields(args[0])["_pool"]
+        if not Bool(py=pool["closed"]):
+            process_pool_close(pool)
+        return PythonObject(None)
+    if operation == "ivf_init":
+        raise Error("TypeError: use DistributedIVFIndex.from_index(index, devices=...)")
+    if operation == "ivf_enter":
+        if Bool(py=_driver_fields(args[0], "distributed_ivf_class")["_closed"]):
+            raise Error("RuntimeError: distributed IVF index is closed")
+        return args[0]
     if operation == "pool_close":
         if not Bool(py=args[0]["closed"]):
             process_pool_close(args[0])

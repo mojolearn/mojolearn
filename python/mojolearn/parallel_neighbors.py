@@ -21,12 +21,8 @@ __all__ = [
     'ParallelQueries',
 ]
 
-import sys
-
-from ._parallel_pool import public_method_result
 from . import neighbors as _nb
 from . import density as _den
-from . import _parallel_shard_ops
 from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
@@ -40,15 +36,12 @@ _METHODS = {
     _den.KernelDensity: ('score_samples',),
 }
 
-# The parallel queries' owner (bindings/parallel_shard_native.mojo
-# `parallel_queries`): the snapshots, the query blocks, the scheduling and the
-# join are native; a block's query runs in the shard workers
-# (python/mojolearn/_parallel_shard_ops.py).
-_shard.register(query_methods=_METHODS, py_ops=_parallel_shard_ops.OPERATIONS)
-
-
-def _methods(estimator):
-    return _METHODS.get(type(estimator), ())
+# Import-time exact classes/methods; workers dispatch directly to native owners.
+_shard.register(query_methods=_METHODS,
+                query_classes={cls.__name__: cls for cls in _METHODS},  # glue: fixed supported class metadata
+                nearest_class=_nb.NearestNeighbors, knc_class=_nb.KNeighborsClassifier,
+                knr_class=_nb.KNeighborsRegressor, kde_class=_den.KernelDensity,
+                context=_nb._NATIVE_CONTEXT)
 
 
 class ParallelQueries:
@@ -89,16 +82,7 @@ class ParallelQueries:
     # per-shard call and the merge are unchanged, so the bytes are too. The
     # workers drop the snapshot when the call ends.
     def __init__(self, estimator, *, devices=(0,), rows_per_shard=128):
-        if not _methods(estimator):
-            raise TypeError('parallel queries require an exact neighbors or KernelDensity estimator')
-        if estimator.numeric_mode not in (None, 'identical'):
-            raise ValueError('parallel queries require IDENTICAL numeric mode')
-        if type(rows_per_shard) is not int or rows_per_shard < 1:
-            raise ValueError('rows_per_shard must be a positive integer')
-        self.estimator = estimator
-        self.rows_per_shard = rows_per_shard
-        self._pool = _native_parallel_shard('pool_open', (devices,))
-        self.last_shards_ = []
+        _native_parallel_shard('queries_init', (self, estimator, devices, rows_per_shard))
 
     def query(self, X=None, *, method=None, **kwargs):
         """Run one query method of the estimator over ``X``.
@@ -123,16 +107,17 @@ class ParallelQueries:
         The same value the estimator's method returns for ``X``.
         """
         # One native call (bindings/parallel_shard_native.mojo `parallel_queries`).
-        return public_method_result(self.estimator, _methods(self.estimator)[0] if method is None else method,
-                                    _native_parallel_shard('parallel_queries', (self, X, method, kwargs)),
-                                    sys._getframe(1))
+        return _native_parallel_shard('parallel_queries', (self, X, method, kwargs))
 
     def close(self):
         """Stop the worker processes."""
-        _native_parallel_shard('pool_close', (self._pool,))
+        _native_parallel_shard('holder_close', (self,))
 
     def __enter__(self):
-        return self
+        return _native_parallel_shard('holder_enter', (self,))
 
     def __exit__(self, *exc):
-        self.close()
+        _native_parallel_shard('holder_close', (self,))
+
+
+_shard.register(query_driver_class=ParallelQueries)

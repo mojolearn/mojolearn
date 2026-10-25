@@ -8,52 +8,12 @@ index and extending a distributed index are outside this API.
 """
 __all__ = ['DistributedIVFIndex']
 
-from ._buffer import Array, as_f32_c, as_i32_c, empty, addr, addr_ro
 from ._ivf_impl import IVFIndex
-from . import _parallel_shard_ops
 from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
-# The distributed index's owner (bindings/parallel_shard_native.mojo
-# `ivf_from_index` / `ivf_search`): the shard plan, the storage, the
-# scheduling and the merge are native; a shard's partial search runs in the
-# shard workers (python/mojolearn/_parallel_shard_ops.py).
-_shard.register(py_ops=_parallel_shard_ops.OPERATIONS)
-
-
-def _partial_search(index, queries):
-    q, _ = as_f32_c(queries, ndim=2, name='queries')
-    if q.shape[1] != index.n_features_in_:
-        raise ValueError('query features differ from index')
-    m, k = q.shape[0], index.n_neighbors
-    dist, ids, counts = empty((m, k), '<f4'), empty((m, k), '<i4'), empty((m,), '<i4')
-    native = index._extension()
-    # The shard stays resident in its worker (lane/py-dn-ann, 2026-09-28):
-    # admitted and uploaded at the first batch, only the queries after it.
-    handle = index._resident_handle(native, partial=True)
-    if handle is not None:
-        native.ivf_flat_index_search(
-            handle,
-            [addr_ro(q, name='queries'), addr(dist, name='distances'), addr(ids, name='ids'),
-             addr(counts, name='counts')],
-            [index.n_rows_, index.n_features_in_, index.n_lists_, index.metric_code_, m, k, index.n_probes, 1])
-        return dist, ids, counts
-    fn = index._entry(native, 'ivf_flat_partial_search')
-    fn([addr_ro(index.centers_, name='centers'), addr_ro(index.center_norms_, name='norms'),
-        addr_ro(index.list_offsets_, name='offsets'), addr_ro(index.list_indices_, name='ids'),
-        addr_ro(index.list_data_, name='data'), addr_ro(q, name='queries'),
-        addr(dist, name='distances'), addr(ids, name='ids'), addr(counts, name='counts')],
-       [index.n_rows_, index.n_features_in_, index.n_lists_, index.metric_code_, m, k, index.n_probes])
-    return dist, ids, counts
-
-
-#: `ivf_merge_shards`' statuses (bindings/ivf_index_arrays.mojo), as the
-#: Python merge raised them.
-_MERGE_ERRORS = {
-    1: 'invalid IVF candidate count',
-    2: 'invalid IVF local row id',
-    4: 'NaN distance in an IVF shard result',
-}
+# Import-time class metadata; admission, storage and partial searches are native.
+_shard.register(ivf_class=IVFIndex)
 
 
 class DistributedIVFIndex:
@@ -66,35 +26,11 @@ class DistributedIVFIndex:
     Individual shards and all coarse centers must each fit on one GPU.
     """
     def __init__(self):
-        raise TypeError('use DistributedIVFIndex.from_index(index, devices=...)')
+        _native_parallel_shard('ivf_init', (self,))
 
     @classmethod
     def from_index(cls, index, *, devices=(0, 1)):
-        from . import _backend
-        if type(index) is not IVFIndex:
-            raise TypeError('requires mojolearn.IVFIndex')
-        if not hasattr(index, 'list_data_'):
-            raise ValueError('fit or load the index first')
-        if (getattr(index, 'numeric_mode', None) or _backend.default_mode()) != 'identical':
-            raise ValueError('distributed IVF requires IDENTICAL numeric mode')
-        if index._metric_code() != index.metric_code_:
-            raise ValueError('metric differs from the fitted index')
-        from ._ivf_impl import _int_param
-        for name in ('n_lists', 'n_probes', 'n_neighbors'):  # glue: checks three parameter names
-            _int_param(name, getattr(index, name))
-        if not 1 <= index.n_probes <= index.n_lists_ or index.n_neighbors < 1:
-            raise ValueError('invalid IVF probe or neighbor count')
-        if index.list_data_.shape != (index.n_rows_, index.n_features_in_):
-            raise ValueError('IVF stored data shape differs from index metadata')
-        n, n_lists = int(index.n_rows_), int(index.n_lists_)
-        ind, _ = as_i32_c(index.list_indices_, ndim=1, name='list_indices_')
-        offs, _ = as_i32_c(index.list_offsets_, ndim=1, name='list_offsets_')
-        if ind.shape[0] != n:
-            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
-        if offs.shape[0] != n_lists + 1:
-            raise ValueError('invalid global IVF list offsets')
-        # One native call: the shard plan, one stored shard per device.
-        return _native_parallel_shard('ivf_from_index', (cls, index, devices, index._extension(), ind, offs))
+        return _native_parallel_shard('ivf_from_index', (cls, index, devices))
 
     def search(self, queries):
         # One native call (bindings/parallel_shard_native.mojo `ivf_search`).
@@ -105,9 +41,10 @@ class DistributedIVFIndex:
         _native_parallel_shard('ivf_close', (self,))
 
     def __enter__(self):
-        if self._closed:
-            raise RuntimeError('distributed IVF index is closed')
-        return self
+        return _native_parallel_shard('ivf_enter', (self,))
 
     def __exit__(self, *exc):
-        self.close()
+        _native_parallel_shard('ivf_close', (self,))
+
+
+_shard.register(distributed_ivf_class=DistributedIVFIndex)

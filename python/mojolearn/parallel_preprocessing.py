@@ -20,10 +20,7 @@ __all__ = [
     'transform_scaler',
 ]
 
-import sys
-
 from . import preprocessing as _prep
-from ._parallel_pool import public_method_result
 from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
@@ -34,10 +31,6 @@ _shard.register(standard_class=_prep.StandardScaler, standard_call=_prep._STANDA
                 standard_fit=_prep._STANDARD_FIT, standard_context=_prep._STANDARD_CONTEXT,
                 minmax_class=_prep.MinMaxScaler, minmax_call=_prep._MINMAX_CALL,
                 minmax_context=_prep._MINMAX_CONTEXT)
-
-#: The plain method whose public conversion `transform_scaler` applies.
-_SCALER_METHOD = {False: 'transform', True: 'inverse_transform'}
-
 
 def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weight=None):
     """Fit a ``StandardScaler`` or ``MinMaxScaler`` with column blocks on separate GPUs.
@@ -93,7 +86,4 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
     # the plain native transform with its columns' statistics in a worker
     # process, the blocks joined at their column offsets; the plain method's
     # public conversion for our caller.
-    return public_method_result(estimator, _SCALER_METHOD.get(inverse),
-                                _native_parallel_shard('transform_scaler',
-                                                       (estimator, X, devices, columns_per_shard, inverse)),
-                                sys._getframe(1))
+    return _native_parallel_shard('transform_scaler', (estimator, X, devices, columns_per_shard, inverse))
