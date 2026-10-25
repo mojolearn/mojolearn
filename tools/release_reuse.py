@@ -86,6 +86,7 @@ sys.path.insert(0, str(ROOT / "packaging" / "linux"))
 import bincache  # noqa: E402
 import stage_libs  # noqa: E402
 from pack_wheel import HOST_NAMES, TIERS, tier_names  # noqa: E402
+from ptx_reuse import normalized_set_identity, rebind_manifest  # noqa: E402
 from release_modes import parse_modes, record_modes, release_modes  # noqa: E402
 
 SCHEMA = "mojolearn.binding-identity.v2"
@@ -106,8 +107,9 @@ MACOS = "osx-arm64"
 #: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out from 0.8.38: PyPI 100 MiB limit).
 #: PTX ships in its own exactly pinned wheel, under the per-file upload limit.
 LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
-#: The PTX slot (gpu_plugins.PTX_ARCH): always BUILD, never taken from a published wheel.
+#: PTX reuse needs an original completed-leg proof; wheel-only reuse is unproved.
 PTX_SET = ("cuda", "sm_80")
+PTX_REASON = "published PTX reuse needs a retained whole-set build proof; completed legs are admitted separately"
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
@@ -1014,10 +1016,12 @@ def _decide(commit, root, cache_dir, facts, current, rt, prev):
         elif prev.get("linux" if target == LINUX else "macos") is None:
             decision, reason = "BUILD", "the previous release published no %s wheel" % target
         elif (b.vendor, b.arch) == PTX_SET:
-            # THE PTX SET IS BUILT EVERY RELEASE: its PTX_BASELINE.json binds the
-            # source commit (the pack and the loader refuse another commit's), and
-            # a set rebuilt from the published wheel carries no manifest.
-            decision, reason = "BUILD", "the PTX set's manifest binds this release's source commit"
+            # A completed leg can supply its original build/manifest witnesses
+            # at assembly, with a fresh core admission. A published wheel alone
+            # does not supply that proof. Preserve actual input-change reasons.
+            decision, reason = compare(cur, old)
+            if decision == "REUSE":
+                decision, reason = "BUILD", PTX_REASON
         else:
             decision, reason = compare(cur, old)
         if decision == "BUILD" and reason.startswith("changed: closure"):
@@ -1028,7 +1032,8 @@ def _decide(commit, root, cache_dir, facts, current, rt, prev):
         # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): MOJOLEARN_RELEASE_BUILD_ONLY=gbdt,x_decomp,...
         # names the bindings whose output really changed; every other binding whose only
         # change is source (e.g. deleting a dead tier's code) ships the published bytes.
-        if decision == "BUILD" and reason.startswith("changed:") and BUILD_ONLY is not None:
+        if (decision == "BUILD" and reason.startswith("changed:") and BUILD_ONLY is not None
+                and (b.vendor, b.arch) != PTX_SET):
             stem = b.name[len("_mojolearn_"):] if b.name != "_mojolearn" else "core"
             if stem not in BUILD_ONLY and stem.removesuffix("_host") not in BUILD_ONLY:
                 decision, reason = "REUSE", "release owner: not in MOJOLEARN_RELEASE_BUILD_ONLY (" + reason + ")"
@@ -1071,13 +1076,8 @@ def set_identity(plan, vendor, arch):
     if not rows or not rt.get("identity_digest") or unreadable_runtime(rt.get("identity")):
         return None
     doc = dict(set=f"{vendor}/{arch}", bindings=rows, runtime=rt["identity_digest"])
-    # The PTX package also produces PTX_BASELINE.json. Both the packer and
-    # installed loader require that manifest to name the current core source.
-    # Equal compiled closures alone therefore cannot reuse an older PTX leg.
-    if (vendor, arch) == PTX_SET:
-        if not plan.get("commit"):
-            return None
-        doc["source_commit"] = plan["commit"]
+    # PTX_BASELINE.json binds the current core through a fresh release admission
+    # of the original complete proof. Its metadata does not change binary inputs.
     return dict(doc, digest=digest_of(doc))
 
 
@@ -1324,7 +1324,7 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                     if p.is_file():
                         reused[".libs/" + p.name] = dict(sha256=sha256(p), source="leg", leg=name)
                 ptx = sdir / "PTX_BASELINE.json"
-                if ptx.is_file():
+                if ptx.is_file() and (vendor, arch) != PTX_SET:
                     reused[ptx.name] = dict(sha256=sha256(ptx), source="leg", leg=name)
                 say(f"  {key}: the set of leg {name} built at {old['origin']['source_commit'][:12]} taken whole "
                     f"(set identity {old['origin']['set_identity_digest'][:12]} unchanged)")
@@ -1443,6 +1443,14 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                                 bytes_staged_libs=sum(s["bytes"] for s in staged), staged_libs=staged,
                                 driver_libs_not_staged=elf_driver_libs(exts))
                 (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            if old and not leg and (vendor, arch) == PTX_SET:
+                # Only metadata is regenerated, after all byte replacements.
+                # It is not falsely listed among byte-identical reused files.
+                try:
+                    rebind_manifest(sdir, old["dir"], old["origin"], plan.get("commit"),
+                                    set_identity(plan, vendor, arch))
+                except (OSError, ValueError, TypeError, KeyError) as exc:
+                    raise SystemExit(f"release_reuse: cannot admit completed PTX leg: {exc}") from exc
             if origin is not None or reused:
                 doc = dict(schema=REUSE_SCHEMA, set=key, from_release=origin, files=reused)
                 if from_legs:

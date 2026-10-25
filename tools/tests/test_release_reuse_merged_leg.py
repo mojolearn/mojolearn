@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import release_reuse as rr
@@ -11,7 +12,10 @@ import release_reuse as rr
 
 class MergedLegReuse(unittest.TestCase):
     def test_all_completed_merged_legs_supply_host_and_gpu_members(self):
-        with tempfile.TemporaryDirectory() as directory:
+        # PTX additionally needs the retained proof/manifest admission exercised
+        # in test_release_reuse_ptx; this fixture tests generic merged transport.
+        native_sets = tuple(s for s in rr.LINUX_SETS if s != rr.PTX_SET)
+        with tempfile.TemporaryDirectory() as directory, patch.object(rr, "LINUX_SETS", native_sets):
             root = Path(directory)
             rows = []
             old = {}
@@ -34,8 +38,6 @@ class MergedLegReuse(unittest.TestCase):
                         {"format": 1, "files": {"merged.so": [member]}}))
                 (source / ".libs").mkdir()
                 (source / ".libs/runtime.so").write_bytes(b"runtime")
-                if (vendor, arch) == rr.PTX_SET:
-                    (source / "PTX_BASELINE.json").write_text('{"source_commit": "old"}')
                 old[name] = dict(dir=source, origin=dict(source_commit="a" * 40,
                                                        set_identity_digest=name))
             plan = dict(previous=None, rows=rows, runtime=dict(decision="BUILD"))
@@ -50,9 +52,6 @@ class MergedLegReuse(unittest.TestCase):
                         self.assertEqual(record["files"][rel]["sha256"], rr.sha256(folder / rel))
                         self.assertEqual(record["files"][rel]["source"], "leg")
                 self.assertFalse((folder / "host/_host.so").exists())
-                if (vendor, arch) == rr.PTX_SET:
-                    self.assertEqual(record["files"]["PTX_BASELINE.json"]["sha256"],
-                                     rr.sha256(folder / "PTX_BASELINE.json"))
 
     def test_index_cannot_stand_in_for_a_missing_binary(self):
         with tempfile.TemporaryDirectory() as directory:

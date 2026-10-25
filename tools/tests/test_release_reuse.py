@@ -29,7 +29,7 @@ PREV_COMMIT = "b" * 40
 CUR_COMMIT = "c" * 40
 
 
-PTX_REASON = "the PTX set's manifest binds this release's source commit"
+PTX_REASON = rr.PTX_REASON
 
 #: Whether a release ships the PTX slot (release_reuse.LINUX_SETS, gpu_plugins `ptx_shipped`).
 #: 0.8.39 (2026-10-12) took it out of the Linux sets while PyPI's 100 MiB mojolearn-nvidia
@@ -282,8 +282,7 @@ class DecisionTests(unittest.TestCase):
         refrozen["commit"] = "f" * 40
         for s in rr.LINUX_SETS:
             changed = rr.set_identity(refrozen, *s)["digest"] != base[s]
-            self.assertEqual(changed, s == rr.PTX_SET,
-                             "only the PTX manifest binds the release source commit")
+            self.assertFalse(changed, "release metadata alone never changes a compiled set identity")
         moved = copy.deepcopy(plan)
         for r in moved["rows"]:
             if (r["target"], r["vendor"], r["arch"], r["name"]) == (rr.LINUX, "hip", "gfx942", "_mojolearn_gbdt"):
@@ -316,7 +315,7 @@ class DecisionTests(unittest.TestCase):
             return dict(ident, flags=dict(ident["flags"], compile_jobs="9")) if b.name == "_mojolearn_core_host" else ident
         prev = self.record(self.cur, dict(xcode="16"), mutate)
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
-        # the PTX leg runs every release and every leg builds the host bindings;
+        # Without a retained completed-leg proof, PTX builds the host bindings;
         # without the PTX slot no set builds, so the cheapest leg (HOST_LEG) builds them
         self.assertEqual(plan["legs"], PTX_LEGS or ["%s-%s" % rr.HOST_LEG])
         n_ptx = sum(1 for b in rr.bindings(rr.LINUX) if (b.vendor, b.arch) == rr.PTX_SET)
@@ -372,7 +371,7 @@ def published_wheel_fixture(tmp):
     with zipfile.ZipFile(whl, "w") as z:
         for vendor, arch in rr.LINUX_SETS:
             if (vendor, arch) == rr.PTX_SET:
-                continue  # the PTX set is built every release, never taken from a published wheel
+                continue  # wheel-only PTX reuse lacks its retained complete-leg proof
             for tier in pack_wheel.TIERS:
                 for name in pack_wheel.tier_names(tier, True):
                     rel = f"{name}.so" if tier == "fast" else f"{tier}/{name}.so"
@@ -415,7 +414,7 @@ def build_proof(path, extensions):
 
 
 def ptx_leg(tmp, plan, new_hosts=()):
-    """The cuda-sm_80 leg's set (the PTX set, built every release, Andrew
+    """The cuda-sm_80 leg's set (this fixture has no prior complete-leg proof, Andrew
     2026-10-10: PTX is a normal target; no flag) with a valid v2 PTX_BASELINE.json,
     its read-backs and runtime, and its build proof. Host bindings carry the
     published bytes except `new_hosts` (built this release, b"NEW " like the
@@ -456,7 +455,7 @@ def ptx_leg(tmp, plan, new_hosts=()):
 
 def ptx_legs(tmp, plan, new_hosts=()):
     """({"cuda-sm_80": leg dir}, [its proof]) when the release ships the PTX
-    slot (every release builds it), else ({}, [])."""
+    slot (this fixture builds it), else ({}, [])."""
     if not SHIPS_PTX:
         return {}, []
     leg, proof = ptx_leg(tmp, plan, new_hosts)
@@ -484,7 +483,7 @@ class AssemblyTests(unittest.TestCase):
         return linux_plan(self.prev, build)
 
     def legs(self, plan, **others):
-        """`others` ("vendor-arch": dir) plus the PTX leg every release runs."""
+        """`others` ("vendor-arch": dir) plus this fixture's PTX leg."""
         legs, _ = ptx_legs(self.tmp, plan)
         return dict(others, **legs)
 
@@ -630,7 +629,7 @@ class PayloadTests(unittest.TestCase):
             rr.assemble_linux(plan, whl, legs, tmp / "sets", say=lambda *_: None)
             sets = [s for vendor in ("cuda", "hip") for s in pack_wheel.load_set(tmp / "sets" / vendor, True)]
             version = pack_wheel.read_version()
-            # the PTX set (while shipped) is built every release: its leg's proof is the one proof;
+            # PTX lacks a retained prior leg here: its leg's proof is the one new proof;
             # without it every set is reused and no proof is owed
             inv = pack_wheel.release_inventory(sets, ptx_proofs, version, ROOT, required=SPLIT_SETS)
             per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
@@ -758,7 +757,7 @@ class PayloadTests(unittest.TestCase):
             self.assertEqual(inv["sets"]["hip/gfx942"]["from_legs"]["hip-gfx942"]["admitted_for"], CUR_COMMIT)
             self.assertIn("hip-gfx942", inv["reuse"]["from_legs"])
             per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
-            self.assertEqual(inv["reuse"]["built"], per_set if SHIPS_PTX else 0)  # the PTX set, built every release
+            self.assertEqual(inv["reuse"]["built"], per_set if SHIPS_PTX else 0)  # this fixture's PTX build
             target = out["hip/gfx942"] / "identical" / "_mojolearn_gbdt.so"
             target.write_bytes(target.read_bytes() + b"\0")
             with self.assertRaises(SystemExit) as cm:
@@ -835,7 +834,7 @@ class HostBuiltIntoReusedSets(unittest.TestCase):
             proof.write_text(json.dumps(dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
                                              action="build", source_commit=commit, source_inventory=inventory,
                                              source_sha256=inventory_digest(inventory), extensions=proof_ext)))
-            # While the release ships the PTX set (release_reuse.PTX_SET) it is built every release,
+            # This fixture builds the shipped PTX set (release_reuse.PTX_SET) without an older proof,
             # so its leg is the one that built and read back the host bindings: its proof is the only
             # one owed. Without it, the cheapest leg (cuda-sm_89) built them and owes the proof.
             owed = self.ptx_proofs if SHIPS_PTX else [proof]
@@ -1232,7 +1231,7 @@ class IdentityUpgradeTests(unittest.TestCase):
         plan = rr.make_plan("HEAD", self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=self.v1_record())
         self.assertIn("upgraded after reproducing", plan["previous_identities_from"])
         self.assertEqual({r["decision"] for r in plan["rows"] if (r["vendor"], r["arch"]) != rr.PTX_SET}, {"REUSE"})
-        # the runtime keeps every list whole, so it builds, on the PTX leg that runs every release
+        # the runtime keeps every list whole, so it builds on this fixture's PTX leg
         self.assertEqual(plan["runtime"]["decision"], "BUILD")
         # (without the PTX slot in the release, on the cheapest leg)
         self.assertEqual(plan["legs"], PTX_LEGS or ["%s-%s" % rr.HOST_LEG])
