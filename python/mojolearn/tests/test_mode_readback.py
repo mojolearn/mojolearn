@@ -42,6 +42,14 @@ def test_legacy_artifact_keeps_path_hint(connected, monkeypatch):
     assert model.numeric_mode_used() == 'identical'
 
 
+def test_legacy_artifact_without_a_path_hint_does_not_invent_a_mode(connected, monkeypatch):
+    model, connection = connected
+    monkeypatch.setitem(connection, 'mode', None)
+    monkeypatch.setitem(connection, 'legacy_mode', None)
+    with pytest.raises(IndexError, match='no numeric-mode path'):
+        model.numeric_mode_used()
+
+
 def test_python_binding_override_is_refused_before_invocation(connected):
     model, connection = connected
     calls = []
