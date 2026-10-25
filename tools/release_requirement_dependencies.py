@@ -23,6 +23,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from release_requirement_routes import loader_routes
 
 SCHEMA = "mojolearn.release-dependencies.v1"
 PROOF_SCHEMA = "mojolearn.release-dependency-equivalence.v1"
@@ -139,6 +140,7 @@ def _worker_snapshot(root, request):
         result["adapters"] = dict(sources=hashes, unresolved=missing, builder_views=builder_views)
     if request.get("lanes"):
         sources, reasons = ls.lane_sources()
+        result["loader_routes"] = loader_routes(root, ls.host_surface())
         result["lanes"] = {lane: dict(sources={p: _file_hash(root, p) for p in sorted(paths)},
             bindings=reasons[lane].get("bindings", []),
             precision_limitations=reasons[lane].get("precision_limitations", []))
@@ -186,7 +188,8 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
     report = logs / (token + ".json")
     log_path = logs / (token + ".log")
     # Never reuse a cached result under a different analyzer implementation.
-    analyzer = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    analyzer = digest({name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
+                       for name in ("release_requirement_dependencies.py", "release_requirement_routes.py")})
     if report.is_file():
         old = json.loads(report.read_text())
         if old.get("analyzer") == analyzer and old.get("request") == request and old.get("revision") == revision:
@@ -242,7 +245,19 @@ def _binding_context(snapshot, vendor, lane, context):
         target = context.get("cpu_target")
         if target not in ("osx-arm64", "linux-64"):
             missing.append("dependency_context.cpu_target is required")
-    names = set(lane["bindings"])
+    declared = set(lane["bindings"])
+    routes = snapshot.get("loader_routes", {})
+    exclusions = routes.get("mode_exclusions", {}).get("identical", {})
+    omitted = {name: exclusions[name] for name in declared if name in exclusions}
+    names = declared - omitted.keys()
+    mapped = {}
+    if vendor == "cpu":
+        aliases = routes.get("cpu_aliases", {})
+        for name in list(names):
+            if name in aliases:
+                mapped[name] = aliases[name]
+                names.remove(name)
+                names.update(aliases[name]["bindings"])
     matched = [b for b in snapshot["bindings"] if b["target"] == target
         and b["name"] in names and (b["vendor"] == VENDORS[vendor] or b["tier"] == "host")]
     # Every declared binding needs a target identity. A partially matched lane
@@ -266,7 +281,10 @@ def _binding_context(snapshot, vendor, lane, context):
         missing += [m for m in binding["unresolved"] if "whole-tree" not in m]
     if not matched:
         missing.append("no native binding context mapped for lane")
-    return dict(target=target, toolchain=toolchain, bindings=build_context), missing
+    environment = dict(target=target, toolchain=toolchain, bindings=build_context)
+    if omitted or mapped:
+        environment["loader_routes"] = dict(excluded=omitted, aliases=mapped, sources=routes.get("sources", {}))
+    return environment, missing
 
 
 def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None):
