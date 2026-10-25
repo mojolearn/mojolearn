@@ -132,6 +132,8 @@ def test_setter_preserves_references_and_never_invokes_python_estimator_protocol
     assert '_release_admit(fields[fitted[i]], context, seen)' in source
     assert 'native_release_weakrefs(item, context["ownership"])' in source
     assert 'native_release_admit(item, context["ownership"])' in source
+    assert 'py_call(b.id' not in source
+    assert 'PythonObject(Int(item._obj_ptr))' in source
 
 
 def test_reset_marker_preserves_legacy_user_fields_but_new_fit_wins():
