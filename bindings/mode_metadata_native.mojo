@@ -27,8 +27,8 @@ def _fields(model: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
-    if py_type(cls) is not b.type:
-        raise Error("TypeError: native metadata refuses Python metaclass protocols")
+    # Native type descriptors read actual MRO/storage, including buffers with
+    # native metaclasses. They do not consult a metaclass's Python hooks.
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: refuse dictionary protocol overrides before storage access
         var namespace = _class_fields(ancestry[i])

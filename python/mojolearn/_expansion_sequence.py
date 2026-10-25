@@ -72,7 +72,15 @@ def __getattr__(name):
     from importlib import import_module
     module, attribute = _LAZY_EXPORTS[name]
     try:
-        value = getattr(import_module("." + module, __package__), attribute)
+        loaded = import_module("." + module, __package__)
+        # glue: the first public-name import connects new class metadata once;
+        # preserve optional NumPy loading and every already-pinned native plan.
+        import sys
+        from . import _mode
+        from ._native_params_metadata import connect_classes
+        if _mode._PARAMS_METADATA_CONTEXT['ready']:
+            connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])
+        value = getattr(loaded, attribute)
     except ModuleNotFoundError as exc:
         if exc.name != "numpy":
             raise

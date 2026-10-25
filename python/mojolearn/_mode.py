@@ -553,20 +553,7 @@ class ParamsMixin(SklearnTagsMixin):
         return sorted(names)  # glue: sklearn get_params parameter names
 
     def get_params(self, deep=True):
-        out = {}
-        for name in self._get_param_names():  # glue: sklearn get_params parameter names
-            try:
-                value = getattr(self, name)
-            except AttributeError:
-                raise TypeError(
-                    f"mojolearn {type(self).__name__}: constructor parameter "
-                    f"{name!r} is not stored under its own name, so this "
-                    "estimator cannot report or clone its parameters"
-                ) from None
-            if deep and not isinstance(value, type) and callable(getattr(value, "get_params", None)):
-                out.update((f"{name}__{k}", v) for k, v in value.get_params().items())  # glue: sklearn nested get_params plumbing
-            out[name] = value
-        return out
+        return _PARAMS_METADATA(self, deep, _PARAMS_METADATA_CONTEXT)
 
     def set_params(self, **params):
         """Set constructor parameters. The estimator is rebuilt through its
@@ -700,3 +687,5 @@ class NumericModeMixin(ParamsMixin):
 # replacing any method identities captured by other native owner layouts.
 from ._native_mode_metadata import connect as _connect_mode_metadata
 _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
+from ._native_params_metadata import connect as _connect_params_metadata
+_PARAMS_METADATA, _PARAMS_METADATA_CONTEXT = _connect_params_metadata()
