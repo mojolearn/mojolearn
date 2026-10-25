@@ -10,6 +10,7 @@ PASS text and hashed log are insufficient proof of execution.
 | --- | --- | --- |
 | `candidate-nvidia`, `candidate-amd` | `tools/gate_smoke_box.py` structured candidate gate report | Exact candidate wheel hashes/modes and completed installation, whole-plan smoke, autograd, adapters and measured plan pairs; counts come from the raw producer report. |
 | `runtime-source` | `tools/public_runtime_inventory.py` full endpoint gate, schema 2 | Zero prohibited/unresolved endpoint source classifications, with actual endpoint rows/counts. Runtime proof remains required separately. |
+| Expanded Linux native binding compile units | `tools/linux_surface_qualification.sh` complete release-build proof, original before-build input capture and ledger launch | Selected native binding/index bytes; exact declared compiler/toolchain/flag configuration. Development-cache passes are not admitted. See `RELEASE_COMPILE_RECEIPTS_20261025.md`. |
 
 Each admitted producer also needs its retained `producer-inputs.json`, created
 for the actual run or through explicit historical provenance reconciliation.
@@ -19,7 +20,7 @@ Both raw files are retained and hashed; every later validation reparses them,
 derives the result/counts again and compares them with the receipt. Candidate
 wheel hashes and modes must also match the begun input configuration.
 
-No parser is currently connected for `coverage-source`, compile, runtime,
+No parser is currently connected for `coverage-source`, Apple compile, Linux runtime-library or C++ adapter compile units, runtime,
 identity, adapter-only, physical multi-GPU, performance or published-wheel
 requirements. Those producer schemas remain **unqualified / complete-provenance**
 until an adapter validates their actual retained structured reports and derives

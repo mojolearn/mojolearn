@@ -65,6 +65,9 @@ def producer_admission_available(wanted):
     """
     if wanted.get("kind") == "candidate":
         return True
+    if wanted.get("kind") == "compile":
+        from release_compile_evidence import supports_requirement
+        return supports_requirement(wanted)
     return (wanted.get("kind") == "source"
             and wanted.get("inputs", {}).get("contract", {}).get("id") == "runtime-source")
 
@@ -442,30 +445,60 @@ class RequirementsLedger:
         """Persist the reason before work starts; unchanged passes are reused."""
         reason = (reason or "").strip() or None
         with self.edit() as doc:
-            wanted = doc["requirements"][requirement]
             row = self._evaluate(doc)[requirement]
-            if row["action"] == "resume":
-                raise ValueError("resume or record the existing run " + row["active_run"]
-                                 + "; another launch would duplicate work")
-            if row["action"] == "reuse" and not reason and not invalidation_paths:
-                return None
-            if row["action"] in ("restore-evidence", "complete-provenance"):
-                raise ValueError("; ".join(row["reasons"]) + "; restore provenance before rerunning")
-            if row["action"] == "reuse" and (not reason or not invalidation_paths):
-                raise ValueError("unchanged qualified inputs require retained invalidation evidence and a specific reason; "
-                                 "a new commit or free-text reason alone cannot force a rerun")
-            invalidation = evidence_files(invalidation_paths) if invalidation_paths else []
-            run = dict(id=digest([requirement, stamp(), len(doc["runs"])]), requirement=requirement,
-                       source_revision=wanted["source_revision"], fingerprint=wanted["fingerprint"],
-                       inputs=copy.deepcopy(wanted["inputs"]), started_at=stamp(),
-                       manifest={k: copy.deepcopy(value) for k, value in wanted.items() if k != "inputs"},
-                       reasons=[*row["reasons"], *([reason] if reason else [])],
-                       invalidation_evidence=invalidation)
-            doc["runs"].append(run)
+            return self._begin(doc, requirement, row, reason, invalidation_paths)
+
+    def begin_many(self, requirements):
+        """Atomically begin a producer's units; reuse passes without forcing work."""
+        names = list(requirements)
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate begin requirement")
+        with self.edit() as doc:
+            rows = self._evaluate(doc)
+            return {name: self._begin(doc, name, rows[name], None, ()) for name in names}
+
+    @staticmethod
+    def _begin(doc, requirement, row, reason, invalidation_paths):
+        wanted = doc["requirements"][requirement]
+        if row["action"] == "resume":
+            raise ValueError("resume or record the existing run " + row["active_run"]
+                             + "; another launch would duplicate work")
+        if row["action"] == "reuse" and not reason and not invalidation_paths:
+            return None
+        if row["action"] in ("restore-evidence", "complete-provenance"):
+            raise ValueError("; ".join(row["reasons"]) + "; restore provenance before rerunning")
+        if row["action"] == "reuse" and (not reason or not invalidation_paths):
+            raise ValueError("unchanged qualified inputs require retained invalidation evidence and a specific reason; "
+                             "a new commit or free-text reason alone cannot force a rerun")
+        invalidation = evidence_files(invalidation_paths) if invalidation_paths else []
+        run = dict(id=digest([requirement, stamp(), len(doc["runs"])]), requirement=requirement,
+                   source_revision=wanted["source_revision"], fingerprint=wanted["fingerprint"],
+                   inputs=copy.deepcopy(wanted["inputs"]), started_at=stamp(),
+                   manifest={k: copy.deepcopy(value) for k, value in wanted.items() if k != "inputs"},
+                   reasons=[*row["reasons"], *([reason] if reason else [])],
+                   invalidation_evidence=invalidation)
+        doc["runs"].append(run)
         return run["id"]
 
     def record(self, run_id, status, paths, summary, exit_code, expected, completed, failed=0, skipped=0,
                receipt=None):
+        return self.record_many([dict(run_id=run_id, status=status, paths=paths, summary=summary,
+            exit_code=exit_code, expected=expected, completed=completed, failed=failed,
+            skipped=skipped, receipt=receipt)])[0]
+
+    def record_many(self, records):
+        """Admit a producer's units atomically, evaluating and writing only once."""
+        records = list(records)
+        if not records:
+            return []
+        with self.edit() as doc:
+            attempts = [self._record(doc, **record) for record in records]
+            doc["status"] = self._evaluate(doc)
+        return attempts
+
+    @staticmethod
+    def _record(doc, run_id, status, paths, summary, exit_code, expected, completed, failed=0, skipped=0,
+                receipt=None):
         if status not in ("passed", "failed"):
             raise ValueError("a completed attempt is passed or failed; missing work remains untested")
         if not summary.strip():
@@ -477,34 +510,32 @@ class RequirementsLedger:
         evidence = evidence_files(paths)
         if not evidence:
             raise ValueError("retain reports/logs before recording a result")
-        with self.edit() as doc:
-            run = next(r for r in doc["runs"] if r["id"] == run_id)
-            if any(a["run_id"] == run_id for a in doc["attempts"]):
-                raise ValueError("run already recorded; historical results are immutable")
-            invalidation = run.get("invalidation_evidence", [])
-            errors = evidence_errors(invalidation) if invalidation else []
+        run = next(r for r in doc["runs"] if r["id"] == run_id)
+        if any(a["run_id"] == run_id for a in doc["attempts"]):
+            raise ValueError("run already recorded; historical results are immutable")
+        invalidation = run.get("invalidation_evidence", [])
+        errors = evidence_errors(invalidation) if invalidation else []
+        if errors:
+            raise ValueError("invalidation evidence requires restoration: " + "; ".join(errors))
+        evidence += [item for item in invalidation if item not in evidence]
+        if status == "passed" or receipt is not None:
+            from release_requirement_receipts import validate_receipt, coverage_summary
+            errors = validate_receipt(run["requirement"], dict(run.get("manifest", {}), inputs=run["inputs"]), receipt,
+                                      require_pass=status == "passed")
             if errors:
-                raise ValueError("invalidation evidence requires restoration: " + "; ".join(errors))
-            evidence += [item for item in invalidation if item not in evidence]
-            if status == "passed" or receipt is not None:
-                from release_requirement_receipts import validate_receipt, coverage_summary
-                errors = validate_receipt(run["requirement"], dict(run.get("manifest", {}), inputs=run["inputs"]), receipt,
-                                          require_pass=status == "passed")
-                if errors:
-                    raise ValueError("; ".join(errors))
-                totals = coverage_summary(receipt)
-                if (receipt["status"] != status or receipt["exit_code"] != exit_code
-                        or totals != dict(expected=expected, completed=completed, failed=failed, skipped=skipped)):
-                    raise ValueError("declared result differs from the actual producer receipt")
-                # Retain and revalidate every raw report named by the producer.
-                evidence += [item for item in receipt["evidence"] if item not in evidence]
-            attempt = dict(run, id=digest([run_id, evidence, status]), run_id=run_id,
-                           status=status, evidence=evidence, summary=summary, finished_at=stamp(),
-                           receipt=copy.deepcopy(receipt),
-                           exit_code=exit_code, coverage=dict(expected=expected, completed=completed,
-                                                            failed=failed, skipped=skipped))
-            doc["attempts"].append(attempt)
-            doc["status"] = self._evaluate(doc)
+                raise ValueError("; ".join(errors))
+            totals = coverage_summary(receipt)
+            if (receipt["status"] != status or receipt["exit_code"] != exit_code
+                    or totals != dict(expected=expected, completed=completed, failed=failed, skipped=skipped)):
+                raise ValueError("declared result differs from the actual producer receipt")
+            # Retain and revalidate every raw report named by the producer.
+            evidence += [item for item in receipt["evidence"] if item not in evidence]
+        attempt = dict(run, id=digest([run_id, evidence, status]), run_id=run_id,
+                       status=status, evidence=evidence, summary=summary, finished_at=stamp(),
+                       receipt=copy.deepcopy(receipt),
+                       exit_code=exit_code, coverage=dict(expected=expected, completed=completed,
+                                                        failed=failed, skipped=skipped))
+        doc["attempts"].append(attempt)
         return attempt
 
     def gate(self, manifest=None, stage=None):

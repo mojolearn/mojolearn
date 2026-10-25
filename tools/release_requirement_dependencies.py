@@ -8,7 +8,8 @@ selector can also prove that a changed shared source file leaves a lane alone;
 that proof preserves the original execution receipt and tested revision.
 
 Configuration under ``dependency_context`` accepts ``apple_toolchain`` (the
-recorded build host toolchain), ``cpu_target``, and ``workloads`` keyed by vendor.
+recorded build host toolchain), ``compiler_sha256`` keyed by execution target,
+``cpu_target``, and ``workloads`` keyed by vendor.
 Each workload specifies id, lanes, source_inputs (exact recipe/harness paths),
 dataset, settings, boundary, phases and environment. Missing provenance blocks
 the corresponding unit; it never expands to a guessed whole-library rerun.
@@ -19,6 +20,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -317,6 +319,9 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
             release_modes=["identical"], build_flags=configuration.get("build_flags"))
         common_missing = [] if "build_flags" in configuration else ["build_flags"]
         if kind == "compile":
+            # Expanded units must retain every declared switch configuration;
+            # clearing the parent's broad configuration must not erase a matrix.
+            common["compile_variants"] = copy.deepcopy(configuration.get("compile_variants", []))
             target = "osx-arm64" if vendor == "apple" else "linux-64"
             if vendor == "cpu":
                 target = context.get("cpu_target")
@@ -324,6 +329,11 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
                     expanded.append(_unit(spec, "unresolved", dict(unit=common), [],
                         common_missing + ["dependency_context.cpu_target is required"], spec["coverage"]))
                     continue
+            if target == "linux-64":
+                compiler_hash = context.get("compiler_sha256", {}).get(target)
+                common["compiler_sha256"] = compiler_hash
+                if not isinstance(compiler_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", compiler_hash):
+                    common_missing.append("dependency_context.compiler_sha256.linux-64 is required")
             rows = [b for b in snapshot["bindings"] if b["target"] == target
                 and (b["vendor"] == VENDORS[vendor] or b["tier"] == "host")]
             for binding in rows:

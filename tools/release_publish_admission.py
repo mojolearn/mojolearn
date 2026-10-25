@@ -53,7 +53,8 @@ def strict_json(data):
 
 def policy(root):
     result = {name: sha256(Path(root) / name) for name in POLICY_FILES}
-    for module in ("tools/release_requirements_storage.py", "tools/release_requirement_routes.py"):
+    for module in ("tools/release_requirements_storage.py", "tools/release_requirement_routes.py",
+                   "tools/release_compile_evidence.py"):
         result[module] = sha256(Path(root) / module) if (Path(root) / module).is_file() else None
     return result
 
