@@ -71,6 +71,63 @@ requires `--rerun-reason <specific invalidation or failure>`; a new commit alone
 does not justify repeating completed checks. Existing binaries, identity cells
 and measurements remain reusable when their relevant inputs match.
 
+### Installed runtime, multi-GPU and published producers
+
+Three box producers fill `runtime-<vendor>`, `multi-gpu-<vendor>` and (post
+stage) `published-<vendor>`. Each runs against installed wheels in a fresh venv,
+writes one report into a NEW output directory, and exits 0 only on a complete
+pass. Pull the whole directory home, then admit it on the Mac with
+`tools/release_ledger_admission.py` (adapters `installed-runtime`, `multi-gpu`,
+`published-install`, all in `tools/release_installed_evidence.py`). Evidence
+paths are relative to the directory, so it can move; admission re-derives every
+count from the raw files and refuses wheels that are not the ledger's
+`artifacts:*` candidate bytes.
+
+Each box needs the candidate wheels, `python3.12` with `venv`/`pip` and PyPI
+access (numpy, pytest, and the qualifier's test-only dependencies: pandas,
+scipy, torch, scikit-learn, pyarrow). The orchestrator queues them through
+`lq ... CMD`; `V`, `SHA` (full commit packaged in the wheels) and `W` (the
+candidate wheel directory) are placeholders.
+
+```sh
+# runtime-<vendor>: every file of tools/release_runtime_coverage.json, grouped by coverage ID.
+# The tests are copied from a checkout of SHA; a git worktree of SHA is enough.
+git worktree add --detach ~/src-$SHA $SHA
+python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/src-$SHA --source-commit $SHA \
+  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl --wheel $W/mojolearn_nvidia_ptx-$V-*.whl \
+  --python python3.12 --out ~/mojolearn-evidence/release/$V/runtime-nvidia
+#   amd:   --vendor amd   --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_amd-$V-*.whl
+#   cpu:   --vendor cpu   --wheel $W/mojolearn_core-$V-*.whl            (Linux CPU box, cpu_target linux-64)
+#   apple: python3 tools/mac_slot.py --wait-timeout 3600 metal -- python3 tools/release_runtime_installed.py run \
+#            --vendor apple --wheel $W/mojolearn-$V-*-macosx_*.whl ...  (the M2 Pro)
+
+# multi-gpu-<vendor>: two or more GPUs of one vendor; nvidia-smi (NVIDIA) or amd-smi and rocm-smi (AMD).
+python3 tools/release_multi_gpu_parallel.py run --vendor nvidia --devices 0,1 \
+  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl --wheel $W/mojolearn_nvidia_ptx-$V-*.whl \
+  --python python3.12 --out ~/mojolearn-evidence/release/$V/multi-gpu-nvidia
+
+# published-<vendor>, after publication: PyPI install, published hashes == candidate hashes,
+# the eleven installed correctness jobs and the three adapter phases.
+python3 tools/release_published_install.py run --vendor nvidia --version $V \
+  --candidate-wheel $W/mojolearn_core-$V-*.whl --candidate-wheel $W/mojolearn_nvidia-$V-*.whl \
+  --candidate-wheel $W/mojolearn_nvidia_ptx-$V-*.whl --python python3.12 --out ~/mojolearn-evidence/release/$V/published-nvidia
+#   apple runs under tools/mac_slot.py ... metal -- with --candidate-wheel $W/mojolearn-$V-*-macosx_*.whl
+
+# On the Mac, for each pulled directory DIR and its adapter:
+python3 tools/release_ledger_admission.py prepare --adapter installed-runtime --ledger "$LEDGER" --root . \
+  --producer report=DIR/runtime-report.json --out DIR-admission
+python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . --report DIR-admission/report.json
+#   multi-gpu:          --adapter multi-gpu         --producer report=DIR/multi-gpu-report.json
+#   published-install:  --adapter published-install --producer report=DIR/published-report.json
+```
+
+`multi-gpu-amd` needs an AMD box with two GPUs; the DigitalOcean MI325X
+droplet has one, so that row stays untested until a two-GPU AMD box runs it.
+The multi-GPU fault controls are a real native fold failure on two devices, a
+hidden-device refusal, wrong-device and Python-callback refusals and the
+verifier's comparator controls. Perturbing a fold's native arithmetic needs a
+product fault-injection hook and is not part of this producer.
+
 ## Standalone native-only candidate
 
 The optional standalone artifact has a separate strict qualification gate:
