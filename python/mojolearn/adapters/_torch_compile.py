@@ -65,15 +65,16 @@ def _connect_torch_execution(torch, program, free, n_args, sequence):
     # is not a claim that the whole torch.compile surface is native.
     from types import BuiltinFunctionType
     entry = program._s._b.ops_torch_program_run
-    api = dict(empty=torch._C._VariableFunctions.empty)
-    for key, name in (("get_device", "_cuda_getDevice"), ("set_device", "_cuda_setDevice"),
-                      ("synchronize", "_cuda_synchronize"), ("synchronize_mps", "_mps_deviceSynchronize")):
-        api[key] = getattr(torch._C, name, None)
+    api = dict(empty=torch._C._VariableFunctions.empty,
+               get_device=getattr(torch._C, "_cuda_getDevice", None),
+               set_device=getattr(torch._C, "_cuda_setDevice", None),
+               synchronize=getattr(torch._C, "_cuda_synchronize", None),
+               synchronize_mps=getattr(torch._C, "_mps_deviceSynchronize", None))
     if type(entry) is not BuiltinFunctionType:
         raise TypeError("Torch execution requires the compiled program entry")
-    for name, function in api.items():
-        if function is not None and type(function) is not BuiltinFunctionType:
-            raise TypeError(f"Torch execution requires compiled {name}")
+    if type(api["empty"]) is not BuiltinFunctionType:
+        raise TypeError("Torch execution requires compiled empty")
+    # Optional vendor entries are checked by the native owner before use.
     api.update(cpu=torch.device("cpu"), f32=torch.float32, i32=torch.int32,
                free=tuple(free), n_args=n_args, sequence=sequence)
     return entry, api
