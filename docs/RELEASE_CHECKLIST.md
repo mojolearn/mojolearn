@@ -25,6 +25,14 @@ python3 tools/release_ledger.py check --ledger "$HOME/mojolearn-evidence/release
 The input configuration is retained in the ledger. It declares `release_modes`,
 `build_flags` and `dependency_context`, including an explicit `cpu_target`
 (`osx-arm64` or `linux-64`) and full-workload recipes under `workloads` by vendor.
+The accepted CPU identity column runs on Linux x86_64, so sync with
+`--configuration tools/release_identity_targets.json` (`cpu_target: linux-64`);
+`dependency_context` keys merge, so the retained compiler hashes are kept.
+Identity units are admitted by `tools/release_identity_evidence.py`: `begin
+--vendor <v>` before the column runs (it prints the `LANES=` list), then `admit
+--records <dir>... --launch <launch.json>...` once the Apple, NVIDIA, AMD, CPU
+and (for NVIDIA units binding the sm_80 set) PTX records exist at the frozen
+source. A record from other hardware than the unit's target is refused.
 Recipes name their identity lanes, source files, dataset identity, settings,
 timing boundary, phases and environment. Missing mappings remain untested;
 discovery of a recipe file does not establish full-dataset coverage.
