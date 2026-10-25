@@ -29,6 +29,7 @@ BINDINGS = ROOT / "bindings"
 
 try:
     import mojolearn as ml
+    from mojolearn.model_selection import KFold
     ml.Ridge  # noqa: B018  (the bindings loaded)
 except Exception:  # no built bindings: only the source checks run
     ml = None
@@ -222,7 +223,9 @@ def test_rfe_refusals_without_a_native_plan():
     class MyLDA(ml.LinearDiscriminantAnalysis):
         pass
 
-    with pytest.raises(TypeError, match="RFE requires a mojolearn estimator; got MyLDA"):
+    # The native LDA constructor now rejects the unsupported subclass before
+    # RFE can admit an estimator. Preserve that earlier no-callback refusal.
+    with pytest.raises(TypeError, match="native LDA requires its connected class without Python subclass hooks"):
         ml.RFE(MyLDA()).fit(X, y)
     with pytest.raises(TypeError, match="unexpected keyword argument 'sample_weight'"):
         ml.RFE(ml.LinearDiscriminantAnalysis()).fit(X, y, sample_weight=np.ones(len(y), np.float32))
@@ -236,13 +239,13 @@ def test_target_encoder_never_calls_the_splitter_split_method():
     rng = np.random.default_rng(7)
     X = rng.integers(0, 4, (200, 2)).astype(np.int64)
     y = (X[:, 0] + rng.random(200) > 2).astype(np.int64)
-    cv = ml.KFold(4)
+    cv = KFold(4)
     forbidden = _class_codes(type(cv))
     enc = ml.TargetEncoder(cv=cv, smooth=2.0)
     with _Probe() as probe:
         out = enc.fit_transform(X, y)
     assert probe.hits(forbidden) == []
-    pairs = list(ml.KFold(4).split(X, y))
+    pairs = list(KFold(4).split(X, y))
     np.testing.assert_array_equal(np.asarray(out), np.asarray(ml.TargetEncoder(cv=pairs, smooth=2.0).fit_transform(X, y)))
 
 
@@ -343,8 +346,8 @@ def test_native_composition_refuses_callback_keywords_without_executing_them():
 def test_meta_estimators_use_native_members_and_splitters(name):
     X, labels = _classes(seed=17, n=48, d=4)
     y = (X[:, 0] - 0.25 * X[:, 1]).astype(np.float32)
-    classes = [ml.Ridge, ml.BayesianRidge, ml.LogisticRegression, ml.GaussianNB, ml.LinearSVC, ml.KFold]
-    cv = ml.KFold(2, shuffle=True, random_state=1)
+    classes = [ml.Ridge, ml.BayesianRidge, ml.LogisticRegression, ml.GaussianNB, ml.LinearSVC, KFold]
+    cv = KFold(2, shuffle=True, random_state=1)
     if name in ('VotingRegressor', 'StackingRegressor'):
         members = [('ridge', ml.Ridge()), ('bayes', ml.BayesianRidge(max_iter=20))]
         estimator = ml.VotingRegressor(members) if name == 'VotingRegressor' else ml.StackingRegressor(members, cv=cv)
