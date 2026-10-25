@@ -513,7 +513,7 @@ class RequirementsLedger:
         requirement never replaces or satisfies the broad runtime gate.
         """
         from release_public_runtime_evidence import (CONFIG_KEY, load, profile,
-            producer_payload, reference, wanted_from_facts, frozen_environment)
+            producer_payload, reference, wanted_from_facts, frozen_environment, git_tree)
         from release_requirement_receipts import validate_receipt, coverage_summary
         report_path = Path(report_path).resolve()
         report = load(report_path)
@@ -539,7 +539,8 @@ class RequirementsLedger:
                     f"{facts['executions']} executions; not broad runtime or installed-wheel qualification",
             coverage=coverage_summary(receipt), receipt=receipt)
         with self.edit() as doc:
-            if doc.get("source_revision") != current["source_revision"]:
+            if (not doc.get("source_revision")
+                    or git_tree(root, doc["source_revision"])[0] != current["source_revision"]):
                 raise ValueError("synchronize the ledger to the requested revision before retrospective admission")
             if name in doc["requirements"] and doc["requirements"][name].get("required") is not False:
                 raise ValueError("retained regression admission cannot replace a required gate")
