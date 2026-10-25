@@ -7,7 +7,7 @@ from . import _expansion_linear as linear
 _ENTRY = _binding()._module.linear_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('linear constructors require a compiled native entry')
-_CONTEXT = dict(plans={}, ready=False)
+_CONTEXT = dict(plans={}, missing=object(), ready=False)
 _CLASSES = (
     linear.SGDClassifier, linear.SGDRegressor, linear.PoissonRegressor, linear.GammaRegressor,
     linear.TweedieRegressor, linear.HuberRegressor, linear.BayesianRidge, linear.ARDRegression,
@@ -31,7 +31,7 @@ def install():
         original = vars(cls)['__init__']
         signature = inspect.signature(original)
         parameters = tuple(signature.parameters.values())[1:]
-        if any(p.kind not in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY) for p in parameters):  # glue: schema validation
+        if any(p.kind not in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY) for p in parameters):  # glue: validate import-time constructor metadata
             raise TypeError('linear native constructor schema requires declared ordinary parameters')
         function = _initializer()
         function.__name__ = '__init__'
@@ -58,6 +58,7 @@ def connect(setter_context):
     # glue: share the vetted constructor/storage and reference-release schemas
     # after CV and setters have captured their final native method identities.
     from ._native_params_setter import _CLASSES as names
+    from ._native_public_attributes import _resolved
     if tuple(cls.__name__ for cls in _CLASSES) != names:  # glue: exact supported subset
         raise TypeError('linear constructor and setter schemas differ')
     for cls in _CLASSES:  # glue: fixed post-install layout snapshots
@@ -69,4 +70,7 @@ def connect(setter_context):
             raise TypeError('linear constructor requires its vetted field-only parameter schema')
         plan['field_hooks'] = tuple((base, name, vars(base).get(name))
             for base in constructor['mro'] for name in plan['names'])  # glue: refuse changed parameter descriptors before runtime writes
+        plan.update(mro=constructor['mro'], layout_hooks=constructor['hooks'], protected=constructor['protected'],
+            inherited_hooks=tuple((name, _resolved(cls, name, _CONTEXT['missing']))
+                for name in constructor['protected']))  # glue: inherited constructor/storage identities, allowing passive subclasses
     _CONTEXT.update(setters=setter_context, ready=True)
