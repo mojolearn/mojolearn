@@ -149,6 +149,27 @@ class CandidateReceiptTests(unittest.TestCase):
         self.assertEqual(receipt["autograd_artifacts"], 8)
         self.assertNotEqual(R.coverage_summary(receipt)["completed"], 5)
 
+    def test_existing_receipt_reparses_raw_gate_and_rejects_caller_counts(self):
+        receipt = self.admit()
+        receipt["coverage"][0].update(expected=1, completed=1)
+        self.assertTrue(any("actual producer" in error for error in
+                            R.validate_receipt("candidate-nvidia", self.wanted, receipt)))
+        receipt = self.admit()
+        self.gate["measure"]["pending"] = 1
+        self.path.write_text(json.dumps(self.gate))
+        # Even re-hashing the edited raw report cannot retain the original
+        # controller stamp or turn failed producer coverage into a pass.
+        receipt["producer_report"]["sha256"] = R.sha256(self.path)
+        receipt["evidence"][0]["sha256"] = R.sha256(self.path)
+        self.assertTrue(R.validate_receipt("candidate-nvidia", self.wanted, receipt))
+
+    def test_candidate_must_match_declared_artifact_input_closure(self):
+        self.wanted["inputs"]["configuration"]["artifacts:nvidia"]["mojolearn-core"] = "f" * 64
+        self.wanted["fingerprint"] = R.hashlib.sha256(json.dumps(self.wanted["inputs"], sort_keys=True,
+                                                                separators=(",", ":")).encode()).hexdigest()
+        with self.assertRaisesRegex(ValueError, "artifacts/modes"):
+            self.admit()
+
     def test_pass_label_without_native_schema_is_refused(self):
         self.assertTrue(R.candidate_gate_errors({"verdict": "PASS"}, self.identity))
 
