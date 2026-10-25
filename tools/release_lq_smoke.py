@@ -26,14 +26,13 @@ column-<vendor>.json, diff-ref-<vendor>.txt). In order:
 The exit code is the box job's rc (the smoke's own verdict), 1 when no
 results.json came home, 3 when the job never reported within --max-wait-hours.
 
---gate VENDOR VERSION (2026-10-22, Andrew: every exposed API measured against its peers, and the
-measurements in the smoke): the RELEASE GATE instead of the wheel smoke, `python3 tools/gate_smoke_box.py
-<vendor> <version> <remote-dir>/out all` (setup from the published PyPI wheels, the 5 s smoke over the
-whole plan, the autograd smoke, then one scored run per arm of every plan line). Nothing is uploaded (the
-gate installs from PyPI) and the box's earlier gate tree of this version is KEPT (its venv, data cache and
-gate-smoke.json resume); only the reports come home (gate-smoke.json, the smoke, autograd and campaign
-reports and the merged board, never the venv or the data cache). It succeeds only when gate-smoke.json
-came home with verdict PASS for this vendor and version.
+--gate VENDOR VERSION runs release-light-v1 by default: exact installed wheels,
+bounded correctness/autograd/adapter completion with a 30-minute total ceiling.
+--gate-profile performance-campaign-v1 explicitly retains the full board and
+opponent campaign. Candidate mode transports hashed wheels and all eight existing
+autograd executables; it never compiles. Reports/logs come home, including actual
+coverage, timeouts and installation/execution timing. Historical directories are
+not converted to another profile or relabelled as new evidence.
 --state keeps the queued tag: a relaunch while the job is queued or running
 polls it again instead of queueing a second one; it is removed once the result
 is home. The ssh targets are lq's own (NV= and AMD= in the lq script).
@@ -141,7 +140,7 @@ def box_plan(smoke_args, remote_dir):
 
 
 #: what --gate brings home from <remote-dir>/out (reports only; the venv and data cache stay on the box)
-GATE_FETCH = ("gate-smoke.json", "autograd-smoke.json", "smoke.log", "measure-*.log", "measure-manifest-*.json",
+GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-smoke.json", "autograd-smoke", "smoke.log", "measure-*.log", "measure-manifest-*.json",
               "setup/wheel-manifest.json", "setup/logs", "autograd-bin/build-manifest.json",
               "smoke-*/smoke/smoke.json", "smoke-*/smoke/smoke.txt", "measure-*/campaign.json",
               "measure-*/campaign-retention.json", "measure-*/board",
@@ -151,12 +150,15 @@ GATE_FETCH = ("gate-smoke.json", "autograd-smoke.json", "smoke.log", "measure-*.
 
 
 def gate_plan(vendor, version, remote_dir, candidate_wheels=(), source_commit=None, autograd_dir=None,
-              adapters=True):
+              adapters=True, profile="release-light-v1"):
     """The box argv of the release gate (tools/gate_smoke_box.py ... all). ADAPTERS False (the release's
     MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship) passes --no-adapters, the env not reaching the box."""
     if vendor not in ("nvidia", "amd") or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
         raise SystemExit(f"lq-smoke: --gate takes nvidia|amd and a version, not {vendor!r} {version!r}")
-    argv = ["python3", "tools/gate_smoke_box.py", vendor, version, f"{remote_dir}/out", "all"]
+    from release_gate_profiles import PROFILES
+    if profile not in PROFILES:
+        raise ValueError("unknown gate profile")
+    argv = ["python3", "tools/gate_smoke_box.py", vendor, version, f"{remote_dir}/out", "all", "--profile", profile]
     if not adapters:
         argv.append("--no-adapters")
     uploads = []
@@ -305,7 +307,8 @@ class Runner:
         uploads, box_argv = (gate_plan(a.gate[0], a.gate[1], a.remote_dir,
                                       getattr(a, 'candidate_wheel', ()), getattr(a, 'candidate_source_commit', None),
                                       getattr(a, 'gate_autograd_dir', None),
-                                      adapters=not getattr(a, 'no_adapters', False)) if a.gate
+                                      adapters=not getattr(a, 'no_adapters', False),
+                                      profile=getattr(a, 'gate_profile', 'release-light-v1')) if a.gate
                              else box_plan(a.smoke, a.remote_dir))
         key = hashlib.sha256(json.dumps([a.box, a.branch, a.remote_dir, box_argv,
                                          [sha256(l) if l.is_file() else str(l) for l, _ in uploads]]).encode()).hexdigest()
@@ -364,6 +367,7 @@ def parse(argv):
                          "instead of the wheel smoke; no smoke arguments")
     ap.add_argument('--candidate-wheel', action='append', default=[], help='local unpublished core/vendor wheel; repeat')
     ap.add_argument('--candidate-source-commit', help='full candidate source commit')
+    ap.add_argument('--gate-profile', choices=('release-light-v1', 'performance-campaign-v1'), default='release-light-v1')
     ap.add_argument('--gate-autograd-dir', help='directory holding the eight binaries and build-manifest.json')
     ap.add_argument('--no-adapters', action='store_true',
                     help='with --gate: no framework adapters ship (MOJOLEARN_RELEASE_ADAPTERS=0); the gate records '

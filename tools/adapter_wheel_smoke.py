@@ -83,12 +83,13 @@ def run(name, argv, out, seconds, env=None):
                                 start_new_session=True, env=env)
         timed_out = False
         try:
-            code = proc.wait(timeout=seconds)
+            deadline = float(os.environ.get("MOJOLEARN_GATE_DEADLINE", "inf"))
+            code = proc.wait(timeout=max(0, min(seconds, deadline - time.time())))
         except subprocess.TimeoutExpired:
             timed_out = True
             os.killpg(proc.pid, signal.SIGTERM)
             try:
-                proc.wait(timeout=20)
+                proc.wait(timeout=0 if os.environ.get("MOJOLEARN_GATE_DEADLINE") else 20)
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait()

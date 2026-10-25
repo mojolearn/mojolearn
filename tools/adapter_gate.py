@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -98,12 +99,14 @@ def run(vendor, base_python, out, installs, env=None, launch=None):
             return subprocess.run(argv, stdout=fh, stderr=subprocess.STDOUT, env=env).returncode
     launch = launch or default
     rec = dict(enabled=True, vendor=vendor, device=DEVICE.get(vendor), report=str(out / RECEIPT))
+    started = time.monotonic()
     for argv in venv_commands(base_python, venv, installs):
         rc = launch(argv, str(out / "adapter-venv.log"))
         if rc != 0:
             rec.update(status="VENV_FAILED", ok=False, rc=rc,
                        why="adapter venv setup failed (exit %s); see %s" % (rc, out / "adapter-venv.log"))
             return rec
+    setup_elapsed = time.monotonic() - started
     rec["rc"] = launch(smoke_command(vendor, venv, out), str(out / "adapter-smoke.log"))
     status, ok, why = judge(out / RECEIPT)
     doc = {}
@@ -112,5 +115,8 @@ def run(vendor, base_python, out, installs, env=None, launch=None):
     except (OSError, ValueError):
         pass
     rec.update(status=status, ok=ok, why=why, frameworks=doc.get("frameworks"),
-               phases={n: (p or {}).get("exit") for n, p in (doc.get("phases") or {}).items()})
+               phases={n: (p or {}).get("exit") for n, p in (doc.get("phases") or {}).items() if n in PHASES},
+               phase_records=doc.get("phases") or {},
+               installation_elapsed_seconds=setup_elapsed + sum(float(p.get("seconds", 0)) for n, p in (doc.get("phases") or {}).items() if n.startswith("install-")),
+               execution_elapsed_seconds=sum(float(p.get("seconds", 0)) for n, p in (doc.get("phases") or {}).items() if n in PHASES))
     return rec

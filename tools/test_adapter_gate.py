@@ -125,7 +125,7 @@ def test_gate_verdict_skips_the_disabled_adapter_stage():
 
 
 def gate(tmp_path, vendor="amd", **kw):
-    g = G.Gate(vendor, "0.8.56", tmp_path / "gate", **kw)
+    g = G.Gate(vendor, "0.8.56", tmp_path / "gate", profile="performance-campaign-v1", **kw)
     g.state.update(python="/gate/venv/bin/python")
     return g
 

@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import zipfile
 
+COMMAND_TIMEOUT_SECONDS = 180  # Keep this standalone shipped runner dependency-free.
+
 
 #: wheel-name prefix -> distribution of the split Linux GPU plugins
 #: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
@@ -194,17 +196,25 @@ def runner(manifest, receipt, output):
         temporary.replace(receipt)
 
     def run(name, command, cwd, json_output=False, allowed_exits=(0,)):
+        import time
+        started = time.monotonic()
+        deadline = float(os.environ.get("MOJOLEARN_GATE_DEADLINE", "inf"))
+        timeout = max(0, min(COMMAND_TIMEOUT_SECONDS, deadline - time.time()))
+        timed_out = False
         path = output / (name + (".json" if json_output else ".log"))
         with path.open("w") as stdout, (output / (name + ".stderr.log")).open("w") as stderr:
             proc = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                     stdout=stdout, stderr=stderr, start_new_session=True)
             try:
-                code = proc.wait(timeout=180)
+                code = proc.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
+                timed_out = True
                 os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait()
                 code = 124
-        manifest["jobs"].append(dict(name=name, exit_code=code, output=str(path)))
+        manifest["jobs"].append(dict(name=name, exit_code=code, output=str(path),
+                                     elapsed_seconds=time.monotonic() - started, timed_out=timed_out,
+                                     timeout_seconds=COMMAND_TIMEOUT_SECONDS))
         save()
         if code not in allowed_exits:
             raise RuntimeError(f"{name} failed with exit {code}; see {path}")
@@ -239,6 +249,19 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
         doc = run(kind, [python, "-m", "mojolearn", "verify", *flags, "--json"], work, True,
                   (0, 5) if kind == "extended" else (0,))
         admit(kind, doc, models)
+        from collections import Counter
+        counts = manifest.setdefault("coverage_counts", {})
+        if kind == "models":
+            counts[kind] = dict(expected=len(models) * 2, completed=len(doc["cells"]),
+                                states=dict(Counter(row["state"] for row in doc["cells"])))
+        elif kind == "extended":
+            counts[kind] = dict(completed=len(doc["cells"]),
+                                states=dict(Counter(row["state"] for row in doc["cells"])))
+        elif kind == "self-test":
+            counts[kind] = dict(controls=2, clean=doc["clean"]["state"], perturbed=doc["perturbed"]["state"])
+        else:
+            counts[kind] = dict(lanes=len(doc["lanes"]), cpu_declared=doc["cpu_execution_counts"]["declared"])
+        save()
         if kind == "extended":
             # This gate checks the CLI's honest incomplete result;
             # it does not qualify properties lacking references.
@@ -285,7 +308,11 @@ def qualify_installed(parser, args):
             work = Path(directory)
             located = run("locate-installed", [python, "-c", LOCATE_INSTALLED], work, True)
             manifest["installed_from"].update(located)
-            wrong = {n: v for n, v in located["distributions"].items() if v != args.expected_version}
+            wrong = {n: v for n, v in located["distributions"].items() if v is not None and v != args.expected_version}
+            installed_names = {n for n, v in located["distributions"].items() if v is not None}
+            required = {"mojolearn-core"} if installed_names.intersection(
+                {"mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx"}) else {"mojolearn"}
+            wrong.update({name: None for name in required - installed_names})
             if wrong:
                 raise RuntimeError(f"installed distributions not at {args.expected_version}: {wrong}")
             package = Path(located["package"] or "")

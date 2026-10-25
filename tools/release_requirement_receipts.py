@@ -10,11 +10,13 @@ import json
 from pathlib import Path
 from collections import Counter
 import release_evidence
+import release_gate_profiles as gate_profiles
 
 SCHEMA = "mojolearn.release-requirement-receipt.v1"
 PROVENANCE_SCHEMA = "mojolearn.release-producer-inputs.v1"
 KINDS = {"source", "compile", "runtime", "identity", "adapters", "multi", "performance", "candidate", "published"}
-CANDIDATE_COVERAGE = ("install", "whole-plan-smoke", "autograd-artifacts", "adapters", "measured-plan-pairs")
+CANDIDATE_COVERAGE = gate_profiles.CAMPAIGN_COVERAGE
+LIGHT_CANDIDATE_COVERAGE = gate_profiles.LIGHT_COVERAGE
 SOURCE_COVERAGE = ("zero prohibited source paths",)
 SOURCE_SCOPE = "all public and returned endpoints; static connections only, no product imports or execution"
 
@@ -236,7 +238,12 @@ def candidate_gate_errors(gate, identity):
 
     if not isinstance(gate, dict) or not isinstance(identity, dict):
         return ["candidate gate and identity must be objects"]
-    for field in ("counts", "autograd_counts", "autograd_artifacts", "adapters", "measure"):
+    try:
+        light = gate_profiles.profile(gate) == gate_profiles.LIGHT
+    except ValueError as error:
+        return [str(error)]
+    structured = ("correctness",) if light else ("counts", "measure")
+    for field in ("autograd_counts", "autograd_artifacts", "adapters", *structured):
         if not isinstance(gate.get(field), dict):
             return ["candidate gate lacks structured " + field]
     errors = []
@@ -254,19 +261,21 @@ def candidate_gate_errors(gate, identity):
             errors.append("native gate verdict did not pass: " + "; ".join(reasons))
     except (TypeError, ValueError, KeyError):
         errors.append("malformed native gate stage records")
-    for name in ("setup", "smoke", "autograd", "adapters", "measure"):
+    stages = gate_profiles.LIGHT_STAGES if light else ("setup", "smoke", "autograd", "adapters", "measure")
+    for name in stages:
         finished = gate.get(name + "_finished")
         if type(finished) not in (int, float) or finished <= 0:
             errors.append(name + " stage has no completion record")
     if not gate.get("wheel_manifest") or not gate.get("python"):
         errors.append("setup lacks its installed-wheel manifest/interpreter")
-    counts = gate.get("counts")
-    # STARTED is the existing producer's successful startup smoke result,
-    # not a claim that a timed workload completed. The measure stage is separate.
-    if (not _counts(counts, {"PASSED", "STARTED"}) or type(gate.get("smoke_rc")) is not int or gate.get("smoke_rc") != 0
-            or not _count(gate.get("smoke_lines"))
-            or gate.get("smoke_lines") != sum((counts or {}).values())):
-        errors.append("whole-plan smoke lacks complete successful startup counts")
+    if not light:
+        counts = gate.get("counts")
+        # STARTED is the existing producer's successful startup smoke result,
+        # not a claim that a timed workload completed. The measure stage is separate.
+        if (not _counts(counts, {"PASSED", "STARTED"}) or type(gate.get("smoke_rc")) is not int or gate.get("smoke_rc") != 0
+                or not _count(gate.get("smoke_lines"))
+                or gate.get("smoke_lines") != sum((counts or {}).values())):
+            errors.append("whole-plan smoke lacks complete successful startup counts")
     counts = gate.get("autograd_counts")
     if (not _counts(counts, {"ok"}) or type(gate.get("autograd_rc")) is not int or gate.get("autograd_rc") != 0
             or sum(counts.values()) != len(autograd_smoke.ENTRIES)):
@@ -276,11 +285,12 @@ def candidate_gate_errors(gate, identity):
         files = artifacts["files"]
         expected = gate_autograd_artifacts.expected(identity["vendor"])
         if (artifacts.get("schema") != gate_autograd_artifacts.SCHEMA or artifacts.get("state") != "built"
-                or artifacts.get("source_commit") != identity["source_commit"]
+                or not gate_autograd_artifacts.source_matches(artifacts, identity["source_commit"])
                 or artifacts.get("vendor") != identity["vendor"] or len(files) != len(expected)
                 or {row["file"] for row in files} != set(expected)
                 or any(type(row.get("exit_code")) is not int or row.get("exit_code") != 0 or row.get("source") != expected[row["file"]]
-                       or not row.get("sha256") or not row.get("source_sha256") for row in files)):
+                       or not row.get("sha256") or not row.get("source_sha256")
+                       or not gate_autograd_artifacts.retained_artifact_valid(artifacts, row) for row in files)):
             errors.append("autograd artifacts lack exact built source provenance")
     except (KeyError, TypeError, ValueError, AttributeError):
         errors.append("autograd artifact manifest is incomplete")
@@ -291,19 +301,20 @@ def candidate_gate_errors(gate, identity):
             or not isinstance(phases, dict) or set(phases) != set(adapter_gate.PHASES)
             or any(type(code) is not int or code != 0 for code in phases.values())):
         errors.append("candidate adapters require every actual installed-wheel phase")
-    measure = gate.get("measure") or {}
-    expected = measure.get("planned_whole_plan")
-    statuses = measure.get("statuses") or {}
-    pairs = measure.get("pairs") or {}
-    if (not _count(expected) or expected < 1 or not _count(measure.get("expected")) or measure.get("expected") != expected
-            or not _counts(statuses, {"process finished"}) or statuses != {"process finished": expected}
-            or type(measure.get("pending")) is not int or measure.get("pending") != 0
-            or measure.get("failed") != [] or measure.get("own_not_built") != []
-            or not measure.get("board") or type(gate.get("measure_rc")) is not int or gate.get("measure_rc") != 0):
-        errors.append("measurement lacks complete actual workload execution counts")
-    if (not isinstance(pairs, dict) or not _count(pairs.get("matched")) or pairs.get("matched", 0) < 1
-            or pairs.get("unchecked") != [] or pairs.get("refused") != []):
-        errors.append("measurement lacks complete admitted opponent pairs")
+    if not light:
+        measure = gate.get("measure") or {}
+        expected = measure.get("planned_whole_plan")
+        statuses = measure.get("statuses") or {}
+        pairs = measure.get("pairs") or {}
+        if (not _count(expected) or expected < 1 or not _count(measure.get("expected")) or measure.get("expected") != expected
+                or not _counts(statuses, {"process finished"}) or statuses != {"process finished": expected}
+                or type(measure.get("pending")) is not int or measure.get("pending") != 0
+                or measure.get("failed") != [] or measure.get("own_not_built") != []
+                or not measure.get("board") or type(gate.get("measure_rc")) is not int or gate.get("measure_rc") != 0):
+            errors.append("measurement lacks complete actual workload execution counts")
+        if (not isinstance(pairs, dict) or not _count(pairs.get("matched")) or pairs.get("matched", 0) < 1
+                or pairs.get("unchecked") != [] or pairs.get("refused") != []):
+            errors.append("measurement lacks complete admitted opponent pairs")
     return errors
 
 
@@ -330,20 +341,25 @@ def _candidate_payload(requirement_id, wanted, report_path, identity, provenance
             errors.append("candidate producer provenance differs: " + key)
     if identity.get("source_commit") != provenance.get("source_revision"):
         errors.append("candidate artifact source differs from producer input provenance")
+    selected_profile = gate_profiles.profile(gate)
+    coverage = LIGHT_CANDIDATE_COVERAGE if selected_profile == gate_profiles.LIGHT else CANDIDATE_COVERAGE
     if (wanted.get("kind") != "candidate" or not isinstance(wanted.get("coverage"), list)
             or any(not isinstance(item, str) for item in wanted["coverage"])
-            or len(wanted["coverage"]) != len(CANDIDATE_COVERAGE)
-            or set(wanted["coverage"]) != set(CANDIDATE_COVERAGE)):
+            or len(wanted["coverage"]) != len(coverage)
+            or set(wanted["coverage"]) != set(coverage)):
         errors.append("candidate requirement has another kind or coverage contract")
     if errors:
         raise ValueError("; ".join(errors))
     counts = {
         "install": len(identity["wheels"]),
-        "whole-plan-smoke": gate["smoke_lines"],
         "autograd-artifacts": sum(gate["autograd_counts"].values()),
         "adapters": len(adapter_gate.PHASES),
-        "measured-plan-pairs": gate["measure"]["statuses"]["process finished"],
     }
+    if selected_profile == gate_profiles.LIGHT:
+        counts["installed-correctness"] = len(gate["correctness"]["jobs"])
+    else:
+        counts["whole-plan-smoke"] = gate["smoke_lines"]
+        counts["measured-plan-pairs"] = gate["measure"]["statuses"]["process finished"]
     proof_path, proof_hash = _producer_stamp(requirement_id, wanted, report_path, provenance)
     configuration = wanted.get("inputs", {}).get("configuration", {})
     vendor = identity.get("vendor")
@@ -362,7 +378,8 @@ def _candidate_payload(requirement_id, wanted, report_path, identity, provenance
                                   completed=count, failed=0, skipped=0) for name, count in counts.items()],
                    evidence=[dict(path=str(report_path), sha256=report_hash),
                              dict(path=str(proof_path), sha256=proof_hash)],
-                   measured_pairs=gate["measure"]["pairs"]["matched"],
+                   gate_profile=selected_profile,
+                   measured_pairs=None if selected_profile == gate_profiles.LIGHT else gate["measure"]["pairs"]["matched"],
                    autograd_artifacts=len(gate["autograd_artifacts"]["files"]))
     return receipt
 
