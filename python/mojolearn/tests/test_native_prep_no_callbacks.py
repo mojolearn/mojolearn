@@ -224,7 +224,7 @@ def test_rfe_refusals_without_a_native_plan():
 
     with pytest.raises(TypeError, match="RFE requires a mojolearn estimator; got MyLDA"):
         ml.RFE(MyLDA()).fit(X, y)
-    with pytest.raises(TypeError, match="takes no fit parameters"):
+    with pytest.raises(TypeError, match="unexpected keyword argument 'sample_weight'"):
         ml.RFE(ml.LinearDiscriminantAnalysis()).fit(X, y, sample_weight=np.ones(len(y), np.float32))
     fitted = ml.RFE(ml.Ridge(), n_features_to_select=2).fit(X, X[:, 0])
     with pytest.raises(AttributeError, match="predict_proba"):
@@ -264,3 +264,72 @@ def test_select_kbest_refuses_user_score_functions_and_runs_mutual_info_natively
         sel.fit(X, y)
     assert probe.hits(forbidden) == []
     np.testing.assert_array_equal(np.asarray(sel.scores_), np.asarray(ml.mutual_info_classif(X, y)))
+
+
+@needs_bindings
+@pytest.mark.parametrize('name,kwargs', [
+    ('Ridge', {'alpha': 0.5}), ('BayesianRidge', {'max_iter': 20}),
+    ('SVR', {'kernel': 'linear', 'max_iter': 100}), ('LinearSVR', {'max_iter': 100}),
+    ('Lasso', {'alpha': 0.01}), ('ElasticNet', {'alpha': 0.01}),
+])
+def test_rfe_preserves_weighted_native_fits(name, kwargs):
+    rng = np.random.default_rng(42)
+    X = rng.normal(size=(48, 4)).astype(np.float32)
+    y = (X[:, 0] - 0.7 * X[:, 2] + 0.1 * rng.normal(size=48)).astype(np.float32)
+    weights = np.linspace(0.25, 2, len(y), dtype=np.float32)
+    cls = getattr(ml, name)
+    estimator = cls(**kwargs)
+    selector = ml.RFE(estimator, n_features_to_select=2)
+    with _Probe() as probe:
+        selector.fit(X, y, sample_weight=weights)
+        actual = selector.predict(X)
+    assert probe.hits(_class_codes(cls)) == []
+    direct = cls(**kwargs).fit(X[:, np.asarray(selector.support_)], y, sample_weight=weights)
+    np.testing.assert_array_equal(np.asarray(actual), np.asarray(direct.predict(X[:, np.asarray(selector.support_)])))
+
+
+@needs_bindings
+def test_rfe_preserves_native_forest_fit_keywords():
+    X, y = _classes(n=48, d=4)
+    selector = ml.RFE(ml.RandomForestClassifier(n_estimators=3, max_depth=3), n_features_to_select=2)
+    with _Probe() as probe:
+        selector.fit(X, y, sample_weight=np.ones(len(y), np.float32), feature_importances=True)
+    assert probe.hits(_class_codes(ml.RandomForestClassifier)) == []
+    assert np.asarray(selector.estimator_.feature_importances_).shape == (2,)
+
+
+@needs_bindings
+def test_iterative_imputer_preserves_supplied_native_posterior():
+    from mojolearn.gaussian_process import ConstantKernel, RBF
+    X = _gaps(41, n=24, d=3)
+    kernel = ConstantKernel(1.0, 'fixed') * RBF(1.0, 'fixed')
+    kwargs = dict(sample_posterior=True, max_iter=2, random_state=7, min_value=-10, max_value=10)
+    estimator = ml.GaussianProcessRegressor(kernel=kernel, optimizer=None)
+    imputer = ml.IterativeImputer(estimator=estimator, **kwargs)
+    with _Probe() as probe:
+        actual = imputer.fit_transform(X)
+        transformed = imputer.transform(X)
+    assert probe.hits(_class_codes(type(estimator), type(kernel), RBF, ConstantKernel)) == []
+    twin = ml.IterativeImputer(estimator=ml.GaussianProcessRegressor(kernel=kernel, optimizer=None), **kwargs)
+    np.testing.assert_array_equal(np.asarray(actual), np.asarray(twin.fit_transform(X)))
+    assert np.isfinite(np.asarray(transformed)).all()
+    for _, _, fitted in imputer.imputation_sequence_:
+        assert fitted.kernel is not kernel
+        assert fitted.kernel.a is not kernel.a
+        assert fitted.kernel.b is not kernel.b
+
+
+@needs_bindings
+def test_native_composition_refuses_callback_keywords_without_executing_them():
+    calls = []
+    class Weight:
+        def __float__(self):
+            calls.append('float')
+            return 1.0
+        def __array__(self, *args, **kwargs):
+            calls.append('array')
+            return np.ones(48)
+    X, y = _classes(n=48, d=4)
+    with pytest.raises(TypeError):
+        ml.RFE(ml.Ridge()).fit(X, y, sample_weight=Weight())
+    assert calls == []

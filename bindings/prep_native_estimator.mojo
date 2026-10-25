@@ -79,10 +79,10 @@ def prep_estimator_clone(est: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def prep_estimator_call(est: PythonObject, method: String, args: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
+                        context: PythonObject, keywords: PythonObject = PythonObject(None)) raises -> PythonObject:
     """`est.<method>(*args)` as the compiled operation est's plan names."""
     return prep_entry_call(prep_native_entry(context),
-                       Python.tuple(est, "family_msel_estimator_call", Python.tuple(method, args),
+                       Python.tuple(est, "family_msel_estimator_call", Python.tuple(method, args, keywords),
                                     prep_native_context(context)))
 
 
@@ -92,3 +92,26 @@ def prep_native_split(cv: PythonObject, x: PythonObject, y: PythonObject, contex
     return prep_entry_call(prep_native_entry(context),
                        Python.tuple(cv, "family_msel_split", Python.tuple(x, y, PythonObject(None)),
                                     prep_native_context(context)))
+
+
+def prep_estimator_attribute(est: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
+    # RFE's attribute path reads only connected native estimator state or
+    # an explicitly registered native attribute operation (SVM coef_).
+    # operator.attrgetter/getattr could invoke arbitrary Python descriptors.
+    var b = native_loaded_module("builtins")
+    if py_type(name) is not b.str:
+        raise Error("TypeError: native estimator attribute names must be exact strings")
+    var parts = py_call(name.split, ".")
+    var current = est
+    for k in range(len(parts)):  # driver-loop: the explicit attribute path
+        var plan = prep_estimator_plan(current, context)
+        if plan is None:
+            raise Error("TypeError: estimator attribute paths require connected native estimator state")
+        if prep_estimator_has(current, String(parts[k]), context):
+            current = prep_estimator_call(current, String(parts[k]), Python.tuple(), context)
+        else:
+            var fields = py_call(plan["fields_get"], current, py_type(current))
+            current = py_get(fields, parts[k])
+        if current is None:
+            return current
+    return current

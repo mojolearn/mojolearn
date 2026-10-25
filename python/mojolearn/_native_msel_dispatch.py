@@ -26,6 +26,7 @@ def connect(context, package):
                  '__sklearn_clone__', 'get_params', 'set_params', 'fit', 'predict', 'predict_proba',
                  'decision_function', 'transform', 'score', '_parameter_names',
                  '_has_constructor_parameters', '_BINDING', '_mojolearn_device_rows', '_estimator_type')
+    class_fields = ('coef_', 'feature_importances_', '_power', '_loss_name', '_nodes', '_hyper', '_replace')
 
     def register(cls, entry, owner_context, parameters, init, methods, forest=None):
         # glue: fixed class layout, parameter names and native method ABIs
@@ -35,7 +36,7 @@ def connect(context, package):
         if type(cls) is not type or type(descriptor) is not GetSetDescriptorType:
             raise TypeError('native CV requires an ordinary native instance dictionary')
         hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, fields)  # glue: retain method/layout identities once
-                      for name in protected)  # glue: fixed import-time method identity inventory
+                      for name in protected + class_fields)  # glue: fixed import-time method identity inventory
         registry[cls] = dict(entry=entry if type(entry) is BuiltinFunctionType else None,
                              context=owner_context, parameters=tuple(parameters), init=init,
                              methods=methods, forest=forest, mro=mro, hooks=hooks,
@@ -100,6 +101,8 @@ def connect(context, package):
             registry[cls]['scorer_predict_operation'] = base['scorer_predict_operation']
     from ._native_msel_extra import connect as connect_extra
     connect_extra(context, register, registry)
+    from ._native_msel_prep import connect as connect_prep
+    connect_prep(context, register, registry)
     context.update(family_msel_estimators=registry,
                    family_msel_pending_estimators=tuple(value for value in vars(package).values()  # glue: distinguish known migration debt from external callbacks
                                                         if type(value) is type and value not in registry),
