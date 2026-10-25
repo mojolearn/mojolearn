@@ -102,7 +102,8 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
     producer = receipt.get("producer", {})
     pair = (wanted.get("kind"), producer.get("tool") if isinstance(producer, dict) else None)
     supported = {("candidate", "tools/gate_smoke_box.py"), ("source", "tools/public_runtime_inventory.py"),
-                 ("compile", "tools/linux_surface_qualification.sh")}
+                 ("compile", "tools/linux_surface_qualification.sh"),
+                 ("runtime", "tools/release_public_runtime_evidence.py")}
     if pair not in supported:
         return ["unsupported actual producer for this requirement; complete-provenance requires a producer report adapter"]
     try:
@@ -112,7 +113,8 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
             if not isinstance(ref, dict) or ref not in receipt["evidence"] or sha256(ref["path"]) != ref["sha256"]:
                 raise ValueError("producer report/provenance evidence digest differs or was not retained")
         report_path = Path(report_ref["path"]).resolve()
-        if Path(proof_ref["path"]).resolve() != report_path.parent / "producer-inputs.json":
+        proof_name = "reconciliation.json" if pair[0] == "runtime" else "producer-inputs.json"
+        if Path(proof_ref["path"]).resolve() != report_path.parent / proof_name:
             raise ValueError("producer provenance evidence does not belong to this retained report")
         provenance = receipt["producer_provenance"]
         if pair[0] == "candidate":
@@ -121,11 +123,14 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
         elif pair[0] == "compile":
             from release_compile_evidence import producer_payload
             actual = producer_payload(requirement_id, wanted, report_path, provenance)
+        elif pair[0] == "runtime":
+            from release_public_runtime_evidence import producer_payload
+            actual = producer_payload(requirement_id, wanted, report_path, provenance)
         else:
             actual = _source_payload(requirement_id, wanted, report_path, provenance)
         fields = ("requirement_id", "kind", "source_revision", "input_fingerprint", "producer", "producer_provenance",
                   "producer_report", "producer_provenance_report", "status", "exit_code", "coverage",
-                  "measured_pairs", "autograd_artifacts", "evidence")
+                  "measured_pairs", "autograd_artifacts", "evidence", "runtime_qualification", "execution_count")
         if any(receipt.get(key) != actual.get(key) for key in fields):
             raise ValueError("receipt outcome/coverage differs from the retained actual producer report")
         return []
@@ -134,9 +139,9 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
 
 
 def validate_receipt(requirement_id, wanted, receipt, *, require_pass=True):
-    """Return integrity/coverage errors against the *begun run's* manifest.
+    """Return integrity/coverage errors against the original execution manifest.
 
-    Validate an old attempt against its retained run manifest, not a later
+    Validate an old attempt against its retained execution manifest, not a later
     commit label. The ledger can then reuse its unchanged input fingerprint.
     Failed attempts may be retained with require_pass=False; they never acquire
     passed status through this function.
