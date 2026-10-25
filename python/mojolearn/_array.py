@@ -787,6 +787,9 @@ class Array:
         # migration, not a demonstrated Mojo limitation. Verification records
         # array-length-metadata explicitly and never calls it Python-free.
         # See _runtime_fallbacks.py and Modular issue 7399 for the context.
+        # The owner also permits Python runtime calls where a documented Mojo
+        # bug requires them, including calls from Mojo. That policy does not
+        # turn this retained length callback into a confirmed Mojo bug.
         if self.ndim == 0:
             raise TypeError("len() of a 0-d Array")
         return self.shape[0]

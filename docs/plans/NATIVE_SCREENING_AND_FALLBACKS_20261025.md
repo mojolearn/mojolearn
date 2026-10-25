@@ -7,6 +7,14 @@ identified in release qualification. This is not blanket qualification of the
 remaining source inventory. The lookup repair needs no Python fallback. The
 meta-estimator paths retain the explicit metadata exception below.
 
+The owner reaffirmed that Mojo/Modular bugs may require Python in product
+execution, including Python called from Mojo/native code. Such a documented
+fallback is an explicit exception to the runtime rule. Its inline comment must
+identify the specific observed or suspected failure and required Python work;
+retained public-runtime evidence and the upstream report establish its scope.
+Screening interruptions remain a separate reason for the previously authorized
+metadata fallback and are not a technical diagnosis of a Mojo defect.
+
 ## Retained Python metadata exception
 
 `array-length-metadata` permits the existing `mojolearn._array.Array.__len__`

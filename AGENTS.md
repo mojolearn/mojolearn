@@ -91,8 +91,9 @@ Mojo/Modular interoperability bug; its exact internal cause is unconfirmed.
 retained evidence and Codex Daybreak screening interruptions inline. This
 specific repair is authorized; do not reopen its permission question. Preserve
 exact dictionary/string admission, object identity, descriptor precedence and
-lifetimes. It permits no Python callbacks, runtime loops, toolchain patches or
-general fallback. Validate the affected public runtime before broad qualification.
+lifetimes. This specific native API repair needs no Python fallback or callback.
+Other explicitly authorized Python exceptions are recorded under "No Python in
+the runtime" below. Validate the affected public runtime before broad qualification.
 
 ## No dimension targeting, in any mode
 
@@ -283,18 +284,23 @@ same bits is the double work the release cost rules forbid. Treat them different
 
 ## No Python in the runtime
 
-Owner override (2026-10-25, after the lookup crash and Codex screening
-interruptions): narrow Python fallbacks are authorized where a working native
-path cannot be completed. Document each affected operation INLINE, the exact
-Python work invoked, the reason, and retained evidence. Preserve supported
-behavior and test the actual public operation. Record it explicitly as a
-fallback in release evidence; do not label that path Python-free or silently
-exempt unrelated paths. Prefer a supported native repair when it works.
-Document Codex cybersecurity/Daybreak interruptions separately from technical
-Mojo failures: screening alone does not prove a Mojo defect. Submit reproducible
-Mojo failures upstream and include the screening context requested by Andrew.
-This overrides the absolute no-callback/no-fallback wording below only for
-those documented fallback paths; it does not authorize toolchain patches.
+Owner exception (2026-10-25, reaffirmed): Mojo/Modular bugs can require Python
+in product execution. A narrowly scoped Python runtime implementation is allowed
+where such a bug blocks a correct supported native implementation, including
+calling Python from Mojo/native code. Preserve supported behavior. Document
+INLINE the affected operation, the specific bug or suspected failure, the Python
+work required, and the retained reproduction/upstream issue. Distinguish a
+suspected bug from a confirmed diagnosis. Test the actual public operation and
+record the exception explicitly in release evidence; never call it Python-free.
+Use a working supported native repair when available. No additional permission
+is required for a fallback within this authorized scope.
+
+Previously approved, documented fallbacks after Codex cybersecurity/Daybreak
+interruptions also remain authorized. Record those interruptions accurately;
+screening alone is not evidence of a Mojo bug. This exception supersedes older
+absolute no-Python/no-callback/no-fallback and wait-for-Modular wording only for
+these documented paths. It does not authorize toolchain patches or silently
+exempt unrelated runtime work.
 
 Owner clarification (2026-10-24): scikit-learn tag metadata is a narrow
 compatibility-layer exception to the rules below.
