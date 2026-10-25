@@ -168,7 +168,7 @@ def test_admission_is_retrospective_optional_idempotent_and_syncable(retained):
     review=prepare(retained);root=retained['root'];name=runtime.profile()['id']
     ledger=RequirementsLedger(root.parent/'ledger.json',source_root=root)
     catalog={'source_inputs':{},'requirements':[dict(id='runtime-apple',kind='runtime',scope='whole runtime',coverage=['whole runtime'])]}
-    manifest=requirements(root,retained['revision'],'0.8.57',catalog)
+    manifest=requirements(root,retained['revision'][:9],'0.8.57',catalog)
     ledger.sync(manifest)
     first=ledger.admit_retained_runtime(retained['out']/'report.json',retained['revision'])
     assert first['run_id'] is None and first['origin']=='retained-execution' and 'started_at' not in first
