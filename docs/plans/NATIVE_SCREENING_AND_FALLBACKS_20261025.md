@@ -72,9 +72,22 @@ The latter's `retained-lookup-repair-1/receipt.json` records a downloaded/hash-
 verified R2 archive including the repaired binary and full test results.
 Meta repair source results are under `~/mojolearn-evidence/meta-runtime-20261025/`.
 
-The original 167-case suite completed with 147 passed and 20 failed. Two of the
-failed setup/oracle cases subsequently passed; eight others reached genuine
-meta-estimator failures after a test import correction. The 37 extra attribute
-cases and separate Torch parameter case pass. Composition repairs require a new
-integrated freeze and affected runtime validation. These results do not qualify
-the release or waive the remaining source-gate entries.
+The original 167-case suite first completed with 147 passed and 20 failed;
+that failure evidence remains retained. At source `70447150b`, the complete
+original selection passes **167/167**. The separate affected composition suite,
+including ten finite-check connection cases, passes **68/68**. Both runs use the
+same verified 79-group activation, entirely reused from valid cached builds.
+Reports are `existing-compatible-freeze/run/summary.json` and
+`compatibility-targeted/run/summary.json` under the repaired-runtime evidence
+directory above. The earlier 37 extra attribute cases and separate Torch
+parameter case retain their passing evidence.
+
+The eight meta-estimator fit/predict/score probes retain 24 operation reports:
+12 are strictly native and 12 use the named metadata callback. All 24 satisfy
+the scoped compatibility check. The original callback frames, counts and strict
+native failures remain in JUnit properties and `compatibility-details.json`;
+the passing test totals do not mean every operation is Python-free.
+
+This is source-development runtime qualification, not installed-wheel or full
+release qualification. Adapter, cross-vendor identity, source inventory and
+other release requirements remain separate and must retain their own evidence.

@@ -74,6 +74,7 @@ _verify_small.py _verify_worker.py _verification_catalog.py
 _verify_graph.py _verify_native_runtime.py _verify_generation.py
 _verification_coverage.py _verification_ctr_models.py
 _verification_evidence_data.py _verification_profiles.py
+_runtime_fallbacks.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
 _classical_host.py _serialize.py
 neural_inference.py _causal_lm_fixtures.py
@@ -84,6 +85,9 @@ _bpe_trainer.py _tokenizer_synthetic.py
 # _serialize.py: model save/load (no fit, transform or predict).
 # _bpe_trainer.py: the BPE trainer's verification oracle (refused as a run-time route).
 # _tokenizer_synthetic.py: tokenizer fixtures for the gates and the identity lane.
+# _runtime_fallbacks.py: verifier-only exception descriptions and code identities;
+# no product caller imports it (enforced by test_runtime_fallback_scope.py).
+# The actual Array.__len__ product callback remains in scope and is reported.
 
 # The host thread pool's own implementation: its contents are the CPU-only
 # executor. Every USE of it in GPU code is still a finding.
