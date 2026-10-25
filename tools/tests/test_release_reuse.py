@@ -278,6 +278,12 @@ class DecisionTests(unittest.TestCase):
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
         base = {s: rr.set_identity(plan, *s)["digest"] for s in rr.LINUX_SETS}
         self.assertEqual(len(set(base.values())), len(rr.LINUX_SETS), "each set has its own identity")
+        refrozen = copy.deepcopy(plan)
+        refrozen["commit"] = "f" * 40
+        for s in rr.LINUX_SETS:
+            changed = rr.set_identity(refrozen, *s)["digest"] != base[s]
+            self.assertEqual(changed, s == rr.PTX_SET,
+                             "only the PTX manifest binds the release source commit")
         moved = copy.deepcopy(plan)
         for r in moved["rows"]:
             if (r["target"], r["vendor"], r["arch"], r["name"]) == (rr.LINUX, "hip", "gfx942", "_mojolearn_gbdt"):
@@ -1050,10 +1056,10 @@ class BuilderViewTests(unittest.TestCase):
             lambda t: t.replace('if [[ "$1" = identical || "$1" = fast ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi',
                                 'if [[ "$1" = identical ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi'),
             # a line inside an embedded Python heredoc, and a '#' line there
-            lambda t: t.replace("import importlib.machinery, importlib.util, sys",
-                                "import importlib.machinery, importlib.util, sys, os", 1),
-            lambda t: t.replace("import importlib.machinery, importlib.util, sys",
-                                "# a heredoc line is data\nimport importlib.machinery, importlib.util, sys", 1),
+            lambda t: t.replace("import importlib.machinery, importlib.util, os, sys",
+                                "import importlib.machinery, importlib.util, os, sys, math", 1),
+            lambda t: t.replace("import importlib.machinery, importlib.util, os, sys",
+                                "# a heredoc line is data\nimport importlib.machinery, importlib.util, os, sys", 1),
             # a list variable renamed, or its environment override renamed
             lambda t: t.replace('EXT_NAMES="', 'EXTN_NAMES="', 1),
             lambda t: t.replace("${MOJOLEARN_BUILD_SCRIPTS:-", "${MOJOLEARN_SCRIPTS:-", 1),
@@ -1068,7 +1074,7 @@ class BuilderViewTests(unittest.TestCase):
         ]
         for k, fn in enumerate(edits):
             after = fn(text)
-            self.assertNotEqual(after, text, f"edit {k} did not apply")
+            self.assertTrue(after != text, f"edit {k} did not apply")
             self.assertViews(LINUX_SETS_SH, text, after, same=(), moved=VIEWERS)
         for rel in rr.LINUX_BUILDERS + rr.MACOS_BUILDERS:
             text = real(rel)
