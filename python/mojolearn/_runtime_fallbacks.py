@@ -23,6 +23,26 @@ _OWNERS = ('VotingRegressor', 'VotingClassifier', 'StackingRegressor',
 _METHODS = frozenset(('fit', 'fit_transform', 'predict', 'predict_proba', 'transform', 'score'))
 
 
+def _connected_methods():
+    module = sys.modules.get('mojolearn._expansion_trees')
+    if type(module) is not ModuleType:
+        return {}
+    methods = {}
+    for name in _OWNERS:
+        cls = vars(module).get(name)
+        if type(cls) is not type:
+            continue
+        for method in _METHODS:
+            for base in cls.__mro__:
+                if method in vars(base):
+                    methods[cls, method] = vars(base)[method]
+                    break
+    return methods
+
+
+_CONNECTED_METHODS = _connected_methods()
+
+
 def approved_metadata_callbacks(operation):
     """Return exact callback code identities for the declared public owners."""
     if type(operation) is not MethodType or operation.__func__.__name__ not in _METHODS:
@@ -32,6 +52,8 @@ def approved_metadata_callbacks(operation):
         return {}
     owner = type(operation.__self__)
     if not any(owner is vars(module).get(name) for name in _OWNERS):
+        return {}
+    if _CONNECTED_METHODS.get((owner, operation.__func__.__name__)) is not operation.__func__:
         return {}
     # A subclass or monkeypatched length implementation is not authorized by
     # this exception. The callback must be the originally connected body.
