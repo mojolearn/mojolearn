@@ -1478,13 +1478,19 @@ def _tag_metadata_only(index, func, owner):
     return True
 
 
-def endpoint_inventory(root, package="mojolearn"):
+def endpoint_inventory(root, package="mojolearn", installed_slots=None):
     """One static ledger for public operations and their omitted lifecycle surface.
 
     Evidence is deliberately unclaimed: a syntactic reference or an algorithm's
     lane cannot establish that a constructor, option or failure path executed.
     Runtime installers and external base classes require a separate runtime walk.
     """
+    witnessed, matched_slots = {}, set()
+    if installed_slots is not None:
+        import installed_attribute_slots as slot_evidence
+        if package != "mojolearn":
+            raise ValueError("installed-slot evidence currently models mojolearn only")
+        witnessed = slot_evidence.validate(installed_slots, root)
     index, cache, rows, by_definition = Index(root, package), {}, [], {}
     layout = _layout(index, package)
     for canonical, origin, aliases in public_names(root, package, include_non_algorithm=True):
@@ -1582,6 +1588,11 @@ def endpoint_inventory(root, package="mojolearn"):
             item["qualification_debt"].append("class-definition hook requires import-time versus product-call boundary qualification")
         if declared and replacement and func is not declared:
             item["declared_source_ast_sha256"] = hashlib.sha256(ast.dump(declared.node).encode()).hexdigest()
+        if owner and witnessed and method == "__getattribute__":
+            class_key = ".".join(owner.key)
+            slot_evidence.apply(item, class_key, witnessed)
+            if "installed_slot_witness" in item:
+                matched_slots.add(class_key)
         rows.append(item)
 
     for group in by_definition.values():
@@ -1647,8 +1658,11 @@ def endpoint_inventory(root, package="mojolearn"):
                     add(group, "<base:" + ast.unparse(base) + ">", "unresolved_base")
             if cls.node.keywords:
                 add(group, "<class-construction>", "unresolved_metaclass")
+    if set(witnessed) != matched_slots:
+        raise ValueError("installed-slot classes do not resolve to current public getters: "
+                         + ", ".join(sorted(set(witnessed) - matched_slots)))
     rows.sort(key=lambda row: row["endpoint"])
-    return dict(schema=2, scope="all public and returned endpoints; static connections only, no product imports or execution",
+    return dict(schema=2, scope="all public and returned endpoints; source analysis plus optional retained installed-slot identity, no product imports or execution",
                 limitations=["Dynamic native installers and external-base methods need runtime enumeration.",
                              "Static native-shaped calls do not prove transitive callees avoid Python.",
                              "Parameters describe declared options, not tested values or combinations.",
@@ -1659,7 +1673,8 @@ def endpoint_inventory(root, package="mojolearn"):
                              refusal_only=sum(r.get("always_refuses", False) for r in rows),
                              declared_parameters=sum(len(r["parameters"]) for r in rows),
                              by_kind={k: sum(r["kind"] == k for r in rows) for k in sorted({r["kind"] for r in rows})},
-                             by_status={k: sum(r["runtime_status"] == k for r in rows) for k in sorted({r["runtime_status"] for r in rows})}))
+                             by_status={k: sum(r["runtime_status"] == k for r in rows) for k in sorted({r["runtime_status"] for r in rows})},
+                             installed_attribute_slots=len(matched_slots)))
 
 
 def _refusal(node):
@@ -1838,16 +1853,24 @@ def main(argv=None):
     parser.add_argument("--summary", action="store_true", help="print only the per-family summary")
     parser.add_argument("--endpoints-json", type=Path,
                         help="write all static public lifecycle/option endpoints and unclaimed evidence axes")
+    parser.add_argument("--installed-slots", type=Path,
+                        help="admit an exact-source, receipted installed-attribute witness (classification only)")
     parser.add_argument("--baseline", action="store_true", help="rewrite the committed baseline")
     parser.add_argument("--check", action="store_true", help="require zero prohibited/unresolved public or returned endpoints")
     parser.add_argument("--baseline-file", type=Path, default=None)
     parser.add_argument("--explain", metavar="NAME.METHOD",
                         help="print the walk of one method, e.g. mojolearn.KMeans.fit")
     args = parser.parse_args(argv)
+    if args.installed_slots and not (args.endpoints_json or args.check):
+        parser.error("--installed-slots requires --endpoints-json or --check")
     if args.endpoints_json or args.check:
         if args.baseline or args.explain:
             parser.error("endpoint qualification is separate from the historical operation baseline")
-        report = endpoint_inventory(args.root, args.package)
+        try:
+            report = endpoint_inventory(args.root, args.package, args.installed_slots)
+        except (ValueError, OSError, KeyError, TypeError, RuntimeError) as error:
+            print("public-runtime evidence refused: " + str(error), file=sys.stderr)
+            return 2
         problems = check_endpoints(report)
         report["gate"] = dict(status="failed" if problems else "source-classification-passed",
                               prohibited_or_unresolved=len(problems), problems=problems,
