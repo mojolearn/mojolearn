@@ -105,7 +105,8 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
     pair = (wanted.get("kind"), producer.get("tool") if isinstance(producer, dict) else None)
     supported = {("candidate", "tools/gate_smoke_box.py"), ("source", "tools/public_runtime_inventory.py"),
                  ("compile", "tools/linux_surface_qualification.sh"),
-                 ("runtime", "tools/release_public_runtime_evidence.py")}
+                 ("runtime", "tools/release_public_runtime_evidence.py"),
+                 ("identity", "tools/record_identity_column.sh")}
     if pair not in supported:
         return ["unsupported actual producer for this requirement; complete-provenance requires a producer report adapter"]
     try:
@@ -128,11 +129,15 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
         elif pair[0] == "runtime":
             from release_public_runtime_evidence import producer_payload
             actual = producer_payload(requirement_id, wanted, report_path, provenance)
+        elif pair[0] == "identity":
+            from release_identity_evidence import producer_payload
+            actual = producer_payload(requirement_id, wanted, report_path, provenance)
         else:
             actual = _source_payload(requirement_id, wanted, report_path, provenance)
         fields = ("requirement_id", "kind", "source_revision", "input_fingerprint", "producer", "producer_provenance",
                   "producer_report", "producer_provenance_report", "status", "exit_code", "coverage",
-                  "measured_pairs", "autograd_artifacts", "evidence", "runtime_qualification", "execution_count")
+                  "measured_pairs", "autograd_artifacts", "evidence", "runtime_qualification", "execution_count",
+                  "identity_detail")
         if any(receipt.get(key) != actual.get(key) for key in fields):
             raise ValueError("receipt outcome/coverage differs from the retained actual producer report")
         return []

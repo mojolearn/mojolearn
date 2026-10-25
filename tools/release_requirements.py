@@ -55,6 +55,24 @@ def build_flags(environ=None):
         and not key.upper().endswith(secret_suffixes)}
 
 
+def merge_configuration(saved, supplied):
+    """Apply supplied qualification inputs over the retained ones.
+
+    ``dependency_context`` merges by key, so a file that corrects one input
+    (for example ``cpu_target``) keeps the retained compiler hashes and
+    workloads instead of silently dropping them. Other keys are replaced.
+    """
+    if not isinstance(supplied, dict):
+        raise ValueError("configuration must be a JSON object")
+    result = copy.deepcopy(saved)
+    for key, value in supplied.items():
+        if key == "dependency_context" and isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = dict(result[key], **copy.deepcopy(value))
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
 def producer_admission_available(wanted):
     """Require a real report adapter before scheduling new execution.
 
@@ -70,6 +88,9 @@ def producer_admission_available(wanted):
         return supports_requirement(wanted)
     if wanted.get("kind") == "runtime":
         from release_public_runtime_evidence import supports_requirement
+        return supports_requirement(wanted)
+    if wanted.get("kind") == "identity":
+        from release_identity_evidence import supports_requirement
         return supports_requirement(wanted)
     return (wanted.get("kind") == "source"
             and wanted.get("inputs", {}).get("contract", {}).get("id") == "runtime-source")
@@ -656,7 +677,7 @@ def main(argv=None):
             supplied = json.loads(args.configuration.read_text())
             if not isinstance(supplied, dict):
                 ap.error("configuration must be a JSON object")
-            configuration.update(supplied)
+            configuration = merge_configuration(configuration, supplied)
         configuration["build_flags"] = build_flags()
         manifest = requirements(args.root, revision, args.version, configuration=configuration,
                                 evidence_log_dir=args.dependency_log_dir)

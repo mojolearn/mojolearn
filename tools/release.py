@@ -1351,7 +1351,7 @@ class Release:
             supplied = json.loads(Path(configuration_path).read_text())
             if not isinstance(supplied, dict):
                 raise ValueError("requirements configuration must be a JSON object")
-            configuration.update(supplied)
+            configuration = release_requirements.merge_configuration(configuration, supplied)
         configuration.update(release_modes=list(self.release_modes),
                              build_flags=release_requirements.build_flags())
         context = dict(configuration.get("dependency_context", {}))
