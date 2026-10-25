@@ -33,7 +33,7 @@ def fixture():
         cls=type(node.name,(),{'__init__':original});classes.append(cls);signatures[cls]=signature
     order=selected();classes.sort(key=lambda cls:order.index(cls.__name__))
     body=[n for n in ast.parse(CONNECTOR.read_text()).body if isinstance(n,ast.FunctionDef)]
-    calls=[];context={'plans':{},'ready':False}
+    calls=[];context={'plans':{},'missing':object(),'ready':False}
     linear=ModuleType('constructor_fixture._expansion_linear')
     for cls in classes:setattr(linear,cls.__name__,cls)
     ns={'linear':linear,'_CLASSES':tuple(classes),'_CONTEXT':context,'_ENTRY':lambda *args:calls.append(args),'__package__':'constructor_fixture'}
@@ -55,10 +55,15 @@ def test_install_preserves_exact_signature_defaults_and_only_calls_binding():
 
 def test_connection_uses_final_setter_layout_and_does_not_construct():
     ns,signatures,calls=fixture();ns['install']()
+    protected=('__init__','__getattribute__','__setattr__','__del__')
     setters={'plans':{cls:{'constructor':dict(init=None,forest=None,initial_fields={},
-        parameters=tuple(signature.parameters)[1:],mro=cls.__mro__)} for cls,signature in signatures.items()}}
+        parameters=tuple(signature.parameters)[1:],mro=cls.__mro__,protected=protected,
+        hooks=tuple((base,name,vars(base).get(name)) for base in cls.__mro__ for name in protected))}
+        for cls,signature in signatures.items()}}
     fake=ModuleType('constructor_fixture._native_params_setter');fake._CLASSES=selected()
-    with patch.dict('sys.modules',{fake.__name__:fake}):ns['connect'](setters)
+    attributes=ModuleType('constructor_fixture._native_public_attributes')
+    attributes._resolved=lambda cls,name,missing: next((vars(base)[name] for base in cls.__mro__ if name in vars(base)),missing)
+    with patch.dict('sys.modules',{fake.__name__:fake,attributes.__name__:attributes}):ns['connect'](setters)
     assert not calls and ns['_CONTEXT']['ready'] and ns['_CONTEXT']['setters'] is setters
     for cls,plan in ns['_CONTEXT']['plans'].items():
         assert all(value is vars(base).get(name) for base,name,value in plan['field_hooks'])
@@ -68,7 +73,8 @@ def test_additional_constructor_work_requires_explicit_new_schema():
     ns,signatures,calls=fixture();ns['install']()
     setters={'plans':{cls:{'constructor':dict(init='extra-work',forest=None,parameters=tuple(signature.parameters)[1:])} for cls,signature in signatures.items()}}
     fake=ModuleType('constructor_fixture._native_params_setter');fake._CLASSES=selected()
-    with patch.dict('sys.modules',{fake.__name__:fake}),pytest.raises(TypeError,match='field-only'):
+    attributes=ModuleType('constructor_fixture._native_public_attributes');attributes._resolved=lambda *args:None
+    with patch.dict('sys.modules',{fake.__name__:fake,attributes.__name__:attributes}),pytest.raises(TypeError,match='field-only'):
         ns['connect'](setters)
     assert not calls and not ns['_CONTEXT']['ready']
 
@@ -87,10 +93,13 @@ def test_constructor_has_one_native_call_and_no_python_lifecycle_fallback():
     native=(ROOT/'bindings/linear_constructor_native.mojo').read_text()
     for forbidden in ('Python.import_module','.__init__(','.__setattr__(','.bind(', 'fields.clear', 'fields.pop', 'native_storage_allocate'):
         assert forbidden not in native
-    assert native.index('_release_admit(fields[name]') < native.index('py_setitem(fields, order[i]')
-    assert '_setter_plan(model, fields, context["setters"])' in native
+    assert native.index('_release_admit(previous,') < native.index('py_setitem(fields, order[i]')
+    assert 'var plan = _connected_plan(cls, context)' in native
     assert 'py_get(_class_fields(hooks[i][0]), hooks[i][1]) is not hooks[i][2]' in native
-    assert 'values["numeric_mode"] is None and py_contains(fields, "numeric_mode")' in native
+    assert 'native_instance_item(fields, "numeric_mode")' in native
+    assert 'var previous = native_instance_item(fields, name)' in native
+    assert 'fields[' not in native
+    assert '_resolved(py_type(model), "numeric_mode", context["missing"])' in native
     registration=(ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert '\n        module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")\n' in registration
 

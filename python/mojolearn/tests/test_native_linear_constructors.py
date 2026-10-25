@@ -147,3 +147,69 @@ def test_keyword_only_constructor_arity_and_missing_self_are_preserved():
     failure=clean(linear.PoissonRegressor,1,error=TypeError)
     assert str(failure)=='PoissonRegressor.__init__() takes 1 positional argument but 2 were given'
     clean(linear.SGDRegressor.__init__,error=TypeError)
+
+
+@pytest.mark.parametrize('name', _CLASSES)
+def test_passive_subclasses_keep_inherited_native_constructor_behavior(name):
+    cls=getattr(linear,name)
+    class Passive(cls):
+        pass
+    model=clean(Passive,numeric_mode='identical')
+    assert type(model) is Passive and vars(model)['numeric_mode']=='identical'
+    assert set(vars(model)) == set(inspect.signature(cls).parameters)
+    assert clean(model.__init__,numeric_mode=None) is None
+    assert vars(model)['numeric_mode']=='identical'
+
+
+def test_passive_mixin_ancestry_keeps_inherited_constructor_behavior():
+    class Label:
+        label='test-label'
+    class Passive(linear.SGDRegressor,Label):
+        pass
+    model=clean(Passive,alpha=0.25)
+    assert type(model) is Passive and vars(model)['alpha']==0.25
+    assert vars(model)['numeric_mode'] is None
+
+
+def test_passive_subclass_class_mode_hasattr_rule_preserves_absent_instance_field():
+    class Passive(linear.SGDRegressor):
+        numeric_mode='identical'
+    model=clean(Passive)
+    assert 'numeric_mode' not in vars(model) and model.numeric_mode=='identical'
+    assert clean(model.__init__,numeric_mode=None) is None
+    assert 'numeric_mode' not in vars(model) and model.numeric_mode=='identical'
+    assert clean(model.__init__,numeric_mode='explicit-mode') is None
+    assert vars(model)['numeric_mode']=='explicit-mode'
+    assert clean(model.__init__,numeric_mode=None) is None
+    assert vars(model)['numeric_mode']=='explicit-mode'
+
+
+def test_passive_subclass_changed_storage_hook_refuses_without_callback():
+    calls=[]
+    class Changed(linear.SGDRegressor):
+        def __setattr__(self,name,value):calls.append((name,value))
+    model=object.__new__(Changed)
+    clean(linear.SGDRegressor.__init__,model,error=TypeError)
+    assert not calls and not vars(model)
+
+
+def test_passive_subclass_mode_descriptor_refuses_without_hasattr_callback():
+    calls=[]
+    class Mode:
+        def __get__(self,model,owner):calls.append('get');return 'identical'
+    class Changed(linear.SGDRegressor):
+        numeric_mode=Mode()
+    model=object.__new__(Changed)
+    clean(linear.SGDRegressor.__init__,model,error=TypeError)
+    assert not calls and not vars(model)
+
+
+def test_passive_subclass_delete_only_descriptor_refuses_without_callback():
+    calls=[]
+    class Parameter:
+        def __delete__(self,model):calls.append('delete')
+    class Changed(linear.SGDRegressor):
+        alpha=Parameter()
+    model=object.__new__(Changed)
+    clean(linear.SGDRegressor.__init__,model,alpha=0.2,error=TypeError)
+    assert not calls and not vars(model)
