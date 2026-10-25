@@ -296,7 +296,12 @@ def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
-                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject = PythonObject(None)) raises -> PythonObject:
+                out_kind: Int, context: PythonObject) raises -> PythonObject:
+    return _gpc_latent(ext, fields, est, q, want_proba, out_kind, context, PythonObject(None))
+
+
+def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
+                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject) raises -> PythonObject:
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
     them (a multi-GPU shard worker, which holds no kernel object); else
