@@ -278,6 +278,12 @@ class DecisionTests(unittest.TestCase):
         plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
         base = {s: rr.set_identity(plan, *s)["digest"] for s in rr.LINUX_SETS}
         self.assertEqual(len(set(base.values())), len(rr.LINUX_SETS), "each set has its own identity")
+        refrozen = copy.deepcopy(plan)
+        refrozen["commit"] = "f" * 40
+        for s in rr.LINUX_SETS:
+            changed = rr.set_identity(refrozen, *s)["digest"] != base[s]
+            self.assertEqual(changed, s == rr.PTX_SET,
+                             "only the PTX manifest binds the release source commit")
         moved = copy.deepcopy(plan)
         for r in moved["rows"]:
             if (r["target"], r["vendor"], r["arch"], r["name"]) == (rr.LINUX, "hip", "gfx942", "_mojolearn_gbdt"):

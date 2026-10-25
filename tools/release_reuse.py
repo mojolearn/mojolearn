@@ -1071,6 +1071,13 @@ def set_identity(plan, vendor, arch):
     if not rows or not rt.get("identity_digest") or unreadable_runtime(rt.get("identity")):
         return None
     doc = dict(set=f"{vendor}/{arch}", bindings=rows, runtime=rt["identity_digest"])
+    # The PTX package also produces PTX_BASELINE.json. Both the packer and
+    # installed loader require that manifest to name the current core source.
+    # Equal compiled closures alone therefore cannot reuse an older PTX leg.
+    if (vendor, arch) == PTX_SET:
+        if not plan.get("commit"):
+            return None
+        doc["source_commit"] = plan["commit"]
     return dict(doc, digest=digest_of(doc))
 
 
