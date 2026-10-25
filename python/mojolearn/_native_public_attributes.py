@@ -56,7 +56,7 @@ def _prep_availability(package, missing):
     base = declarations['_PrepBase']
     getter = vars(base)['get_params']
     checks = tuple(vars(vars(declarations[name])['fit_transform'])['check']  # glue: exact built-in predicate identities
-                   for name in ('_PrepBase', '_Classifier'))
+                   for name in ('_PrepBase', '_Classifier'))  # glue: fixed import-time predicate declarations
     return {declarations[name]: checks for name in declarations['__all__']  # glue: exact public prep class schema
             if type(declarations[name]) is type
             and _resolved(declarations[name], 'get_params', missing) is getter}
@@ -75,7 +75,7 @@ def _availability_plan(member, checks, missing):
                 attribute_name=fields.get('attribute_name', missing),
                 mro=type.__dict__['__mro__'].__get__(type(member)),
                 hooks=tuple((name, _resolved(type(member), name, missing))  # glue: descriptor protocol identities
-                            for name in ('__get__', '__set__', '__delete__', '__getattribute__', '__getattr__')))
+                            for name in ('__get__', '__set__', '__delete__', '__getattribute__', '__getattr__')))  # glue: fixed import-time protocol metadata
 
 
 def connect_classes(package):
