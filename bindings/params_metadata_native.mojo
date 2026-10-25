@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
+from bindings.native_instance_item import native_instance_item
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
@@ -90,7 +91,8 @@ def _value(model: PythonObject, fields: PythonObject, name: PythonObject,
         if _resolved(kind, PythonObject("__get__"), context["missing"]) is not context["missing"]:
             raise Error("TypeError: native parameters cannot invoke Python properties; store constructor parameters as native fields")
     if py_contains(fields, name):
-        return fields[name]
+        # See native_instance_item for the retained Mojo subscript failure.
+        return native_instance_item(fields, name)
     if value is not context["missing"]:
         return value
     raise Error(missing_error + ": constructor parameter is not stored under its own name: " + String(name))

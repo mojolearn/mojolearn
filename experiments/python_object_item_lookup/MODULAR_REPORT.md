@@ -60,9 +60,17 @@ both Python versions above. A fix must also preserve descriptor precedence and
 must not require executing arbitrary Python property callbacks.
 
 No compiler flags, standard library, binary output or reference counts have
-been patched to compensate. No product fallback has been introduced. A direct
-documented native dictionary API passed isolated diagnostic controls, but is
-not an admitted product repair and does not replace public runtime validation.
+been patched to compensate. After reviewing the isolated native dictionary
+controls, the owner authorized a product repair using the documented
+`PyDict_GetItemWithError` and `Py_NewRef` APIs. See the inline explanation in
+`bindings/native_instance_item.mojo`. This preserves the Python 3.10 floor and
+introduces no Python callback or fallback. Public behavior and lifetime tests
+must pass before the full runtime suite; compilation alone is insufficient.
+
+Codex's automated cybersecurity screening blocked delegated debugging turns
+and directed us to Daybreak access. We cannot identify the precise classifier
+trigger. Those interruptions are independent of the reproduced Mojo runtime
+failure and do not establish a security vulnerability.
 
 ## Retained evidence
 

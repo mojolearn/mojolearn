@@ -12,6 +12,7 @@ from bindings.classical_attributes import _type_mro, _classical_descriptor_get, 
 from bindings.native_array_view import native_array_ndarray_view as _array_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_error_class import error_without_class
+from bindings.native_instance_item import native_instance_item
 
 
 def _string_keys(fields: PythonObject) raises:
@@ -207,7 +208,8 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
             raise Error("TypeError: Python attribute properties/descriptors require a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)
     if py_contains(fields, name):
-        return fields[name]
+        # See native_instance_item for the retained Mojo subscript failure.
+        return native_instance_item(fields, name)
     if not present:
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
     var availability = py_get(plan, "availability")
