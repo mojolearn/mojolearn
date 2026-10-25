@@ -28,7 +28,7 @@ from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
-from ._mode import SklearnTagsMixin, available_if
+from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 from ._mode import RegressorScoreMixin
 
 
@@ -1536,7 +1536,8 @@ class _Base(SklearnTagsMixin):
         dict
             Parameter name to current value.
         """
-        return {name: getattr(self, name) for name in self._parameters}  # glue: estimator parameter names (get_params)
+        # The declared decomposition schema has always ignored `deep`.
+        return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
 
     def set_params(self, **params):
         """Set constructor parameters by keyword.
