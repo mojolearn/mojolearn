@@ -405,18 +405,36 @@ PACK_ROUTING = {"MOJOLEARN_MERGED_BINDINGS": "1", "MOJOLEARN_REUSE_DIR": "", "MO
 TIER_DIRS = {"host": "host", "identical": "identical"}
 
 
-def _tree_digest(tree, script):
-    """bincache.source_digest's whole-tree scope over the tracked bytes of the tested revision."""
+def _tree_digest(tree, script, generated=None):
+    """bincache.source_digest's whole-tree scope over the tracked bytes of the tested revision.
+
+    GENERATED ({path: sha256}) adds gitignored build-time sources the walk saw in
+    the checkout (the tokenizer unicode table, written by the first tokenizer
+    host compile and walked by every later tree-scope key); each sha256 must be
+    the exact output of its tracked generator (_generated_shas)."""
     import bincache
     skip = {".pixi", ".git", "__pycache__"}
     rels = {r for r in tree.files if r.endswith(".mojo") and not skip & set(PurePosixPath(r).parts[:-1])}
     rels |= {r for r in (script, "bindings/build_host_family.sh", "pixi.toml", "pixi.lock") if r in tree.files}
+    generated = dict(generated or {})
+    require(not set(generated) & rels, "a generated source is tracked at the tested revision")
     value = hashlib.sha256()
-    for rel in sorted(rels, key=lambda name: PurePosixPath(name).parts):
-        found = (bincache.sha256_bytes(bincache.pixi_toml_build_part(tree.text(rel)).encode())
-                 if rel == "pixi.toml" else tree.sha256(rel))
+    for rel in sorted(rels | set(generated), key=lambda name: PurePosixPath(name).parts):
+        found = generated.get(rel) or (bincache.sha256_bytes(bincache.pixi_toml_build_part(tree.text(rel)).encode())
+                                       if rel == "pixi.toml" else tree.sha256(rel))
         value.update(rel.encode() + b"\0" + found.encode() + b"\n")
-    return dict(scope="tree", digest=value.hexdigest(), files=len(rels))
+    return dict(scope="tree", digest=value.hexdigest(), files=len(rels) + len(generated))
+
+
+def _generated_shas(tree, checkout):
+    """{path: sha256} of every build-time generated source, as the tested
+    revision's tracked generator writes it (generated_sources.expected_sha:
+    regenerated here, or the checkout's copy verified byte for byte). A
+    revision without the generator generates nothing."""
+    import generated_sources as gs
+    return {rel: gs.expected_sha(rel, {name: tree.text(name).encode() for name in gs.GENERATED[rel]},
+                                 [Path(checkout) / rel])
+            for rel in sorted(gs.GENERATED) if all(name in tree.files for name in gs.GENERATED[rel])}
 
 
 def _pack_groups(directory, admission, tree, archive):
@@ -424,7 +442,7 @@ def _pack_groups(directory, admission, tree, archive):
     import bincache
     provenance = directory / "cache-provenance"
     rows_ref = reference(provenance / "provenance.tsv")
-    refs, groups = [rows_ref], {}
+    refs, groups, generated = [rows_ref], {}, None
     for line in Path(rows_ref["path"]).read_text().splitlines():
         cells = line.split("\t")
         require(len(cells) == 6, "malformed packer cache provenance row")
@@ -443,8 +461,13 @@ def _pack_groups(directory, admission, tree, archive):
                 and Path(fields.get("repo_path", "")).resolve() == Path(admission["source_root"]).resolve()
                 and local.get("host_toolchain") == admission["host_toolchain"] and len(outputs) == 1,
                 "packer compile key differs from the admitted source/toolchain: " + key)
-        require(fields.get("source") == _tree_digest(tree, script),
-                "packer compiled source does not reproduce from the tested revision: " + key)
+        # Keys taken before the first tokenizer host compile walked the tracked
+        # tree alone; later ones also walked the generated unicode table.
+        if fields.get("source") != _tree_digest(tree, script):
+            if generated is None:
+                generated = _generated_shas(tree, admission["source_root"])
+            require(fields.get("source") == _tree_digest(tree, script, generated),
+                    "packer compiled source does not reproduce from the tested revision: " + key)
         output = PurePosixPath(outputs[0])
         require(output.parts[:2] == ("python", "mojolearn") and len(output.parts) == 4
                 and output.parts[2] in TIER_DIRS.values() and output.suffix == ".so",

@@ -20,6 +20,7 @@ import sys
 import time
 import traceback
 
+import generated_sources as gs
 import release_host_composition as hc
 
 SCHEMA = 'mojolearn.linux.host-build.v1'
@@ -46,6 +47,72 @@ def write(path, data):
 
 def inventory_sha(rows):
     return hashlib.sha256(json.dumps(rows, separators=(',', ':')).encode()).hexdigest()
+
+
+def generator_dir_digest(inventory, rel):
+    """release_reuse.dir_digest of a generator directory, recomputed from the
+    tracked source inventory (equal only when the inventory covers every file
+    the archive carries there)."""
+    prefix = rel.rstrip('/') + '/'
+    h = hashlib.sha256()
+    for path in gs.sorted_rels(p for p, _ in inventory if p.startswith(prefix)):
+        h.update(path.encode() + b'\0' + dict(inventory)[path].encode() + b'\n')
+    return h.hexdigest()
+
+
+def generated_record(proof, source, inventory):
+    """Validate the retained generated sources the host compile read: each is
+    byte-identical to what its tracked generator (at the frozen revision)
+    writes. Returns {path: sha256}."""
+    generated = proof.get('generated_sources', {})
+    require(isinstance(generated, dict) and set(source.get('generated', {})) == set(generated)
+            and set(source.get('generated_inputs', {})) == {i for r in generated for i in gs.GENERATED.get(r, ())},
+            'retained generated sources differ from the proof')
+    tracked = dict(inventory)
+    out = {}
+    for rel, row in generated.items():
+        require(rel in gs.GENERATED and isinstance(row, dict) and set(row) == {'sha256', 'inputs'}
+                and row['inputs'] == {name: tracked.get(name) for name in gs.GENERATED[rel]}
+                and all(row['inputs'].values()), 'generated source inputs are not the tracked generator')
+        inputs = {}
+        for name, sha in row['inputs'].items():
+            inputs[name] = hc.raw(source['generated_inputs'][name])
+            require(hashlib.sha256(inputs[name]).hexdigest() == sha, 'retained generator input differs: ' + name)
+        data = hc.raw(source['generated'][rel])
+        try:
+            got = gs.verify(rel, data, inputs)
+        except gs.GeneratedSourceError as error:
+            require(False, str(error))
+        require(got == row['sha256'], 'retained generated source differs: ' + rel)
+        out[rel] = got
+    return out
+
+
+def check_member_stamp(name, row, ident, closures, generated, inventory):
+    """One merged-stamp member against its committed binding identity. A
+    member whose closure reached a generated file carries its recorded closure
+    rows: with the generated rows they hash to the stamp, without them to the
+    identity (git archive never has the file), and the generated rows are the
+    verified retained bytes. Every other member: stamp digest == identity."""
+    require(row.get('scope') == 'closure' and row.get('script') == ident['script'], 'stamp source closure differs')
+    if name not in closures:
+        require(row.get('digest') == ident['closure']['digest'], 'stamp source closure differs')
+        return
+    rows = closures[name]
+    require(isinstance(rows, list) and all(isinstance(r, list) and len(r) == 2 and isinstance(r[0], str)
+                                           and re.fullmatch('[0-9a-f]{64}', str(r[1])) for r in rows)
+            and len({r[0] for r in rows}) == len(rows), 'malformed generated closure rows')
+    for path, _ in rows:
+        hc.relative(path)
+    reached = [r for r in rows if r[0] in gs.GENERATED]
+    require(reached and all(r[0] in generated and r[1] == generated[r[0]] for r in reached),
+            'generated closure rows are not the retained generated sources')
+    require(gs.closure_hash(rows) == row.get('digest'), 'stamp source closure differs (with generated sources)')
+    require(gs.closure_hash([r for r in rows if r[0] not in gs.GENERATED]) == ident['closure']['digest'],
+            'stamp source closure differs (committed closure)')
+    for path, _ in reached:
+        require(ident.get('generators') == generator_dir_digest(inventory, gs.GENERATOR_DIRS[path]),
+                'binding identity generator inputs differ from the tracked generator')
 
 
 def command(pixi_env):
@@ -108,9 +175,13 @@ def record(source, compiler):
             and stamp.get('script') == 'merged_build.sh' and stamp.get('commit') == revision
             and set(stamp.get('members', {})) == names, 'host stamp differs')
     by_name = {v['name']: v for v in identities.values()}
+    generated = generated_record(proof, source, inventory)
+    closures = proof.get('generated_closures', {})
+    require(isinstance(closures, dict) and set(closures) <= names
+            and {r[0] for rows in closures.values() for r in rows if r[0] in gs.GENERATED} == set(generated),
+            'generated closure coverage differs')
     for name, row in stamp['members'].items():
-        require(row.get('scope') == 'closure' and row.get('digest') == by_name[name]['closure']['digest']
-                and row.get('script') == by_name[name]['script'], 'stamp source closure differs')
+        check_member_stamp(name, row, by_name[name], closures, generated, inventory)
     import binding_stamps
     merged_inputs = {name:dict(inventory).get(name) for name in binding_stamps.MERGED_INPUTS}
     require(all(merged_inputs.values()) and capture.get('merged_build_inputs') == merged_inputs,
@@ -146,7 +217,7 @@ def record(source, compiler):
     require(capture.get('runtime_identity') == proof.get('runtime_identity'), 'runtime input record differs')
     contract = dict(source_commit=revision, source_inventory=inventory, compiler_sha256=compiler,
         host_identities=identities, installed_packages=packages, toolchain=toolchain,
-        index=index, runtime_libraries=libraries,
+        index=index, runtime_libraries=libraries, generated_sources=generated,
         host_dependencies={k: stage.get(k) for k in ('needed', 'runpath', 'rpath')})
     return contract, dict(leg='cpu', host_sha256=stage['staged_sha256'],
                           unstaged_sha256=proof['raw_host_sha256'], proof_sha256=source['proof']['sha256']), proof, capture
@@ -160,6 +231,11 @@ def inspect(root):
             'index':'set/' + HOST_INDEX, 'stamp':'binding-stamp.json', 'stage':'stage.json',
             'readback':'readback.json'}.items()})
     source['runtime_source'] = json.loads((root / 'runtime-source.json').read_text())
+    generated = hc.decoded(source['proof']).get('generated_sources') or {}
+    if generated:
+        source['generated'] = {rel: hc.witness(root / 'generated' / hc.relative(rel)) for rel in generated}
+        source['generated_inputs'] = {name: hc.witness(root / 'generated-inputs' / hc.relative(name))
+                                      for rel in generated for name in gs.GENERATED.get(rel, ())}
     require(hc.file_sha(root / 'raw' / hc.HOST_FILE) == hc.decoded(source['proof'])['raw_host_sha256'],
             'original compiler output bytes are missing or changed')
     return source, root / 'set'
@@ -257,6 +333,25 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     stamp_exit = run_logged(['python3','tools/binding_stamps.py','write-merged',str(raw_output),
                             ','.join(sorted(hc.expected_names()))], root, env, out / 'stamp.log')
     shutil.copy2(binding_stamps.stamp_path(raw_output), out / 'binding-stamp.json')
+    # The compile read gitignored generated sources (the tokenizer unicode
+    # table) that git archive, and so the binding identities, never carry.
+    # Retain them with their tracked generator inputs and each reaching
+    # member's closure rows, so record() can join stamp and identity exactly.
+    generated_closures = {}
+    for name in sorted(hc.expected_names()):
+        rows, _ = gs.closure_rows(root, binding_stamps.member_script(name))
+        if any(r[0] in gs.GENERATED for r in rows):
+            generated_closures[name] = rows
+    generated_sources = {}
+    for rel in sorted({r[0] for rows in generated_closures.values() for r in rows if r[0] in gs.GENERATED}):
+        (out / 'generated' / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / rel, out / 'generated' / rel)
+        for name in gs.GENERATED[rel]:
+            (out / 'generated-inputs' / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / name, out / 'generated-inputs' / name)
+        generated_sources[rel] = dict(sha256=hc.file_sha(out / 'generated' / rel),
+                                      inputs={name: hc.file_sha(out / 'generated-inputs' / name)
+                                              for name in gs.GENERATED[rel]})
     staged = out / 'set'
     (staged / 'host').mkdir(parents=True)
     shutil.copy2(raw_output, staged / HOST_PATH)
@@ -301,6 +396,7 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
         merged_indexes={PREFIX + HOST_INDEX:dict(sha256=hc.file_sha(staged / HOST_INDEX),files=index['files'])},
         stamp_sha256=hc.file_sha(out / 'binding-stamp.json'), stage_sha256=hc.file_sha(out / 'stage.json'),
         readback_sha256=hc.file_sha(out / 'readback.json'), runtime_identity=context['runtime_identity'],
+        generated_sources=generated_sources, generated_closures=generated_closures,
         qualification='One real CPU host compile and native metadata readback; no GPU, adapter, public runtime, or installed-wheel qualification')
     write(out / 'host-build-proof.json', proof)
     source, directory = inspect(out)
