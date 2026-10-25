@@ -182,6 +182,12 @@ class Ledger:
 
 
 def main(argv=None):
+    # The readiness view is the canonical requirements ledger. The older
+    # build/column keys remain retained evidence indexes consumed by it.
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ("sync", "plan", "check", "begin", "record"):
+        import release_requirements
+        return release_requirements.main(argv)
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("cmd", choices=("list", "get"))
     ap.add_argument("arg", nargs="?", default="")

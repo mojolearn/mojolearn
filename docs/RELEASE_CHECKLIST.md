@@ -1,5 +1,64 @@
 # Release checklist
 
+## Readiness ledger and evidence reuse
+
+`~/mojolearn-evidence/release/<version>/requirements.json` is the release's
+readiness record. `tools/release_requirements.json` declares the required scope;
+compile requirements expand by binding, identity requirements by lane, and
+performance requirements by explicit full-workload recipe. Every row is
+`passed`, `failed`, or `untested`, with its source revision, input fingerprint,
+retained evidence and the revision actually tested. Pipeline completion flags
+and handoff prose do not qualify a requirement.
+
+`release.py` consumes this ledger before publication and before recording a
+completed release. All required pre-publication rows must pass before publishing;
+published-wheel checks remain required afterwards. `--preverified` reuses
+qualified evidence; it does not bypass these gates. Source audits qualify only
+source checks, and compilation does not qualify runtime behavior.
+
+```sh
+python3 tools/release_ledger.py sync --ledger "$HOME/mojolearn-evidence/release/0.8.57/requirements.json" --version 0.8.57 --revision integ/0857 --configuration /path/to/qualification-inputs.json
+python3 tools/release_ledger.py plan --ledger "$HOME/mojolearn-evidence/release/0.8.57/requirements.json" --json
+python3 tools/release_ledger.py check --ledger "$HOME/mojolearn-evidence/release/0.8.57/requirements.json" --stage pre
+```
+
+The input configuration is retained in the ledger. It declares `release_modes`,
+`build_flags` and `dependency_context`, including an explicit `cpu_target`
+(`osx-arm64` or `linux-64`) and full-workload recipes under `workloads` by vendor.
+Recipes name their identity lanes, source files, dataset identity, settings,
+timing boundary, phases and environment. Missing mappings remain untested;
+discovery of a recipe file does not establish full-dataset coverage.
+`release.py --requirements-configuration <file>` imports these explicit inputs
+and records the current toolchain and available artifact hashes.
+
+A commit name is provenance, never an invalidation input. The plan lists the
+specific changed source, compiler, flags, dependencies or coverage that require
+work, and reuses unchanged evidence. Where a shared source file changed but a
+frozen dependency analysis proves a lane unaffected, reuse preserves the old
+receipt and tested revision with that proof. Unresolved dependency attribution
+requires investigation; it does not silently schedule a complete rerun. Missing
+or corrupt retained evidence first requires restoration from its archive.
+
+Before launching work, producers call `begin --requirement <id>` on the ledger.
+It returns reuse for an unchanged pass and refuses duplicate unfinished runs.
+Completed work is recorded with `record --run-id <id>`, retained evidence,
+exit status, coverage counts and `--result-report <typed-receipt.json>`.
+`tools/release_requirement_receipts.py` defines the receipt contract: exact
+requirement and input identity, per-coverage results and hashed raw evidence.
+Every required coverage item must complete successfully for a pass. Legacy
+reports without sufficient input provenance require reconciliation; do not
+attach today's fingerprint and present them as a new pass. Candidate-gate
+producers record these receipts directly. Admission also parses the approved
+producer's retained report; a caller-authored receipt and an arbitrary log cannot
+establish a pass. Unsupported report schemas remain untested until their producer
+adapter is implemented and its actual coverage reconciled. This calls for
+evidence admission work, not an automatic rerun of the underlying test.
+
+Every rerun keeps its reason and original attempt. `release.py --redo <step>`
+requires `--rerun-reason <specific invalidation or failure>`; a new commit alone
+does not justify repeating completed checks. Existing binaries, identity cells
+and measurements remain reusable when their relevant inputs match.
+
 ## Standalone native-only candidate
 
 The optional standalone artifact has a separate strict qualification gate:

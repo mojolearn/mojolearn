@@ -222,6 +222,7 @@ PUBLISH_CHOICES = ("none", "testpypi", "pypi")
 sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
 import release_reuse  # noqa: E402
+import release_requirements  # noqa: E402
 import release_tooling  # noqa: E402
 import release_github_build  # noqa: E402
 import runpy
@@ -1337,6 +1338,73 @@ class Release:
             self.say(f"  ledger: could not record {key} ({type(exc).__name__}: {exc})")
             return None
 
+    def readiness(self):
+        """One persistent readiness ledger across freezes of this version."""
+        return release_requirements.RequirementsLedger(self.base / "requirements.json")
+
+    def readiness_manifest(self):
+        configuration = dict(self.readiness().read().get("configuration", {}))
+        configuration_path = getattr(self.args, "requirements_configuration", None)
+        if configuration_path:
+            supplied = json.loads(Path(configuration_path).read_text())
+            if not isinstance(supplied, dict):
+                raise ValueError("requirements configuration must be a JSON object")
+            configuration.update(supplied)
+        configuration.update(release_modes=list(self.release_modes),
+                             build_flags=release_requirements.build_flags())
+        context = dict(configuration.get("dependency_context", {}))
+        apple_toolchain = release_reuse.darwin_toolchain()
+        if apple_toolchain is not None:
+            context["apple_toolchain"] = apple_toolchain
+        configuration["dependency_context"] = context
+        for vendor in GATE_VENDORS:
+            configuration.pop("artifacts:" + vendor, None)
+            try:
+                identity = self.candidate_gate_identity(vendor)
+                # Source revision is provenance, not an invalidation input.
+                configuration["artifacts:" + vendor] = identity["wheels"]
+            except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile):
+                pass
+        try:
+            configuration.pop("artifacts:apple", None)
+            wheel = self.macos_wheel()
+            if wheel and Path(wheel).is_file():
+                configuration["artifacts:apple"] = {Path(wheel).name: sha256(wheel)}
+        except (StepFailed, OSError, ValueError):
+            pass
+        return release_requirements.requirements(ROOT, self.commit, self.version,
+                                                  configuration=configuration)
+
+    def readiness_status(self, write=False):
+        manifest = self.readiness_manifest()
+        ledger = self.readiness()
+        return ledger.sync(manifest) if write else ledger.plan(manifest)
+
+    def record_candidate_requirement(self, vendor, run_id, executed=False):
+        if run_id is None:
+            return
+        import release_requirement_receipts as receipts
+        ledger = self.readiness()
+        run = next(row for row in ledger.read()["runs"] if row["id"] == run_id)
+        report = self.gate_out(vendor) / "gate-smoke.json"
+        provenance_path = report.parent / "producer-inputs.json"
+        if executed:
+            # Only the controller that actually launched this begun run writes
+            # this stamp. A legacy report cannot acquire current inputs by fiat.
+            write_json(provenance_path, dict(schema=receipts.PROVENANCE_SCHEMA, requirement_id="candidate-" + vendor,
+                       kind="candidate", source_revision=run["source_revision"], input_fingerprint=run["fingerprint"],
+                       report_sha256=sha256(report), run_id=run_id))
+        try:
+            receipt = receipts.candidate_gate_receipt("candidate-" + vendor,
+                         dict(run["manifest"], inputs=run["inputs"]), report,
+                         self.candidate_gate_identity(vendor), read_json(provenance_path))
+        except ValueError as error:
+            raise StepFailed("candidate evidence needs provenance/coverage reconciliation; no automatic rerun: "
+                             + str(error)) from error
+        counts = receipts.coverage_summary(receipt)
+        ledger.record(run_id, "passed", [report, provenance_path],
+                      "candidate producer passed all required coverage IDs", 0, receipt=receipt, **counts)
+
     # ------------------------------------------------------------ steps
     def frozen(self):
         return bool(self.state.get("commit")) and not getattr(self.args, "refreeze", False)
@@ -1625,6 +1693,11 @@ class Release:
             return None, "the set identity is unreadable (no plan, or a binding without a readable identity)"
         if not self.packer_takes_legs():
             return None, "the frozen source's packer predates leg origins in reuse.json"
+        if (vendor, arch) == release_reuse.PTX_SET:
+            packer = file_at(self.commit, "packaging/linux/pack_wheel.py") or ""
+            if ("PTX_RELEASE_ADMISSION_SCHEMA" not in packer
+                    or not file_at(self.commit, "packaging/linux/ptx_reuse.py")):
+                return None, "the frozen packer cannot rebind retained PTX provenance; packaging support is missing"
         t = self.tooling()
         if not t["digest"]:
             return None, "the build tooling has uncommitted changes (" + ", ".join(t["dirty"]) + ")"
@@ -1632,7 +1705,8 @@ class Release:
         for where, c in self.leg_candidates(name, vendor, arch, ident):
             if c.get("source_commit") == self.commit:
                 continue
-            if (c.get("set_identity") or {}).get("digest") != ident["digest"]:
+            prior_ident = release_reuse.normalized_set_identity(c.get("set_identity"))
+            if prior_ident is None or prior_ident["digest"] != ident["digest"]:
                 why.append(f"{where}: set identity differs")
                 continue
             if c.get("tooling_digest") != t["digest"]:
@@ -1650,6 +1724,7 @@ class Release:
                        because=("the set identity (every binding identity of the set, the host bindings and the "
                                 "runtime closure) and the build tooling digest equal this freeze's"),
                        set_identity_digest=ident["digest"], tooling_digest=t["digest"],
+                       original_set_identity=c.get("set_identity"),
                        release_build=c["release_build"], exit_file=c.get("exit_file"),
                        set_dir=str(Path(c["release_build"]) / "build" / "sets" / vendor / arch),
                        proof_sha256=proof_sha, provenance=where, at=now())
@@ -1667,7 +1742,9 @@ class Release:
         """reuse.json's origin of an admitted leg (pack_wheel.LEG_ORIGIN_KEYS)."""
         return dict(source_commit=doc["built_from"], leg=doc["leg"], proof_sha256=doc["proof_sha256"],
                     admitted_for=doc["admitted_for"], set_identity_digest=doc["set_identity_digest"],
-                    tooling_digest=doc["tooling_digest"], release_build=doc["release_build"])
+                    tooling_digest=doc["tooling_digest"], release_build=doc["release_build"],
+                    **({"original_set_identity": doc["original_set_identity"]}
+                       if doc.get("original_set_identity") else {}))
 
     def reused_leg_objects(self):
         out = []
@@ -2314,6 +2391,10 @@ class Release:
             if any(not verdict[0] for _, verdict in blocked):
                 raise StepFailed('publication requires both candidate gates: '+ '; '.join(
                     vendor+': '+verdict[1] for vendor, verdict in blocked if not verdict[0]))
+            self.readiness_status(write=True)
+            ready, reasons = self.readiness().gate(stage="pre")
+            if not ready:
+                raise StepFailed("release requirements ledger blocks publication: " + "; ".join(reasons))
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
@@ -2640,8 +2721,14 @@ class Release:
                       f"{m.get('expected')} lines (board {m.get('board')})")
 
     def run_gate(self, vendor):
+        run_id = None
+        if not self.dry:
+            self.readiness_status(write=True)
+            run_id = self.readiness().begin("candidate-" + vendor)
         ok, why = self.gate_ok(vendor)
         if ok:
+            if not self.dry:
+                self.record_candidate_requirement(vendor, run_id)
             return why
         box = LQ_COLUMN_BOX[vendor]
         work = self.rel / "gates"
@@ -2663,12 +2750,22 @@ class Release:
             cmd.append("--no-adapters")  # no adapters ship: the gate records its adapter stage as disabled
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
-        self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate on lq box {box}")
+        try:
+            self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate on lq box {box}")
+        except StepFailed as error:
+            reports = [p for p in (output / "gate-smoke.json", work / f"gate-{vendor}.log") if p.is_file()]
+            if run_id and reports:
+                self.readiness().record(run_id, "failed", reports, str(error), 1, 5, 0, failed=1)
+            raise
         if self.dry:
             return None
         ok, why = self.gate_ok(vendor)
         if not ok:
+            report = output / "gate-smoke.json"
+            if run_id and report.is_file():
+                self.readiness().record(run_id, "failed", [report], why, 1, 5, 0, failed=1)
             raise StepFailed(f"the {vendor} release gate did not pass: {why}")
+        self.record_candidate_requirement(vendor, run_id, executed=True)
         return why
 
     def step_gate_nvidia(self):
@@ -2689,6 +2786,12 @@ class Release:
         if ungated:
             raise StepFailed("published vendor(s) without a passing release gate: " + "; ".join(ungated)
                              + ". Rerun `release` to run the gate (tools/gate_smoke_box.py on the held lq box).")
+        if not self.dry:
+            self.readiness_status(write=True)
+            ready, reasons = self.readiness().gate()
+            if not ready:
+                raise StepFailed("release record requires the pre- and post-publication ledger checks: "
+                                 + "; ".join(reasons))
         date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "") \
             or dt.date.today().isoformat()
         rec = ROOT / "bench" / "results" / "release_verification" / f"{date}_pypi_{self.version.replace('.', '')}"
@@ -2928,7 +3031,15 @@ class Release:
                 raise SystemExit("release: unknown step(s) " + ", ".join(unknown) + "; steps: " + ", ".join(steps))
             steps = [s for s in steps if s in wanted]
         for redo in (self.args.redo.split(",") if self.args.redo else []):
+            if redo not in self.STEPS:
+                raise SystemExit("release: unknown --redo step " + redo)
+            reason = (getattr(self.args, "rerun_reason", None) or "").strip()
+            if not reason:
+                raise SystemExit("release: --redo requires --rerun-reason naming the invalidated evidence or failed check")
+            self.state.setdefault("rerun_requests", []).append(dict(step=redo, reason=reason, at=now()))
             self.state["steps"].pop(redo, None)
+        if self.args.redo:
+            self.save()
         self.say(f"== mojolearn release {self.version}{' (DRY RUN: nothing runs, nothing is rented)' if self.dry else ''}")
         self.banner()
         if self.dry:
@@ -3008,6 +3119,31 @@ class Release:
         head = git_at(ROOT, "rev-parse", "HEAD") or "?"
         say(f"== mojolearn release {self.version}: status (read-only)")
         say(f"   state {self.state_path}" + ("" if self.state_path.is_file() else " (no state yet)"))
+        if c or self.readiness().path.exists():
+            try:
+                rows = self.readiness_status() if c else self.readiness().plan()
+                counts = {s: sum(row["status"] == s for row in rows.values())
+                          for s in ("passed", "failed", "untested")}
+                say(f"   requirements ledger {self.readiness().path}: {counts}")
+                families = {}
+                for name, result in rows.items():
+                    family = result.get("parent_requirement", name)
+                    totals = families.setdefault(family, dict(passed=0, failed=0, untested=0))
+                    totals[result["status"]] += 1
+                for family, totals in families.items():
+                    say(f"      {family}: {totals}")
+                needed = [(name, result) for name, result in rows.items() if result["status"] != "passed"]
+                for name, result in needed[:12]:
+                    reasons = result["reasons"]
+                    detail = "; ".join(reasons[:3])
+                    if len(reasons) > 3:
+                        detail += f"; +{len(reasons) - 3} reasons (full ledger plan --json)"
+                    say(f"      {name}: {result['status']} / {result['action']}: " + detail)
+                if len(needed) > 12:
+                    say(f"      +{len(needed) - 12} other requirements need attention; "
+                        "release_ledger.py plan --ledger <path above> --json shows every row and reason")
+            except (OSError, ValueError, subprocess.CalledProcessError) as error:
+                say(f"   requirements ledger untested: {error}")
         if c:
             say(f"   source commit {c} (pinned at freeze; only --refreeze moves it)")
             say(f"   tooling: {ROOT} at {head[:12]}" + (" (the source commit)" if head == c else ""))
@@ -3084,6 +3220,9 @@ def main(argv=None):
                     help="publish the two wheels (none = the workflow's checks without uploading)")
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
+    ap.add_argument("--rerun-reason", help="specific invalidation/failure reason required with --redo")
+    ap.add_argument("--requirements-configuration", metavar="JSON",
+                    help="explicit qualification inputs (CPU target, full-workload recipes); retained in the release ledger")
     ap.add_argument("--refreeze", action="store_true",
                     help="move the frozen source commit to HEAD (the only way it moves); completed legs and "
                          "columns are kept where what they built or tested is unchanged")

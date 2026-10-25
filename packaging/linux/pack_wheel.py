@@ -167,6 +167,9 @@ from device_glue import DEVICE_GLUE, NO_IMAGE, validate as validate_device_glue
 # and LINUX_PAYLOAD.json carries it in `merged_indexes` (the `.so` maps keep
 # only binaries).
 import merged_layout  # noqa: E402
+# The release controller checks this capability in the *frozen source* before
+# admitting an older PTX leg; older packers cannot validate a fresh admission.
+from ptx_reuse import SCHEMA as PTX_RELEASE_ADMISSION_SCHEMA, validate_admission as validate_ptx_admission
 MERGED_INDEX = merged_layout.INDEX
 #: The binaries a host/ directory holds; the merged host file
 #: `_mojolearn_native_host.so` matches it too.
@@ -1153,7 +1156,9 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             tier_indexes = {rel: sha(p).hex() for rel, p in indexes.items() if not rel.startswith("host/")}
             try:
                 gpu_plugins.validate_baseline_manifest(doc, digests, indexes=tier_indexes)
-            except ValueError as exc:
+                if "release_admission" in doc or (reuse or {}).get("legs", {}).get("cuda-sm_80"):
+                    validate_ptx_admission(doc, adir, (reuse or {}).get("legs", {}))
+            except (ValueError, OSError, TypeError, KeyError) as exc:
                 raise SystemExit(f"pack_wheel: invalid PTX set manifest: {exc}") from exc
             files[f"{vendor}/{arch}/{gpu_plugins.BASELINE_MANIFEST}"] = baseline_path
         elif baseline_path.exists():
