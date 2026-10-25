@@ -522,7 +522,10 @@ def _(ml, X, yc, yr, Xh=None):
     """mutual_info with discrete features: the contingency estimator
     (discrete feature, classes), Ross's with a feature's categories as the
     classes (discrete feature, continuous target) and the continuous columns
-    of a mixed mask, by mask, by indices and all-discrete."""
+    of a mixed mask, by mask, by indices and all-discrete; SelectKBest with
+    the built-in mutual_info_classif. Revised 2026-10-25 (lane
+    verify-lane-contracts-20261025): the selector took a lambda score_func,
+    which the native owner refuses, and the lane read REFUSED."""
     Xs, y3, ys = X[:1200, :6], _prep_three_class(X, yr)[:1200], yr[:1200]
     Xm = np.array(Xs, dtype=np.float32)
     Xm[:, :3] = _prep_categorical(Xs[:, :3])
@@ -533,8 +536,10 @@ def _(ml, X, yc, yr, Xh=None):
     Xd = Xm[:, :3]
     parts["dd"] = _h(ml.mutual_info_classif(Xd, y3, discrete_features=True))
     parts["dc"] = _h(ml.mutual_info_regression(Xd, ys, discrete_features=True))
-    m = ml.SelectKBest(lambda A, b: ml.mutual_info_classif(A, b, discrete_features=[0, 1, 2], random_state=3),
-                       k=3).fit(Xm, y3)
+    # SelectKBest takes only the built-in score functions (a user callable is
+    # refused: no Python callback in the runtime, 2026-10-25), so the selector
+    # runs mutual_info_classif with its defaults on the same mixed matrix.
+    m = ml.SelectKBest(ml.mutual_info_classif, k=3).fit(Xm, y3)
     parts["support"] = _h(np.array(m.get_support()))
     return _fit(parts, m, lambda e: (e.transform(np.array(Xh[:256, :6], dtype=np.float32)),))
 
@@ -653,8 +658,8 @@ class _prep_Splits:
 
 @lane("x-prep-user-objects")
 def _(ml, X, yc, yr, Xh=None):
-    """User objects the library accepts: SimpleImputer(strategy=<callable>),
-    TargetEncoder cv=<splitter> / cv=<(train, test) pairs> and
+    """User objects the library accepts: TargetEncoder cv=<splitter> folds /
+    cv=<(train, test) pairs> and
     categories=<list> (one training value left out, one unseen added).
     LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis refuse a
     covariance_estimator object at fit (no Python callback in the runtime,
@@ -662,11 +667,14 @@ def _(ml, X, yc, yr, Xh=None):
     documented TypeError, and the discriminant parts are the supported native
     configuration instead (LDA shrinkage, QDA reg_param). Revised 2026-10-24
     (lane verify-coverage-20261024): the old body fit LDA/QDA with a Python
-    covariance estimator and read REFUSED on every fixture."""
+    covariance estimator and read REFUSED on every fixture. Revised
+    2026-10-25 (lane verify-lane-contracts-20261025): SimpleImputer refuses a
+    callable strategy (ValueError, no Python callback in the runtime), so the
+    `si` part is the built-in order statistic, strategy='median', with the
+    same missing indicator."""
     Xm, Xhm = _prep_with_nan(X), _prep_with_nan(Xh)
     parts = {}
-    third = lambda v: (lambda s: float(s[len(s) // 3]) if s else float("nan"))(sorted(v.tolist()))
-    si = ml.SimpleImputer(strategy=third, add_indicator=True).fit(Xm)
+    si = ml.SimpleImputer(strategy="median", add_indicator=True).fit(Xm)
     parts["si"] = _h(si.statistics_, si.transform(Xm[:256]))
     y3 = _prep_three_class(X, yr)
     Xs, ys = X[:600], y3[:600]

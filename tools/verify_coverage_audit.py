@@ -1353,7 +1353,7 @@ _ARM_DECISIONS_20261024 = [
     "one test group moved to train with its sums, every group rotated to the next fold with its sizes).",
     "- `x-prep-user-objects` (lane revised, 5b1606ab1 AMD record REFUSED on all nine fixtures): LDA/QDA now refuse a "
     "covariance_estimator object at fit (no Python callback in the runtime). The lane keeps the user objects the "
-    "library accepts (SimpleImputer callable strategy, TargetEncoder splitter, pairs and categories), holds the two "
+    "library accepts (TargetEncoder splitter, pairs and categories; SimpleImputer is strategy='median' since 2026-10-25, a callable strategy is refused), holds the two "
     "LDA and the QDA refusals as a `refusals` part, and records the native configuration instead (LDA shrinkage=0.25, "
     "QDA reg_param=0.25). Its cells and the arms that expect it (coverage-core-hotpath_impl_rows, "
     "coverage-core-count-fold-hits) are re-recorded / re-proved.",

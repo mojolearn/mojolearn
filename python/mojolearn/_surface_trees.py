@@ -142,7 +142,7 @@ TRAINING_LANE_NAMES = {
     "trees-multioutput": "MultiOutputRegressor",
     "trees-onevsrest": "OneVsRestClassifier",
     "trees-calibrated": "CalibratedClassifierCV",
-    "trees-oob-cv-link": "Bagging oob_score, cv splitter objects, KernelExplainer link=logit",
+    "trees-oob-cv-link": "Bagging oob_score, native cv splitter objects and index pairs, KernelExplainer link=logit",
     "trees-shap-tree": "TreeExplainer",
     "trees-shap-kernel": "KernelExplainer",
     "trees-shap-permutation": "PermutationExplainer",
