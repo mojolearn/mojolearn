@@ -2883,16 +2883,18 @@ class IterativeImputer(_PrepBase):
     Parameters
     ----------
     estimator : mojolearn regressor, default None
-        A mojolearn regressor (:class:`LinearRegression`, :class:`Ridge`, :class:`DecisionTreeRegressor`,
-        :class:`RandomForestRegressor`, :class:`ExtraTreesRegressor` or
-        :class:`GradientBoostingRegressor`), cloned for each step. Any other estimator, including a
-        subclass, raises ``TypeError``. None uses the built-in Bayesian ridge regression.
+        A built-in mojolearn regressor, cloned for each step. For example,
+        :class:`Ridge`, :class:`BayesianRidge`, :class:`SVR`,
+        :class:`GaussianProcessRegressor` or :class:`RandomForestRegressor`.
+        User-defined estimators and subclasses raise ``TypeError``.
+        None uses the built-in Bayesian ridge regression.
     missing_values : float, default NaN
         Value that marks a missing entry.
     sample_posterior : bool, default False
         Draw each imputed value from the predictive normal distribution, truncated to
-        ``[min_value, max_value]``, instead of using its mean. Only the built-in estimator supports
-        it; with an ``estimator`` it raises ``ValueError``.
+        ``[min_value, max_value]``, instead of using its mean. Supported by the
+        default estimator and :class:`GaussianProcessRegressor`. Other
+        supplied estimators must support predictive standard deviations.
     max_iter : int, default 10
         Maximum number of imputation rounds.
     tol : float, default 1e-3
@@ -3383,9 +3385,10 @@ class RFE(_SelectorMixin):
     Parameters
     ----------
     estimator : mojolearn estimator
-        A mojolearn estimator whose ``fit`` exposes ``coef_``: :class:`LinearDiscriminantAnalysis`,
-        :class:`LogisticRegression`, :class:`Ridge` or :class:`LinearRegression`. Any other estimator,
-        including a subclass, raises ``TypeError``.
+        A built-in mojolearn estimator whose fit exposes ``coef_`` or
+        ``feature_importances_``, such as :class:`Ridge`, :class:`BayesianRidge`
+        or :class:`SVR` with a linear kernel. User-defined estimators and
+        subclasses raise ``TypeError``.
     n_features_to_select : int or float, default None
         Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
     step : int or float, default 1
@@ -3431,6 +3434,24 @@ class RFE(_SelectorMixin):
         self.importance_getter = importance_getter
 
     def fit(self, X, y, **fit_params):
+        """Fit the selector and final estimator.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training features.
+        y : array-like of shape (n_samples,)
+            Training targets.
+        **fit_params : dict
+            Arguments accepted by the estimator's fit, passed to every
+            elimination round and the final fit. For example,
+            ``sample_weight`` or a forest's ``feature_importances=True``.
+
+        Returns
+        -------
+        self : RFE
+            The fitted selector.
+        """
         return _ENCODE_CALL(self, "fit", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def fit_transform(self, X, y=None, **fit_params):

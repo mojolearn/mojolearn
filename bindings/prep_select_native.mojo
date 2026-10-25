@@ -35,7 +35,7 @@ from bindings.prep_encode_native import (
 from bindings.prep_classify_prog import ClsProg, f32_array
 from bindings.prep_classify_common import cls_x2d, cls_mode
 from bindings.prep_native_estimator import (
-    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call)
+    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -91,12 +91,13 @@ def _class_name(value: PythonObject) raises -> String:
     return String(py_type(value).__name__)
 
 
-def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_params: PythonObject,
+               context: PythonObject) raises -> PythonObject:
     """RFE's `_clone(estimator).fit(x, y)`: the clone built from the
     constructor schema and fitted by the plan's compiled fit (no Python
     get_params, constructor or fit). Returns the fitted clone."""
     var est = prep_estimator_clone(estimator, context)
-    _ = prep_estimator_call(est, "fit", Python.tuple(x, y), context)
+    _ = prep_estimator_call(est, "fit", Python.tuple(x, y), context, fit_params)
     return est
 
 
@@ -128,13 +129,12 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
     var auto = py_type(getter) is b.str and String(getter) == "auto"
     var coef = PythonObject(None)
     if not auto:
-        var pick = py_call(Python.import_module("operator").attrgetter, getter)
-        coef = _call(pick, Python.tuple(est), PythonObject(None))
+        coef = prep_estimator_attribute(est, getter, context)
     else:
-        coef = _call(b.getattr, Python.tuple(est, "coef_", PythonObject(None)), PythonObject(None))
+        coef = prep_estimator_attribute(est, PythonObject("coef_"), context)
     var key = pr.work(2 * m)
     if coef is None and auto:
-        var imp = _call(b.getattr, Python.tuple(est, "feature_importances_", PythonObject(None)), PythonObject(None))
+        var imp = prep_estimator_attribute(est, PythonObject("feature_importances_"), context)
         if imp is None:
             raise Error("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
         var got = _score_words(imp, m, context)
@@ -187,10 +187,8 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("mojolearn: RFE importance_getter must be 'auto', a str or a callable")
     var y = args[1]
     var fit_params = _fit_params(args)
-    if py_type(fit_params) is not b.dict or len(fit_params) != 0:
-        # The plan's fit takes (X, y) only; extra fit parameters would need
-        # the estimator's Python fit.
-        raise Error("TypeError: mojolearn: RFE.fit takes no fit parameters for the estimator")
+    if py_type(fit_params) is not b.dict:
+        raise Error("TypeError: mojolearn: RFE.fit parameters require an exact dict")
     var arr = cls_x2d(args[0], cc)
     var n = arr.n
     var d = arr.d
@@ -228,7 +226,7 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
             if support[j]:
                 features.append(j)
         var m = len(features)
-        var est = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, context)
+        var est = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, fit_params, context)
         var pr = ClsProg()
         var key = _importance_keys(pr, est, m, g, context, cc)
         var mask = List[Float64]()
@@ -252,7 +250,7 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         if support[j]:
             features.append(j)
         _ = py_call(mask_list.append, PythonObject(support[j]))
-    var final = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, context)
+    var final = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, fit_params, context)
     py_setitem(fields, "estimator_", final)
     py_setitem(fields, "_mask", mask_list)
     py_setitem(fields, "support_", py_call(b.list, mask_list))

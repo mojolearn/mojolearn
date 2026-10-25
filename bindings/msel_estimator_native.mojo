@@ -58,7 +58,8 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
 
 
 def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
-                        context: PythonObject, scorer_response: Bool = False) raises -> PythonObject:
+                        context: PythonObject, scorer_response: Bool = False,
+                        keywords: PythonObject = PythonObject(None)) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     var entry = plan["entry"]
@@ -67,16 +68,47 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
     var method_plan = py_get(plan["methods"], PythonObject(method))
     if method_plan is None:
         raise Error("AttributeError: native estimator has no " + method)
+    var allowed = py_get(py_get(plan, "keywords", Python.dict()), PythonObject(method), Python.tuple())
+    if keywords is not None:
+        if py_type(keywords) is not b.dict:
+            raise Error("TypeError: native estimator keywords require an exact dict")
+        var keys = py_call(b.list, keywords.keys())
+        for k in range(len(keys)):  # driver-loop: named fit arguments before native dispatch
+            if py_type(keys[k]) is not b.str:
+                raise Error("TypeError: native estimator keyword names must be exact strings")
+            if not py_contains(allowed, keys[k]):
+                raise Error("TypeError: " + String(py_type(model).__name__) + "." + method
+                            + " got an unexpected keyword argument '" + String(keys[k]) + "'")
+            sequential_admit_value(keywords[keys[k]], context)
     if method == "fit" and py_contains(plan, "fit_entry"):
         var fit = plan["fit_entry"]
         if py_type(fit) is not py_type(b.len):
             raise Error("TypeError: native scaler fitting entry is unavailable")
-        return family_call(fit, model, args[0], args[1], PythonObject(None), plan["context"])
+        return family_call(fit, model, args[0], args[1], py_get(keywords, "sample_weight")
+                           if keywords is not None else PythonObject(None), plan["context"])
     var values = Python.list()
     var recipe = method_plan[1]
     for k in range(len(recipe)):  # driver-loop: fixed native ABI arguments
         var item = recipe[k]
-        var value = args[Int(py=item[1])] if String(item[0]) == "arg" else item[1]
+        var kind = String(item[0])
+        var value = item[1]
+        if kind == "arg":
+            value = args[Int(py=item[1])]
+        elif kind == "keyword":
+            value = py_get(keywords, item[1], item[2]) if keywords is not None else item[2]
+        elif kind == "binding":
+            var fields = py_call(plan["fields_get"], model, py_type(model))
+            var mode = py_get(fields, "numeric_mode")
+            if mode is None:
+                mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
+            if py_type(mode) is not b.str:
+                raise Error("TypeError: native estimator numeric_mode must be an exact string or None")
+            var modes = context["family_msel_bindings"][item[1]]
+            value = py_get(modes, mode)
+            if value is None:
+                raise Error("ImportError: native estimator binding is unavailable for " + String(mode))
+            if py_type(value) is b.str:
+                raise Error(String(value))
         _ = py_call(values.append, value)
     var envelope = py_call(b.tuple, values)
     if method == "fit" and plan["forest"] is not None:
@@ -98,6 +130,11 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
         py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
         return result
     var operation = method_plan[0]
+    var override = py_get(py_get(plan, "method_entries", Python.dict()), PythonObject(method))
+    if override is not None:
+        if py_type(override[0]) is not py_type(b.len):
+            raise Error("ImportError: native estimator method binding is unavailable")
+        return family_call(override[0], model, operation, envelope, override[1])
     if scorer_response and method == "predict":
         var internal_operation = py_get(plan, "scorer_predict_operation")
         if internal_operation is not None:
@@ -194,6 +231,9 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
         # Exact fixed constructor schemas containing only field assignments.
         var fields = py_call(plan["fields_get"], result, py_type(result))
         _ = py_call(fields.update, parameters)
+        var fixed = py_get(plan, "initial_fields")
+        if fixed is not None:
+            _ = py_call(fields.update, msel_clone_parameter(fixed, context))
     else:
         var entry = plan["entry"]
         if entry is None or py_type(entry) is not py_type(b.len):

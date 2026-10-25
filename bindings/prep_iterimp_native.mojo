@@ -21,8 +21,10 @@ from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
 from bindings.user_objects_native import user_objects_call
+from bindings.native_array_storage import native_array_zeros
+from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.prep_stateless_native import _int_like, _repr, _name
-from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_clone, prep_estimator_call
+from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has
 from bindings.prep_encode_native import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
@@ -196,10 +198,10 @@ def _refuse(model: PythonObject, context: PythonObject) raises:
     var nnf = fields["n_nearest_features"]
     if nnf is not None and (not _int_like(nnf, context) or Int(py=py_call(b.int, nnf)) < 1):
         raise Error("mojolearn: n_nearest_features must be an int >= 1; got " + _repr(nnf))
-    if _truth(fields["sample_posterior"]) and estimator is not None:
-        # No connected native plan's predict takes return_std (the plans'
-        # predict operations take X only), so this is the reference's refusal
-        # without inspecting the Python method's signature.
+    if (_truth(fields["sample_posterior"]) and estimator is not None
+            and not prep_estimator_has(estimator, "predict_std", context)):
+        # The native plan declares the supported return_std operation;
+        # inspecting/calling the estimator's Python predict is unnecessary.
         raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
                     + "'return_std' in its 'predict' method.")
 
@@ -457,6 +459,35 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
     return _Take(x_fit, y_fit, xm, rows, m)
 
 
+def _truncnorm(mus: PythonObject, sig: PythonObject, lo: Float64, hi: Float64, mut rng: UInt64,
+               context: PythonObject) raises -> List[Float64]:
+    # Preserve the supplied estimator route's original binary64 draws and
+    # splitmix stream. Inputs come from the native predict_std operation.
+    var mu = _pred_f64(mus, context)
+    var sd = _pred_f64(sig, context)
+    var k = min(len(mu), len(sd))
+    var mb = native_array_zeros("d", k)
+    var sb = native_array_zeros("d", k)
+    var out = native_array_zeros("d", k)
+    var mp = F64P(unsafe_from_address=Int(py=py_call(mb.buffer_info)[0]))
+    var sp = F64P(unsafe_from_address=Int(py=py_call(sb.buffer_info)[0]))
+    for i in range(k):  # cpu-route: one feature's native posterior buffers
+        mp[i] = mu[i]
+        sp[i] = sd[i]
+    var state = Python.tuple(Int(rng >> 32), Int(rng & 0xFFFFFFFF))
+    var hi_lo = truncnorm_draws_binding(py_call(mb.buffer_info)[0], py_call(sb.buffer_info)[0], PythonObject(k),
+                                       Python.tuple(lo, hi), state, py_call(out.buffer_info)[0])
+    rng = (UInt64(Int(py=hi_lo[0])) << 32) | UInt64(Int(py=hi_lo[1]))
+    var src = F64P(unsafe_from_address=Int(py=py_call(out.buffer_info)[0]))
+    var vals = List[Float64]()
+    for i in range(k):  # cpu-route: read the completed posterior result
+        vals.append(src[i])
+        _ = out
+    _ = mb
+    _ = sb
+    return vals^
+
+
 def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: Int, dk: Int, j: Int,
             est: PythonObject, posterior: Bool, bounds: List[Float64], mode: PythonObject, mut rng: UInt64,
             context: PythonObject) raises -> PythonObject:
@@ -470,10 +501,13 @@ def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: I
     var v = List[Float64]()
     var clip = 1
     if posterior:
-        # `_refuse` refused sample_posterior with a user estimator.
-        raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
-                    + "'return_std' in its 'predict' method.")
-    v = _pred_f64(prep_estimator_call(est, "predict", Python.tuple(xm), context), context)
+        var pair = prep_estimator_call(est, "predict_std", Python.tuple(xm), context)
+        if py_type(pair) is not _b().tuple or len(pair) != 2:
+            raise Error("TypeError: native posterior prediction must return a mean/std pair")
+        v = _truncnorm(pair[0], pair[1], lo, hi, rng, context)
+        clip = 0
+    else:
+        v = _pred_f64(prep_estimator_call(est, "predict", Python.tuple(xm), context), context)
     var k = min(len(v), m)  # the reference's zip stops at the shorter
     if k == 0:
         return xt

@@ -1238,6 +1238,33 @@ def _svr_score(fields: PythonObject, binding: PythonObject, source: PythonObject
     return PythonObject(1.0 - ss_res / ss_tot)
 
 
+def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
+                 context: PythonObject) raises -> PythonObject:
+    # SVC/SVR.coef_ uses the same svc_dual_gemv operation as its former
+    # Python property. RFE reaches it directly, never the property hook.
+    var name = String("SVC" if classifier else "SVR")
+    if not svc_has(fields, "dual_coef_"):
+        raise Error("AttributeError: mojolearn " + name + ": call fit() first")
+    if String(fields["_hp_kernel"]) != "linear":
+        raise Error("AttributeError: mojolearn " + name + ": coef_ is only available for kernel='linear'")
+    var pairs = py_get(fields, "_pairs") if classifier else PythonObject(None)
+    var count = len(pairs) if pairs is not None else 1
+    var d = Int(py=fields["n_features_in_"])
+    var out = family_array(Python.tuple(count, d), "<f4", context)
+    for row in range(count):  # driver-loop: the fitted one-vs-one machines
+        var dual = pairs[row]["dual"] if pairs is not None else fields["dual_coef_"]
+        var sv = pairs[row]["sv"] if pairs is not None else fields["support_vectors_"]
+        var n = Int(py=sv.shape[0])
+        if d > 0 and n > 0:
+            _ = family_call(_entry(binding, "svc_dual_gemv", context), classical_address(dual),
+                            classical_address(sv), Python.list(n, d, 1 if pairs is not None else 0),
+                            PythonObject(_addr(out) + 4 * row * d))
+        _ = dual
+        _ = sv
+        _ = out
+    return out
+
+
 # ---------------------------------------------------------------- dispatch
 
 
@@ -1246,6 +1273,8 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
     """The kernel machines; args[0] is the resolved `_mojolearn_svm` binding."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
+    if operation == "family_svc_svc_coef" or operation == "family_svc_svr_coef":
+        return _linear_coef(fields, args[0], operation == "family_svc_svc_coef", context)
     if operation == "family_svc_svc_fit":
         _svc_fit(model, args, context)
         return model
