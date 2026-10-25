@@ -4,6 +4,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.57 (published 2026-10-25)
+
+0.8.56 was never published; its changes ship in this release.
+
 - **Import a PyTorch module directly.** `mojolearn.import_model(model, example_inputs=torch.zeros(8, 3, 32, 32))`
   takes a `torch.nn.Module`, exports it to ONNX in this process and imports it; `shapes=` alone also works for
   float32 inputs. An export failure raises `UnsupportedModel` with PyTorch's message. `import_model` also takes an
@@ -12,15 +16,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   `mojolearn.import_model`, `torch.ops.mojolearn.train` and the MAX `mojolearn_train` and `mojolearn_train_resume`
   operations. The undocumented one-operation-per-call entry points are removed, so no framework arithmetic runs
   between mojolearn operations.
-
-## 0.8.56 (published 2026-10-24)
-
 - **Same bits everywhere.** In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. This
   release keeps that contract for every changed method; `fast` remains Apple only.
 - **Native runtime.** Public methods across the classical estimators, preprocessing, decomposition, neighbors, manifold
   learning, metrics, model selection, `Sequential` and the optimizers now run as one native call that validates,
-  prepares, computes and returns the result. No Python runs in the runtime, kernels import no Python, and the binding
-  shells only convert arguments. Results are unchanged. `PCA.fit` and `PCA.fit_transform` cover every solver, including
+  prepares, computes and returns the result. Kernels import no Python, and the binding shells only convert arguments.
+  Results are unchanged. `PCA.fit` and `PCA.fit_transform` cover every solver, including
   `n_components="mle"`, a variance fraction and `svd_solver="randomized"`.
 - **Saved models.** Prediction from a saved model on the CPU runs natively, and `HostLinearRegression` and `HostRidge`
   fit on the CPU binaries again with weighted, no-intercept and one-column fits; `fit`, `predict`, `score`, `save`,
@@ -38,8 +39,6 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   `mojolearn_train_resume` operations fit a whole mojolearn `Sequential` model in one call. Install the framework
   with the `torch` or `max` extra (`pip install "mojolearn[torch]"`; on Linux `pip install mojolearn
   "mojolearn-core[torch]"`). `import mojolearn` never imports PyTorch or MAX.
-- **Model import.** `mojolearn.import_model` takes an ONNX file; export a PyTorch model first with
-  `torch.onnx.export(model, args, "model.onnx")`. Passing a torch object raises `ValueError` with that instruction.
 - **Verification.** `python -m mojolearn verify` gains lanes for every new or changed public method, and each one is
   paired with a fault injection that the check is shown to catch. A release check also runs the estimators,
   preprocessing, the tokenizer, `Sequential` and the optimizers as standalone native programs with no Python present.
