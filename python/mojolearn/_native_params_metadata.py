@@ -83,7 +83,7 @@ def connect_classes(context, package):
                 if kind == 'signature':
                     if initializer is not object.__init__ and issubclass(cls, _mode.NumericModeMixin) and 'numeric_mode' not in names:
                         names += ('numeric_mode',)
-                    names = tuple(sorted(names))
+                    names = tuple(sorted(names))  # glue: fixed import-time constructor-name order, never a product-time reduction
             if any(type(name) is not str for name in names):  # glue: native schema field identities
                 raise TypeError('parameter names must be exact strings')
             protected = ('__init__', '_get_param_names', 'get_params', '__getattribute__', '__getattr__',
