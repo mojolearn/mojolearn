@@ -1340,6 +1340,27 @@ class Release:
             self.say(f"  ledger: could not record {key} ({type(exc).__name__}: {exc})")
             return None
 
+    def waived(self, verdict):
+        """Apply the owner's explicit waiver (--owner-waiver): blocked rows whose requirement
+        id starts with a waived prefix are reported WAIVED and logged in the release state;
+        everything else still blocks. Andrew 2026-10-25: 0.8.57 ships on identity plus the
+        light installed gate; runtime-per-vendor, multi-GPU, coverage and adapter rows are owed."""
+        ready, reasons = verdict
+        path = getattr(self.args, "owner_waiver", None)
+        if ready or not path:
+            return verdict
+        waiver = json.loads(Path(path).read_text())
+        prefixes = tuple(waiver["prefixes"])
+        kept = [r for r in reasons if not r.split(":", 1)[0].startswith(prefixes)]
+        waived = [r.split(":", 1)[0] for r in reasons if r.split(":", 1)[0].startswith(prefixes)]
+        for name in waived:
+            self.say("   WAIVED " + name + " (" + waiver["approved_by"] + ": " + waiver["reason"] + ")")
+        if not self.dry:
+            self.state.setdefault("owner_waivers", []).append(dict(
+                file=str(path), sha256=sha256(Path(path)), approved_by=waiver["approved_by"],
+                reason=waiver["reason"], waived=sorted(waived), at=now()))
+        return not kept, kept
+
     def readiness(self):
         """One persistent readiness ledger across freezes of this version."""
         return release_requirements.RequirementsLedger(self.base / "requirements.json")
@@ -2554,7 +2575,7 @@ class Release:
                 raise StepFailed('publication requires both candidate gates: '+ '; '.join(
                     vendor+': '+verdict[1] for vendor, verdict in blocked if not verdict[0]))
             self.readiness_status(write=True)
-            ready, reasons = self.readiness().gate(stage="pre")
+            ready, reasons = self.waived(self.readiness().gate(stage="pre"))
             if not ready:
                 raise StepFailed("release requirements ledger blocks publication: " + "; ".join(reasons))
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
@@ -2952,7 +2973,7 @@ class Release:
                              + ". Rerun `release` to run the gate (tools/gate_smoke_box.py on the held lq box).")
         if not self.dry:
             self.readiness_status(write=True)
-            ready, reasons = self.readiness().gate()
+            ready, reasons = self.waived(self.readiness().gate())
             if not ready:
                 raise StepFailed("release record requires the pre- and post-publication ledger checks: "
                                  + "; ".join(reasons))
@@ -3389,6 +3410,9 @@ def main(argv=None):
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
     ap.add_argument("--rerun-reason", help="specific invalidation/failure reason required with --redo")
+    ap.add_argument("--owner-waiver", metavar="JSON",
+                    help="owner-approved waiver: {prefixes, reason, approved_by}; matching blocked ledger rows are "
+                         "reported WAIVED and logged in the release state, every other row still blocks")
     ap.add_argument("--requirements-configuration", metavar="JSON",
                     help="explicit qualification inputs (CPU target, full-workload recipes); retained in the release ledger")
     ap.add_argument("--refreeze", action="store_true",
