@@ -493,10 +493,24 @@ def _pkg_dir():
 
 
 def _has_binaries(d):
+    """Binaries directly in `d` (the `fast` tier, or a legacy flat set) or in
+    one of its tier directories (`identical`: `tier_dir`). An identical-only
+    release ships no file at the architecture level (0.8.56, 2026-10-25: the
+    packed plugin read as having no architecture sets), so the tier level
+    counts too."""
     try:
-        return any(n.endswith(".so") for n in os.listdir(d))
+        names = os.listdir(d)
     except OSError:
         return False
+    if any(n.endswith(".so") for n in names):
+        return True
+    for tier in _MODE_CODE:
+        try:
+            if any(n.endswith(".so") for n in os.listdir(os.path.join(d, tier))):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _probe_box():
