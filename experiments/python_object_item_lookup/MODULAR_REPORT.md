@@ -1,6 +1,9 @@
 # PythonObject instance-field lookup terminates the process
 
-Prepared locally for Modular; this report has not been submitted.
+Submitted to Modular on 2026-10-25:
+https://github.com/modular/modular/issues/7399
+The issue includes both complete reproduction files, all eight outcomes,
+environment details, the suspected cause and Codex Daybreak interruptions.
 
 ## Reproduced behavior
 
