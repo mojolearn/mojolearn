@@ -194,9 +194,14 @@ def test_nonfinite_inputs_still_refuse(method):
     model, _ = fixture('ExtraTreesRegressor')
     x = X.copy()
     x[0, 0] = np.nan
-    with pytest.raises(ValueError):
+    # The retained direct-kernel helper exposes Mojo's generic Exception;
+    # the public native owner translates this validation failure to ValueError.
+    # Assert both real boundaries, rather than inventing the old helper's type.
+    with pytest.raises(Exception, match='valid finite trees and input') as legacy:
         legacy_auxiliary(model, x, leaves=True)
-    clean(getattr(model, method), x, expected_error=ValueError)
+    assert type(legacy.value) is Exception
+    error = clean(getattr(model, method), x, expected_error=ValueError)
+    assert 'valid finite trees and input' in str(error)
 
 
 def test_private_combined_request_still_returns_all_three_outputs():

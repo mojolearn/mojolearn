@@ -60,9 +60,6 @@ def test_declared_setter_preserves_identity_fitted_state_and_unrelated_fields(fa
     model = make_model(family, name)
     # Use a scalar parameter for the broad family matrix; estimator and native
     # score-function replacements have dedicated ownership probes below.
-    key = next(key for key in type(model)._parameters
-               if type(object.__getattribute__(model, key)) in (type(None), str, int, float, bool))
-    old = object.__getattribute__(model, key)
     fitted = array.array('f', [3.0, 4.0])
     user = object()
     model.__dict__.update(example_fitted_=fitted, user_metadata=user, _mojolearn_fitted=True)
@@ -70,6 +67,15 @@ def test_declared_setter_preserves_identity_fitted_state_and_unrelated_fields(fa
     operation = model.set_params
     assert clean(operation) is model
     assert all(model.__dict__[key] is value for key, value in before.items())
+    if not type(model)._parameters:
+        # LabelEncoder declares no constructor parameters. Its setter contract
+        # is an empty no-op plus rejection of every supplied parameter.
+        clean(operation, unknown=1, expected_error=ValueError)
+        assert model.__dict__ == before
+        return
+    key = next(key for key in type(model)._parameters
+               if type(object.__getattribute__(model, key)) in (type(None), str, int, float, bool))
+    old = object.__getattribute__(model, key)
     value = array.array('f', [1.0, 2.0])
     assert clean(operation, **{key: value}) is model
     assert object.__getattribute__(model, key) is value
