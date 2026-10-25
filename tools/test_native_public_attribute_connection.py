@@ -100,6 +100,64 @@ class PublicAttributeConnection(unittest.TestCase):
         self.assertNotIn(package.Fake, context['plans'])
         self.assertIn('unconnected property', context['pending'][package.Fake])
 
+    def test_only_registered_archive_finalizers_are_connected(self):
+        import ctypes
+        from types import MethodType
+        factory = ctypes.pythonapi.PyInstanceMethod_New
+        factory.argtypes = [ctypes.py_object]
+        factory.restype = ctypes.py_object
+        package, mode, ns, context, modules, original = self.fixture()
+        context['descriptor'] = factory(MethodType(len, {}))
+        context['archive_finalizer_entry'] = len
+        archive = dict(host_archive_lifetime_layouts={})
+        finalizer = factory(MethodType(len, archive))
+        archive['host_archive_finalizer_descriptor'] = finalizer
+        owner = ModuleType(package.__name__ + '._native_archive_bridge')
+        owner._CONTEXT = {'host_archive_context': archive}
+        modules[owner.__name__] = owner
+        def cls(name, member, base=mode.ParamsMixin):
+            result = type(name, (base,), {'__module__': package.__name__ + '.models', '__del__': member})
+            setattr(package, name, result)
+            return result
+        registered = cls('Registered', finalizer)
+        fields_descriptor = next(vars(base)['__dict__'] for base in registered.__mro__ if '__dict__' in vars(base))
+        archive['host_archive_lifetime_layouts'][registered] = (None, fields_descriptor)
+        inherited = cls('Inherited', finalizer, registered)
+        unregistered = cls('Unregistered', finalizer)
+        other_descriptor = cls('OtherDescriptor', factory(MethodType(len, archive)))
+        calls = []
+        class ForeignDescriptor:
+            def __get__(self, instance, owner=None):
+                calls.append('hook')
+                raise AssertionError('foreign descriptor executed')
+        foreign = cls('Foreign', ForeignDescriptor())
+        with patch.dict(sys.modules, modules):
+            ns['connect_classes'](package)
+        for value in (registered, inherited):
+            self.assertIn(value, context['plans'])
+            self.assertIs(context['plans'][value]['bindings']['__del__'][0], finalizer)
+        for value in (unregistered, other_descriptor, foreign):
+            self.assertEqual(context['pending'][value], 'unconnected descriptor: __del__')
+            self.assertIs(vars(value)['__getattribute__'], original)
+        self.assertEqual(calls, [])
+
+    def test_archive_finalizer_context_and_entry_must_match(self):
+        import ctypes
+        from types import MethodType
+        factory = ctypes.pythonapi.PyInstanceMethod_New
+        factory.argtypes = [ctypes.py_object]
+        factory.restype = ctypes.py_object
+        package, mode, ns, context, modules, _ = self.fixture()
+        context['descriptor'] = factory(MethodType(len, {}))
+        context['archive_finalizer_entry'] = len
+        cls = type('Registered', (mode.ParamsMixin,), {'__module__': package.__name__ + '.models'})
+        archive = {'host_archive_lifetime_layouts': {cls: ()}}
+        for bound in (MethodType(id, archive), MethodType(len, {})):
+            with self.subTest(bound=bound.__func__.__name__):
+                descriptor = factory(bound)
+                archive['host_archive_finalizer_descriptor'] = descriptor
+                self.assertIsNone(ns['_archive_finalizer_binding'](cls, descriptor, context, [archive]))
+
     def test_registration_indent_and_snapshot_order(self):
         registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
         for line in registration.splitlines():
@@ -117,6 +175,8 @@ class PublicAttributeConnection(unittest.TestCase):
             self.assertNotIn(forbidden, source)
         for required in ('"PyEval_GetFrame"', '"PyFrame_GetCode"', '"PyFrame_GetBack"', '_classical_descriptor_get', '_array_view'):
             self.assertIn(required, source)
+        self.assertIn('"PyMethod_New"', source)
+        self.assertNotIn('member.__get__', source)
 
 
 if __name__ == '__main__':
