@@ -230,7 +230,7 @@ devices and configurations.
 
 ## Runtime rule
 
-No Python compute in the runtime, ever. The Python package is only the API surface (argument checks, routing, calls into compiled Mojo); every computed value comes from Mojo, on the GPU for GPU paths.
+mojolearn's numerical kernels are implemented in Mojo, with GPU execution on GPU paths. The Python package provides the public API and PyPI distribution.
 
 ## Benchmark boards
 
