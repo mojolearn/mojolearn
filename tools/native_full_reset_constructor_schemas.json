@@ -122,6 +122,77 @@
           "line": 1000,
           "ast_sha256": "9bc92fdc7e42b08255c993c18b76d3ae1cd1f83313dda36a604cac8e4df94133"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "AdaBoostClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "_AdaBoostBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_AdaBoostBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -245,6 +316,77 @@
           "line": 1000,
           "ast_sha256": "9bc92fdc7e42b08255c993c18b76d3ae1cd1f83313dda36a604cac8e4df94133"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "AdaBoostRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "_AdaBoostBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_AdaBoostBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -314,6 +456,60 @@
           "name": "__init__",
           "line": 1338,
           "ast_sha256": "30c391d6d45b8ca73770869904db4bae21b97f5f159fe7798b11f34fe70ebc85"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "AdditiveChi2Sampler",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -462,6 +658,60 @@
           "name": "__init__",
           "line": 885,
           "ast_sha256": "112deee495a06ed9e3f3985504caab3087f792093f0143d985795650bc30a180"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "AffinityPropagation",
+          "bases": [
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -623,6 +873,42 @@
           "name": "__init__",
           "line": 220,
           "ast_sha256": "2f9acee47213277366e704bbb56b05d2ae07bcb941a11d947015df19501516cd"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._hierarchy_impl",
+          "name": "AgglomerativeClustering",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -825,6 +1111,77 @@
           "line": 673,
           "ast_sha256": "fcd4960fab66750876beb54e02b6f24b0f4e6d7167706af8ac08cacc557c1aac"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "BaggingClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "_BaggingBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_BaggingBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -1025,6 +1382,77 @@
           "name": "__init__",
           "line": 673,
           "ast_sha256": "fcd4960fab66750876beb54e02b6f24b0f4e6d7167706af8ac08cacc557c1aac"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "BaggingRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "_BaggingBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_BaggingBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -1291,6 +1719,60 @@
           "line": 1077,
           "ast_sha256": "48f9d0e577e38b43c2b641fe17819721e19246e151381c30b9630a7c11188e6d"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "BayesianGaussianMixture",
+          "bases": [
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -1465,6 +1947,68 @@
           "line": 467,
           "ast_sha256": "77e3178258a1c3151261b049ea5954b4f24c969da0e7a6464c2fcc0907228ade"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "BisectingKMeans",
+          "bases": [
+            "_CentersMixin",
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_CentersMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -1613,6 +2157,67 @@
           "line": 701,
           "ast_sha256": "95f2b790b79c723e0c71a348c0fbe25dc91ef1dedbdde69a903d9c41928b9efd"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "CagraIndex",
+          "bases": [
+            "_AnnResident",
+            "_AnnSaved",
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnResident",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnSaved",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -1722,6 +2327,85 @@
           "line": 2689,
           "ast_sha256": "2ccf6923810f6fb37f83da8a9b3984b2d1888252be83be5d1831a0dc2aad6055"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "CalibratedClassifierCV",
+          "bases": [
+            "_MetaClassifierScore",
+            "ClassifierScoreMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaClassifierScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -1778,6 +2462,51 @@
           "name": "__init__",
           "line": 22,
           "ast_sha256": "d6f0ab957d53f3e48b56411b50bcae0993bf22a68e649dd5529415f0bc456203"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_croston",
+          "name": "CrostonClassic",
+          "bases": [
+            "_Croston"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_croston",
+          "name": "_Croston",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -1836,6 +2565,51 @@
           "line": 22,
           "ast_sha256": "d6f0ab957d53f3e48b56411b50bcae0993bf22a68e649dd5529415f0bc456203"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_croston",
+          "name": "CrostonOptimized",
+          "bases": [
+            "_Croston"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_croston",
+          "name": "_Croston",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -1892,6 +2666,51 @@
           "name": "__init__",
           "line": 22,
           "ast_sha256": "d6f0ab957d53f3e48b56411b50bcae0993bf22a68e649dd5529415f0bc456203"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_croston",
+          "name": "CrostonSBA",
+          "bases": [
+            "_Croston"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_croston",
+          "name": "_Croston",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -2027,6 +2846,51 @@
           "name": "__init__",
           "line": 232,
           "ast_sha256": "cce164a853d973728a4f820886f6503de02e3d2636fddf77b601f1224fbe63cc"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.density",
+          "name": "DBSCAN",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -2214,6 +3078,42 @@
           "name": "__init__",
           "line": 219,
           "ast_sha256": "3ef39e53f311acad3045743573e2447b579708812196e6018e4fe2e0cec591ce"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._solver_impl",
+          "name": "ElasticNet",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -2415,6 +3315,68 @@
           "line": 58,
           "ast_sha256": "0e3c8e295fd4b31238657d3231c98f439a54dc178b0cf02485cd495c6c652bf5"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "GRUClassifier",
+          "bases": [
+            "_RecurrentClassifier"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "_RecurrentBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentBase",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -2614,6 +3576,68 @@
           "name": "__init__",
           "line": 58,
           "ast_sha256": "0e3c8e295fd4b31238657d3231c98f439a54dc178b0cf02485cd495c6c652bf5"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "GRURegressor",
+          "bases": [
+            "_RecurrentRegressor"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "_RecurrentBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentBase",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -2815,6 +3839,51 @@
           "line": 135,
           "ast_sha256": "0dbce6a74e8a102ba7290e7f584a8ed14f6902c8d4ef7608393e5f1141426705"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.mixture",
+          "name": "GaussianMixture",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -2976,6 +4045,51 @@
           "line": 261,
           "ast_sha256": "9875244d7e089e8b9638aa97c529eca28817d9751048b93920fe56a814a4154b"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._gpc_impl",
+          "name": "GaussianProcessClassifier",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -3123,6 +4237,51 @@
           "name": "__init__",
           "line": 661,
           "ast_sha256": "c4e1d288bcd84a11b7f51c9d96eaa6eced2ef073dc1f8e2d3da7f240fe60dbdd"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._gp_impl",
+          "name": "GaussianProcessRegressor",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -3285,6 +4444,51 @@
           "line": 169,
           "ast_sha256": "fabd6072dd7da571e638572a9f38a4e5b6c90c07bfd50352406f4f64f0158fa8"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.hdbscan",
+          "name": "HDBSCAN",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -3404,6 +4608,51 @@
           "name": "__init__",
           "line": 194,
           "ast_sha256": "269d7c9787e442a3e12d8801c8c5da77cb62673452d6c43384c86961e88fd871"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._ivf_impl",
+          "name": "IVFIndex",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -3551,6 +4800,67 @@
           "line": 310,
           "ast_sha256": "104fbf7701df9f59f574dcdcab6b0b6ef35c2f39eeb047580a39c6f62fed6d69"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "IVFPQIndex",
+          "bases": [
+            "_AnnResident",
+            "_AnnSaved",
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnResident",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnSaved",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -3657,6 +4967,67 @@
           "name": "__init__",
           "line": 1113,
           "ast_sha256": "3eb7eb21f8d264bf6c3203ee042516eb698e3ac5b60d0734f4cf9a78ddaf4b4e"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "IVFRaBitQIndex",
+          "bases": [
+            "_AnnResident",
+            "_AnnSaved",
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnResident",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnSaved",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -3777,6 +5148,67 @@
           "name": "__init__",
           "line": 932,
           "ast_sha256": "ecd644dd1ec621f24672772fce28010d6615e9a565f2059aca7f4106c383501e"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "IVFSQIndex",
+          "bases": [
+            "_AnnResident",
+            "_AnnSaved",
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnResident",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "_AnnSaved",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -3965,6 +5397,51 @@
           "line": 153,
           "ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._iforest_impl",
+          "name": "IsolationForest",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -4060,6 +5537,59 @@
           "name": "__init__",
           "line": 2423,
           "ast_sha256": "acc1e428b8b64492df2d6e367972e87eb9f1fb0caf09693256d013221ddacfa7"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_linear",
+          "name": "IsotonicRegression",
+          "bases": [
+            "RegressorScoreMixin",
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -4222,6 +5752,51 @@
           "line": 188,
           "ast_sha256": "f6f11d742ce207073cae739dc1b3cb9cdc7b9beb06f0aed2546dd4f7b1072659"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.cluster",
+          "name": "KMeans",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -4356,6 +5931,60 @@
           "name": "__init__",
           "line": 1871,
           "ast_sha256": "6b0f5da3ec3f40f05e2e6c9f23bfa3bac35561782a5127b3784ccfdb5e4b0b45"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "KNNImputer",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -4515,6 +6144,68 @@
           "line": 512,
           "ast_sha256": "deb7fba28d9f3d82bfee152fbc3a29eba4ccf9afea2932c4d32f7012fc423ec6"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.neighbors",
+          "name": "KNeighborsClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "NearestNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.neighbors",
+          "name": "NearestNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -4672,6 +6363,68 @@
           "name": "__init__",
           "line": 512,
           "ast_sha256": "deb7fba28d9f3d82bfee152fbc3a29eba4ccf9afea2932c4d32f7012fc423ec6"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.neighbors",
+          "name": "KNeighborsRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "NearestNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.neighbors",
+          "name": "NearestNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -4833,6 +6586,51 @@
           "name": "__init__",
           "line": 482,
           "ast_sha256": "fb00cca0500105d8fc8246af73c0bfa9e3b022974ce9c3c3bb2831395b075ba6"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.density",
+          "name": "KernelDensity",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -5086,6 +6884,60 @@
           "line": 1042,
           "ast_sha256": "ff7ab73b14e78c96900912369e22b006aaa97ebf1ef62132c6d267522fd0cfdb"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "KernelPCA",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -5194,6 +7046,68 @@
           "name": "__init__",
           "line": 207,
           "ast_sha256": "bdd0383a87092ddb641446b43188ea59be377000c3083d70fe8ddb62784675ae"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.kernel_methods",
+          "name": "KernelRidge",
+          "bases": [
+            "RegressorScoreMixin",
+            "_KernelMethodBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.kernel_methods",
+          "name": "_KernelMethodBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -5395,6 +7309,68 @@
           "line": 58,
           "ast_sha256": "0e3c8e295fd4b31238657d3231c98f439a54dc178b0cf02485cd495c6c652bf5"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "LSTMClassifier",
+          "bases": [
+            "_RecurrentClassifier"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "_RecurrentBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentBase",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -5595,6 +7571,68 @@
           "line": 58,
           "ast_sha256": "0e3c8e295fd4b31238657d3231c98f439a54dc178b0cf02485cd495c6c652bf5"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "LSTMRegressor",
+          "bases": [
+            "_RecurrentRegressor"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "_RecurrentBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentBase",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -5716,6 +7754,69 @@
           "name": "__init__",
           "line": 1703,
           "ast_sha256": "99fcbf6b105d0e34e2d8c2242489fce87ada1d569fc05855c84832f38f4d6a4d"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "LabelPropagation",
+          "bases": [
+            "_LabelPropagationBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_LabelPropagationBase",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -5851,6 +7952,69 @@
           "name": "__init__",
           "line": 1775,
           "ast_sha256": "f3d0d0d900644366b0939c54c91225bcce7d5f1f0609dd71c139e79ebeb78f0b"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "LabelSpreading",
+          "bases": [
+            "_LabelPropagationBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_LabelPropagationBase",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -6043,6 +8207,51 @@
           "name": "__init__",
           "line": 219,
           "ast_sha256": "3ef39e53f311acad3045743573e2447b579708812196e6018e4fe2e0cec591ce"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._solver_impl",
+          "name": "Lasso",
+          "bases": [
+            "ElasticNet"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._solver_impl",
+          "name": "ElasticNet",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -6238,6 +8447,60 @@
           "line": 55,
           "ast_sha256": "ea110b1dcaaa7818b6ea19f80829c332b0213c52017363c81f7a105b6f8c567a"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.svm",
+          "name": "LinearSVC",
+          "bases": [
+            "_LinearSVMBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.svm",
+          "name": "_LinearSVMBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -6419,6 +8682,60 @@
           "line": 55,
           "ast_sha256": "ea110b1dcaaa7818b6ea19f80829c332b0213c52017363c81f7a105b6f8c567a"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.svm",
+          "name": "LinearSVR",
+          "bases": [
+            "_LinearSVMBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.svm",
+          "name": "_LinearSVMBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -6580,6 +8897,60 @@
           "line": 455,
           "ast_sha256": "c287fedcbbe22996b5cdff1a819ee47251ef45765ab3a77ee750503bc2e4021c"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "LocalOutlierFactor",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -6675,6 +9046,60 @@
           "name": "__init__",
           "line": 2189,
           "ast_sha256": "8bc6dc8aee6b97daffbf5625c0d575123f32a294c015a4de859fd9bc257c76de"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "Louvain",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -7019,6 +9444,59 @@
           "line": 37,
           "ast_sha256": "8e73ef6bf861a13b947eecd8cea34e2b026ad56e8e9eb6d9956805cb7ecad7a6"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_mlp",
+          "name": "MLPClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "_BaseMLP"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_mlp",
+          "name": "_BaseMLP",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -7362,6 +9840,59 @@
           "line": 37,
           "ast_sha256": "8e73ef6bf861a13b947eecd8cea34e2b026ad56e8e9eb6d9956805cb7ecad7a6"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_mlp",
+          "name": "MLPRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "_BaseMLP"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_mlp",
+          "name": "_BaseMLP",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -7496,6 +10027,60 @@
           "name": "__init__",
           "line": 596,
           "ast_sha256": "d6ac983998863c4f4a54a8065069b460d81e5572bc67604416f3af088bdb9163"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "MeanShift",
+          "bases": [
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -7697,6 +10282,68 @@
           "line": 325,
           "ast_sha256": "2f0203e3b261744c0d14df1eb5a5bfde27eff905d07823c69b72ae37be4daa6e"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "MiniBatchKMeans",
+          "bases": [
+            "_CentersMixin",
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_CentersMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -7766,6 +10413,69 @@
           "line": 2443,
           "ast_sha256": "25c9af1ae2df63c850ebbdec45d973fc94da45cc142f054a14fc4ab956919d0e"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "MultiOutputClassifier",
+          "bases": [
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -7834,6 +10544,85 @@
           "name": "__init__",
           "line": 2369,
           "ast_sha256": "25c9af1ae2df63c850ebbdec45d973fc94da45cc142f054a14fc4ab956919d0e"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "MultiOutputRegressor",
+          "bases": [
+            "_MetaRegressorScore",
+            "RegressorScoreMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaRegressorScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -7917,6 +10706,60 @@
           "name": "__init__",
           "line": 637,
           "ast_sha256": "ec77f03365764e6eb71489dac55c72e00958cd3a47a28fb699b4ab3ee044ff77"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "NearestCentroid",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -8037,6 +10880,51 @@
           "name": "__init__",
           "line": 512,
           "ast_sha256": "deb7fba28d9f3d82bfee152fbc3a29eba4ccf9afea2932c4d32f7012fc423ec6"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.neighbors",
+          "name": "NearestNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -8159,6 +11047,60 @@
           "name": "__init__",
           "line": 398,
           "ast_sha256": "b7fa84079dffc238b05a7ce1aa7d6b5720c194ac738aad69fa1db9352b775ee5"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.kernel_methods",
+          "name": "Nystroem",
+          "bases": [
+            "_KernelMethodBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.kernel_methods",
+          "name": "_KernelMethodBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -8386,6 +11328,60 @@
           "line": 752,
           "ast_sha256": "cc63bb38fbbcba13da18f40486e3b83c4a9100490025ad265a2bd71478c99001"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "OPTICS",
+          "bases": [
+            "_XCluster"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_cluster",
+          "name": "_XCluster",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -8560,6 +11556,60 @@
           "line": 848,
           "ast_sha256": "4f40594fc16e9f6532159f720110c1fa011479c5c1d0d1d1419a4ee7939a1147"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "OneClassSVM",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -8641,6 +11691,85 @@
           "name": "__init__",
           "line": 2563,
           "ast_sha256": "885504ac12df6673ea643c291f36a4639092e90b0db2e30893c9f749de45ecac"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "OneVsRestClassifier",
+          "bases": [
+            "_MetaClassifierScore",
+            "ClassifierScoreMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaClassifierScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -8793,7 +11922,7 @@
         "random_state": "None",
         "numeric_mode": "None"
       },
-      "numeric_mode_injection": true,
+      "numeric_mode_injection": false,
       "module": "mojolearn.decomposition",
       "declared_class": "PCA",
       "source_functions": [
@@ -8802,6 +11931,54 @@
           "name": "__init__",
           "line": 202,
           "ast_sha256": "14037949c9160681c8aac0de4186758eae782d9479a52ae7c4ebedeb01ce127f"
+        }
+      ],
+      "audit_correction": "PCA declares _mojolearn_native_public=True and takes numeric_mode explicitly; no NumericModeMixin constructor wrapper is installed.",
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.decomposition",
+          "name": "PCA",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": [
+            "_mojolearn_native_public = True"
+          ]
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -8938,6 +12115,60 @@
           "line": 2049,
           "ast_sha256": "b2170b712917727dcdc31f544e48b1146244c7907ee00b8feb962a189bf9b5f7"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "PageRank",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -9047,6 +12278,60 @@
           "line": 1222,
           "ast_sha256": "614ed70aa6a58cecd37e82b0bd4f133b9e20d801efc9edb94d432ddfdb292edd"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "PolynomialCountSketch",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -9129,6 +12414,60 @@
           "name": "__init__",
           "line": 547,
           "ast_sha256": "93e6c0090ab4bd7b6f3ffca4009ab04a3ffca3dd61ea7e75637b8281b67e1ace"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.kernel_methods",
+          "name": "RBFSampler",
+          "bases": [
+            "_KernelMethodBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn.kernel_methods",
+          "name": "_KernelMethodBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -9330,6 +12669,68 @@
           "line": 58,
           "ast_sha256": "0e3c8e295fd4b31238657d3231c98f439a54dc178b0cf02485cd495c6c652bf5"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "RNNClassifier",
+          "bases": [
+            "_RecurrentClassifier"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentClassifier",
+          "bases": [
+            "ClassifierScoreMixin",
+            "_RecurrentBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentBase",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -9530,6 +12931,68 @@
           "line": 58,
           "ast_sha256": "0e3c8e295fd4b31238657d3231c98f439a54dc178b0cf02485cd495c6c652bf5"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "RNNRegressor",
+          "bases": [
+            "_RecurrentRegressor"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentRegressor",
+          "bases": [
+            "RegressorScoreMixin",
+            "_RecurrentBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._x_sequence_rnn",
+          "name": "_RecurrentBase",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -9658,6 +13121,51 @@
           "name": "__init__",
           "line": 1330,
           "ast_sha256": "c7d346304a0e572b678f1cbade0ebc335d869072b826cb1110d72dba89b10054"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.neighbors",
+          "name": "RadiusNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -9858,6 +13366,60 @@
           "name": "__init__",
           "line": 1647,
           "ast_sha256": "78976d6f1db4b6ce2166528fd253fc4c15010e3c7958c7f0baa07a80060ab76e"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "RandomTreesEmbedding",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -10071,6 +13633,51 @@
           "name": "__init__",
           "line": 1704,
           "ast_sha256": "009a796a89fa6a1adc6cb2bf269fc51ae88955de2cbae679a7b3a653b6b9018d"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_linear",
+          "name": "SGDOneClassSVM",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -10324,6 +13931,51 @@
           "line": 555,
           "ast_sha256": "6cf582a168e1986c6bccfab87ced120cfdc09a85ab39ea59e3c98797d326a9c9"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._svm_impl",
+          "name": "SVC",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -10445,6 +14097,68 @@
           "name": "__init__",
           "line": 2303,
           "ast_sha256": "fc81888ad06f36cfb99198c8db9e412af2bed2a55fbeec428a3aca6e358fa5eb"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "SVGP",
+          "bases": [
+            "RegressorScoreMixin",
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -10646,6 +14360,51 @@
           "line": 1283,
           "ast_sha256": "a7ddbf41826e362ed58b9571b53ca024d4d1e2deadec8516684f8fe26c23f66e"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._svm_impl",
+          "name": "SVR",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -10728,6 +14487,60 @@
           "name": "__init__",
           "line": 1464,
           "ast_sha256": "07c3990b8b8266d4754ea6534e73978bcd3141dca34830246beea9405e31cba4"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "SkewedChi2Sampler",
+          "bases": [
+            "_XNeighbors"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "_XNeighbors",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -10968,6 +14781,42 @@
           "line": 258,
           "ast_sha256": "3c633a8813ae38f728d6c683a5eea30019bce480da5fd4591e9cd0a49b9433e9"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._spectral_impl",
+          "name": "SpectralClustering",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -11115,6 +14964,42 @@
           "name": "__init__",
           "line": 608,
           "ast_sha256": "074a03298147b919ffddc1a8c30b5e1857373fe7dcbaa1263b86d6d49808fc7b"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._spectral_impl",
+          "name": "SpectralEmbedding",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -11264,6 +15149,102 @@
           "line": 2091,
           "ast_sha256": "3d3fd6325357211a49fe076c1cb19a3f2e35370167713537f0bc1b64c841e9a9"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "StackingClassifier",
+          "bases": [
+            "_MetaClassifierScore",
+            "ClassifierScoreMixin",
+            "_StackingBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaClassifierScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_StackingBase",
+          "bases": [
+            "_FitTransformMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_FitTransformMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -11409,6 +15390,102 @@
           "name": "__init__",
           "line": 2091,
           "ast_sha256": "3d3fd6325357211a49fe076c1cb19a3f2e35370167713537f0bc1b64c841e9a9"
+        }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "StackingRegressor",
+          "bases": [
+            "_MetaRegressorScore",
+            "RegressorScoreMixin",
+            "_StackingBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaRegressorScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_StackingBase",
+          "bases": [
+            "_FitTransformMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_FitTransformMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
         }
       ]
     },
@@ -11558,6 +15635,51 @@
           "line": 552,
           "ast_sha256": "10cfce3ec59f9b5b58e47d61be5d08dfc1b5ac52640a27dd99d013ccb2e31645"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_ann",
+          "name": "TSNE",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -11693,6 +15815,51 @@
           "line": 420,
           "ast_sha256": "8d049cc7a7be6b2d4836067a70496d7d0c2ba60d7816d30b4d8a0387f8f91302"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn.decomposition",
+          "name": "TruncatedSVD",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -11814,6 +15981,93 @@
           "line": 1923,
           "ast_sha256": "e4050ae3145e535832dd5a0a1eb1cfcac2dd85306bb18f5192d08fadb8921e5f"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "VotingClassifier",
+          "bases": [
+            "_MetaClassifierScore",
+            "ClassifierScoreMixin",
+            "_FitTransformMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaClassifierScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ClassifierScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_FitTransformMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     },
     {
@@ -11909,7 +16163,100 @@
           "line": 2034,
           "ast_sha256": "63fccb4cfd75b93db87864e7c64a1dc7576ecb3cad728b444b8ed365ff81ff40"
         }
+      ],
+      "constructor_ancestry": [
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "VotingRegressor",
+          "bases": [
+            "_MetaRegressorScore",
+            "RegressorScoreMixin",
+            "_FitTransformMixin",
+            "_TreesWrapperBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_MetaRegressorScore",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "RegressorScoreMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_FitTransformMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesWrapperBase",
+          "bases": [
+            "_TreesEnsembleBase"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._expansion_trees",
+          "name": "_TreesEnsembleBase",
+          "bases": [
+            "NumericModeMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "NumericModeMixin",
+          "bases": [
+            "ParamsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "ParamsMixin",
+          "bases": [
+            "SklearnTagsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "SklearnTagsMixin",
+          "bases": [
+            "PublicOutputsMixin"
+          ],
+          "decorators": [],
+          "native_public_declarations": []
+        },
+        {
+          "module": "mojolearn._mode",
+          "name": "PublicOutputsMixin",
+          "bases": [],
+          "decorators": [],
+          "native_public_declarations": []
+        }
       ]
     }
-  ]
+  ],
+  "mode_wrapper_source": {
+    "path": "python/mojolearn/_mode.py",
+    "class": "NumericModeMixin",
+    "method": "__init_subclass__",
+    "ast_sha256": "8143a5b42ccdfb91c04b0a006cbd9487b338883549973e072d3af1f2ad17df46"
+  }
 }

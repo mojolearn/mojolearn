@@ -53,6 +53,10 @@ def _release_owned(values: PythonObject, retained: PythonObject, context: Python
         if kept:
             continue
         var cls = py_type(item)
+        if cls is b.object:
+            # Exact object() has no instance dictionary, slots, weakrefs or
+            # destructor callback. Parameter sentinels remain valid owners.
+            continue
         if cls is b.type and py_contains(context["plans"], item):
             # Import-time schema keys independently retain these exact classes.
             continue
@@ -163,8 +167,9 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject) 
     if native is not None:
         var fields = _fields(model)
         _constructor_layout(model, fields, native["layout"])
-        # This exact import-connected entry is already a supported public
-        # native setter. The Python method and constructor are never called.
+        # Forward the exact existing native ABI, never a Python public method
+        # or constructor. Export identity alone does not qualify its transitive
+        # owner release: the public nested-lifetime tests remain mandatory.
         ref cpy = Python().cpython()
         var entry = native["entry"]
         var args = Python.tuple(model, native["operation"], Python.tuple(params), native["context"])

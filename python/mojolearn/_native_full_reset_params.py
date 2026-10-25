@@ -215,6 +215,7 @@ def install():
     # glue: install only source-vetted classes before class-layout snapshots
     import inspect
     from ._mode import ParamsMixin
+    from . import _classical_host
     from ._native_public_attributes import _resolved
     for cls in _CLASSES:  # glue: exact77 source-vetted full-reset constructor contracts
         if _resolved(cls, 'set_params', _CONTEXT['missing']) is not ParamsMixin.set_params:
@@ -230,6 +231,17 @@ def install():
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
             class_name=cls.__name__)
+    # The explicit host inference subclasses have their own constructor and
+    # storage contracts. Keep their existing setter debt visible: changing a
+    # selected base must not silently replace a host setter with a refusal.
+    deferred = tuple(cls for cls in vars(_classical_host).values()  # glue: fixed built-in descendants outside this migration
+                     if type(cls) is type and cls not in _CLASSES
+                     and cls.__module__ == _classical_host.__name__
+                     and any(base in _CLASSES for base in cls.__mro__[1:])  # glue: fixed host ancestry during import
+                     and _resolved(cls, 'set_params', _CONTEXT['missing']) is ParamsMixin.set_params)
+    for cls in deferred:  # glue: preserve the original unconverted host contract before changing bases
+        cls.set_params = ParamsMixin.set_params
+    _CONTEXT['deferred_host_classes'] = deferred
     # Validate the complete set before replacing any public setter.
     for cls in _CLASSES:  # glue: one direct native-call wrapper; constructors remain unchanged
         cls.set_params = NativeFullResetParams.set_params
@@ -262,7 +274,10 @@ def connect(parameter_metadata, linear, declared, estimator_context):
         if set(metadata['names']) != set(plan['names']):
             raise TypeError('full-reset native constructor and getter schemas differ')
     native_setters = {}
-    for cls, plan in estimator_context['family_msel_estimators'].items():  # glue: existing verified built-in setter ABIs
+    # Export identity and ABI are connection metadata, not transitive runtime
+    # qualification. The nested ownership/callback tests must pass before
+    # admitting this candidate; some inherited setters still owe that repair.
+    for cls, plan in estimator_context['family_msel_estimators'].items():  # glue: existing built-in setter ABI connections
         recipe = plan['methods'].get('set_params')
         if recipe is not None and type(plan['entry']) is BuiltinFunctionType:
             if recipe[1] != (('arg', 0),):
