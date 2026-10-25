@@ -1,7 +1,7 @@
 """Prep getter bodies against the installed native metadata owner.
 
-Method binding happens before these probes. The separate source inventory
-still records inherited public attribute lookup as Python runtime debt.
+Method binding happens before these probes. test_native_prep_attributes
+separately probes the connected public attribute lookup boundary.
 """
 import array
 

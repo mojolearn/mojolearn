@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time native attribute slots for classes with connected descriptors."""
-from types import BuiltinFunctionType, ClassMethodDescriptorType, MethodType, ModuleType
+from types import BuiltinFunctionType, ClassMethodDescriptorType, FunctionType, MethodType, ModuleType
 
 _CONTEXT = None
 
@@ -44,6 +44,40 @@ def _archive_finalizer_binding(cls, member, context, archives):
     return None
 
 
+def _prep_availability(package, missing):
+    # glue: admit only the declared shallow-parameter prep family and its two
+    # built-in hasattr(transform) predicates; arbitrary available_if callbacks
+    # and descriptors in other families retain their existing source owner.
+    import sys
+    module = sys.modules.get(package.__name__ + '._expansion_prep')
+    if type(module) is not ModuleType:
+        return {}
+    declarations = vars(module)
+    base = declarations['_PrepBase']
+    getter = vars(base)['get_params']
+    checks = tuple(vars(vars(declarations[name])['fit_transform'])['check']  # glue: exact built-in predicate identities
+                   for name in ('_PrepBase', '_Classifier'))
+    return {declarations[name]: checks for name in declarations['__all__']  # glue: exact public prep class schema
+            if type(declarations[name]) is type
+            and _resolved(declarations[name], 'get_params', missing) is getter}
+
+
+def _availability_plan(member, checks, missing):
+    # glue: snapshot descriptor data without calling the availability check,
+    # its __get__, or the wrapped function. Runtime validates these identities.
+    fields = vars(member)
+    check, function = fields.get('check'), fields.get('fn')
+    if type(check) is not FunctionType or not any(check is expected for expected in checks):  # glue: built-in predicate identity only
+        raise TypeError('unconnected availability predicate')
+    if type(function) is not FunctionType:
+        raise TypeError('unconnected availability method')
+    return dict(member=member, check=check, code=check.__code__, function=function,
+                attribute_name=fields.get('attribute_name', missing),
+                mro=type.__dict__['__mro__'].__get__(type(member)),
+                hooks=tuple((name, _resolved(type(member), name, missing))  # glue: descriptor protocol identities
+                            for name in ('__get__', '__set__', '__delete__', '__getattribute__', '__getattr__')))
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
@@ -68,6 +102,7 @@ def connect_classes(package):
         _CONTEXT = context
     context = _CONTEXT
     archives = _archive_finalizers(package)
+    prep_availability = _prep_availability(package, context['missing'])
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'
@@ -99,6 +134,7 @@ def connect_classes(package):
                 for name, member in vars(base).items():  # glue: exact class namespace metadata
                     names.setdefault(name, member)
             properties = {}
+            availability = {}
             for name, member in names.items():  # glue: native property schema admission
                 finalizer = (_archive_finalizer_binding(cls, member, context, archives)
                              if name == '__del__' else None)
@@ -109,11 +145,15 @@ def connect_classes(package):
                     properties[name] = (member, kind)
                 elif finalizer is not None:
                     plan['bindings'][name] = finalizer
+                elif (cls in prep_availability and name == 'fit_transform'
+                      and type(member) is _mode.available_if):
+                    availability[name] = _availability_plan(member, prep_availability[cls], context['missing'])
                 elif type(member) is ClassMethodDescriptorType and member.__objclass__ is object:
                     plan['bindings'][name] = (member, member.__get__)
                 elif _resolved(type(member), '__get__', context['missing']) is not context['missing'] and name not in plan['bindings']:
                     raise TypeError('unconnected descriptor: ' + name)
             plan['properties'] = properties
+            plan['availability'] = availability
             eligible.append((cls, plan))
         except TypeError as error:
             context['pending'][cls] = str(error)

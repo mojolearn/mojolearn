@@ -112,6 +112,57 @@ def _bound_function(function: PythonObject, model: PythonObject) raises -> Pytho
     return PythonObject(from_owned=pointer)
 
 
+def _availability_member(cls: PythonObject, name: PythonObject, missing: PythonObject) raises -> PythonObject:
+    var ancestry = _type_mro(cls)
+    for i in range(len(ancestry)):  # driver-loop: raw descriptor protocol metadata only
+        var fields = _class_fields(ancestry[i])
+        if py_contains(fields, name):
+            return fields[name]
+    return missing
+
+
+def _available(model: PythonObject, member: PythonObject, schema: PythonObject,
+               fields: PythonObject, plan: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The only admitted prep rule is presence of transform. Never call the
+    # Python available_if descriptor, its check, or the wrapped method body.
+    var ancestry = _type_mro(py_type(member))
+    if len(ancestry) != len(schema["mro"]):
+        raise Error("TypeError: native availability descriptor ancestry changed")
+    for i in range(len(ancestry)):  # driver-loop: frozen descriptor class identities
+        if ancestry[i] is not schema["mro"][i]:
+            raise Error("TypeError: native availability descriptor ancestry changed")
+    var hooks = schema["hooks"]
+    for i in range(len(hooks)):  # driver-loop: changed Python descriptor hooks are never executed
+        if _availability_member(py_type(member), hooks[i][0], context["missing"]) is not hooks[i][1]:
+            raise Error("TypeError: native availability descriptor hooks changed")
+    var metadata = _fields(member)
+    if (py_get(metadata, "check") is not schema["check"]
+            or py_get(metadata, "fn") is not schema["function"]
+            or py_get(metadata, "attribute_name", context["missing"]) is not schema["attribute_name"]):
+        raise Error("TypeError: native availability descriptor data changed")
+    ref cpy = Python().cpython()
+    # Direct CPython function metadata access avoids the object.__getattr__
+    # audit event emitted by Python's function.__code__ getset descriptor.
+    var code = cpy.lib.get_function[PyObjectPtr]("PyFunction_GetCode")(schema["check"]._obj_ptr)
+    if not code:
+        raise cpy.unsafe_get_error()
+    if PythonObject(from_borrowed=code) is not schema["code"]:
+        raise Error("TypeError: native availability predicate code changed")
+    try:
+        _ = _lookup(model, PythonObject("transform"), fields, plan, context)
+    except error:
+        if String(error).startswith("AttributeError:"):
+            var name = schema["attribute_name"]
+            if name is context["missing"]:
+                name = schema["function"].__name__
+            if py_type(name) is not py_type(PythonObject("")):
+                raise Error("TypeError: native availability method name must be an exact string")
+            var cls_name = py_call(native_loaded_module("builtins").type.__dict__["__name__"].__get__, py_type(model))
+            raise Error("AttributeError: This '" + String(cls_name) + "' has no attribute '" + String(name) + "'")
+        raise error^
+    return _bound_function(schema["function"], model)
+
+
 def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               plan: PythonObject, context: PythonObject) raises -> PythonObject:
     if kind == "cholesky_logdet":
@@ -159,6 +210,11 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
         return fields[name]
     if not present:
         raise Error("AttributeError: native model has no attribute '" + String(name) + "'")
+    var availability = py_get(plan, "availability")
+    if availability is not None:
+        var schema = py_get(availability, name)
+        if schema is not None and member is schema["member"]:
+            return _available(model, member, schema, fields, plan, context)
     if descriptor:
         # Creating a bound method does not execute its body. Preserve ordinary
         # subclass functions and later import-time native setter connections.
