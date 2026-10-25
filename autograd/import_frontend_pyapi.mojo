@@ -8,8 +8,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.native_json import native_path
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_pandas import classical_admit_value
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from autograd.python_errors_pyapi import graph_python_error, graph_int
 from autograd.session_frontend_pyapi import ops_session_initialize_py
@@ -24,20 +22,32 @@ def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     if len(mro) != len(layout["mro"]):
         raise Error("TypeError: artifact import class ancestry changed")
-    for i in range(len(mro)):  # driver-loop: connected class ancestry
+    for i in range(len(mro)):  # driver-loop: over connected class ancestry
         if mro[i] is not layout["mro"][i]:
             raise Error("TypeError: artifact import class ancestry changed")
     var hooks = layout["hooks"]
-    for i in range(len(hooks)):  # driver-loop: fixed native storage identities
+    for i in range(len(hooks)):  # driver-loop: over fixed native storage identities
         var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
         if py_get(row, hooks[i][1]) is not hooks[i][2]:
             raise Error("TypeError: artifact import refuses changed Python storage hooks")
     var fields = py_call(layout["fields_get"], value, cls)
     var keys = py_call(b.list, fields)
-    for i in range(len(keys)):  # driver-loop: safe keys before field lookup
+    for i in range(len(keys)):  # driver-loop: over safe keys before field lookup
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: artifact state requires exact string keys")
     return fields
+
+
+def _one_of(cls: PythonObject, classes: PythonObject) raises -> Bool:
+    for i in range(len(classes)):  # driver-loop: over fixed native metadata types
+        if cls is classes[i]:
+            return True
+    return False
+
+
+def _scalar(value: PythonObject, classes: PythonObject) raises:
+    if not _one_of(py_type(value), classes):
+        raise Error("TypeError: shape metadata requires native scalar values; Python conversion hooks are unsupported")
 
 
 def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -46,10 +56,8 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
     var flat = Python.list()
     if shapes is None:
         return Python.tuple(names, flat)
-    var admission = context["admission"]
-    classical_connect_numpy(admission)
     var cls = py_type(shapes)
-    if not py_contains(admission["mapping_types"], cls) and cls is not b.list and cls is not b.tuple:
+    if not _one_of(cls, context["shape_mappings"]) and cls is not b.list and cls is not b.tuple:
         raise Error("TypeError: shapes requires a native mapping or key/value sequence; Python mapping callbacks are unsupported")
     # Do not traverse dimension objects yet: a standard torch.Size is a native
     # tuple subtype. It is read through tuple's C iterator below, after checking
@@ -57,23 +65,18 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
     var provided = shapes
     if cls is b.list or cls is b.tuple:
         provided = Python.dict()
-        for i in range(len(shapes)):  # driver-loop: native key/value shape pairs
+        for i in range(len(shapes)):  # driver-loop: over native key/value shape pairs
             var pair = shapes[i]
             if (py_type(pair) is not b.list and py_type(pair) is not b.tuple) or len(pair) != 2:
                 raise Error("TypeError: shape entries require native key/value pairs")
             var key = pair[0]
             var key_type = py_type(key)
-            classical_admit_value(key, admission)
-            if key_type is not b.str and key_type is not b.int and key_type is not b.float and key_type is not b.bool and key_type is not b.bytes and not py_contains(admission["scalar_types"], key_type):
-                raise Error("TypeError: shape names require native scalar strings")
+            _scalar(key, context["shape_names"])
             py_setitem(provided, key, pair[1])
     var keys = py_call(b.list, provided)
-    for i in range(len(keys)):  # driver-loop: named input shape metadata
+    for i in range(len(keys)):  # driver-loop: over named input shape metadata
         var key = keys[i]
-        classical_admit_value(key, admission)
-        var key_type = py_type(key)
-        if key_type is not b.str and key_type is not b.int and key_type is not b.float and key_type is not b.bool and key_type is not b.bytes and not py_contains(admission["scalar_types"], key_type):
-            raise Error("TypeError: shape names require native scalar strings")
+        _scalar(key, context["shape_names"])
         var name = py_call(b.str, key)
         var dims = provided[key]
         var dims_type = py_type(dims)
@@ -82,7 +85,7 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
             var mro = py_call(b.type.__dict__["__mro__"].__get__, dims_type)
             tuple_storage = py_contains(mro, b.tuple)
             if tuple_storage:
-                for j in range(len(mro)):  # driver-loop: effective tuple iterator identity
+                for j in range(len(mro)):  # driver-loop: over effective tuple iterator identity
                     var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[j])
                     if py_contains(fields, "__iter__"):
                         if fields["__iter__"] is not b.tuple.__dict__["__iter__"]:
@@ -91,21 +94,13 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
         if tuple_storage:
             dims = py_call(b.tuple, py_call(b.tuple.__iter__, dims))
         else:
-            classical_admit_value(dims, admission)
-            var containers = Python.tuple(b.list, b.range, b.str, b.bytes, b.bytearray,
-                b.memoryview, admission["array_type"], py_get(admission, "ndarray"),
-                py_type(py_call(b.iter, Python.list())), py_type(py_call(b.iter, Python.tuple())),
-                py_type(py_call(b.iter, py_call(b.range, 0))), py_type(py_call(b.reversed, Python.list())))
-            if not py_contains(containers, dims_type):
+            if not _one_of(dims_type, context["shape_containers"]):
                 raise Error("TypeError: dimensions require native sequence storage")
             dims = py_call(b.tuple, dims)
         py_call(names.append, name)
         py_call(flat.append, len(dims))
-        for j in range(len(dims)):  # driver-loop: native scalar axis conversion
-            classical_admit_value(dims[j], admission)
-            var axis_type = py_type(dims[j])
-            if axis_type is not b.int and axis_type is not b.float and axis_type is not b.bool and axis_type is not b.str and axis_type is not b.bytes and not py_contains(admission["scalar_types"], axis_type):
-                raise Error("TypeError: dimensions require native scalar values")
+        for j in range(len(dims)):  # driver-loop: over native scalar axis conversion
+            _scalar(dims[j], context["shape_scalars"])
             py_call(flat.append, graph_int(dims[j]))
     return Python.tuple(names, flat)
 
@@ -123,7 +118,7 @@ def _unsupported(source: PythonObject, problems: PythonObject, context: PythonOb
     var b = native_loaded_module("builtins")
     var output = Python.list()
     var all_nodes = True
-    for i in range(len(problems)):  # driver-loop: native lowerer's refusal records
+    for i in range(len(problems)):  # driver-loop: over native lowerer's refusal records
         var item = problems[i]
         py_call(output.append, Python.tuple(item[0], item[1], item[2]))
         all_nodes = all_nodes and item[1] is not None
@@ -134,7 +129,7 @@ def _unsupported(source: PythonObject, problems: PythonObject, context: PythonOb
     if len(basename) == 0:
         basename = source
     var message = String(len(problems)) + " " + noun + " of " + String(basename) + " cannot be imported:"
-    for i in range(len(output)):  # driver-loop: complete ordered refusal text
+    for i in range(len(output)):  # driver-loop: over complete ordered refusal text
         var item = output[i]
         message += "\n  " + String(item[0])
         if item[1] is not None:
@@ -237,10 +232,10 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         _status(result, name, context)
         var inputs = Python.list()
         var outputs = Python.list()
-        for i in range(len(result[2])):  # driver-loop: completed input descriptors
+        for i in range(len(result[2])):  # driver-loop: over completed input descriptors
             var item = result[2][i]
             py_call(inputs.append, Python.tuple(item[0], py_call(b.tuple, item[1]), py_get(context["dtype_names"], item[2], item[2])))
-        for i in range(len(result[3])):  # driver-loop: completed output descriptors
+        for i in range(len(result[3])):  # driver-loop: over completed output descriptors
             var item = result[3][i]
             py_call(outputs.append, Python.tuple(item[0], py_call(b.tuple, item[1]), "int32" if Int(py=item[2]) != 0 else "float32"))
         var program = native_storage_allocate(context["imported"])
