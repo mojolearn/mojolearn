@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 import release_requirements as R
+PRODUCTION_PRODUCER_ADMISSION = R.producer_admission_available
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +17,7 @@ def synthetic_producer_only(monkeypatch):
     # their own tests. All receipt/input/evidence/coverage checks remain real.
     import release_requirement_receipts as P
     monkeypatch.setattr(P, "validate_producer_receipt", lambda *args, **kwargs: [], raising=False)
+    monkeypatch.setattr(R, "producer_admission_available", lambda wanted: True)
 
 
 def manifest(revision="a", arithmetic="one", compiler="1", flags="identical"):
@@ -603,3 +605,31 @@ def test_record_producer_validation_receives_original_input_configuration(ledger
     # inputs, even when the current desired source has moved on.
     assert any(isinstance(value, dict) and value.get('inputs') == ledger.read()['runs'][0]['inputs']
                for args, kwargs in seen for value in (*args, *kwargs.values()))
+
+
+@pytest.mark.parametrize('kind', ['compile', 'runtime', 'identity', 'adapters', 'multi', 'performance', 'published'])
+def test_unsupported_producers_require_evidence_admission_before_new_execution(tmp_path, monkeypatch, kind):
+    monkeypatch.setattr(R, 'producer_admission_available', PRODUCTION_PRODUCER_ADMISSION)
+    target = manifest()
+    target['requirements']['identity']['kind'] = kind
+    ledger = R.RequirementsLedger(tmp_path / 'ledger.json')
+    ledger.sync(target)
+    row = ledger.plan()['identity']
+    assert row['status'] == 'untested' and row['action'] == 'complete-provenance'
+    assert row['producer_admission'] == 'unsupported'
+    assert 'reconcile retained evidence' in row['reasons'][-1]
+    with pytest.raises(ValueError, match='producer report adapter unavailable'):
+        ledger.begin('identity')
+    assert not ledger.read()['runs']
+
+
+def test_unsupported_producer_keeps_exact_input_change_reasons(native_ledger, tmp_path, monkeypatch):
+    ledger, _, _ = native_ledger
+    record(ledger, tmp_path, status='failed')
+    monkeypatch.setattr(R, 'producer_admission_available', PRODUCTION_PRODUCER_ADMISSION)
+    ledger.sync(native_manifest(tmp_path, 'b' * 40, 'edited', flags={'CXXFLAGS': '-new'}))
+    row = ledger.plan()['identity']
+    assert row['action'] == 'complete-provenance'
+    assert 'changed input: native_sources/core/shared.mojo' in row['reasons']
+    assert 'added input: unit/build_flags/CXXFLAGS' in row['reasons']
+    assert any('previous attempt failed' in reason for reason in row['reasons'])

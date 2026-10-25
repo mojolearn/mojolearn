@@ -55,6 +55,16 @@ def build_flags(environ=None):
         and not key.upper().endswith(secret_suffixes)}
 
 
+def producer_admission_available(wanted):
+    """Require a real report adapter before scheduling new execution.
+
+    Source and candidate producers have parsers. Other kinds first need
+    adapters and reconciliation of retained evidence; no rerun is implied.
+    Each actual receipt still undergoes its producer/coverage validation.
+    """
+    return wanted.get("kind") in ("source", "candidate")
+
+
 def source_files(root, revision):
     """Git blob identities include additions/deletions; revision is provenance only."""
     raw = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-rz", "--full-tree", revision])
@@ -406,6 +416,11 @@ class RequirementsLedger:
                                 RequirementsLedger._equivalence(doc, name, old, wanted, row, root=root, log_dir=log_dir)
             else:
                 row["reasons"] = ["no qualification evidence recorded for this requirement"]
+            if not producer_admission_available(wanted) and row["status"] != "passed":
+                if row["action"] in ("run", "repair"):
+                    row["action"] = "complete-provenance"
+                row["producer_admission"] = "unsupported"
+                row["reasons"].append("producer report adapter unavailable: reconcile retained evidence before scheduling new execution")
             rows[name] = row
         return rows
 
