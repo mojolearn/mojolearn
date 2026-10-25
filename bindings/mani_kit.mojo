@@ -17,12 +17,14 @@
 # Apple FAST precise LLE entries) are the Python kit's own tests.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem
+from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_entry, family_as_f32, family_as_f32_dense
 from core.family_cast_impl import family_all_finite_f32
+from bindings.native_loaded_module import native_loaded_module, _loaded_fields
+from bindings.spectral_umap_routes import spectral_umap_entry
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -356,10 +358,15 @@ struct MKit(Movable):
         self.ctx = ctx
         # `_raw()`: a profiler proxy's wrapped binding, else the binding
         var raw = binding
-        try:
-            raw = py_call(Python.import_module("builtins").object.__getattribute__, binding, PythonObject("_b"))
-        except:
-            raw = binding
+        if py_type(binding) is py_type(native_loaded_module("builtins")):
+            # Exact import-time entry tables have no Python proxy hooks. Read
+            # absent optional attributes without Python's module-error formatter.
+            raw = py_get(_loaded_fields(binding), PythonObject("_b"), binding)
+        else:
+            try:
+                raw = py_call(Python.import_module("builtins").object.__getattribute__, binding, PythonObject("_b"))
+            except:
+                raw = binding
         self.raw = raw
         self.res_known = False
         self.res_ok = False
@@ -369,11 +376,15 @@ struct MKit(Movable):
 
     def fn(self, name: String) raises -> PythonObject:
         """`self.b.<name>`."""
+        if py_type(self.b) is py_type(native_loaded_module("builtins")):
+            return spectral_umap_entry(self.b, name, self.ctx)
         return family_entry(self.b, name, self.ctx)
 
     def has(self, name: String) -> Bool:
         """Whether the raw binding exports `name` (any refusal: no)."""
         try:
+            if py_type(self.raw) is py_type(native_loaded_module("builtins")):
+                return py_get(_loaded_fields(self.raw), PythonObject(name)) is not None
             _ = py_call(Python.import_module("builtins").getattr, self.raw, PythonObject(name))
             return True
         except:

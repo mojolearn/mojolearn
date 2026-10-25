@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # UMAP's public methods, one native call each (python/mojolearn/_umap_impl.py:
-# `fit`, `fit_transform`, `transform`). The shell hands over the metrics
-# binding `_bind` resolved; this owner validates the parameters with
+# `fit`, `fit_transform`, `transform`). This owner selects exact retained
+# compiled entries in the requested or fitted mode; it validates parameters with
 # `_parameters` / `_extras` / `_target`'s refusals (same wording, same order),
 # builds a 'random' or 'pca' start with the decomp kit's cells exactly as
 # `_initial` did (bindings/mani_kit.mojo: the same x_decomp entries, operands
@@ -17,9 +17,11 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.pca_exact import pca_copied
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_is_str, family_type_name, family_call, family_entry, family_array,
+    FAMILY_F32P, family_repr, family_is_str, family_type_name, family_call, family_array,
     family_as_f32, family_field, family_shape_repr,
 )
+from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_entry as family_entry
+from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from core.family_cast_impl import family_all_finite_f32
 from core.mani_impl import mani_same_words
 from bindings.mani_kit import (
@@ -32,8 +34,8 @@ comptime _I64_MAX = 9223372036854775807
 
 
 def _umap_attr(model: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
-    """`getattr(model, name, default)`."""
-    return py_call(Python.import_module("builtins").getattr, model, PythonObject(name), default)
+    """Read stored fields without the Python public-output attribute hook."""
+    return family_raw_get_or(model, name, default)
 
 
 def _umap_integer(value: PythonObject, name: String, minimum: Int, maximum: Int) raises -> PythonObject:
@@ -154,6 +156,8 @@ def _umap_mode(model: PythonObject, context: PythonObject) raises -> String:
     """`(self.numeric_mode or _backend.default_mode()).strip().lower()`."""
     var b = Python.import_module("builtins")
     var want = _umap_attr(model, "numeric_mode", PythonObject(None))
+    if want is not None and py_type(want) is not b.str:
+        raise Error("numeric_mode must be fast, identical or None")
     if not Bool(py=py_call(b.bool, want)):
         want = context["backend_fields"]["_DEFAULT_MODE"]
     return String(py=py_call(py_call(want.strip).lower))
@@ -238,11 +242,10 @@ def _umap_initial(model: PythonObject, x: PythonObject, n: Int, nc: Int, seed: P
     if family_is_str(init):
         # `_Kit("identical")`, and `_host_kit()` (the default mode) for the
         # host moves and `_svd_flip_v`
-        var resolve = context["family_mani_binding"]
-        var k = MKit("identical", family_call(resolve, PythonObject("_mojolearn_x_decomp"), PythonObject("identical")),
+        var k = MKit("identical", spectral_umap_route(context, "decomp", PythonObject("identical")),
                      context)
         var hk = MKit(String(py=context["backend_fields"]["_DEFAULT_MODE"]),
-                      family_call(resolve, PythonObject("_mojolearn_x_decomp"), PythonObject(None)), context)
+                      spectral_umap_route(context, "decomp", PythonObject(None)), context)
         if String(py=init) == "random":
             var u = k.rand(n, nc, seed, 90, 0)
             var scaled = k.ew1(OP_SCALE, u, 20.0)
@@ -375,9 +378,9 @@ def _umap_target(model: PythonObject, y: PythonObject, n: Int, context: PythonOb
 def _umap_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`UMAP.fit(X, y)`; returns the embedding."""
     classical_connect_numpy(context)
-    var binding = args[0]
-    var source = args[1]
-    var y = args[2]
+    var binding = spectral_umap_route(context, "metrics", py_get(py_fields(model), "numeric_mode"))
+    var source = args[0]
+    var y = args[1]
     var config = _umap_parameters(model, context)
     var extras = _umap_extras(model, context)
     var x = family_as_f32(source, 2, "X", context)
@@ -465,20 +468,22 @@ def _umap_transform(model: PythonObject, args: PythonObject, context: PythonObje
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var op = Python.import_module("operator")
-    var binding = args[0]
-    if not Bool(py=py_call(b.hasattr, model, PythonObject("_transform_training"))):
+    if not family_raw_has(model, "_transform_training"):
         raise Error("UMAP transform requires a successful fit")
     var config = _umap_parameters(model, context)
     var extras = _umap_extras(model, context)
     var mode = _umap_mode(model, context)
-    var fitted_config = py_call(b.getattr, model, PythonObject("_transform_config"))
-    var fitted_mode = py_call(b.getattr, model, PythonObject("_transform_mode"))
+    var fitted_config = family_raw_get(model, "_transform_config")
+    var fitted_mode = family_raw_get(model, "_transform_mode")
     if (Bool(py=py_call(b.bool, py_call(op.ne, _umap_concat_tuple(config, extras), fitted_config)))
             or Bool(py=py_call(b.bool, py_call(op.ne, PythonObject(mode), fitted_mode)))):
         raise Error("UMAP parameters or numeric mode changed after fit; refit before transform")
-    var x = family_as_f32(args[1], 2, "X", context)
-    var training = py_call(b.getattr, model, PythonObject("_transform_training"))
-    var fitted_embedding = py_call(b.getattr, model, PythonObject("_transform_embedding"))
+    # The fitted route is selected only after the live-mode/refit refusal,
+    # so changing a fitted identical model to unavailable fast still says refit.
+    var binding = spectral_umap_route(context, "metrics", fitted_mode)
+    var x = family_as_f32(args[0], 2, "X", context)
+    var training = family_raw_get(model, "_transform_training")
+    var fitted_embedding = family_raw_get(model, "_transform_embedding")
     var nq = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var nt = Int(py=training.shape[0])
@@ -516,8 +521,7 @@ def _umap_transform(model: PythonObject, args: PythonObject, context: PythonObje
 
 def umap_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
-    """UMAP: fit / fit_transform args = (metrics binding, X, y); transform
-    args = (metrics binding, X)."""
+    """UMAP: fit / fit_transform args = (X, y); transform args = (X,)."""
     if operation == "family_mani_umap_fit":
         _ = _umap_fit(model, args, context)
         return model

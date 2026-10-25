@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SpectralClustering `fit`, `fit_predict` and `predict`, SpectralEmbedding
 # `fit` and `fit_transform`, and `spectral_embedding`, one native call each
-# (python/mojolearn/_spectral_impl.py). The shells hand over the metrics
-# binding (`_get_binding()`: the dense, graph and dataset entries), the
-# x_decomp binding of the default mode (the RBF affinity cells), the
-# IDENTICAL base binding (the host COO scans and the precomputed kNN
-# affinity, `_buffer._native`'s entries) and, for SpectralClustering, the
-# x_cluster binding (discretize / cluster_qr). This owner makes
+# (python/mojolearn/_spectral_impl.py). This owner selects exact compiled
+# entries retained at package connection: metrics and x_decomp in the live
+# default mode, base COO/kNN helpers in identical, and x_cluster in the model's
+# mode. Runtime operations never enter a Python binding proxy. This owner makes
 # `_validate_params`' and the fits' refusals in their order and wording and
 # calls those entries with the argument lists, in the order, the Python
 # made (the RBF affinity takes the `_Kit` route the Python took: the
@@ -14,16 +12,19 @@
 # entries, same inputs: the bits do not move.
 from std.math import isinf
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
 from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order
 from core.family_cast_impl import family_all_finite_f32
 from core.cfb_impl import cfb_f64_to_i32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call, family_entry,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call,
     family_array, family_as_f32, family_view, family_cast_view_f64, family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries, _xc_array
-from bindings.cfb_resident import cfb_optional_entry
+from bindings.spectral_umap_routes import (
+    spectral_umap_route, spectral_umap_entry as family_entry,
+    spectral_umap_optional_entry as cfb_optional_entry,
+)
 from bindings.cfb_dbscan import cfb_borrow_copy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
@@ -907,8 +908,8 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
     var k = Int(py=family_field(fields, "_n_components"))
     # `_drop_first` / `_norm_laplacian`: class attributes, or the instance's
     # (spectral_embedding sets them).
-    var drop_first = Bool(py=family_call(b.bool, py_call(b.getattr, model, PythonObject("_drop_first"))))
-    var norm_laplacian = Bool(py=family_call(b.bool, py_call(b.getattr, model, PythonObject("_norm_laplacian"))))
+    var drop_first = Bool(py=family_call(b.bool, family_raw_get(model, "_drop_first")))
+    var norm_laplacian = Bool(py=family_call(b.bool, family_raw_get(model, "_norm_laplacian")))
     # The one piece of arithmetic the reference keeps in Python
     # (spectral_embedding.pyx:294): the transform receives this number.
     var n_lanczos = k + 1 if drop_first else k
@@ -1070,33 +1071,47 @@ def _spectral_embedding(args: PythonObject, context: PythonObject) raises -> Pyt
 
 def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
-    """SpectralClustering fit args: (metrics, x_decomp, base, x_cluster, X);
-    predict args: (binding, X). SpectralEmbedding fit args: (metrics,
-    x_decomp, base, X)."""
-    if operation == "family_cfb_sc_fit":
-        _sc_fit(model, args, context)
-        return model
-    if operation == "family_cfb_sc_fit_predict":
-        _sc_fit(model, args, context)
+    """Fit/predict shells pass (X,); route selection belongs to this owner."""
+    if operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict":
+        var routed = Python.tuple(
+            spectral_umap_route(context, "metrics", PythonObject(None)),
+            spectral_umap_route(context, "decomp", PythonObject(None)),
+            spectral_umap_route(context, "base", PythonObject("identical")),
+            spectral_umap_route(context, "cluster", py_get(py_fields(model), "numeric_mode")), args[0])
+        _sc_fit(model, routed, context)
+        if operation == "family_cfb_sc_fit":
+            return model
         return py_fields(model)["labels_"]
     if operation == "family_cfb_sc_predict":
-        return _sc_predict(model, args[0], args[1], context)[0]
+        var binding = spectral_umap_route(context, "metrics", py_get(py_fields(model), "numeric_mode"))
+        return _sc_predict(model, binding, args[0], context)[0]
     if operation == "family_cfb_sc_predict_embedding":
-        return _sc_predict(model, args[0], args[1], context)
+        var binding = spectral_umap_route(context, "metrics", py_get(py_fields(model), "numeric_mode"))
+        return _sc_predict(model, binding, args[0], context)
     if operation == "family_cfb_se_validate":
         _se_validate(py_fields(model), context)
         return PythonObject(None)
     if operation == "family_cfb_se_knn_affinity":
-        return _knn_affinity(py_fields(model), args[1], False, args[0], context)
+        var base = spectral_umap_route(context, "base", PythonObject("identical"))
+        return _knn_affinity(py_fields(model), args[0], False, base, context)
     if operation == "family_cfb_coo_triples":
-        var coo = _coo_triples(args[1], String(py=args[2]), args[0], context)
+        var base = spectral_umap_route(context, "base", PythonObject("identical"))
+        var coo = _coo_triples(args[0], String(py=args[1]), base, context)
         return Python.tuple(coo.rows, coo.cols, coo.vals, PythonObject(coo.n))
-    if operation == "family_cfb_se_fit":
-        _se_fit(model, args, args[3], context)
-        return model
-    if operation == "family_cfb_se_fit_transform":
-        _se_fit(model, args, args[3], context)
+    if operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform":
+        var routed = Python.tuple(
+            spectral_umap_route(context, "metrics", PythonObject(None)),
+            spectral_umap_route(context, "decomp", PythonObject(None)),
+            spectral_umap_route(context, "base", PythonObject("identical")))
+        _se_fit(model, routed, args[0], context)
+        if operation == "family_cfb_se_fit":
+            return model
         return py_fields(model)["embedding_"]
     if operation == "family_cfb_spectral_embedding":
-        return _spectral_embedding(args, context)
+        var routed = Python.tuple(args[0],
+            spectral_umap_route(context, "metrics", PythonObject(None)),
+            spectral_umap_route(context, "decomp", PythonObject(None)),
+            spectral_umap_route(context, "base", PythonObject("identical")),
+            args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+        return _spectral_embedding(routed, context)
     raise Error("RuntimeError: unknown spectral operation " + operation)
