@@ -144,3 +144,16 @@ def test_whole_surface_sabotage_column():
                                           n_closure_kernel=3))
     assert st == "owed" and "metrics/x.mojo:score +2" in why
     assert audit_tool.sabotage_of(_row("kernel_entry", sabotage_defines=["MOJOLEARN_HOST_SABOTAGE"]))[0] == "armed"
+
+
+def test_dead_and_probe_entries_read_sabotage_na():
+    # lane coverage-sabotage-arms-20261025: the 0.8.57 owed sabotage rows, each without a live caller
+    for entry in ("adam_hyper_f64", "lr_schedule_fill", "byte_lm_launch_probe", "forest_host_gbdt_sigmoid",
+                  "gbdt_sigmoid", "gp_log64", "km_rbf_staged", "x_decomp_knn_select", "x_decomp_mcd_cov_reach",
+                  "x_neighbors_purity_flags", "sched_exp_block"):
+        st, why = audit_tool.sabotage_of(_row(entry, changed_kernel=["core/x.mojo:k"], n_changed=1))
+        assert st == "n/a" and why, entry
+    # a reaching arm still wins over the table (the armed device gbdt_sigmoid twin)
+    st, _ = audit_tool.sabotage_of(_row("gbdt_sigmoid", changed_kernel=["core/x.mojo:k"], n_changed=1,
+                                        sabotage_patches=["gbdt/checks/sabotage/coverage_binary_prediction.patch"]))
+    assert st == "armed"
