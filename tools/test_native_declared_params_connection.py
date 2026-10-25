@@ -122,8 +122,8 @@ def test_native_owner_preserves_order_and_uses_existing_storage_and_lifetime_gua
     source = (ROOT / 'bindings/declared_params_native.mojo').read_text()
     operation = source.split('def _assign(', 1)[1].split('def declared_params_c(', 1)[0]
     loop = operation.split('for i in range(len(pairs)):', 1)[1]
-    assert loop.index('native parameter names must be exact strings') < loop.index('names.__contains__')
-    assert loop.index('names.__contains__') < loop.index('_release(previous, context)')
+    assert loop.index('native parameter names must be exact strings') < loop.index('py_contains(names, name)')
+    assert loop.index('py_contains(names, name)') < loop.index('_release(previous, context)')
     assert loop.index('_release(previous, context)') < loop.index('py_setitem(fields, name, value)')
     assert 'native_instance_item(fields, name)' in loop
     assert '"ValueError: mojolearn: invalid parameter "' in loop

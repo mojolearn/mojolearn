@@ -93,7 +93,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     if operation == "trees_public_forest_set_params":
         return _set_params(model, args[0], context)
     if operation == "trees_public_forest_apply" or operation == "trees_public_forest_predict_with_leaves" or operation == "trees_public_forest_staged_predict" or operation == "trees_public_forest_auxiliary":
-        var method = operation[len("trees_public_forest_"):]
+        var method = String(operation[byte=String("trees_public_forest_").byte_length():])
         # Retained e087692fd public baseline: these auxiliary APIs return
         # Array/tuple-of-Arrays even externally with NumPy loaded. Preserve
         # that boundary and Float32 means, including regressors.

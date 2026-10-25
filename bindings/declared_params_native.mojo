@@ -99,7 +99,7 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject) 
         var name = pairs[i][0]
         if py_type(name) is not b.str:
             raise Error("TypeError: native parameter names must be exact strings")
-        if not Bool(py=py_call(names.__contains__, name)):
+        if not py_contains(names, name):
             if String(plan["style"]) == "prep":
                 raise Error("ValueError: mojolearn: invalid parameter " + String(py_call(b.repr, name)) + " for " + String(cls.__name__))
             raise Error("ValueError: Invalid " + String(cls.__name__) + " parameter: " + String(name))
