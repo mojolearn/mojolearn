@@ -23,6 +23,7 @@ from bindings.cluster_fit_a_native import cluster_fit_a_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
 from bindings.mixture_native import mixture_operation
 from bindings.linalg_ops_native import linalg_ops_operation
+from bindings.parallel_public_native import parallel_public_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter_all, plan_exit_all
 from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits
 
@@ -68,6 +69,8 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
 
 def family_operation(model: PythonObject, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    if operation == "family_par_public":
+        return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
         return _family_par_run(model, args, context)
     if operation.startswith("family_kmeans_"):
