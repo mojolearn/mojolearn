@@ -52,7 +52,9 @@ def _release_admit(value: PythonObject, context: PythonObject, seen: PythonObjec
     while cursor < len(todo):  # driver-loop: iterative ownership walk, including deeply nested/cyclic native data
         var item = todo[cursor]
         cursor += 1
-        var identity = py_call(b.id, item)
+        # builtin id() emits an audit event and can run a Python audit hook.
+        # Native pointer identity provides the same cycle key without it.
+        var identity = PythonObject(Int(item._obj_ptr))
         if py_contains(seen, identity):
             continue
         # Exact builtin identity integers never invoke an object's hash/eq.
