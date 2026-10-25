@@ -41,9 +41,13 @@ def connect_classes(package):
     for name, module in tuple(sys.modules.items()):  # glue: loaded product declarations only; no optional module imports
         if (name == package.__name__ or name.startswith(package.__name__ + '.')) and not name.startswith(package.__name__ + '.tests'):
             if type(module) is ModuleType:
+                # Raw declared metadata: native types can lack __module__, and
+                # descriptors or non-string metadata must not run protocols.
                 candidates.update(value for value in vars(module).values()  # glue: exact product class identities
-                                  if type(value) is type and value.__module__.startswith(package.__name__ + '.')
-                                  and not value.__module__.startswith(package.__name__ + '.tests'))
+                                  if type(value) is type
+                                  and type(owner := vars(value).get('__module__')) is str
+                                  and owner.startswith(package.__name__ + '.')
+                                  and not owner.startswith(package.__name__ + '.tests'))
     # Compute eligibility before installing any slot: installing a base must
     # never silently convert a subclass with an unported property or callback.
     eligible = []
