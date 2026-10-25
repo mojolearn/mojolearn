@@ -38,12 +38,19 @@ def ledger(tmp_path):
 
 
 def record(ledger, tmp_path, name="identity", status="passed", reason=None):
-    run = ledger.begin(name, reason)
+    invalidation = [invalidation_evidence(tmp_path, reason)] if reason and ledger.plan()[name]['action'] == 'reuse' else []
+    run = ledger.begin(name, reason, invalidation_paths=invalidation)
     path = tmp_path / (run + ".log")
     path.write_text(status)
     ledger.record(run, status, [path], "whole operation checked", 0 if status == "passed" else 1,
                   2, 2 if status == "passed" else 1, failed=int(status == "failed"),
                   receipt=receipt_for(ledger, run, path, expected=2) if status == "passed" else None)
+    return path
+
+
+def invalidation_evidence(tmp_path, reason):
+    path = tmp_path / ('invalidation-' + R.digest(reason)[:12] + '.log')
+    path.write_text(reason)
     return path
 
 
@@ -66,6 +73,9 @@ def test_new_commit_only_reuses_pass_and_preserves_tested_revision(ledger, tmp_p
     assert row["status"] == "passed" and row["action"] == "reuse"
     assert row["tested_revision"] == "a" and row["source_revision"] == "new"
     assert ledger.begin("identity") is None
+    with pytest.raises(ValueError, match='new commit or free-text reason alone'):
+        ledger.begin("identity", reason="a new commit exists")
+    assert ledger.begin("identity", reason="   ") is None
     assert len(ledger.read()["runs"]) == 1
 
 
@@ -244,9 +254,37 @@ def test_unfinished_run_prevents_duplicate_launches(ledger):
 
 def test_explicit_rerun_holds_readiness_until_its_result(ledger, tmp_path):
     record(ledger, tmp_path)
-    ledger.begin("identity", reason="new negative control may expose invalid retained result")
+    reason = "new negative control may expose invalid retained result"
+    proof = invalidation_evidence(tmp_path, reason)
+    ledger.begin("identity", reason=reason, invalidation_paths=[proof])
     assert ledger.plan()["identity"]["status"] == "untested"
     assert ledger.plan()["identity"]["action"] == "resume"
+
+
+def test_rerun_retains_invalidation_bytes_and_refuses_changed_diagnostic(ledger, tmp_path):
+    record(ledger, tmp_path)
+    reason = 'negative control exposed a missed routing failure'
+    proof = invalidation_evidence(tmp_path, reason)
+    run = ledger.begin('identity', reason=reason, invalidation_paths=[proof])
+    diagnostic = ledger.read()['runs'][-1]['invalidation_evidence']
+    assert diagnostic == R.evidence_files([proof])
+    report = tmp_path / 'rerun-failure.log'
+    report.write_text('failure reproduced')
+    proof.write_text('replaced original diagnostic')
+    with pytest.raises(ValueError, match='invalidation evidence requires restoration'):
+        ledger.record(run, 'failed', [report], 'routing failure reproduced', 1, 1, 0, failed=1)
+    proof.write_text(reason)
+    attempt = ledger.record(run, 'failed', [report], 'routing failure reproduced', 1, 1, 0, failed=1)
+    assert diagnostic[0] in attempt['evidence']
+
+
+def test_explicit_reason_does_not_hide_computed_invalidation(ledger, tmp_path):
+    record(ledger, tmp_path)
+    ledger.sync(manifest(arithmetic='changed'))
+    ledger.begin('identity', reason='verify corrected arithmetic')
+    reasons = ledger.read()['runs'][-1]['reasons']
+    assert 'changed input: arithmetic/identity.mojo' in reasons
+    assert 'verify corrected arithmetic' in reasons
 
 
 def native_manifest(tmp_path, revision='a' * 40, source='old', flags=None):
@@ -450,7 +488,8 @@ def test_later_equivalent_failure_or_pending_cannot_hide_behind_exact_old_pass(n
     led, _, _ = native_ledger
     record(led, tmp_path)
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
-    run = led.begin('identity', reason='new negative control is required')
+    reason = 'new negative control is required'
+    run = led.begin('identity', reason=reason, invalidation_paths=[invalidation_evidence(tmp_path, reason)])
     led.sync(native_manifest(tmp_path))
     assert led.plan()['identity']['action'] == 'resume'
     assert led.plan()['identity']['active_revision'] == 'b' * 40

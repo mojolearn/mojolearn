@@ -41,6 +41,10 @@ or corrupt retained evidence first requires restoration from its archive.
 
 Before launching work, producers call `begin --requirement <id>` on the ledger.
 It returns reuse for an unchanged pass and refuses duplicate unfinished runs.
+An exceptional rerun of unchanged qualified inputs requires both `--reason`
+and retained diagnostic bytes through `--invalidation-evidence`; a new commit
+or a free-text request alone cannot force that rerun. The run retains the
+diagnostic hashes and all computed input-change reasons.
 Completed work is recorded with `record --run-id <id>`, retained evidence,
 exit status, coverage counts and `--result-report <typed-receipt.json>`.
 `tools/release_requirement_receipts.py` defines the receipt contract: exact
