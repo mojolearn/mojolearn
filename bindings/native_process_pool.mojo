@@ -67,7 +67,11 @@ def process_initialize(executable: String, environ: PythonObject, vendor: String
     transport_initialize()
 
 
-def _process_environment(devices: PythonObject, group: PythonObject, overrides: PythonObject = PythonObject(None)) raises -> List[String]:
+def _process_environment(devices: PythonObject, group: PythonObject) raises -> List[String]:
+    return _process_environment(devices, group, PythonObject(None))
+
+
+def _process_environment(devices: PythonObject, group: PythonObject, overrides: PythonObject) raises -> List[String]:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var env = bi.dict()

@@ -2669,7 +2669,12 @@ def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: Pyt
 
 
 def host_archive_build(path: PythonObject, context: PythonObject,
-                       requested_class: PythonObject = PythonObject(None), classical_only: Bool = False) raises -> PythonObject:
+                       classical_only: Bool = False) raises -> PythonObject:
+    return host_archive_build(path, context, PythonObject(None), classical_only)
+
+
+def host_archive_build(path: PythonObject, context: PythonObject,
+                       requested_class: PythonObject, classical_only: Bool = False) raises -> PythonObject:
     # Read the archive once and select its native schema from the fixed
     # import-time registry. No class constructor or load method is invoked.
     var arrays = classical_archive_read(path, context)
