@@ -26,6 +26,7 @@ from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._bufcheck import memcopy
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
+from ._native_params_setter import NativeParamsSetter
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
            "HuberRegressor",
@@ -72,7 +73,7 @@ def _coef_block(coef, intercept):
 _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
 
 
-class _LinearClassifierMixin:
+class _LinearClassifierMixin(NativeParamsSetter):
     _estimator_type = "classifier"
 
     def decision_function(self, X):
@@ -136,7 +137,7 @@ class _LinearClassifierMixin:
         return _XL_CALL(self, "classifier_score", (X, y), _XL_CONTEXT)
 
 
-class _LinearRegressorMixin:
+class _LinearRegressorMixin(NativeParamsSetter):
     _estimator_type = "regressor"
     _link = LINK_IDENTITY
 
