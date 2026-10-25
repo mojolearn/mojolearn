@@ -109,6 +109,16 @@ for directory, dirs, names in os.walk(root):
 files.sort()
 (out / 'source-inventory.json').write_text(json.dumps(files, indent=2) + '\n')
 PYPROVENANCE
+    if [[ "$ACTION" = build ]]; then
+        case "${MOJOLEARN_TARGET_COLUMN:-}" in
+            nvidia) compile_vendor=cuda ;;
+            amd) compile_vendor=hip ;;
+            *) echo 'Release compile provenance requires an explicit NVIDIA/AMD target column' >&2; exit 2 ;;
+        esac
+        "$PY" tools/release_compile_evidence.py capture --root "$ROOT" \
+            --output "$DEST/compile-inputs.json" --source "$commit" \
+            --vendor "$compile_vendor" --arch "${MOJOLEARN_GPU_ARCHS:?explicit compile architecture}"
+    fi
     status=0
     bash packaging/linux/build_sets.sh "$DEST" || status=$?
     "$PY" - "$ROOT" "$DEST" "$status" "$ACTION" <<'PYBUILT'
@@ -199,6 +209,11 @@ record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit
               merged_indexes=merged_indexes, binding_layout=binding_layout, release_modes=built_modes,
               adapters=adapters,
               complete=(status == 0 and action == 'build' and len(outputs) == full_count and not layout_errors))
+capture = out / 'compile-inputs.json'
+if capture.is_file():
+    record['compile_inputs_sha256'] = hashlib.sha256(capture.read_bytes()).hexdigest()
+record['set_manifests'] = {member_of(path): hashlib.sha256(path.read_bytes()).hexdigest()
+                         for path in sorted(sets.glob('*/*/manifest.json'))}
 if layout_errors:
     record['layout_errors'] = layout_errors
 # THE BOX'S BUILD SIZING (tools/build_sizing.py via release061_remote_build.sh):

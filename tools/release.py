@@ -807,6 +807,9 @@ def launch_detached(ctx, legs):
         if leg.done(ctx.commit):
             ctx.say(f"  {leg.name}: already done")
             continue
+        compile_requirements = None
+        if type(leg) is Leg and callable(getattr(ctx, "begin_compile_requirements", None)):
+            compile_requirements = ctx.begin_compile_requirements(leg)
         leg.workdir.mkdir(parents=True, exist_ok=True)
         stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         for p in (leg.log, leg.exit_file, leg.pid_file, leg.provenance_file):
@@ -819,6 +822,8 @@ def launch_detached(ctx, legs):
         prov = leg.provenance
         if prov is None and type(leg) is Leg and callable(getattr(ctx, "leg_provenance", None)):
             prov = ctx.leg_provenance(leg)
+        if compile_requirements is not None:
+            prov = dict(prov or {}, compile_requirements=compile_requirements)
         if prov is not None:
             write_json(leg.provenance_file, dict(prov, command=[str(c) for c in leg.command], launched_at=now()))
         wrapped = (f"{' '.join(shlex.quote(c) for c in leg.command)} > {shlex.quote(str(leg.log))} 2>&1; "
@@ -1405,6 +1410,157 @@ class Release:
         ledger.record(run_id, "passed", [report, provenance_path],
                       "candidate producer passed all required coverage IDs", 0, receipt=receipt, **counts)
 
+    def begin_compile_requirements(self, leg):
+        """Persist exact inputs before a fresh release leg starts, never on reuse."""
+        import release_compile_evidence as compile_evidence
+        source_tool = file_at(self.commit, "tools/release_compile_evidence.py") or ""
+        if compile_evidence.CAPTURE_SCHEMA not in source_tool:
+            raise StepFailed("frozen Linux build producer lacks before-build provenance capture; "
+                             "reconcile retained evidence before launching another build")
+        ledger = self.readiness()
+        ledger.sync(self.readiness_manifest())
+        requirements = ledger.read()["requirements"]
+        selected = {name: wanted for name, wanted in requirements.items()
+                    if compile_evidence.belongs_to_leg(wanted, leg.vendor, leg.arch)}
+        if not selected:
+            raise StepFailed("no supported declared compile requirements for " + leg.name + "; no build launched")
+        if getattr(leg, "compile_provider_retry", False):
+            # An explicitly recognized provisioning refusal did not reach the
+            # compiler. Continue that same begun attempt on the next provider;
+            # never use this path for an ordinary compile failure or rerun.
+            if any((leg.release_build / "build" / name).exists()
+                   for name in ("compile-inputs.json", "build-provenance.json")):
+                self.record_compile_failure(leg)
+                raise StepFailed("provider retry reached build preparation/execution; reconcile its original outcome")
+            prior = (read_json(leg.provenance_file) or {}).get("compile_requirements", {})
+            document = ledger.read()
+            completed = {row["run_id"] for row in document["attempts"]}
+            active = {row["id"]: row for row in document["runs"] if row["id"] not in completed}
+            active_selected = {row["requirement"] for row in active.values() if row["requirement"] in selected}
+            if (prior.get("schema") != compile_evidence.LAUNCH_SCHEMA or not prior.get("runs")
+                    or prior.get("selected") != sorted(selected)
+                    or set(prior["runs"]) != active_selected):
+                raise StepFailed("provider retry lacks the original compile launch; reconcile before relaunch")
+            for name, saved in prior.get("runs", {}).items():
+                run = active.get(saved.get("run_id"))
+                if (name not in selected or run is None or run["requirement"] != name
+                        or run["fingerprint"] != selected[name]["fingerprint"]
+                        or run["source_revision"] != selected[name]["source_revision"]
+                        or saved.get("fingerprint") != run["fingerprint"]
+                        or saved.get("source_revision") != run["source_revision"]):
+                    raise StepFailed("provider retry differs from the active begun compile inputs")
+            return prior
+        runs = {}
+        try:
+            begun = ledger.begin_many(selected)
+        except ValueError as error:
+            raise StepFailed("compile requirements refused a new build: " + str(error)) from error
+        for name, run_id in begun.items():
+            wanted = selected[name]
+            # Normal begin reuses an unchanged pass and refuses active work or
+            # missing provenance. No free-text reason forces a repeat here.
+            if run_id is not None:
+                runs[name] = dict(run_id=run_id, source_revision=wanted["source_revision"],
+                                  fingerprint=wanted["fingerprint"])
+        if not runs:
+            raise StepFailed("all compile inputs already have retained passes; restore/reconcile their artifacts "
+                             "instead of launching another build")
+        return dict(schema=compile_evidence.LAUNCH_SCHEMA, selected=sorted(selected), runs=runs)
+
+    def record_compile_requirements(self, leg):
+        """Parse the actual complete producer output for its original begun runs."""
+        import release_compile_evidence as compile_evidence
+        import release_requirement_receipts as receipts
+        provenance = read_json(leg.provenance_file) or {}
+        launch = provenance.get("compile_requirements", {})
+        if launch.get("schema") != compile_evidence.LAUNCH_SCHEMA:
+            self.say(f"  {leg.name}: compile readiness requires original launch provenance reconciliation; no rerun")
+            return
+        ledger = self.readiness()
+        document = ledger.read()
+        recorded = {attempt["run_id"] for attempt in document["attempts"]}
+        runs = {run["id"]: run for run in document["runs"]}
+        build = leg.release_build / "build"
+        set_root = build / "sets" / leg.vendor / leg.arch
+        admitted = []
+        for name, begun in launch.get("runs", {}).items():
+            run_id = begun["run_id"]
+            if run_id in recorded:
+                continue
+            run = runs[run_id]
+            output = self.rel / "compile-receipts" / run_id
+            output.mkdir(parents=True, exist_ok=True)
+            report_path = output / "compile-report.json"
+            report = dict(schema=compile_evidence.REPORT_SCHEMA, producer=compile_evidence.TOOL,
+                build_report=compile_evidence.reference(build / "build-provenance.json"),
+                capture_report=compile_evidence.reference(build / "compile-inputs.json"),
+                launch_report=compile_evidence.reference(leg.provenance_file),
+                exit_report=compile_evidence.reference(leg.exit_file),
+                set_manifest=compile_evidence.reference(set_root / "manifest.json"), set_root=str(set_root.resolve()))
+            write_json(report_path, report)
+            stamp = dict(schema=receipts.PROVENANCE_SCHEMA, requirement_id=name, kind="compile",
+                         source_revision=run["source_revision"], input_fingerprint=run["fingerprint"],
+                         report_sha256=sha256(report_path), run_id=run_id)
+            write_json(output / "producer-inputs.json", stamp)
+            try:
+                receipt = compile_evidence.producer_payload(name,
+                    dict(run["manifest"], inputs=run["inputs"]), report_path, stamp)
+            except (ValueError, OSError, KeyError, TypeError) as error:
+                raise StepFailed("retained release compilation needs provenance reconciliation; no rerun: "
+                                 + str(error)) from error
+            admitted.append(dict(run_id=run_id, status="passed", paths=[report_path, output / "producer-inputs.json"],
+                summary="complete release build; retained source, compiler, flags and artifact bytes verified",
+                exit_code=0, receipt=receipt, **receipts.coverage_summary(receipt)))
+        ledger.record_many(admitted)
+
+    def record_compile_failure(self, leg):
+        """Retain an actual failed compiler producer; never infer from provisioning."""
+        import release_compile_evidence as compile_evidence
+        provenance = read_json(leg.provenance_file) or {}
+        launch = provenance.get("compile_requirements", {})
+        proof_path = leg.release_build / "build/build-provenance.json"
+        capture_path = leg.release_build / "build/compile-inputs.json"
+        proof, capture = read_json(proof_path) or {}, read_json(capture_path) or {}
+        code, build_code = leg.exit_code(), proof.get("build_exit")
+        if (launch.get("schema") != compile_evidence.LAUNCH_SCHEMA or not launch.get("runs")
+                or proof.get("schema") != compile_evidence.BUILD_SCHEMA or proof.get("action") != "build"
+                or type(code) is not int or not 0 < code < 124
+                or type(build_code) is not int or not 0 < build_code < 124
+                or capture.get("schema") != compile_evidence.CAPTURE_SCHEMA or capture.get("phase") != "before-build"):
+            return  # No proof that a compiler/build-producer attempt completed with failure.
+        if (proof.get("compile_inputs_sha256") != sha256(capture_path)
+                or not proof.get("source_commit")
+                or proof["source_commit"] != provenance.get("source_commit")
+                or proof["source_commit"] != capture.get("source_commit")):
+            raise StepFailed("failed compile evidence differs from its original launch; reconcile provenance")
+        ledger = self.readiness()
+        document = ledger.read()
+        completed = {row["run_id"] for row in document["attempts"]}
+        runs = {row["id"]: row for row in document["runs"]}
+        identity = compile_evidence.digest([leg.name, sha256(leg.provenance_file), sha256(proof_path), code])
+        retained = self.rel / "compile-failures" / identity
+        retained.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for path in (leg.log, leg.exit_file, leg.provenance_file, proof_path, capture_path):
+            dest = retained / path.name
+            if dest.exists() and sha256(dest) != sha256(path):
+                raise StepFailed("retained compile failure bytes changed: " + str(dest))
+            if not dest.exists():
+                shutil.copy2(path, dest)
+            paths.append(dest)
+        failures = []
+        for name, begun in launch["runs"].items():
+            if begun["run_id"] in completed:
+                continue
+            run = runs.get(begun["run_id"])
+            if (run is None or run["requirement"] != name or run["fingerprint"] != begun.get("fingerprint")
+                    or run["source_revision"] != proof["source_commit"]):
+                raise StepFailed("failed compile outcome does not identify its original begun inputs")
+            failures.append(dict(run_id=run["id"], status="failed", paths=paths,
+                summary=f"release build producer exited {build_code}; leg exited {code}; no compile coverage admitted",
+                exit_code=code, expected=len(run["manifest"]["coverage"]), completed=0, failed=0, skipped=0))
+        ledger.record_many(failures)
+
     # ------------------------------------------------------------ steps
     def frozen(self):
         return bool(self.state.get("commit")) and not getattr(self.args, "refreeze", False)
@@ -1915,6 +2071,7 @@ class Release:
                     # a GPU droplet went live after the route was chosen: walk to Hot Aisle
                     self.say(f"  {l.name}: DigitalOcean refused (a GPU droplet is live); trying Hot Aisle")
                     l.command, l.env = amd_leg_command(self, "hotaisle", l.workdir)
+                    l.compile_provider_retry = True
                     l.provider, l.provider_reason = "hotaisle", "walked: DigitalOcean refused a rental"
                     self._amd_route = ("hotaisle", l.provider_reason)
                     again.append(l)
@@ -1925,6 +2082,7 @@ class Release:
                     i = l.command.index("--gpu")
                     self.say(f"  {l.name}: {l.command[i + 1]} has no stock; trying {walk[tried[l.name]]}")
                     l.command[i + 1] = walk[tried[l.name]]
+                    l.compile_provider_retry = True
                     again.append(l)
             if again:
                 launch_detached(self, again)
@@ -1937,13 +2095,19 @@ class Release:
         bad = []
         for l in legs:
             if l.exit_code() != 0 or not l.proof_ok(self.commit):
+                self.record_compile_failure(l)
                 bad.append(f"{l.name} (exit {l.exit_code()}, log {l.log})")
                 continue
             ok, why = overlay_verified(read_json(l.provenance_file), l.out_dir)
             if not ok:
                 bad.append(f"{l.name} ({why})")
+            else:
+                # Preserve independent completed compile units even if another
+                # leg fails; cross-leg packaging checks below remain separate.
+                self.record_compile_requirements(l)
         if bad:
-            raise StepFailed("build leg(s) failed: " + ", ".join(bad) + ". Rerun `release` to relaunch them.")
+            raise StepFailed("build leg(s) failed: " + ", ".join(bad)
+                             + ". Inspect retained evidence; repair or reconcile before another build.")
         mismatch = host_digest_mismatches(legs + taken)
         if mismatch:
             lines = [f"{name}: " + ", ".join(f"{leg}={d[:12]}" for leg, d in row.items())
@@ -1968,6 +2132,7 @@ class Release:
             verdict="PASS", kind="build", set=f"{leg.vendor}/{leg.arch}", source_commit=self.commit,
             tooling_commit=prov.get("tooling_commit"), provenance=prov,
             evidence=dict(release_build=str(leg.release_build), proof_sha256=proof_sha, log=str(leg.log))))
+        self.record_compile_requirements(leg)
 
     def linux_final(self):
         """The final Linux core wheel (mojolearn_core-*, beside its plugins)."""

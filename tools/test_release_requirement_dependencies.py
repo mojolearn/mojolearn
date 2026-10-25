@@ -50,7 +50,8 @@ def manifest(expanded, revision):
 
 class Dependencies(unittest.TestCase):
     def setUp(self):
-        self.config = dict(build_flags={}, release_modes=["identical"])
+        self.config = dict(build_flags={}, release_modes=["identical"],
+                           dependency_context=dict(compiler_sha256={"linux-64": "c" * 64}))
 
     def expand(self, kinds=("compile", "identity"), snap=None, config=None):
         with patch.object(d, "frozen_snapshot", return_value=snap or snapshot()):

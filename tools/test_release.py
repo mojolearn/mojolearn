@@ -249,6 +249,8 @@ class AmdRouteTests(unittest.TestCase):
         r.state["commit"] = COMMIT
         r.say = lambda msg: None
         r.leg_env = lambda: {"MOJOLEARN_SOURCE_CHECKOUT": "/frozen/source"}
+        # Route-walk fixture only; actual producer admission has its own tests.
+        r.begin_compile_requirements = lambda leg: {}
         saved = release.linux_legs
         release.linux_legs = lambda ctx: [hip]
         try:

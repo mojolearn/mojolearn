@@ -74,6 +74,10 @@ class Base(unittest.TestCase):
         r.sleep = lambda s: None
         r.leg_env = lambda: {"MOJOLEARN_SOURCE_CHECKOUT": "/frozen/source"}
         r.packer_takes_legs = lambda: True
+        # These fixtures exercise route/reuse mechanics with inert legacy
+        # proofs. Actual compile admission is tested separately, without a
+        # production exemption for these synthetic source revisions.
+        r.begin_compile_requirements = lambda leg: {}
         return r
 
 
