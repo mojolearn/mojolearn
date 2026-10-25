@@ -4,8 +4,26 @@ Andrew authorized narrow Python fallbacks on 2026-10-25 where a working native
 path cannot be completed. Each actual fallback must document its operation,
 Python work, reason and evidence inline, preserve behavior, and be explicitly
 identified in release qualification. This is not blanket qualification of the
-remaining source inventory. No new Python fallback has been introduced by the
-lookup or composition repairs described here.
+remaining source inventory. The lookup repair needs no Python fallback. The
+meta-estimator paths retain the explicit metadata exception below.
+
+## Retained Python metadata exception
+
+`array-length-metadata` permits the existing `mojolearn._array.Array.__len__`
+callback for fit/fit_transform/predict/predict_proba/transform/score on the eight
+connected Voting, Stacking, MultiOutput, OneVsRest and Calibrated meta-estimators.
+It reads dimensional metadata, including the existing zero-dimensional refusal;
+it performs no model computation. This is retained implementation work under
+Andrew's release exception after the screening interruption, not proof that
+Mojo cannot implement a length query.
+
+The callback definition documents this INLINE in `_array.py`; the exact caller
+scope and connected callback code are in `_runtime_fallbacks.py`. Modified
+callback bodies and other Python callees are not admitted by that exception.
+`audit_compatible_call` retains all Python frames and reports the named fallback.
+The strict `passed` field and `assert_native()` remain false/failing when the
+callback executes. Compatibility qualification uses `assert_compatible()` and
+is recorded separately in retained runtime-test JUnit properties.
 
 ## Reproduced Mojo issue
 

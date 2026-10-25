@@ -778,6 +778,15 @@ class Array:
         return self.reshape((-1,))
 
     def __len__(self):
+        # PYTHON COMPATIBILITY EXCEPTION (Andrew, 2026-10-25): native
+        # Voting/Stacking/MultiOutput/Calibrated meta-estimator paths still
+        # call this owned metadata method through len(Array). It only reads
+        # dimensional metadata; it does not compute model results. Retained
+        # under the owner's fallback authorization after Codex's Daybreak
+        # screening interrupted that lane. This is an incomplete native
+        # migration, not a demonstrated Mojo limitation. Verification records
+        # array-length-metadata explicitly and never calls it Python-free.
+        # See _runtime_fallbacks.py and Modular issue 7399 for the context.
         if self.ndim == 0:
             raise TypeError("len() of a 0-d Array")
         return self.shape[0]

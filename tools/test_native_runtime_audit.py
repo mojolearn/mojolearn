@@ -20,6 +20,49 @@ SPEC.loader.exec_module(AUDIT)
 
 
 class NativeRuntimeAuditTests(unittest.TestCase):
+    def test_named_python_metadata_exception_never_passes_native_assertion(self):
+        class Value:
+            def __len__(self):
+                return 3
+        def public(value):
+            return len(value)
+        approved = {Value.__len__.__code__: dict(id='test-metadata', reason='test-only control')}
+        result = AUDIT._audit_call(public, (Value(),), {}, approved)
+        self.assertFalse(result.passed)
+        with self.assertRaises(AssertionError):
+            result.assert_native()
+        self.assertEqual(result.assert_compatible(), 3)
+        report = result.report()
+        self.assertEqual(report['approved_python_fallbacks'][0]['calls'], 1)
+        self.assertEqual(len(report['python_frames']), 1)
+
+    def test_approved_metadata_callback_cannot_hide_an_extra_python_callee(self):
+        def unexpected():
+            return 3
+        class Value:
+            def __len__(self):
+                return unexpected()
+        def public(value):
+            return len(value)
+        approved = {Value.__len__.__code__: dict(id='test-metadata', reason='test-only control')}
+        result = AUDIT._audit_call(public, (Value(),), {}, approved)
+        self.assertFalse(result.compatibility_qualified)
+        with self.assertRaises(AssertionError):
+            result.assert_compatible()
+        self.assertEqual(len(result.report()['python_frames']), 2)
+
+    def test_compatibility_does_not_hide_callback_exceptions(self):
+        class Value:
+            def __len__(self):
+                raise ValueError('bad metadata')
+        def public(value):
+            return len(value)
+        approved = {Value.__len__.__code__: dict(id='test-metadata', reason='test-only control')}
+        result = AUDIT._audit_call(public, (Value(),), {}, approved)
+        self.assertFalse(result.compatibility_qualified)
+        with self.assertRaises(AssertionError):
+            result.assert_compatible()
+
     def test_audit_hook_suppression_has_an_independent_callback_control(self):
         # Hooks cannot be removed. Each setting gets its own child so the
         # control cannot contaminate other tests or alter a user's audit hooks.

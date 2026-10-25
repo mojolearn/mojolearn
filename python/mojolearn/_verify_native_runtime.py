@@ -65,10 +65,13 @@ def _native_call_origin(function):
 
 
 class NativeRuntimeAudit:
-    def __init__(self):
+    def __init__(self, approved_callbacks=None):
         self.result = None
         self.exception = None
         self.frames = Counter()
+        self.approved_callbacks = approved_callbacks or {}
+        self.approved_frames = Counter()
+        self.fallback_calls = Counter()
         self.forbidden_native = Counter()
         self.unresolved_native = Counter()
         self.wrapper_entries = 0
@@ -81,10 +84,22 @@ class NativeRuntimeAudit:
                 not self.forbidden_native and not self.unresolved_native and not self.unobserved_threads and
                 not self.wrapper_work)
 
+    @property
+    def compatibility_qualified(self):
+        return (self.exception is None and self.frames == self.approved_frames
+                and not self.forbidden_native and not self.unresolved_native
+                and not self.unobserved_threads and not self.wrapper_work)
+
     def report(self):
         return {
             "schema": "mojolearn.native-runtime-audit.v1",
             "passed": self.passed,
+            "compatibility_qualified": self.compatibility_qualified,
+            "approved_python_fallbacks": [
+                dict(record, calls=self.fallback_calls[record['id']])
+                for record in self.approved_callbacks.values()
+                if self.fallback_calls[record['id']]
+            ],
             "scope": "Profile-visible work in one whole operation; tracing is not timing.",
             "claim": "The passed field covers only profiler-visible work and wrapper-bytecode checks.",
             "observer_limitations": [
@@ -124,6 +139,16 @@ class NativeRuntimeAudit:
             ) from self.exception
         return self.result
 
+    def assert_compatible(self):
+        """Require only the explicit compatibility exceptions, retaining traces.
+
+        ``passed`` and ``assert_native`` remain strict: an approved Python
+        callback still prevents a Python-free claim.
+        """
+        if not self.compatibility_qualified:
+            return self.assert_native()
+        return self.result
+
 
 def audit_native_call(operation, *args, **kwargs):
     """Exercise a call and return its value, failure and profile-visible trace.
@@ -135,12 +160,22 @@ def audit_native_call(operation, *args, **kwargs):
     Audit hooks can also evade profiling; a passing trace is an observation,
     not standalone proof that the operation executed no Python callbacks.
     """
+    return _audit_call(operation, args, kwargs, {})
+
+
+def audit_compatible_call(operation, *args, **kwargs):
+    """Audit the public operation with its named, owner-authorized exceptions."""
+    from ._runtime_fallbacks import approved_metadata_callbacks
+    return _audit_call(operation, args, kwargs, approved_metadata_callbacks(operation))
+
+
+def _audit_call(operation, args, kwargs, approved_callbacks):
     # Drain unreachable testing-controller objects before tracing. Otherwise
     # an allocation inside a native call can close an unrelated pytest parser
     # generator and report that old finalizer as product orchestration. Keep
     # collection enabled inside the operation: its own callbacks still count.
     gc.collect()
-    audit = NativeRuntimeAudit()
+    audit = NativeRuntimeAudit(approved_callbacks)
     # A class call enters its public __init__ wrapper. Custom Python __new__
     # implementations and metaclass calls remain additional traced frames.
     function = operation.__init__ if type(operation) is type else getattr(operation, "__func__", operation)
@@ -178,8 +213,11 @@ def audit_native_call(operation, *args, **kwargs):
                     threading.get_ident() == caller_thread):
                 audit.wrapper_entries += 1
             else:
-                audit.frames[(code.co_filename, code.co_firstlineno,
-                              code.co_qualname)] += 1
+                key = (code.co_filename, code.co_firstlineno, code.co_qualname)
+                audit.frames[key] += 1
+                if code in audit.approved_callbacks:
+                    audit.approved_frames[key] += 1
+                    audit.fallback_calls[audit.approved_callbacks[code]['id']] += 1
         elif event == "c_call":
             module = _native_call_origin(arg)
             name = getattr(arg, "__qualname__", None)

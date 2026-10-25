@@ -6,6 +6,10 @@ import pytest
 
 import mojolearn as ml
 
+# These tests exercise the application-facing output contract, including when
+# pytest imports this file under the package's internal tests namespace.
+__mojolearn_user_boundary__ = True
+
 
 @pytest.mark.parametrize('owner', ['rfe', 'imputer'])
 def test_unfitted_composition_preserves_not_fitted_contract(owner):
