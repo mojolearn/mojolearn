@@ -438,23 +438,29 @@ class RequirementsLedger:
             doc.update(copy.deepcopy(manifest))
         return self._evaluate(doc)
 
-    def begin(self, requirement, reason=None):
+    def begin(self, requirement, reason=None, *, invalidation_paths=()):
         """Persist the reason before work starts; unchanged passes are reused."""
+        reason = (reason or "").strip() or None
         with self.edit() as doc:
             wanted = doc["requirements"][requirement]
             row = self._evaluate(doc)[requirement]
             if row["action"] == "resume":
                 raise ValueError("resume or record the existing run " + row["active_run"]
                                  + "; another launch would duplicate work")
-            if row["action"] == "reuse" and not reason:
+            if row["action"] == "reuse" and not reason and not invalidation_paths:
                 return None
             if row["action"] in ("restore-evidence", "complete-provenance"):
                 raise ValueError("; ".join(row["reasons"]) + "; restore provenance before rerunning")
+            if row["action"] == "reuse" and (not reason or not invalidation_paths):
+                raise ValueError("unchanged qualified inputs require retained invalidation evidence and a specific reason; "
+                                 "a new commit or free-text reason alone cannot force a rerun")
+            invalidation = evidence_files(invalidation_paths) if invalidation_paths else []
             run = dict(id=digest([requirement, stamp(), len(doc["runs"])]), requirement=requirement,
                        source_revision=wanted["source_revision"], fingerprint=wanted["fingerprint"],
                        inputs=copy.deepcopy(wanted["inputs"]), started_at=stamp(),
                        manifest={k: copy.deepcopy(value) for k, value in wanted.items() if k != "inputs"},
-                       reasons=[reason] if reason else row["reasons"])
+                       reasons=[*row["reasons"], *([reason] if reason else [])],
+                       invalidation_evidence=invalidation)
             doc["runs"].append(run)
         return run["id"]
 
@@ -475,6 +481,11 @@ class RequirementsLedger:
             run = next(r for r in doc["runs"] if r["id"] == run_id)
             if any(a["run_id"] == run_id for a in doc["attempts"]):
                 raise ValueError("run already recorded; historical results are immutable")
+            invalidation = run.get("invalidation_evidence", [])
+            errors = evidence_errors(invalidation) if invalidation else []
+            if errors:
+                raise ValueError("invalidation evidence requires restoration: " + "; ".join(errors))
+            evidence += [item for item in invalidation if item not in evidence]
             if status == "passed" or receipt is not None:
                 from release_requirement_receipts import validate_receipt, coverage_summary
                 errors = validate_receipt(run["requirement"], dict(run.get("manifest", {}), inputs=run["inputs"]), receipt,
@@ -517,6 +528,8 @@ def main(argv=None):
     ap.add_argument("--dependency-log-dir", type=Path, help="retain frozen dependency analysis logs here")
     ap.add_argument("--requirement")
     ap.add_argument("--reason")
+    ap.add_argument("--invalidation-evidence", action="append", default=[],
+                    help="retained diagnostic evidence required to rerun unchanged qualified inputs")
     ap.add_argument("--run-id")
     ap.add_argument("--result", choices=("passed", "failed"))
     ap.add_argument("--evidence", action="append", default=[])
@@ -532,7 +545,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
     ledger = RequirementsLedger(args.ledger, source_root=args.root, evidence_log_dir=args.dependency_log_dir)
     if args.command == "begin":
-        print(ledger.begin(args.requirement, args.reason) or "REUSE: no run required")
+        print(ledger.begin(args.requirement, args.reason, invalidation_paths=args.invalidation_evidence)
+              or "REUSE: no run required")
         return 0
     if args.command == "record":
         receipt = json.loads(args.result_report.read_text()) if args.result_report else None

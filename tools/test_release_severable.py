@@ -494,7 +494,8 @@ class SourceAndTooling(Base):
             self.assertIn(step, release.AFTER["finish-line"])
 
     @mock.patch("release_requirement_receipts.validate_producer_receipt", return_value=[])
-    def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self, producer_admission):
+    @mock.patch("release_requirements.producer_admission_available", return_value=True)
+    def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self, available_producer, producer_admission):
         # This controller fixture uses a synthetic requirement. Actual producer
         # schemas/admission are exercised independently by their receipt tests.
         r = self.release(commit=Y, publish="pypi")
