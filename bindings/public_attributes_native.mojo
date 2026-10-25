@@ -99,6 +99,19 @@ def _member(model: PythonObject, name: PythonObject) raises -> PythonObject:
     return Python.tuple(False, None)
 
 
+def _bound_function(function: PythonObject, model: PythonObject) raises -> PythonObject:
+    # Exact Python function binding is a native CPython operation. A function
+    # can have an instance attribute named __get__; never consult that mutable
+    # attribute or invoke it as a callback while binding a public method.
+    if py_type(function) is not native_loaded_module("types").FunctionType:
+        raise Error("TypeError: native method binding requires an exact function")
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyMethod_New")(function._obj_ptr, model._obj_ptr)
+    if not pointer:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=pointer)
+
+
 def _property(model: PythonObject, name: PythonObject, kind: String, fields: PythonObject,
               plan: PythonObject, context: PythonObject) raises -> PythonObject:
     if kind == "cholesky_logdet":
@@ -149,10 +162,9 @@ def _lookup(model: PythonObject, name: PythonObject, fields: PythonObject,
     if descriptor:
         # Creating a bound method does not execute its body. Preserve ordinary
         # subclass functions and later import-time native setter connections.
-        # Exact function.__get__ is CPython's native binding descriptor.
+        # Use CPython's method constructor, not mutable function.__get__.
         if member_type is native_loaded_module("types").FunctionType:
-            binding = Python.tuple(member, member.__get__)
-            known = True
+            return _bound_function(member, model)
         if not known:
             raise Error("TypeError: Python attribute descriptor requires a native owner")
         return _classical_descriptor_get(binding, model, cls, plan)

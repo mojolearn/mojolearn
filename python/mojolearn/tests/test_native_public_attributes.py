@@ -105,6 +105,18 @@ def test_passive_subclass_fields_and_bound_functions():
     assert bound.__self__ is model and bound.__func__ is Child.own_method
 
 
+def test_function_get_override_is_not_executed_during_binding():
+    calls = []
+    class Child(KMeans):
+        def own_method(self):
+            raise AssertionError('binding must not execute a Python method')
+    Child.own_method.__get__ = lambda *args: calls.append('callback')
+    model, _, _ = model_with_output(Child)
+    bound = clean(reader(), model, 'own_method')
+    assert bound.__self__ is model and bound.__func__ is Child.own_method
+    assert calls == []
+
+
 def test_python_property_is_refused_before_its_hook():
     calls = []
     class Child(KMeans):
