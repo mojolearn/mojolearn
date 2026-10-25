@@ -399,6 +399,215 @@ def test_endpoint_ledger_includes_lifecycle_descriptors_aliases_and_refusals():
         assert __import__('json').loads(out.read_text())["summary"]["endpoints"] == 7
 
 
+def endpoint_fixture(root, source, exports=("Estimator",)):
+    base = root / "python/mojolearn"
+    base.mkdir(parents=True)
+    (base / "__init__.py").write_text("from .est import " + ", ".join(exports) + "\n__all__ = " + repr(list(exports)) + "\n")
+    (base / "_backend.py").write_text("def binding(name): return __import__(name)\n")
+    (base / "est.py").write_text("from . import _backend\n_NATIVE = _backend.binding('_mojolearn_test').run\n" + textwrap.dedent(source))
+    return base
+
+
+def test_gate_includes_omitted_query_methods_constructors_and_properties():
+    cases = {
+        "kneighbors": "def kneighbors(self, X):\n    return [float(x) for x in X]",
+        "radius_neighbors": "def radius_neighbors(self, X):\n    return [float(x) for x in X]",
+        "search": "def search(self, X):\n    return [float(x) for x in X]",
+        "__init__": "def __init__(self, count):\n    self.count = int(count)",
+        "value:get": "@property\ndef value(self):\n    return self._value",
+    }
+    for method, body in cases.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            endpoint_fixture(root, "class Estimator:\n" + textwrap.indent(body, "    ") + "\n")
+            report = INV.endpoint_inventory(root)
+            assert any(r["method"] == method and r["runtime_status"] == "prohibited_source" for r in report["endpoints"]), report
+            assert INV.main(["--root", str(root), "--check"]) == 1
+
+
+def test_gate_allows_only_tag_metadata_not_calls_into_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base = endpoint_fixture(root, '''
+            class Estimator:
+                def __sklearn_tags__(self):
+                    tags = dict(estimator_type='regressor')
+                    return tags
+                def fit(self, X):
+                    return _NATIVE(self, X)
+        ''')
+        assert INV.main(["--root", str(root), "--check"]) == 0
+        report = INV.endpoint_inventory(root)
+        tags = next(r for r in report["endpoints"] if r["method"] == "__sklearn_tags__")
+        assert tags["static_verdict"] == "python" and tags["runtime_status"] == "allowed_tag_metadata"
+        path = base / "est.py"
+        path.write_text(path.read_text().replace("_NATIVE(self, X)", "_NATIVE(self, self.__sklearn_tags__())"))
+        assert INV.main(["--root", str(root), "--check"]) == 1
+        path.write_text("class Estimator:\n    def __sklearn_tags__(self): return self.predict([1])\n    def predict(self, X): return [x + 1 for x in X]\n")
+        tags = next(r for r in INV.endpoint_inventory(root)["endpoints"] if r["method"] == "__sklearn_tags__")
+        assert tags["runtime_status"] == "prohibited_source", tags
+
+
+def test_unresolved_exports_and_non_algorithm_product_types_cannot_disappear():
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base = endpoint_fixture(root, "class Estimator:\n    def read(self, X): return [x + 1 for x in X]\n")
+        manifest = root / "packaging/native_only/manifest.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(json.dumps({"inventory": [{"algorithm": "mojolearn.Estimator", "symbol_origin": "mojolearn.est.Estimator", "status": "not_algorithm"}]}))
+        assert INV.inventory_rows(root) == []
+        assert INV.main(["--root", str(root), "--check"]) == 1
+        (base / "__init__.py").write_text("__all__ = ['MissingFactoryProduct']\n")
+        rows = INV.endpoint_inventory(root)["endpoints"]
+        assert any(r["kind"] == "unresolved_export" for r in rows)
+        assert INV.main(["--root", str(root), "--check"]) == 1
+
+
+def test_import_time_native_function_replacement_supersedes_dead_body():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, '''
+            class Estimator:
+                def search(self, X):
+                    return [float(x) for x in X]
+            def install(cls):
+                def search(self, X):
+                    return _NATIVE(self, X)
+                cls.search = search
+            install(Estimator)
+        ''')
+        row = INV.endpoint_inventory(root)["endpoints"][0]
+        assert row["runtime_status"] == "native_boundary", row
+        assert row["definition"] != row["declared_definition"]
+        assert row["import_connections"] and INV.main(["--root", str(root), "--check"]) == 0
+
+
+def test_native_named_factory_result_is_unresolved_until_installed_slot_qualified():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, '''
+            class Estimator:
+                def search(self, X):
+                    return [float(x) for x in X]
+            def install(cls):
+                cls.search = _NATIVE('make_callable')
+            install(Estimator)
+        ''')
+        row = INV.endpoint_inventory(root)["endpoints"][0]
+        assert row["runtime_status"] == "unresolved", row
+        assert row["declared_definition"] and row["definition"] is None
+        assert "installed-slot" in row["qualification_debt"][0]
+        assert INV.main(["--root", str(root), "--check"]) == 1
+
+
+def test_class_decorator_installed_constructor_is_followed():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, '''
+            def connect(kind):
+                def decorate(cls):
+                    def initialize(self, **kwargs):
+                        return _NATIVE(self, kwargs)
+                    cls.__init__ = initialize
+                    return cls
+                return decorate
+            @connect('plain')
+            class Estimator:
+                def __init__(self, count):
+                    self.count = int(count)
+        ''')
+        row = next(r for r in INV.endpoint_inventory(root)["endpoints"] if r["method"] == "__init__")
+        assert row["runtime_status"] == "native_boundary", row
+        assert INV.main(["--root", str(root), "--check"]) == 0
+
+
+def test_returned_factory_operations_and_dynamic_decorators_stay_visible():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base = endpoint_fixture(root, '''
+            class _Result:
+                def search(self, X):
+                    return [float(x) for x in X]
+            def factory():
+                return _Result()
+        ''', exports=("factory",))
+        report = INV.endpoint_inventory(root)
+        assert any(r["returned_operation"] and r["method"] == "search" for r in report["endpoints"])
+        assert INV.check_endpoints(report)
+        (base / "__init__.py").write_text("from .est import Estimator\n__all__=['Estimator']\n")
+        (base / "est.py").write_text("from somewhere import dynamic_install\n@dynamic_install\nclass Estimator:\n    def fit(self, X): return self\n")
+        rows = INV.endpoint_inventory(root)["endpoints"]
+        assert any(r["kind"] == "unresolved_installer" for r in rows)
+        assert INV.main(["--root", str(root), "--check"]) == 1
+
+
+def test_gate_report_keeps_all_failures_while_console_is_bounded():
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, "class Estimator:\n" + "\n".join(
+            f"    def query_{n}(self, X): return [x + 1 for x in X]" for n in range(45)) + "\n")
+        report = root / "report.json"
+        assert INV.main(["--root", str(root), "--check", "--endpoints-json", str(report)]) == 1
+        data = json.loads(report.read_text())
+        assert data["gate"]["prohibited_or_unresolved"] == 45
+        assert len(data["gate"]["problems"]) == 45
+
+
+def test_native_name_and_per_call_binding_selection_are_not_native_proof():
+    for operation in ("_native_missing(self, X)", "_backend.binding('_mojolearn_test').run(self, X)"):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            endpoint_fixture(root, "class Estimator:\n    def search(self, X): return " + operation + "\n")
+            row = INV.endpoint_inventory(root)["endpoints"][0]
+            assert row["runtime_status"] != "native_boundary", row
+            assert INV.main(["--root", str(root), "--check"]) == 1
+
+
+def test_transitive_replaced_method_body_is_not_walked_as_live_python():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, '''
+            class Estimator:
+                def search(self, X): return self.query(X)
+                def query(self, X): return [float(x) for x in X]
+            Estimator.query = _NATIVE
+        ''')
+        rows = {r['method']:r for r in INV.endpoint_inventory(root)['endpoints']}
+        assert rows['query']['runtime_status'] == 'native_boundary', rows
+        assert rows['search']['runtime_status'] == 'native_boundary', rows
+
+
+def test_unresolved_custom_descriptor_is_not_silently_omitted():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        endpoint_fixture(root, '''
+            from somewhere import Descriptor
+            class Estimator:
+                value = Descriptor()
+        ''')
+        rows = INV.endpoint_inventory(root)['endpoints']
+        assert len(rows) == 1 and rows[0]['kind'] == 'unresolved_class_attribute', rows
+        assert INV.main(['--root', str(root), '--check']) == 1
+
+
+def test_class_slot_replacement_does_not_relabel_same_named_module_function():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base = endpoint_fixture(root, '''
+            from . import helpers
+            class Estimator:
+                def search(self, X): return helpers.query(X)
+                def query(self, X): return [float(x) for x in X]
+            Estimator.query = _NATIVE
+        ''')
+        (base / 'helpers.py').write_text('def query(X): return [float(x) for x in X]\n')
+        rows = {r['method']:r for r in INV.endpoint_inventory(root)['endpoints']}
+        assert rows['query']['runtime_status'] == 'native_boundary', rows
+        assert rows['search']['runtime_status'] == 'prohibited_source', rows
+
+
 if __name__ == "__main__":
     for name, test in sorted(globals().items()):
         if name.startswith("test_") and callable(test):
