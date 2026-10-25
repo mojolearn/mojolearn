@@ -343,6 +343,18 @@ def audit_tree(root, python_only=False):
                 report = ptx_baseline.audit_tree(directory, manifest["source_commit"],
                                                 manifest["mojo_version"], manifest.get("source_dirty", False))
                 errors.extend(report["errors"])
+                composed = manifest.pop("retained_composition", None)
+                if composed is not None:
+                    # tools/retained_release_composition.py re-associates an unchanged PTX
+                    # set with the release source: only source_commit may differ from the
+                    # retained original manifest, which must hash to its recorded sha256.
+                    raw = composed["original_manifest"]["utf8"]
+                    original = json.loads(raw)
+                    if hashlib.sha256(raw.encode()).hexdigest() != composed["original_manifest"]["sha256"]:
+                        errors.append("portable PTX retained original manifest differs from its sha256")
+                    if {k: v for k, v in original.items() if k != "source_commit"} != {
+                            k: v for k, v in report.items() if k != "source_commit"}:
+                        errors.append("portable PTX final bytes differ from their retained original manifest")
                 if report != manifest:
                     errors.append("portable PTX final bytes differ from their build manifest")
                 baseline_reports.append(report)
