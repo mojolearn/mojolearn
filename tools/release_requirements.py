@@ -48,8 +48,11 @@ def build_flags(environ=None):
     secret_suffixes = tuple("_" + name + suffix
         for name in ("TOKEN", "PASSWORD", "SECRET", "ACCESS_KEY", "PRIVATE_KEY")
         for suffix in ("", "_FILE", "_PATH"))
+    evidence_locations = {"MOJOLEARN_REQUIREMENTS_LEDGER", "MOJOLEARN_LEDGER_EVIDENCE_ROOT",
+                          "MOJOLEARN_LEDGER_BUNDLE"}
     return {key: value for key, value in flags.items()
-        if key != "MOJOLEARN_RUNPOD_KEY_FILE" and not key.upper().endswith(secret_suffixes)}
+        if key != "MOJOLEARN_RUNPOD_KEY_FILE" and key not in evidence_locations
+        and not key.upper().endswith(secret_suffixes)}
 
 
 def source_files(root, revision):
