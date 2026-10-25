@@ -15,18 +15,11 @@ from bindings.params_metadata_native import _read, _resolved
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 
 
-def _setter_plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+def _constructor_layout(model: PythonObject, fields: PythonObject, plan: PythonObject) raises:
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameter setters cannot invoke Python metaclass hooks")
-    var owner = py_get(context["plans"], cls)
-    if owner is None:
-        var setter = _resolved(cls, "set_params", context["missing"])
-        if setter is context["missing"]:
-            raise Error("AttributeError: parameter value has no set_params")
-        raise Error("TypeError: Python parameter callbacks are not accepted; use a connected native parameter plan")
-    var plan = owner["constructor"]
     var hooks = plan["hooks"]
     for i in range(len(hooks)):  # driver-loop: exact connected constructor/method/storage identities
         if py_get(_class_fields(hooks[i][0]), hooks[i][1]) is not hooks[i][2]:
@@ -41,6 +34,19 @@ def _setter_plan(model: PythonObject, fields: PythonObject, context: PythonObjec
     for i in range(len(protected)):  # driver-loop: instance protocols are never product callbacks
         if py_contains(fields, protected[i]):
             raise Error("TypeError: native parameter setters refuse instance protocol overrides")
+
+
+def _setter_plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var cls = py_type(model)
+    if py_type(cls) is not native_loaded_module("builtins").type:
+        raise Error("TypeError: native parameter setters cannot invoke Python metaclass hooks")
+    var owner = py_get(context["plans"], cls)
+    if owner is None:
+        var setter = _resolved(cls, "set_params", context["missing"])
+        if setter is context["missing"]:
+            raise Error("AttributeError: parameter value has no set_params")
+        raise Error("TypeError: Python parameter callbacks are not accepted; use a connected native parameter plan")
+    _constructor_layout(model, fields, owner["constructor"])
     return owner
 
 
@@ -61,6 +67,11 @@ def _release_admit(value: PythonObject, context: PythonObject, seen: PythonObjec
         # Retaining each owner also postpones decrefs until admission finishes.
         py_setitem(seen, identity, item)
         var kind = py_type(item)
+        var ordinary_class = py_type(kind) is b.type
+        if kind is b.type and py_contains(context["splitter_plans"], item):
+            # Repeated splitters store their exact connected splitter class.
+            # Its import-time plan retains it independently of the old value.
+            continue
         native_release_weakrefs(item, context["ownership"])
         var finalizer = _resolved(kind, "__del__", context["missing"])
         if finalizer is not context["missing"]:
@@ -74,11 +85,15 @@ def _release_admit(value: PythonObject, context: PythonObject, seen: PythonObjec
             for i in range(len(keys)):  # driver-loop: no user-key hashing or item protocol
                 _ = py_call(todo.append, keys[i])
                 _ = py_call(todo.append, values[i])
-        elif py_get(context["plans"], kind) is not None:
+        elif ordinary_class and py_get(context["plans"], kind) is not None:
             # The connected plan retains this class and pins its ordinary
             # storage/lifecycle hooks before following estimator ownership.
             var fields = _fields(item)
             _ = _setter_plan(item, fields, context)
+            _ = py_call(todo.append, fields)
+        elif ordinary_class and py_get(context["splitter_plans"], kind) is not None:
+            var fields = _fields(item)
+            _constructor_layout(item, fields, context["splitter_plans"][kind])
             _ = py_call(todo.append, fields)
         else:
             # Shared admission covers native arrays, NumPy dtype metadata and

@@ -63,5 +63,9 @@ def connect(context, parameter_metadata):
         if plan['init'] is not None or plan['forest'] is not None or plan.get('initial_fields'):
             raise TypeError('linear parameter setter requires its field-only native constructor plan')
         plans[cls] = dict(constructor=plan, class_name=name, fitted_fields=_FITTED_FIELDS)
+    # Existing CV configurations can be replaced without executing their
+    # constructors or lifecycle hooks. This does not add a splitter setter.
+    splitters = {cls: context['family_msel_estimators'][cls]  # glue: exact previously connected native splitter ownership plans
+                 for cls in context['family_msel_splitter_layouts']}
     _CONTEXT.update(plans=plans, parameter_metadata=parameter_metadata,
-                    ownership=ownership, ready=True)
+                    ownership=ownership, splitter_plans=splitters, ready=True)

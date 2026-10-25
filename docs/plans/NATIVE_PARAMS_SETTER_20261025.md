@@ -67,3 +67,28 @@ owners, cyclic containers, and fit/reset/refit behavior. The profiling probes
 must have zero extra Python frames, prohibited/unresolved native calls, wrapper
 work and unobserved threads; independent callback counters supplement profiling.
 No compiled runtime result or release qualification pass is claimed here.
+
+## Integrated connection review
+
+At integration `6dd569e26`, native public attribute slots install before the
+model-selection layout snapshots. The setter connector then retains those plan
+objects and the shared getter context without mutating any class; the final
+getter connection captures the installed identities afterwards. Lazy sequence
+connection installs new attribute slots before new getter plans and does not
+refresh existing snapshots. The reset marker is an ordinary private instance
+field: native attribute access leaves it unchanged, and fitted-state reads use
+raw native instance storage. Refit restores the selected owner's learned fields.
+
+Review found and repaired a lifetime-admission regression for replacing existing
+built-in CV splitters on the four covered CV estimators. Their existing native
+constructor plans now admit their storage before release, including the exact
+splitter class stored by repeated splitters. This adds no splitter setter;
+`cv__n_splits` retains its existing AttributeError when the splitter has no
+`set_params`. Incoming foreign metaclasses are also excluded from keyed plan
+lookups before their hash hooks could execute.
+
+The integrated source suite passes 22 tests and 2 subtests across setter, getter,
+attribute and mode connection checks. The pending public runtime suite now has
+40 cases, including eight splitter-replacement cases, the existing nested error
+and a metaclass-hash negative control. Full evidence is under
+`~/mojolearn-evidence/native-params-setter-integration-review-20261025/`.
