@@ -676,7 +676,7 @@ class NumericModeMixin(ParamsMixin):
         Returns
         -------
         str
-            ``'identical'`` or ``'fast'``, read from the compiled
+            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
             binary the estimator uses, not from the argument it was given.
         """
         return _MODE_METADATA(self, "numeric_mode_used", _MODE_METADATA_CONTEXT)

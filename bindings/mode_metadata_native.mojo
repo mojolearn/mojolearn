@@ -210,6 +210,8 @@ def _readback(model: PythonObject, operation: String, context: PythonObject) rai
         if String(mode_value) != selected:
             raise Error("RuntimeError: compiled binary numeric mode does not match the selected mode")
     if operation == "numeric_mode_used":
+        if mode_value is None:
+            raise Error("IndexError: legacy binary has no numeric-mode path component")
         return mode_value
     var entry = connection["vendor"]
     if entry is None:
@@ -248,6 +250,8 @@ def mode_metadata_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
             return raise_python_exception(error_without_class(error, "ModuleNotFoundError"), ExceptionType("PyExc_ModuleNotFoundError"))
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
+        if String(error).startswith("IndexError:"):
+            return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)

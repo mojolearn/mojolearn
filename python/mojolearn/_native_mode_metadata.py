@@ -70,7 +70,7 @@ def connect_classes(context, package):
                             raise TypeError('mode metadata cannot call a Python binary read-back function')
                     pieces = module.__name__.split('.')
                     connected[key] = dict(mode=mode_entry, vendor=vendor_entry,
-                                          legacy_mode=pieces[-2] if len(pieces) > 1 else '', error=None)
+                                          legacy_mode=pieces[-2] if len(pieces) > 1 else None, error=None)
                 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
                     # Retain the actual import-time refusal; native execution
                     # restores it without constructing/calling its Python class.
