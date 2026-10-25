@@ -655,4 +655,8 @@ from ._native_params_metadata import connect_classes as _connect_params_metadata
 from . import _mode as _params_metadata_owner
 import sys as _params_metadata_sys
 _connect_params_metadata_classes(_params_metadata_owner._PARAMS_METADATA_CONTEXT, _params_metadata_sys.modules[__name__])
+from ._native_declared_params import connect as _connect_declared_params
+_connect_declared_params(_params_metadata_sys.modules[__name__], model_selection._NATIVE_CONTEXT,
+                         _params_metadata_owner._PARAMS_METADATA_CONTEXT)
+del _connect_declared_params
 del _connect_params_metadata_classes, _params_metadata_owner, _params_metadata_sys
