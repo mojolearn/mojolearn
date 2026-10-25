@@ -157,13 +157,12 @@ THE STEPS
                      `mojolearn-nvidia` and `mojolearn-amd` (Linux)
   gate-nvidia        } THE RELEASE GATE, after linux-pack and before any publish: tools/release_lq_smoke.py
   gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
-                         (never the Mac, nothing rented): the 5 s smoke over the WHOLE plan, the autograd
-                         smoke, the installed-wheel framework adapter smoke (tools/adapter_gate.py: torch and
-                         max installed, every phase PASSED; skipped under MOJOLEARN_RELEASE_ADAPTERS=0), then
-                         one scored run per arm of every plan line vs its peers (opponents from
-                         the box's store when already scored); only the reports come home to
-                         <version>/<commit12>/gate-<vendor>/<artifact-id>/. Done only on verdict PASS
-                         for the candidate core/vendor/PTX hashes and frozen autograd artifacts
+                         (never the Mac, nothing rented): release-light-v1 completes eleven installed
+                         correctness records, 24 autograd entries and three adapter phases against the
+                         exact candidate wheels. A 30-minute total ceiling includes setup; timeouts fail.
+                         No opponent/performance campaign or native compilation is part of publication.
+                         Validated unchanged autograd artifact inputs reuse their original binaries.
+                         Reports come home to <version>/<commit12>/gate-<vendor>/<artifact-id>/.
   record             bench/results/release_verification/<date>_pypi_<v>/, committed; waits for both
                      gates and preserves their candidate artifact provenance
 
@@ -951,13 +950,11 @@ LQ_COLUMN_BOX = {"nvidia": os.environ.get("MOJOLEARN_RELEASE_NV_BOX", "nv"),
 HOPPER_NOT_RUN = "not run (no Hopper box held)"
 PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
 AFTER["finish-line"] = list(PUBLISH_STEPS)
-# THE RELEASE GATE (2026-10-22, Andrew: every exposed API "measured if appropriate with apples-to-apples
-# comparison against peers, and the measurements should be in the smoke test"): before ANY publication,
-# tools/gate_smoke_box.py ... all runs ON both held vendor boxes (tools/release_lq_smoke.py --gate;
-# a box job, never a Mac job, nothing rented): setup from the actual candidate wheels, the 5 s smoke over the WHOLE
-# plan, the autograd smoke, and one scored run per arm of every plan line (opponents from the box's store when
-# already scored). The record step waits for both gates to settle and refuses to record a published Linux
-# vendor whose gate did not PASS, so a release cannot skip it.
+# Owner clarification 2026-10-25: publication uses release-light-v1 against
+# the exact installed candidate wheels on held boxes, with no performance race.
+# The explicit performance-campaign-v1 profile retains historical campaigns;
+# performance evidence remains required for claims and default promotions.
+# Every publication still waits for both actual candidate gate verdicts.
 GATE_VENDORS = {"nvidia": "publish-nvidia", "amd": "publish-amd"}
 STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")):0] = [
     ("gate-" + v, "finish", ["linux-pack"], None) for v in GATE_VENDORS]
@@ -2851,7 +2848,8 @@ class Release:
     def gate_out(self, vendor):
         identity = self.candidate_gate_identity(vendor)
         stamp = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:20]
-        return self.rel / f"gate-{vendor}" / stamp
+        # A new profile must not overwrite an earlier full-campaign outcome.
+        return self.rel / f"gate-{vendor}" / (stamp + "-release-light-v1")
 
     def gate_ok(self, vendor):
         """(ok, why): the gate report that came home for this version and vendor says PASS."""
@@ -2872,19 +2870,18 @@ class Release:
         verdict, why = gate_verdict(doc)
         if verdict != "PASS" or doc.get("verdict") != "PASS":
             return False, f"verdict {verdict}: " + "; ".join(why or doc.get("verdict_reasons") or [])
-        m = doc.get("measure") or {}
-        if (not m.get('expected') or m.get('expected') != m.get('planned_whole_plan')
-                or not (m.get('pairs') or {}).get('matched')):
-            return False, 'candidate gate lacks complete measured-plan/pair evidence'
         if adapter_gate_module().enabled() and doc.get("adapters_enabled") is False:
             return False, "the gate ran without its adapter smoke, but this release ships the adapters"
-        artifacts = doc.get('autograd_artifacts') or {}
-        if artifacts.get('source_commit') != self.commit or artifacts.get('vendor') != vendor or len(artifacts.get('files', [])) != 8:
-            return False, 'candidate gate lacks the eight source-matched autograd artifacts'
-        adapters = dict(doc.get("adapters") or {}, enabled=doc.get("adapters_enabled", True))
-        return True, (f"PASS: smoke {doc.get('smoke_lines')} lines {doc.get('counts')}, "
-                      f"{adapter_gate_module().summary(adapters)}, measured "
-                      f"{m.get('expected')} lines (board {m.get('board')})")
+        from release_requirement_receipts import candidate_gate_errors
+        errors = candidate_gate_errors(doc, identity)
+        if errors:
+            return False, "; ".join(errors)
+        from release_gate_profiles import profile, LIGHT
+        if profile(doc) == LIGHT:
+            return True, (f"PASS: 11 installed correctness records, 24 autograd entries, three adapter phases; "
+                          f"elapsed {doc['budget']['elapsed_seconds']:.1f}s (no performance campaign)")
+        m = doc["measure"]
+        return True, f"PASS historical performance campaign: {m['expected']} measured lines"
 
     def run_gate(self, vendor):
         run_id = None
@@ -2909,7 +2906,8 @@ class Release:
                "--out", str(output), "--state", str(work / f"{vendor}-{output.name}.lq.json"),
                "--branch", getattr(self.args, "smoke_branch", None) or "main",
                '--candidate-source-commit', self.commit, '--gate-autograd-dir', str(artifacts),
-               "--max-job-hours", "40", "--max-wait-hours", "72"]
+               "--gate-profile", "release-light-v1",
+               "--max-job-hours", "0.55", "--max-wait-hours", "72"]
         for wheel in self.candidate_gate_wheels(vendor):
             cmd += ['--candidate-wheel', str(wheel)]
         if not adapter_gate_module().enabled():

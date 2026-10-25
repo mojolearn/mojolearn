@@ -559,6 +559,8 @@ def start(cmd, log, timeout, env=None, cwd=None):
     """(status, rc, seconds): ok / STARTED / failed for one bounded start; the process group is
     killed at the timer."""
     t0 = time.time()
+    if timeout <= 0:
+        return "failed", 124, 0.0
     with open(log, "ab", buffering=0) as stream:
         proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT, start_new_session=True,
                                 env=env, cwd=cwd)
@@ -582,7 +584,7 @@ def start(cmd, log, timeout, env=None, cwd=None):
     return ("ok" if rc == 0 else "failed"), rc, seconds
 
 
-def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None):
+def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None, deadline=None):
     selected = list(ENTRIES) if entries is None else [e for e in ENTRIES if e["name"] in entries]
     unknown = set(entries or ()) - {e["name"] for e in ENTRIES}
     if unknown or not selected:
@@ -623,7 +625,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
             if "pytest" in e:
                 row["junit"] = str(junit)
         offset = log.stat().st_size if log.exists() else 0
-        status, rc, seconds = start(cmd, log, timeout, env=env, cwd=str(ROOT))
+        limit = min(timeout, max(0, deadline - 2 - time.time())) if deadline else timeout
+        status, rc, seconds = start(cmd, log, limit, env=env, cwd=str(ROOT))
         row.update(command=cmd, status=status, rc=rc, seconds=seconds)
         if status == "ok":
             try:

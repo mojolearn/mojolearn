@@ -1,68 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Release gate: the FULL measurement-board smoke AND measurement on one box (test tooling).
+"""Bounded publication qualification, or an explicitly selected performance campaign.
 
-    python3 tools/gate_smoke_box.py <nvidia|amd> <version> <out-root> [setup|smoke|autograd|measure|all]
+Default --profile release-light-v1 installs exact wheels without opponents,
+completes eleven installed correctness records (nine checks plus location and
+pip dependency checks), 24 autograd entries and three framework adapter phases.
+A 30-minute total ceiling includes separately timed installation; timeout,
+missing artifact and incomplete test coverage fail. No compilation occurs here.
 
-setup: by default, the bench venv from the published wheels (mojolearn==<version> and the
-vendor plugin, verified against PyPI) plus every pinned opponent, exactly as
-tools/bench_board.setup_python builds it for a measurement run.
-smoke (the first stage after setup, 5 s per line): tools/gpu_gap_campaign.py --smoke --cpu-fallback over the
-vendor's WHOLE plan (no --manifest, no --smoke-suspects: every line of bench_board.plan_races, GPU opponents
-first, the CPU library where this vendor has no GPU library, and lines with no opponent at all),
---smoke-verify-data. Before 2026-10-22 the gate did not pass --cpu-fallback and selected_plan(smoke=True) kept
-only lines with a GPU-library opponent: 132 of 273 NVIDIA lanes and 198 AMD lanes never started on the gate
-box (~/mojolearn-evidence/audit-20261022/measurement_coverage.md section 4).
-autograd (2026-10-19, lane ag-bench): tools/autograd_smoke.py's entries on this vendor, 5 s "does it
-start" each: the gradient suite and the MLP identity check from the check binaries the orchestrator built
-into <out-root>/autograd-bin (`tools/autograd_smoke.py build-commands`), and the tiny fit test, the public
-examples and the Sequential and ops.Session probes (2026-10-19, lane ag-board-twins: the board's
-sequential-fit and ops-session-step lanes in miniature) through the installed wheel. A missing binary reads
-`not built`, never a pass. The importer probes (import-model-smoke; since 2026-10-20, lane ag-torch-twins,
-import-torch-smoke, a torch module exported to ONNX and imported) run there too; import-torch-smoke reads `SKIPPED` when the
-wheel's environment has no torch (set MOJOLEARN_REQUIRE_TORCH=1 in the box environment to fail instead).
-The shared registry also includes captured training/replay, dropout, validation, optimizers, rank-N,
-higher-order public checks and the Mamba/LM/small-MLP/Samba tape binaries. Python entries verify their
-actual compiled binding; incomplete pytest coverage and importer refusals are reported explicitly.
-measure (Andrew 2026-10-22: every exposed API is "measured if appropriate with apples-to-apples comparison
-against peers, and the measurements should be in the smoke test"): tools/gpu_gap_campaign.py over EVERY line
-of the same whole plan (--cpu-fallback, one manifest of all its recipe ids), IDENTICAL, ONE seed and ONE
-scored run per arm (the campaign's bench_board.py --rounds 1: one excluded warm-up, one scored sample), our
-arm from the verified PyPI wheel. Opponents are scored once and stored (CLAUDE.md): --opponent-store reuses
-every stored opponent whose key (box, device, library version, read-back parameters, settings, data) matches
-and scores only the missing ones. --keep-going: a line that fails is recorded and the next line starts (its
-evidence is uploaded first; an upload failure still stops the run). Each line's log, preflight, board.json
-and campaign row go to R2 as the line finishes (gpu_gap_campaign.retain_recipe). The board rows are written
-by tools/bench_board.py inside each line; this stage then merges them through bench_board (load_result,
-add_ratios, save_result, write_board) into <out-root>/measure-*/board/board.json + BOARD.md, which
-tools/main_board_ingest.py --gate-board BOX=PATH takes onto the rolling main board (ours' clock span kept).
-adapters (2026-10-24, AGENTS.md "Framework adapters are the same API in another format"): the Torch and MAX
-adapters the installed wheel ships, through tools/adapter_gate.py: a fresh venv (never the measurement venv: its
-torch is the opponents' pinned build) with the same mojolearn wheels, then tools/adapter_wheel_smoke.py --install
-torch,max --require torch,max --device cuda:0 (torch from PyPI on NVIDIA, from the PyTorch ROCm 7.2 index on AMD,
-as the shipped adapters.json names). Each phase compares the adapter's bytes with the plain Python API's on this
-GPU. Only PASSED passes: NO_FRAMEWORK and FAILED fail the gate. The receipt stays at <out-root>/adapter-smoke/.
---no-adapters (tools/release.py passes it under MOJOLEARN_RELEASE_ADAPTERS=0, when no adapters ship) records the
-stage as disabled.
-all: setup, smoke, autograd, adapters, measure, then the verdict. verdict: recompute the verdict of the stages
-already run (after running one stage on its own).
-
-THE VERDICT (gate_verdict; tools/release.py reads the same function): PASS only when the smoke ran with no
-FAILED line, the autograd smoke exited 0, and the measure stage finished every planned line (none pending,
-none with a controller failure, every line's evidence retained), and (Andrew 2026-10-22: measurement enforces
-apples-to-apples comparisons, our identical mode being the only difference) every opponent pair on the gate
-board reads MATCHED (bench_board.pair_report over board_pairing.params_state): an opponent whose explicit
-parameters cannot be read back or differ is refused for that cell, with the reason, the cell shows ours alone,
-and the gate FAILS listing it (gate-smoke.json measure.pairs, the verdict reasons and <board>/pair-check.json).
-A REFUSED line (an arm refused by name) and
-a STARTED smoke line (slow, not broken) do not fail the gate. An own arm that does not import or construct (its
-binding not built, an import error, a constructor that raised) is never a skip (measure-coverage, 2026-10-24): the
-smoke line reads FAILED (gpu_gap_campaign.own_arm_failures) and a measured own cell that read "SKIPPED: not built
-yet" fails the verdict (own_not_built). gate-smoke.json carries every stage's record and
-`verdict`; the exit status is 0 only on PASS (or for a single stage that ran).
-
-Nothing here rents or deletes anything; it runs ON the box (an lq CMD job, tools/release_lq_smoke.py --gate),
-never on the Mac.
+--profile performance-campaign-v1 preserves the historical whole-board startup
+smoke and full-dataset opponent campaign. Its performance evidence remains
+required for performance claims and default promotions, not publication.
+Nothing here rents, deletes, publishes or replaces historical result directories.
 """
 
 import glob
@@ -73,6 +22,8 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+
+import release_gate_profiles as P
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -87,6 +38,12 @@ STORE_DIR = os.path.join(os.path.expanduser("~"), "mojolearn-gate-store")
 
 def gate_verdict(state):
     """(verdict 'PASS' | 'FAIL' | 'INCOMPLETE', [reasons]) of a gate-smoke.json document."""
+    try:
+        selected = P.profile(state)
+    except ValueError as error:
+        return "FAIL", [str(error)]
+    if selected == P.LIGHT:
+        return light_verdict(state)
     why = []
     for stage in ("smoke", "autograd", "measure"):
         if state.get(stage + "_finished") is None:
@@ -131,6 +88,35 @@ def gate_verdict(state):
     return ("FAIL" if why else "PASS"), why
 
 
+def light_verdict(state):
+    why = []
+    for stage in P.LIGHT_STAGES:
+        if state.get(stage + "_finished") is None:
+            why.append(stage + " stage not finished")
+    identity = state.get("candidate") or {}
+    why += P.correctness_errors(state.get("correctness"), identity.get("source_commit") or (state.get("correctness") or {}).get("source_commit"),
+                                state.get("version"), state.get("vendor"))
+    if state.get("correctness_rc") != 0:
+        why.append("installed correctness process failed")
+    import autograd_smoke as AS
+    if state.get("autograd_rc") != 0 or state.get("autograd_counts") != {"ok": len(AS.ENTRIES)}:
+        why.append("autograd requires every registry entry to complete; timeout/STARTED is not a pass")
+    adapters = state.get("adapters") or {}
+    import adapter_gate as AG
+    if state.get("adapters_enabled", True) and (adapters.get("ok") is not True
+            or adapters.get("status") != "PASSED" or adapters.get("rc") != 0
+            or adapters.get("phases") != {name: 0 for name in AG.PHASES}):
+        why.append("installed adapters did not complete all three phases")
+    budget = state.get("budget") or {}
+    if (budget.get("scope") != "all" or budget.get("limit_seconds") != P.LIGHT_BUDGET_SECONDS or budget.get("timed_out") is not False
+            or not P.finite_seconds(budget.get("elapsed_seconds"), P.LIGHT_BUDGET_SECONDS)
+            or state.get("status") == "failed"):
+        why.append("light profile exceeded its deadline or has no completed budget record")
+    if state.get("status") != "failed" and any(reason.endswith("not finished") for reason in why):
+        return "INCOMPLETE", why
+    return ("FAIL" if why else "PASS"), why
+
+
 def own_not_built(board):
     """[{race, arm, reason}] for every own cell of a gate board that did not run because our arm did not import or
     construct (bench_board.ALGOS_SKIPPED, "SKIPPED: not built yet", with the driver's skip reason)."""
@@ -146,10 +132,12 @@ def own_not_built(board):
 
 class Gate:
     def __init__(self, vendor, version, root, candidate_wheels=(), source_commit=None, autograd_manifest=None,
-                 adapters=True):
+                 adapters=True, profile=P.LIGHT):
         import bench_board as B
         import bench_board_evidence as E
         self.B, self.E = B, E
+        self.profile = P.profile({"profile": profile})
+        self.deadline = None
         self.vendor, self.version, self.root = vendor, version, Path(root)
         self.candidate_wheels, self.source_commit = list(candidate_wheels), source_commit
         self.autograd_manifest = autograd_manifest
@@ -171,9 +159,11 @@ class Gate:
                 raise SystemExit('candidate gate requires an eight-binary autograd artifact manifest')
             from gate_autograd_artifacts import validate
             self.autograd_artifacts = validate(autograd_manifest, vendor, source_commit, self.root/'autograd-bin')
+        if self.state and P.profile(self.state) != self.profile:
+            raise SystemExit("gate output belongs to another profile; use a new out-root")
         if self.state and (self.state.get('input_mode', 'published') != mode or self.state.get('candidate') != candidate):
             raise SystemExit('gate output belongs to different published/candidate artifacts; use a new out-root')
-        self.state.update(input_mode=mode, candidate=candidate)
+        self.state.update(input_mode=mode, candidate=candidate, profile=self.profile)
         if mode == 'candidate':
             self.state['autograd_artifacts'] = self.autograd_artifacts
         self.state.update(vendor=vendor, version=version, source_commit=B.repo_commit())
@@ -186,16 +176,21 @@ class Gate:
         if self.vendor == "amd":
             os.environ["LD_LIBRARY_PATH"] = ":".join(
                 glob.glob(self.cache + "/venv/lib/python*/site-packages/*/lib64")
+                + glob.glob(str(self.root / "venv/lib/python*/site-packages/*/lib64"))
                 + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
 
     def env(self):
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env.pop("PYTHONHOME", None)
+        if self.deadline is not None:
+            env["MOJOLEARN_GATE_DEADLINE"] = str(self.deadline - 2)  # let nested runners kill their groups before our ceiling
         return env
 
     # -------------------------------------------------------------- stages
     def setup(self):
+        if self.profile == P.LIGHT:
+            return self.setup_light()
         B, out = self.B, self.out
         self.mark(phase="setup", status="running", setup_started=time.time())
         argv = ["--vendor", self.vendor, "--out", str(out), "--cache", self.cache,
@@ -228,6 +223,99 @@ class Gate:
         self.mark(phase="setup", status="ready", python=python, wheel=wheel, wheel_manifest=manifest,
                   setup_finished=time.time())
 
+    def remaining(self):
+        return max(0.0, self.deadline - time.time()) if self.deadline else P.LIGHT_BUDGET_SECONDS
+
+    def launch_light(self, command, log):
+        result = P.bounded_run(command, log, self.remaining(), env=self.env(), cwd=HERE.parent)
+        self.state.setdefault("commands", []).append(dict(command=list(map(str, command)), log=str(log), **result))
+        self.mark()
+        return result["exit_code"]
+
+    def setup_light(self):
+        # Exact candidate installer, without bench_board's opponent environment.
+        # Torch/ONNX here are test dependencies for the importer probes; they
+        # are pinned by the shipped adapter manifest, never opponent versions.
+        self.mark(phase="setup", status="running", setup_started=time.time())
+        python = str(self.root / "venv/bin/python")
+        manifest = str(self.out / "wheel-manifest.json")
+        commands = [[sys.executable, "-m", "venv", str(self.root / "venv")]]
+        if self.candidate_wheels:
+            command = [sys.executable, str(HERE / "candidate_wheel_install.py"), "--python", python,
+                       "--version", self.version, "--vendor", self.vendor, "--source-commit", self.source_commit,
+                       "--manifest", manifest, "--log", str(self.out / "logs/install.log")]
+            for wheel in self.candidate_wheels:
+                command += ["--wheel", wheel]
+        else:
+            command = [sys.executable, str(HERE / "pypi_wheel_install.py"), "install", "--python", python,
+                       "--version", self.version, "--vendor", self.vendor, "--manifest", manifest,
+                       "--dir", str(self.out / "wheels")]
+        commands += [command, [python, "-m", "pip", "install", "--disable-pip-version-check",
+                               "numpy", "pytest", "onnx", "onnxscript"]]
+        for command in commands:
+            if self.launch_light(command, self.out / "logs/install.log"):
+                raise RuntimeError("light gate setup failed; see setup/logs/install.log")
+        import adapter_wheel_smoke as AW
+        probe_log = self.out / "logs/framework-manifest.log"
+        if self.launch_light([python, "-c", AW.PROBE], probe_log):
+            raise RuntimeError("installed framework manifest probe failed")
+        facts = json.loads(probe_log.read_text().splitlines()[-1])
+        installs = AW.install_commands(python, facts.get("adapters") or {}, ["torch"])
+        if "install-torch" not in installs:
+            raise RuntimeError("installed wheel lacks the Torch test dependency pin")
+        if self.launch_light(installs["install-torch"], self.out / "logs/install.log"):
+            raise RuntimeError("pinned importer test dependency installation failed")
+        self.mark(phase="setup", status="ready", python=python, wheel_manifest=manifest,
+                  setup_finished=time.time(), setup_elapsed_seconds=time.time() - self.state["setup_started"])
+
+    def correctness(self):
+        self.amd_env()
+        self.mark(phase="correctness", status="running", correctness_started=time.time(), correctness_finished=None)
+        output = self.root / ("correctness-" + str(time.time_ns()))
+        command = [sys.executable, str(HERE / "qualify_verifier_wheel.py"), "--installed-python", self.state["python"],
+                   "--expected-version", self.version, "--scope", "expanded", "--output", str(output)]
+        if self.source_commit:
+            command += ["--expected-source-commit", self.source_commit]
+        rc = self.launch_light(command, self.root / "correctness.log")
+        report = output / "results.json"
+        document = json.loads(report.read_text()) if report.is_file() else {}
+        self.mark(correctness_rc=rc, correctness=document, correctness_report=str(report),
+                  correctness_finished=time.time(), status="done")
+
+    def run_light(self, step):
+        started = time.time()
+        self.deadline = started + P.LIGHT_BUDGET_SECONDS
+        self.mark(budget=dict(scope=step, limit_seconds=P.LIGHT_BUDGET_SECONDS, started=started, timed_out=False))
+        try:
+            for stage in P.LIGHT_STAGES:
+                if step in (stage, "all"):
+                    if self.remaining() <= 0:
+                        raise TimeoutError("release-light total deadline expired")
+                    before = time.time()
+                    getattr(self, stage)()
+                    timing = self.state.setdefault("stage_timing", {})
+                    timing[stage] = dict(elapsed_seconds=time.time() - before,
+                                         category="installation" if stage == "setup" else "installation-and-execution" if stage == "adapters" else "execution")
+                    self.mark()
+                    # Do not spend the remaining budget repeatedly exercising
+                    # a runtime whose installed correctness check has failed.
+                    if stage == "correctness" and (self.state.get("correctness_rc") != 0
+                            or (self.state.get("correctness") or {}).get("status") != "PASSED"):
+                        raise RuntimeError("installed correctness failed; remaining stages not run")
+                    if stage == "autograd":
+                        import autograd_smoke as AS
+                        if self.state.get("autograd_rc") != 0 or self.state.get("autograd_counts") != {"ok": len(AS.ENTRIES)}:
+                            raise RuntimeError("autograd did not complete; remaining stages not run")
+                    if stage == "adapters" and self.adapters_on and not (self.state.get("adapters") or {}).get("ok"):
+                        raise RuntimeError("installed adapters failed")
+        except (Exception, SystemExit) as error:
+            self.mark(status="failed", error=str(error))
+        finally:
+            elapsed = time.time() - started
+            self.mark(budget=dict(scope=step, limit_seconds=P.LIGHT_BUDGET_SECONDS, started=started,
+                                  elapsed_seconds=elapsed, timed_out=elapsed > P.LIGHT_BUDGET_SECONDS))
+        return self.finish() if step == "all" else int(self.state.get("status") == "failed")
+
     def smoke(self):
         self.amd_env()
         python, manifest = self.state["python"], self.state["wheel_manifest"]
@@ -256,7 +344,9 @@ class Gate:
         import autograd_smoke as AS
         report = self.root / "autograd-smoke.json"
         self.mark(phase="autograd", status="running", autograd_started=time.time(), autograd_finished=None)
-        arc = AS.run(self.vendor, str(self.root / "autograd-bin"), self.state["python"], str(report))
+        arc = AS.run(self.vendor, str(self.root / "autograd-bin"), self.state["python"], str(report),
+                     timeout=P.AUTOGRAD_TIMEOUT_SECONDS if self.profile == P.LIGHT else AS.TIMEOUT_S,
+                     deadline=self.deadline)
         doc = json.loads(report.read_text()) if report.exists() else {}
         self.mark(phase="autograd", status="done", autograd_rc=arc, autograd_report=str(report),
                   autograd_counts=doc.get("counts"), autograd_finished=time.time())
@@ -284,7 +374,8 @@ class Gate:
             env["LD_LIBRARY_PATH"] = ":".join(
                 glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
                 + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
-        rec = AG.run(self.vendor, sys.executable, self.root / "adapter-smoke", self.adapter_installs(), env=env)
+        options = {"launch": self.launch_light} if self.profile == P.LIGHT else {}
+        rec = AG.run(self.vendor, sys.executable, self.root / "adapter-smoke", self.adapter_installs(), env=env, **options)
         self.mark(phase="adapters", status="done", adapters=rec, adapters_finished=time.time())
         print("GATE_ADAPTERS vendor=%s status=%s ok=%s %s" % (self.vendor, rec.get("status"), rec.get("ok"),
                                                              rec.get("why")))
@@ -394,7 +485,8 @@ def main(argv):
     parser.add_argument('vendor', choices=('nvidia', 'amd'))
     parser.add_argument('version')
     parser.add_argument('root')
-    parser.add_argument('step', nargs='?', default='all', choices=STAGES+('all', 'verdict'))
+    parser.add_argument('step', nargs='?', default='all', choices=STAGES+('correctness', 'all', 'verdict'))
+    parser.add_argument('--profile', choices=P.PROFILES, default=P.LIGHT)
     parser.add_argument('--candidate-wheel', action='append', default=[])
     parser.add_argument('--source-commit')
     parser.add_argument('--autograd-manifest')
@@ -404,14 +496,17 @@ def main(argv):
     vendor, version, root, step = args.vendor, args.version, args.root, args.step
     if vendor not in ("nvidia", "amd"):
         raise SystemExit("gate: nvidia or amd (Apple runs its own smoke tooling; Apple timing is the M3 Ultra's)")
-    if step not in STAGES + ("all", "verdict"):
+    stages = P.LIGHT_STAGES if args.profile == P.LIGHT else STAGES
+    if step not in stages + ("all", "verdict"):
         raise SystemExit("gate: stage is one of %s or all" % ", ".join(STAGES))
     if bool(args.candidate_wheel) != bool(args.source_commit):
         parser.error('candidate wheels and source-commit must be supplied together')
     if args.autograd_manifest and not args.candidate_wheel:
         parser.error('autograd-manifest is a candidate-mode input')
     gate = Gate(vendor, version, root, args.candidate_wheel, args.source_commit, args.autograd_manifest,
-                adapters=not args.no_adapters)
+                adapters=not args.no_adapters, profile=args.profile)
+    if args.profile == P.LIGHT and step != "verdict":
+        return gate.run_light(step)
     for stage in STAGES:
         if step in (stage, "all"):
             getattr(gate, stage)()

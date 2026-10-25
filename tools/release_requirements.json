@@ -439,7 +439,7 @@
     },
     {
       "id": "performance-nvidia",
-      "scope": "Affected full-dataset end-to-end workloads on nvidia",
+      "scope": "Affected full-dataset end-to-end workloads on nvidia (required for performance claims/default promotions; optional for publication)",
       "coverage": [
         "transfer costs",
         "fit/training",
@@ -459,23 +459,29 @@
         "build_flags"
       ],
       "kind": "performance",
-      "stage": "pre"
+      "stage": "pre",
+      "required": false
     },
     {
       "id": "candidate-nvidia",
       "scope": "Actual packed candidate artifacts on nvidia",
       "coverage": [
         "install",
-        "whole-plan-smoke",
+        "installed-correctness",
         "autograd-artifacts",
-        "adapters",
-        "measured-plan-pairs"
+        "adapters"
       ],
       "source_inputs": {
         "gate": [
           "tools/gate_smoke_box.py",
           "tools/candidate_wheel_install.py",
-          "tools/adapter_gate.py"
+          "tools/adapter_gate.py",
+          "tools/release_gate_profiles.py",
+          "tools/qualify_verifier_wheel.py",
+          "tools/autograd_smoke.py",
+          "tools/gate_autograd_artifacts.py",
+          "tools/autograd_artifact_reuse.py",
+          "tools/adapter_wheel_smoke.py"
         ]
       },
       "configuration": [
@@ -509,7 +515,7 @@
     },
     {
       "id": "performance-amd",
-      "scope": "Affected full-dataset end-to-end workloads on amd",
+      "scope": "Affected full-dataset end-to-end workloads on amd (required for performance claims/default promotions; optional for publication)",
       "coverage": [
         "transfer costs",
         "fit/training",
@@ -529,23 +535,29 @@
         "build_flags"
       ],
       "kind": "performance",
-      "stage": "pre"
+      "stage": "pre",
+      "required": false
     },
     {
       "id": "candidate-amd",
       "scope": "Actual packed candidate artifacts on amd",
       "coverage": [
         "install",
-        "whole-plan-smoke",
+        "installed-correctness",
         "autograd-artifacts",
-        "adapters",
-        "measured-plan-pairs"
+        "adapters"
       ],
       "source_inputs": {
         "gate": [
           "tools/gate_smoke_box.py",
           "tools/candidate_wheel_install.py",
-          "tools/adapter_gate.py"
+          "tools/adapter_gate.py",
+          "tools/release_gate_profiles.py",
+          "tools/qualify_verifier_wheel.py",
+          "tools/autograd_smoke.py",
+          "tools/gate_autograd_artifacts.py",
+          "tools/autograd_artifact_reuse.py",
+          "tools/adapter_wheel_smoke.py"
         ]
       },
       "configuration": [

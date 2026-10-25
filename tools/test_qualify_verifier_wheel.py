@@ -292,7 +292,7 @@ class ExpandedWheelTests(unittest.TestCase):
             for missing in ('mojolearn-amd', 'mojolearn-core'):
                 versions = {n: '0.9.0' for n in ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd',
                                                   'mojolearn-nvidia-ptx')}
-                versions[missing] = None
+                versions[missing] = '0.8.99'
                 rc, commands, receipt = self._installed(Path(temp) / missing, versions)
                 self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
                 self.assertIn(missing, receipt['reason'])
@@ -302,6 +302,21 @@ class ExpandedWheelTests(unittest.TestCase):
             rc, commands, receipt = self._installed(Path(temp), three, extra=('--expected-source-commit','b'*40))
             self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
             self.assertIn('records source commit', receipt['reason'])
+
+    def test_vendor_install_does_not_require_other_vendor_or_meta_distributions(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            versions = {'mojolearn': None, 'mojolearn-core': '0.9.0', 'mojolearn-amd': '0.9.0',
+                        'mojolearn-nvidia': None, 'mojolearn-nvidia-ptx': None}
+            rc, commands, receipt = self._installed(Path(temp) / 'vendor', versions)
+            # The fake pip check fails; location/source admission completed.
+            self.assertEqual(len(commands), 2)
+            self.assertIn('dependencies failed', receipt['reason'])
+            versions['mojolearn-core'] = None
+            rc, commands, receipt = self._installed(Path(temp) / 'missing-core', versions)
+            self.assertEqual(len(commands), 1)
+            self.assertIn('mojolearn-core', receipt['reason'])
 
     def test_installed_python_refuses_a_wheel_beside_it(self):
         from unittest.mock import patch
