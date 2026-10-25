@@ -98,13 +98,15 @@ def source_context(root, revision):
         require(not rr.unreadable_runtime(runtime), 'unresolved runtime identity')
         adapters = adapter_inputs(Path(directory))
         inventory = native_inventory(directory)
+        import binding_stamps
+        merged_inputs = {name: hc.file_sha(Path(directory) / name) for name in binding_stamps.MERGED_INPUTS}
         for name in hc.HOST_FORMAT_SOURCES:
             require(b'MOJOLEARN_CUDA_CODE_FORMAT' not in (Path(directory) / name).read_bytes(),
                     'host builder now consumes CUDA format; explicit support is required')
         builders = {name: rr.builder_view(name, (Path(directory) / name).read_bytes(),
                     {'packaging/adapters/build.sh', 'adapters'}) for name in rr.LINUX_BUILDERS}
     return dict(binding_identities=identities, runtime_identity=runtime, source_inventory=inventory,
-                adapter_sources=adapters, adapter_builders=builders)
+                adapter_sources=adapters, adapter_builders=builders, merged_build_inputs=merged_inputs)
 
 
 def current_source(root):
@@ -159,7 +161,11 @@ def _source_record(source, compiler):
 
 def _projection(device, host, compiler):
     dc, dv, dp, di = _source_record(device, compiler)
-    hc0, hv, hp, hi = _source_record(host, compiler)
+    if host.get('kind') == 'independent-host-build':
+        from release_host_build import record
+        hc0, hv, hp, hi = record(host, compiler)
+    else:
+        hc0, hv, hp, hi = _source_record(host, compiler)
     require(dc['runtime_libraries'] == hc0['runtime_libraries'], 'device and host runtime bytes differ')
     require(dc['toolchain'] == hc0['toolchain'] and dc['installed_packages'] == hc0['installed_packages'],
             'device and host compiler/package environment differs')
@@ -207,6 +213,11 @@ def validate(proof, source_root=None):
             'selected host compiler/flags/source identity changed')
     require(before['runtime_identity'] == hbefore['runtime_identity'] == current['runtime_identity'],
             'runtime compiler/flags/source identity changed')
+    require(before['merged_build_inputs'] == hbefore['merged_build_inputs'] == current['merged_build_inputs'],
+            'merged compiler script, defines, generator, or manifest changed')
+    if host.get('kind') == 'independent-host-build':
+        require(hcapture['runtime_identity'] == hbefore['runtime_identity']
+                and hcapture['merged_build_inputs'] == hbefore['merged_build_inputs'], 'independent host runtime/build inputs differ')
     if projection['adapters']:
         require(before['adapter_sources'] == current['adapter_sources']
                 and before['adapter_builders'] == current['adapter_builders'], 'adapter source/build inputs changed')
@@ -276,7 +287,11 @@ def validate_ptx(doc, root):
 def prepare(device_build, host_build, source_root, compiler, output):
     """Create a new set and assembly proof; originals and their proofs stay untouched."""
     device, device_set = hc.inspect_build(device_build)
-    host, host_set = hc.inspect_build(host_build)
+    if (Path(host_build) / 'host-build-proof.json').is_file():
+        from release_host_build import inspect
+        host, host_set = inspect(host_build)
+    else:
+        host, host_set = hc.inspect_build(host_build)
     revision, inventory, context = current_source(source_root)
     root = str(Path(source_root).resolve())
     dp, hp = hc.decoded(device['proof']), hc.decoded(host['proof'])
@@ -291,6 +306,10 @@ def prepare(device_build, host_build, source_root, compiler, output):
     validate(proof, source_root)
     # Check originals before copying. Each source is checked with its own host.
     for original, directory in ((device, device_set), (host, host_set)):
+        if original.get('kind') == 'independent-host-build':
+            from release_host_build import validate_bytes as validate_host_bytes
+            validate_host_bytes(original, directory, compiler)
+            continue
         original_projection = _projection(original, original, compiler)
         for group in ('extensions', 'host_extension'):
             prefix = 'mojolearn/' + original['leg'] + '/'
