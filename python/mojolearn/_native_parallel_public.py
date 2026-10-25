@@ -9,7 +9,7 @@ def _binding(name, mode):
     try:
         module = _backend.binding(name, mode)
         if type(module) is _backend._HostBinding:
-            module = _backend.load_host_module(module._HostBinding__basename)
+            module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time resolution of the existing CPU-only proxy
         if type(module) is not ModuleType:
             getattr(module, 'parallel_public_probe')
             raise ImportError('parallel driver requires a compiled binding')
