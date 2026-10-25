@@ -52,3 +52,13 @@ def test_non_object_configuration_is_rejected(tmp_path, monkeypatch):
     ctx = controller(tmp_path, monkeypatch, supplied=["invalid"])
     with pytest.raises(ValueError, match="JSON object"):
         ctx.readiness_manifest()
+
+
+def test_evidence_transport_locations_do_not_invalidate_builds():
+    flags = release.release_requirements.build_flags({
+        "MOJOLEARN_REQUIREMENTS_LEDGER": "/release/requirements.json",
+        "MOJOLEARN_LEDGER_EVIDENCE_ROOT": "/restored/evidence",
+        "MOJOLEARN_LEDGER_BUNDLE": "/transport/evidence.tar.gz",
+        "CXXFLAGS": "-DNUMERIC_FLAG=1",
+    })
+    assert flags == {"CXXFLAGS": "-DNUMERIC_FLAG=1"}
