@@ -1338,7 +1338,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(mode_metadata_c, "mode_metadata_native_call")
-    module.def_py_c_function(params_metadata_c, "params_metadata_native_call")
+        module.def_py_c_function(params_metadata_c, "params_metadata_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "host_archive_finalize_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "host_svr_attribute_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "host_svc_attribute_call")
