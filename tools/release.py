@@ -2418,7 +2418,8 @@ class Release:
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
         tag = f"alpha-api-{self.version}-{platform}-{day}"
         work = self.rel / f"publish-{platform}"
-        env = dict(MOJOLEARN_ARTIFACT_SOURCE_COMMIT=self.commit)
+        env = dict(MOJOLEARN_ARTIFACT_SOURCE_COMMIT=self.commit,
+                   MOJOLEARN_REQUIREMENTS_LEDGER=str(self.readiness().path))
         notes = self.smoke_notes(platform)
         if notes:
             env["MOJOLEARN_ALPHA_SMOKE_NOTES"] = json.dumps(notes, sort_keys=True)

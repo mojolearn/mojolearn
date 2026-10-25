@@ -536,6 +536,7 @@ class SourceAndTooling(Base):
         (cmd, env), = calls
         self.assertEqual(cmd[:2], ["bash", "tools/release_linux_publish.sh"])
         self.assertEqual(env["MOJOLEARN_ARTIFACT_SOURCE_COMMIT"], Y)
+        self.assertEqual(env["MOJOLEARN_REQUIREMENTS_LEDGER"], str(r.readiness().path))
         self.assertIn(f"source {Y[:12]}, tooling {HEAD[:12]}", out)
         with zipfile.ZipFile(whl, "w") as z:
             z.writestr("mojolearn/identity_columns/COMMIT", X + "\n")
