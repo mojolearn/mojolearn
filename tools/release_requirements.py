@@ -162,7 +162,8 @@ class RequirementsLedger:
     def read(self):
         if not self.path.exists():
             return dict(schema=SCHEMA, requirements={}, attempts=[], runs=[])
-        doc = json.loads(self.path.read_text())
+        from release_requirements_storage import decode
+        doc = decode(json.loads(self.path.read_text()))
         if doc.get("schema") != SCHEMA:
             raise ValueError("unsupported release requirements ledger schema")
         return doc
@@ -178,7 +179,8 @@ class RequirementsLedger:
             fd, name = tempfile.mkstemp(prefix=self.path.name + ".", dir=self.path.parent)
             try:
                 with os.fdopen(fd, "w") as out:
-                    json.dump(doc, out, indent=2, sort_keys=True)
+                    from release_requirements_storage import encode
+                    json.dump(encode(doc), out, separators=(",", ":"), sort_keys=True)
                     out.write("\n")
                 os.replace(name, self.path)
             finally:
