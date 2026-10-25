@@ -9,19 +9,23 @@ The backend (python/mojolearn/adapters/_torch_compile.py, _Compiled) has two per
 
   device  CUDA and ROCm tensors on GPU 0: the inputs' device addresses go to ops_imported_run_device,
           which writes the outputs into torch.empty tensors on the same device (no host copy).
-  host    every other tensor (CPU, MPS): each input is copied to a host NumPy array, ImportedProgram.run
-          runs, and each output is rebuilt as a tensor on the input's device.
+  host    every other tensor (CPU, MPS): native ATen calls stage host tensors;
+          their raw buffers enter the program executor and outputs return to the input device.
 
 This probe compiles a Linear-ReLU-Linear model of the given shape, makes one warm call (the import and
-weight upload), times ONE whole compiled(x) call, then times each route's steps once, each closed by a
-device sync:
+weight upload), then times ONE whole compiled(x) call per supported route, closed by a device sync.
+The native execution entry records the phases of that same call:
 
-  host    transfer_in_ms   x.detach().cpu().contiguous().numpy() for every input
-          compute_ms       ImportedProgram.run on the host arrays (upload, program, download inside mojolearn)
-          transfer_out_ms  torch.tensor(y, device=input device) for every output
-  device  transfer_in_ms   x.detach().contiguous() and the torch.empty outputs, then the stream drain
+  host    transfer_in_ms   admission, native host copies and output allocation
+          compute_ms       raw-buffer program execution (upload, program, download inside mojolearn)
+          transfer_out_ms  native ATen copies to the input device
+  device  transfer_in_ms   admission, native contiguous copies, allocation and device synchronization
           compute_ms       ops_imported_run_device (device-to-device copies in and out, the program)
-          transfer_out_ms  the closing stream drain
+          transfer_out_ms  closing device synchronization and current-device restoration
+
+The forced host comparison on CUDA/ROCm runs through the same native entry.
+It receives one excluded warmup before its scored call. No Python reconstruction
+of the route is used as a substitute for the product execution boundary.
 
 It prints one line per route, `TRANSFER_PROBE route=<device|host> device=... rows=... transfer_in_ms=...
 compute_ms=... transfer_out_ms=... call_ms=...` (call_ms: the whole compiled call, which takes the route
@@ -71,10 +75,6 @@ def main(argv=None):
     with torch.no_grad():
         compiled(x)  # warm: capture, import, weight upload
         sync(torch, device)
-        t = time.perf_counter()
-        compiled(x)
-        sync(torch, device)
-        call_ms = (time.perf_counter() - t) * 1e3
 
     # each route's steps on the program and the callable the warm call made
     entries = [e for per_gm in tc._PROGRAMS.values() for e in per_gm.values()]
@@ -85,46 +85,34 @@ def main(argv=None):
     route_taken, reason = compiled_obj._route([x])
     base = dict(device=str(device), rows=a.rows, features=a.features, hidden=a.hidden, outputs=a.outputs,
                 numeric_mode=a.numeric_mode or "identical", torch=torch.__version__, route_taken=route_taken,
-                call_ms=round(call_ms, 4))
+                clock_scope="native_execution", samples=1, warmups=1)
     rows = []
-
-    # host route
-    with torch.no_grad():
-        sync(torch, device)
-        t0 = time.perf_counter()
-        arrays = [x.detach().cpu().contiguous().numpy()]
-        t1 = time.perf_counter()
-        got = program.run(*arrays)
-        t2 = time.perf_counter()
-        got = got if isinstance(got, tuple) else (got,)
-        outs = tuple(torch.tensor(y, device=device) for y in got)
-        sync(torch, device)
-        t3 = time.perf_counter()
-        del outs
-    rows.append(dict(route="host", status="ok", **base, transfer_in_ms=round((t1 - t0) * 1e3, 4),
-                     compute_ms=round((t2 - t1) * 1e3, 4), transfer_out_ms=round((t3 - t2) * 1e3, 4)))
-
-    # device route
+    context = compiled_obj._execution_context
+    context["profile"] = True
+    try:
+        for route in (["device", "host"] if route_taken == "device" else ["host"]):
+            context["force_host"] = route == "host"
+            with torch.no_grad():
+                if route != route_taken:
+                    compiled(x)  # excluded warmup for the forced host route
+                sync(torch, device)
+                started = time.perf_counter()
+                out = compiled(x)
+                sync(torch, device)
+                call_ms = (time.perf_counter() - started) * 1e3
+                measured, incoming_ns, compute_ns, outgoing_ns = context["last_profile"]
+                if measured != route:
+                    raise RuntimeError(f"native execution took {measured}, requested {route}")
+                rows.append(dict(route=route, status="ok", **base, call_ms=round(call_ms, 4),
+                                 transfer_in_ms=round(incoming_ns / 1e6, 4),
+                                 compute_ms=round(compute_ns / 1e6, 4),
+                                 transfer_out_ms=round(outgoing_ns / 1e6, 4)))
+                del out
+    finally:
+        context.pop("profile", None)
+        context.pop("force_host", None)
     if route_taken != "device":
         rows.append(dict(route="device", status="refused", reason=reason.replace(" ", "_"), **base))
-    else:
-        with torch.no_grad():
-            sync(torch, device)
-            t0 = time.perf_counter()
-            xs = [x.detach().contiguous()]
-            outs = tuple(torch.empty(tuple(shape), dtype=torch.int32 if dt == "int32" else torch.float32,
-                                     device=device) for _n, shape, dt in program.outputs)
-            stream = torch.cuda.current_stream(device)
-            stream.synchronize()
-            t1 = time.perf_counter()
-            program._run_device(program, [(v.data_ptr(), tuple(v.shape), tc._dtype_name(v.dtype)) for v in xs],
-                                [y.data_ptr() for y in outs])
-            t2 = time.perf_counter()
-            stream.synchronize()
-            t3 = time.perf_counter()
-            del outs, xs
-        rows.append(dict(route="device", status="ok", **base, transfer_in_ms=round((t1 - t0) * 1e3, 4),
-                         compute_ms=round((t2 - t1) * 1e3, 4), transfer_out_ms=round((t3 - t2) * 1e3, 4)))
 
     for row in rows:
         print("TRANSFER_PROBE " + " ".join(f"{k}={v}" for k, v in row.items()))

@@ -3,10 +3,11 @@
 
 The glue tests run without torch: a stand-in ``torch`` in ``sys.modules``
 provides tensors, modules, the ONNX export and TorchDynamo's registry, and
-the file import is replaced by a recorder returning a stand-in program. They
+the file import and native execution door are replaced by test doubles. They
 check the registration, the export of the captured graph, that each call's
 outputs carry the program's result bytes, the refusals and the cache. The
-last test needs PyTorch and a binding with model import.
+real-device tests need PyTorch and the rebuilt sequence binding. The test
+doubles qualify capture/cache/argument wiring only, not native execution.
 """
 from __future__ import annotations
 
@@ -229,6 +230,51 @@ def fake(monkeypatch):
         return _Program(results)
 
     monkeypatch.setattr(_program, "_import", record)
+    # Retain the existing capture/cache tests across the new native door. This
+    # independent test double does not qualify buffer admission, native stream
+    # handling or the Mojo runner; those require the installed-wheel probes.
+    def connect_execution(torch, program, free, n_args, sequence):
+        context = dict(free=tuple(free), n_args=n_args, sequence=sequence)
+
+        def execute(program, args, context, route_only):
+            if not route_only and len(args) != context["n_args"]:
+                raise ValueError("compiled graph input count differs")
+            inputs = list(args) if route_only else [args[i] for i in context["free"]]
+            device = inputs[0].device if inputs else torch.device("cpu")
+            route, reason = "host", "the graph has no tensor inputs"
+            if inputs:
+                if device.type == "mps":
+                    reason = "MPS has no supported raw pointer"
+                elif device.type != "cuda":
+                    reason = "the inputs are on the " + device.type
+                elif device.index not in (None, 0):
+                    reason = "mojolearn runs on GPU 0"
+                elif any(x.device != device for x in inputs):
+                    reason = "the inputs are on different devices"
+                elif getattr(program, "_run_device", None) is None:
+                    reason = "this binding takes no device buffers"
+                else:
+                    route, reason = "device", ""
+            if route_only:
+                return route, reason
+            if route == "device":
+                prepared = [x.detach().contiguous() for x in inputs]
+                outputs = tuple(torch.empty(shape, dtype=torch.int32 if dtype == "int32" else torch.float32,
+                                            device=device) for _, shape, dtype in program.outputs)
+                stream = torch.cuda.current_stream(device)
+                stream.synchronize()
+                program._run_device(program, [(x.data_ptr(), x.shape, tc._dtype_name(x.dtype)) for x in prepared],
+                                    [x.data_ptr() for x in outputs])
+                stream.synchronize()
+            else:
+                got = program.run(*(x.detach().cpu().contiguous().numpy() for x in inputs))
+                got = got if isinstance(got, tuple) else (got,)
+                outputs = tuple(torch.tensor(value, device=device) for value in got)
+            return outputs if context["sequence"] else outputs[0]
+
+        return execute, context
+
+    monkeypatch.setattr(tc, "_connect_torch_execution", connect_execution)
     torch.imports, torch.results = imports, results
     return torch
 
@@ -500,6 +546,8 @@ def _real_torch_and_binding():
         pytest.skip(f"no x_sequence binding: {e}")
     if not hasattr(b, "onnx_import_file"):
         pytest.skip("this x_sequence binding has no model import (rebuild it)")
+    if not hasattr(b, "ops_torch_program_run"):
+        pytest.skip("this x_sequence binding has no native Torch execution door (rebuild it)")
     return torch
 
 
@@ -540,7 +588,7 @@ def test_a_real_device_route_matches_the_host_route_and_import_model_bit_for_bit
     program = entries[-1][0]
     if program._run_device is None:
         pytest.skip("this binding has no ops_imported_run_device (rebuild the x_sequence bindings)")
-    # the host route's arithmetic is exactly program.run on the host copy (_Compiled._run_host)
+    # Compare the native adapter route with the plain imported-program API.
     got_host = program.run(x_dev.detach().cpu().contiguous().numpy())
     a = got_dev.cpu().numpy().view(np.uint32)
     assert got_dev.device == dev and got_dev.dtype == torch.float32
