@@ -71,8 +71,16 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
             # Explicit CPU archive classes replace device finalizers with a
             # connected native descriptor. Only the first resolved slot can
             # run; a shadowed GPU-base Python finalizer is never invoked.
+            # A context shared by a public class and its explicit CPU
+            # subclass (the neighbor queries) holds both connected native
+            # descriptors: the public one, and the host archive's as its
+            # peer, exactly as host_archive_check_layout admits them.
+            var member = _type_fields(mro[k])["__del__"]
             var native_finalizer = py_get(context, "host_archive_finalizer_descriptor")
-            if native_finalizer is None or _type_fields(mro[k])["__del__"] is not native_finalizer:
+            var peer_finalizer = py_get(context, "host_archive_peer_finalizer_descriptor")
+            var connected_finalizer = (native_finalizer is not None and member is native_finalizer) or (
+                peer_finalizer is not None and member is peer_finalizer)
+            if not connected_finalizer:
                 raise Error("TypeError: Python model finalizer hooks are not accepted")
             found_finalizer = True
         if not found_fields:
