@@ -55,11 +55,12 @@ def test_actual_prep_slot_fields_and_method_binding(name):
     assert clean(read, model, 'user_note') is fields['user_note']
     bound = clean(read, model, 'get_params')
     assert bound.__self__ is model
-    # This audits the ordinary public expression, including its attribute read.
-    def parameters(instance):
-        return instance.get_params()
+    # The native attribute read was audited above. Audit the resulting public
+    # method directly so the verifier checks its one-call wrapper. Wrapping
+    # this call in another Python test function incorrectly consumes the
+    # verifier's single allowed public-entry frame with test-controller code.
     expected = {key: object.__getattribute__(model, key) for key in cls._parameters}
-    result = clean(parameters, model)
+    result = clean(bound)
     assert list(result) == list(cls._parameters)
     assert all(result[key] is expected[key] for key in cls._parameters)
     if name not in CLASSIFIERS:
