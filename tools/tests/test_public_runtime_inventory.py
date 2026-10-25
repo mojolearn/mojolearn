@@ -249,7 +249,7 @@ def test_verdicts_and_counts():
     with tempfile.TemporaryDirectory() as tmp:
         rows = rows_by_key(build(Path(tmp)))
     native = rows[("Native", "fit")]
-    assert (native.verdict, native.native_calls, native.native_entries) == ("native", 1, 1)
+    assert (native.verdict, native.native_calls, native.native_entries) == ("orchestrated", 1, 1)
     assert native.statements == 3 and native.shell == 1 and native.helpers == 0
     assert rows[("Native", "predict")].verdict == "native"
     assert rows[("native_function", INV.FUNCTION_OP)].verdict == "native"
@@ -279,7 +279,7 @@ def test_module_level_entries():
     with tempfile.TemporaryDirectory() as tmp:
         rows = rows_by_key(build(Path(tmp)))
     owned = rows[("Owned", "fit")]                     # `_NATIVE = _binding()._module.small_call`
-    assert (owned.verdict, owned.native_calls, owned.helpers) == ("native", 1, 0)
+    assert (owned.verdict, owned.native_calls, owned.helpers) == ("orchestrated", 1, 0)
     assert rows[("Owned", "predict")].verdict == "python"      # a Python helper doing work stays python
     connected = rows[("Connected", "fit")]             # `_OWNER, _CTX = _bridge.connect(...)`
     assert (connected.verdict, connected.native_calls) == ("native", 1)
@@ -295,7 +295,7 @@ def test_baseline_and_check():
         root = build(Path(tmp))
         baseline = root / "baseline.tsv"
         assert INV.main(["--root", str(root), "--baseline", "--baseline-file", str(baseline)]) == 0
-        assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 0
+        assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 1
         records = INV.read_tsv(baseline)
         assert {r["verdict"] for r in records} == {"native", "orchestrated", "python"}
         # a native method that starts allocating in Python fails the check
@@ -307,7 +307,40 @@ def test_baseline_and_check():
         assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 1
         problems, _ = INV.check(INV.records_of(INV.inventory_rows(root)), records)
         assert any("regressed native -> orchestrated" in p for p in problems)
-        assert any("non-native public methods grew" in p for p in problems)
+        assert any("zero required regardless of baseline" in p for p in problems)
+
+
+def test_existing_baseline_debt_cannot_authorize_product_execution():
+    row = {"class": "mojolearn.Estimator", "method": "fit", "module:line": "est.py:1"}
+    for verdict in ("python", "orchestrated", "unresolved"):
+        debt = dict(row, verdict=verdict)
+        problems, _ = INV.check([debt], [debt])
+        assert problems and any("zero required" in p for p in problems)
+    native = dict(row, verdict="native")
+    assert INV.check([native], [dict(row, verdict="python")])[0] == []
+
+
+def test_returned_framework_callable_is_audited_without_an_export():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build(Path(tmp))
+        folder = root / "python/mojolearn/adapters"
+        folder.mkdir()
+        (folder / "__init__.py").write_text("")
+        path = folder / "_torch_compile.py"
+        path.write_text(textwrap.dedent('''
+            from .. import _backend
+            class _Compiled:
+                def __call__(self, X):
+                    X = [x for x in X]
+                    return _backend.binding("_mojolearn").run(X)
+        '''))
+        rows = INV.records_of(INV.inventory_rows(root))
+        returned = [r for r in rows if r["class"].endswith("._Compiled")]
+        assert len(returned) == 1 and returned[0]["verdict"] == "python"
+        path.write_text("class _Compiled:\n    pass\n")
+        rows = INV.records_of(INV.inventory_rows(root))
+        returned = [r for r in rows if r["class"].endswith("._Compiled")]
+        assert len(returned) == 1 and returned[0]["verdict"] == "unresolved"
 
 
 def test_summary_counts_families():

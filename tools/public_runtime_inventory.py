@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The measure of the public runtime migration (docs/plans/PUBLIC_RUNTIME_MIGRATION.md).
 
-The contract: a public method is argument checks, a choice of binding, ONE
-native call that prepares, executes and produces the results, and a return.
+The contract: a public operation hands its arguments to ONE native call that
+validates, prepares, executes and produces the result. Python-side validation,
+conversion and binding orchestration are product execution too.
 This tool reads the Python call path of every public operation method and
 says how far each one is from that.
 
@@ -43,7 +44,9 @@ could not resolve. The verdict:
                 allocation, or a tagged driver loop)
   unresolved    the public name does not resolve to a def statically
 
-Static analysis, Python only: nothing is imported or built.
+Static analysis, Python only: nothing is imported or built. A native-shaped
+wrapper is not proof that its native entry never calls Python; runtime callback
+probes and native-callee audits remain separate qualification requirements.
 
   python3 tools/public_runtime_inventory.py                 # TSV on stdout, summary on stderr
   python3 tools/public_runtime_inventory.py --summary       # per-family numbers only
@@ -70,6 +73,13 @@ OPS = ("fit", "partial_fit", "predict", "predict_proba", "decision_function", "t
        "fit_transform", "fit_predict", "inverse_transform", "score", "sample", "generate", "step",
        "forward", "train_step", "save", "load", "export", "__call__")
 FUNCTION_OP = "call"   # the method column for a public function
+
+# Public operations returned by factories/framework registration are not in the
+# package's __all__. Keep them in the same gate as directly exported estimators.
+RETURNED_OPERATIONS = (
+    ("adapters._torch_compile", "_Compiled", "__call__"),
+    ("importers._program", "ImportedProgram", "run"),
+)
 
 VERDICTS = ("native", "orchestrated", "python", "unresolved")
 RANK = {v: i for i, v in enumerate(VERDICTS)}
@@ -1011,8 +1021,9 @@ def verdict(facts, helpers=0):
         return "python"
     # A call into a Python helper is never native, however thin the helper:
     # the contract is the method body itself making the one native call.
-    if (facts.native_sites == 1 and helpers == 0 and not facts.loops and not facts.branches
-            and not facts.allocs):
+    if (facts.native_sites == 1 and helpers == 0 and facts.statements == 1
+            and not facts.loops and not facts.branches and not facts.allocs
+            and not facts.shell and not facts.numpy and not facts.unresolved):
         return "native"
     return "orchestrated"
 
@@ -1145,6 +1156,20 @@ def inventory_rows(root, package="mojolearn"):
             facts, helpers = measure(index, found[1], obj, cache)
             rows.append(_row(op, canonical, _where(root, found[1]), facts, None, helpers,
                              verdict(facts, helpers), family))
+    for module, name, op in RETURNED_OPERATIONS:
+        path = Path(root) / "python" / package / (module.replace(".", "/") + ".py")
+        if not path.is_file():
+            continue
+        public = f"{package}.{module}.{name}"
+        target = index.resolve_name(f"{package}.{module}", name)
+        found = index.lookup(target[1], op) if target and target[0] == "class" else None
+        if not found or found[0] != "func":
+            rows.append(_row(op, public, str(path.relative_to(root)), None, None, 0,
+                             "unresolved", "returned_operations"))
+            continue
+        facts, helpers = measure(index, found[1], target[1], cache)
+        rows.append(_row(op, public, _where(root, found[1]), facts, None, helpers,
+                         verdict(facts, helpers), "returned_operations"))
     rows.sort(key=lambda r: (r.family, r.public, OPS.index(r.method) if r.method in OPS else -1))
     return rows
 
@@ -1348,7 +1373,7 @@ def records_of(rows):
 
 
 def check(current, baseline):
-    """Problems (empty when the check passes) and notes."""
+    """Require zero non-native operation rows; the baseline is history, never permission."""
     def counts(records):
         c = defaultdict(int)
         for rec in records:
@@ -1358,10 +1383,13 @@ def check(current, baseline):
     non_native_now = sum(now[v] for v in VERDICTS if v != "native")
     non_native_then = sum(then[v] for v in VERDICTS if v != "native")
     problems, notes = [], []
-    if non_native_now > non_native_then:
-        problems.append(f"non-native public methods grew: {non_native_then} -> {non_native_now}")
-    if now["python"] > then["python"]:
-        problems.append(f"python public methods grew: {then['python']} -> {now['python']}")
+    if non_native_now:
+        problems.append(f"non-native public operations remain: {non_native_now}; zero required "
+                        "regardless of baseline")
+        for rec in current:
+            if rec["verdict"] != "native":
+                problems.append(f"{rec['verdict']}: {rec['class']}.{rec['method']} "
+                                f"({rec['module:line']})")
     before = {(r["class"], r["method"]): r["verdict"] for r in baseline}
     for rec in current:
         old = before.get((rec["class"], rec["method"]))
@@ -1387,7 +1415,7 @@ def main(argv=None):
     parser.add_argument("--endpoints-json", type=Path,
                         help="write all static public lifecycle/option endpoints and unclaimed evidence axes")
     parser.add_argument("--baseline", action="store_true", help="rewrite the committed baseline")
-    parser.add_argument("--check", action="store_true", help="fail if the non-native count grows")
+    parser.add_argument("--check", action="store_true", help="require zero non-native public operations")
     parser.add_argument("--baseline-file", type=Path, default=None)
     parser.add_argument("--explain", metavar="NAME.METHOD",
                         help="print the walk of one method, e.g. mojolearn.KMeans.fit")
@@ -1425,7 +1453,7 @@ def main(argv=None):
             print("note: " + note)
         for problem in problems:
             print("FAIL: " + problem)
-        print("public-runtime: " + ("FAIL" if problems else "ok"))
+        print("public-runtime: " + ("FAIL" if problems else "source classification passed; runtime proof still required"))
         return 1 if problems else 0
     if args.out:
         args.out.write_text(tsv)
