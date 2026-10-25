@@ -1226,6 +1226,28 @@ def elf_driver_libs(paths):
     return sorted(driver)
 
 
+def binding_files(set_dir, row):
+    """Physical files supplying a binding, including a merged file's index."""
+    target = Path(set_dir) / row["set_rel"]
+    if target.is_file():
+        return [target]
+    index = target.parent / "_mojolearn_merged.json"
+    if not index.is_file():
+        return []
+    doc = json.loads(index.read_text())
+    files = doc.get("files")
+    if doc.get("format") != 1 or not isinstance(files, dict):
+        raise SystemExit(f"release_reuse: invalid merged index {index}")
+    matches = [name for name, members in files.items() if row["name"] in members]
+    if len(matches) != 1:
+        raise SystemExit(f"release_reuse: merged index {index} must name {row['name']} exactly once")
+    name = matches[0]
+    binary = index.parent / name
+    if Path(name).name != name or not name.endswith(".so") or not binary.is_file():
+        raise SystemExit(f"release_reuse: missing or unsafe merged binary {name} in {index}")
+    return [binary, index]
+
+
 def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
     """The set directories pack_wheel.py packs, one per (vendor, arch): a
     leg's set copied whole when the leg ran, the set of a completed leg of an
@@ -1285,10 +1307,12 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 shutil.copytree(old["dir"], sdir, symlinks=False)
                 from_legs[name] = dict(old["origin"])
                 for r in gpu + host_rows:
-                    p = sdir / r["set_rel"]
-                    if p.is_file():
-                        reused[r["set_rel"]] = dict(sha256=sha256(p), source="leg", leg=name,
-                                                    identity_digest=r["identity_digest"])
+                    for p in binding_files(sdir, r):
+                        rel = p.relative_to(sdir).as_posix()
+                        rec = reused.setdefault(rel, dict(sha256=sha256(p), source="leg", leg=name))
+                        rec.setdefault("binding_identities", {})[r["name"]] = r["identity_digest"]
+                        if rel == r["set_rel"]:
+                            rec["identity_digest"] = r["identity_digest"]
                 for p in sorted((sdir / ".libs").glob("*")) if (sdir / ".libs").is_dir() else []:
                     if p.is_file():
                         reused[".libs/" + p.name] = dict(sha256=sha256(p), source="leg", leg=name)
@@ -1359,7 +1383,7 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                             "its source changed)")
                     reused[r["set_rel"]] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r["identity_digest"],
                                                 rebuilt_sha256=rebuilt)
-                elif not target.is_file():
+                elif not binding_files(sdir, r):
                     built = [(n, d / r["set_rel"]) for n, d in legs.items() if (d / r["set_rel"]).is_file()]
                     taken = [(n, o) for n, o in leg_reuse.items() if (Path(o["dir"]) / r["set_rel"]).is_file()]
                     if built:

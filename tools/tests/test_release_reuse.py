@@ -1050,10 +1050,10 @@ class BuilderViewTests(unittest.TestCase):
             lambda t: t.replace('if [[ "$1" = identical || "$1" = fast ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi',
                                 'if [[ "$1" = identical ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi'),
             # a line inside an embedded Python heredoc, and a '#' line there
-            lambda t: t.replace("import importlib.machinery, importlib.util, sys",
-                                "import importlib.machinery, importlib.util, sys, os", 1),
-            lambda t: t.replace("import importlib.machinery, importlib.util, sys",
-                                "# a heredoc line is data\nimport importlib.machinery, importlib.util, sys", 1),
+            lambda t: t.replace("import importlib.machinery, importlib.util, os, sys",
+                                "import importlib.machinery, importlib.util, os, sys, math", 1),
+            lambda t: t.replace("import importlib.machinery, importlib.util, os, sys",
+                                "# a heredoc line is data\nimport importlib.machinery, importlib.util, os, sys", 1),
             # a list variable renamed, or its environment override renamed
             lambda t: t.replace('EXT_NAMES="', 'EXTN_NAMES="', 1),
             lambda t: t.replace("${MOJOLEARN_BUILD_SCRIPTS:-", "${MOJOLEARN_SCRIPTS:-", 1),
@@ -1068,7 +1068,7 @@ class BuilderViewTests(unittest.TestCase):
         ]
         for k, fn in enumerate(edits):
             after = fn(text)
-            self.assertNotEqual(after, text, f"edit {k} did not apply")
+            self.assertTrue(after != text, f"edit {k} did not apply")
             self.assertViews(LINUX_SETS_SH, text, after, same=(), moved=VIEWERS)
         for rel in rr.LINUX_BUILDERS + rr.MACOS_BUILDERS:
             text = real(rel)
