@@ -100,9 +100,13 @@ def _facts(root, producer, version):
     base = published = None
     if scope == "changed":
         published = published_base(root, head, version)
-        base = git(root, "rev-parse", str(audit.get("base")) + "^{commit}").strip()
-        require(not str(audit.get("base")).count("/") and base == published[1],
-                "changed-scope audit base is not the last published release source commit")
+        named = str(audit.get("base") or "")
+        require(named and "/" not in named, "changed-scope audit base must be a fixed commit, not " + repr(named))
+        try:
+            base = git(root, "rev-parse", "--verify", "--quiet", named + "^{commit}").strip()
+        except subprocess.CalledProcessError as error:
+            raise ValueError("changed-scope audit base does not resolve: " + named) from error
+        require(base == published[1], "changed-scope audit base is not the last published release source commit")
     else:
         require(scope == "all", "unknown audit scope")
     rows = statuses(root, head, Path(audit_ref["path"]))
