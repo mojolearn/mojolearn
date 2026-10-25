@@ -65,7 +65,7 @@ def connect(context, parameter_metadata):
         plans[cls] = dict(constructor=plan, class_name=name, fitted_fields=_FITTED_FIELDS)
     # Existing CV configurations can be replaced without executing their
     # constructors or lifecycle hooks. This does not add a splitter setter.
-    splitters = {cls: context['family_msel_estimators'][cls]  # glue: exact previously connected native splitter ownership plans
-                 for cls in context['family_msel_splitter_layouts']}
+    splitters = {cls: context['family_msel_estimators'][cls]
+                 for cls in context['family_msel_splitter_layouts']}  # glue: fixed import-time native splitter connections
     _CONTEXT.update(plans=plans, parameter_metadata=parameter_metadata,
                     ownership=ownership, splitter_plans=splitters, ready=True)
