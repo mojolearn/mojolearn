@@ -83,6 +83,17 @@ until Modular ships that, we do not pursue it (decided 2026-10-04; the parked pr
 with the evidence in `docs/AMD_PORTABLE_PATH.md` on that branch). Do not hand-rewrite compiler output, patch
 toolchain internals, or ship unsupported build modes. Record the ask for Modular instead and move on.
 
+Owner exception (2026-10-25): use the documented native CPython dictionary API
+for the reproduced instance-field lookup failure in native `get_params` and
+public attribute access. The standard-library-only reproduction points to a
+Mojo/Modular interoperability bug; its exact internal cause is unconfirmed.
+`bindings/native_instance_item.mojo` records the failure, API ownership contract,
+retained evidence and Codex Daybreak screening interruptions inline. This
+specific repair is authorized; do not reopen its permission question. Preserve
+exact dictionary/string admission, object identity, descriptor precedence and
+lifetimes. It permits no Python callbacks, runtime loops, toolchain patches or
+general fallback. Validate the affected public runtime before broad qualification.
+
 ## No dimension targeting, in any mode
 
 No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
