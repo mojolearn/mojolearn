@@ -36,9 +36,9 @@ def _routes(groups, host_names=None):
     for group in groups:  # glue: fixed query binding groups
         name, symbols = _SYMBOLS[group]
         choices = {}
-        for mode in (("identical",) if host_names is not None else ("identical", "fast")):  # glue: offered routes
+        for mode in (("identical",) if host_names is not None else ("identical", "fast")):  # glue: import-time fixed supported numeric-mode routes
             try:
-                binding = (_backend.load_host_module(host_names[name]) if host_names is not None
+                binding = (_backend.load_host_module(host_names[name]) if host_names is not None  # cpu-route: import-time connection of explicit saved-model CPU entries
                            else _backend.binding(name, mode))
                 choices[mode] = _capture(binding, name, symbols)
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
