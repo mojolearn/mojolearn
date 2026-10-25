@@ -67,13 +67,24 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
 def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
                         context: PythonObject, scorer_response: Bool,
                         keywords: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     if method == "__admit__":
         # Validate constructor configuration without executing any of its
         # Python protocols. Native clone owns the recursive value schemas.
         _ = msel_native_clone(model, context)
         return PythonObject(None)
+    return _msel_admitted_dispatch(model, method, args, context, plan, scorer_response, keywords)
+
+
+def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObject,
+                            context: PythonObject, plan: PythonObject,
+                            scorer_response: Bool, keywords: PythonObject) raises -> PythonObject:
+    # The caller has checked the exact connected class, its methods and native
+    # storage layout through msel_estimator_plan. Admission is a separate
+    # operation: reading a clone's constructor parameters must not re-enter
+    # the general admission/clone dispatcher. Keep the ordinary method recipes,
+    # native-entry checks and keyword/output handling shared with public calls.
+    var b = native_loaded_module("builtins")
     var entry = plan["entry"]
     if entry is None or py_type(entry) is not py_type(b.len):
         raise Error("ImportError: native cross-validation estimator binding is unavailable")
@@ -230,7 +241,8 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
     elif plan["init"] is None:
         given = py_call(plan["fields_get"], model, py_type(model))
     else:
-        given = msel_estimator_call(model, "get_params", Python.tuple(), context)
+        given = _msel_admitted_dispatch(model, "get_params", Python.tuple(), context,
+                                        plan, False, PythonObject(None))
     var parameters = Python.dict()
     var args = Python.list()
     for k in range(len(names)):  # driver-loop: fixed constructor parameters, no fitted state
