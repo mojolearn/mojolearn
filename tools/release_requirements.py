@@ -68,6 +68,9 @@ def producer_admission_available(wanted):
     if wanted.get("kind") == "compile":
         from release_compile_evidence import supports_requirement
         return supports_requirement(wanted)
+    if wanted.get("kind") == "runtime":
+        from release_public_runtime_evidence import supports_requirement
+        return supports_requirement(wanted)
     return (wanted.get("kind") == "source"
             and wanted.get("inputs", {}).get("contract", {}).get("id") == "runtime-source")
 
@@ -128,6 +131,12 @@ def requirements(root, revision, version, catalog=None, configuration=None, *,
         for key in ("parent_requirement", "dependency_limitations", "dependency_provenance", "recipe_discovery"):
             if key in spec:
                 result[spec["id"]][key] = copy.deepcopy(spec[key])
+    from release_public_runtime_evidence import CONFIG_KEY, requirement_from_declaration
+    for declaration in config.get(CONFIG_KEY, []):
+        name = declaration["id"]
+        if name in result:
+            raise ValueError("retained regression profile cannot replace an existing requirement")
+        result[name] = requirement_from_declaration(root, revision, declaration)
     manifest = dict(schema=SCHEMA, version=version, source_revision=revision, requirements=result,
                     source_root=str(Path(root).resolve()), configuration=config)
     if "dependency_provenance" in catalog:
@@ -495,6 +504,59 @@ class RequirementsLedger:
             attempts = [self._record(doc, **record) for record in records]
             doc["status"] = self._evaluate(doc)
         return attempts
+
+    def admit_retained_runtime(self, report_path, revision):
+        """Reconcile a bounded historical execution without inventing a begun run.
+
+        The original source, receipt and observed execution timestamps remain
+        immutable. Only this admission gets a new timestamp. Its optional
+        requirement never replaces or satisfies the broad runtime gate.
+        """
+        from release_public_runtime_evidence import (CONFIG_KEY, load, profile,
+            producer_payload, reference, wanted_from_facts, frozen_environment)
+        from release_requirement_receipts import validate_receipt, coverage_summary
+        report_path = Path(report_path).resolve()
+        report = load(report_path)
+        root = self.source_root or report["source_root"]
+        facts = report["facts"]
+        original = wanted_from_facts(facts, root, facts["source_revision"])
+        current = wanted_from_facts(facts, root, revision)
+        name = profile()["id"]
+        receipt = producer_payload(name, original, report_path, load(report_path.parent / "reconciliation.json"))
+        errors = validate_receipt(name, original, receipt)
+        if errors:
+            raise ValueError("; ".join(errors))
+        report_ref = reference(report_path)
+        admission_id = digest(["retained-execution", name, report_ref, receipt])
+        attempt = dict(id=admission_id, admission_id=admission_id, run_id=None,
+            origin="retained-execution", requirement=name, admitted_at=stamp(),
+            observed_timestamps=copy.deepcopy(facts["observed_timestamps"]),
+            source_revision=original["source_revision"], fingerprint=original["fingerprint"],
+            inputs=copy.deepcopy(original["inputs"]),
+            manifest={k: copy.deepcopy(v) for k, v in original.items() if k != "inputs"},
+            status="passed", exit_code=0, evidence=copy.deepcopy(receipt["evidence"]),
+            summary=f"Retained development regression profile: {facts['distinct_cases']} distinct cases, "
+                    f"{facts['executions']} executions; not broad runtime or installed-wheel qualification",
+            coverage=coverage_summary(receipt), receipt=receipt)
+        with self.edit() as doc:
+            if doc.get("source_revision") != current["source_revision"]:
+                raise ValueError("synchronize the ledger to the requested revision before retrospective admission")
+            if name in doc["requirements"] and doc["requirements"][name].get("required") is not False:
+                raise ValueError("retained regression admission cannot replace a required gate")
+            declarations = doc.setdefault("configuration", {}).setdefault(CONFIG_KEY, [])
+            existing = next((d for d in declarations if d.get("id") == name), None)
+            environment = existing["environment"] if existing else frozen_environment(facts)
+            current = wanted_from_facts(facts, root, revision, environment)
+            declaration = dict(id=name, report=report_ref, environment=environment)
+            declarations[:] = [d for d in declarations if d.get("id") != name] + [declaration]
+            doc["requirements"][name] = current
+            prior = next((a for a in doc["attempts"] if a["id"] == admission_id), None)
+            if prior is None:
+                doc["attempts"].append(attempt)
+            else:
+                attempt = prior
+            doc["status"] = self._evaluate(doc)
+        return attempt
 
     @staticmethod
     def _record(doc, run_id, status, paths, summary, exit_code, expected, completed, failed=0, skipped=0,
