@@ -453,11 +453,11 @@ def _stage_class_gather(mut p: EncProg, codes: Int, n: Int, cats: PythonObject, 
     return (out, neg)
 
 
-def _class_words(ran: PythonObject, out: Int, n: Int, ints: Bool, context: PythonObject) raises -> PythonObject:
+def _class_words(ran: PythonObject, offset: Int, n: Int, ints: Bool, context: PythonObject) raises -> PythonObject:
     # `_class_words`: the n 64-bit class words as an int64 or float64 Array.
     if ints:
-        return _take_words(ran, out, n, Python.tuple(n), "q", "<i8", 8, context)
-    return _take_words(ran, out, n, Python.tuple(n), "d", "<f8", 8, context)
+        return _take_words(ran, offset, n, Python.tuple(n), "q", "<i8", 8, context)
+    return _take_words(ran, offset, n, Python.tuple(n), "d", "<f8", 8, context)
 
 
 def _int64_codes(values: PythonObject) raises -> List[Int]:
