@@ -30,6 +30,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
+from bindings.native_loaded_module import native_loaded_module
 from bindings.native_process_pool import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
 from bindings.native_worker_inventory import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native import tsa_array
@@ -247,6 +248,17 @@ def shard_item(dtype: String) raises -> Tuple[String, Int]:
     raise Error("ValueError: shard arrays require float32, float64, int32, int64, uint32 or uint8, got " + dtype)
 
 
+def shard_dtype(value: PythonObject) raises -> String:
+    """The typestr ("<f4", "<i8", ...) of a mojolearn Array or an ndarray.
+    An Array's `dtype` is its typestr; an ndarray's `dtype` prints its name
+    ("float32"), so its typestr is `dtype.str`. A driver input admitted
+    in place (already C-ordered float32) is the caller's ndarray."""
+    var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
+    if module is not None and py_type(value) is module.Array:
+        return String(py=value.dtype)
+    return String(py=value.dtype.str)
+
+
 def shard_array(dtype: String, shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
     """A zero-filled C-ordered Array of `dtype` and `shape` (`count` items)."""
     var item = shard_item(dtype)
@@ -265,7 +277,7 @@ def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) ra
     for k in range(1, len(shape)):  # small-loop(the source's trailing dimensions)
         inner *= Int(py=shape[k])
     py_setitem(shape, 0, hi - lo)
-    var dtype = String(py=source.dtype)
+    var dtype = shard_dtype(source)
     var item = shard_item(dtype)
     var out = shard_array(dtype, py_call(b.tuple, shape), (hi - lo) * inner, context)
     var bytes = (hi - lo) * inner * item[1]
@@ -283,7 +295,7 @@ def shard_row_vector(source: PythonObject, row: Int, context: PythonObject) rais
     """Row `row` of a C-ordered 2-D Array, as a 1-D copy."""
     var b = shard_b()
     var width = Int(py=source.shape[1])
-    var dtype = String(py=source.dtype)
+    var dtype = shard_dtype(source)
     var item = shard_item(dtype)
     var out = shard_array(dtype, Python.tuple(width), width, context)
     if width > 0:
@@ -317,14 +329,14 @@ def shard_join_rows(arrays: PythonObject, total: Int, context: PythonObject) rai
     var inner = 1
     for k in range(1, len(shape)):  # small-loop(the trailing dimensions)
         inner *= Int(py=shape[k])
-    var dtype = String(py=first.dtype)
+    var dtype = shard_dtype(first)
     var item = shard_item(dtype)
     py_setitem(shape, 0, total)
     var out = shard_array(dtype, py_call(b.tuple, shape), total * inner, context)
     var cursor = 0
     for p in range(len(arrays)):  # driver-loop: one block copy per device shard
         var value = arrays[p]
-        if String(py=value.dtype) != dtype:
+        if shard_dtype(value) != dtype:
             raise Error("ValueError: shard workers returned different dtypes")
         var rows = Int(py=value.shape[0])
         var bytes = rows * inner * item[1]

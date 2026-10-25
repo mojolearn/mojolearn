@@ -160,6 +160,24 @@ def connect(context):
     shard.register(context=context,rbf_class=km.RBFSampler)
 
 
+def refresh(context):
+    # glue: re-read the frozen class/storage identities once, after the
+    # package's last import-time class connection. The parallel modules
+    # connect while mojolearn imports, before _native_public_attributes
+    # installs native attribute slots (cls.__getattribute__, on eligible and
+    # pending product classes and their product bases) and before the linear
+    # constructors connect; a snapshot taken earlier refused every later
+    # correct call with "parallel estimator methods or storage hooks changed".
+    # A change after import is still refused.
+    meta = context.get('parallel_public')
+    if meta is None:
+        return
+    for cls in tuple(meta['classes']):  # glue: fixed connected class identities
+        meta['classes'][cls] = _class(cls)
+    if 'predictor_class' in meta:
+        meta['predictor_layout'] = _class(meta['predictor_class'])
+
+
 def register_predictor(cls, context):
     # glue: a public class connects after its definition, never at construction.
     import _thread
