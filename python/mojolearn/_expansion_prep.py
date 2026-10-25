@@ -46,7 +46,7 @@ from ._array import Array
 from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
-from ._mode import SklearnTagsMixin, available_if
+from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 from ._native_robust_bridge import native_method as _native_robust_method
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
@@ -599,7 +599,8 @@ class _PrepBase(SklearnTagsMixin):
         dict
             Parameter names mapped to their values.
         """
-        return {name: getattr(self, name) for name in self._parameters}  # glue: copies estimator keyword arguments
+        # The declared prep schema has always been shallow; deep is ignored.
+        return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
 
     def set_params(self, **params):
         """Set constructor parameters.
