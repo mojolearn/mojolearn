@@ -45,9 +45,12 @@ def connect_classes(context, package):
     }
     classes = set()
     for name, module in tuple(sys.modules.items()):  # glue: loaded built-in class identities only
-        if name == package.__name__ or name.startswith(package.__name__ + '.'):
+        if (name == package.__name__ or name.startswith(package.__name__ + '.')) and not name.startswith(package.__name__ + '.tests'):
             if type(module) is ModuleType:
-                classes.update(value for value in vars(module).values() if type(value) is type)  # glue: fixed class declarations
+                classes.update(value for value in vars(module).values()  # glue: fixed product class declarations; imported external/test callbacks are not built-in debt
+                               if type(value) is type
+                               and (value.__module__ == package.__name__ or value.__module__.startswith(package.__name__ + '.'))
+                               and not value.__module__.startswith(package.__name__ + '.tests'))
     for cls in classes:  # glue: native parameter schemas, never product-time introspection
         if cls in context['plans'] or cls in context['pending']:
             continue  # Never bless changes to a previously pinned class.

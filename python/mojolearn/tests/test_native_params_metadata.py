@@ -229,11 +229,14 @@ def test_all_public_generic_getters_have_connected_schemas():
             declared = next((vars(base)['get_params'] for base in cls.__mro__ if 'get_params' in vars(base)), None)
             if declared is not None:
                 assert cls not in context['pending'], (name, context['pending'][cls])
+                assert cls in context['plans'], (name, 'missing native parameter schema')
     seen = set()
     for module in tuple(__import__('sys').modules.values()):
-        if getattr(module, '__name__', '').startswith('mojolearn'):
+        if (getattr(module, '__name__', '').startswith('mojolearn')
+                and not getattr(module, '__name__', '').startswith('mojolearn.tests')):
             for cls in vars(module).values():
-                if type(cls) is type and cls not in seen:
+                if (type(cls) is type and cls not in seen and cls.__module__.startswith('mojolearn')
+                        and not cls.__module__.startswith('mojolearn.tests')):
                     seen.add(cls)
                     declared = next((vars(base)['get_params'] for base in cls.__mro__ if 'get_params' in vars(base)), None)
                     if declared is _mode.ParamsMixin.get_params:

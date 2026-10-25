@@ -58,16 +58,19 @@ class NativeParamsConnection(unittest.TestCase):
                 def __init__(self, alpha=None, *, estimator=None):
                     raise AssertionError('Python constructor ran')
                 return type(name, (), {'get_params': get_params, '__init__': __init__,
+                                      '__module__': package.__name__ + '.' + module_name,
                                       '_parameters': ('alpha', 'estimator'),
                                       '_parameter_names': ('alpha', 'estimator')})
             setattr(getattr(package, module_name), class_name, make_owner(class_name))
         mode = package._mode
         mode.ParamsMixin._get_param_names = classmethod(lambda cls: (_ for _ in ()).throw(AssertionError('Python signature hook ran')))
-        mode.NumericModeMixin = type('NumericModeMixin', (mode.ParamsMixin,), {})
-        package.Model = type('Model', (mode.NumericModeMixin,), {})
+        mode.NumericModeMixin = type('NumericModeMixin', (mode.ParamsMixin,), {'__module__': package.__name__})
+        package.Model = type('Model', (mode.NumericModeMixin,), {'__module__': package.__name__})
         package.Custom = type('Custom', (mode.NumericModeMixin,), {
+            '__module__': package.__name__,
             '_get_param_names': classmethod(lambda cls: (_ for _ in ()).throw(AssertionError('Python signature hook ran')))})
-        package._training_impl.SGD = type('SGD', (package._training_impl._Optimizer,), {})
+        package.External = type('External', (), {'get_params': lambda self: {}})
+        package._training_impl.SGD = type('SGD', (package._training_impl._Optimizer,), {'__module__': package.__name__})
         selection = package.model_selection
         selection._NATIVE_CONTEXT = {'family_msel_search_layouts': {selection._BaseSearch: {'parameters': ('estimator',)}}}
         namespace = {'__name__': package.__name__ + '._native_params_metadata', '__package__': package.__name__}
@@ -80,9 +83,10 @@ class NativeParamsConnection(unittest.TestCase):
         self.assertTrue(plan['recurse'])
         self.assertFalse(context['plans'][package.preprocessing.StandardScaler]['recurse'])
         self.assertEqual(set(context['pending']), {package.Custom})
+        self.assertNotIn(package.External, context['pending'])
         self.assertIn('custom Python parameter-name callbacks', context['pending'][package.Custom])
         original = context['plans'][package.Model]
-        package.Late = type('Late', (mode.NumericModeMixin,), {})
+        package.Late = type('Late', (mode.NumericModeMixin,), {'__module__': package.__name__})
         package.Model.__init__ = lambda self, changed=None: None
         with patch.dict(sys.modules, modules):
             namespace['connect_classes'](context, package)
