@@ -885,6 +885,8 @@ def _call(index, scope, node, facts):
         return
     # 2. binding acquisition: counted nowhere, never walked
     if scope.is_binding(node):
+        if getattr(index, "strict_endpoints", False):
+            facts.shell += 1  # runtime binding acquisition is product orchestration
         return
     # 3. NumPy
     root = _root_name(func_expr)
@@ -898,7 +900,7 @@ def _call(index, scope, node, facts):
         return
     target = scope.resolve_call(func_expr)
     if target is None:
-        if name and NATIVE_CALL.search(name):
+        if name and NATIVE_CALL.search(name) and not getattr(index, "strict_endpoints", False):
             facts.native_sites += 1
             facts.entries.add(name)
         elif _is_alloc(name) or name in ALLOC_CLASSES:
@@ -911,6 +913,45 @@ def _call(index, scope, node, facts):
     if kind == "module":
         facts.unresolved += 1
         return
+    connections = getattr(index, "endpoint_connections", None)
+    if connections is not None:
+        owner = None
+        if isinstance(func_expr, ast.Attribute):
+            receiver = func_expr.value
+            if isinstance(receiver, ast.Name):
+                owner = scope.root if receiver.id in ("self", "cls") else scope.obj_types.get(receiver.id)
+            if owner is None:
+                receiver_target = index.resolve_expr(receiver, scope.modname, scope.func)
+                if receiver_target and receiver_target[0] == "class":
+                    owner = receiver_target[1]
+        replaced = connections.get(owner, name) if owner and isinstance(func_expr, ast.Attribute) else []
+        if kind == "class":
+            replaced = connections.get(obj, "__init__")
+        if replaced:
+            values = [r["value"] for r in replaced]
+            value = values[0] if values and values[0] and all(v == values[0] for v in values) else None
+            if value and value[0] == "native":
+                facts.native_sites += 1
+                facts.entries.add(value[1])
+                return
+            if value and value[0] == "func":
+                kind, obj = value
+            else:
+                facts.unresolved += 1
+                facts.unresolved_names.append(f"{node.lineno}:unresolved installed slot {name}")
+                return
+        if kind == "func":
+            decorated = connections.decorated(obj)
+            if decorated and decorated[0] == "func":
+                obj = decorated[1]
+            elif decorated and decorated[0] == "native":
+                facts.native_sites += 1
+                facts.entries.add(decorated[1])
+                return
+            else:
+                facts.unresolved += 1
+                facts.unresolved_names.append(f"{node.lineno}:unresolved decorator on {name}")
+                return
     shell = obj.mod.short in SHELL_MODULES and obj.mod.name.count(".") == 1
     if kind == "func" and (obj.mod.short, obj.qual) in SHELL_FUNCTIONS and obj.mod.name.count(".") == 1:
         shell = True
@@ -1030,7 +1071,7 @@ def verdict(facts, helpers=0):
 
 # ---------------------------------------------------------------- exports and families
 
-def public_names(root, package="mojolearn"):
+def public_names(root, package="mojolearn", include_non_algorithm=False):
     """[(public name, origin 'module.name', [all public aliases])], one per symbol origin."""
     inventory = _load_inventory()
     base = root / "python" / package
@@ -1050,7 +1091,7 @@ def public_names(root, package="mojolearn"):
     resolve, module_of = inventory.origins(root)
     groups = defaultdict(list)
     for public, origin in sorted(rows.items()):
-        if public in skip:
+        if public in skip and not include_non_algorithm:
             continue
         if origin is None:
             module, _, name = public.rpartition(".")
@@ -1199,6 +1240,244 @@ def _endpoint_parameters(node):
     return out
 
 
+class EndpointConnections:
+    """Resolve import-time class-slot replacements without importing the product.
+
+    This small symbolic walk follows concrete class/function identities through
+    installers and decorators. It does not execute calls or infer that a value
+    returned by a native factory must itself be native. Unknown installed slots
+    remain qualification debt; their superseded Python bodies are not reported
+    as live execution. Existing runtime evidence must still prove transitivity.
+    """
+
+    def __init__(self, index):
+        self.index, self.replacements, self.seen = index, {}, set()
+        self.scopes = {}
+        for cls in list(index.classes.values()):
+            for node in cls.node.body:
+                if isinstance(node, ast.Assign):
+                    value = self.value(node.value, cls.mod, None, {})
+                    if value and value[0] in ("native", "func"):
+                        for target in node.targets:
+                            if isinstance(target, ast.Name):
+                                self.record(cls, target.id, value, cls.mod, node, "class-definition slot connection")
+        for mod in list(index.mods.values()):
+            if mod is None:
+                continue
+            self.walk(mod.tree.body, mod, None, {})
+        for cls in list(index.classes.values()):
+            for decorator in reversed(cls.node.decorator_list):
+                value = self.value(decorator, cls.mod, None, {})
+                if value and value[0] == "func":
+                    self.call(value[1], [("class", cls)], [], {})
+                else:
+                    self.record(cls, "*", None, cls.mod, decorator,
+                                "unresolved class decorator can replace public operations")
+
+    def scope(self, func):
+        if func.key not in self.scopes:
+            self.scopes[func.key] = Scope(self.index, func, func.cls)
+        return self.scopes[func.key]
+
+    def value(self, expr, mod, func, env, depth=0):
+        if expr is None or depth > 12:
+            return None
+        if isinstance(expr, ast.Constant):
+            return ("literal", expr.value)
+        if isinstance(expr, ast.Name):
+            if expr.id in env:
+                return env[expr.id]
+            target = self.index.resolve_expr(expr, mod.name, func)
+            if target and target[0] != "const":
+                return target
+            scope = self.scope(func or mod.module_scope) if func or mod.module_scope else None
+            if scope and expr.id in scope.entry_names:
+                return ("native", scope.entry_names[expr.id])
+            alias = mod.aliases.get(expr.id)
+            if alias is not None and not isinstance(alias, ast.Call):
+                return self.value(alias, mod, func, env, depth + 1)
+        if isinstance(expr, (ast.Tuple, ast.List)):
+            return ("sequence", [self.value(e, mod, func, env, depth + 1) for e in expr.elts])
+        if isinstance(expr, ast.Attribute):
+            if (isinstance(expr.value, ast.Name) and expr.value.id == "object"
+                    and expr.attr in ("__getattribute__", "__setattr__", "__delattr__", "__new__", "__init__")):
+                return ("native", "object." + expr.attr)
+            base = self.value(expr.value, mod, func, env, depth + 1)
+            if base and base[0] == "class":
+                return self.index.lookup(base[1], expr.attr)
+            if base and base[0] == "func" and expr.attr in ("__wrapped__", "__func__"):
+                return base
+            target = self.index.resolve_expr(expr, mod.name, func)
+            if target:
+                return target
+        scope = self.scope(func or mod.module_scope) if func or mod.module_scope else None
+        if scope:
+            entry = scope.entry_of(expr)
+            if entry:
+                return ("native", entry)
+        if isinstance(expr, ast.Call):
+            args = [self.value(a, mod, func, env, depth + 1) for a in expr.args]
+            if (_final(expr.func) in ("getattr", "getattr_static") and len(args) >= 2
+                    and args[0] and args[0][0] == "class" and args[1] and args[1][0] == "literal"):
+                return self.index.lookup(args[0][1], args[1][1])
+            if _final(expr.func) == "unwrap" and args:
+                return args[0]
+            called = self.index.resolve_expr(expr.func, mod.name, func)
+            if called and called[0] == "func":
+                # A decorator factory returns a source function, not a native
+                # operation just because its name contains 'native'.
+                callee = called[1]
+                local = dict(zip(_params(callee.node)[0], args))
+                returns = [self.value(n.value, callee.mod, callee, local, depth + 1)
+                           for n in _own_nodes(callee.node) if isinstance(n, ast.Return)]
+                if returns and returns[0] and all(r == returns[0] for r in returns):
+                    return returns[0]
+        return None
+
+    def record(self, cls, name, value, mod, node, reason="import-time class-slot replacement"):
+        if name != "*" and not _public_member(name):
+            return
+        row = dict(value=value, source=f"{mod.path.relative_to(self.index.root)}:{node.lineno}",
+                   expression=ast.unparse(node), reason=reason)
+        key = (cls.key, name)
+        current = self.replacements.setdefault(key, [])
+        if not any(r["source"] == row["source"] and r["expression"] == row["expression"] for r in current):
+            current.append(row)
+
+    def assign(self, target, value, mod, func, env, node):
+        if isinstance(target, ast.Name):
+            env[target.id] = value
+        elif isinstance(target, (ast.Tuple, ast.List)) and value and value[0] == "sequence":
+            for dst, src in zip(target.elts, value[1]):
+                self.assign(dst, src, mod, func, env, node)
+        elif isinstance(target, ast.Attribute):
+            cls = self.value(target.value, mod, func, env)
+            if cls and cls[0] == "class":
+                self.record(cls[1], target.attr, value, mod, node)
+
+    def call(self, func, args, keywords, parent_env):
+        env = dict(zip(_params(func.node)[0], args))
+        env.update(keywords)
+        # Closures keep the concrete class connected by their enclosing factory.
+        env = dict(parent_env, **env)
+        identity = tuple(sorted((k, v[0], v[1].key if v[0] in ("class", "func") else str(v[1])[:120])
+                                for k, v in env.items() if v and v[0] in ("class", "func", "literal")))
+        key = (func.key, identity)
+        if key in self.seen:
+            return
+        self.seen.add(key)
+        self.walk(func.node.body, func.mod, func, env)
+
+    def walk(self, body, mod, func, env):
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = self.value(node.value, mod, func, env)
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    self.assign(target, value, mod, func, env, node)
+            if isinstance(node, ast.For):
+                seq = self.value(node.iter, mod, func, env)
+                if seq and seq[0] == "sequence":
+                    for value in seq[1]:
+                        local = dict(env)
+                        self.assign(node.target, value, mod, func, local, node)
+                        self.walk(node.body, mod, func, local)
+                else:
+                    self.walk(node.body, mod, func, dict(env))
+                self.walk(node.orelse, mod, func, dict(env))
+                continue
+            if isinstance(node, (ast.If, ast.Try, ast.With)):
+                self.walk(node.body, mod, func, dict(env))
+                self.walk(getattr(node, "orelse", []), mod, func, dict(env))
+                self.walk(getattr(node, "finalbody", []), mod, func, dict(env))
+                for handler in getattr(node, "handlers", []):
+                    self.walk(handler.body, mod, func, dict(env))
+                continue
+            # Expressions in assignments can invoke installers too.
+            for call in (n for n in ast.walk(node) if isinstance(n, ast.Call)):
+                args = [self.value(a, mod, func, env) for a in call.args]
+                if _final(call.func) == "setattr" and len(args) >= 3 and args[0] and args[0][0] == "class":
+                    name = args[1][1] if args[1] and args[1][0] == "literal" and isinstance(args[1][1], str) else "*"
+                    self.record(args[0][1], name, args[2], mod, call)
+                called = self.index.resolve_expr(call.func, mod.name, func)
+                if called and called[0] == "func":
+                    # Package import roots plus helpers carrying a concrete
+                    # class. Do not walk ordinary product calls as installers.
+                    has_class = any(a and (a[0] == "class" or a[0] == "sequence" and
+                        any(v and v[0] == "class" for v in a[1])) for a in args)
+                    if func is None or has_class:
+                        keywords = [(k.arg, self.value(k.value, mod, func, env)) for k in call.keywords if k.arg]
+                        self.call(called[1], args, keywords, env if called[1].parent else {})
+
+    def get(self, cls, name):
+        for owner in self.index.mro(cls):
+            rows = self.replacements.get((owner.key, name), [])
+            if name != "*":
+                rows = rows + self.replacements.get((owner.key, "*"), [])
+            if rows:
+                return rows
+            # An own source definition shadows a base's installed attribute.
+            if any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name
+                   or isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)
+                   for n in owner.node.body):
+                break
+        return []
+
+    def decorated(self, func):
+        current = ("func", func)
+        for decorator in reversed(func.node.decorator_list):
+            name = ast.unparse(decorator.func if isinstance(decorator, ast.Call) else decorator)
+            if name in ("property", "classmethod", "staticmethod", "functools.wraps", "wraps") or name.endswith((".getter", ".setter", ".deleter")):
+                continue
+            factory = self.value(decorator, func.mod, func.parent, {})
+            if not factory or factory[0] != "func":
+                return None
+            outer = factory[1]
+            env = dict(zip(_params(outer.node)[0], [current]))
+            returns = [self.value(n.value, outer.mod, outer, env) for n in _own_nodes(outer.node)
+                       if isinstance(n, ast.Return)]
+            if not returns or not returns[0] or any(v != returns[0] for v in returns):
+                return None
+            current = returns[0]
+        return current
+
+
+def _endpoint_verdict(func, facts, helpers):
+    if (facts.unresolved and facts.statements == 1 and not facts.loops
+            and not facts.numpy and not facts.allocs and not facts.shell):
+        return "unresolved"
+    result = verdict(facts, helpers)
+    if result == "native" and facts.native_sites == 0:
+        body = [n for n in func.node.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))]
+        # Merely being short is not a native boundary. In particular, property
+        # hooks, scalar coercions and constructor assignments execute Python.
+        noop = all(isinstance(n, ast.Pass) or isinstance(n, ast.Return) and
+                   (n.value is None or isinstance(n.value, ast.Constant) and n.value.value is None
+                    or isinstance(n.value, ast.Name) and n.value.id == "self") for n in body)
+        if not noop:
+            return "python"
+    return result
+
+
+def _tag_metadata_only(index, func, owner):
+    """The tag name does not exempt calls into ordinary product operations."""
+    computational = set(OPS) | {"kneighbors", "radius_neighbors", "search", "run", "backward"}
+    seen, pending = set(), [(func, owner)]
+    while pending:
+        current, cls = pending.pop()
+        key = (current.key, cls.key if cls else None)
+        if key in seen:
+            continue
+        seen.add(key)
+        for node in _own_nodes(current.node):
+            if isinstance(node, ast.Call) and _final(node.func) in computational:
+                return False
+        pending.extend(analyze(index, current, cls).callees)
+    return True
+
+
 def endpoint_inventory(root, package="mojolearn"):
     """One static ledger for public operations and their omitted lifecycle surface.
 
@@ -1207,7 +1486,8 @@ def endpoint_inventory(root, package="mojolearn"):
     Runtime installers and external base classes require a separate runtime walk.
     """
     index, cache, rows, by_definition = Index(root, package), {}, [], {}
-    for canonical, origin, aliases in public_names(root, package):
+    layout = _layout(index, package)
+    for canonical, origin, aliases in public_names(root, package, include_non_algorithm=True):
         module, _, name = origin.rpartition(".")
         target = index.resolve_name(module, name) if module else None
         if target and target[0] in ("module", "const"):
@@ -1215,15 +1495,71 @@ def endpoint_inventory(root, package="mojolearn"):
         key = (target[0], target[1].key) if target else ("unresolved", origin)
         group = by_definition.setdefault(key, dict(target=target, origin=origin, names=set()))
         group["names"].update([canonical, *aliases])
+    # Factory-produced objects are product APIs even when their class is private
+    # or the export manifest calls them 'not_algorithm'. Retain the explicit
+    # framework-returned doors whose registration factories are not exports.
+    for module, name, _ in RETURNED_OPERATIONS:
+        dotted = f"{package}.{module}"
+        if index.module_file(dotted) is None:
+            continue
+        target = index.resolve_name(dotted, name)
+        key = (target[0], target[1].key) if target else ("unresolved", dotted + "." + name)
+        by_definition.setdefault(key, dict(target=target, origin=dotted + "." + name,
+                                           names={dotted + "." + name}, returned=True))
+    for group in list(by_definition.values()):
+        target = group["target"]
+        if target and target[0] == "func":
+            cls = index.returns_class.get(target[1].key)
+            if cls:
+                key = ("class", cls.key)
+                by_definition.setdefault(key, dict(target=("class", cls), origin=".".join(cls.key),
+                    names={min(group["names"]) + "::<result>"}, returned=True))
+    connections = EndpointConnections(index)
+    index.endpoint_connections = connections
+    index.strict_endpoints = True
 
     def add(group, method, kind, func=None, owner=None):
         names = sorted(group["names"])
         public = min(names, key=lambda n: (n.count("."), len(n), n))
+        defined_in = func.mod.name if func else group["origin"].rpartition(".")[0]
         item = dict(endpoint=public + "." + method, public=public, aliases=names,
                     method=method, kind=kind, definition=None, source_ast_sha256=None,
                     parameters=[], static_verdict="unresolved", native_entries=[],
+                    family=family_of(public, defined_in, names, layout),
+                    returned_operation=group.get("returned", False),
+                    runtime_status="unresolved", qualification_debt=[],
                     evidence={axis: {"status": "unreviewed", "records": []} for axis in
                               ("runtime", "correctness", "identity", "fault", "options", "failures")})
+        declared = func
+        replacement = connections.get(owner, method.split(":", 1)[0]) if owner else []
+        if replacement:
+            item["import_connections"] = [{k: v for k, v in r.items() if k != "value"} for r in replacement]
+            item["declared_definition"] = _where(root, func) if func else None
+            values = [r["value"] for r in replacement]
+            if values and values[0] and all(v == values[0] for v in values):
+                if values[0][0] == "func":
+                    func = values[0][1]
+                elif values[0][0] == "native":
+                    func = None
+                    item.update(static_verdict="native", native_entries=[values[0][1]],
+                                runtime_status="native_boundary")
+                else:
+                    func = None
+            else:
+                func = None
+            if func is None and item["static_verdict"] != "native":
+                item["qualification_debt"].append("import-time replacement requires installed-slot qualification")
+        if func:
+            decorated = connections.decorated(func)
+            if decorated and decorated[0] == "func":
+                func = decorated[1]
+            elif decorated and decorated[0] == "native":
+                item.update(static_verdict="native", native_entries=[decorated[1]], runtime_status="native_boundary")
+                func = None
+            else:
+                item["qualification_debt"].append("unresolved method decorator; source body is not the installed callable")
+                item["declared_definition"] = _where(root, func)
+                func = None
         if func:
             # Descriptors share a source name; avoid the ordinary method cache
             # collapsing their getter, setter and deleter into one definition.
@@ -1231,9 +1567,21 @@ def endpoint_inventory(root, package="mojolearn"):
             item.update(definition=_where(root, func),
                         source_ast_sha256=hashlib.sha256(ast.dump(func.node).encode()).hexdigest(),
                         parameters=_endpoint_parameters(func.node),
-                        static_verdict=verdict(facts, helpers), native_entries=sorted(map(str, facts.entries)),
+                        static_verdict=_endpoint_verdict(func, facts, helpers), native_entries=sorted(map(str, facts.entries)),
                         always_refuses=_refusal(func.node),
                         unresolved_calls=facts.unresolved, shell_calls=facts.shell)
+            item["runtime_status"] = ("native_boundary" if item["static_verdict"] == "native" else
+                                      "unresolved" if item["static_verdict"] == "unresolved" else "prohibited_source")
+        if method == "__sklearn_tags__" and func is not None and _tag_metadata_only(index, func, owner):
+            item["runtime_status"] = "allowed_tag_metadata"
+            item["exception"] = "Owner-authorized scikit-learn tag metadata only; native callbacks remain prohibited."
+        elif item.get("always_refuses"):
+            item["runtime_status"] = "refusal_only"
+        elif method == "__init_subclass__" and item["static_verdict"] != "native":
+            item["runtime_status"] = "unresolved"
+            item["qualification_debt"].append("class-definition hook requires import-time versus product-call boundary qualification")
+        if declared and replacement and func is not declared:
+            item["declared_source_ast_sha256"] = hashlib.sha256(ast.dump(declared.node).encode()).hexdigest()
         rows.append(item)
 
     for group in by_definition.values():
@@ -1263,6 +1611,15 @@ def endpoint_inventory(root, package="mojolearn"):
                 if not nodes:
                     if found and found[0] == "func":
                         add(group, name, "method_alias", found[1], obj)
+                    elif connections.get(obj, name):
+                        add(group, name, "installed_method", owner=obj)
+                    else:
+                        assigned = next((n.value for n in cls.node.body if isinstance(n, ast.Assign)
+                            and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)), None)
+                        if isinstance(assigned, ast.Call) or isinstance(assigned, (ast.Name, ast.Attribute)) and not found:
+                            # A custom descriptor or imported callable cannot
+                            # disappear just because lookup cannot resolve it.
+                            add(group, name, "unresolved_class_attribute", owner=obj)
                     continue
                 for node in nodes:
                     decorators = [ast.unparse(d) for d in node.decorator_list]
@@ -1277,8 +1634,21 @@ def endpoint_inventory(root, package="mojolearn"):
                     elif found and found[0] == "func":
                         add(group, name, "constructor" if name in ("__init__", "__new__") else "method", found[1], obj)
                         break
+        for cls in index.mro(obj):
+            for cls_key, name in connections.replacements:
+                if cls_key == cls.key and name not in seen:
+                    seen.add(name)
+                    add(group, name, "unresolved_installer" if name == "*" else "installed_method", owner=obj)
+            for base in cls.node.bases:
+                if isinstance(base, ast.Name) and base.id in ("object", "Exception", "ValueError", "RuntimeError"):
+                    continue
+                resolved = index.resolve_expr(base, cls.mod.name, None)
+                if not resolved or resolved[0] != "class":
+                    add(group, "<base:" + ast.unparse(base) + ">", "unresolved_base")
+            if cls.node.keywords:
+                add(group, "<class-construction>", "unresolved_metaclass")
     rows.sort(key=lambda row: row["endpoint"])
-    return dict(schema=1, scope="static public endpoints; no product imports or execution",
+    return dict(schema=2, scope="all public and returned endpoints; static connections only, no product imports or execution",
                 limitations=["Dynamic native installers and external-base methods need runtime enumeration.",
                              "Static native-shaped calls do not prove transitive callees avoid Python.",
                              "Parameters describe declared options, not tested values or combinations.",
@@ -1287,7 +1657,9 @@ def endpoint_inventory(root, package="mojolearn"):
                 summary=dict(endpoints=len(rows), constructors=sum(r["kind"] == "constructor" for r in rows),
                              properties=sum(r["kind"] == "property" for r in rows),
                              refusal_only=sum(r.get("always_refuses", False) for r in rows),
-                             declared_parameters=sum(len(r["parameters"]) for r in rows)))
+                             declared_parameters=sum(len(r["parameters"]) for r in rows),
+                             by_kind={k: sum(r["kind"] == k for r in rows) for k in sorted({r["kind"] for r in rows})},
+                             by_status={k: sum(r["runtime_status"] == k for r in rows) for k in sorted({r["runtime_status"] for r in rows})}))
 
 
 def _refusal(node):
@@ -1406,6 +1778,58 @@ def check(current, baseline):
     return problems, notes
 
 
+def check_endpoints(report):
+    """Zero prohibited OR unresolved live endpoints, independent of OPS/history."""
+    admitted = {"native_boundary", "allowed_tag_metadata", "refusal_only"}
+    problems = []
+    for row in report["endpoints"]:
+        if row["runtime_status"] not in admitted:
+            detail = "; ".join(row.get("qualification_debt", [])) or row["static_verdict"]
+            problems.append(f"{row['runtime_status']}: {row['endpoint']} "
+                            f"({row.get('definition') or row.get('declared_definition') or 'unresolved source'}): {detail}")
+    return problems
+
+
+def summarize_endpoints(report):
+    families = defaultdict(lambda: defaultdict(int))
+    for row in report["endpoints"]:
+        families[row["family"]][row["runtime_status"]] += 1
+    fields = ("native_boundary", "prohibited_source", "unresolved", "allowed_tag_metadata", "refusal_only")
+    lines = [f"{'family':<28} {'native':>7} {'prohibited':>10} {'unresolved':>10} {'tags':>6} {'refusal':>8}"]
+    for family, counts in sorted(families.items()):
+        lines.append(f"{family:<28} " + " ".join(f"{counts[k]:>10}" for k in fields))
+    lines.append("endpoint kinds: " + json.dumps(report["summary"]["by_kind"], sort_keys=True))
+    lines.append("endpoint status: " + json.dumps(report["summary"]["by_status"], sort_keys=True))
+    return "\n".join(lines) + "\n"
+
+
+def endpoint_frontier(report):
+    """Group gate debt by live implementation or unresolved connection site."""
+    groups, classes, kinds, families = {}, defaultdict(int), defaultdict(int), defaultdict(lambda: defaultdict(int))
+    for row in report["endpoints"]:
+        status = row["runtime_status"]
+        if status not in ("prohibited_source", "unresolved"):
+            continue
+        classes[row["public"]] += 1
+        kinds[row["kind"]] += 1
+        families[row["family"]][status] += 1
+        reasons = row.get("qualification_debt") or [row["static_verdict"]]
+        locations = ([r["source"] for r in row.get("import_connections", [])] if status == "unresolved" else [])
+        locations = sorted(set(locations or [row.get("definition") or row.get("declared_definition") or row["public"]]))
+        key = (status, tuple(locations), tuple(reasons))
+        group = groups.setdefault(key, dict(status=status, locations=locations, reasons=reasons, endpoints=[], kinds=set(), families=set()))
+        group["endpoints"].append(row["endpoint"])
+        group["kinds"].add(row["kind"])
+        group["families"].add(row["family"])
+    result = []
+    for group in groups.values():
+        result.append(dict(group, kinds=sorted(group["kinds"]), families=sorted(group["families"]), count=len(group["endpoints"])))
+    result.sort(key=lambda g: (-g["count"], g["locations"]))
+    return dict(implementation_groups=result, unique_implementation_groups=len(result),
+                by_class=dict(sorted(classes.items())), by_kind=dict(sorted(kinds.items())),
+                by_family={k: dict(v) for k, v in sorted(families.items())})
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--root", type=Path, default=REPO)
@@ -1415,16 +1839,31 @@ def main(argv=None):
     parser.add_argument("--endpoints-json", type=Path,
                         help="write all static public lifecycle/option endpoints and unclaimed evidence axes")
     parser.add_argument("--baseline", action="store_true", help="rewrite the committed baseline")
-    parser.add_argument("--check", action="store_true", help="require zero non-native public operations")
+    parser.add_argument("--check", action="store_true", help="require zero prohibited/unresolved public or returned endpoints")
     parser.add_argument("--baseline-file", type=Path, default=None)
     parser.add_argument("--explain", metavar="NAME.METHOD",
                         help="print the walk of one method, e.g. mojolearn.KMeans.fit")
     args = parser.parse_args(argv)
-    if args.endpoints_json:
-        if args.check or args.baseline or args.explain:
-            parser.error("--endpoints-json is separate from the historical operation baseline")
+    if args.endpoints_json or args.check:
+        if args.baseline or args.explain:
+            parser.error("endpoint qualification is separate from the historical operation baseline")
         report = endpoint_inventory(args.root, args.package)
-        args.endpoints_json.write_text(json.dumps(report, indent=2) + "\n")
+        problems = check_endpoints(report)
+        report["gate"] = dict(status="failed" if problems else "source-classification-passed",
+                              prohibited_or_unresolved=len(problems), problems=problems,
+                              runtime_proof_required=True)
+        report["frontier"] = endpoint_frontier(report)
+        if args.endpoints_json:
+            args.endpoints_json.write_text(json.dumps(report, indent=2) + "\n")
+        if args.check:
+            sys.stdout.write(summarize_endpoints(report))
+            for problem in problems[:40]:
+                print("FAIL: " + problem)
+            if len(problems) > 40:
+                print(f"{len(problems) - 40} additional failures; retain every endpoint with --endpoints-json PATH")
+            print("public-runtime: " + (f"FAIL ({len(problems)} prohibited/unresolved endpoints; zero required)"
+                  if problems else "source classification passed; transitive runtime proof still required"))
+            return 1 if problems else 0
         print(json.dumps(report["summary"], sort_keys=True))
         return 0
     if args.explain:
@@ -1443,18 +1882,6 @@ def main(argv=None):
         sys.stdout.write(summary)
         print(f"baseline: {baseline} ({len(rows)} rows)")
         return 0
-    if args.check:
-        if not baseline.is_file():
-            print(f"public-runtime: no baseline at {baseline}", file=sys.stderr)
-            return 2
-        problems, notes = check(records, read_tsv(baseline))
-        sys.stdout.write(summary)
-        for note in notes:
-            print("note: " + note)
-        for problem in problems:
-            print("FAIL: " + problem)
-        print("public-runtime: " + ("FAIL" if problems else "source classification passed; runtime proof still required"))
-        return 1 if problems else 0
     if args.out:
         args.out.write_text(tsv)
     elif not args.summary:
