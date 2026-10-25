@@ -4,7 +4,7 @@
 from . import _portable_math as math
 import operator
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 
 from ._mode import NumericModeMixin
 from .linear_model import _round_f32
@@ -23,8 +23,9 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: `fit`,
 # `fit_transform` and `transform` are one native call each
 # (bindings/mani_umap_native.mojo).
-from . import _native_runtime_manifold_bridge
+from . import _native_runtime_manifold_bridge, _native_spectral_umap_bridge
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
+_NATIVE_CONTEXT["family_spectral_umap_bindings"] = _native_spectral_umap_bridge.connect()
 
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):
@@ -305,7 +306,7 @@ class UMAP(NumericModeMixin):
             For ``densmap=True``, a non-euclidean ``output_metric`` or an
             unsupported ``target_metric``.
         """
-        return _NATIVE(self, "family_mani_umap_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mani_umap_fit", (X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to ``X`` and return the training embedding.
@@ -322,7 +323,7 @@ class UMAP(NumericModeMixin):
         embedding : Array of shape (n_samples, n_components)
             The float32 embedding, sharing memory with ``embedding_``.
         """
-        return _NATIVE(self, "family_mani_umap_fit_transform", (self._bind(), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mani_umap_fit_transform", (X, y), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new rows in the fitted coordinate system without refitting.
@@ -349,13 +350,7 @@ class UMAP(NumericModeMixin):
             since ``fit`` (refit first), the feature count differs, or ``X``
             is not finite.
         """
-        # glue: route to the tier the model was fitted in, so a changed live
-        # numeric_mode reaches the native "changed after fit" refusal instead
-        # of an unrelated tier refusal (e.g. no 'fast' tier on a CPU-only
-        # install); an unfitted model resolves the default tier and refuses
-        # natively as unfitted.
-        binding = _backend.binding(self._BINDING, getattr(self, "_transform_mode", None))
-        return _NATIVE(self, "family_mani_umap_transform", (binding, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mani_umap_transform", (X,), _NATIVE_CONTEXT)
 
     # Saved layout (lane/inference-forecast-umap-pca, 2026-09-15): training and
     # embedding (float32), `meta` <i8 [n_neighbors, n_components, n_epochs,
@@ -441,6 +436,6 @@ _native_archive_bridge.register(UMAP, _UMAP_FORMAT, (
                         ("float", _config(6)), ("float", _config(8)), ("float", _config(9)))),
 ), host_archive_umap_metrics=dict(_METRICS))
 
-# The owner's fixed tables: the metric codes, and the binding resolver a
-# 'random' / 'pca' start uses for the decomp kit (binding acquisition only).
-_native_family_bridge.tables(family_mani_umap_metrics=dict(_METRICS), family_mani_binding=_backend.binding)
+# The owner's fixed metric codes; random/PCA initialization uses the retained
+# exact native decomp entries, with native mode selection.
+_native_family_bridge.tables(family_mani_umap_metrics=dict(_METRICS))

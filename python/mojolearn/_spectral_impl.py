@@ -23,10 +23,10 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 from ._mode import ParamsMixin, available_if
 from ._buffer import _native, addr, empty
-from ._metrics_impl import _get_binding
+from . import _native_spectral_umap_bridge
 
 __all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
 
@@ -67,14 +67,15 @@ DEFAULT_EIGEN_TOL = 1e-5
 DEFAULT_SEED = 0
 
 # The compiled family owner (bindings/cfb_spectral.mojo): every public method
-# is one native call, handed the bindings it runs; it reads these tables.
+# is one native call; its owner selects among these import-time connections.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_cfb_sc_affinities=_CLUSTER_AFFINITIES,
                              family_cfb_se_affinities=_EMBED_AFFINITIES,
                              family_cfb_predict_affinities=_AFFINITIES,
                              family_cfb_assign_labels=_ASSIGN_LABELS,
                              family_cfb_assign_codes=dict(_ASSIGN_CODES),
-                             family_cfb_default_eigen_tol=DEFAULT_EIGEN_TOL)
+                             family_cfb_default_eigen_tol=DEFAULT_EIGEN_TOL,
+                             family_spectral_umap_bindings=_native_spectral_umap_bridge.connect())
 
 
 def _coo_triples(A, who="SpectralClustering"):
@@ -88,7 +89,7 @@ def _coo_triples(A, who="SpectralClustering"):
     The scan is native (bindings/cfb_spectral.mojo, the base binding's
     `nonzero_f64_count` / `nonzero_f64_fill`).
     """
-    return _NATIVE(None, "family_cfb_coo_triples", (_backend.binding("_mojolearn", "identical"), A, who),
+    return _NATIVE(None, "family_cfb_coo_triples", (A, who),
                    _NATIVE_CONTEXT)
 
 
@@ -297,9 +298,6 @@ class SpectralClustering(ParamsMixin):
     #: binding, which ships in the inference wheel.
     _BINDING = "_mojolearn_metrics"
 
-    def _bind(self, name=None):
-        return _get_binding(getattr(self, "numeric_mode", None))
-
     def fit(self, X, y=None):
         """Cluster ``X``.
 
@@ -326,10 +324,7 @@ class SpectralClustering(ParamsMixin):
         TypeError
             If ``prediction_data`` is not a bool.
         """
-        return _NATIVE(self, "family_cfb_sc_fit", (
-            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
-            _backend.binding("_mojolearn", "identical"),
-            _backend.binding("_mojolearn_x_cluster", getattr(self, "numeric_mode", None)), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_sc_fit", (X,), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit to ``X`` and return the training labels.
@@ -345,10 +340,7 @@ class SpectralClustering(ParamsMixin):
         labels : Array of shape (n_samples,), int32
             Same as ``labels_``.
         """
-        return _NATIVE(self, "family_cfb_sc_fit_predict", (
-            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
-            _backend.binding("_mojolearn", "identical"),
-            _backend.binding("_mojolearn_x_cluster", getattr(self, "numeric_mode", None)), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_sc_fit_predict", (X,), _NATIVE_CONTEXT)
 
     # predict, maintainer notes (DEVIATION 2860). Nystrom extension of Bengio,
     # Paiement, Vincent, Delalleau, Le Roux and Ouimet (NIPS 2003), as Fowlkes
@@ -421,12 +413,12 @@ class SpectralClustering(ParamsMixin):
         column more than 1000x), the prediction is refused with an error
         naming the column.
         """
-        return _NATIVE(self, "family_cfb_sc_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_sc_predict", (X,), _NATIVE_CONTEXT)
 
     def _predict_embedding(self, X):
         """`predict`'s labels and the extended embedding (n_new x
         n_components float32)."""
-        return _NATIVE(self, "family_cfb_sc_predict_embedding", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_sc_predict_embedding", (X,), _NATIVE_CONTEXT)
 
     # Saved layout: eigenvalues <f4 (k), eigenvectors <f4 (n_train, k), diag <f4
     # (n_train), centroids <f4 (n_clusters, k), labels <i4, x <f4 (training rows,
@@ -664,16 +656,14 @@ class SpectralEmbedding(ParamsMixin):
             a negative or repeated entry, or ``n_components`` needs as many
             eigenpairs as there are samples.
         """
-        return _NATIVE(self, "family_cfb_se_fit", (
-            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
-            _backend.binding("_mojolearn", "identical"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_se_fit", (X,), _NATIVE_CONTEXT)
 
     def _precomputed_knn_affinity(self, X):
         """scikit-learn's affinity='precomputed_nearest_neighbors' of a
         precomputed distance matrix, symmetrized 0.5 * (C + C^T), as an
         n x n float32 Array (and `affinity_matrix_`): the base binding's
         `knn_affinity_f32` (bindings/cfb_spectral.mojo)."""
-        return _NATIVE(self, "family_cfb_se_knn_affinity", (_backend.binding("_mojolearn", "identical"), X),
+        return _NATIVE(self, "family_cfb_se_knn_affinity", (X,),
                        _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
@@ -690,9 +680,7 @@ class SpectralEmbedding(ParamsMixin):
         embedding : Array of shape (n_samples, n_components), float32
             Same as ``embedding_``.
         """
-        return _NATIVE(self, "family_cfb_se_fit_transform", (
-            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
-            _backend.binding("_mojolearn", "identical"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_se_fit_transform", (X,), _NATIVE_CONTEXT)
 
 
 def spectral_embedding(
@@ -740,6 +728,5 @@ def spectral_embedding(
         If ``norm_laplacian`` or ``drop_first`` is not a bool.
     """
     return _NATIVE(None, "family_cfb_spectral_embedding", (
-        SpectralEmbedding, _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
-        _backend.binding("_mojolearn", "identical"), A, n_components, affinity, random_state, n_neighbors,
+        SpectralEmbedding, A, n_components, affinity, random_state, n_neighbors,
         norm_laplacian, drop_first), _NATIVE_CONTEXT)
