@@ -3126,6 +3126,10 @@ class Release:
                 counts = {s: sum(row["status"] == s for row in rows.values())
                           for s in ("passed", "failed", "untested")}
                 say(f"   requirements ledger {self.readiness().path}: {counts}")
+                assessed = sorted({row["source_revision"] for row in rows.values()})
+                say("   assessed source: " + ", ".join(assessed))
+                if not c and head not in assessed:
+                    say("   HEAD has not been reconciled with this saved ledger; these results apply to the assessed source")
                 families = {}
                 for name, result in rows.items():
                     family = result.get("parent_requirement", name)
