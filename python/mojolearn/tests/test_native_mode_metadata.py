@@ -119,3 +119,24 @@ def test_import_time_binding_failure_keeps_its_exception_identity(monkeypatch):
     failure = ImportError('fixture: identical binary is unavailable')
     monkeypatch.setitem(connection, 'error', failure)
     assert clean(model.numeric_mode_used, error=ImportError) is failure
+
+
+def test_default_mode_dictionary_key_hooks_are_refused_before_lookup():
+    model = KMeans(n_clusters=2, numeric_mode=None)
+    mode = model.numeric_mode_used
+    fields = _mode._MODE_METADATA_CONTEXT['backend_fields']
+    calls = []
+    class Key:
+        def __hash__(self):
+            return hash('_DEFAULT_MODE')
+        def __eq__(self, other):
+            calls.append('called')
+            return False
+    key = Key()
+    fields[key] = 'fixture'
+    calls.clear()
+    try:
+        clean(mode, error=TypeError)
+        assert not calls
+    finally:
+        del fields[key]
