@@ -45,21 +45,25 @@ def _archive_finalizer_binding(cls, member, context, archives):
 
 
 def _prep_availability(package, missing):
-    # glue: admit only the declared shallow-parameter prep family and its two
-    # built-in hasattr(transform) predicates; arbitrary available_if callbacks
-    # and descriptors in other families retain their existing source owner.
+    # glue: both declared-parameter families use the same built-in
+    # hasattr(transform) rule. Pin each exact predicate; no arbitrary
+    # available_if callback or other predicate is admitted by this schema.
     import sys
-    module = sys.modules.get(package.__name__ + '._expansion_prep')
-    if type(module) is not ModuleType:
-        return {}
-    declarations = vars(module)
-    base = declarations['_PrepBase']
-    getter = vars(base)['get_params']
-    checks = tuple(vars(vars(declarations[name])['fit_transform'])['check']  # glue: exact built-in predicate identities
-                   for name in ('_PrepBase', '_Classifier'))  # glue: fixed import-time predicate declarations
-    return {declarations[name]: checks for name in declarations['__all__']  # glue: exact public prep class schema
-            if type(declarations[name]) is type
-            and _resolved(declarations[name], 'get_params', missing) is getter}
+    result = {}
+    for module_name, base_name, predicates in (  # glue: two fixed import-time class families
+            ('_expansion_prep', '_PrepBase', ('_PrepBase', '_Classifier')),
+            ('_expansion_decomp', '_Base', ('_Base', 'MinCovDet', 'AlternatingLeastSquares'))):
+        module = sys.modules.get(package.__name__ + '.' + module_name)
+        if type(module) is not ModuleType:
+            continue
+        declarations = vars(module)
+        getter = vars(declarations[base_name])['get_params']
+        checks = tuple(vars(vars(declarations[name])['fit_transform'])['check']  # glue: exact built-in predicate identities
+                       for name in predicates)  # glue: fixed import-time predicate declarations
+        result.update({declarations[name]: checks for name in declarations['__all__']  # glue: exact public class schema
+                       if type(declarations[name]) is type
+                       and _resolved(declarations[name], 'get_params', missing) is getter})
+    return result
 
 
 def _availability_plan(member, checks, missing):
