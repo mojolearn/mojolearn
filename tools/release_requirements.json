@@ -84,8 +84,12 @@
       "source_inputs": {
         "tests": [
           "python/mojolearn/_verify*.py",
-          "python/tests/*.py",
-          "tools/test_native_runtime_audit.py"
+          "python/mojolearn/tests/*.py",
+          "tools/test_native_runtime_audit.py",
+          "tools/qualify_native_runtime_installed.py",
+          "tools/release_runtime_installed.py",
+          "tools/release_runtime_coverage.json",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -159,8 +163,12 @@
       "source_inputs": {
         "tests": [
           "python/mojolearn/_verify*.py",
-          "python/tests/*.py",
-          "tools/test_native_runtime_audit.py"
+          "python/mojolearn/tests/*.py",
+          "tools/test_native_runtime_audit.py",
+          "tools/qualify_native_runtime_installed.py",
+          "tools/release_runtime_installed.py",
+          "tools/release_runtime_coverage.json",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -234,8 +242,12 @@
       "source_inputs": {
         "tests": [
           "python/mojolearn/_verify*.py",
-          "python/tests/*.py",
-          "tools/test_native_runtime_audit.py"
+          "python/mojolearn/tests/*.py",
+          "tools/test_native_runtime_audit.py",
+          "tools/qualify_native_runtime_installed.py",
+          "tools/release_runtime_installed.py",
+          "tools/release_runtime_coverage.json",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -309,8 +321,12 @@
       "source_inputs": {
         "tests": [
           "python/mojolearn/_verify*.py",
-          "python/tests/*.py",
-          "tools/test_native_runtime_audit.py"
+          "python/mojolearn/tests/*.py",
+          "tools/test_native_runtime_audit.py",
+          "tools/qualify_native_runtime_installed.py",
+          "tools/release_runtime_installed.py",
+          "tools/release_runtime_coverage.json",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -427,7 +443,8 @@
       "source_inputs": {
         "tests": [
           "python/mojolearn/_verify*parallel*",
-          "tools/*parallel*.py"
+          "tools/*parallel*.py",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -503,7 +520,8 @@
       "source_inputs": {
         "tests": [
           "python/mojolearn/_verify*parallel*",
-          "tools/*parallel*.py"
+          "tools/*parallel*.py",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -583,7 +601,14 @@
         "published_harness": [
           "tools/gate_smoke_box.py",
           "tools/adapter_gate.py",
-          "tools/check_light_release.py"
+          "tools/check_light_release.py",
+          "tools/release_published_install.py",
+          "tools/pypi_wheel_install.py",
+          "tools/qualify_verifier_wheel.py",
+          "tools/adapter_wheel_smoke.py",
+          "tools/release_gate_profiles.py",
+          "tools/release_adapter_evidence.py",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -607,7 +632,14 @@
         "published_harness": [
           "tools/gate_smoke_box.py",
           "tools/adapter_gate.py",
-          "tools/check_light_release.py"
+          "tools/check_light_release.py",
+          "tools/release_published_install.py",
+          "tools/pypi_wheel_install.py",
+          "tools/qualify_verifier_wheel.py",
+          "tools/adapter_wheel_smoke.py",
+          "tools/release_gate_profiles.py",
+          "tools/release_adapter_evidence.py",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [
@@ -631,7 +663,14 @@
         "published_harness": [
           "tools/gate_smoke_box.py",
           "tools/adapter_gate.py",
-          "tools/check_light_release.py"
+          "tools/check_light_release.py",
+          "tools/release_published_install.py",
+          "tools/pypi_wheel_install.py",
+          "tools/qualify_verifier_wheel.py",
+          "tools/adapter_wheel_smoke.py",
+          "tools/release_gate_profiles.py",
+          "tools/release_adapter_evidence.py",
+          "tools/release_installed_evidence.py"
         ]
       },
       "configuration": [

@@ -89,6 +89,17 @@ PUBLIC_TESTS = {
     "test_host_svc_native.py": "Explicit CPU HostSVC public margins, predictions, probabilities and computed coefficients",
     "test_host_kde_native.py": "Explicit CPU HostKernelDensity public sample scores, total score and native state admission",
     "test_host_iforest_native.py": "Explicit CPU HostIsolationForest public scores, labels and saved control/state readback",
+    # Release runtime-<vendor> coverage (tools/release_runtime_coverage.json):
+    # native local workers and built-in estimator combinations.
+    "test_native_process_pool.py": "Native local worker pool wire, process observations and callback-free pool operations",
+    "test_native_parallel_cv_wire.py": "Native parallel CV constructor wire and authenticated worker inventory contracts",
+    "test_native_meta_public_boundary.py": "Public meta-estimator calls and native lifecycle behavior",
+    "test_meta_native.py": "Meta-estimators on the public path, refusing non-mojolearn members by name",
+    "test_native_cv_lda.py": "LDA constructor, parameter metadata and native cross-validation entries",
+    "test_native_cv_gbdt_nb.py": "Boosting and naive Bayes native CV, search and permutation paths",
+    "test_native_search_dispatch.py": "Public search construction, configuration, sampling and callback refusal",
+    "test_native_cv_scorers.py": "Native scorer ABI, option semantics and whole public CV audit coverage",
+    "test_native_cv_outputs.py": "Public native CV label placement and canonical descriptor compatibility",
 }
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
@@ -106,6 +117,7 @@ TEST_DEPENDENCIES = {
     "test_host_svc_native.py": ("pandas", "scipy"),
     "test_host_kde_native.py": ("pandas", "scipy", "torch"),
     "test_host_iforest_native.py": ("pandas", "scipy", "torch"),
+    "test_native_cv_lda.py": ("pandas",),
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
