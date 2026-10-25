@@ -12,7 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "python/mojolearn"
 MODULES = ("_expansion_linear", "_solver_impl", "_svm_impl", "svm", "_gp_impl", "kernel_methods", "neighbors",
-           "linear_model", "_expansion_trees")
+           "linear_model", "_expansion_trees", "model_selection", "_metrics_impl")
 
 
 def _signature(node):
@@ -64,7 +64,7 @@ def plans(monkeypatch):
     registry = {}
     def register(cls, entry, owner, parameters, init, methods):
         registry[cls] = dict(entry=entry, context=owner, parameters=parameters, init=init, methods=methods, forest=None)
-    context = {}
+    context = {'family_msel_splitter_layouts': {}}
     module.connect(context, register, registry)
     return registry, classes, sources, context
 
@@ -109,7 +109,7 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             else:
                 assert item[0] == "binding", name
         checked.append(name)
-    assert len(checked) == 36
+    assert len(checked) == 44
 
 
 def test_native_plans_preserve_posterior_and_weight_semantics(plans):
@@ -147,3 +147,29 @@ def test_posterior_is_native_prediction_and_existing_draw_algorithm():
     dispatch = (ROOT / "bindings/msel_estimator_native.mojo").read_text()
     assert 'sequential_admit_value(keywords[keys[k]], context)' in dispatch
     assert 'kind == "keyword"' in dispatch and 'kind == "binding"' in dispatch
+
+
+def test_meta_owners_do_not_call_member_methods_or_python_constructors():
+    source = (ROOT / 'bindings/trees_public_meta.mojo').read_text()
+    forbidden = ('py_call(member.fit', 'py_call(e.fit', '.predict,', '.predict_proba,',
+                 '.decision_function,', 'est.get_params', 'c.split,', 'est._validate_params',
+                 'py_call(_import(', '_call_kw(r2,', 'target.tolist', 'col.tolist',
+                 'context["array_class"].from_list')
+    for token in forbidden:
+        assert token not in source, token
+    assert 'prep_native_split(c, X, y, context)' in source
+    assert 'prep_estimator_call(model, "__admit__"' in source
+    assert 'msel_admit(args, prep_native_context(context))' in source
+    assert '"family_mcls_r2"' in source
+    assert 'native_estimator_defaults' in source
+    assert 'native_estimator_entry=model_selection._NATIVE' in (PACKAGE / '__init__.py').read_text()
+    linear = (ROOT / 'bindings/x_linear_native.mojo').read_text()
+    assert 'py_call(cv.split' not in linear
+    assert 'prep_native_split(cv, x_source, y_source, context)' in linear
+
+
+def test_native_clone_bounds_recursive_configurations():
+    source = (ROOT / 'bindings/msel_estimator_native.mojo').read_text()
+    assert source.count('if depth > 64:') == 2
+    assert 'msel_native_clone(value, context, depth + 1)' in source
+    assert 'msel_clone_parameter(given[names[k]], context, depth + 1)' in source

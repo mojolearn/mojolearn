@@ -30,6 +30,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_wrap_array
 from bindings.classical_score import classical_r2_score
 from bindings.classical_warnings import classical_warning
+from bindings.prep_native_estimator import prep_native_context, prep_native_split
+from bindings.msel_inputs import msel_admit
 from bindings.classical_labels import (
     LabelsMatrix, ClassicalLabels, labels_f32, labels_view, labels_check_rank, labels_f32_view,
     labels_check_sample_weight, labels_vector, labels_empty, labels_full_f32, labels_address, labels_cast, labels_reshape,
@@ -1562,13 +1564,13 @@ def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObje
     splitter's `split(X, y)` (called once) or an iterable of pairs."""
     var b = _b()
     var pairs = PythonObject(None)
-    if Bool(py=py_call(b.hasattr, cv, PythonObject("split"))):
-        pairs = py_call(cv.split, x_source, y_source)
-    elif _isinstance(cv, Python.tuple(b.str, b.bytes)) or not Bool(py=py_call(b.hasattr, cv, PythonObject("__iter__"))):
-        raise Error("Expected cv as an integer, cross-validation object (from sklearn.model_selection) "
-                    + "or an iterable. Got " + _repr(cv) + ".")
-    else:
+    if py_type(py_type(cv)) is b.type and py_contains(prep_native_context(context)["family_msel_splitter_layouts"], py_type(cv)):
+        pairs = prep_native_split(cv, x_source, y_source, context)
+    elif py_type(cv) is b.list or py_type(cv) is b.tuple:
+        msel_admit(cv, prep_native_context(context))
         pairs = cv
+    else:
+        raise Error("TypeError: native linear CV requires a native splitter or list of index pairs; Python callbacks cannot execute")
     var listed = py_call(b.list, pairs)
     var splits = Python.list()
     for k in range(len(listed)):  # driver-loop: over the cv splits

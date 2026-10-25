@@ -7,11 +7,9 @@
 # with their wording, the member clones, the cv folds, the x_trees glue
 # kernels in the same order with the same arguments, and the fitted state.
 #
-# Members are mojolearn estimators. Each member is fitted and asked for its
-# outputs through its own public methods, which are its native entries (one
-# native call each); a member of any other class is a Python object whose
-# methods would run Python inside this call, and is refused by name with
-# NotImplementedError (the decision taken for Bagging* and AdaBoost*).
+# Members are exact built-in mojolearn estimators with connected ABI plans.
+# Clone, fit and prediction call those compiled operations directly; Python
+# methods, constructors, property hooks and custom splitters never execute.
 #
 # Round trips removed against the Python path: X is converted to float32
 # once per operation and handed to every member; the fold rows are copied
@@ -39,6 +37,15 @@ from bindings.trees_public_boost import (
     _gather_vec, _argmax, _scale,
 )
 from bindings.trees_public_score import trees_accuracy, trees_r2
+from bindings.prep_native_estimator import (
+    prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
+    prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
+)
+from bindings.classical_labels import _label_list
+from bindings.classical_pandas import native_pandas_exact
+from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_array_storage import native_array_from_values
+from bindings.msel_inputs import msel_admit, msel_input_count
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -153,7 +160,9 @@ def _int_list(values: PythonObject) raises -> PythonObject:
 
 def _codes_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list([int(c) for c in values], "<i4")`."""
-    var store = py_call(context["array_type"], PythonObject("i"), _int_list(values))
+    var b = trees_builtins()
+    var listed = values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context)
+    var store = py_call(context["array_type"], PythonObject("i"), _int_list(listed))
     return classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
 
 
@@ -162,9 +171,11 @@ def _sub_cols(member: PythonObject, context: PythonObject) raises -> PythonObjec
     return _codes_array(_attr(member, "classes_", PythonObject(None)), context)
 
 
-def _index_of_one(member: PythonObject) raises -> Int:
+def _index_of_one(member: PythonObject, context: PythonObject) raises -> Int:
     """`[int(c) for c in member.classes_].index(1)`, or -1 when 1 is absent."""
-    var subs = _int_list(_attr(member, "classes_", PythonObject(None)))
+    var b = trees_builtins()
+    var values = _attr(member, "classes_", PythonObject(None))
+    var subs = _int_list(values if py_type(values) is b.list or py_type(values) is b.tuple else _label_list(values, context))
     for i in range(len(subs)):  # driver-loop: over the member's fitted classes
         if Int(py=subs[i]) == 1:
             return i
@@ -223,57 +234,28 @@ def _class_zero(xt: PythonObject, n: Int, context: PythonObject) raises -> Pytho
 # ---------------------------------------------------------------- members
 
 
-def _is_mojolearn(est: PythonObject) raises -> Bool:
-    var module = _attr(py_type(est), "__module__", PythonObject(""))
-    if py_type(module) is not trees_builtins().str:
+def _require_member(est: PythonObject, owner: String, context: PythonObject) raises:
+    prep_estimator_admit(est, owner, context)
+
+
+def _clone(est: PythonObject, context: PythonObject) raises -> PythonObject:
+    return prep_estimator_clone(est, context)
+
+
+def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights: PythonObject,
+                context: PythonObject) raises:
+    var keywords = Python.dict()
+    if weights is not None:
+        py_setitem(keywords, "sample_weight", weights)
+    _ = prep_estimator_call(member, "fit", Python.tuple(X, y), context, keywords)
+
+
+def _takes_weights(est: PythonObject, context: PythonObject) raises -> Bool:
+    var plan = prep_estimator_plan(est, context)
+    if plan is None:
         return False
-    var name = String(module)
-    if name.startswith("mojolearn.tests"):
-        return False  # a test's own stand-in estimator is a user class
-    return name == "mojolearn" or name.startswith("mojolearn.")
-
-
-def _require_member(est: PythonObject, owner: String) raises:
-    if not _is_mojolearn(est):
-        raise Error("NotImplementedError: " + owner + ": " + _repr(est) + " is not a mojolearn estimator; "
-                    + "the native ensemble fits and predicts only mojolearn members. "
-                    + "Refused by name rather than run in Python.")
-
-
-def _clone(est: PythonObject) raises -> PythonObject:
-    """`_trees_clone(est)`: `type(est)(**est.get_params(deep=False))`."""
-    var b = trees_builtins()
-    var params = Python.dict()
-    if _has(est, "get_params"):
-        params = py_call(b.dict, py_call(est.get_params, deep=PythonObject(False)))
-    return _call_kw(py_type(est), Python.tuple(), params)
-
-
-def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights: PythonObject) raises:
-    if weights is None:
-        _ = py_call(member.fit, X, y)
-    else:
-        _ = py_call(member.fit, X, y, sample_weight=weights)
-
-
-def _takes_weights(est: PythonObject) raises -> Bool:
-    """`"sample_weight" in inspect.signature(est.fit).parameters`: the
-    named parameters of the fit function, past its `functools.wraps`
-    wrappers."""
-    var method = _attr(est, "fit", PythonObject(None))
-    for _ in range(16):  # small-loop(wrapper chain): functools.wraps layers of one method
-        if not _has(method, "__wrapped__"):
-            break
-        method = _attr(method, "__wrapped__", PythonObject(None))
-    var code = _attr(method, "__code__", PythonObject(None))
-    if code is None:
-        return False
-    var count = Int(py=code.co_argcount) + Int(py=code.co_kwonlyargcount)
-    var names = code.co_varnames
-    for i in range(count):  # small-loop(parameters): the fit function's named parameters
-        if String(names[i]) == "sample_weight":
-            return True
-    return False
+    var keywords = py_get(py_get(plan, "keywords", Python.dict()), "fit", Python.tuple())
+    return py_contains(keywords, PythonObject("sample_weight"))
 
 
 def _member_weights(names: PythonObject, ests: PythonObject, sample_weight: PythonObject, n: Int,
@@ -283,7 +265,7 @@ def _member_weights(names: PythonObject, ests: PythonObject, sample_weight: Pyth
     if sample_weight is None:
         return PythonObject(None)
     for i in range(len(ests)):  # driver-loop: over members
-        if not _takes_weights(ests[i]):
+        if not _takes_weights(ests[i], context):
             var who = String("") if names[i] is None else " " + _str(names[i])
             raise Error("Underlying estimator" + who + " does not support sample weights.")
     var w = trees_check_sample_weight(sample_weight, n, context)
@@ -300,7 +282,7 @@ struct Active(Copyable, Movable):
         self.ests = ests
 
 
-def _active(estimators: PythonObject, owner: String) raises -> Active:
+def _active(estimators: PythonObject, owner: String, context: PythonObject) raises -> Active:
     var b = trees_builtins()
     if not _truthy(estimators):
         raise Error("estimators must be a non-empty list of (name, estimator)")
@@ -325,7 +307,7 @@ def _active(estimators: PythonObject, owner: String) raises -> Active:
     if len(ests) == 0:
         raise Error("all estimators are 'drop'")
     for i in range(len(ests)):  # driver-loop: over members
-        _require_member(ests[i], owner)
+        _require_member(ests[i], owner, context)
     return Active(names, ests)
 
 
@@ -359,11 +341,6 @@ def _refuse_jobs(model: PythonObject, verbose: Bool, why: String) raises:
         _refuse("n_jobs", why)
 
 
-def _import(module: String, name: String) raises -> PythonObject:
-    """A mojolearn public class, from its loaded module."""
-    return py_call(trees_builtins().getattr, Python.import_module(module), PythonObject(name))
-
-
 # ------------------------------------------------------------------ cv folds
 
 
@@ -373,10 +350,14 @@ def _cv_value(cv: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
     if cv is None:
         return PythonObject(5)
-    var number = py_call(b.getattr, Python.import_module("numbers"), PythonObject("Number"))
-    var plain = Bool(py=py_call(b.isinstance, cv, Python.tuple(b.str, b.bytes, number)))
-    if _has(cv, "split") or (not plain and _has(cv, "__iter__")):
+    var native = prep_native_context(context)
+    if py_type(py_type(cv)) is b.type and py_contains(native["family_msel_splitter_layouts"], py_type(cv)):
         return cv
+    if py_type(cv) is b.list or py_type(cv) is b.tuple:
+        msel_admit(cv, native)
+        return cv
+    if py_type(cv) is not b.int:
+        raise Error("TypeError: cv requires an integer, native splitter or list of index pairs; Python callbacks cannot execute")
     if _is_bool(cv) or not _is_integral(cv, context) or Bool(py=cv < PythonObject(2)):
         raise Error("cv=" + _repr(cv) + ": an int >= 2, a splitter with split(X, y), or an iterable of"
                     + " (train, test) index pairs")
@@ -449,10 +430,7 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     """`_trees_splits`: [(train rows, test rows)] as int32 Arrays."""
     var b = trees_builtins()
     var c = _cv_value(cv, context)
-    var shape = _attr(X, "shape", PythonObject(None))
-    var n_x = n
-    if shape is not None and len(shape) > 0:
-        n_x = Int(py=py_call(b.int, shape[0]))
+    var n_x = msel_input_count(X, prep_native_context(context))
     var n_y = len(codes) if codes is not None else n
     if n != n_x or n != n_y or n_x != n_y:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(n_x) + ", "
@@ -460,8 +438,8 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     if py_type(c) is b.int:
         return _native_folds(xt, Int(py=c), n, codes, n_classes, context)
     var pairs = c
-    if _has(c, "split"):
-        pairs = py_call(c.split, X, y)
+    if py_contains(prep_native_context(context)["family_msel_splitter_layouts"], py_type(c)):
+        pairs = prep_native_split(c, X, y, context)
     var out = Python.list()
     var seen = trees_vector(n if n > 1 else 1, "<i8", context)
     var check = trees_helper(context, "check_indices_i64")
@@ -546,13 +524,13 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
         _set(model, "classes_", labels.classes)
         _set(model, "n_classes_", PythonObject(len(labels.classes)))
         target = labels.codes
-    var active = _active(_attr(model, "estimators", PythonObject(None)), owner)
+    var active = _active(_attr(model, "estimators", PythonObject(None)), owner, context)
     var weights = _member_weights(active.names, active.ests, sample_weight, _rows(Xa), context)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     for i in range(len(active.ests)):  # driver-loop: over members
-        var e = _clone(active.ests[i])
-        _fit_member(e, Xa, target, weights)
+        var e = _clone(active.ests[i], context)
+        _fit_member(e, Xa, target, weights, context)
         _ = py_call(fitted.append, e)
     _set(model, "named_estimators_", _named(active.names, fitted))
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -573,7 +551,7 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
     var members = _attr(model, "estimators_", Python.list())
     for i in range(len(members)):  # driver-loop: over members
         var e = members[i]
-        _acc_cols_w(xt, acc, py_call(e.predict_proba, Xa), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
+        _acc_cols_w(xt, acc, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -600,7 +578,7 @@ def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject)
         var w = _voting_weights(model)
         var members = _attr(model, "estimators_", Python.list())
         for i in range(len(members)):  # driver-loop: over members
-            _acc_votes(xt, acc, _i32_vec(py_call(members[i].predict, Xa), "codes", context), n, k, Float64(py=w[i]))
+            _acc_votes(xt, acc, _i32_vec(prep_estimator_call(members[i], "predict", Python.tuple(Xa), context), "codes", context), n, k, Float64(py=w[i]))
     return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _argmax(xt, acc, n, k, context), context)
 
 
@@ -619,12 +597,12 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
         var e = members[j]
         if soft:
             var p = _zeros(n * k, context)
-            _acc_cols_w(xt, p, py_call(e.predict_proba, Xa), _sub_cols(e, context), n, k, 1.0, context)
+            _acc_cols_w(xt, p, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
             var blk = trees_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "C", "p", context)
             _ = _place(xt, out, n, width, blk, rows, j * k)
             _ = blk^
         else:
-            var blk = _out2d(py_call(e.predict, Xa), n, context)
+            var blk = _out2d(prep_estimator_call(e, "predict", Python.tuple(Xa), context), n, context)
             _ = _place(xt, out, n, width, blk, rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
@@ -652,7 +630,7 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
         raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
     var acc = _zeros(n, context)
     for i in range(m):  # driver-loop: over members
-        _acc_w(xt, acc, py_call(members[i].predict, Xa), n, Float64(py=w[i]), context)
+        _acc_w(xt, acc, prep_estimator_call(members[i], "predict", Python.tuple(Xa), context), n, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -668,15 +646,15 @@ def _stacking_validate(model: PythonObject, context: PythonObject) raises:
     _ = _cv_value(_attr(model, "cv", PythonObject(None)), context)
 
 
-def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool) raises -> PythonObject:
+def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """`_StackingBase._method`."""
     var method = _attr(model, "stack_method", PythonObject("auto"))
     if String(method) != "auto":
         return method
     if classifier:
-        if _has(est, "predict_proba"):
+        if prep_estimator_has(est, "predict_proba", context):
             return PythonObject("predict_proba")
-        if _has(est, "decision_function"):
+        if prep_estimator_has(est, "decision_function", context):
             return PythonObject("decision_function")
     return PythonObject("predict")
 
@@ -684,7 +662,7 @@ def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool) rais
 def _stack_out(model: PythonObject, xt: PythonObject, est: PythonObject, method: PythonObject, Xs: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`_StackingBase._out`: a binary predict_proba keeps its second column."""
-    var out = py_call(py_call(trees_builtins().getattr, est, method), Xs)
+    var out = prep_estimator_call(est, String(method), Python.tuple(Xs), context)
     if String(method) == "predict_proba" and _truthy(_attr(model, "_binary", PythonObject(False))):
         var p = _out2d(out, _rows(Xs), context)
         var col = _one_col(xt, p, 1, context)
@@ -703,8 +681,8 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var Xa = _x_array(X, context)
     var n = _rows(Xa)
     var d = _cols(Xa)
-    var active = _active(_attr(model, "estimators", PythonObject(None)), owner)
-    _require_member(final, owner)
+    var active = _active(_attr(model, "estimators", PythonObject(None)), owner, context)
+    _require_member(final, owner, context)
     var all_names = py_call(trees_builtins().list, active.names)
     var all_ests = py_call(trees_builtins().list, active.ests)
     _ = py_call(all_names.append, PythonObject("final_estimator"))
@@ -713,12 +691,12 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     for i in range(len(active.ests)):  # driver-loop: over members
-        var e = _clone(active.ests[i])
-        _fit_member(e, Xa, y_full, sw)
+        var e = _clone(active.ests[i], context)
+        _fit_member(e, Xa, y_full, sw, context)
         _ = py_call(fitted.append, e)
     var methods = Python.list()
     for i in range(len(fitted)):  # driver-loop: over members
-        _ = py_call(methods.append, _stack_method(model, fitted[i], classifier))
+        _ = py_call(methods.append, _stack_method(model, fitted[i], classifier, context))
     _set(model, "stack_method_", methods)
     var head = _gather(xt, trees_address(Xa), n, d, _arange(xt, n if n < 2 else 2, context), _arange(xt, d, context), context)
     _ = Xa  # keep the Python object alive through the native call above
@@ -738,7 +716,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         var te = splits[f][1]
         var col0 = 0
         for i in range(len(active.ests)):  # driver-loop: over members
-            var e = _clone(active.ests[i])
+            var e = _clone(active.ests[i], context)
             var y_tr: PythonObject
             if codes:
                 y_tr = _gather_codes(xt, y_full, tr, context)
@@ -748,7 +726,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
             if sw is not None:
                 w_tr = _gather_vec(xt, trees_address(sw), n, tr, context)
                 _ = sw  # keep the Python object alive through the native call above
-            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context), y_tr, w_tr)
+            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context), y_tr, w_tr, context)
             _ = Xa  # keep the Python object alive through the native call above
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
@@ -768,10 +746,10 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         _ = Xa  # keep the Python object alive through the native call above
     _set(model, "_widths_", widths)
     _set(model, "named_estimators_", _named(active.names, fitted))
-    var final_ = _clone(final)
+    var final_ = _clone(final, context)
     _set(model, "final_estimator_", final_)
     var meta32 = _f32_array(trees_reshape(meta, Python.tuple(n, width), context), 2, "meta", context)
-    _fit_member(final_, meta32, y_full, sw)
+    _fit_member(final_, meta32, y_full, sw, context)
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -819,7 +797,7 @@ def _stacking_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObje
     var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, labels.n, labels.codes, True, k, context)
     var final = _attr(model, "final_estimator", PythonObject(None))
     if final is None:
-        final = py_call(_import("mojolearn.linear_model", "LogisticRegression"))
+        final = prep_estimator_clone(context["native_estimator_defaults"]["LogisticRegression"], context)
     return _stacking_fit(model, X, labels.codes, True, splits, final, sample_weight, True, context)
 
 
@@ -832,7 +810,7 @@ def _stacking_regressor_fit(model: PythonObject, X: PythonObject, y: PythonObjec
                          context)
     var final = _attr(model, "final_estimator", PythonObject(None))
     if final is None:
-        final = py_call(_import("mojolearn.linear_model", "Ridge"))
+        final = prep_estimator_clone(context["native_estimator_defaults"]["Ridge"], context)
     return _stacking_fit(model, X, y32, False, splits, final, sample_weight, False, context)
 
 
@@ -844,8 +822,8 @@ def _stacking_predict(model: PythonObject, X: PythonObject, classifier: Bool, co
     var final_ = _attr(model, "final_estimator_", PythonObject(None))
     var Xm = _stacking_meta32(model, X, context)
     if not classifier:
-        return py_call(final_.predict, Xm)
-    var codes = _i32_vec(py_call(final_.predict, Xm), "codes", context)
+        return prep_estimator_call(final_, "predict", Python.tuple(Xm), context)
+    var codes = _i32_vec(prep_estimator_call(final_, "predict", Python.tuple(Xm), context), "codes", context)
     return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), codes, context)
 
 
@@ -856,7 +834,7 @@ def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: Pytho
     var n = _rows(Xm)
     var xt = _xt(py_fields(model), context)
     var acc = _class_zero(xt, n * k, context)
-    _acc_cols_w(xt, acc, py_call(final_.predict_proba, Xm), _sub_cols(final_, context), n, k, 1.0, context)
+    _acc_cols_w(xt, acc, prep_estimator_call(final_, "predict_proba", Python.tuple(Xm), context), _sub_cols(final_, context), n, k, 1.0, context)
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
@@ -879,11 +857,11 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
     """`_multiout_ridge_entry`: the estimators binding table when it has the
     one-program ridge (FAST + Apple builds) and `est` is a plain Ridge, else
     None."""
-    var ridge = _import("mojolearn.linear_model", "Ridge")
+    var ridge = py_type(context["native_estimator_defaults"]["Ridge"])
     var plain = py_type(est) is ridge
     if plain:
         # Ridge checks its parameters at fit; this route skips Ridge.fit.
-        _ = py_call(est._validate_params)
+        _ = prep_estimator_call(est, "validate_params", Python.tuple(), context)
     if sample_weight is not None or not plain or _truthy(_attr(est, "normalize", PythonObject(False))):
         return PythonObject(None)
     try:
@@ -943,7 +921,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var ic = _F32P(unsafe_from_address=trees_address(icpt32))
     _ = icpt32  # keep the Python object alive through the native call above
     for j in range(m):  # driver-loop: over the output columns (one fitted ridge each)
-        var e = _clone(est)
+        var e = _clone(est, context)
         _set(e, "solver_", PythonObject("eig"))
         _set(e, "coef_", _copy_block(coef, j * d, (j + 1) * d, "<f4", context))
         _set(e, "_x_mean", xm)
@@ -970,7 +948,7 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     if _rows(Ya) != _rows(Xa):
         raise Error("y has " + String(_rows(Ya)) + " rows, X has " + String(_rows(Xa)))
     var est = _attr(model, "estimator", PythonObject(None))
-    _require_member(est, _owner(model))
+    _require_member(est, _owner(model), context)
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, _rows(Xa), context)
     _set(model, "_multi_ridge", PythonObject(None))
     var table = _ridge_multi_entry(model, est, weights, context)
@@ -981,11 +959,11 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     _set(model, "estimators_", fitted)
     var rows = _arange(xt, n, context)
     for j in range(_cols(Ya)):  # driver-loop: over the output columns (one member each)
-        var e = _clone(est)
+        var e = _clone(est, context)
         var col = _codes_array(Python.list(PythonObject(j)), context)
         var yj = trees_reshape(_gather(xt, trees_address(Ya), n, _cols(Ya), rows, col, context), Python.tuple(n), context)
         _ = Ya  # keep the Python object alive through the native call above
-        _fit_member(e, Xa, yj, weights)
+        _fit_member(e, Xa, yj, weights, context)
         _ = Ya  # keep the Python object alive through the native call above
         _ = py_call(fitted.append, e)
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -1012,7 +990,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var out = _zeros(n * m, context)
     var rows = _arange(xt, n, context)
     for j in range(m):  # driver-loop: over members
-        var blk = _out2d(py_call(members[j].predict, Xa), n, context)
+        var blk = _out2d(prep_estimator_call(members[j], "predict", Python.tuple(Xa), context), n, context)
         _ = _place(xt, out, n, m, blk, rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)
@@ -1084,18 +1062,16 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     _refuse_jobs(model, False, "the columns fit one after another.")
     var Xa = _x_array(X, context)
     var n = _rows(Xa)
-    var nd = _attr(y, "ndim", PythonObject(None))
+    var target = y
+    var listed = py_type(y) is b.list or py_type(y) is b.tuple
+    if not listed and native_pandas_exact(y):
+        target = _label_list(y, context)
+    var nd = _attr(target, "ndim", PythonObject(None))
     if nd is not None and Bool(py=nd == PythonObject(1)):
         raise Error("y must have at least two dimensions for multi-output classification but has only one.")
-    var target = y
-    var listed = Bool(py=py_call(b.isinstance, y, Python.tuple(b.list, b.tuple)))
-    if not listed and not _has_buffer(y) and Bool(py=py_call(b.callable, _attr(y, "__array__", PythonObject(None)))):
-        # A pandas DataFrame has no buffer and iterates its column names:
-        # its own `__array__` hands back the host block.
-        target = py_call(y.__array__)
     _multioutput_y(target)
     var est = _attr(model, "estimator", PythonObject(None))
-    _require_member(est, _owner(model))
+    _require_member(est, _owner(model), context)
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
     var fitted = Python.list()
     var classes = Python.list()
@@ -1110,14 +1086,14 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         _set(model, "classes_", classes)
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var labels = trees_encode_labels(_copy_block(T, j * rows_n, (j + 1) * rows_n, String(T.dtype), context), context)
-            var e = _clone(est)
-            _fit_member(e, Xa, labels.codes, weights)
+            var e = _clone(est, context)
+            _fit_member(e, Xa, labels.codes, weights, context)
             _ = py_call(fitted.append, e)
             _ = py_call(classes.append, labels.classes)
     else:
         var rows = Python.list()
         if _has(target, "tolist"):
-            rows = py_call(target.tolist)  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
+            rows = _label_list(target, context)  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
         else:
             rows = py_call(b.list, py_call(b.map, b.list, target))  # cpu-route: label objects (str/mixed) no Array holds
         if len(rows) != n:
@@ -1131,8 +1107,8 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
             var labels = trees_encode_labels(column, context)
-            var e = _clone(est)
-            _fit_member(e, Xa, labels.codes, weights)
+            var e = _clone(est, context)
+            _fit_member(e, Xa, labels.codes, weights, context)
             _ = py_call(fitted.append, e)
             _ = py_call(classes.append, labels.classes)
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -1151,7 +1127,7 @@ def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, contex
     var stacked = True
     var all_int = True
     for j in range(len(members)):  # driver-loop: over members
-        var col = trees_decode_labels(classes[j], _i32_vec(py_call(members[j].predict, Xa), "codes", context), context)
+        var col = trees_decode_labels(classes[j], _i32_vec(prep_estimator_call(members[j], "predict", Python.tuple(Xa), context), "codes", context), context)
         _ = py_call(cols.append, col)
         if py_type(col) is not context["array_class"]:
             stacked = False
@@ -1183,13 +1159,17 @@ def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, contex
     var lists = Python.list()
     for j in range(len(cols)):  # driver-loop: over members
         var col = cols[j]
-        _ = py_call(lists.append, py_call(col.tolist) if _has(col, "tolist") else col)
+        _ = py_call(lists.append, col if py_type(col) is b.list or py_type(col) is b.tuple else _label_list(col, context))
     var ints = True
     for j in range(len(lists)):  # driver-loop: over members (each column's first label)
         if len(lists[j]) > 0 and not Bool(py=py_call(b.isinstance, lists[j][0], b.int)):
             ints = False
     var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
-    return py_call(context["array_class"].from_list, zipped, PythonObject("<i8" if ints else "<f8"))
+    var flat = Python.list()
+    for i in range(len(zipped)):  # driver-loop: completed output labels
+        _ = py_call(flat.extend, zipped[i])
+    var store = native_array_from_values("q" if ints else "d", flat)
+    return classical_wrap_array(store, Python.tuple(len(zipped), len(cols)), "<i8" if ints else "<f8", "C", context)
 
 
 def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1202,7 +1182,7 @@ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context:
     for j in range(len(members)):  # driver-loop: over members
         var k = len(classes[j])
         var acc = _zeros(n * k, context)
-        _acc_cols_w(xt, acc, py_call(members[j].predict_proba, Xa), _sub_cols(members[j], context), n, k, 1.0, context)
+        _acc_cols_w(xt, acc, prep_estimator_call(members[j], "predict_proba", Python.tuple(Xa), context), _sub_cols(members[j], context), n, k, 1.0, context)
         _ = py_call(out.append, trees_reshape(acc, Python.tuple(n, k), context))
     return out
 
@@ -1291,7 +1271,7 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     if k < 2:
         raise Error("y has fewer than 2 classes")
     var est = _attr(model, "estimator", PythonObject(None))
-    _require_member(est, _owner(model))
+    _require_member(est, _owner(model), context)
     var targets = Python.list()
     if k == 2:
         _ = py_call(targets.append, labels.codes)
@@ -1301,8 +1281,8 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     for i in range(len(targets)):  # driver-loop: over members
-        var e = _clone(est)
-        _ = py_call(e.fit, Xa, targets[i])
+        var e = _clone(est, context)
+        _fit_member(e, Xa, targets[i], PythonObject(None), context)
         _ = py_call(fitted.append, e)
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
     _set(model, "_fitted", PythonObject(True))
@@ -1313,8 +1293,8 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
     """`OneVsRestClassifier._proba_positive`: predict_proba's column for
     code 1 (zeros when the member never saw it), float32 (n,)."""
     var n = _rows(Xa)
-    var p = _out2d(py_call(e.predict_proba, Xa), n, context)
-    var at = _index_of_one(e)
+    var p = _out2d(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+    var at = _index_of_one(e, context)
     if at < 0:
         _ = p^
         return trees_vector(n, "<f4", context)
@@ -1326,8 +1306,8 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
 def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
     """`OneVsRestClassifier._positive`: decision_function when the member
     has one, else predict_proba's column for code 1."""
-    if _has(e, "decision_function"):
-        return _f32_array(py_call(e.decision_function, Xa), 1, "score", context)
+    if prep_estimator_has(e, "decision_function", context):
+        return _f32_array(prep_estimator_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
     return _proba_positive(xt, e, Xa, context)
 
 
@@ -1339,7 +1319,7 @@ def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     var k = len(classes)
     var members = _attr(model, "estimators_", Python.list())
     if k == 2:
-        return trees_decode_labels(classes, _i32_vec(py_call(members[0].predict, Xa), "codes", context), context)
+        return trees_decode_labels(classes, _i32_vec(prep_estimator_call(members[0], "predict", Python.tuple(Xa), context), "codes", context), context)
     var acc = _class_zero(xt, n * k, context)
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
@@ -1395,10 +1375,10 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     var n = _rows(Xa)
     var k = len(_attr(model, "classes_", Python.list()))
     var out: PythonObject
-    if _has(e, "decision_function"):
-        out = py_call(e.decision_function, Xa)
+    if prep_estimator_has(e, "decision_function", context):
+        out = prep_estimator_call(e, "decision_function", Python.tuple(Xa), context)
     else:
-        out = py_call(e.predict_proba, Xa)
+        out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
     var blk = _out2d(out, n, context)
     if k == 2:
         var acc = _zeros(n, context)
@@ -1407,7 +1387,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
             _ = acc  # keep the Python object alive through the native call above
             _ = blk  # keep the Python object alive through the native call above
         else:
-            var at = _index_of_one(e)
+            var at = _index_of_one(e, context)
             if at < 0:
                 raise Error("1 is not in list")
             var col = _one_col(xt, blk, at, context)
@@ -1524,8 +1504,8 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         raise Error("y has fewer than 2 classes")
     var base = _attr(model, "estimator", PythonObject(None))
     if base is None:
-        base = py_call(_import("mojolearn.svm", "LinearSVC"))
-    _require_member(base, _owner(model))
+        base = prep_estimator_clone(context["native_estimator_defaults"]["LinearSVC"], context)
+    _require_member(base, _owner(model), context)
     _set(model, "_cal_fast", PythonObject(None))
     var ensemble = _truthy(_attr(model, "ensemble", PythonObject(True)))
     var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
@@ -1536,9 +1516,9 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         for f in range(len(splits)):  # driver-loop: over the cv folds
             var tr = splits[f][0]
             var te = splits[f][1]
-            var e = _clone(base)
-            _ = py_call(e.fit, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
-                        _gather_codes(xt, labels.codes, tr, context))
+            var e = _clone(base, context)
+            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
+                        _gather_codes(xt, labels.codes, tr, context), PythonObject(None), context)
             _ = Xa  # keep the Python object alive through the native call above
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
@@ -1552,9 +1532,9 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         for f in range(len(splits)):  # driver-loop: over the cv folds
             var tr = splits[f][0]
             var te = splits[f][1]
-            var e = _clone(base)
-            _ = py_call(e.fit, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
-                        _gather_codes(xt, labels.codes, tr, context))
+            var e = _clone(base, context)
+            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
+                        _gather_codes(xt, labels.codes, tr, context), PythonObject(None), context)
             _ = Xa  # keep the Python object alive through the native call above
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
@@ -1562,8 +1542,8 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             _ = Xa  # keep the Python object alive through the native call above
             _ = _place(xt, S, n, c, blk, te, 0)
             _ = blk^
-        var e = _clone(base)
-        _ = py_call(e.fit, Xa, labels.codes)
+        var e = _clone(base, context)
+        _fit_member(e, Xa, labels.codes, PythonObject(None), context)
         _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
                                                                    labels.codes, context)))
     _set(model, "n_features_in_", PythonObject(d))
@@ -1604,11 +1584,14 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
     if len(_attr(pred.keep, "shape", Python.tuple(0))) == 2 or len(_attr(truth.keep, "shape", Python.tuple(0))) == 2:
         # 2-D targets: the metrics family's public r2_score (its multioutput
         # program), on the same float32 blocks.
-        var r2 = _import("mojolearn._metrics_impl", "r2_score")
-        var kwargs = Python.dict()
-        py_setitem(kwargs, PythonObject("sample_weight"), sample_weight)
-        py_setitem(kwargs, PythonObject("numeric_mode"), mode)
-        var result = _call_kw(r2, Python.tuple(truth.keep, pred.keep), kwargs)
+        var metrics = context["native_meta_metrics"]
+        var selected = mode if mode is not None else context["backend_fields"]["_DEFAULT_MODE"]
+        var binding = metrics[2][selected]
+        if py_type(binding) is trees_builtins().str:
+            raise Error(String(binding))
+        var result = prep_entry_call(metrics[0], Python.tuple(PythonObject(None), "family_mcls_r2",
+                                     Python.tuple(binding, truth.keep, pred.keep, sample_weight,
+                                                  "uniform_average", True, mode), metrics[1]))
         _ = truth^
         _ = pred^
         return result
@@ -1682,6 +1665,9 @@ def _fit_params_weight(fit_params: PythonObject) raises -> PythonObject:
 def meta_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """The meta-estimators' public methods (`trees_meta_*`)."""
+    prep_estimator_admit(model, "native meta-estimator", context)
+    _ = prep_estimator_call(model, "__admit__", Python.tuple(), context)
+    msel_admit(args, prep_native_context(context))
     var kind = meta_kind(model, context)
     if operation == "trees_meta_fit":
         return _meta_fit(model, kind, args[0], args[1], args[2], context)

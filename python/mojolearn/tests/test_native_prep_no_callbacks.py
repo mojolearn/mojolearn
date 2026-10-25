@@ -333,3 +333,61 @@ def test_native_composition_refuses_callback_keywords_without_executing_them():
     with pytest.raises(TypeError):
         ml.RFE(ml.Ridge()).fit(X, y, sample_weight=Weight())
     assert calls == []
+
+
+@needs_bindings
+@pytest.mark.parametrize('name', [
+    'VotingRegressor', 'VotingClassifier', 'StackingRegressor', 'StackingClassifier',
+    'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV',
+])
+def test_meta_estimators_use_native_members_and_splitters(name):
+    X, labels = _classes(seed=17, n=48, d=4)
+    y = (X[:, 0] - 0.25 * X[:, 1]).astype(np.float32)
+    classes = [ml.Ridge, ml.BayesianRidge, ml.LogisticRegression, ml.GaussianNB, ml.LinearSVC, ml.KFold]
+    cv = ml.KFold(2, shuffle=True, random_state=1)
+    if name in ('VotingRegressor', 'StackingRegressor'):
+        members = [('ridge', ml.Ridge()), ('bayes', ml.BayesianRidge(max_iter=20))]
+        estimator = ml.VotingRegressor(members) if name == 'VotingRegressor' else ml.StackingRegressor(members, cv=cv)
+    elif name in ('VotingClassifier', 'StackingClassifier'):
+        members = [('logistic', ml.LogisticRegression(max_iter=30)), ('bayes', ml.GaussianNB())]
+        estimator = ml.VotingClassifier(members, voting='soft') if name == 'VotingClassifier' else ml.StackingClassifier(members, cv=cv)
+        y = labels
+    elif name == 'MultiOutputRegressor':
+        estimator, y = ml.MultiOutputRegressor(ml.Ridge()), np.column_stack([y, -y])
+    elif name == 'MultiOutputClassifier':
+        estimator, y = ml.MultiOutputClassifier(ml.LogisticRegression(max_iter=30)), np.column_stack([labels, labels % 2])
+    elif name == 'OneVsRestClassifier':
+        estimator, y = ml.OneVsRestClassifier(ml.LogisticRegression(max_iter=30)), labels
+    else:
+        estimator, y = ml.CalibratedClassifierCV(cv=cv), labels
+    forbidden = _class_codes(*classes)
+    with _Probe() as probe:
+        estimator.fit(X, y)
+        output = estimator.predict(X)
+        score = estimator.score(X, y)
+    assert probe.hits(forbidden) == []
+    assert np.asarray(output).shape == np.asarray(y).shape
+    assert np.isfinite(float(score))
+
+
+@needs_bindings
+def test_meta_estimator_refuses_spoofed_members_without_callbacks():
+    calls = []
+    class Fake:
+        __module__ = 'mojolearn'
+        def get_params(self, **kwargs):
+            calls.append('params')
+            return {}
+        def fit(self, *args, **kwargs):
+            calls.append('fit')
+            return self
+        def predict(self, *args):
+            calls.append('predict')
+            return []
+        def __repr__(self):
+            calls.append('repr')
+            return 'Fake'
+    X, y = _classes(n=24, d=3)
+    with pytest.raises(TypeError):
+        ml.VotingRegressor([('fake', Fake())]).fit(X, y)
+    assert calls == []
