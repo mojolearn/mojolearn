@@ -1395,7 +1395,8 @@ class Release:
                        kind="candidate", source_revision=run["source_revision"], input_fingerprint=run["fingerprint"],
                        report_sha256=sha256(report), run_id=run_id))
         try:
-            receipt = receipts.candidate_gate_receipt("candidate-" + vendor, run["manifest"], report,
+            receipt = receipts.candidate_gate_receipt("candidate-" + vendor,
+                         dict(run["manifest"], inputs=run["inputs"]), report,
                          self.candidate_gate_identity(vendor), read_json(provenance_path))
         except ValueError as error:
             raise StepFailed("candidate evidence needs provenance/coverage reconciliation; no automatic rerun: "
@@ -3118,18 +3119,29 @@ class Release:
         head = git_at(ROOT, "rev-parse", "HEAD") or "?"
         say(f"== mojolearn release {self.version}: status (read-only)")
         say(f"   state {self.state_path}" + ("" if self.state_path.is_file() else " (no state yet)"))
-        if c:
+        if c or self.readiness().path.exists():
             try:
-                rows = self.readiness_status()
+                rows = self.readiness_status() if c else self.readiness().plan()
                 counts = {s: sum(row["status"] == s for row in rows.values())
                           for s in ("passed", "failed", "untested")}
                 say(f"   requirements ledger {self.readiness().path}: {counts}")
+                families = {}
                 for name, result in rows.items():
+                    family = result.get("parent_requirement", name)
+                    totals = families.setdefault(family, dict(passed=0, failed=0, untested=0))
+                    totals[result["status"]] += 1
+                for family, totals in families.items():
+                    say(f"      {family}: {totals}")
+                needed = [(name, result) for name, result in rows.items() if result["status"] != "passed"]
+                for name, result in needed[:12]:
                     reasons = result["reasons"]
                     detail = "; ".join(reasons[:3])
                     if len(reasons) > 3:
                         detail += f"; +{len(reasons) - 3} reasons (full ledger plan --json)"
                     say(f"      {name}: {result['status']} / {result['action']}: " + detail)
+                if len(needed) > 12:
+                    say(f"      +{len(needed) - 12} other requirements need attention; "
+                        "release_ledger.py plan --ledger <path above> --json shows every row and reason")
             except (OSError, ValueError, subprocess.CalledProcessError) as error:
                 say(f"   requirements ledger untested: {error}")
         if c:

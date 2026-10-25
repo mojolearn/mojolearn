@@ -48,8 +48,11 @@ requirement and input identity, per-coverage results and hashed raw evidence.
 Every required coverage item must complete successfully for a pass. Legacy
 reports without sufficient input provenance require reconciliation; do not
 attach today's fingerprint and present them as a new pass. Candidate-gate
-producers record these receipts directly. Other producers must provide a
-validated receipt before their row can pass.
+producers record these receipts directly. Admission also parses the approved
+producer's retained report; a caller-authored receipt and an arbitrary log cannot
+establish a pass. Unsupported report schemas remain untested until their producer
+adapter is implemented and its actual coverage reconciled. This calls for
+evidence admission work, not an automatic rerun of the underlying test.
 
 Every rerun keeps its reason and original attempt. `release.py --redo <step>`
 requires `--rerun-reason <specific invalidation or failure>`; a new commit alone
