@@ -267,6 +267,24 @@ same bits is the double work the release cost rules forbid. Treat them different
 
 ## No Python in the runtime
 
+Owner exception (2026-10-25, reaffirmed): Mojo/Modular bugs can require Python
+in product execution. A narrowly scoped Python runtime implementation is allowed
+where such a bug blocks a correct supported native implementation, including
+calling Python from Mojo/native code. Preserve supported behavior. Document
+INLINE the affected operation, the specific bug or suspected failure, the Python
+work required, and the retained reproduction/upstream issue. Distinguish a
+suspected bug from a confirmed diagnosis. Test the actual public operation and
+record the exception explicitly in release evidence; never call it Python-free.
+Use a working supported native repair when available. No additional permission
+is required for a fallback within this authorized scope.
+
+Previously approved, documented fallbacks after Codex cybersecurity/Daybreak
+interruptions also remain authorized. Record those interruptions accurately;
+screening alone is not evidence of a Mojo bug. This exception supersedes older
+absolute no-Python/no-callback/no-fallback and wait-for-Modular wording only for
+these documented paths. It does not authorize toolchain patches or silently
+exempt unrelated runtime work.
+
 Owner clarification (2026-10-24): scikit-learn tag metadata is a narrow
 compatibility-layer exception to the rules below.
 
