@@ -30,7 +30,7 @@ def connect_classes(package):
         context['attribute_array_dtypes'] = _array.SUPPORTED_DTYPES
         array_class = context['array_class']
         context['attribute_array_slots'] = {name: vars(array_class)[name]  # glue: native storage slots, never Array protocols
-                                            for name in ('_store', '_addr', '_readonly', 'shape', 'dtype', 'order')}
+                                            for name in ('_store', '_addr', '_readonly', 'shape', 'dtype', 'order')}  # glue: fixed import-time native slot identities
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
                        property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet'},
                        stl_connected=False)
