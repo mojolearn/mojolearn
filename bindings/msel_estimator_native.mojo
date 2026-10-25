@@ -58,8 +58,15 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
 
 
 def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
-                        context: PythonObject, scorer_response: Bool = False,
-                        keywords: PythonObject = PythonObject(None)) raises -> PythonObject:
+                        context: PythonObject, scorer_response: Bool = False) raises -> PythonObject:
+    # PythonObject initialization is runtime binding work; default arguments
+    # are evaluated at compile time by Mojo.
+    return msel_estimator_call(model, method, args, context, scorer_response, PythonObject(None))
+
+
+def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
+                        context: PythonObject, scorer_response: Bool,
+                        keywords: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     if method == "__admit__":

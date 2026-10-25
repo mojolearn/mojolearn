@@ -92,7 +92,7 @@ def _shape_words(shapes: PythonObject, context: PythonObject) raises -> PythonOb
                             raise Error("TypeError: dimensions refuse Python iteration hooks")
                         break
         if tuple_storage:
-            dims = py_call(b.tuple, py_call(b.tuple.__iter__, dims))
+            dims = py_call(b.tuple, py_call(b.tuple.__dict__["__iter__"], dims))
         else:
             if not _one_of(dims_type, context["shape_containers"]):
                 raise Error("TypeError: dimensions require native sequence storage")

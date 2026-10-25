@@ -81,7 +81,13 @@ def prep_estimator_clone(est: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def prep_estimator_call(est: PythonObject, method: String, args: PythonObject,
-                        context: PythonObject, keywords: PythonObject = PythonObject(None)) raises -> PythonObject:
+                        context: PythonObject) raises -> PythonObject:
+    # Keep native-object construction out of compile-time default evaluation.
+    return prep_estimator_call(est, method, args, context, PythonObject(None))
+
+
+def prep_estimator_call(est: PythonObject, method: String, args: PythonObject,
+                        context: PythonObject, keywords: PythonObject) raises -> PythonObject:
     """`est.<method>(*args)` as the compiled operation est's plan names."""
     return prep_entry_call(prep_native_entry(context),
                        Python.tuple(est, "family_msel_estimator_call", Python.tuple(method, args, keywords),
