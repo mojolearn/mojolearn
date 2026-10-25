@@ -6,6 +6,7 @@ import pytest
 
 from mojolearn import _expansion_linear as linear
 from mojolearn import _mode
+from mojolearn import model_selection
 from mojolearn._native_params_setter import NativeParamsSetter, _CLASSES, _FITTED_FIELDS
 from mojolearn._verify_native_runtime import audit_native_call
 
@@ -80,6 +81,23 @@ def test_numeric_mode_capture_and_constructor_validation_timing_are_preserved():
     assert model.__dict__['numeric_mode'] is None
 
 
+@pytest.mark.parametrize('name', ('RidgeCV', 'LassoCV', 'ElasticNetCV', 'LogisticRegressionCV'))
+@pytest.mark.parametrize('repeated', (False, True))
+def test_supported_splitter_configuration_can_be_replaced(name, repeated):
+    splitter = (model_selection.RepeatedKFold(n_splits=2, n_repeats=2)
+                if repeated else model_selection.KFold(n_splits=2))
+    model = getattr(linear, name)(cv=splitter, numeric_mode='identical')
+    assert clean(model.set_params, cv=3) is model
+    assert model.__dict__['cv'] == 3
+
+
+def test_splitters_without_set_params_keep_the_existing_nested_error():
+    splitter = model_selection.KFold(n_splits=2)
+    model = linear.RidgeCV(cv=splitter, numeric_mode='identical')
+    clean(model.set_params, cv__n_splits=3, expected_error=AttributeError)
+    assert model.__dict__['cv'] is splitter and splitter.__dict__['n_splits'] == 2
+
+
 def test_nested_python_callbacks_are_refused_without_running_hooks():
     calls = []
     class Callback:
@@ -117,6 +135,21 @@ def test_removed_state_cannot_run_python_finalizers():
     model.__dict__['coef_'] = held
     clean(model.set_params, alpha=0.5, expected_error=TypeError)
     assert model.__dict__['coef_'] is held and not calls
+
+
+def test_release_admission_does_not_hash_a_python_metaclass():
+    calls = []
+    class Meta(type):
+        def __hash__(cls):
+            calls.append('hash')
+            return 1
+    class Owner(metaclass=Meta):
+        pass
+    held = Owner()
+    model = linear.SGDRegressor(numeric_mode='identical')
+    model.__dict__['coef_'] = held
+    clean(model.set_params, alpha=0.5, expected_error=TypeError)
+    assert model.__dict__['coef_'] is held and calls == []
 
 
 def test_removed_state_cannot_run_weak_reference_callbacks():

@@ -95,6 +95,9 @@ def test_connection_never_constructs_or_calls_estimators():
         cls = type(name, (), dict(__init__=forbidden, get_params=forbidden, set_params=forbidden))
         setattr(linear, name, cls)
         registry[cls] = dict(init=None, forest=None, initial_fields={}, parameters=('alpha',))
+    splitter = type('KFold', (), dict(__init__=forbidden))
+    registry[splitter] = dict(parameters=('n_splits',))
+    before = {cls: dict(vars(cls)) for cls in registry}
     tree = ast.parse(CONNECTOR.read_text())
     function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'connect')
     namespace = dict(values, __package__=package.__name__, _CONTEXT={'plans': {}, 'ready': False})
@@ -102,11 +105,15 @@ def test_connection_never_constructs_or_calls_estimators():
     metadata = {'plans': {}}
     with patch.dict(sys.modules, {package.__name__: package, linear.__name__: linear,
                                  bridge.__name__: bridge, lifetime.__name__: lifetime}):
-        namespace['connect']({'family_msel_estimators': registry}, metadata)
+        namespace['connect']({'family_msel_estimators': registry,
+                              'family_msel_splitter_layouts': {splitter: object()}}, metadata)
     assert len(namespace['_CONTEXT']['plans']) == 19
     assert namespace['_CONTEXT']['parameter_metadata'] is metadata
     assert namespace['_CONTEXT']['ready']
     assert namespace['_CONTEXT']['ownership']['ownership_connected']
+    assert namespace['_CONTEXT']['splitter_plans'][splitter] is registry[splitter]
+    assert splitter not in namespace['_CONTEXT']['plans']
+    assert all(dict(vars(cls)) == fields for cls, fields in before.items())
     for cls, row in namespace['_CONTEXT']['plans'].items():
         assert row['constructor'] is registry[cls]
 
@@ -134,6 +141,15 @@ def test_setter_preserves_references_and_never_invokes_python_estimator_protocol
     assert 'native_release_admit(item, context["ownership"])' in source
     assert 'py_call(b.id' not in source
     assert 'PythonObject(Int(item._obj_ptr))' in source
+    assert '_constructor_layout(item, fields, context["splitter_plans"][kind])' in source
+
+
+def test_native_slots_setter_and_getter_connection_order_preserves_snapshots():
+    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    calls = ('_connect_public_attributes(', '_connect_native_cv(',
+             '_connect_params_setter(', '_connect_params_metadata_classes(')
+    positions = [source.index(call) for call in calls]
+    assert positions == sorted(positions)
 
 
 def test_reset_marker_preserves_legacy_user_fields_but_new_fit_wins():
