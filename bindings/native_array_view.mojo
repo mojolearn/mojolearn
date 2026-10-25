@@ -86,4 +86,3 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
     # buffer protocol, dtype conversion, or data copy. NumPy validates span.
     return py_call(context["ndarray"], shape, dtype=values["dtype"], buffer=buffer,
                    offset=offset, order=values["order"])
-
