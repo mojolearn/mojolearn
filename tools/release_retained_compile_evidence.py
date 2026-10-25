@@ -41,8 +41,11 @@ FLAG_ENV = {"numeric_mode": "MOJOLEARN_NUMERIC_MODE", "target_column": "MOJOLEAR
             "compile_jobs": "MOJOLEARN_COMPILE_JOBS", "package_byte_lm": "MOJOLEARN_PACKAGE_BYTE_LM"}
 # Placement of the selected toolchain/interpreter, checked against the build
 # checkout; not numerical/build switches.
-DEV_PLACEMENT = {"MODULAR_HOME": ".pixi/envs/default/share/max",
-                 "MOJOLEARN_MERGED_PYTHON": ".pixi/envs/default/bin/python"}
+DEV_PLACEMENT = {"MODULAR_HOME": ".pixi/envs/default/share/max"}
+# MOJOLEARN_MERGED_PYTHON only runs the merged-index glue (bindings/merged_build.sh ->
+# tools/merged_bindings.py); it never compiles. Any interpreter is admissible if it is
+# recorded as an absolute path in the group's environment (and therefore in its key).
+GLUE_INTERPRETERS = ("MOJOLEARN_MERGED_PYTHON",)
 HEX64 = re.compile(r"[0-9a-f]{64}")
 HEX40 = re.compile(r"[0-9a-f]{40}")
 
@@ -168,6 +171,9 @@ def _dev_group(row, repo, cache, tree):
     for name, rel in DEV_PLACEMENT.items():
         require(name not in environment or Path(environment[name]) == repo / rel,
                 "development toolchain placement differs: " + name)
+    for name in GLUE_INTERPRETERS:
+        require(name not in environment or Path(environment[name]).is_absolute(),
+                "development glue interpreter is not recorded as an absolute path: " + name)
     receipt_path = cache / "artifacts" / row["key"] / "receipt.json"
     receipt = load(receipt_path)
     require(receipt.get("key") == row["key"] and receipt.get("fields") == fields
