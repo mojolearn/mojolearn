@@ -2,6 +2,7 @@
 # Container admission alone does not qualify scalar conversion: an exact
 # object ndarray can call its element's Python __int__/__float__/__bool__.
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.sequential_admission import _one_of
 from bindings.native_numpy_metadata import native_numpy_dtype
