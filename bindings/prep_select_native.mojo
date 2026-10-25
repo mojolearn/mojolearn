@@ -24,6 +24,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_typed, classical_input, classical_host_f32
+from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_f32, labels_vector, classical_encode_labels
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
@@ -177,6 +178,12 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     estimator on the selected columns."""
     var b = native_loaded_module("builtins")
     var cc = context["select_context"]
+    # RFE uses the classifier arena's independent input context. The outer
+    # prep door connects only its encode context, so a first RFE call could
+    # reject the ndarray that composition_before just prepared. Connect this
+    # existing native NumPy metadata here; a prior GaussianNB/LDA call must
+    # not be required, and NumPy may be loaded after package import.
+    classical_connect_numpy(cc)
     var fields = py_fields(model)
     var estimator = fields["estimator"]
     prep_estimator_admit(estimator, "RFE", context)
