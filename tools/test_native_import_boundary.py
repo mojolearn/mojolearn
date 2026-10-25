@@ -90,8 +90,9 @@ def test_native_shape_admission_precedes_protocol_sensitive_conversion():
     source = (ROOT / 'autograd/import_frontend_pyapi.mojo').read_text()
     body = source[source.index('def _shape_words('):source.index('def _raise_object(')]
     assert 'Python mapping callbacks are unsupported' in body
-    assert body.index('classical_admit_value(key, admission)') < body.index('py_setitem(provided, key, pair[1])')
+    assert body.index('_scalar(key, context["shape_names"])') < body.index('py_setitem(provided, key, pair[1])')
     assert body.index('dimensions refuse Python iteration hooks') < body.index('py_call(b.tuple.__iter__, dims)')
-    assert body.index('classical_admit_value(dims[j], admission)') < body.index('graph_int(dims[j])')
-    assert 'py_get(admission, "ndarray")' in body
-    assert 'admission["scalar_types"]' in body
+    assert body.index('_scalar(dims[j], context["shape_scalars"])') < body.index('graph_int(dims[j])')
+    assert 'context["shape_containers"]' in body
+    assert 'context["shape_scalars"]' in body
+    assert 'from bindings.classical_' not in source
