@@ -71,6 +71,50 @@ requires `--rerun-reason <specific invalidation or failure>`; a new commit alone
 does not justify repeating completed checks. Existing binaries, identity cells
 and measurements remain reusable when their relevant inputs match.
 
+### Compile sub-units: runtime libraries, framework adapters, Apple pack bindings
+
+`compile-<vendor>/runtime`, `compile-cpu/runtime` (Linux CPU column),
+`compile-<vendor>/adapters/<arch>`, `compile-apple/adapters/apple` and the
+compile-apple bindings the Mac packer compiles itself are admitted from retained
+producers by `tools/release_compile_subunit_evidence.py`; nothing is rebuilt.
+
+- `linux-release-leg`: one retained Linux release leg, `LEGS/<vendor>-<arch>` beside
+  its `.provenance.json` and `.exit`. The hip/gfx942 leg gives `compile-amd/runtime`
+  and `compile-amd/adapters/gfx942`; the cuda/sm_89 (host) leg gives
+  `compile-nvidia/runtime`, `compile-cpu/runtime` and `compile-nvidia/adapters/sm_89`.
+  The PTX leg (sm_80) owns neither and is refused. Checked: the leg built the tested
+  revision from a clean, overlay-free tree (every compiled-inventory byte), the
+  launch record's runtime identity digest, the Mojo compiler executable and
+  toolchain, the release flags, the portable math helper's source, every staged
+  `.libs` file, the adapter manifest, invocations (target, CPU, jobs, column),
+  Torch pin and source bytes, and every shipped adapter file.
+- `apple-pack`: a `tools/apple_retained_groups.py pack` directory with
+  `pack-proof.json`. It admits `compile-apple/adapters/apple` and every binding of
+  a group the packer compiled in that run (host, and identical groups whose
+  retained placement was refused): its bincache key must reproduce from the tested
+  revision's tracked bytes, name the admitted checkout and Xcode toolchain and carry
+  the binding's flags. Retained placements are `apple-retained-device`'s; cache hits
+  are not compilations and are not admitted.
+
+An identity's `image` is the box-image pin from the tested tree (as for the device
+bindings); the image the CPU box actually ran is kept as evidence, and the C++
+compiler executable is not captured by the producers.
+
+```sh
+LEGS=~/mojolearn-evidence/release/$V/<build-sha12>/legs
+for LEG in hip-gfx942 cuda-sm_89; do
+  python3 tools/release_ledger_admission.py prepare --adapter linux-release-leg --ledger "$LEDGER" --root . \
+    --producer leg=$LEGS/$LEG --out ~/mojolearn-evidence/release/$V/admit-subunits-$LEG
+  python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . \
+    --report ~/mojolearn-evidence/release/$V/admit-subunits-$LEG/report.json
+done
+PACK=~/mojolearn-evidence/apple-$V-final/pack   # after pack-proof.json exists
+python3 tools/release_ledger_admission.py prepare --adapter apple-pack --ledger "$LEDGER" --root . \
+  --producer pack=$PACK --out ~/mojolearn-evidence/release/$V/admit-apple-pack
+python3 tools/release_ledger_admission.py admit --ledger "$LEDGER" --root . \
+  --report ~/mojolearn-evidence/release/$V/admit-apple-pack/report.json
+```
+
 ### Installed runtime, multi-GPU and published producers
 
 Three box producers fill `runtime-<vendor>`, `multi-gpu-<vendor>` and (post

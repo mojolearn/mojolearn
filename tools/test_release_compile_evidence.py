@@ -119,6 +119,13 @@ def test_c_and_cpp_units_wait_for_their_actual_compiler_byte_identity(tmp_path, 
     ledger = requirements.RequirementsLedger(tmp_path / "requirements.json")
     status = ledger.sync(dict(schema=requirements.SCHEMA, version="0.8.57", requirements={name: wanted},
                              source_revision=wanted["source_revision"], source_root=str(tmp_path)))
+    if kind == "adapters":
+        # A begun Linux compile still cannot qualify it; the retained release-leg
+        # admission (tools/release_compile_subunit_evidence.py) can, so it is runnable.
+        import release_ledger_admission as admission
+        assert admission.supports_requirement(wanted)
+        assert status[name]["action"] == "run"
+        return
     assert status[name]["action"] == "complete-provenance"
     with pytest.raises(ValueError, match="provenance"):
         ledger.begin(name)
