@@ -11,6 +11,39 @@ def _resolved(cls, name, missing):
                  if name in vars(base)), missing)
 
 
+def _archive_finalizers(package):
+    # glue: only existing archive-owner connections, never optional imports or
+    # arbitrary native callable/descriptor admission.
+    import sys
+    archives = []
+    for suffix, key in (('._native_archive_bridge', '_CONTEXT'), ('._classical_host', '_CLASSICAL')):  # glue: the two fixed archive owners
+        module = sys.modules.get(package.__name__ + suffix)
+        if type(module) is ModuleType:
+            owner = vars(module).get(key)
+            archive = owner.get('host_archive_context') if type(owner) is dict else None
+            if type(archive) is dict:
+                archives.append(archive)
+    return archives
+
+
+def _archive_finalizer_binding(cls, member, context, archives):
+    # glue: PyInstanceMethod binding itself is native. Admit only the exact
+    # archive finalizer installed for this class (or its registered ancestor),
+    # with the known compiled entry and the original owner's context.
+    if type(member) is not type(context['descriptor']):
+        return None
+    for archive in archives:  # glue: exact registered native lifetime ownership
+        if member is not archive.get('host_archive_finalizer_descriptor'):
+            continue
+        bound = member.__func__
+        layouts = archive.get('host_archive_lifetime_layouts')
+        if (type(bound) is MethodType and bound.__func__ is context['archive_finalizer_entry']
+                and bound.__self__ is archive and type(layouts) is dict
+                and any(base in layouts for base in type.__dict__['__mro__'].__get__(cls))):  # glue: same native finalizer resolution as its owner
+            return member, member.__get__
+    return None
+
+
 def connect_classes(package):
     # glue: establish native slots once, before dependent estimator/parameter
     # tables capture method identities; lazy imports admit only new classes.
@@ -24,15 +57,17 @@ def connect_classes(package):
         module = _binding()._module
         entry = module.public_attribute_native_call
         factory = module.classical_attribute_descriptor
-        if type(entry) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+        finalizer = module.host_archive_finalize_call
+        if any(type(value) is not BuiltinFunctionType for value in (entry, factory, finalizer)):  # glue: fixed native entry identities
             raise TypeError('public attributes require compiled native entries')
         context = _numpy_free_context()
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
                        property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet'},
-                       stl_connected=False)
+                       stl_connected=False, archive_finalizer_entry=finalizer)
         context['descriptor'] = factory(MethodType(entry, context))
         _CONTEXT = context
     context = _CONTEXT
+    archives = _archive_finalizers(package)
     stl_module = sys.modules.get(package.__name__ + '._x_sequence_stl')
     if not context['stl_connected'] and type(stl_module) is ModuleType:
         context['property_schemas'][vars(vars(stl_module)['STL'])['config']] = 'stl_config'
@@ -69,11 +104,15 @@ def connect_classes(package):
                     names.setdefault(name, member)
             properties = {}
             for name, member in names.items():  # glue: native property schema admission
+                finalizer = (_archive_finalizer_binding(cls, member, context, archives)
+                             if name == '__del__' else None)
                 if type(member) is property:
                     kind = context['property_schemas'].get(member)
                     if kind is None:
                         raise TypeError('unconnected property: ' + name)
                     properties[name] = (member, kind)
+                elif finalizer is not None:
+                    plan['bindings'][name] = finalizer
                 elif type(member) is ClassMethodDescriptorType and member.__objclass__ is object:
                     plan['bindings'][name] = (member, member.__get__)
                 elif _resolved(type(member), '__get__', context['missing']) is not context['missing'] and name not in plan['bindings']:
