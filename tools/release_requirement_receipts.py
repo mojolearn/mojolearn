@@ -106,7 +106,9 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
     supported = {("candidate", "tools/gate_smoke_box.py"), ("source", "tools/public_runtime_inventory.py"),
                  ("compile", "tools/linux_surface_qualification.sh"),
                  ("runtime", "tools/release_public_runtime_evidence.py")}
-    if pair not in supported:
+    import release_ledger_admission as admission
+    retained = pair in admission.tools()
+    if pair not in supported and not retained:
         return ["unsupported actual producer for this requirement; complete-provenance requires a producer report adapter"]
     try:
         report_ref = receipt["producer_report"]
@@ -115,11 +117,13 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
             if not isinstance(ref, dict) or ref not in receipt["evidence"] or sha256(ref["path"]) != ref["sha256"]:
                 raise ValueError("producer report/provenance evidence digest differs or was not retained")
         report_path = Path(report_ref["path"]).resolve()
-        proof_name = "reconciliation.json" if pair[0] == "runtime" else "producer-inputs.json"
+        proof_name = ("reconciliation.json" if pair[0] == "runtime" or retained else "producer-inputs.json")
         if Path(proof_ref["path"]).resolve() != report_path.parent / proof_name:
             raise ValueError("producer provenance evidence does not belong to this retained report")
         provenance = receipt["producer_provenance"]
-        if pair[0] == "candidate":
+        if retained:
+            actual = admission.producer_payload(requirement_id, wanted, report_path, provenance)
+        elif pair[0] == "candidate":
             raw = json.loads(release_evidence.read_text(report_path))
             actual = _candidate_payload(requirement_id, wanted, report_path, raw.get("candidate"), provenance)
         elif pair[0] == "compile":

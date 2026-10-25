@@ -58,12 +58,18 @@ def build_flags(environ=None):
 def producer_admission_available(wanted):
     """Require a real report adapter before scheduling new execution.
 
-    The public-runtime source gate and candidate producers have parsers. Other
-    source checks and execution kinds first need
-    adapters and reconciliation of retained evidence; no rerun is implied.
+    The public-runtime source gate, candidate, Linux release compile and
+    retained-producer admissions (tools/release_ledger_admission.py) have
+    parsers. Other kinds first need adapters and reconciliation of retained
+    evidence; no rerun is implied.
     Each actual receipt still undergoes its producer/coverage validation.
     """
     if wanted.get("kind") == "candidate":
+        return True
+    # Retained producers (Mac/Linux host builds, installed adapter smoke and the
+    # coverage audit) are admitted by tools/release_ledger_admission.py.
+    from release_ledger_admission import supports_requirement as retained
+    if retained(wanted):
         return True
     if wanted.get("kind") == "compile":
         from release_compile_evidence import supports_requirement
