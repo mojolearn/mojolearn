@@ -28,6 +28,12 @@ Adapters (``--adapter``):
                           device subset run (apple_retained_groups)   (--producer run=)
   linux-host-build        Linux host-tier bindings of compile-cpu/nvidia/amd from a
                           tools/release_host_build.py output   (--producer build=)
+  linux-release-leg       compile-<vendor>/runtime, compile-cpu/runtime (host leg) and
+                          compile-<vendor>/adapters/<arch> from one retained Linux
+                          release leg directory   (--producer leg=LEGS/<vendor>-<arch>)
+  apple-pack              compile-apple bindings the Mac packer compiled in the run and
+                          compile-apple/adapters/apple from a tools/apple_retained_groups.py
+                          pack directory   (--producer pack=DIR with pack-proof.json)
   gate-adapters           adapters-nvidia/amd from a release gate directory
                           holding gate-smoke.json   (--producer gate=)
   apple-gate-adapters     adapters-apple from gate-apple/adapters plus the exact
@@ -66,6 +72,8 @@ ADAPTERS = {
     "mac-development-build": ("release_retained_compile_evidence", "compile"),
     "apple-retained-device": ("release_retained_compile_evidence", "compile"),
     "linux-host-build": ("release_retained_compile_evidence", "compile"),
+    "linux-release-leg": ("release_compile_subunit_evidence", "compile"),
+    "apple-pack": ("release_compile_subunit_evidence", "compile"),
     "gate-adapters": ("release_adapter_evidence", "adapters"),
     "apple-gate-adapters": ("release_adapter_evidence", "adapters"),
     "coverage-source": ("release_coverage_source_evidence", "source"),
