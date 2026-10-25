@@ -10,84 +10,98 @@ import gate_autograd_artifacts
 import release_requirement_receipts as R
 
 
-class ReceiptTests(unittest.TestCase):
+class UnsupportedReceiptTests(unittest.TestCase):
+    def test_caller_typed_receipt_and_hashed_plaintext_never_prove_execution(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "no-execution.log"
+            path.write_text("No build or execution occurred.\n")
+            for kind in ("compile", "runtime", "identity", "adapters", "multi", "performance", "published"):
+                with self.subTest(kind=kind):
+                    wanted = dict(kind=kind, source_revision="a" * 40, fingerprint="b" * 64, coverage=["check"])
+                    receipt = dict(schema=R.SCHEMA, requirement_id="test", kind=kind,
+                        source_revision=wanted["source_revision"], input_fingerprint=wanted["fingerprint"],
+                        producer=dict(tool="anything", report_type="build" if kind == "compile" else "execution"),
+                        status="passed", exit_code=0,
+                        coverage=[dict(id="check", expected=1, completed=1, failed=0, skipped=0, status="passed", exit_code=0)],
+                        evidence=[dict(path=str(path), sha256=R.sha256(path))])
+                    errors = R.validate_receipt("test", wanted, receipt)
+                    self.assertTrue(any("unsupported actual producer" in error for error in errors))
+                    receipt["producer"]["tool"] = "tools/gate_smoke_box.py"
+                    self.assertTrue(R.validate_receipt("test", wanted, receipt))
+
+    def test_plain_pass_log_has_no_receipt_contract(self):
+        self.assertTrue(R.validate_receipt("runtime-apple", dict(kind="runtime"), {"status": "passed"}))
+
+
+class SourceReceiptTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.report = Path(self.temp.name) / "actual-report.json"
-        self.report.write_text('{"producer":"native-runtime","checks":2}\n')
-        self.wanted = dict(kind="runtime", source_revision="a" * 40, fingerprint="b" * 64,
-                           coverage=["constructors", "callback-refusals"])
-        self.receipt = dict(schema=R.SCHEMA, requirement_id="runtime-apple", kind="runtime",
-                            source_revision=self.wanted["source_revision"], input_fingerprint=self.wanted["fingerprint"],
-                            producer=dict(tool="tools/runtime_probe.py", report_type="execution"),
-                            status="passed", exit_code=0,
-                            coverage=[dict(id=name, status="passed", exit_code=0, expected=2,
-                                           completed=2, failed=0, skipped=0) for name in self.wanted["coverage"]],
-                            evidence=[dict(path=str(self.report), sha256=R.sha256(self.report))])
+        self.path = Path(self.temp.name) / "endpoints.json"
+        self.inputs = dict(contract=dict(id="runtime-source", kind="source"), configuration=dict(release_modes=["identical"]),
+                           product_api={"python/mojolearn/example.py": "a" * 40})
+        self.wanted = dict(kind="source", source_revision="a" * 40,
+                           fingerprint=R.hashlib.sha256(json.dumps(self.inputs, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                           coverage=list(R.SOURCE_COVERAGE), inputs=self.inputs)
+        self.report = dict(schema=2, scope=R.SOURCE_SCOPE,
+            endpoints=[dict(endpoint="mojolearn.Model.predict", public="mojolearn.Model", method="predict", kind="method",
+                            runtime_status="native_boundary", static_verdict="native", native_entries=["native_predict"],
+                            definition="python/mojolearn/example.py:1", source_ast_sha256="a" * 64),
+                       dict(endpoint="mojolearn.Model.__sklearn_tags__", public="mojolearn.Model", method="__sklearn_tags__",
+                            kind="method", runtime_status="allowed_tag_metadata", static_verdict="python", native_entries=[],
+                            definition="python/mojolearn/example.py:3", source_ast_sha256="b" * 64)],
+            summary=dict(endpoints=2, by_kind={"method": 2}, by_status={"native_boundary": 1, "allowed_tag_metadata": 1}),
+            gate=dict(status="source-classification-passed", prohibited_or_unresolved=0, problems=[], runtime_proof_required=True))
 
-    def errors(self, receipt=None, wanted=None, **kwargs):
-        return R.validate_receipt("runtime-apple", wanted or self.wanted, receipt or self.receipt, **kwargs)
+    def admit(self, report=None, proof_change=None):
+        self.path.write_text(json.dumps(self.report if report is None else report))
+        proof = dict(schema=R.PROVENANCE_SCHEMA, requirement_id="runtime-source", kind="source", run_id="actual-source-run",
+                     source_revision=self.wanted["source_revision"], input_fingerprint=self.wanted["fingerprint"], report_sha256=R.sha256(self.path))
+        proof.update(proof_change or {})
+        (self.path.parent / "producer-inputs.json").write_text(json.dumps(proof))
+        return R.source_gate_receipt("runtime-source", self.wanted, self.path, proof)
 
-    def test_complete_execution_receipt_and_actual_counts(self):
-        self.assertEqual(self.errors(), [])
-        self.assertEqual(R.coverage_summary(self.receipt), dict(expected=4, completed=4, failed=0, skipped=0))
+    def test_full_source_report_derives_actual_endpoint_count_only(self):
+        receipt = self.admit()
+        self.assertEqual(R.validate_receipt("runtime-source", self.wanted, receipt), [])
+        self.assertEqual(R.coverage_summary(receipt), dict(expected=2, completed=2, failed=0, skipped=0))
+        runtime = dict(self.wanted, kind="runtime")
+        self.assertTrue(R.validate_receipt("runtime-source", runtime, receipt))
 
-    def test_plain_log_and_source_report_never_qualify_runtime(self):
-        self.assertTrue(self.errors({"status": "passed", "expected": 1, "completed": 1}))
-        self.receipt["producer"]["report_type"] = "source"
-        self.assertTrue(any("source-only" in error for error in self.errors()))
+    def test_caller_one_of_one_cannot_replace_actual_coverage(self):
+        receipt = self.admit()
+        receipt["coverage"][0].update(expected=1, completed=1)
+        self.assertTrue(any("actual producer" in error for error in R.validate_receipt("runtime-source", self.wanted, receipt)))
 
-    def test_source_audit_only_qualifies_its_source_requirement(self):
-        self.wanted["kind"] = self.receipt["kind"] = "source"
-        self.receipt["producer"]["report_type"] = "source"
-        self.assertEqual(self.errors(), [])
+    def test_failed_unresolved_omitted_and_old_selected_method_reports_refuse(self):
+        for case in ("status", "unresolved", "count", "duplicate", "missing rows", "old schema", "runtime proof", "tag exception"):
+            with self.subTest(case=case):
+                report = copy.deepcopy(self.report)
+                if case == "status": report["gate"]["status"] = "failed"
+                elif case == "unresolved": report["endpoints"][0]["runtime_status"] = "unresolved"
+                elif case == "count": report["summary"]["endpoints"] = 1
+                elif case == "duplicate": report["endpoints"][1]["endpoint"] = report["endpoints"][0]["endpoint"]
+                elif case == "missing rows": report.pop("endpoints")
+                elif case == "old schema": report["schema"] = 1
+                elif case == "runtime proof": report["gate"]["runtime_proof_required"] = False
+                else: report["endpoints"][1]["method"] = "fit"
+                with self.assertRaises(ValueError): self.admit(report)
 
-    def test_exact_requirement_source_kind_and_input_closure(self):
-        for field in ("requirement_id", "kind", "source_revision", "input_fingerprint"):
-            with self.subTest(field=field):
-                receipt = copy.deepcopy(self.receipt)
-                receipt[field] = "different"
-                self.assertTrue(self.errors(receipt))
+    def test_missing_modified_or_relabelled_provenance_refuses(self):
+        receipt = self.admit()
+        (self.path.parent / "producer-inputs.json").unlink()
+        self.assertTrue(R.validate_receipt("runtime-source", self.wanted, receipt))
+        for field in ("source_revision", "input_fingerprint", "report_sha256", "run_id"):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.admit(proof_change={field: ""})
+        receipt = self.admit()
+        self.path.write_text("changed")
+        self.assertTrue(R.validate_receipt("runtime-source", self.wanted, receipt))
 
-    def test_later_commit_does_not_relabel_old_receipt(self):
-        later = dict(self.wanted, source_revision="c" * 40)
-        self.assertTrue(self.errors(wanted=later))
-        # Reuse validates the old receipt against its retained begun manifest.
-        self.assertEqual(self.errors(wanted=self.wanted), [])
-
-    def test_required_ids_cannot_be_replaced_with_aggregate_counts(self):
-        for action in ("missing", "duplicate", "unknown"):
-            with self.subTest(action=action):
-                receipt = copy.deepcopy(self.receipt)
-                if action == "missing":
-                    receipt["coverage"].pop()
-                elif action == "duplicate":
-                    receipt["coverage"].append(dict(receipt["coverage"][0]))
-                else:
-                    receipt["coverage"][0]["id"] = "unrelated source check"
-                self.assertTrue(self.errors(receipt))
-
-    def test_bad_or_incomplete_coverage_cannot_pass(self):
-        for change in (dict(expected=0, completed=0), dict(completed=1), dict(failed=1), dict(skipped=1),
-                       dict(expected=True), dict(completed=3), dict(exit_code=True), dict(exit_code=1),
-                       dict(status="failed")):
-            with self.subTest(change=change):
-                receipt = copy.deepcopy(self.receipt)
-                receipt["coverage"][0].update(change)
-                self.assertTrue(self.errors(receipt))
-
-    def test_failed_attempt_remains_recordable_but_never_passes(self):
-        self.receipt.update(status="failed", exit_code=1)
-        self.receipt["coverage"][0].update(status="failed", exit_code=1, completed=1, failed=1)
-        self.assertEqual(self.errors(require_pass=False), [])
-        self.assertTrue(self.errors())
-
-    def test_missing_or_modified_producer_evidence_is_refused(self):
-        self.report.write_text("changed bytes")
-        self.assertTrue(self.errors())
-        self.report.unlink()
-        self.assertTrue(self.errors())
+    def test_current_input_closure_is_required_not_only_fingerprint_label(self):
+        self.wanted["inputs"] = dict(self.inputs, changed=True)
+        with self.assertRaisesRegex(ValueError, "input closure"):
+            self.admit()
 
 
 class CandidateReceiptTests(unittest.TestCase):
@@ -97,8 +111,10 @@ class CandidateReceiptTests(unittest.TestCase):
         self.path = Path(self.temp.name) / "gate-smoke.json"
         self.identity = dict(source="candidate", vendor="nvidia", version="0.8.57", source_commit="a" * 40,
                              release_modes=["identical"], wheels={"mojolearn-core": "c" * 64, "mojolearn-nvidia": "d" * 64})
-        self.wanted = dict(kind="candidate", source_revision="a" * 40, fingerprint="b" * 64,
-                           coverage=list(R.CANDIDATE_COVERAGE))
+        inputs = dict(configuration={"artifacts:nvidia": dict(self.identity["wheels"]), "release_modes": ["identical"]})
+        self.wanted = dict(kind="candidate", source_revision="a" * 40,
+                           fingerprint=R.hashlib.sha256(json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                           coverage=list(R.CANDIDATE_COVERAGE), inputs=inputs)
         artifacts = dict(schema=gate_autograd_artifacts.SCHEMA, state="built", vendor="nvidia", source_commit="a" * 40,
                          files=[dict(file=name, source=source, exit_code=0, sha256="e" * 64, source_sha256="f" * 64)
                                 for name, source in gate_autograd_artifacts.expected("nvidia").items()])
@@ -116,8 +132,9 @@ class CandidateReceiptTests(unittest.TestCase):
     def admit(self, gate=None, provenance_change=None):
         self.path.write_text(json.dumps(gate or self.gate))
         proof = dict(schema=R.PROVENANCE_SCHEMA, report_sha256=R.sha256(self.path), requirement_id="candidate-nvidia",
-                     kind="candidate", source_revision="a" * 40, input_fingerprint="b" * 64)
+                     kind="candidate", source_revision="a" * 40, input_fingerprint=self.wanted["fingerprint"], run_id="actual-gate-run")
         proof.update(provenance_change or {})
+        (self.path.parent / "producer-inputs.json").write_text(json.dumps(proof))
         return R.candidate_gate_receipt("candidate-nvidia", self.wanted, self.path, self.identity, proof)
 
     def test_native_gate_counts_and_tooling_source_are_preserved(self):

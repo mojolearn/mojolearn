@@ -8,11 +8,14 @@ attaches a current fingerprint to an older report merely because it says PASS.
 import hashlib
 import json
 from pathlib import Path
+from collections import Counter
 
 SCHEMA = "mojolearn.release-requirement-receipt.v1"
 PROVENANCE_SCHEMA = "mojolearn.release-producer-inputs.v1"
 KINDS = {"source", "compile", "runtime", "identity", "adapters", "multi", "performance", "candidate", "published"}
 CANDIDATE_COVERAGE = ("install", "whole-plan-smoke", "autograd-artifacts", "adapters", "measured-plan-pairs")
+SOURCE_COVERAGE = ("zero prohibited source paths",)
+SOURCE_SCOPE = "all public and returned endpoints; static connections only, no product imports or execution"
 
 
 def sha256(path):
@@ -22,6 +25,108 @@ def sha256(path):
 
 def _count(value):
     return type(value) is int and value >= 0
+
+
+def _producer_stamp(requirement_id, wanted, report_path, provenance):
+    """Retained controller inputs, bound to the original report bytes."""
+    path = Path(report_path).resolve().parent / "producer-inputs.json"
+    try:
+        actual = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise ValueError("producer input provenance evidence is unavailable") from error
+    if actual != provenance or not isinstance(actual, dict) or actual.get("schema") != PROVENANCE_SCHEMA:
+        raise ValueError("retained producer input provenance differs")
+    expected = dict(requirement_id=requirement_id, kind=wanted.get("kind"),
+                    source_revision=wanted.get("source_revision"), input_fingerprint=wanted.get("fingerprint"),
+                    report_sha256=sha256(report_path))
+    if any(not value or actual.get(key) != value for key, value in expected.items()):
+        raise ValueError("retained producer inputs do not identify the begun source/input closure/report")
+    if not isinstance(actual.get("run_id"), str) or not actual["run_id"]:
+        raise ValueError("producer input provenance has no actual run identity")
+    inputs = wanted.get("inputs")
+    if (not isinstance(inputs, dict) or hashlib.sha256(json.dumps(inputs, sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest() != wanted.get("fingerprint")):
+        raise ValueError("producer admission requires the begun input closure, matching its fingerprint")
+    return path, sha256(path)
+
+
+def _source_payload(requirement_id, wanted, report_path, provenance):
+    """Parse the full endpoint gate, never its historical selected-method TSV."""
+    report_path = Path(report_path).resolve()
+    report = json.loads(report_path.read_text())
+    if (requirement_id != "runtime-source" or wanted.get("kind") != "source"
+            or wanted.get("coverage") != list(SOURCE_COVERAGE)):
+        raise ValueError("full endpoint source gate has another requirement/coverage contract")
+    if not isinstance(report, dict) or report.get("schema") != 2 or report.get("scope") != SOURCE_SCOPE:
+        raise ValueError("source producer requires the full endpoint gate schema2")
+    rows, summary, gate = report.get("endpoints"), report.get("summary"), report.get("gate")
+    if not isinstance(rows, list) or not rows or not isinstance(summary, dict) or not isinstance(gate, dict):
+        raise ValueError("full endpoint gate lacks endpoint/summary/gate records")
+    if (gate.get("status") != "source-classification-passed" or gate.get("prohibited_or_unresolved") != 0
+            or gate.get("problems") != [] or gate.get("runtime_proof_required") is not True):
+        raise ValueError("full endpoint source classification did not pass; runtime proof remains separate")
+    allowed = {"native_boundary", "allowed_tag_metadata", "refusal_only"}
+    names = []
+    for row in rows:
+        if (not isinstance(row, dict) or not isinstance(row.get("endpoint"), str) or not row["endpoint"]
+                or not isinstance(row.get("kind"), str) or row.get("runtime_status") not in allowed):
+            raise ValueError("full endpoint gate has prohibited/unresolved/malformed endpoint rows")
+        if row["runtime_status"] == "allowed_tag_metadata" and row.get("method") != "__sklearn_tags__":
+            raise ValueError("source metadata exception is only sklearn tag metadata")
+        if not isinstance(row.get("static_verdict"), str) or not isinstance(row.get("native_entries"), list):
+            raise ValueError("full endpoint gate lacks source classification/connection metadata")
+        names.append(row["endpoint"])
+    if (len(names) != len(set(names)) or summary.get("endpoints") != len(rows)
+            or summary.get("by_kind") != dict(Counter(row["kind"] for row in rows))
+            or summary.get("by_status") != dict(Counter(row["runtime_status"] for row in rows))):
+        raise ValueError("full endpoint source coverage differs from its actual rows")
+    proof_path, proof_hash = _producer_stamp(requirement_id, wanted, report_path, provenance)
+    report_ref = dict(path=str(report_path), sha256=sha256(report_path))
+    proof_ref = dict(path=str(proof_path), sha256=proof_hash)
+    return dict(schema=SCHEMA, requirement_id=requirement_id, kind="source",
+                source_revision=provenance["source_revision"], input_fingerprint=provenance["input_fingerprint"],
+                producer=dict(tool="tools/public_runtime_inventory.py", report_type="source"),
+                producer_provenance=dict(provenance), producer_report=report_ref, producer_provenance_report=proof_ref,
+                status="passed", exit_code=0, evidence=[report_ref, proof_ref],
+                coverage=[dict(id=SOURCE_COVERAGE[0], status="passed", exit_code=0,
+                               expected=len(rows), completed=len(rows), failed=0, skipped=0)])
+
+
+def validate_producer_receipt(requirement_id, wanted, receipt):
+    """Re-read recognized producer records and derive the result independently.
+
+    Unsupported producers stay unqualified until their real report adapter is
+    implemented. No arbitrary tool name, report-type label or caller count can
+    substitute for an actual parsed producer record.
+    """
+    producer = receipt.get("producer", {})
+    pair = (wanted.get("kind"), producer.get("tool") if isinstance(producer, dict) else None)
+    supported = {("candidate", "tools/gate_smoke_box.py"), ("source", "tools/public_runtime_inventory.py")}
+    if pair not in supported:
+        return ["unsupported actual producer for this requirement; complete-provenance requires a producer report adapter"]
+    try:
+        report_ref = receipt["producer_report"]
+        proof_ref = receipt["producer_provenance_report"]
+        for ref in (report_ref, proof_ref):
+            if not isinstance(ref, dict) or ref not in receipt["evidence"] or sha256(ref["path"]) != ref["sha256"]:
+                raise ValueError("producer report/provenance evidence digest differs or was not retained")
+        report_path = Path(report_ref["path"]).resolve()
+        if Path(proof_ref["path"]).resolve() != report_path.parent / "producer-inputs.json":
+            raise ValueError("producer provenance evidence does not belong to this retained report")
+        provenance = receipt["producer_provenance"]
+        if pair[0] == "candidate":
+            raw = json.loads(report_path.read_text())
+            actual = _candidate_payload(requirement_id, wanted, report_path, raw.get("candidate"), provenance)
+        else:
+            actual = _source_payload(requirement_id, wanted, report_path, provenance)
+        fields = ("requirement_id", "kind", "source_revision", "input_fingerprint", "producer", "producer_provenance",
+                  "producer_report", "producer_provenance_report", "status", "exit_code", "coverage",
+                  "measured_pairs", "autograd_artifacts")
+        if any(receipt.get(key) != actual.get(key) for key in fields):
+            raise ValueError("receipt outcome/coverage differs from the retained actual producer report")
+        return []
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        return ["actual producer evidence requires provenance reconciliation: " + str(error)]
 
 
 def validate_receipt(requirement_id, wanted, receipt, *, require_pass=True):
@@ -97,6 +202,7 @@ def validate_receipt(requirement_id, wanted, receipt, *, require_pass=True):
                     errors.append("producer evidence digest differs")
             except (OSError, KeyError, TypeError, ValueError):
                 errors.append("producer evidence is unavailable")
+    errors += validate_producer_receipt(requirement_id, wanted, receipt)
     return errors
 
 
@@ -192,7 +298,7 @@ def candidate_gate_errors(gate, identity):
     return errors
 
 
-def candidate_gate_receipt(requirement_id, wanted, report_path, identity, provenance):
+def _candidate_payload(requirement_id, wanted, report_path, identity, provenance):
     """Admit a native gate report using a hash-bound actual-input stamp.
 
     ``provenance`` is recorded by the controller for the actual begun run (or
@@ -229,15 +335,40 @@ def candidate_gate_receipt(requirement_id, wanted, report_path, identity, proven
         "adapters": len(adapter_gate.PHASES),
         "measured-plan-pairs": gate["measure"]["statuses"]["process finished"],
     }
+    proof_path, proof_hash = _producer_stamp(requirement_id, wanted, report_path, provenance)
+    configuration = wanted.get("inputs", {}).get("configuration", {})
+    vendor = identity.get("vendor")
+    if (configuration.get("artifacts:" + str(vendor)) != identity.get("wheels")
+            or configuration.get("release_modes") != identity.get("release_modes")
+            or requirement_id != "candidate-" + str(vendor)):
+        raise ValueError("candidate artifacts/modes differ from the begun input configuration")
     receipt = dict(schema=SCHEMA, requirement_id=requirement_id, kind="candidate",
                    source_revision=provenance["source_revision"], input_fingerprint=provenance["input_fingerprint"],
                    producer=dict(tool="tools/gate_smoke_box.py", report_type="execution"),
-                   producer_provenance=dict(provenance), status="passed", exit_code=0,
+                   producer_provenance=dict(provenance),
+                   producer_report=dict(path=str(report_path), sha256=report_hash),
+                   producer_provenance_report=dict(path=str(proof_path), sha256=proof_hash),
+                   status="passed", exit_code=0,
                    coverage=[dict(id=name, status="passed", exit_code=0, expected=count,
                                   completed=count, failed=0, skipped=0) for name, count in counts.items()],
-                   evidence=[dict(path=str(report_path), sha256=report_hash)],
+                   evidence=[dict(path=str(report_path), sha256=report_hash),
+                             dict(path=str(proof_path), sha256=proof_hash)],
                    measured_pairs=gate["measure"]["pairs"]["matched"],
                    autograd_artifacts=len(gate["autograd_artifacts"]["files"]))
+    return receipt
+
+
+def candidate_gate_receipt(requirement_id, wanted, report_path, identity, provenance):
+    receipt = _candidate_payload(requirement_id, wanted, report_path, identity, provenance)
+    errors = validate_receipt(requirement_id, wanted, receipt)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return receipt
+
+
+def source_gate_receipt(requirement_id, wanted, report_path, provenance):
+    """Admit full endpoint source evidence, without making a runtime claim."""
+    receipt = _source_payload(requirement_id, wanted, report_path, provenance)
     errors = validate_receipt(requirement_id, wanted, receipt)
     if errors:
         raise ValueError("; ".join(errors))
