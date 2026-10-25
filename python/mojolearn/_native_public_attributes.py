@@ -16,7 +16,7 @@ def connect_classes(package):
     # tables capture method identities; lazy imports admit only new classes.
     global _CONTEXT
     import sys
-    from . import _mode, _cholesky_impl, _array
+    from . import _mode, _cholesky_impl
     from ._native_classical_bridge import _layout, _numpy_free_context
     from .tokenizer import _binding
 
@@ -27,10 +27,6 @@ def connect_classes(package):
         if type(entry) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
             raise TypeError('public attributes require compiled native entries')
         context = _numpy_free_context()
-        context['attribute_array_dtypes'] = _array.SUPPORTED_DTYPES
-        array_class = context['array_class']
-        context['attribute_array_slots'] = {name: vars(array_class)[name]  # glue: native storage slots, never Array protocols
-                                            for name in ('_store', '_addr', '_readonly', 'shape', 'dtype', 'order')}  # glue: fixed import-time native slot identities
         context.update(native_module_type=ModuleType, plans={}, pending={}, missing=object(),
                        property_schemas={vars(_cholesky_impl.Cholesky)['logdet_']: 'cholesky_logdet'},
                        stl_connected=False)
