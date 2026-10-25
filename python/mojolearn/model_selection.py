@@ -34,6 +34,7 @@ from ._buffer import _materialize, _native, empty
 from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 from . import _user_objects
+from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding (the native
 # owner resolves it through this binding getter).
@@ -657,7 +658,9 @@ class _Splitter:
 
     def get_params(self, deep=True):
         """Return the splitter's constructor parameters as a dict."""
-        return {k: v for k, v in vars(self).items() if not k.startswith('_')}  # glue: repr and params over the splitter attributes
+        # The connected splitter schema preserves public-field insertion order
+        # and borrowed values; the established interface ignores `deep`.
+        return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays, one pair per split."""
@@ -1030,7 +1033,7 @@ class _Repeated:
 
     def get_params(self, deep=True):
         """Return ``n_repeats``, ``random_state`` and ``n_splits`` as a dict."""
-        return dict(n_repeats=self.n_repeats, random_state=self.random_state, **self.cvargs)
+        return _PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_splits * n_repeats``."""
