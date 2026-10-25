@@ -22,6 +22,7 @@ import json
 import os
 import re
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -180,8 +181,98 @@ def _worker_snapshot(root, request):
     return result
 
 
+def _tracked_state(root, revision):
+    """Verify actual tracked bytes, including assume-unchanged/skip-worktree files."""
+    if _revision(root, "HEAD") != revision:
+        raise ValueError("dependency source HEAD changed from the requested revision")
+    if subprocess.run(["git", "-C", str(root), "diff", "--cached", "--quiet", revision, "--"],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        raise ValueError("dependency source has staged changes")
+    algorithm = _git(root, "rev-parse", "--show-object-format")
+    entries = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-rz", "--full-tree", revision])
+    state = {}
+    for entry in entries.split(b"\0"):
+        if not entry:
+            continue
+        metadata, raw_path = entry.split(b"\t", 1)
+        mode, kind, expected = metadata.decode().split()
+        path = os.fsdecode(raw_path)
+        if kind != "blob" or mode not in ("100644", "100755", "120000"):
+            raise ValueError("unsupported tracked dependency source kind: " + path)
+        source = root / path
+        try:
+            before = source.lstat()
+            if mode == "120000":
+                if not stat.S_ISLNK(before.st_mode):
+                    raise ValueError("tracked dependency symlink changed: " + path)
+                data = os.fsencode(os.readlink(source))
+                actual = hashlib.new(algorithm, b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+            else:
+                if not stat.S_ISREG(before.st_mode) or bool(before.st_mode & stat.S_IXUSR) != (mode == "100755"):
+                    raise ValueError("tracked dependency file mode changed: " + path)
+                value = hashlib.new(algorithm, b"blob " + str(before.st_size).encode() + b"\0")
+                with source.open("rb") as stream:
+                    for block in iter(lambda: stream.read(1048576), b""):
+                        value.update(block)
+                actual = value.hexdigest()
+            after = source.lstat()
+        except OSError as error:
+            raise ValueError("tracked dependency source unavailable: " + path) from error
+        # ctime/inode catch an edit followed by restoration of the original
+        # bytes or mtime. Access time is intentionally not part of the guard.
+        def stamp(info):
+            return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                    info.st_mtime_ns, info.st_ctime_ns)
+        if stamp(before) != stamp(after):
+            raise ValueError("dependency source changed while being checked: " + path)
+        if actual != expected:
+            raise ValueError("tracked dependency source differs from requested revision: " + path)
+        state[path] = (mode, actual, stamp(after))
+    return state
+
+
+def _clone_tracked_tree(root, tree, state, log):
+    """Make a tracked-only CoW view; never hardlink mutable source files."""
+    parents = {}
+    for name, (mode, _, _) in state.items():
+        destination = tree / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if mode == "120000":
+            destination.symlink_to(os.readlink(root / name))
+        else:
+            parents.setdefault(destination.parent, []).append(root / name)
+    for parent, paths in parents.items():
+        # macOS cp -c uses supported clonefile(2), preserving separate inodes:
+        # an analyzer write/chmod cannot alter the original source. It can fall
+        # back to copying on a filesystem without cloning; failure still stops
+        # analysis. Batching avoids one subprocess per source file.
+        for first in range(0, len(paths), 128):
+            subprocess.run(["/bin/cp", "-c", "-p", *map(str, paths[first:first + 128]), str(parent)],
+                           stdout=log, stderr=subprocess.STDOUT, check=True)
+    # --no-checkout creates no index. Read the exact requested tree into it
+    # without touching the cloned files, so frozen analyzers see normal Git.
+    subprocess.run(["git", "-C", str(tree), "read-tree", "HEAD"],
+                   stdout=log, stderr=subprocess.STDOUT, check=True)
+
+
+def _run_snapshot_worker(tree, temporary, request, log):
+    inp, out = temporary / "request.json", temporary / "result.json"
+    inp.write_text(json.dumps(request))
+    env = dict(os.environ)
+    for key in ("PYTHONPATH", "MOJOLEARN_RELEASE_BUILD_ONLY"):
+        env.pop(key, None)
+    # Existing pyc files are not frozen source, and new ones must not enter
+    # directory-level source hashes (e.g. portable_math and tokenizer/tools).
+    env.update(PYTHONPYCACHEPREFIX=str(temporary / "pycache"), PYTHONDONTWRITEBYTECODE="1")
+    process = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker",
+        str(tree), str(inp), str(out)], cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT)
+    if process.returncode:
+        raise ValueError("frozen dependency analysis exited " + str(process.returncode))
+    return json.loads(out.read_text())
+
+
 def frozen_snapshot(root, revision, request, *, log_dir=None):
-    """Analyze a detached checkout of revision, retaining the complete log."""
+    """Analyze an exact detached source view, retaining the complete log."""
     root = Path(root).resolve()
     revision = _revision(root, revision)
     logs = Path(log_dir or Path.home() / "mojolearn-evidence/release-dependencies")
@@ -197,29 +288,45 @@ def frozen_snapshot(root, revision, request, *, log_dir=None):
         if old.get("analyzer") == analyzer and old.get("request") == request and old.get("revision") == revision:
             return old["snapshot"]
     with tempfile.TemporaryDirectory(prefix="mojolearn-dependencies-") as temporary:
-        tree = Path(temporary) / "tree"
+        temporary = Path(temporary)
+        tree = temporary / "tree"
         with log_path.open("w") as log:
-            subprocess.run(["git", "-C", str(root), "worktree", "add", "--detach", str(tree), revision],
-                           stdout=log, stderr=subprocess.STDOUT, check=True)
+            # A fresh physical checkout can exhaust disk on the build Mac.
+            # Only reuse exact current bytes, and exclude ALL untracked files:
+            # clean Git status alone would admit generated Mojo and pyc files
+            # that do not exist in the requested revision's source tree.
+            clone_current = sys.platform == "darwin" and _revision(root, "HEAD") == revision
+            before = _tracked_state(root, revision) if clone_current else None
+            source_view = dict(method="tracked-cow" if clone_current else "git-checkout",
+                               source_checkout=str(root), tracked_files_checked=len(before or {}))
+            log.write("source view: " + json.dumps(source_view, sort_keys=True) + "\n")
+            log.flush()
+            command = ["git", "-C", str(root), "worktree", "add", "--detach"]
+            if clone_current:
+                command.append("--no-checkout")
+            added = False
             try:
-                inp, out = Path(temporary) / "request.json", Path(temporary) / "result.json"
-                inp.write_text(json.dumps(request))
-                env = dict(os.environ)
-                # Source plans must not silently inherit a caller's partial-build filter.
-                for key in ("PYTHONPATH", "MOJOLEARN_RELEASE_BUILD_ONLY"):
-                    env.pop(key, None)
-                process = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker",
-                    str(tree), str(inp), str(out)], cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT)
-                if process.returncode:
-                    raise ValueError(f"frozen dependency analysis exited {process.returncode}; log {log_path}")
-                snapshot = json.loads(out.read_text())
+                subprocess.run(command + [str(tree), revision], stdout=log, stderr=subprocess.STDOUT, check=True)
+                added = True
+                if clone_current:
+                    _clone_tracked_tree(root, tree, before, log)
+                    view_before = _tracked_state(tree, revision)
+                snapshot = _run_snapshot_worker(tree, temporary, request, log)
                 if snapshot.get("revision") != revision:
                     raise ValueError("frozen dependency snapshot revision mismatch")
+                if clone_current:
+                    if _tracked_state(tree, revision) != view_before:
+                        raise ValueError("frozen dependency view changed during analysis")
+                    if _tracked_state(root, revision) != before:
+                        raise ValueError("dependency source changed during analysis")
             finally:
-                subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
-                               stdout=log, stderr=subprocess.STDOUT, check=True)
+                # Failed `worktree add` can leave a registration too. Remove
+                # only this unique temporary tree; never prune other sessions.
+                if added or (tree / ".git").exists():
+                    subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)],
+                                   stdout=log, stderr=subprocess.STDOUT, check=True)
     report.write_text(json.dumps(dict(analyzer=analyzer, revision=revision, request=request,
-                                     snapshot=snapshot), sort_keys=True) + "\n")
+                                     source_view=source_view, snapshot=snapshot), sort_keys=True) + "\n")
     return snapshot
 
 
