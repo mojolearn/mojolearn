@@ -247,3 +247,13 @@ def register_meta(cls, kind):
     if "trees_unavailable" in context:
         return
     context["trees_meta_classes"][cls] = kind
+    # These classes already completed their constructor/numeric-mode setup.
+    # Replace the old fit/validation/output decorators only on these public
+    # methods; trees_public_meta_lifecycle now owns their runtime semantics.
+    # Keep constructors and the still-unported parameter setter visible.
+    import inspect
+    for name in ('fit', 'fit_transform', 'predict', 'predict_proba', 'transform', 'score'):  # glue: fixed public meta-estimator doors
+        method = getattr(cls, name, None)
+        if inspect.isfunction(method):
+            setattr(cls, name, inspect.unwrap(method))
+    cls._mojolearn_native_public = True
