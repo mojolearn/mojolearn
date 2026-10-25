@@ -169,7 +169,17 @@ def _readback(model: PythonObject, operation: String, context: PythonObject) rai
             raise Error("ValueError: this host estimator runs identical only")
         selected = "identical"
     else:
-        selected = _mode(context["backend_fields"]["_DEFAULT_MODE"]) if requested is None else _mode(requested)
+        if requested is None:
+            var defaults = context["backend_fields"]
+            if py_type(defaults) is not b.dict:
+                raise Error("TypeError: native default mode requires its connected module dictionary")
+            var names = py_call(b.list, defaults.keys())
+            for i in range(len(names)):  # driver-loop: reject foreign equality hooks before reading mutable process metadata
+                if py_type(names[i]) is not b.str:
+                    raise Error("TypeError: native default mode requires exact string module keys")
+            selected = _mode(defaults["_DEFAULT_MODE"])
+        else:
+            selected = _mode(requested)
         if route == "forest":
             var captured = _configuration_value(model, fields, "_fit_numeric_mode")
             if captured is not None:
