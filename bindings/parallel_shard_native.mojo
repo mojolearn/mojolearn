@@ -18,10 +18,10 @@ same words: no bit moves.
 The worker (`mojolearn._native_parallel_shard_worker`) imports the package,
 whose driver modules register their classes, entries and contexts here at
 import, and enters `shard_worker`. A worker rebuilds each shard's model from
-its state record without a Python constructor. Its one Python call is the
-binding getter (`_backend.binding`) the package registered, once per request,
-to resolve the binding a plain owner takes as its first argument; the parent
-never calls it (its shell resolves the bindings).
+its state record without a Python constructor. Bindings are connected before
+any request and retained as namespaces of compiled entries; workers never
+call the Python binding loader. The neighbor/IVF `py` operation below remains
+separate unresolved callback debt and is not qualified by this repair.
 """
 from std.ffi import _Global
 from std.memory import memcpy
@@ -32,6 +32,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.scaler_lifecycle_native import _public_result
 from bindings.family_common import family_call, family_as_f32, family_view
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
@@ -85,8 +87,13 @@ def _ctx() raises -> PythonObject:
 
 
 def _worker_binding(name: String) raises -> PythonObject:
-    """The identical binding `name`, in a worker: the registered getter."""
-    return py_call(_t("binding_getter"), PythonObject(name), PythonObject("identical"))
+    """The import-connected identical binding, without a loader callback."""
+    var binding = py_get(_t("worker_bindings"), PythonObject(name))
+    if binding is None:
+        raise Error("ImportError: parallel native binding is not connected: " + name)
+    if py_type(binding) is shard_b().str:
+        raise Error("ImportError: " + String(binding))
+    return binding
 
 
 def _identical(fields: PythonObject) raises -> Bool:
@@ -306,10 +313,13 @@ def _gpc_admit(estimator: PythonObject, context: PythonObject) raises -> PythonO
     publishes."""
     if py_type(estimator) is not _t("gpc_class"):
         raise Error("TypeError: requires mojolearn.GaussianProcessClassifier")
+    classical_check_layout(estimator, context)
     var fields = py_fields(estimator)
     var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     var b = shard_b()
-    if mode is None or not Bool(py=py_call(b.bool, mode)):
+    if mode is not None and py_type(mode) is not b.str:
+        raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
+    if mode is None or String(mode) == "":
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not b.str or String(mode) != "identical":
         raise Error("ValueError: parallel GPC requires IDENTICAL numeric mode")
@@ -330,7 +340,7 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var source = family_as_f32(args[1], 2, "X", context)
     var copied = not (source is args[1])
     var x = source
-    var encoded = gp_encode_labels(args[2], args[5], context)
+    var encoded = gp_encode_labels(args[2], _worker_binding("_mojolearn"), context)
     var classes = encoded[0]
     var codes = encoded[1]
     if Int(py=codes.size) != Int(py=x.shape[0]):
@@ -413,8 +423,8 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     if n_classes == 2:
         if proba_method:
             return columns[0]
-        return gp_decode_labels(fields["classes_"], columns[0], args[5], context)
-    var combined = _gpc_ovr_combine(args[4], columns, n_star, context)
+        return gp_decode_labels(fields["classes_"], columns[0], _worker_binding("_mojolearn"), context)
+    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp"), columns, n_star, context)
     if proba_method:
         return combined[0]
     # `codes32.astype("<i8")`: the exact widening
@@ -423,7 +433,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
     _ = codes32  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    return gp_decode_labels(fields["classes_"], codes, args[5], context)
+    return gp_decode_labels(fields["classes_"], codes, _worker_binding("_mojolearn"), context)
 
 
 # ---------------------------------------------------------------- forests
@@ -454,8 +464,12 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var cls = py_type(estimator)
     var classes = _t("forest_classes")
     var regressors = _t("forest_regressors")
-    if not Bool(py=py_call(py_attr(classes, "__contains__"), cls)):
+    var admitted = False
+    for i in range(len(classes)):  # driver-loop: exact connected forest classes
+        admitted = admitted or cls is classes[i]
+    if not admitted:
         raise Error("TypeError: fit_forest requires a mojolearn RandomForest or ExtraTrees estimator")
+    classical_check_layout(estimator, context)
     var tps = args[4]
     if py_type(tps) is not b.int or Int(py=tps) < 1:
         raise Error("ValueError: trees_per_shard must be a positive integer")
@@ -489,7 +503,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var offsets = b.list()
     for r in range(len(parts)):  # driver-loop: one offset table per tree range
         _ = py_call(offsets.append, parts[r]["_offsets"])
-    py_setitem(merged, "_offsets", _rebase_offsets(offsets, args[5], context))
+    py_setitem(merged, "_offsets", _rebase_offsets(offsets, _worker_binding("_mojolearn").msel_rebase_offsets_i32, context))
     var node_names = Python.list("_colid", "_quesval", "_left_child", "_leaves")
     for k in range(len(node_names)):  # small-loop(the four flat node arrays)
         var name = String(node_names[k])
@@ -1113,7 +1127,9 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
     if operation == "fit_gaussian_process_classifier":
         return _fit_gpc(args)
     if operation == "predict_gaussian_process_classifier":
-        return _predict_gpc(args)
+        var context = _ctx()
+        classical_connect_numpy(context)
+        return _public_result(_predict_gpc(args), context)
     if operation == "fit_forest":
         return _fit_forest(args)
     if operation == "trace_take":

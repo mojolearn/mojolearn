@@ -87,7 +87,8 @@ def _torch_connect() raises:
         raise Error("TypeError: Torch lacks native TensorBase metadata")
     var base_fields = _torch_type_fields(base)
     var methods = Python.dict()
-    for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride")]:  # small-loop(the four fixed tensor method names)
+    for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride"),
+                 String("contiguous"), String("cpu"), String("to")]:  # small-loop(the fixed native tensor method names)
         var entry = py_get(base_fields, name)
         if entry is None or py_type(entry) is not py_type(bi.list.append):
             raise Error("TypeError: Torch tensor conversion requires native method " + name)
@@ -162,6 +163,12 @@ def native_torch_admit(value: PythonObject) raises:
         has_base = has_base or hierarchy[i] is cache[].base
     if not has_base:
         raise Error("TypeError: Torch Tensor class metadata does not derive from its native TensorBase")
+    native_torch_modes_admit()
+
+
+def native_torch_modes_admit() raises:
+    _torch_connect()
+    var cache = NATIVE_TORCH.get_or_create_ptr()
     if Int(py=cache[].entries["_len_torch_function_stack"]()) != 0:
         raise Error("TypeError: Torch buffers cannot be used while a Python TorchFunctionMode is active")
     if Int(py=cache[].entries["_len_torch_dispatch_stack"]()) != 0:
@@ -199,3 +206,23 @@ def native_torch_numpy(value: PythonObject) raises -> PythonObject:
     var result = py_call(cache[].methods["numpy"], detached)
     _ = detached^
     return result
+
+
+def native_torch_device(value: PythonObject) raises -> PythonObject:
+    native_torch_admit(value)
+    return py_call(NATIVE_TORCH.get_or_create_ptr()[].methods["device"].__get__, value)
+
+
+def native_torch_contiguous(value: PythonObject, host: Bool) raises -> PythonObject:
+    """Detach and prepare a Tensor using only admitted native base entries."""
+    native_torch_admit(value)
+    var methods = NATIVE_TORCH.get_or_create_ptr()[].methods
+    var tensor = py_call(methods["detach"], value)
+    if host:
+        tensor = py_call(methods["cpu"], tensor)
+    return py_call(methods["contiguous"], tensor)
+
+
+def native_torch_to(value: PythonObject, device: PythonObject) raises -> PythonObject:
+    native_torch_admit(value)
+    return py_call(NATIVE_TORCH.get_or_create_ptr()[].methods["to"], value, device)

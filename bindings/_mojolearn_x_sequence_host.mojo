@@ -35,6 +35,7 @@ from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from autograd.program_control_pyapi import ops_program_control_py
+from autograd.torch_program_pyapi import ops_torch_program_run_py
 from autograd.distributed_pyapi import (
     distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
@@ -385,6 +386,17 @@ def ops_program_execute_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi
         if len(args) != 7:
             raise Error("TypeError: ops_program_execute expects 7 arguments")
         var result = ops_program_execute_binding(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_torch_program_run_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 4:
+            raise Error("TypeError: ops_torch_program_run expects 4 arguments")
+        var result = ops_torch_program_run_py[HostExec, OPS_HOST](args[0], args[1], args[2], Bool(py=args[3]))
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -815,6 +827,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_py_c_function(ops_program_execute_c_binding, "ops_program_execute")
         m.def_py_c_function(ops_program_inspect_c_binding, "ops_program_inspect")
         m.def_py_c_function(ops_imported_run_c_binding, "ops_imported_run")
+        m.def_py_c_function(ops_torch_program_run_c_binding, "ops_torch_program_run")
         m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
         m.def_function[ops_program_fit_binding]("ops_program_fit")
         m.def_function[ops_partitioned_open_binding]("ops_partitioned_open")

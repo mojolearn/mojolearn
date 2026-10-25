@@ -27,6 +27,8 @@ def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
     install); otherwise the door shards and a CPU-only install runs the
     host binding per shard."""
     var b = Python.import_module("builtins")
+    if py_type(value) is not b.tuple and py_type(value) is not b.list and py_type(value) is not b.range:
+        raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
         raise Error("ValueError: devices must be distinct nonnegative integer indices")

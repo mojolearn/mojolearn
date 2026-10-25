@@ -7,11 +7,7 @@ not a distributed factorization of a single binary covariance matrix.
 """
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
-import sys
-
-from . import _backend
 from . import _gpc_impl
-from ._parallel_pool import public_method_result
 from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
@@ -33,11 +29,8 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     # `fit_gaussian_process_classifier`): one binary Laplace fit per
     # one-vs-rest class column on a worker process per device (column i on
     # device i % len(devices)), stored as the plain fit stores them.
-    if type(estimator) is not _gpc_impl.GaussianProcessClassifier:
-        raise TypeError('requires mojolearn.GaussianProcessClassifier')
     return _native_parallel_shard('fit_gaussian_process_classifier',
-                                  (estimator, X, y, devices, estimator._bind(),
-                                   _backend.binding('_mojolearn', 'identical')))
+                                  (estimator, X, y, devices))
 
 
 def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='predict'):
@@ -50,10 +43,5 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
     # One native call (`predict_gaussian_process_classifier`): one latent
     # pass per fitted class on a worker process, the class columns folded in
     # canonical order; the plain method's public conversion for our caller.
-    if type(estimator) is not _gpc_impl.GaussianProcessClassifier:
-        raise TypeError('requires mojolearn.GaussianProcessClassifier')
-    return public_method_result(estimator, method,
-                                _native_parallel_shard('predict_gaussian_process_classifier',
-                                                       (estimator, X, devices, method, estimator._bind(),
-                                                        _backend.binding('_mojolearn', 'identical'))),
-                                sys._getframe(1))
+    return _native_parallel_shard('predict_gaussian_process_classifier',
+                                  (estimator, X, devices, method))

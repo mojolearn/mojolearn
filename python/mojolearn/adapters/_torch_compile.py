@@ -16,19 +16,20 @@
 #   activations. An in-place change of a bound parameter (an optimizer step, load_state_dict) bumps its
 #   version counter; the next call re-imports the graph with the new weights.
 # - Static shapes only: a symbolic size (dynamic=True, or the automatic dynamic recompile) is refused.
-# - Two routes per call, chosen by _route, glue only on both:
+# - Native buffer execution has two routes (autograd/torch_program_pyapi.mojo).
 #   * device (CUDA and ROCm tensors on GPU 0, a binding with ops_imported_run_device): the program reads
 #     each input where it is, by device address, shape and dtype, and writes each output straight into a
 #     torch.empty tensor on the same device (autograd/program_device_pyapi.mojo). Nothing crosses the
-#     host and no NumPy array is made. The torch stream is drained before the call (inputs written,
+#     host and no NumPy array is made. The Torch device is synchronized before the call (inputs written,
 #     output storage free) and after it; the native call drains its own queue before it returns, so the
 #     bits never depend on stream order. Same bits as the host route by construction (the same cast
 #     launches on the same bytes; see that module's header).
 #   * host (CPU tensors, MPS tensors, another GPU, a CPU-only install): the inputs are copied to host
-#     arrays (.detach().cpu().numpy()), ImportedProgram.run runs, and the outputs are copied back to the
-#     input's device. MPS stays here: PyTorch exposes no supported raw pointer for an MPS tensor, and
-#     Metal buffers are objects, not addresses. That gap is PyTorch's; no workaround (CLAUDE.md "Wait for
-#     Mojo and Modular" in spirit): the host route is the documented behavior on Apple.
+#     tensors by native ATen methods. Their raw host buffers enter the same captured program executor,
+#     and native Tensor methods copy its outputs back to the input's device. MPS stays here:
+#     Metal buffers are objects, not addresses; the host route remains the supported behavior on Apple.
+# - Capture/export and changed-weight reimport above still execute Python. This
+#   native execution repair is not complete runtime compliance for the backend.
 # - torch is imported lazily: `import mojolearn` and `import mojolearn.adapters` never import it.
 from __future__ import annotations
 
@@ -56,6 +57,26 @@ def _torch():
 
 def _dtype_name(dtype):
     return str(dtype).rsplit(".", 1)[-1]
+
+
+def _connect_torch_execution(torch, program, free, n_args, sequence):
+    # Connection metadata for the compiled execution door. Capture/export and
+    # weight-change reimport are still Python product execution; this connection
+    # is not a claim that the whole torch.compile surface is native.
+    from types import BuiltinFunctionType
+    entry = program._s._b.ops_torch_program_run
+    api = dict(empty=torch._C._VariableFunctions.empty)
+    for key, name in (("get_device", "_cuda_getDevice"), ("set_device", "_cuda_setDevice"),
+                      ("synchronize", "_cuda_synchronize"), ("synchronize_mps", "_mps_deviceSynchronize")):
+        api[key] = getattr(torch._C, name, None)
+    if type(entry) is not BuiltinFunctionType:
+        raise TypeError("Torch execution requires the compiled program entry")
+    for name, function in api.items():
+        if function is not None and type(function) is not BuiltinFunctionType:
+            raise TypeError(f"Torch execution requires compiled {name}")
+    api.update(cpu=torch.device("cpu"), f32=torch.float32, i32=torch.int32,
+               free=tuple(free), n_args=n_args, sequence=sequence)
+    return entry, api
 
 
 def _refuse_dynamic(torch, example_inputs):
@@ -127,6 +148,8 @@ class _Compiled:
         self._sequence, self._count = _output_layout(gm)
         self._examples = [example_inputs[i] for i in self._free]  # glue: one entry per graph input
         self._program, self._versions = self._import(gm)
+        self._execute_native, self._execution_context = _connect_torch_execution(
+            torch, self._program, self._free, len(self._signature), self._sequence)
 
     def _weight_versions(self):
         return tuple(getattr(p, "_version", 0) for p in self._bound.values())  # glue: one entry per model parameter
@@ -152,67 +175,24 @@ class _Compiled:
 
     def _route(self, free):
         """("device", "") when the call's inputs go to the program on the GPU, else ("host", reason)."""
-        if not free:
-            return "host", "the graph has no tensor inputs"
-        device = free[0].device
-        if device.type == "mps":
-            return "host", ("PyTorch exposes no supported raw pointer for an MPS tensor; Apple inputs are copied "
-                            "through the host")
-        if device.type != "cuda":
-            return "host", f"the inputs are on the {device.type}"
-        if any(x.device != device for x in free):  # glue: one entry per graph input
-            return "host", "the inputs are on different devices"
-        # mojolearn's sequence context is the process's GPU 0 (sequence/exec_device.mojo sequence_ctx)
-        if getattr(device, "index", None) not in (None, 0):
-            return "host", f"mojolearn runs on GPU 0 and the inputs are on {device}"
-        if getattr(self._program, "_run_device", None) is None:
-            return "host", "this mojolearn binding takes no device buffers (a CPU-only install or an older build)"
-        return "device", ""
-
-    def _run_host(self, torch, free, device):
-        # glue: a host copy of each input, the program run, each output copied to the input's device
-        arrays = [x.detach().cpu().contiguous().numpy() for x in free]  # glue: one entry per graph input
-        got = self._program.run(*arrays)
-        got = got if isinstance(got, tuple) else (got,)
-        # the program's output bits, moved to the input's device
-        return tuple(torch.tensor(y, device=device) for y in got)  # glue: one entry per graph output
-
-    def _run_device(self, torch, free, device):
-        # glue: device addresses in, caller-allocated device outputs; no host copy, no NumPy
-        xs = [x.detach().contiguous() for x in free]  # glue: one entry per graph input
-        outs = tuple(torch.empty(tuple(shape), dtype=torch.int32 if dtype == "int32" else torch.float32,
-                                 device=device)
-                     for _name, shape, dtype in self._program.outputs)  # glue: one entry per graph output
-        stream = torch.cuda.current_stream(device)
-        stream.synchronize()  # the inputs are written and the outputs' storage is free before mojolearn's queue runs
-        self._program._run_device(
-            self._program,
-            [(x.data_ptr(), tuple(x.shape), _dtype_name(x.dtype)) for x in xs],  # glue: one entry per graph input
-            [y.data_ptr() for y in outs])  # glue: one entry per graph output
-        stream.synchronize()
-        del xs  # held through the call: a .contiguous() copy must outlive the native read
-        return outs
+        return self._execute_native(self._program, free, self._execution_context, True)
 
     def __call__(self, *args):
-        torch = _torch()
-        if len(args) != len(self._signature):
-            raise ValueError(f"the compiled graph takes {len(self._signature)} inputs, got {len(args)}")
+        # Still prohibited runtime debt: a changed parameter currently needs
+        # Python graph export. Buffer lifecycle below is native; this remaining
+        # path prevents classifying the returned callable as fully native.
         if self._bound and self._weight_versions() != self._versions:
             gm = self._gm()
             if gm is None:
                 raise RuntimeError("the captured graph was released; compile the model again")
             self._program, self._versions = self._import(gm)
-        free = [args[i] for i in self._free]  # glue: one entry per graph input
-        device = free[0].device if free else torch.device("cpu")
         # measured: tools/adapter_transfer_probe.py prints one TRANSFER_PROBE line per route (device, host)
         # with the transfer and compute split; the orchestrator records nv/amd/Mac here as
         #   <box> <route> rows x features: transfer_in_ms / compute_ms / transfer_out_ms / call_ms (run id)
         # nv  device: (owed)    nv  host: (owed)
         # amd device: (owed)    amd host: (owed)
         # Mac host:   (owed; MPS has no device route)
-        route, _reason = self._route(free)
-        outs = self._run_device(torch, free, device) if route == "device" else self._run_host(torch, free, device)
-        return outs if self._sequence else outs[0]
+        return self._execute_native(self._program, args, self._execution_context, False)
 
 
 def backend(gm, example_inputs, *, numeric_mode=None, **options):

@@ -61,6 +61,8 @@ def shard_devices(devices: PythonObject) raises -> Int:
     """`DevicePool`'s admission of the device list, in its words; the number
     of devices."""
     var b = shard_b()
+    if py_type(devices) is not b.tuple and py_type(devices) is not b.list and py_type(devices) is not b.range:
+        raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var selected = py_call(b.tuple, devices)
     var seen = b.set()
     if len(selected) == 0:
