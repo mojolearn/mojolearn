@@ -20,6 +20,8 @@ from bindings.prep_encode_native import prep_encode_c, prep_encode_scores_call
 from bindings.prep_labels_native import prep_labels_call
 from bindings.prep_iterimp_native import prep_iterimp_call
 from bindings.prep_select_native import prep_rfe_call, prep_mutual_info_call
+from bindings.prep_composition_lifecycle import composition_before, composition_after_fit
+from bindings.parallel_public_result import parallel_public_result
 
 
 def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
@@ -28,6 +30,8 @@ def _owner_kind(model: PythonObject, context: PythonObject) raises -> String:
     if model is None:
         return ""
     var b = Python.import_module("builtins")
+    if py_type(py_type(model)) is not b.type:
+        raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
     var kinds = context["prep_owner_kinds"]
     for k in range(len(mro)):  # driver-loop: over the model class's MRO
@@ -53,9 +57,11 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         if kind == "label_encoder" or kind == "label_binarizer" or kind == "multilabel_binarizer":
             result = prep_labels_call(model, kind, operation, args, context)
         elif kind == "iterative_imputer":
-            result = prep_iterimp_call(model, operation, args, context)
+            var prepared = composition_before(model, kind, operation, args, context)
+            result = prep_iterimp_call(model, operation, prepared, context)
         elif kind == "rfe":
-            result = prep_rfe_call(model, operation, args, context)
+            var prepared = composition_before(model, kind, operation, args, context)
+            result = prep_rfe_call(model, operation, prepared, context)
         elif kind != "":
             raise Error("TypeError: the native prep owner does not serve this class")
         elif operation == "mutual_info_classif" or operation == "mutual_info_regression":
@@ -64,6 +70,10 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = prep_encode_scores_call(operation, args, context)
         else:
             raise Error("unknown native prep operation")
+        if kind == "rfe" or kind == "iterative_imputer":
+            if operation == "fit" or operation == "fit_transform":
+                composition_after_fit(model, args[0], context)
+            result = parallel_public_result(result, operation, PythonObject(None), context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:

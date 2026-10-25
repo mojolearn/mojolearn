@@ -10,6 +10,7 @@ from bindings.native_numpy_metadata import native_numpy_type
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.msel_inputs import msel_input
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
 from bindings.family_common import family_call
 from bindings.sequential_admission import sequential_admit_value
 
@@ -93,6 +94,10 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
         raise Error("AttributeError: native estimator has no " + method)
     var allowed = py_get(py_get(plan, "keywords", Python.dict()), PythonObject(method), Python.tuple())
     if keywords is not None:
+        # This context is independent of the public prep owner's context.
+        # Connect NumPy here before admitting a first-call ndarray keyword;
+        # the positional inputs may not have reached a native owner yet.
+        classical_connect_numpy(context)
         if py_type(keywords) is not b.dict:
             raise Error("TypeError: native estimator keywords require an exact dict")
         var keys = py_call(b.list, keywords.keys())
@@ -102,7 +107,7 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
             if not py_contains(allowed, keys[k]):
                 raise Error("TypeError: " + String(py_type(model).__name__) + "." + method
                             + " got an unexpected keyword argument '" + String(keys[k]) + "'")
-            sequential_admit_value(keywords[keys[k]], context)
+            classical_admit_value(keywords[keys[k]], context)
     if method == "fit" and py_contains(plan, "fit_entry"):
         var fit = plan["fit_entry"]
         if py_type(fit) is not py_type(b.len):

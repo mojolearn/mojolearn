@@ -281,6 +281,20 @@ def _rfe_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
 
 def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
                   context: PythonObject) raises -> PythonObject:
+    if operation == "get_support":
+        var fields = py_fields(model)
+        var mask = fields["_mask"]
+        var result = Python.list()
+        var indices = Bool(py=args[0])
+        for i in range(len(mask)):  # driver-loop: completed feature support metadata
+            if indices:
+                if Bool(py=mask[i]):
+                    _ = py_call(result.append, PythonObject(i))
+            else:
+                _ = py_call(result.append, mask[i])
+        return result
+    if operation == "transform":
+        return _rfe_transform(model, args[0], context)
     if operation == "fit":
         _rfe_fit(model, args, context)
         return model

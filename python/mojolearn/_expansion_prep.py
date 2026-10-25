@@ -2952,6 +2952,9 @@ class IterativeImputer(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
+    # The compiled composition owner supplies validation, fitted-state and
+    # public output handling. Python decorators must not convert user inputs.
+    _mojolearn_native_public = True
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
                    "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
@@ -3425,6 +3428,9 @@ class RFE(_SelectorMixin):
     >>> rfe = mojolearn.RFE(mojolearn.LinearDiscriminantAnalysis(), n_features_to_select=3).fit(X, y)
     >>> rfe.support_
     """
+    # Native lifecycle handling replaces the inherited Python fit/output
+    # wrappers; constructor and parameter setters remain separately audited.
+    _mojolearn_native_public = True
     _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
@@ -3467,6 +3473,14 @@ class RFE(_SelectorMixin):
 
     def predict(self, X):
         return _ENCODE_CALL(self, "predict", (X,), _ENCODE_CONTEXT)
+
+    def transform(self, X):
+        """Keep the selected columns of ``X``."""
+        return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
+
+    def get_support(self, indices=False):
+        """Return the selected feature mask, or its indices when requested."""
+        return _ENCODE_CALL(self, "get_support", (indices,), _ENCODE_CONTEXT)
 
     def predict_proba(self, X):
         return _ENCODE_CALL(self, "predict_proba", (X,), _ENCODE_CONTEXT)

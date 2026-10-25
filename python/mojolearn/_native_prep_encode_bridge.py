@@ -62,4 +62,13 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
                    prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores),
                    prep_owner_kinds=dict(owner_kinds or {}), prep_owner_classes=dict(owner_classes or {}))
     context.update(label_context())
+    # Only these exact composition classes use the native public lifecycle.
+    # Keep the native instance-dictionary descriptor, not a Python getter.
+    context['prep_composition_plans'] = {
+        cls: dict(parameters=tuple(cls._parameters),
+                  fields_get=next(vars(base)['__dict__'].__get__ for base in cls.__mro__  # glue: fixed native instance storage descriptor
+                                  if '__dict__' in vars(base)))
+        for cls, kind in (owner_kinds or {}).items()  # glue: fixed import-time native composition parameter/storage schemas
+        if kind in ('rfe', 'iterative_imputer')
+    }
     return call, context
