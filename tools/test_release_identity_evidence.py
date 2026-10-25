@@ -69,7 +69,7 @@ def write_record(directory, name, j, *, repeats=1, dirty="none"):
     return path
 
 
-def unit(vendor, lane, target=None, ptx=True):
+def unit(vendor, lane, target=None, ptx=True, revision=SOURCE, native="f" * 64):
     target = target or ("osx-arm64" if vendor == "apple" else "linux-64")
     bindings = {f"{target}/host/-/host/_mojolearn_core_host": {"arch": ""}}
     if vendor == "nvidia":
@@ -78,11 +78,11 @@ def unit(vendor, lane, target=None, ptx=True):
             bindings[f"{target}/cuda/sm_80/identical/_mojolearn"] = {"arch": "sm_80"}
     inputs = dict(unit=dict(schema="mojolearn.release-dependencies.v1", kind="identity", vendor=vendor,
                             release_modes=["identical"], build_flags={}, lanes=[lane]),
-                  native_sources={"bindings/x.mojo": "f" * 64},
+                  native_sources={"bindings/x.mojo": native},
                   execution_environment={lane: dict(target=target, toolchain={"platform": target}, bindings=bindings)},
                   configuration={}, contract=dict(id=f"identity-{vendor}/{lane}", scope="s", kind="identity",
                                                   stage="pre", coverage=[E.BASE_COVERAGE, "lane:" + lane]))
-    return dict(source_revision=SOURCE, inputs=inputs, fingerprint=R.digest(inputs), scope="s",
+    return dict(source_revision=revision, inputs=inputs, fingerprint=R.digest(inputs), scope="s",
                 coverage=[E.BASE_COVERAGE, "lane:" + lane], missing_inputs=[], kind="identity", stage="pre",
                 provenance_sources=[], required=True)
 
@@ -312,3 +312,190 @@ def test_configuration_merge_keeps_retained_context():
     assert saved["dependency_context"]["cpu_target"] == "osx-arm64"
     with pytest.raises(ValueError):
         R.merge_configuration(saved, ["x"])
+
+
+# ------------------------------------------------- refreeze: fingerprint-equal begun revisions
+def refreeze(ledger, lanes=("ols",), changed=(), revision=OTHER):
+    """Sync the ledger to a later frozen source; ``changed`` lanes get different inputs."""
+    reqs = {f"identity-{v}/{lane}": unit(v, lane, revision=revision,
+                                         native=("0" * 64 if lane in changed else "f" * 64))
+            for v in E.VENDORS for lane in lanes}
+    ledger.sync(dict(schema=R.SCHEMA, version="0.0.1", source_revision=revision, requirements=reqs, configuration={}))
+
+
+def finish_unrecorded(ledger, tmp_path, names):
+    """Close begun runs without a result (the operator's abort before a re-begin)."""
+    note = tmp_path / "abort.txt"
+    note.write_text("aborted: inputs changed at the refreeze\n")
+    rows = ledger.plan()
+    for name in names:
+        ledger.record(rows[name]["active_run"], "failed", [str(note)], "aborted before completion: refreeze", 1, 1, 0, 1)
+
+
+def test_equal_fingerprint_older_revision_records_admit_with_provenance(tmp_path):
+    ledger = ledger_with(tmp_path)
+    launches = begin_all(ledger, tmp_path)
+    before = {n: w["fingerprint"] for n, w in ledger.read()["requirements"].items()}
+    refreeze(ledger)
+    assert {n: w["fingerprint"] for n, w in ledger.read()["requirements"].items()} == before
+    rows = ledger.plan()
+    assert all(rows[f"identity-{v}/ols"]["active_revision"] == SOURCE for v in E.VENDORS)
+    # Records made at the begun revision; an extra lane that no unit declares is ignored with a note.
+    directory = columns(tmp_path, lanes=("ols", "lasso"))
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["passed"] == 4 and not result["problems"] and not result["refused_records"], result
+    assert all(x["lanes"] == ["lasso"] and x["commit"] == SOURCE for x in result["ignored"].values())
+    assert len(result["ignored"]) == 5
+    rows = ledger.plan()
+    for v in E.VENDORS:
+        row = rows[f"identity-{v}/ols"]
+        assert row["status"] == "passed" and row["action"] == "reuse", row["reasons"]
+        revisions = row["receipt"]["identity_detail"]["revisions"]
+        assert revisions["begun_revision"] == SOURCE and revisions["frozen_revision"] == OTHER
+        assert revisions["input_fingerprint_equal"] is True
+        assert set(revisions["record_commits"].values()) == {SOURCE}
+        assert row["receipt"]["source_revision"] == SOURCE
+    assert ledger.gate(stage="pre")[0]
+
+
+def test_records_at_the_frozen_source_do_not_satisfy_a_unit_begun_earlier(tmp_path):
+    ledger = ledger_with(tmp_path)
+    launches = begin_all(ledger, tmp_path)
+    refreeze(ledger)
+    directory = tmp_path / "records"
+    for cls in ("apple", "nvidia", "amd", "cpu", "ptx"):
+        write_record(directory, LABELS[cls], record(cls, ["ols"], commit=OTHER))
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["recorded"] == 0 and len(result["ignored"]) == 5
+    assert not result["problems"] and not result["waiting"]
+
+
+def test_changed_fingerprint_older_revision_records_are_refused(tmp_path):
+    ledger = ledger_with(tmp_path)
+    launches = begin_all(ledger, tmp_path)
+    refreeze(ledger, changed=("ols",))
+    rows = ledger.plan()
+    assert all(rows[f"identity-{v}/ols"]["active_input_fingerprint"] != rows[f"identity-{v}/ols"]["input_fingerprint"]
+               for v in E.VENDORS)
+    result = run(ledger, tmp_path, columns(tmp_path), launches)
+    assert result["recorded"] == 0
+    assert all("inputs that differ" in result["problems"][f"identity-{v}/ols"] for v in E.VENDORS)
+    assert not result["ignored"]  # refused by unit, not silently ignored
+    assert all(r["status"] == "untested" for r in ledger.plan().values())
+
+
+def test_stale_begun_revision_never_admits_without_a_unit(tmp_path):
+    """A record at a revision no begun unit carries is refused by its commit witness."""
+    ledger = ledger_with(tmp_path)
+    launches = begin_all(ledger, tmp_path)
+    amd = record("amd", ["ols"], commit="3" * 40)
+    amd["resume_signature"]["provenance"]["commit"] = "3" * 40
+    result = run(ledger, tmp_path, columns(tmp_path, amd=amd), launches)
+    assert result["recorded"] == 0
+    assert "commit witness" in " ".join(sum(result["refused_records"].values(), []))
+
+
+def test_columns_from_different_fingerprint_equal_revisions(tmp_path):
+    ledger = ledger_with(tmp_path)
+    out = tmp_path / "out"
+    launches = [E.begin(ledger, v, out)[0] for v in ("apple", "amd", "cpu")]
+    refreeze(ledger)
+    launches.append(E.begin(ledger, "nvidia", out)[0])
+    assert ledger.plan()["identity-nvidia/ols"]["active_revision"] == OTHER
+    directory = tmp_path / "records"
+    for cls in ("apple", "amd", "cpu"):
+        write_record(directory, LABELS[cls], record(cls, ["ols"], commit=SOURCE))
+    for cls in ("nvidia", "ptx"):
+        write_record(directory, LABELS[cls], record(cls, ["ols"], commit=OTHER))
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["passed"] == 4 and not result["problems"] and not result["ignored"], result
+    rows = ledger.plan()
+    nvidia = rows["identity-nvidia/ols"]["receipt"]["identity_detail"]["revisions"]
+    assert nvidia["begun_revision"] == OTHER and nvidia["frozen_revision"] == OTHER
+    assert nvidia["record_commits"] == dict(apple=SOURCE, amd=SOURCE, cpu=SOURCE, nvidia=OTHER, ptx=OTHER)
+    apple = rows["identity-apple/ols"]["receipt"]["identity_detail"]["revisions"]
+    assert apple["begun_revision"] == SOURCE and apple["record_commits"]["nvidia"] == OTHER
+    assert all(rows[f"identity-{v}/ols"]["status"] == "passed" for v in E.VENDORS)
+
+
+def test_columns_from_different_revisions_still_compare_bits(tmp_path):
+    ledger = ledger_with(tmp_path)
+    out = tmp_path / "out"
+    launches = [E.begin(ledger, v, out)[0] for v in ("apple", "amd", "cpu")]
+    refreeze(ledger)
+    launches.append(E.begin(ledger, "nvidia", out)[0])
+    directory = tmp_path / "records"
+    for cls in ("apple", "amd", "cpu"):
+        write_record(directory, LABELS[cls], record(cls, ["ols"], commit=SOURCE))
+    write_record(directory, LABELS["ptx"], record("ptx", ["ols"], commit=OTHER))
+    write_record(directory, LABELS["nvidia"], record("nvidia", ["ols"], commit=OTHER,
+                                                    digests={("ols", "base"): "0000000000000004"}))
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["failed"] == 4 and result["passed"] == 0
+
+
+def test_passed_column_at_an_earlier_revision_serves_a_later_unit(tmp_path):
+    """Units admitted earlier keep supplying their column to a unit admitted after the refreeze."""
+    ledger = ledger_with(tmp_path)
+    launches = begin_all(ledger, tmp_path)
+    directory = columns(tmp_path, classes=("apple", "nvidia", "amd", "cpu"))
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["passed"] == 3 and "ptx" in result["waiting"]["identity-nvidia/ols"]
+    refreeze(ledger)
+    write_record(directory, LABELS["ptx"], record("ptx", ["ols"]))
+    E._RECORDS.clear()
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["passed"] == 1 and not result["problems"], result
+    assert ledger.plan()["identity-nvidia/ols"]["status"] == "passed"
+
+
+def test_repeat_rule_is_per_unit_revision(tmp_path):
+    lanes = ("ols", "ridge")
+    ledger = ledger_with(tmp_path, lanes=lanes)
+    launches = begin_all(ledger, tmp_path)
+    refreeze(ledger, lanes=lanes, changed=("ridge",))
+    finish_unrecorded(ledger, tmp_path, [f"identity-{v}/ridge" for v in E.VENDORS])
+    out = tmp_path / "out"
+    launches += [E.begin(ledger, v, out, ["ridge"])[0] for v in E.VENDORS]
+    rows = ledger.plan()
+    assert all(rows[f"identity-{v}/ridge"]["active_revision"] == OTHER for v in E.VENDORS)
+    # A full column at the begun revision covers ridge too; the ridge units use the later LANES= record.
+    directory = columns(tmp_path, lanes=lanes)
+    for cls in ("apple", "nvidia", "amd", "cpu", "ptx"):
+        write_record(directory, LABELS[cls] + ".lanes-ridge", record(cls, ["ridge"], commit=OTHER))
+    result = run(ledger, tmp_path, directory, launches)
+    assert result["passed"] == 8 and not result["problems"], result
+    assert sorted(x["lanes"] == ["ridge"] and x["commit"] == SOURCE for x in result["ignored"].values()) == [True] * 5
+    rows = ledger.plan()
+    assert rows["identity-amd/ridge"]["receipt"]["identity_detail"]["revisions"]["record_commits"]["amd"] == OTHER
+    assert rows["identity-amd/ols"]["receipt"]["identity_detail"]["revisions"]["record_commits"]["amd"] == SOURCE
+    # Two records of one column at the revision a unit uses are still a repeat.
+    second = tmp_path / "again"
+    ledger2 = ledger_with(second, lanes=lanes)
+    launches2 = begin_all(ledger2, second)
+    refreeze(ledger2, lanes=lanes)
+    directory2 = columns(second, lanes=lanes)
+    write_record(directory2, "amd-mi325x-gfx942.lanes-0000aaaa", record("amd", ["ols"]))
+    write_record(directory2, "amd-mi325x-gfx942.lanes-0000bbbb", record("amd", ["ridge"], commit=OTHER))
+    result = E.admit(ledger2, [directory2], launches2, second / "out", check=fake_check)
+    assert all("repeat records" in result["problems"][f"identity-{v}/ols"] for v in E.VENDORS)
+    assert result["passed"] == 4  # ridge: its unit uses the begun revision; the later record is ignored
+    assert any(x["commit"] == OTHER for x in result["ignored"].values())
+
+
+def test_report_without_fingerprint_equality_is_refused_on_reevaluation(tmp_path):
+    ledger = ledger_with(tmp_path)
+    launches = begin_all(ledger, tmp_path)
+    refreeze(ledger)
+    run(ledger, tmp_path, columns(tmp_path), launches)
+    attempt = next(a for a in ledger.read()["attempts"] if a["requirement"] == "identity-amd/ols")
+    wanted = dict(attempt["manifest"], inputs=attempt["inputs"])
+    report_path = Path(attempt["receipt"]["producer_report"]["path"])
+    report = json.loads(report_path.read_text())
+    report["revisions"]["frozen_fingerprint"] = "0" * 64
+    with pytest.raises(ValueError, match="cannot qualify"):
+        E.column_revisions(report["revisions"], SOURCE, "amd", wanted, E.required_classes(wanted))
+    report["revisions"]["frozen_fingerprint"] = wanted["fingerprint"]
+    report["revisions"]["columns"]["apple"] = "3" * 40
+    with pytest.raises(ValueError, match="not a fingerprint-equal run"):
+        E.column_revisions(report["revisions"], SOURCE, "amd", wanted, E.required_classes(wanted))

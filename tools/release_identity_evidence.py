@@ -11,13 +11,28 @@ frozen NVIDIA environment binds the sm_80 PTX set, the ``nvidia-ptx-*`` column
 equals it too. A STABLE cell of one column never proves identity by itself.
 
 Records are admitted only as produced: complete, one commit witness equal to
-the frozen source, REPEATS=1, every fixture, no partial column, no sabotage, a
+the unit's begun revision (see below), REPEATS=1, every fixture, no partial column, no sabotage, a
 clean tree, loaded native binding witnesses and a platform that matches the
 unit's frozen execution target (a Linux EPYC CPU column never satisfies an
 ``osx-arm64`` CPU target; correct ``dependency_context.cpu_target`` through
 configuration and sync, never the hardware label). Shard (SHARD=i/N) and
 incremental (ONLY_CHANGED / LANES) records are admitted per lane; two records
-of one column covering the same lane are refused as a repeat.
+of one column covering the same lane at the revision the unit uses are refused
+as a repeat.
+
+A commit name is provenance, never an invalidation input. When the ledger is
+refrozen after units were begun, a unit whose begun run (the ledger's active
+run for the requirement) has the same requirement fingerprint as the current
+requirement is admitted from records whose commit equals that run's revision;
+the unit report and receipt record the record commits, the begun revision, the
+frozen revision and the fingerprint equality. A begun run whose inputs differ
+from the current requirement is refused; begin a new run at the frozen source.
+Each column of a lane is taken at the revision its own unit uses (the begun or
+passed run with fingerprint-equal inputs, else the frozen source; PTX follows
+the NVIDIA unit), so the columns of one unit may come from different
+fingerprint-equal revisions and every slot is still compared bit for bit.
+Records at other revisions for a lane, and lanes no unit uses, are ignored
+with a note (``ignored`` in the admission report), never counted as a repeat.
 
 Commands (no product import, no device work)::
 
@@ -162,8 +177,12 @@ def requested_lanes(record):
     return [lane for lane in lanes.split(",") if lane] if isinstance(lanes, str) else []
 
 
-def record_errors(record, path, ref, source_revision):
-    """(device class, errors) for one column record against the frozen source."""
+def record_errors(record, path, ref, source_revision, equivalent=()):
+    """(device class, errors) for one column record against the revision it must carry.
+
+    ``equivalent`` names further admissible commits (revisions of begun runs
+    whose inputs are fingerprint-equal to the current requirement).
+    """
     v = _vref()
     errors = []
     why = v.admit(record, str(path))
@@ -172,9 +191,10 @@ def record_errors(record, path, ref, source_revision):
     cls, problem = v.record_device_class(record, str(path))
     if problem or cls not in GPU_CLASSES + ("cpu", PTX_CLASS):
         return None, ["no device class: " + str(problem or record.get("vendor"))]
-    if record.get("commit") != source_revision:
+    if record.get("commit") != source_revision and record.get("commit") not in equivalent:
         errors.append(f"commit witness {str(record.get('commit'))[:12]} differs from the frozen source "
-                      f"{str(source_revision)[:12]}")
+                      f"{str(source_revision)[:12]}"
+                      + (" and from every fingerprint-equal begun revision" if equivalent else ""))
     if type(record.get("repeats")) is not int or record["repeats"] != 1:
         errors.append(f"repeats {record.get('repeats')!r}; identity runs once (REPEATS=1)")
     if record.get("complete") is not True:
@@ -381,6 +401,42 @@ def derive(lane, records, own, *, ptx, declared_gpu_only):
     return counts, sorted(problems)
 
 
+def _full(revision):
+    return isinstance(revision, str) and re.fullmatch(r"[0-9a-f]{40}", revision) is not None
+
+
+def column_revisions(revisions, source, vendor, wanted, classes):
+    """({class: commit the record must carry}, receipt provenance) for one unit report.
+
+    Reports written before revision provenance existed carry no ``revisions``:
+    every column is then at the begun source, as before. Otherwise the unit's
+    own column (and PTX for NVIDIA) is at the begun revision; each other column
+    is at the begun revision, the frozen revision, or the revision of its own
+    unit's run with fingerprint-equal inputs. A begun revision other than the
+    frozen one is admissible only when the inputs are fingerprint-equal.
+    """
+    if revisions is None:
+        return {c: source for c in classes}, None
+    columns = revisions.get("columns") if isinstance(revisions, dict) else None
+    require(isinstance(columns, dict) and revisions.get("begun_revision") == source
+            and _full(revisions.get("frozen_revision")) and set(columns) == set(classes)
+            and all(_full(x) for x in columns.values()) and columns.get(vendor) == source
+            and (PTX_CLASS not in columns or columns[PTX_CLASS] == source),
+            "identity unit report does not bind its begun, frozen and column revisions")
+    frozen = revisions["frozen_revision"]
+    equal = revisions.get("frozen_fingerprint") == wanted.get("fingerprint")
+    require(frozen == source or equal,
+            f"begun inputs at {source[:12]} differ from the requirement frozen at {frozen[:12]}; "
+            "records at the begun revision cannot qualify it")
+    basis = revisions.get("basis") if isinstance(revisions.get("basis"), dict) else {}
+    for cls, commit in sorted(columns.items()):
+        own = basis.get(cls) if isinstance(basis.get(cls), dict) else {}
+        require(commit in (source, frozen) or (own.get("fingerprint_equal") is True and own.get("revision") == commit),
+                f"{cls} column revision {commit[:12]} is not a fingerprint-equal run of its unit")
+    return dict(columns), dict(begun_revision=source, frozen_revision=frozen, record_commits=dict(sorted(columns.items())),
+                               input_fingerprint_equal=equal)
+
+
 def producer_payload(requirement_id, wanted, report_path, provenance):
     """Re-read the unit report, launch record and raw column records; derive the outcome."""
     import release_requirement_receipts as receipts
@@ -396,6 +452,8 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
             "identity unit report does not identify the begun source/input closure")
     require(isinstance(source, str) and re.fullmatch(r"[0-9a-f]{40}", source) is not None,
             "frozen source revision must be a full commit")
+    wanted_classes = required_classes(wanted)
+    columns, revision_detail = column_revisions(report.get("revisions"), source, vendor, wanted, wanted_classes)
     refs = [reference(report_path)]
     launch_path = checked(report.get("launch")); refs.append(report["launch"])
     launch = load(launch_path)
@@ -406,10 +464,10 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
             "identity records were not launched for these begun inputs")
     check_path = checked(report.get("check_log")); refs.append(report["check_log"])
     check_lines = evidence.read_text(check_path).splitlines()
-    require(check_lines and check_lines[0].startswith(CHECK_HEADER + source),
+    check_revision = revision_detail["frozen_revision"] if revision_detail else source
+    require(check_lines and check_lines[0].startswith(CHECK_HEADER + check_revision),
             "harness fixture check was not run from the frozen source")
     environment = wanted["inputs"]["execution_environment"][lane]
-    wanted_classes = required_classes(wanted)
     recorded = report.get("records")
     require(isinstance(recorded, dict) and set(recorded) == set(wanted_classes),
             "identity unit needs exactly the " + ", ".join(wanted_classes) + " columns")
@@ -419,7 +477,7 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
         ref, record = load_record(ref_in["path"])
         require(ref == {k: ref_in.get(k) for k in ("path", "sha256", "size")},
                 f"{cls} column record bytes differ from the unit report")
-        found, errors = record_errors(record, ref["path"], ref, source)
+        found, errors = record_errors(record, ref["path"], ref, columns[cls])
         require(not errors and found == cls, f"{cls} column record refused: " + "; ".join(errors))
         require(lane in requested_lanes(record), f"{cls} column record did not request lane {lane}")
         require(any(line.startswith(f"IDCOLUMN {ref['path']} admissible=yes ") for line in check_lines),
@@ -446,6 +504,8 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
     detail = dict(lane=lane, column=vendor, target=environment["target"], ptx_required=PTX_CLASS in wanted_classes,
                   launch_phase=launch["phase"], gpu_only_declared=declared, counts=counts,
                   problems=problems[:50], problem_count=len(problems), records=detail_records)
+    if revision_detail:
+        detail["revisions"] = revision_detail
     return dict(schema=receipts.SCHEMA, requirement_id=requirement_id, kind="identity",
                 source_revision=source, input_fingerprint=wanted["fingerprint"],
                 producer=dict(tool=TOOL, report_type="execution"), producer_provenance=dict(provenance),
@@ -515,50 +575,102 @@ def harness_check(records, root, source, out):
     return reference(path)
 
 
+def unit_bases(doc, rows, source):
+    """The revision each identity unit's column records must carry, with its basis.
+
+    The ledger's active run, or the passed attempt the unit rests on, when its
+    inputs are fingerprint-equal to the current requirement; else the frozen
+    source. A commit name is provenance, never an invalidation input.
+    """
+    attempts = {a["id"]: a for a in doc.get("attempts", [])}
+    bases = {}
+    for name, wanted in identity_units(doc):
+        row = rows.get(name, {})
+        found = None
+        if row.get("action") == "resume":
+            found = dict(run_id=row.get("active_run"), revision=row.get("active_revision"),
+                         fingerprint=row.get("active_input_fingerprint"))
+        elif row.get("status") == "passed" and row.get("attempt") in attempts:
+            attempt = attempts[row["attempt"]]
+            found = dict(run_id=attempt.get("run_id"), revision=attempt.get("source_revision"),
+                         fingerprint=attempt.get("fingerprint"))
+        if found and found["fingerprint"] == wanted["fingerprint"] and _full(found["revision"]):
+            bases[name] = dict(requirement=name, run_id=found["run_id"], revision=found["revision"],
+                               fingerprint_equal=True)
+        else:
+            bases[name] = dict(requirement=name, run_id=None, revision=source, basis="frozen-source")
+    return bases
+
+
 def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_missing=False, check=harness_check):
     """Write per-unit reports for every unit whose columns are present; record them."""
     out = Path(out).resolve()
     doc = ledger.read()
     source = doc.get("source_revision")
-    require(isinstance(source, str) and re.fullmatch(r"[0-9a-f]{40}", source) is not None,
-            "synchronize the ledger to a frozen source before admission")
+    require(_full(source), "synchronize the ledger to a frozen source before admission")
     paths = sorted({p.resolve() for d in record_dirs for p in Path(d).glob("*.identical.json")})
     require(paths, "no *.identical.json records")
-    refused, by_lane = {}, {}
+    rows = ledger.plan()
+    bases = unit_bases(doc, rows, source)
+    # Begun revisions other than the frozen source; a run with different inputs
+    # is listed so its unit is refused by name below rather than by record.
+    begun_revisions = ({b["revision"] for b in bases.values()}
+                       | {r["active_revision"] for n, r in rows.items()
+                          if n in bases and r.get("action") == "resume" and _full(r.get("active_revision"))})
+    begun_revisions.discard(source)
+    refused, by_lane, lane_commit = {}, {}, {}
     for path in paths:
         ref, record = load_record(path)
-        cls, errors = record_errors(record, path, ref, source)
+        cls, errors = record_errors(record, path, ref, source, equivalent=begun_revisions)
         if errors:
             refused[str(path)] = errors
             continue
         for lane in requested_lanes(record):
-            by_lane.setdefault(lane, {}).setdefault(cls, []).append(ref)
+            by_lane.setdefault(lane, {}).setdefault(cls, {}).setdefault(record["commit"], []).append(ref)
+            lane_commit[(ref["path"], lane)] = record["commit"]
     check_ref = check([Path(p) for p in paths if str(p) not in refused], harness_root, source, out) \
         if len(refused) < len(paths) else None
+    run_sources = {r["id"]: r["source_revision"] for r in doc.get("runs", [])}
     launches = {}
     for path in launch_paths:
         record = load(path)
-        require(record.get("schema") == LAUNCH_SCHEMA and record.get("source_revision") == source,
-                f"launch record {path} belongs to another source")
-        for name, run in record["runs"].items():
+        runs = record.get("runs") if isinstance(record.get("runs"), dict) else {}
+        own = record.get("source_revision") == source or (runs and all(
+            run_sources.get(r.get("run_id")) == record.get("source_revision") for r in runs.values()))
+        require(record.get("schema") == LAUNCH_SCHEMA and own, f"launch record {path} belongs to another source")
+        for name, run in runs.items():
             launches[name] = (reference(path), run)
-    rows = ledger.plan()
-    units, late, waiting, problems = [], [], {}, {}
+    units, late, waiting, problems, picked, used = [], [], {}, {}, {}, set()
     for name, wanted in identity_units(doc):
-        lane = unit_lane(wanted)
+        lane, vendor = unit_lane(wanted), wanted["inputs"]["unit"]["vendor"]
         columns = by_lane.get(lane, {})
-        needed = required_classes(wanted)
-        duplicate = [c for c in needed if len(columns.get(c, [])) > 1]
-        missing = [c for c in needed if not columns.get(c)]
         if not columns:
             continue
+        row = rows[name]
+        own = row["active_revision"] if row["action"] == "resume" else source
+        if own != source and row.get("active_input_fingerprint") != wanted["fingerprint"]:
+            problems[name] = (f"begun run {row['active_run']} at {own[:12]} has inputs that differ from the "
+                              f"requirement frozen at {source[:12]}; its records cannot qualify the current "
+                              "inputs: finish that run and begin a new one at the frozen source")
+            used.update((ref["path"], lane) for by_commit in columns.values() for ref in by_commit.get(own, []))
+            continue
+        needed = required_classes(wanted)
+        basis = {c: (dict(bases[name], revision=own) if c in (vendor, PTX_CLASS)
+                     else bases.get(f"identity-{c}/{lane}", dict(revision=source, basis="frozen-source")))
+                 for c in needed}
+        revs = {c: basis[c]["revision"] for c in needed}
+        chosen = {c: columns.get(c, {}).get(revs[c], []) for c in needed}
+        if not any(chosen.values()):
+            continue
+        used.update((ref["path"], lane) for refs in chosen.values() for ref in refs)
+        duplicate = [f"{c}@{revs[c][:12]}" for c in needed if len(chosen[c]) > 1]
+        missing = [f"{c}@{revs[c][:12]}" for c in needed if not chosen[c]]
         if duplicate:
             problems[name] = "repeat records of one column for this lane: " + ", ".join(duplicate)
             continue
         if missing:
             waiting[name] = "missing columns: " + ", ".join(missing)
             continue
-        row = rows[name]
         launched = launches.get(name, (None, {}))[1].get("run_id")
         if row["action"] == "resume" and launched is not None and row.get("active_run") == launched:
             units.append(name)
@@ -567,6 +679,14 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
             late.append(name)
         else:
             waiting[name] = f"ledger action {row['action']} without a launch record for its run"
+            continue
+        picked[name] = dict(records={c: chosen[c][0] for c in needed}, columns=revs,
+                            basis=basis)
+    ignored = {}
+    for (path, lane), commit in sorted(lane_commit.items()):
+        if (path, lane) not in used:
+            entry = ignored.setdefault(path, dict(commit=commit, lanes=[]))
+            entry["lanes"].append(lane)
     for vendor in VENDORS:
         lanes = [unit_lane(doc["requirements"][n]) for n in late if n.startswith(f"identity-{vendor}/")]
         if lanes:
@@ -586,10 +706,17 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
         begun = dict(run.get("manifest", {}), inputs=run["inputs"])
         lane, vendor = unit_lane(wanted), wanted["inputs"]["unit"]["vendor"]
         unit_dir = out / "units" / vendor / lane
+        chosen = picked[name]
+        if (set(chosen["records"]) != set(required_classes(begun))
+                or chosen["columns"][vendor] != run["source_revision"]):
+            problems[name] = "begun run differs from the run whose records were selected for admission"
+            continue
         report = dict(schema=REPORT_SCHEMA, requirement_id=name, source_revision=run["source_revision"],
                       input_fingerprint=run["fingerprint"], launch=launches[name][0], check_log=check_ref,
-                      gpu_only=gpu_only(lane, run["source_revision"]),
-                      records={c: by_lane[lane][c][0] for c in required_classes(begun)})
+                      gpu_only=gpu_only(lane, run["source_revision"]), records=chosen["records"],
+                      revisions=dict(begun_revision=run["source_revision"], frozen_revision=source,
+                                     frozen_fingerprint=wanted["fingerprint"], columns=chosen["columns"],
+                                     basis=chosen["basis"]))
         report_ref = write_json(unit_dir / "report.json", report)
         import release_requirement_receipts as receipts
         provenance = dict(schema=receipts.PROVENANCE_SCHEMA, requirement_id=name, kind="identity",
@@ -605,13 +732,17 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
         counts = receipt["identity_detail"]["counts"]
         summary = (f"{vendor} identity {lane}: {counts['column_agree']}/{counts['slots']} column parts and "
                    f"{counts['contract_agree']}/{counts['slots']} cross-vendor parts agree at {run['source_revision'][:12]}"
+                   + ("" if run["source_revision"] == source else
+                      f" (inputs fingerprint-equal to the frozen source {source[:12]})")
                    + ("" if receipt["status"] == "passed" else f"; {receipt['identity_detail']['problem_count']} problems"))
         entries.append(dict(run_id=run["id"], status=receipt["status"], paths=[report_ref["path"]], summary=summary,
                             exit_code=receipt["exit_code"], receipt=receipt, **totals))
     attempts = ledger.record_many(entries) if entries else []
     result = dict(records=len(paths), refused_records=refused, recorded=len(attempts),
                   passed=sum(a["status"] == "passed" for a in attempts),
-                  failed=sum(a["status"] == "failed" for a in attempts), waiting=waiting, problems=problems)
+                  failed=sum(a["status"] == "failed" for a in attempts), waiting=waiting, problems=problems,
+                  frozen_revision=source, ignored=ignored,
+                  ignored_note="lanes of admitted records at a revision no begun unit uses; not counted as repeats")
     write_json(out / "identity-admission.json", result)
     return result
 
@@ -650,6 +781,7 @@ def main(argv=None):
     print(f"IDENTITY-ADMIT records={result['records']} refused={len(result['refused_records'])} "
           f"recorded={result['recorded']} passed={result['passed']} failed={result['failed']} "
           f"waiting={len(result['waiting'])} problems={len(result['problems'])} "
+          f"ignored_lanes={sum(len(x['lanes']) for x in result['ignored'].values())} "
           f"report={Path(args.out).resolve() / 'identity-admission.json'}")
     return 0 if not result["problems"] and not result["refused_records"] else 1
 

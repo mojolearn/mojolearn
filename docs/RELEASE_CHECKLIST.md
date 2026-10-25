@@ -31,8 +31,22 @@ The accepted CPU identity column runs on Linux x86_64, so sync with
 Identity units are admitted by `tools/release_identity_evidence.py`: `begin
 --vendor <v>` before the column runs (it prints the `LANES=` list), then `admit
 --records <dir>... --launch <launch.json>...` once the Apple, NVIDIA, AMD, CPU
-and (for NVIDIA units binding the sm_80 set) PTX records exist at the frozen
-source. A record from other hardware than the unit's target is refused.
+and (for NVIDIA units binding the sm_80 set) PTX records exist. A record from
+other hardware than the unit's target is refused.
+A unit's records carry its begun run's revision. After a refreeze, a unit whose
+begun run has the same requirement fingerprint as the current requirement is
+admitted from records made at that run's revision; identity is never rerun for
+it. The unit report and receipt (`identity_detail.revisions`) record the record
+commits, the begun revision, the frozen revision and the fingerprint equality.
+A begun run whose inputs changed is refused: close it and begin the unit again
+at the frozen source, then record those lanes (`LANES=`) there. Each column of a
+lane is taken at the revision its own unit uses (PTX follows the NVIDIA unit),
+so one unit's columns may come from different fingerprint-equal revisions;
+every slot is still compared bit for bit. Lanes of a record at a revision no
+unit uses (for example the changed lanes inside an older full column) are
+listed under `ignored` in `identity-admission.json` and never count as a
+repeat; two records of one column at the revision a unit uses are a repeat.
+The harness fixture check runs once, from a clean checkout of the frozen source.
 Recipes name their identity lanes, source files, dataset identity, settings,
 timing boundary, phases and environment. Missing mappings remain untested;
 discovery of a recipe file does not establish full-dataset coverage.
