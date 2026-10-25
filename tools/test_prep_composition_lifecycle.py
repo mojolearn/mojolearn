@@ -51,7 +51,9 @@ class CompositionDoors(unittest.TestCase):
             ('RFE', 'predict_proba', (x,), {}), ('RFE', 'decision_function', (x,), {}),
             ('RFE', 'score', (x, y), {}), ('RFE', 'get_support', (True,), {}),
             ('IterativeImputer', 'fit', (x, y), {}),
+            ('IterativeImputer', 'fit', (x,), {}),
             ('IterativeImputer', 'fit_transform', (x, y), {}),
+            ('IterativeImputer', 'fit_transform', (x,), {}),
             ('IterativeImputer', 'transform', (x,), {}),
         ]
         for owner, operation, args, kwargs in cases:
@@ -67,6 +69,8 @@ class CompositionDoors(unittest.TestCase):
                 self.assertEqual(actual_args[:len(args)], args)
                 if kwargs:
                     self.assertIs(actual_args[-1]['sample_weight'], weights)
+                if owner == 'IterativeImputer' and operation in ('fit', 'fit_transform') and len(args) == 1:
+                    self.assertEqual(actual_args, (x, None))
 
     def test_uninitialized_inner_context_connects_before_keyword_admission(self):
         source = (ROOT / 'bindings/msel_estimator_native.mojo').read_text()
@@ -89,6 +93,15 @@ class CompositionDoors(unittest.TestCase):
             self.assertLess(section.index('composition_before('), section.index(entry + '('))
         self.assertIn('composition_after_fit(model, args[0], context)', owner)
         self.assertIn('parallel_public_result(result, operation, PythonObject(None), context)', owner)
+
+    def test_instance_dictionary_type_is_checked_before_iteration(self):
+        source = (ROOT / 'bindings/prep_composition_lifecycle.mojo').read_text()
+        fields = source.split('def composition_fields(', 1)[1].split('def composition_require_fitted(', 1)[0]
+        descriptor = fields.index('var fields = py_call(plan["fields_get"], model, cls)')
+        guard = fields.index('if py_type(fields) is not b.dict:')
+        iterate = fields.index('var keys = py_call(b.list, fields)')
+        self.assertLess(descriptor, guard)
+        self.assertLess(guard, iterate)
 
 
 if __name__ == '__main__':

@@ -41,6 +41,10 @@ def composition_fields(model: PythonObject, context: PythonObject) raises -> Pyt
     if plan is None:
         raise Error("TypeError: native preprocessing composition requires its exact connected class; Python subclasses are not supported")
     var fields = py_call(plan["fields_get"], model, cls)
+    # __dict__ assignment accepts dict subclasses. Refuse before iteration,
+    # hashing or lookup can invoke a subclass's Python protocol methods.
+    if py_type(fields) is not b.dict:
+        raise Error("TypeError: native preprocessing state requires an exact dict")
     var keys = py_call(b.list, fields)
     for i in range(len(keys)):  # driver-loop: instance state keys before native dictionary lookup
         if py_type(keys[i]) is not b.str:
