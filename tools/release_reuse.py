@@ -1316,6 +1316,9 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                 for p in sorted((sdir / ".libs").glob("*")) if (sdir / ".libs").is_dir() else []:
                     if p.is_file():
                         reused[".libs/" + p.name] = dict(sha256=sha256(p), source="leg", leg=name)
+                ptx = sdir / "PTX_BASELINE.json"
+                if ptx.is_file():
+                    reused[ptx.name] = dict(sha256=sha256(ptx), source="leg", leg=name)
                 say(f"  {key}: the set of leg {name} built at {old['origin']['source_commit'][:12]} taken whole "
                     f"(set identity {old['origin']['set_identity_digest'][:12]} unchanged)")
             else:

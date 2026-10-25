@@ -34,6 +34,8 @@ class MergedLegReuse(unittest.TestCase):
                         {"format": 1, "files": {"merged.so": [member]}}))
                 (source / ".libs").mkdir()
                 (source / ".libs/runtime.so").write_bytes(b"runtime")
+                if (vendor, arch) == rr.PTX_SET:
+                    (source / "PTX_BASELINE.json").write_text('{"source_commit": "old"}')
                 old[name] = dict(dir=source, origin=dict(source_commit="a" * 40,
                                                        set_identity_digest=name))
             plan = dict(previous=None, rows=rows, runtime=dict(decision="BUILD"))
@@ -48,6 +50,9 @@ class MergedLegReuse(unittest.TestCase):
                         self.assertEqual(record["files"][rel]["sha256"], rr.sha256(folder / rel))
                         self.assertEqual(record["files"][rel]["source"], "leg")
                 self.assertFalse((folder / "host/_host.so").exists())
+                if (vendor, arch) == rr.PTX_SET:
+                    self.assertEqual(record["files"]["PTX_BASELINE.json"]["sha256"],
+                                     rr.sha256(folder / "PTX_BASELINE.json"))
 
     def test_index_cannot_stand_in_for_a_missing_binary(self):
         with tempfile.TemporaryDirectory() as directory:
