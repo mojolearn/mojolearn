@@ -2,8 +2,11 @@
 """Dependency scoping and frozen-source integrity, without builds or GPUs."""
 import copy
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -310,6 +313,170 @@ class FrozenSource(unittest.TestCase):
             self.assertEqual((root / "recipe.json").read_text(), "dirty source")
             self.assertEqual(len(git("worktree", "list", "--porcelain").split("worktree ")) - 1, 1)
             self.assertEqual(d.frozen_snapshot(root, frozen, request, log_dir=Path(temp) / "logs"), got)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "macOS clonefile source-view path")
+class CurrentFrozenSource(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.root = self.base / "repo"
+        self.root.mkdir()
+        self.git("init")
+        self.git("config", "user.email", "test@example.test")
+        self.git("config", "user.name", "Dependency Test")
+        (self.root / "tools").mkdir()
+        for name in ("release_reuse.py", "lane_select.py", "bincache.py"):
+            (self.root / "tools" / name).write_text("from pathlib import Path\nROOT=Path(__file__).resolve().parent.parent\n")
+        (self.root / "recipe.json").write_text("frozen recipe")
+        (self.root / "entry.sh").write_text("#!/bin/sh\nexit 0\n")
+        (self.root / "entry.sh").chmod(0o755)
+        (self.root / "recipe-link.json").symlink_to("recipe.json")
+        self.git("add", ".")
+        self.git("commit", "-m", "frozen source")
+        self.revision = self.git("rev-parse", "HEAD")
+        self.request = dict(extra_paths=["recipe.json", "recipe-link.json", "entry.sh", "generated.mojo"])
+        self.logs = self.base / "logs"
+
+    def git(self, *args):
+        return subprocess.check_output(["git", "-C", str(self.root), *args],
+                                       stderr=subprocess.DEVNULL, text=True).strip()
+
+    def snapshot(self):
+        return d.frozen_snapshot(self.root, self.revision, self.request, log_dir=self.logs)
+
+    def assert_no_retained_result_or_worktree(self):
+        self.assertFalse(list(self.logs.glob("*.json")))
+        self.assertEqual(len(self.git("worktree", "list", "--porcelain").split("worktree ")) - 1, 1)
+
+    def test_current_tree_uses_tracked_only_clones_with_modes_and_symlinks(self):
+        (self.root / "generated.mojo").write_text("not committed")
+        (self.root / "tools" / "__pycache__").mkdir()
+        (self.root / "tools" / "__pycache__" / "stale.pyc").write_bytes(b"not source")
+        worker = d._run_snapshot_worker
+        observed = []
+
+        def inspect(tree, temporary, request, log):
+            observed.append(tree)
+            self.assertNotEqual(tree, self.root)
+            self.assertNotEqual((tree / "recipe.json").stat().st_ino, (self.root / "recipe.json").stat().st_ino)
+            self.assertTrue((tree / "entry.sh").stat().st_mode & stat.S_IXUSR)
+            self.assertTrue((tree / "recipe-link.json").is_symlink())
+            self.assertEqual(os.readlink(tree / "recipe-link.json"), "recipe.json")
+            self.assertFalse((tree / "generated.mojo").exists())
+            self.assertFalse((tree / "tools" / "__pycache__").exists())
+            return worker(tree, temporary, request, log)
+
+        with patch.object(d, "_run_snapshot_worker", side_effect=inspect):
+            result = self.snapshot()
+        self.assertEqual(len(observed), 1)
+        expected = d.hashlib.sha256(b"frozen recipe").hexdigest()
+        self.assertEqual(result["extra_sources"]["recipe.json"], expected)
+        self.assertEqual(result["extra_sources"]["recipe-link.json"], expected)
+        self.assertIsNone(result["extra_sources"]["generated.mojo"])
+        self.assertTrue((self.root / "generated.mojo").is_file())
+        self.assertFalse(observed[0].exists())
+        self.assertEqual(len(self.git("worktree", "list", "--porcelain").split("worktree ")) - 1, 1)
+
+    def test_dirty_current_source_is_rejected_before_analysis(self):
+        (self.root / "recipe.json").write_text("dirty")
+        with patch.object(d, "_run_snapshot_worker") as worker:
+            with self.assertRaisesRegex(ValueError, "differs from requested revision"):
+                self.snapshot()
+            worker.assert_not_called()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_assume_unchanged_does_not_hide_dirty_bytes(self):
+        self.git("update-index", "--assume-unchanged", "recipe.json")
+        (self.root / "recipe.json").write_text("hidden dirty bytes")
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        with self.assertRaisesRegex(ValueError, "differs from requested revision"):
+            self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_staged_change_is_rejected(self):
+        (self.root / "added.json").write_text("staged addition")
+        self.git("add", "added.json")
+        with self.assertRaisesRegex(ValueError, "staged changes"):
+            self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_changed_executable_mode_is_rejected(self):
+        (self.root / "entry.sh").chmod(0o644)
+        with self.assertRaisesRegex(ValueError, "file mode changed"):
+            self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_symlink_replaced_with_regular_file_is_rejected(self):
+        link = self.root / "recipe-link.json"
+        link.unlink()
+        link.write_text("recipe.json")
+        with self.assertRaisesRegex(ValueError, "symlink changed"):
+            self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_source_edit_during_worker_is_rejected(self):
+        worker = d._run_snapshot_worker
+
+        def mutate(tree, temporary, request, log):
+            (self.root / "recipe.json").write_text("changed while worker was running")
+            return worker(tree, temporary, request, log)
+
+        with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "differs from requested revision"):
+                self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_source_edit_then_restore_during_worker_is_rejected(self):
+        worker = d._run_snapshot_worker
+
+        def mutate(tree, temporary, request, log):
+            source = self.root / "recipe.json"
+            before = source.stat()
+            source.write_text("temporary edit")
+            source.write_text("frozen recipe")
+            os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+            return worker(tree, temporary, request, log)
+
+        with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "changed during analysis"):
+                self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_head_change_during_worker_is_rejected(self):
+        worker = d._run_snapshot_worker
+
+        def mutate(tree, temporary, request, log):
+            self.git("commit", "--allow-empty", "-m", "head moved")
+            return worker(tree, temporary, request, log)
+
+        with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "HEAD changed"):
+                self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_view_write_and_chmod_cannot_change_original_source(self):
+        worker = d._run_snapshot_worker
+        mode = (self.root / "recipe.json").stat().st_mode
+
+        def mutate(tree, temporary, request, log):
+            (tree / "recipe.json").write_text("analyzer unexpectedly wrote")
+            (tree / "recipe.json").chmod(0o600)
+            self.assertEqual((self.root / "recipe.json").read_text(), "frozen recipe")
+            self.assertEqual((self.root / "recipe.json").stat().st_mode, mode)
+            return worker(tree, temporary, request, log)
+
+        with patch.object(d, "_run_snapshot_worker", side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, "differs from requested revision"):
+                self.snapshot()
+        self.assert_no_retained_result_or_worktree()
+
+    def test_worker_failure_removes_only_its_temporary_worktree(self):
+        with patch.object(d, "_run_snapshot_worker", side_effect=ValueError("worker failure")):
+            with self.assertRaisesRegex(ValueError, "worker failure"):
+                self.snapshot()
+        self.assert_no_retained_result_or_worktree()
 
 
 if __name__ == "__main__":
