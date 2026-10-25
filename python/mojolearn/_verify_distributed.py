@@ -22,7 +22,7 @@ __all__ = ["main", "compare", "validate_receipt"]
 PROTOCOL = "distributed-classical-v2"
 PROFILE_FILES = frozenset(('__init__.py', 'parallel_forecasting.py', 'parallel_gaussian_process.py',
                            'parallel_ivf.py', '_verify_distributed.py', '_native_parallel_shard.py',
-                           '_parallel_shard_ops.py', '_gpu_witness.py'))
+                           '_gpu_witness.py'))
 CASES = ("arima", "holtwinters", "gpc", "ivf", "gpc_fit")
 #: the native shard workers' numerical operations (bindings/parallel_shard_native.mojo,
 #: parallel_forecast_native.mojo)
@@ -243,9 +243,9 @@ def main(argv=None):
                'package': str(package), 'distribution': distribution,
                'devices': list(devices), 'cells': [], 'worker_calls': [],
                'bindings': {}, 'source_files': {}, 'worker_groups': [], 'controls': []}
-    from mojolearn import _native_parallel_shard as _shard_module, _parallel_shard_ops, _gpu_witness
+    from mojolearn import _native_parallel_shard as _shard_module, _gpu_witness
     for module in (ml, pf, pg, sys.modules[DistributedIVFIndex.__module__],
-                   sys.modules[__name__], _shard_module, _parallel_shard_ops, _gpu_witness):
+                   sys.modules[__name__], _shard_module, _gpu_witness):
         p = Path(module.__file__)
         receipt['source_files'][p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
     for name in ('_mojolearn_arima', '_mojolearn_tsa', '_mojolearn_gp', '_mojolearn_ivf'):

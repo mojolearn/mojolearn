@@ -1401,14 +1401,14 @@ ANNOTATIONS = {
                                   "byte_lm_session_next_bytes", "byte_lm_session_open",
                                   "byte_lm_session_rollback", "byte_lm_session_step")},
     "knn_classify_neighbors": ("covered", ["par-reference-knn"],
-                               "run in a native shard worker (_parallel_shard_ops 'reference_vote' -> "
-                               "parallel_neighbors_reference._vote); par-* lanes run on two-device boxes"),
+                               "run by bindings/parallel_neighbor_worker.mojo reference_vote; "
+                               "par-* lanes run on two-device boxes"),
     "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
-                              "run in a native shard worker (_parallel_shard_ops 'reference_vote')"),
+                              "run by bindings/parallel_neighbor_worker.mojo reference_vote"),
     "fold_pair_f32": ("covered", ["cross-vendor-fold"],
                       "mojolearn.cross_vendor hands it to the native fold at import "
                       "(_buffer_native('fold_pair_f32')); every ordered_fold and fold_pair runs it"),
-    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run in a native shard worker (_parallel_shard_ops)"),
+    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker.mojo ivf_search"),
     "ivf_finalize_distances": ("covered", ["par-ivf"],
                                "called by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
                                "`ivf_search`) on a cosine index"),
