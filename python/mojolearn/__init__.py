@@ -637,3 +637,11 @@ from . import _expansion_trees as _tree_owner
 _tree_owner._TREES_CONTEXT.update(native_estimator_entry=model_selection._NATIVE,
                                  native_estimator_context=model_selection._NATIVE_CONTEXT)
 del _tree_owner
+
+# Parameter-read schemas capture the final built-in installers' method and
+# descriptor identities; the connection changes only this private plan table.
+from ._native_params_metadata import connect_classes as _connect_params_metadata_classes
+from . import _mode as _params_metadata_owner
+import sys as _params_metadata_sys
+_connect_params_metadata_classes(_params_metadata_owner._PARAMS_METADATA_CONTEXT, _params_metadata_sys.modules[__name__])
+del _connect_params_metadata_classes, _params_metadata_owner, _params_metadata_sys
