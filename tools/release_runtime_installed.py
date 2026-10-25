@@ -109,7 +109,8 @@ def summarize(out):
     passed = (receipt.get("status") == "selected-tests-passed" and scope["complete"]
               and all(row["status"] == "passed" for row in rows) and not installed.get("inventory_errors")
               and installed.get("worker_error") is None and receipt.get("pytest_exit") == 0)
-    evidence = [dict(path=str(p), sha256=sha256(p)) for p in
+    # Paths relative to the producer directory: the report is judged again after it moves home.
+    evidence = [dict(path=p.relative_to(out).as_posix(), sha256=sha256(p)) for p in
                 (out / "coverage.json", out / "request.json", qualify / "receipt.json", junit,
                  qualify / "installed-modules.json", qualify / "tests.log")]
     return dict(schema=REPORT_SCHEMA, tool="tools/release_runtime_installed.py", vendor=vendor,

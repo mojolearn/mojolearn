@@ -99,7 +99,7 @@ def judge(out):
         and manifest.get("vendor") == vendor, index=manifest.get("index_url"))
     for row in files:
         add("index-install", "pypi-digest:" + row["file"], row.get("pypi_digest_match") is True
-            and row.get("pypi_sha256") == row.get("sha256") and sha256(row["path"]) == row["sha256"])
+            and row.get("pypi_sha256") == row.get("sha256") and sha256(out / "wheels" / row["file"]) == row["sha256"])
     import pypi_wheel_install
     why = pypi_wheel_install.installed_refusal(manifest, manifest.get("loaded")) if files else "no files"
     add("index-install", "loaded-from-site-packages", why is None, why=why)
@@ -144,9 +144,14 @@ def judge(out):
     passed = all(row["status"] == "passed" for row in coverage)
     paths = [out / "request.json", out / "wheel-manifest.json", out / "installed-bytes.json"]
     paths += [out / "correctness/results.json"] if correctness is not None else []
-    paths += [Path(row["path"]) for row in files]
-    evidence = [dict(path=str(p.resolve()), sha256=sha256(p)) for p in paths]
-    evidence += [ref for ref in adapter_refs if ref not in evidence]
+    paths += [out / "wheels" / row["file"] for row in files]
+    paths += [Path(ref["path"]) for ref in adapter_refs]
+    # Paths relative to the producer directory: the report is judged again after it moves home.
+    evidence = []
+    for path in paths:
+        ref = dict(path=Path(path).resolve().relative_to(out).as_posix(), sha256=sha256(path))
+        if ref not in evidence:
+            evidence.append(ref)
     return dict(schema=REPORT_SCHEMA, tool="tools/release_published_install.py", vendor=vendor, version=version,
                 backend=BACKEND[vendor], index_url=manifest.get("index_url"), source_revision=commit,
                 published=published, coverage=coverage, checks=rows,

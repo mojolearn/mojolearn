@@ -71,10 +71,15 @@ def _facts(kind):
         require(isinstance(revision, str) and len(revision) == 40, name + " report has no full source commit")
         wheels = report.get("published") if kind == "published" else report.get("wheels")
         require(isinstance(wheels, dict) and wheels, name + " report names no wheels")
-        evidence = [report_ref] + [ref for ref in report["evidence"] if ref != report_ref]
-        for ref in evidence:
-            checked_ref = reference(ref["path"])
-            require(checked_ref == ref, "retained producer evidence digest differs: " + ref["path"])
+        evidence = [report_ref]
+        for ref in report["evidence"]:
+            relative = Path(ref["path"])
+            require(not relative.is_absolute() and ".." not in relative.parts,
+                    "producer evidence must lie inside its retained directory")
+            local = reference(out / relative)
+            require(local["sha256"] == ref["sha256"], "retained producer evidence digest differs: " + ref["path"])
+            if local not in evidence:
+                evidence.append(local)
         return dict(producer=name, source_root=str(Path(root).resolve()), source_revision=revision,
                     vendor=vendor, wheels=dict(wheels), version=report.get("version"),
                     coverage=rows, evidence=evidence)

@@ -380,7 +380,7 @@ def judge(out):
         add("native device placement", "driver-table:%d" % d, bool(sighted.get(physical[d])) and not stray,
             gpu=physical[d], pids=sorted(sighted.get(physical[d], ())))
     trace = dict(source="driver process table x worker driver inventory", samples=len(samples),
-                 sample_errors=sample_errors, requested=physical,
+                 sample_errors=sample_errors, requested={str(d): gpu for d, gpu in physical.items()},
                  worker_gpu={str(pid): gpu for pid, gpu in sorted(worker_gpu.items())},
                  sighted={gpu: sorted(pids) for gpu, pids in sorted(sighted.items())}, stray=stray)
     coverage = []
@@ -391,7 +391,8 @@ def judge(out):
         coverage.append(dict(id=name, status="passed" if ok else "failed", exit_code=0 if ok else 1,
                              expected=len(items), completed=passed, failed=len(items) - passed, skipped=0))
     passed = all(row["status"] == "passed" for row in coverage) and request.get("capture_exit") == 0
-    evidence = [dict(path=str(p), sha256=sha256(p)) for p in
+    # Paths relative to the producer directory: the report is judged again after it moves home.
+    evidence = [dict(path=p.relative_to(out).as_posix(), sha256=sha256(p)) for p in
                 (out / "request.json", out / "driver-inventory.json", out / "driver-processes.jsonl",
                  out / "capture/report.json", out / "probe.json", out / "hidden.json", out / "install.log")]
     return dict(schema=REPORT_SCHEMA, tool="tools/release_multi_gpu_parallel.py", vendor=vendor,
