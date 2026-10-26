@@ -176,7 +176,7 @@ def connect(declared):
         plan.update(field_names=fields,
             field_hooks=tuple((base, name, vars(base).get(name)) for base in mro for name in fields),  # glue: parameter/constant field descriptors
             constructor_hooks=tuple((name, _resolved(cls, name, _CONTEXT['missing']))  # glue: final lookup/assignment slots
-                                    for name in _CONSTRUCTOR_HOOKS))
+                                    for name in _CONSTRUCTOR_HOOKS))  # glue: three fixed slot names
     hook_types = [type(vars(object)['__getattribute__']), type(vars(object)['__setattr__'])]
     if 'descriptor' in attributes:
         hook_types.append(type(attributes['descriptor']))

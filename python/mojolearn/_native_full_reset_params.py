@@ -262,7 +262,7 @@ def install():
                                       if p.kind is p.POSITIONAL_OR_KEYWORD and p.default is p.empty),
             required_kwonly=tuple(p.name for p in parameters  # glue: native argument schema
                                   if p.kind is p.KEYWORD_ONLY and p.default is p.empty),
-            rule_fields=tuple(dict.fromkeys(event[0] for event in events if event[3])),  # glue: mode-rule destinations
+            rule_fields=tuple(dict.fromkeys(event[0] for event in events if event[3])),  # glue: numeric_mode rule destination fields
             label=getattr(inner.__code__, 'co_qualname', inner.__qualname__))
         _CONTEXT['originals'][cls] = original
     # The explicit host inference subclasses have their own constructor and
@@ -316,7 +316,7 @@ def connect(parameter_metadata, linear, declared, estimator_context):
         if set(metadata['names']) != set(plan['names']):
             raise TypeError('full-reset native constructor and getter schemas differ')
         plan['constructor_hooks'] = tuple((name, _resolved(cls, name, _CONTEXT['missing']))  # glue: final lookup/assignment slots
-                                          for name in _CONSTRUCTOR_HOOKS)
+                                          for name in _CONSTRUCTOR_HOOKS)  # glue: three fixed slot names
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before
