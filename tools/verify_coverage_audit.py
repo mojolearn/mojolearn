@@ -60,6 +60,13 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 from mojo_registrations import registered_functions
 from verify_reference_evidence import reference_label, reference_snapshot, unknown_references
 SAB_RE = re.compile(r"MOJOLEARN_[A-Z0-9_]*SABOTAGE[A-Z0-9_]*")
+#: The framework adapters' Python package. An entry whose only Python callers
+#: live here is the adapters' own: no identity lane, verifier row or sabotage
+#: arm (Andrew, 2026-10-24; the module docstring's "Out of scope by design").
+ADAPTER_PACKAGE = "python/mojolearn/adapters/"
+ADAPTER_ONLY = ("adapter only: its only Python callers are the framework adapters (python/mojolearn/adapters/), "
+                "the same API in another format, qualified by the installed-wheel adapter smoke, never by a lane "
+                "(AGENTS.md, Andrew 2026-10-24)")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -203,6 +210,10 @@ def native_rows(ls, base, reach, whole_surface=False):
     graph = ls._MojoDefGraph()
     srcs = sorted(p for p in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split())
     py_words = defaultdict(int)
+    # The framework adapters' Python callers are counted apart: an entry only
+    # they call is the adapters' (ADAPTER_ONLY), never a GAP (AGENTS.md
+    # "Framework adapters are the same API in another format").
+    adapter_words = defaultdict(int)
     for p in git("ls-files", "python/mojolearn").split():
         base_name = os.path.basename(p)
         if p.endswith(".py") and "/tests/" not in p and base_name != "host_surface.py" \
@@ -227,8 +238,9 @@ def native_rows(ls, base, reach, whole_surface=False):
                     words.add(node.id)
                 elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
                     words |= set(IDENT_RE.findall(node.value)) if len(node.value) < 80 else set()
+            counts = adapter_words if p.startswith(ADAPTER_PACKAGE) else py_words
             for w in words:
-                py_words[w] += 1
+                counts[w] += 1
     anywhere = set()
     for p in git("ls-tree", "-r", "--name-only", base, "bindings/").split():
         if p.endswith(".mojo"):
@@ -267,7 +279,7 @@ def native_rows(ls, base, reach, whole_surface=False):
             files = {n[1] for n in roots}
             precise |= {lane for lane, owned in OWNER_FILES.items() if owned & files}
             probe = any(constant_probe(graph.text(n)) for n in graph.resolve(src, impl))
-            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots, constant_probe=probe,
+            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), adapter_files=adapter_words.get(export, 0), unresolved=not roots, constant_probe=probe,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
                              # in the closure's breadth-first order: the kernels nearest the export first
@@ -1235,7 +1247,9 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
                        "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
                        "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
-                       "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale"})
+                       "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale",
+                       # lane coverage-gap-lanes-20261025
+                       "public-set-params"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -2201,6 +2215,47 @@ ANNOTATIONS.update({
                      "var_forecast, and sequence-var digests a.forecast(y, 10)"),
 })
 
+# lane coverage-gap-lanes-20261025: the 0.8.57 changed-scope audit's GAP rows.
+# Each entry is installed or handed over at import, so the static reach cannot
+# see the call; each was followed in the source to a recorded lane or to the
+# new lane of tools/identity_lanes/public_native_params.py.
+_NATIVE_PARAMS = ("public-set-params (tools/identity_lanes/public_native_params.py) constructs "
+                  "HuberRegressor, PolynomialFeatures and GaussianRandomProjection, sets their parameters "
+                  "with set_params, refits and digests the outputs and the parameters read back")
+ANNOTATIONS.update({
+    "msel_rebase_offsets_i32": (
+        "covered", ["par-forest", "par-forest-et", "par-forest-et-clf", "par-forest-reg"],
+        "parallel_ensemble.fit_forest is one native call (bindings/parallel_shard_native.mojo "
+        "fit_forest -> _fit_forest), which rebases the tree ranges' node offsets through "
+        "_rebase_offsets with the worker binding's msel_rebase_offsets_i32 "
+        "(_native_parallel_shard._WORKER_BINDINGS['_mojolearn'], the core host twin on a CPU install); "
+        "the four lanes fit 16 trees in four ranges and are held to the plain fit"),
+    "shard_topk_merge_f32": (
+        "covered", ["par-reference-knn", "par-reference-knn-reg"],
+        "ReferenceShardedNeighbors.kneighbors/predict/predict_proba are one native call "
+        "(bindings/parallel_shard_native.mojo reference_query -> _reference_query), which merges every "
+        "reference block's candidates with the reference_merge entry _native_parallel_shard._connect_merge "
+        "resolved (_buffer._native('shard_topk_merge_f32')); both lanes query four reference blocks and "
+        "are held to the plain estimator"),
+    "linear_constructor_native_call": (
+        "covered", ["public-set-params", "x-huber-outliers"],
+        "_native_linear_constructors.install replaces the __init__ of the 19 field-only linear models "
+        "with a function calling this entry; x-huber-outliers constructs HuberRegressor(max_iter=30, "
+        "epsilon=1.1) and digests its outliers_; " + _NATIVE_PARAMS),
+    "params_setter_native_call": (
+        "covered", ["public-set-params"],
+        "NativeParamsSetter.set_params (the linear models' set_params) calls this entry; " + _NATIVE_PARAMS),
+    "declared_params_native_call": (
+        "covered", ["public-set-params"],
+        "_PrepBase.set_params and decomp _Base.set_params call this entry (_DECLARED_PARAMS_SET); "
+        + _NATIVE_PARAMS),
+    "public_attribute_native_call": (
+        "covered", ["cholesky", "public-set-params"],
+        "_native_public_attributes.connect_classes installs it as __getattribute__ of every connected "
+        "class at import, so every attribute read of a fitted model runs it; the cholesky lane reads "
+        "logdet_ (the cholesky_logdet property schema) and " + _NATIVE_PARAMS),
+})
+
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
         "covered", ["hf-causal-lm", "par-causal-lm"],
@@ -2230,6 +2285,8 @@ def triage(row):
         return "n/a", [], ("a constant probe: the body returns one compiled constant (a contract version, "
                            "vendor or capability flag), reads no data and computes nothing")
     if not row["py_files"]:
+        if row.get("adapter_files"):
+            return "n/a", [], ADAPTER_ONLY
         return "n/a", [], "no Python caller in the package (manifest, tests or Mojo-internal dispatch only)"
     return "GAP", [], "no lane reaches it"
 

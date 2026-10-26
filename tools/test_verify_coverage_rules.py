@@ -146,6 +146,36 @@ def test_whole_surface_sabotage_column():
     assert audit_tool.sabotage_of(_row("kernel_entry", sabotage_defines=["MOJOLEARN_HOST_SABOTAGE"]))[0] == "armed"
 
 
+def _native_row(entry, **kw):
+    row = dict(entry=entry, src="bindings/_mojolearn_x_sequence.mojo", lanes_precise=[], py_files=0,
+               constant_probe=False)
+    row.update(kw)
+    return row
+
+
+def test_adapter_only_entry_is_not_a_gap():
+    st, lanes, why = audit_tool.triage(_native_row("adapter_entry", adapter_files=1))
+    assert st == "n/a" and lanes == [] and "adapter" in why
+    assert audit_tool.triage(_native_row("package_entry", py_files=1, adapter_files=1))[0] == "GAP"
+    assert audit_tool.triage(_native_row("lane_entry", py_files=1, lanes_precise=["x"]))[0] == "covered"
+    # an audit written before the adapter count existed keeps its old reading
+    assert "no Python caller" in audit_tool.triage(_native_row("old_row"))[2]
+
+
+def test_import_installed_entries_name_their_lanes():
+    for entry, src in (("msel_rebase_offsets_i32", "bindings/_mojolearn.mojo"),
+                       ("msel_rebase_offsets_i32", "bindings/_mojolearn_core_host.mojo"),
+                       ("shard_topk_merge_f32", "bindings/_mojolearn.mojo"),
+                       ("shard_topk_merge_f32", "bindings/_mojolearn_core_host.mojo"),
+                       ("declared_params_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
+                       ("linear_constructor_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
+                       ("params_setter_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
+                       ("public_attribute_native_call", "bindings/_mojolearn_tokenizer_host.mojo")):
+        st, lanes, why = audit_tool.triage(_native_row(entry, src=src, py_files=1))
+        assert st == "covered" and lanes and why, (entry, src)
+    assert "public-set-params" in audit_tool.NEW_LANES
+
+
 def test_dead_and_probe_entries_read_sabotage_na():
     # lane coverage-sabotage-arms-20261025: the 0.8.57 owed sabotage rows, each without a live caller
     for entry in ("adam_hyper_f64", "lr_schedule_fill", "byte_lm_launch_probe", "forest_host_gbdt_sigmoid",
