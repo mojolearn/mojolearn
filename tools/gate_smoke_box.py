@@ -188,7 +188,9 @@ class Gate:
             os.environ["LD_LIBRARY_PATH"] = ":".join(
                 glob.glob(self.cache + "/venv/lib/python*/site-packages/*/lib64")
                 + glob.glob(str(self.root / "venv/lib/python*/site-packages/*/lib64"))
-                + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
+                # Exactly ONE ROCm runtime: two HSA runtimes in one process (PyTorch's ROCm 7 build
+                # loaded beside a 6.x libhsa) fail with "Failed to initialize HSA runtime".
+                + [next((d for d in ("/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib") if os.path.isdir(d)), "/opt/rocm/lib")])
 
     def env(self):
         env = dict(os.environ)
@@ -403,7 +405,9 @@ class Gate:
         if self.vendor == "amd":
             env["LD_LIBRARY_PATH"] = ":".join(
                 glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
-                + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
+                # Exactly ONE ROCm runtime: two HSA runtimes in one process (PyTorch's ROCm 7 build
+                # loaded beside a 6.x libhsa) fail with "Failed to initialize HSA runtime".
+                + [next((d for d in ("/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib") if os.path.isdir(d)), "/opt/rocm/lib")])
         options = {"launch": self.launch_light} if self.profile == P.LIGHT else {}
         rec = AG.run(self.vendor, sys.executable, self.root / "adapter-smoke", self.adapter_installs(), env=env, **options)
         self.mark(phase="adapters", status="done", adapters=rec, adapters_finished=time.time())
