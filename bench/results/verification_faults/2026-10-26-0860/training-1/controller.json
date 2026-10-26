@@ -1,0 +1,196 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-training-optimizer_public_host": [
+        "optim-sgd"
+      ]
+    },
+    "arms": [
+      "coverage-training-optimizer_public_host"
+    ],
+    "builds": [
+      "build_training_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "training",
+    "id": "training-1",
+    "lanes": [
+      "optim-sgd"
+    ],
+    "patches": [
+      "training/checks/sabotage/coverage_optimizer_public_host.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "optim-sgd",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.0917455001035705
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "training/checks/sabotage/coverage_optimizer_public_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.013017875025980175
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "training/checks/sabotage/coverage_optimizer_public_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01277987495996058
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_training_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_training_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/build/host/_mojolearn_dev_training_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/build/host/_mojolearn_dev_training_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 16.367083124932833
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "optim-sgd",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/sab_cpu.json"
+      ],
+      "exit_code": 1,
+      "seconds": 3.4112710000481457
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "training/checks/sabotage/coverage_optimizer_public_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01149762503337115
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "optim-sgd",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.879943332984112
+    },
+    {
+      "name": "check-coverage-training-optimizer_public_host-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-training-optimizer_public_host",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_training_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.04474529204890132
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_training_host",
+      "members": [
+        "_mojolearn_training_host"
+      ],
+      "sha256": "afcdc045ea5cf164f7dbd5141a2a084dc4b1f7e3de6ecb3a9120d7b633778c02",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1/build/host/_mojolearn_dev_training_host/_mojolearn_dev_training_host.so",
+      "original_path": ".development/b5eb199f0b14553efe8818f2ce40d58491f09ee8160dadb00c3a577d51db9b2e/_mojolearn_dev_training_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/afcdc045ea5cf164f7dbd5141a2a084dc4b1f7e3de6ecb3a9120d7b633778c02/_mojolearn_dev_training_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-training-optimizer_public_host",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

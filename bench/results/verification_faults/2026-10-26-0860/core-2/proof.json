@@ -1,0 +1,59 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "core-2",
+  "arms": [
+    {
+      "arm": "coverage-precise-core-msel_host_read",
+      "checks": [
+        {
+          "arm": "coverage-precise-core-msel_host_read",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-metrics-search"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "4ca8163dd36ad8de1707513fca81dee59572a8b1541beeb7b80c8fe66c1b690c"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "10950d8e0cda5d1565b2042c3258e1ee554c9482ad7b3dfb35b404ff6dd1086d"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "7c5bf3c2bd890adcbb25dd733934c02d287a93c4346716142ffdc5a30d2c5f57"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "fa33af7479f33973c6e0dfead93e489670c22741eaa821d7941f9f4ebfed5a1b"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "dcdfa4827b24c3e62c529d4d188940c50ed91c1a18c7f859bd5e5d493cf756d9"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "d292a3460195a31cfa5d7731fdaf1da69db382c25b1bc6a6871f33f34c9ad541"
+    },
+    "check-coverage-precise-core-msel_host_read-cpu.log": {
+      "path": "check-coverage-precise-core-msel_host_read-cpu.log",
+      "sha256": "50220266cddb15a994aa04bc8e81a9507928a77c7dc04f78e8d028df6afdc588"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-2",
+  "r2_archive": "measurements/verification/0.8.60/core-2-proof.tgz"
+}

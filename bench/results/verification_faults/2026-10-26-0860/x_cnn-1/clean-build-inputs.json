@@ -1,0 +1,169 @@
+[
+  {
+    "action": "reuse",
+    "fields": {
+      "builders": {
+        "artifact": "_mojolearn_dev_x_cnn_host.so",
+        "command": [
+          "sh",
+          "bindings/merged_build.sh",
+          "host",
+          "--layout",
+          "development",
+          "--group",
+          "_mojolearn_dev_x_cnn_host",
+          "--outdir",
+          "<outdir>",
+          "--rootdir",
+          "<rootdir>"
+        ],
+        "flags_class": "host",
+        "mode": "host",
+        "schema": "mojolearn.development-recipe.v1",
+        "scripts": {
+          "bindings/build_defines.sh": "91ef721001571ffd0e88f98590864d77558526c23d989d3a9e153bf363fff2bc",
+          "bindings/merged_build.sh": "4c756e509a3ef8b7127d9374a2fe37ccd17c2819cd16dc760f32d1868c07ed6d"
+        }
+      },
+      "cache": "/Users/andrewhendel/mojolearn-evidence/dev-cache-mac",
+      "environment": {
+        "MOJOLEARN_COMPILE_JOBS": "1",
+        "MOJOLEARN_MERGED_PYTHON": "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+        "MOJOLEARN_RUNPOD_KEY_FILE": "/Users/andrewhendel/.mojolearn_runpod_key",
+        "MOJOLEARN_TARGET_COLUMN": "cpu"
+      },
+      "flags_class": "host",
+      "link_environment": {},
+      "members": [
+        "_mojolearn_x_cnn_host"
+      ],
+      "mode": "host",
+      "platform": "darwin",
+      "repo": "/Users/andrewhendel/mojolearn-wt/integ-0859",
+      "root_sha256": "ebf8705a46686bcc546fd55da0a0f39121ddd3bc2d3d7e407edd125d4052385b",
+      "schema": "mojolearn.development-group.v1",
+      "source": {
+        "files": {
+          "bindings/_mojolearn_x_cnn_host.mojo": "0646fbb1f9fd72fbf12902d76b3ec8c7f406cc1215ae53482c12809101ba11ce",
+          "bindings/native_loaded_module.mojo": "b9a0fb55794e5dda58885f3fdfbc66b4af450dbecaa84fa09edd01d17b1cc154",
+          "bindings/py_balanced.mojo": "4bdf993212bfb7c768f85990b314ded26803c1352d593707ee77e5efa9b9bece",
+          "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
+          "checks/kernel_matrix.mojo": "3b4c69b5d81988e894d2bdfdd2651a479427d21c6066f8fa2a45c00745157952",
+          "checks/numerics.mojo": "8cee8aeb5172945a6577228210b542abd3ac35f1f6fa0ef24c23aa0c1c20dd22",
+          "checks/rtf_seam.mojo": "cbef549b95e2a1578cc893eb0841c52ed765564702311cd4188da9bc81aa9fe1",
+          "core/__init__.mojo": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+          "core/host_lanes.mojo": "1632237663be4004055668bc30a03550fad19e1806b24d6ac2ccd2dcfead6574",
+          "core/host_parallel.mojo": "ae15177298d9ea8a310d96e29a5b3545f0aee8a3221e41abfc92864c33ec6c06",
+          "core/host_predict_threads.mojo": "d6f2795abb76ccf7ba3862bed088634bf1c67023e45b9b3dafdf06b6251197de",
+          "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+          "core/launch_log.mojo": "828a361085bb0baa0fd1091fcbf5e0891bef710ae57aeb07db79b5f797a1a09a",
+          "core/package_profile.mojo": "62de1fa0475ec969be5725e47c53bee9ba30a478b53699301a3975a0de010aac",
+          "core/philox.mojo": "1a1c2c0f81b496287d54658f60a1af18ea0c0fa16df49feb069e3abf82e5a77d",
+          "core/six_lane_experiment_guards.mojo": "d48fe80a5fa8fe89d0c40dd60878ae20ecca2a73aeb10175bab26022a65b635f",
+          "gemm/__init__.mojo": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f",
+          "gemm/contract.mojo": "4331f964dd9b0ba46de78801753140c736d6c75bc07c480ef8b250395dc8a110",
+          "gemm/experiments/neural_profile.mojo": "eabf74d599eff6c8f96a00203470982b13ac6460237e7c0512a4910efdab1bc3",
+          "gemm/host/__init__.mojo": "4d9f9558a0342ed5cef03721dce40b8995cffc0b9dd57fef34700b5b7bccf17c",
+          "gemm/host/gemm_host_rows.mojo": "682bd471119a4d72874b9c8a0afb75b8ea6b8238cecf6de6365b20e5346c2308",
+          "gemm/host/gemm_oracle.mojo": "9f3ebb178a544d58e0c4722be22c2246411a5cb011a33adc3e84e0dc06654132",
+          "gemm/host/neural_gemm.mojo": "69423884cf90edeff474e56e9eb1691ad5ee97475cf780b8dc444579e30fb016",
+          "x_cnn/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "x_cnn/checks/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "x_cnn/host/__init__.mojo": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "x_cnn/host/binding_entries_impl.mojo": "272a1f48558f7ffd653c350a98a3c119744a094c931d240b067f6153a3e5f299",
+          "x_cnn/host/gemm_host.mojo": "8d9029746ecdc1ae4220c3532bd6f8b03ed008f21a3248551f4e900d6cc4f180",
+          "x_cnn/host/ops_host.mojo": "7b64b9f3d405f952dd28411ebac07836e043233c1ee2812bcbccb22209397437",
+          "x_cnn/host/ops_host_pyapi.mojo": "18a5a3462cb7f7264e3ef83273936cc5f7aae530eb66ec240111c3e0e8597375",
+          "x_cnn/neural_aux_contract.mojo": "52a3d33bd9cb21861618192c30af6174aa31fcee86c9dba046c926ba90a8c7ca",
+          "x_cnn/ops.mojo": "238a3601dabfd10d020eb95b82200d02506a9bab10dfbd900495700733b532cd"
+        },
+        "scope": "closure",
+        "unresolved": []
+      },
+      "stem": "_mojolearn_dev_x_cnn_host",
+      "toolchain": {
+        "apple": {
+          "build": "25F84",
+          "developer_dir": "/Applications/Xcode.app/Contents/Developer",
+          "metal": "Apple metal version 32023.883 (metalfe-32023.883)",
+          "product": "26.5.2",
+          "sdk": "26.5",
+          "xcode": "Xcode 26.6"
+        },
+        "available": true,
+        "compiler": "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/default/bin/mojo",
+        "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+        "installed": [
+          "max-26.5.0-3.13release",
+          "max-core-26.5.0-release",
+          "mojo-1.0.0-release",
+          "mojo-compiler-1.0.0-release"
+        ],
+        "locked": {
+          "packages": [
+            "max-26.5.0-3.13release",
+            "max-26.5.0-3.14release",
+            "max-core-26.5.0-release",
+            "mojo-1.0.0-release",
+            "mojo-compiler-1.0.0-release"
+          ],
+          "pixi_lock_sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509",
+          "platform": "osx-arm64"
+        },
+        "os": {
+          "cc": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+          "glibc": "",
+          "id": "darwin",
+          "ld": "ld: unknown options: --version",
+          "machine": "arm64",
+          "version_id": "25.5.0"
+        },
+        "pixi": "pixi 0.77.0",
+        "pixi_configuration": "494aff49b7930907a26b914bfdb86ffcd7425d08411f8d353b08515f9a302587",
+        "precompiled_packages": {
+          "_cublas.mojoc": "26605ebc9e28630df2861f798d0dbcc14625291b74ee2cece23bf15b4c7792f2",
+          "_cudnn.mojoc": "34119438415cf96be47a68a9b56e5e24819aa22d7b11b131dd10495a8b728912",
+          "_cufft.mojoc": "ed489423d1b0a7def8f0c8da5805010c86285e9467b764a6d7a1a6d46e1dd57a",
+          "_hal.mojoc": "6d8fd86f81d2bf80d87355ebaf6a016ddaf9361ac56b2a9cf1c787875c3e921d",
+          "_miopen.mojoc": "ca08603666c4ee0b52e53079c71f65374e5db2c4f88804f4a0fc469fa1d94d75",
+          "_rocblas.mojoc": "e80b7aa2cb99a32278505316b78dcf6353bb70edb9fbe4ee964aec1efdf57581",
+          "algorithm.mojoc": "d0d0e7905015af559e6173839c87e490a82515b3455a25e0e1aa46ac68802023",
+          "builtin_kernels.mojoc": "88dcb8f99b8791171a373660b75ed9ce86ee6d2a9e29a1fad180c2c3f5ad0ae8",
+          "builtin_primitives.mojoc": "2b23584749ca6d7c19887f5cafb70a2199671b60f01b6f94f04995366a7ca8a4",
+          "comm.mojoc": "a0ef021704fc72f523cf6f4e2832b099b13eb0768d3cc598412a9c8e64342949",
+          "extensibility.mojoc": "8462796638692a03b65e527f5da4bed86b3e91228959d62d90d73cfde798a589",
+          "internal_utils.mojoc": "08b9bf9d92537293d513d4e7f1952f838be4e881f43f609ba9f18127a7d1cb22",
+          "kv_cache.mojoc": "2dcd3370bf7f5c8854fab67eaa11286d2d9e66a63fce24e52f1ef2db25728cae",
+          "layout.mojoc": "2d0eed57c1f2dde19b49e72c1bad385beeb2a1652640ee7fd6fcdfe018ae8f73",
+          "linalg.mojoc": "7f60208b38a6c0c8094c23c6ca5c5dbd492fe411efff3ac60fcb8bf225477ee5",
+          "machine.mojoc": "306f114f082b0d49467b4f3f1e5b3afdaa544bb0886bb6f23bc836846b0fcf0d",
+          "matmul_rs.mojoc": "e3fc7f53a931bba0c0a9864b7c87a17375b2e316b8338d6d6708b7611ddfe358",
+          "max.mojoc": "166b3c82d80995b78ec5000d755a236507bb75f59ab12e28539fc6d1d88419c8",
+          "mega_ffn.mojoc": "52d1893be727973cc5ebcaea60b93e99cb7713914104fc431e0c32958d5ce17e",
+          "msa.mojoc": "15d5de9b3f18da751af4aed7c7dc82d02cfd4c9a5d98bda38de1ceeb27d942ed",
+          "nn.mojoc": "602338eff58fd55f5c2619d0402522731e334da377e9d31c6446036369dca26e",
+          "pipeline.mojoc": "0ba1f84f3865c7af81a9c8e9150285e0e41578723c2d88728b2eeae7fe36e51c",
+          "profiling_range.mojoc": "2bfff5f574bcca99762c340e8b0e7009b3e9da17c4f166db83c389b00f04cd42",
+          "quantization.mojoc": "839447e1ad7263bd099d970decdce2bcc8c360c0cefeed3935104805089b39a9",
+          "shmem.mojoc": "937104e463fac87b875c894881eb775c0e6b60826bb4b5c3320b3ab492c0a575",
+          "state_space.mojoc": "1df324cf7d3d8a753c6f30be99d9febd0ab0d1f211923ad1bd1fa6db56b7c5c6",
+          "std.mojoc": "0ca4b40d6907d4fd631ffbf092aee2d4b7cc99baa63f277eea52d56a0b3f8d68",
+          "structured_kernels.mojoc": "f402e5c93f74de8a61616d7f476be794aaef86bde078c0717c75e35dd97c3e64",
+          "weights_registry.mojoc": "b4dabd5f0b11fceee87485eb3716d7bcc1c12fd91f141f74db5f0d9208bec49a"
+        },
+        "version": "Mojo 1.0.0 (ed45d567)"
+      }
+    },
+    "flags_class": "host",
+    "key": "b825d3871be37cad346de19ba2179c09541443677816d337b64d1b878b019aca",
+    "members": [
+      "_mojolearn_x_cnn_host"
+    ],
+    "mode": "host",
+    "recorded_need_bytes": 854989209,
+    "selected": true,
+    "stem": "_mojolearn_dev_x_cnn_host"
+  }
+]

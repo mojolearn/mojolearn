@@ -1,0 +1,80 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "x_metrics-1",
+  "arms": [
+    {
+      "arm": "coverage-precise-x_metrics-first_rows",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_metrics-first_rows",
+          "column": "cpu",
+          "exit_code": 0
+        },
+        {
+          "arm": "coverage-precise-x_metrics-first_rows",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-metrics-splitters"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "ff59990666597fdef681b3a769c62721c38aaa0ffe83e0fd8af8f634d7e133f1"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "df286723262008f02858f594d615b7792d125465aa911f940bf6a6f4bfb5b890"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "28e8d9f5d7db523019b77ed584f2346c89ec258520761726f17c62ecb9c1fc90"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "db283f3112af1cc1796fb228478e77801b3067cb951bb4dacfc340571ef242d3"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "0bb2505123a01128444ab539bbe8aa9cb036466d9f2d7ad8345d8d238a9306a0"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "aa514bc4dcbd487df29138c4208aa86ac6d9a1cc10b97f45ca5563b030713a52"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "ce6b30cf1a59535811fd87d48ee6b05718699c25394bdc0c030d08d4f69abdbe"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "36e5d8bde7d4bb91d7d8cd1ad55e075490f1427923d966b11d7eb0bcbeb1851c"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "2c3314f3f4d4b850212d5e78b8e50e1dd3063db3676f916aec1f8dc7cbb940e5"
+    },
+    "check-coverage-precise-x_metrics-first_rows-cpu.log": {
+      "path": "check-coverage-precise-x_metrics-first_rows-cpu.log",
+      "sha256": "0eecba34d4481b6ca7193100c574a11e6467eb1fa59feb8db46114e99e3f2626"
+    },
+    "check-coverage-precise-x_metrics-first_rows-device.log": {
+      "path": "check-coverage-precise-x_metrics-first_rows-device.log",
+      "sha256": "0eecba34d4481b6ca7193100c574a11e6467eb1fa59feb8db46114e99e3f2626"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1",
+  "r2_archive": "measurements/verification/0.8.60/x_metrics-1-proof.tgz"
+}

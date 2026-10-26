@@ -1,0 +1,60 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "x_cnn-1",
+  "arms": [
+    {
+      "arm": "coverage-precise-x_cnn-csr_build_host",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_cnn-csr_build_host",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-cnn-gcn",
+    "x-cnn-sage"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "4f6d0d4d9c6b8426dfd9f35435d4083a17b1e4124df4cdbd664b555e3a31ca55"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "003f75cf64e9715d4c0b97c5a135ad0c6fa879c225b5c05438d757aa47c5cece"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "5fbf6fe691bd4982f9f99d22a689849909c3b894bcd8e5a410936364c1bbf607"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "3ee5e8370fa114291e5874052b61fef8f363655a93b5cd8342662934f60181d2"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "2b66c66069c2072618db739368e64053fb79476f4e30b69b1a68ab89ab3d3ecc"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "398cc81efa8b7b60fe4f57f37d614297443fc80cedbeb5841698810f722118d6"
+    },
+    "check-coverage-precise-x_cnn-csr_build_host-cpu.log": {
+      "path": "check-coverage-precise-x_cnn-csr_build_host-cpu.log",
+      "sha256": "7fbaeddd6ce474a6f1ea96cf8a2bf16f642842df9e1242454aba4d15613d1852"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1",
+  "r2_archive": "measurements/verification/0.8.60/x_cnn-1-proof.tgz"
+}

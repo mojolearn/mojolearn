@@ -123,7 +123,52 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-precise-core-msel_host_read",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/core-2/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-training-optimizer_public_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/training-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_cnn-csr_build_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_cnn-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_metrics-first_rows",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_metrics-1/proof.json",
+      "columns": [
+        "cpu",
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 40
+  "remaining_declared_fault_arms": 36
 }

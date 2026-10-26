@@ -1,0 +1,198 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-x_cnn-csr_build_host": [
+        "x-cnn-gcn",
+        "x-cnn-sage"
+      ]
+    },
+    "arms": [
+      "coverage-precise-x_cnn-csr_build_host"
+    ],
+    "builds": [
+      "build_x_cnn_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "x_cnn",
+    "id": "x_cnn-1",
+    "lanes": [
+      "x-cnn-gcn",
+      "x-cnn-sage"
+    ],
+    "patches": [
+      "x_cnn/sabotage/coverage_precise_csr_build_host.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-cnn-gcn,x-cnn-sage",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.0077305829618126
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "x_cnn/sabotage/coverage_precise_csr_build_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.011792583973146975
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "x_cnn/sabotage/coverage_precise_csr_build_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.011139541980810463
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_x_cnn_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_cnn_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/build/host/_mojolearn_dev_x_cnn_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/build/host/_mojolearn_dev_x_cnn_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 17.422384124947712
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-cnn-gcn,x-cnn-sage",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.6381125840125605
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "x_cnn/sabotage/coverage_precise_csr_build_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.014623000053688884
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-cnn-gcn,x-cnn-sage",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.3776442089583725
+    },
+    {
+      "name": "check-coverage-precise-x_cnn-csr_build_host-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-x_cnn-csr_build_host",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_x_cnn_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.047737666056491435
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_x_cnn_host",
+      "members": [
+        "_mojolearn_x_cnn_host"
+      ],
+      "sha256": "c40a8178977e05d4e3de4f0e0fdf0a65e1fb27532aa2918b2525697baa99ae20",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_cnn-1/build/host/_mojolearn_dev_x_cnn_host/_mojolearn_dev_x_cnn_host.so",
+      "original_path": ".development/b825d3871be37cad346de19ba2179c09541443677816d337b64d1b878b019aca/_mojolearn_dev_x_cnn_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/c40a8178977e05d4e3de4f0e0fdf0a65e1fb27532aa2918b2525697baa99ae20/_mojolearn_dev_x_cnn_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-precise-x_cnn-csr_build_host",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

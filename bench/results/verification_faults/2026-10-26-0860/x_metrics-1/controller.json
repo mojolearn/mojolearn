@@ -1,0 +1,325 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-x_metrics-first_rows": [
+        "x-metrics-splitters"
+      ]
+    },
+    "arms": [
+      "coverage-precise-x_metrics-first_rows"
+    ],
+    "builds": [
+      "build_x_metrics",
+      "build_x_metrics_host"
+    ],
+    "columns": [
+      "cpu",
+      "device"
+    ],
+    "family": "x_metrics",
+    "id": "x_metrics-1",
+    "lanes": [
+      "x-metrics-splitters"
+    ],
+    "patches": [
+      "x_metrics/sabotage/coverage_precise_first_rows.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-splitters",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.043108750018291
+    },
+    {
+      "name": "clean-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-splitters",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/clean_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.532728207996115
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "x_metrics/sabotage/coverage_precise_first_rows.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.011748166987672448
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "x_metrics/sabotage/coverage_precise_first_rows.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.011335582938045263
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_x_metrics_m1",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_metrics_m1",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/build/identical/_mojolearn_dev_x_metrics_m1",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/build/identical/_mojolearn_dev_x_metrics_m1/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 15.346439917106181
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_x_metrics_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_metrics_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/build/host/_mojolearn_dev_x_metrics_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/build/host/_mojolearn_dev_x_metrics_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 9.227755666011944
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-splitters",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.326003791997209
+    },
+    {
+      "name": "sab-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-splitters",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/sab_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.228193791001104
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "x_metrics/sabotage/coverage_precise_first_rows.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.012701666913926601
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-splitters",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.366816750029102
+    },
+    {
+      "name": "restored-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-splitters",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/restored_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.8871595829259604
+    },
+    {
+      "name": "check-coverage-precise-x_metrics-first_rows-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-x_metrics-first_rows",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_x_metrics,build_x_metrics_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.05030875001102686
+    },
+    {
+      "name": "check-coverage-precise-x_metrics-first_rows-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-x_metrics-first_rows",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/restored_device.json",
+        "--batch-bindings",
+        "build_x_metrics,build_x_metrics_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.0445807499345392
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_x_metrics_m1",
+      "members": [
+        "_mojolearn_x_metrics"
+      ],
+      "sha256": "2fa7a202718303ab0ec0ce7b4876acb342ae274e27d1cccbad2afc14391c4643",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/build/identical/_mojolearn_dev_x_metrics_m1/_mojolearn_dev_x_metrics_m1.so",
+      "original_path": ".development/2ad3609106edc16886b61738bc1d0e30f63fb71365e6a19fb40d7618ac5066e5/_mojolearn_dev_x_metrics_m1.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/identical/.development/2fa7a202718303ab0ec0ce7b4876acb342ae274e27d1cccbad2afc14391c4643/_mojolearn_dev_x_metrics_m1.so",
+      "created": true
+    },
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_x_metrics_host",
+      "members": [
+        "_mojolearn_x_metrics_host"
+      ],
+      "sha256": "814c6e82331e826669dc2ba3676a9baa829b2c6ddd8730fc558a533a0eb1fb88",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_metrics-1/build/host/_mojolearn_dev_x_metrics_host/_mojolearn_dev_x_metrics_host.so",
+      "original_path": ".development/c9b0dfd12652e5caed5f51e4c730d620cbfc6acda1812d192f2093adf3bc4c64/_mojolearn_dev_x_metrics_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/814c6e82331e826669dc2ba3676a9baa829b2c6ddd8730fc558a533a0eb1fb88/_mojolearn_dev_x_metrics_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-precise-x_metrics-first_rows",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-x_metrics-first_rows",
+      "column": "device",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,59 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "training-1",
+  "arms": [
+    {
+      "arm": "coverage-training-optimizer_public_host",
+      "checks": [
+        {
+          "arm": "coverage-training-optimizer_public_host",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "optim-sgd"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "079a8a3a3fb9602cfc3e59ef92ac829dcdbfe55ebbfcff8aa326af4e0ad11791"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "7c997634b80cce26312a3960ca6fcb5d021c8a8400b90903acbdf965a97e2b4a"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "c14efcc157d3f05a2068e9f827d84b8e2137034172b8112df673b761e149148d"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "368ac44596b3070b4324cbe0f27a40136dc161295f65e0cd84d0ffe0b031fd5b"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "5af6d9c9ed3027903cea019961bbe04fed3edc3e25e096436dd6d6b4b16a2959"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "b2da3af0579a3a39de114596ad8f6e628492446ed3ac3c631c774af777134c6a"
+    },
+    "check-coverage-training-optimizer_public_host-cpu.log": {
+      "path": "check-coverage-training-optimizer_public_host-cpu.log",
+      "sha256": "f1cce3f72d999d1b42ad1d604e20c07bfb6c5ad2b6aeb532307aae0cc99da0b3"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/training-1",
+  "r2_archive": "measurements/verification/0.8.60/training-1-proof.tgz"
+}
