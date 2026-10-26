@@ -8504,6 +8504,11 @@ def main(argv=None):
 
     for path, reason in sorted(sel["reasons"].items()):
         print(f"# {path}: {reason}")
+    # Keep the full diagnostic attribution even when a path is unresolved.
+    # Consumers must still honor exit 3 / unattributed; this is not a run plan.
+    if args.json:
+        with open(args.json, "w") as fh:
+            json.dump(sel, fh, indent=1)
     if refuse_unattributed(sel):
         return 3
     print(f"# {len(sel['lanes'])} of {sel['total']} lanes selected")
@@ -8532,10 +8537,6 @@ def main(argv=None):
         for k, group in enumerate(groups):
             print(f"# shard {k} weight {load[k]} s: {','.join(group)}")
     print(",".join(sel["lanes"]))
-    if args.json:
-        with open(args.json, "w") as fh:
-            json.dump({k: v for k, v in sel.items() if k != "reasons"} | dict(reasons=sel["reasons"]),
-                      fh, indent=1)
     return 0
 
 

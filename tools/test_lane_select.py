@@ -441,6 +441,27 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
                 f"{lane} carries {binding} but no door of its own resolves it"
 
 
+def test_failed_selection_retains_json_without_emitting_a_run_list():
+    import contextlib
+    import io
+    import json
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+    selection = dict(lanes=['alpha'], total=1, fallback=False, inert=[],
+                     unattributed=['unmapped.mojo'], reasons={'unmapped.mojo': 'unresolved'})
+    with tempfile.TemporaryDirectory() as directory, \
+            patch.object(lane_select, 'lane_sources', return_value=({'alpha': set()}, {})), \
+            patch.object(lane_select, 'select', return_value=selection):
+        output = io.StringIO()
+        target = Path(directory) / 'selection.json'
+        with contextlib.redirect_stdout(output):
+            status = lane_select.main(['--lanes-for-paths', 'unmapped.mojo', '--json', str(target)])
+        assert status == 3
+        assert json.loads(target.read_text()) == selection
+        assert 'alpha' not in output.getvalue().splitlines()
+
+
 def test_an_unattributable_path_is_refused_by_name_and_selects_nothing():
     """NO FALLBACK (2026-09-22). A path the map cannot place selects
     NOTHING, is named in `unattributed`, and every caller refuses to run: the
