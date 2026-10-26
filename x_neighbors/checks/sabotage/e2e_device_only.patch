@@ -93,12 +93,15 @@ diff --git a/x_neighbors/device_ops.mojo b/x_neighbors/device_ops.mojo
  
  
  def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
-@@ -1014,7 +1024,7 @@
-     var threshold = threshold_
-     var t = _tid()
-     if t < 1:
--        louvain_item(t, a, labels, info, w, w2, comm, node_of, deg, stot, k2c, tmp, n, max_level, resolution, threshold)
-+        louvain_item(t, a, labels, info, w, w2, comm, node_of, deg, stot, k2c, tmp, n, max_level, resolution * Float32(1.5), threshold)
+diff --git a/x_neighbors/graph_dev.mojo b/x_neighbors/graph_dev.mojo
+--- a/x_neighbors/graph_dev.mojo
++++ b/x_neighbors/graph_dev.mojo
+@@ -170,7 +170,7 @@
+                threshold: Float32) raises:
+     """Louvain on the device (graph_par.lv_drive)."""
+     var ex = GraphDev(a, n * n)
+-    lv_drive(ex, n, max_level, resolution, threshold, labels, info)
++    lv_drive(ex, n, max_level, resolution * Float32(1.5), threshold, labels, info)
+     _ = ex^
  
  
- def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
