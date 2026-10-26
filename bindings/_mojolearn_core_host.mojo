@@ -154,7 +154,7 @@ from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
     lr_schedule_exact_binding,
     lr_schedule_exact_block_binding,
-    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
+    lr_schedule_at_c, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers import (
@@ -1295,7 +1295,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
         module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
-        module.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
+        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/lr_schedule_fill.patch
         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
         module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
         module.def_py_c_function(entry_init, "optimizer_door_init")

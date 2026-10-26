@@ -26,9 +26,8 @@ Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
 `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
 from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
-from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_fill, _lr_status
+from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_native, _lr_status
 
-import array as _array
 
 #: `LrSpec` kind codes (sequence/lr_table.mojo)
 _KIND_ONECYCLE = 10
@@ -225,13 +224,8 @@ class OneCycleLR(_Sched):
     def _lr_at_slow(self, t):
         """The exact route of one step (sequence/lr_exact.mojo
         `onecycle_exact`), one native call: the table's reference."""
-        t = int(t)
         ip, fp = self._lr_spec()
-        out = _array.array("f", (0.0,))
-        st, _ = _lr_fill(([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp), t, out)  # glue: the kind word with the exact-only flag
-        if st:
-            self._lr_refuse(st, t)
-        return out[0]
+        return _lr_native("lr_schedule_at")([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp, t, self._LR_STYLE)  # glue: the kind word with the exact-only flag
 
 # Import-time registration of built-in schedule identities, never a runtime hook.
 from . import _training_impl as _schedule_training

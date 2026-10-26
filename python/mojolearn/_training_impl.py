@@ -1102,14 +1102,14 @@ def _f32_bits(value):
 # THE SCHEDULES' ONE NATIVE CALL (lane neural-optimizers, 2026-10-21). A
 # schedule's value at step t is DEFINED as the float32 nearest an exact
 # rational, and that definition does not change. `lr_at(t)` and
-# `lr_values(n)` are each ONE call of the core binding's `lr_schedule_fill`
-# (sequence/lr_table.mojo `lr_spec_fill`): the binary64 table with its
+# `lr_values(n)` are each ONE call of the core binding's `lr_schedule_at` /
+# `lr_schedule_series` (sequence/lr_table.mojo `lr_spec_fill`): the binary64 table with its
 # rigorous error bounds, the float32 decision, the exact big-rational route
 # for every step the table leaves undecided, the constant tail and, for
 # OneCycleLR, the phases. MOJOLEARN_LR_TABLE=0 (or MOJOLEARN_LR_EXACT_ONLY=1)
 # keeps every step on the exact route (the A/B); the answers are the same.
 
-#: `lr_schedule_fill`'s statuses beyond `_LR_ERRORS`: a step below 1, and a
+#: `lr_spec_fill`'s statuses beyond `_LR_ERRORS`: a step below 1, and a
 #: OneCycleLR step past total_steps + 1
 _LR_ONE_BASED = 4
 _LR_BEYOND = 5
@@ -1132,15 +1132,8 @@ def _lr_buffers(n):
     return array.array("d", bytes(8 * n)), array.array("d", bytes(8 * n))
 
 
-def _lr_fill(spec, t0, out):
-    """ONE native call: the float32 rates of steps t0 .. t0 + len(out) - 1
-    into the float32 array `out`. Returns (status, index of the failing
-    step)."""
-    ip, fp = spec
-    res = array.array("q", (0,))
-    st = _lr_native("lr_schedule_fill")(  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
-        ip + [int(t0), len(out)], fp, out.buffer_info()[0], res.buffer_info()[0])
-    return int(st), res[0]
+# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/lr_schedule_fill.patch
 
 
 class _LrTable(object):

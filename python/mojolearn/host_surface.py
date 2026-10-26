@@ -1828,7 +1828,6 @@ FAMILIES = (
             # Native C-entry registrations are part of the exported ABI too.
             "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
-            "lr_schedule_fill",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "knn_classify_neighbors", "knn_regress_neighbors",
