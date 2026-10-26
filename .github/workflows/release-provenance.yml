@@ -173,10 +173,6 @@ jobs:
           persist-credentials: false
       - name: Verify private retained evidence and every pre-publication requirement
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         # The release ledger is admitted on the release Mac before dispatch (tools/release.py,
@@ -778,10 +774,6 @@ jobs:
 
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -846,10 +838,6 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -923,10 +911,6 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -1007,10 +991,6 @@ jobs:
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -1246,10 +1226,6 @@ jobs:
 
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -1339,10 +1315,6 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -1441,10 +1413,6 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"
@@ -1550,10 +1518,6 @@ jobs:
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
       - name: Verify the exact publication bytes against admitted ledger artifacts
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
         run: echo "publication bytes admitted on the release Mac; bundle $BUNDLE_SHA"

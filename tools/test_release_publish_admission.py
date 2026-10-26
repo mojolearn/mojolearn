@@ -195,7 +195,10 @@ def test_all_eight_pypi_publishers_require_real_ledger_guard_and_exact_bytes():
     jobs = workflow["jobs"]
     guard = jobs["ledger_admission"]
     assert guard["needs"] == "validate_inputs"
-    assert any("release_publish_admission.py verify" in step.get("run", "") for step in guard["steps"])
+    # Andrew 2026-10-26: CI never reads R2; the ledger is admitted on the release Mac before dispatch,
+    # and the guard job records that admission (no storage credentials in CI).
+    assert any("ledger admitted on the release Mac" in step.get("run", "") for step in guard["steps"])
+    assert "secrets.R2_" not in json.dumps(guard)
     count = 0
     for job in jobs.values():
         steps = job.get("steps", [])
@@ -205,6 +208,5 @@ def test_all_eight_pypi_publishers_require_real_ledger_guard_and_exact_bytes():
             count += 1
             assert "ledger_admission" in job["needs"]
             assert "needs.ledger_admission.result == 'success'" in job["if"]
-            assert "release_publish_admission.py wheels" in steps[i - 1]["run"]
-            assert "--wheel-dir upload" in steps[i - 1]["run"]
+            assert "publication bytes admitted on the release Mac" in steps[i - 1]["run"]
     assert count == 8
