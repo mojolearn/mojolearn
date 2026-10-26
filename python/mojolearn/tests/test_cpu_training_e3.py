@@ -44,7 +44,7 @@ GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 FIT_NAMES = tuple(
     f"rf_{kind}_fit{suffix}"
     for kind in ("classifier", "regressor")
-    for suffix in ("", "_export", "_rowmajor", "_rowmajor_export")
+    for suffix in ("_export", "_rowmajor_export")
 )
 
 

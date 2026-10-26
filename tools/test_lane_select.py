@@ -1491,14 +1491,14 @@ def test_a_parametrized_def_function_is_still_an_export():
     """`def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")`
     is the ordinary spelling in the forest bindings. Requiring a bare
     identifier dropped 35 exports across five bindings, among them the FIT
-    entry points `rf_classifier_fit` and `et_classifier_fit`.
+    entry points `rf_classifier_fit_export` and `et_classifier_fit`.
 
     A dropped export is not a wide answer. The lane still HITS other exports,
     so the per-export branch runs and the dropped export's whole tree is
     simply absent."""
     rf = lane_select._binding_exports("bindings/_mojolearn_rf.mojo")
     trees = lane_select._binding_exports("bindings/_mojolearn_trees.mojo")
-    for name in ("rf_classifier_fit", "rf_regressor_fit", "forest_prepare_gpu",
+    for name in ("rf_classifier_fit_export", "rf_regressor_fit_export", "forest_prepare_gpu",
                  "forest_predict_resident_reuse_gpu", "forest_release_gpu"):
         assert name in rf, f"{name} is registered in _mojolearn_rf.mojo and is not an export"
     for name in ("et_classifier_fit", "et_regressor_fit", "forest_prepare_gpu"):
@@ -1507,7 +1507,7 @@ def test_a_parametrized_def_function_is_still_an_export():
     text = lane_select._read("bindings/_mojolearn_rf.mojo")
     old = {m.group(2) for m in re.finditer(
         r"def_function\[\s*([A-Za-z0-9_]+)\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
-    assert "rf_classifier_fit" not in old, \
+    assert "rf_classifier_fit_export" not in old, \
         "the old pattern already found the parametrized export; this test cannot fail"
     # It must still be an export NAME, never the impl, that lands in the map.
     assert "forest_prepare_gpu_binding" not in rf, "the impl name leaked in as an export"
@@ -1521,9 +1521,8 @@ def test_an_export_reaches_what_its_impl_reaches():
       is `forest_prepare_gpu_binding` from bindings/forest_inference_binding.mojo,
       so `blocks.get` returned "" and the export contributed nothing;
     * the impl calls a file-local helper which is where the imported symbol
-      appears. `rf_predict_proba_gpu_parallel_binding` calls
-      `_rf_predict_gpu_parallel`, and only that helper names
-      `forest_predict_gpu`.
+      appears. `rf_classifier_fit_shard_binding` calls `_rf_classifier_fit`,
+      and only that helper names `upload_forest_x`.
     """
     src = "bindings/_mojolearn_rf.mojo"
     blocks = lane_select._mojo_blocks_for(src)
@@ -1537,12 +1536,12 @@ def test_an_export_reaches_what_its_impl_reaches():
         "the imported impl does not resolve to the file that defines it"
 
     # the file-local helper
-    impl = exports["rf_predict_proba_gpu_parallel"]
-    assert "forest_predict_gpu" not in blocks[impl], \
+    impl = exports["rf_classifier_fit_shard"]
+    assert "upload_forest_x" not in blocks[impl], \
         "the export's own body names it now; pick a new case"
-    assert "_rf_predict_gpu_parallel" in blocks[impl], "the helper call moved; pick a new case"
-    assert "forest_predict_gpu" in blocks["_rf_predict_gpu_parallel"], "the helper moved"
-    assert "core/forest_inference.mojo" in syms["forest_predict_gpu"]
+    assert "_rf_classifier_fit" in blocks[impl], "the helper call moved; pick a new case"
+    assert "upload_forest_x" in blocks["_rf_classifier_fit"], "the helper moved"
+    assert "ensemble/device_layout.mojo" in syms["upload_forest_x"]
 
 
 def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():

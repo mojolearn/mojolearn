@@ -359,10 +359,8 @@ def et_classifier_fit_export_binding(
     return _et_fit[True, True, False](x_addr, y_addr, params)
 
 
-def et_classifier_fit_rowmajor_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    return _et_fit[True, False, True](x_addr, y_addr, params)
+# TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
 def _et_classifier_fit_weighted[EXPORT: Bool, ROWMAJOR: Bool](
@@ -392,13 +390,6 @@ def et_classifier_fit_weighted_export_binding(
     return _et_classifier_fit_weighted[True, False](x_addr, y_addr, params, weights_addr)
 
 
-def et_classifier_fit_weighted_rowmajor_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    return _et_classifier_fit_weighted[False, True](x_addr, y_addr, params, weights_addr)
-
-
 def et_classifier_fit_weighted_rowmajor_export_binding(
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
     weights_addr: PythonObject,
@@ -422,12 +413,6 @@ def et_regressor_fit_export_binding(
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     return _et_fit[False, True, False](x_addr, y_addr, params)
-
-
-def et_regressor_fit_rowmajor_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    return _et_fit[False, False, True](x_addr, y_addr, params)
 
 
 def et_regressor_fit_rowmajor_export_binding(
@@ -461,13 +446,6 @@ def et_regressor_fit_weighted_export_binding(
     weights_addr: PythonObject,
 ) raises -> PythonObject:
     return _et_regressor_fit_weighted[True, False](x_addr, y_addr, params, weights_addr)
-
-
-def et_regressor_fit_weighted_rowmajor_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    return _et_regressor_fit_weighted[False, True](x_addr, y_addr, params, weights_addr)
 
 
 def et_regressor_fit_weighted_rowmajor_export_binding(
@@ -657,15 +635,18 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
         module.def_function[et_classifier_fit_binding]("et_classifier_fit")
         module.def_function[et_classifier_fit_export_binding]("et_classifier_fit_export")
-        module.def_function[et_classifier_fit_rowmajor_binding]("et_classifier_fit_rowmajor")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[et_classifier_fit_rowmajor_export_binding]("et_classifier_fit_rowmajor_export")
         module.def_function[et_classifier_fit_weighted_binding]("et_classifier_fit_weighted")
         module.def_function[et_classifier_fit_weighted_export_binding]("et_classifier_fit_weighted_export")
-        module.def_function[et_classifier_fit_weighted_rowmajor_binding]("et_classifier_fit_weighted_rowmajor")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[et_classifier_fit_weighted_rowmajor_export_binding]("et_classifier_fit_weighted_rowmajor_export")
         module.def_function[et_regressor_fit_binding]("et_regressor_fit")
         module.def_function[et_regressor_fit_export_binding]("et_regressor_fit_export")
-        module.def_function[et_regressor_fit_rowmajor_binding]("et_regressor_fit_rowmajor")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[et_regressor_fit_rowmajor_export_binding]("et_regressor_fit_rowmajor_export")
         module.def_function[et_forest_export_binding]("forest_export")
         module.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
@@ -676,7 +657,8 @@ def build__mojolearn_trees_host() -> PythonObject:
         module.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
         module.def_function[et_regressor_fit_weighted_binding]("et_regressor_fit_weighted")
         module.def_function[et_regressor_fit_weighted_export_binding]("et_regressor_fit_weighted_export")
-        module.def_function[et_regressor_fit_weighted_rowmajor_binding]("et_regressor_fit_weighted_rowmajor")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[et_regressor_fit_weighted_rowmajor_export_binding]("et_regressor_fit_weighted_rowmajor_export")
         module.def_function[et_predict_binding]("et_predict")
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")

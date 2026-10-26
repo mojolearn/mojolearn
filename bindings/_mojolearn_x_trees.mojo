@@ -13,7 +13,6 @@ from xtrees.api_pyapi import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
-from xtrees.dart_units import IDN_DART_DEVICE
 
 
 # F13 measurement audit lives in the binding used by public TreeExplainer.
@@ -139,12 +138,8 @@ def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> Python
     return PythonObject(0)
 
 
-def dart_idn_binding() raises -> PythonObject:
-    """Present only under `IDN_DART_DEVICE` (lane fam2-forests): the
-    IDENTICAL DART round, the same words as the host twin
-    (xtrees/dart_host.mojo). The Python layer then takes the device loop
-    with or without a forest data session."""
-    return PythonObject(1)
+# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
 def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
@@ -236,8 +231,8 @@ def build__mojolearn_x_trees() -> PythonObject:
             m.def_function[dart_step_binding]("x_trees_dart_step")
             m.def_function[dart_add_binding]("x_trees_dart_add")
             m.def_function[dart_close_binding]("x_trees_dart_close")
-        comptime if IDN_DART_DEVICE:
-            m.def_function[dart_idn_binding]("x_trees_dart_idn")
+        # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_trees: ", e))

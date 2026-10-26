@@ -5,18 +5,13 @@ The calling extension holds the GIL throughout prepare/predict/release, so no
 native handle can be released while another call is using it.
 """
 from std.python import PythonObject
-from std.sys.compile import is_defined
 from core.hostptr import list_f32, list_i32
-from core.forest_inference import vector_groves_for, FOREST_PACKED_NODES
+from core.forest_inference import FOREST_PACKED_NODES
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
 
 
-def forest_pool_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
-def forest_pool_fault_available() raises -> PythonObject:
-    return PythonObject(1 if is_defined["MOJOLEARN_FOREST_POOL_FAULT"]() else 0)
+# TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
 def _i32_ptr(address: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
@@ -72,37 +67,9 @@ def forest_prepare_gpu_binding[RF_INPUT: Bool](
         offsets, columns, thresholds, left, leaves, features, outputs, ordered))
 
 
-def forest_predict_resident_gpu_binding[RF_INPUT: Bool](handle: PythonObject, x_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    if len(params) != 3:
-        raise Error("resident prediction requires rows, features, outputs")
-    var rows = Int(py=params[0])
-    var features = Int(py=params[1])
-    var outputs = Int(py=params[2])
-    if rows < 0 or features < 1 or outputs < 1:
-        raise Error("invalid resident prediction dimensions")
-    if rows > 2147483647 // features or rows > 2147483647 // outputs:
-        raise Error("resident prediction dimensions exceed Int32")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    # borrowed rows go straight to the device and the result straight back
-    # into the borrowed output (no host List copies of X or of the result);
-    # same kernel and fold as the List route, fresh per-call buffers
-    resident_predict_into[RF_INPUT](Int(py=handle),
-        xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
-        rows, features, outputs, False)
-    return PythonObject(rows)
-
-
 def forest_release_gpu_binding[RF_INPUT: Bool](handle: PythonObject) raises -> PythonObject:
     resident_release[RF_INPUT](Int(py=handle))
     return PythonObject(None)
-
-
-
-def forest_vector_groves_binding(outputs: PythonObject) raises -> PythonObject:
-    """Read actual compiled vector dispatch, not environment or filenames."""
-    return PythonObject(vector_groves_for(Int(py=outputs)))
 
 
 def forest_ordered_resident_binding() raises -> PythonObject:
@@ -113,12 +80,12 @@ def forest_ordered_resident_binding() raises -> PythonObject:
 def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](
     handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
     params: PythonObject) raises -> PythonObject:
-    """Borrowed synchronous prediction; REUSE_IO=True is the public default.
+    """Borrowed synchronous prediction; REUSE_IO=True is the public
+    `forest_predict_resident_reuse_gpu`.
 
     DEVIATION 2483: parallel_groves already selects this pointer-through body
-    through forest_predict_resident_reuse_gpu. The REUSE_IO=False export and
-    List-based forest_predict_resident_gpu remain comparison arms. Output may
-    change on a nonfinite-result error; caller ownership lasts until return.
+    through forest_predict_resident_reuse_gpu. Output may change on a
+    nonfinite-result error; caller ownership lasts until return.
     """
     if len(params) != 3:
         raise Error("resident prediction requires rows, features, outputs")

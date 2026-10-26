@@ -29,7 +29,7 @@ sampler's first Python caller.
 
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.memory import memcpy
-from core.hostptr import copy_f32, list_f32, list_i32, store_f32
+from core.hostptr import copy_f32, list_f32, list_i32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
 from xtrees.dart_device import DART_SESSIONS, _DART_CTX
@@ -42,14 +42,12 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from forest_inference_binding import (
-    forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
-    forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
+    forest_prepare_gpu_binding, forest_release_gpu_binding,
+    forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
     forest_resident_layout_binding, forest_ordered_resident_binding,
     forest_identical_fused_labels_binding,
-    forest_pool_available, forest_pool_fault_available,
 )
-from core.forest_inference import forest_predict_gpu
 from core.forest_inference_model import (
     resident_prepare, resident_predict_into, resident_release,
 )
@@ -104,7 +102,6 @@ from ensemble.decisiontree.decisiontree import (
 from ensemble.flatnode import SparseTreeNode
 from ensemble.randomforest import (
     CLASSIFICATION,
-    FUSED_BOOTSTRAP_GATHER,
     REGRESSION,
     RF_params,
     RandomForest,
@@ -893,78 +890,8 @@ def _session_shape_check(
         )
 
 
-def rf_regressor_fit_session_binding(
-    handle: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_regressor_fit_export` on a data session's X: same params, same
-    checks, same export descriptor."""
-    if not _rf_params_len_ok(params):
-        raise Error(
-            "rf_regressor_fit_session: params must hold "
-            + String(N_RF_FIT_PARAMS)
-            + " values, got "
-            + String(len(params))
-        )
-    if Int(py=params[2]) != 0:
-        raise Error("rf_regressor_fit_session: n_classes (slot 2) must be 0")
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var yp = _f32_ptr(Int(py=y_addr))
-    var crit = Int(py=criterion)
-    _check_criterion("rf_regressor_fit_session", crit, _reg_criteria())
-    var rf_params = _rf_params_from(params, crit)
-    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
-    var session_id = Int(py=handle)
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    _session_shape_check(
-        "rf_regressor_fit_session", reg[].sessions[si].n_rows,
-        reg[].sessions[si].n_cols, n_rows, n_cols,
-    )
-    var share_tables = reg[].sessions[si].share_tables
-    var host_x = reg[].sessions[si].host_x
-    # the kept tables leave the session for the fit and return after it
-    var prep = List[ForestPrep]()
-    swap(prep, reg[].sessions[si].prep)
-
-    var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dxv = reg[].sessions[si].dx.create_sub_buffer[DT](
-            0, n_rows * n_cols
-        )
-        var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
-        ctx.synchronize()
-        copy_f32(yp, hy.unsafe_ptr(), n_rows)
-        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        var dsw = ctx.enqueue_create_buffer[DT](1)
-        ctx.synchronize()
-        # the label scale, as `_rf_regressor_fit` chooses it
-        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
-        # blocked order the host column restates (`core/abs_sum_blocked`)
-        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
-        var scales = BinScales(
-            Float32(choose_scale(mag, n_rows)), Float32(1.0)
-        )
-        forest = fit_forest_prepared[RegObj](
-            ctx, dxv, dy, dsw, n_rows, n_cols, 1, rf_params, prep,
-            share_tables, scales, host_x_addr=host_x,
-        )
-        ctx.synchronize()
-        _ = dxv^
-        _ = dy^
-        _ = dsw^
-        _ = hy^
-        _ = ctx^
-    var back = RF_SESSIONS.get_or_create_ptr()
-    var bi = back[].find(session_id)
-    swap(prep, back[].sessions[bi].prep)
-    _ = prep^
-    var export_trees = forest.trees^
-    forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^)
+# TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
 def rf_regressor_fit_dart_binding(
@@ -979,7 +906,7 @@ def rf_regressor_fit_dart_binding(
     `params[1]` sampled columns) are 0 when the round has none; X is laid
     out column-major at them and the target gathered at the rows on the
     device (`ensemble/dart_member.mojo`). Same params, checks and export
-    descriptor as `rf_regressor_fit_session_export`."""
+    descriptor as `rf_regressor_fit_session_rows_export`."""
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_dart: params must hold "
@@ -1656,89 +1583,6 @@ def rf_predict_reg_binding(
     )
 
 
-def _rf_predict_gpu_parallel(
-    offsets_addr: PythonObject, colid_addr: PythonObject,
-    quesval_addr: PythonObject, left_child_addr: PythonObject,
-    leaves_addr: PythonObject, x_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Opt-in GPU inference: fixed 32-grove reduction graph.
-
-    Borrowed arrays retain the existing prediction ABI; graph/finite validation
-    and GPU execution are shared by RF/ET in core.forest_inference.
-    """
-    if len(params) != 4:
-        raise Error("GPU parallel prediction expects rows, features, trees, outputs")
-    var rows = Int(py=params[0])
-    var features = Int(py=params[1])
-    var trees = Int(py=params[2])
-    var outputs = Int(py=params[3])
-    if rows < 0 or features < 1 or trees < 1 or outputs < 1:
-        raise Error("GPU parallel prediction dimensions are invalid")
-    if trees >= 2147483647 or rows > 2147483647 // features or rows > 2147483647 // outputs:
-        raise Error("GPU parallel prediction dimensions exceed Int32 indexing")
-    var offsets_p = _i32_ptr(Int(py=offsets_addr))
-    var columns_p = _i32_ptr(Int(py=colid_addr))
-    var thresholds_p = _f32_ptr(Int(py=quesval_addr))
-    var left_p = _i32_ptr(Int(py=left_child_addr))
-    var leaves_p = _f32_ptr(Int(py=leaves_addr))
-    var x_p = _f32_ptr(Int(py=x_addr))
-    var out_p = _f32_ptr(Int(py=out_addr))
-    var nodes = Int(offsets_p[trees])
-    if nodes < 1 or nodes > 2147483647 // outputs:
-        raise Error("GPU parallel prediction node/output count is invalid")
-    with GILReleased(Python()):
-        # one memcpy per array (no per-element host loop) feeding one upload each
-        var offsets = list_i32(offsets_p, trees + 1)
-        var columns = list_i32(columns_p, nodes)
-        var thresholds = list_f32(thresholds_p, nodes)
-        var left = list_i32(left_p, nodes)
-        var leaves = list_f32(leaves_p, nodes * outputs)
-        var x = list_f32(x_p, rows * features)
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var result = forest_predict_gpu[True, True](
-            ctx, offsets, columns, thresholds, left, leaves, x,
-            rows, features, outputs,
-        )
-        store_f32(out_p, result, rows * outputs)
-        _ = result^
-        _ = ctx^
-    return PythonObject(rows)
-
-
-def rf_predict_proba_gpu_parallel_binding(
-    offsets_addr: PythonObject, colid_addr: PythonObject,
-    quesval_addr: PythonObject, left_child_addr: PythonObject,
-    leaves_addr: PythonObject, x_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    if len(params) != 4:
-        raise Error("GPU parallel prediction requires four parameters")
-    var outputs = Int(py=params[3])
-    if outputs < 2:
-        raise Error("GPU parallel prediction output dimension does not match task")
-    return _rf_predict_gpu_parallel(
-        offsets_addr, colid_addr, quesval_addr, left_child_addr,
-        leaves_addr, x_addr, out_addr, params,
-    )
-
-
-def rf_predict_reg_gpu_parallel_binding(
-    offsets_addr: PythonObject, colid_addr: PythonObject,
-    quesval_addr: PythonObject, left_child_addr: PythonObject,
-    leaves_addr: PythonObject, x_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    if len(params) != 4:
-        raise Error("GPU parallel prediction requires four parameters")
-    var outputs = Int(py=params[3])
-    if outputs != 1:
-        raise Error("GPU parallel prediction output dimension does not match task")
-    return _rf_predict_gpu_parallel(
-        offsets_addr, colid_addr, quesval_addr, left_child_addr,
-        leaves_addr, x_addr, out_addr, params,
-    )
-
 def rf_device_finite_scan_binding() raises -> PythonObject:
     """1 when this build's RF fits refuse a non-finite X cell through a
     device scan (FOREST_DEVICE_FINITE, FAST on Apple), so the Python fit
@@ -1773,11 +1617,6 @@ def rf_dt_default_bins_binding() raises -> PythonObject:
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
-
-
-def rf_fused_bootstrap_gather_binding() raises -> PythonObject:
-    """Whether this binary uses the fused bootstrap/gather arm."""
-    return PythonObject(Int(FUSED_BOOTSTRAP_GATHER))
 
 
 def rf_vendor_binding() raises -> PythonObject:
@@ -1816,32 +1655,36 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
         m.def_function[rf_dt_default_bins_binding]("rf_dt_default_bins")
-        m.def_function[rf_fused_bootstrap_gather_binding](
-            "rf_fused_bootstrap_gather"
-        )
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
         m.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
-        m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
-        m.def_function[rf_classifier_fit_rowmajor_binding[False]]("rf_classifier_fit_rowmajor")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_classifier_fit_rowmajor_binding[True]]("rf_classifier_fit_rowmajor_export")
         m.def_function[rf_classifier_fit_weighted_binding[False]]("rf_classifier_fit_weighted")
         m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
-        m.def_function[rf_regressor_fit_binding[False]]("rf_regressor_fit")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_regressor_fit_binding[True]]("rf_regressor_fit_export")
-        m.def_function[rf_regressor_fit_weighted_binding[False]]("rf_regressor_fit_weighted")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_regressor_fit_weighted_binding[True]]("rf_regressor_fit_weighted_export")
-        m.def_function[rf_regressor_fit_rowmajor_binding[False]]("rf_regressor_fit_rowmajor")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_regressor_fit_rowmajor_binding[True]]("rf_regressor_fit_rowmajor_export")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
-        m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
-        m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
         m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
-        m.def_function[forest_pool_available]("forest_pool_available")
-        m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_forest_export_binding]("forest_export")
         m.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         m.def_function[rf_forest_export_release_binding]("forest_export_release")
@@ -1849,15 +1692,17 @@ def build__mojolearn_rf() -> PythonObject:
         # borrows its one I/O workspace (core/forest_inference_model.mojo,
         # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
         m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
-        m.def_function[forest_predict_resident_gpu_binding[True]]("forest_predict_resident_gpu")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")
-        m.def_function[forest_vector_groves_binding]("forest_vector_groves")
-        m.def_function[forest_predict_resident_into_gpu_binding[True]]("forest_predict_resident_into_gpu")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
         m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
         m.def_function[rf_data_session_open_binding]("rf_data_session_open")
         m.def_function[rf_data_session_close_binding]("rf_data_session_close")
-        m.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
         m.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
