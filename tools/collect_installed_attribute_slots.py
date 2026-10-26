@@ -117,15 +117,17 @@ def collect(root, cache, output):
     module = importlib.import_module("mojolearn.tokenizer")._binding()._module
     entry, factory = getattr(module, witness.ENTRY), getattr(module, witness.FACTORY)
     origins = {name: native_origin(value, name) for name, value in ((witness.ENTRY, entry), (witness.FACTORY, factory))}
-    witness.require(origins[witness.ENTRY]["path"] == origins[witness.FACTORY]["path"],
-                    "attribute entry and factory came from different binaries")
-    binary = Path(origins[witness.ENTRY]["path"])
     index = root / "python/mojolearn/host/_mojolearn_merged.json"
     activation = json.loads(index.read_text())
-    key = activation.get("provenance", {}).get(binary.stem)
-    witness.require(type(key) is str and len(key) == 64, "loaded owner has no activation key")
-    proof = {"binary": witness.reference(binary), "index": witness.reference(index), "origins": origins,
-             "receipt": witness.reference(cache / "artifacts" / key / "receipt.json")}
+    members = witness.owner_members(root)
+    proof = {"index": witness.reference(index), "owners": {}}
+    for name, origin in origins.items():
+        binary = Path(origin["path"])
+        key = activation.get("provenance", {}).get(binary.stem)
+        witness.require(type(key) is str and len(key) == 64, "loaded owner has no activation key: " + name)
+        proof["owners"][name] = {
+            "member": members[name], "origin": origin, "binary": witness.reference(binary),
+            "receipt": witness.reference(cache / "artifacts" / key / "receipt.json")}
     witness.validate_build(root, proof)
     # The known compiled factory provides its exact native descriptor type.
     descriptor = context.get("descriptor")
