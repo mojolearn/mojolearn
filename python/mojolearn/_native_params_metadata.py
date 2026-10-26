@@ -132,7 +132,7 @@ def connect_subclass(context, cls):
     # keeps refusing.
     if not context['ready'] or type(cls) is not type:
         return
-    base = next((context['plans'][ancestor] for ancestor in type.__dict__['__mro__'].__get__(cls)[1:]  # glue: class-definition-time ancestry
+    base = next((context['plans'][ancestor] for ancestor in type.__dict__['__mro__'].__get__(cls)[1:]  # glue: ancestry read once at class definition
                  if ancestor in context['plans']), None)
     if base is None:
         return
