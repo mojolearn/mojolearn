@@ -62,7 +62,7 @@ def test_committed_schemas_are_exactly_the_source_derivation():
     events = ast.literal_eval(literal('_EVENTS'))
     assert events == {name: row['events'] for name, row in SCHEMAS.items()}
     listed = [ast.unparse(node).rpartition('.')[2] for node in literal('_CLASSES').elts]
-    assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 45
+    assert sorted(listed) == sorted(SCHEMAS) and len(listed) == 52
     # Only LabelEncoder (object's own constructor) stays outside.
     assert REFUSED == {'LabelEncoder': 'no source constructor'}
     for row in SCHEMAS.values():
@@ -90,7 +90,7 @@ def test_install_replaces_each_constructor_with_one_native_call():
         marker = object()
         made = cls(marker, k=marker) if plan['positional'] else cls(k=marker)
         assert calls[-1][0] is made and calls[-1][3] is ns['_CONTEXT'] and calls[-1][4] is cls
-    assert len(calls) == 45
+    assert len(calls) == 52
 
 
 def test_connect_pins_storage_hooks_and_the_declared_release_context():

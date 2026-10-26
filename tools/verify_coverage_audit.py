@@ -2245,7 +2245,7 @@ ANNOTATIONS.update({
     "full_reset_constructor_native_call": (
         "covered", ["kmeans", "public-set-params"],
         "_native_full_reset_params.install and _native_declared_constructors.install replace the __init__ of "
-        "the 77 full-reset and 45 declared field-only models with a function calling this entry; the kmeans "
+        "the 77 full-reset and 52 declared or plain field-only classes with a function calling this entry; the kmeans "
         "lane constructs KMeans(n_clusters=8, random_state=3) and digests its fit, and " + _NATIVE_PARAMS),
     "array_native_call": (
         "covered", ["kmeans", "public-set-params"],

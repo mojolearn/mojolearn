@@ -25,6 +25,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 from public_runtime_inventory import Index  # noqa: E402
 
 FAMILIES = (("mojolearn._expansion_prep", "_PrepBase"), ("mojolearn._expansion_decomp", "_Base"))
+# Plain public classes outside those families whose constructors only store
+# their parameters (found by the same rule; none is a NumericModeMixin).
+EXTRAS = (("mojolearn.model_selection", ("ShuffleSplit", "GroupShuffleSplit", "StratifiedShuffleSplit",
+                                         "LeavePOut", "LeavePGroupsOut")),
+          ("mojolearn.resample", ("MonteCarloResult", "PermutationTestResult")))
 
 
 def _all(mod):
@@ -131,9 +136,7 @@ def _events(init, params, base=None):
     return tuple(events), None
 
 
-def derive(root=ROOT):
-    index = Index(root)
-    schemas, refused = {}, {}
+def _candidates(index):
     for modname, basename in FAMILIES:
         mod = index.mod(modname)
         kind, base = index.resolve_name(modname, basename)
@@ -143,34 +146,48 @@ def derive(root=ROOT):
             if not target or target[0] != "class":
                 continue
             cls = target[1]
-            mro = index.mro(cls)
-            owner = next((c for c in mro if _defines(c, "set_params")), None)
+            owner = next((c for c in index.mro(cls) if _defines(c, "set_params")), None)
             if owner is not base or _defines(owner, "set_params") is not setter:
                 continue
-            defining = next((c for c in mro if _defines(c, "__init__")), None)
-            if defining is None:
-                refused[name] = "no source constructor"
-                continue
-            init = _defines(defining, "__init__")
-            args = init.args
-            if args.vararg or args.kwarg or args.posonlyargs or init.decorator_list:
-                refused[name] = "variadic, positional-only or decorated constructor"
-                continue
-            params = [a.arg for a in args.args[1:]] + [a.arg for a in args.kwonlyargs]
+            yield modname, name, cls
+    for modname, names in EXTRAS:
+        for name in names:
+            target = index.resolve_name(modname, name)
+            if target and target[0] == "class":
+                if any(c.name == "NumericModeMixin" for c in index.mro(target[1])):
+                    raise ValueError(f"{name}: a NumericModeMixin needs the wrapper rule")
+                yield modname, name, target[1]
 
-            def resolver(after):
-                def base():
-                    later = mro[mro.index(after) + 1:]
-                    found = next((c for c in later if _defines(c, "__init__")), None)
-                    return None if found is None else (_defines(found, "__init__"), resolver(found))
-                return base
-            events, reason = _events(init, set(params), resolver(defining))
-            if events is None:
-                refused[name] = reason
-                continue
-            schemas[name] = dict(module=modname, defining=f"{defining.mod.name}.{defining.name}",
-                                 line=init.lineno, parameters=tuple(params), events=events,
-                                 ast_dump=ast.dump(init, include_attributes=False))
+
+def derive(root=ROOT):
+    index = Index(root)
+    schemas, refused = {}, {}
+    for modname, name, cls in _candidates(index):
+        mro = index.mro(cls)
+        defining = next((c for c in mro if _defines(c, "__init__")), None)
+        if defining is None:
+            refused[name] = "no source constructor"
+            continue
+        init = _defines(defining, "__init__")
+        args = init.args
+        if args.vararg or args.kwarg or args.posonlyargs or init.decorator_list:
+            refused[name] = "variadic, positional-only or decorated constructor"
+            continue
+        params = [a.arg for a in args.args[1:]] + [a.arg for a in args.kwonlyargs]
+
+        def resolver(after):
+            def base():
+                later = mro[mro.index(after) + 1:]
+                found = next((c for c in later if _defines(c, "__init__")), None)
+                return None if found is None else (_defines(found, "__init__"), resolver(found))
+            return base
+        events, reason = _events(init, set(params), resolver(defining))
+        if events is None:
+            refused[name] = reason
+            continue
+        schemas[name] = dict(module=modname, defining=f"{defining.mod.name}.{defining.name}",
+                             line=init.lineno, parameters=tuple(params), events=events,
+                             ast_dump=ast.dump(init, include_attributes=False))
     return schemas, refused
 
 

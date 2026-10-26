@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public constructors for the 77 source-vetted full-reset owners
 # (python/mojolearn/_native_full_reset_params.py, proof
-# tools/native_full_reset_constructor_schemas.json) and the 45 field-only
-# declared prep/decomp owners (python/mojolearn/_native_declared_constructors.py,
+# tools/native_full_reset_constructor_schemas.json) and the 52 field-only
+# declared prep/decomp and plain owners (python/mojolearn/_native_declared_constructors.py,
 # schemas derived by tools/declared_constructor_schemas.py). The constructor event
 # schema the full-reset setter already replays is the whole original
 # constructor: field writes in source order, repeated writes, fixed constants
