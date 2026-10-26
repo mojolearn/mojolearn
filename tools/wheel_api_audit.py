@@ -407,6 +407,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('wheels', nargs='+', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--source-root', type=Path,
+                        help='frozen package sources to audit instead of the tooling checkout')
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
     parser.add_argument('--split', action='store_true',
@@ -425,7 +427,7 @@ def main():
     if args.split:
         split = split_audit(args.wheels)
         cores = [Path(row['path']) for row in split['wheels'] if row.get('role') == 'core-linux']
-        report = audit(cores) if cores else dict(wheels=[])
+        report = audit(cores, source_root=args.source_root) if cores else dict(wheels=[])
         report['split'] = split
         result = json.dumps(report, indent=2) + '\n'
         if args.output:
@@ -434,7 +436,7 @@ def main():
             print(result, end='')
         return int(bool(split['problems']) or (args.require_complete and any(
             not row['source_payload_complete'] for row in report['wheels'])))
-    report = audit(args.wheels)
+    report = audit(args.wheels, source_root=args.source_root)
     result = json.dumps(report, indent=2) + '\n'
     if args.output:
         args.output.write_text(result)
