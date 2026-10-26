@@ -59,6 +59,7 @@ def test_evidence_transport_locations_do_not_invalidate_builds():
         "MOJOLEARN_REQUIREMENTS_LEDGER": "/release/requirements.json",
         "MOJOLEARN_LEDGER_EVIDENCE_ROOT": "/restored/evidence",
         "MOJOLEARN_LEDGER_BUNDLE": "/transport/evidence.tar.gz",
+        "MOJOLEARN_WIDE_REBUILD_OK": "1",
         "CXXFLAGS": "-DNUMERIC_FLAG=1",
     })
     assert flags == {"CXXFLAGS": "-DNUMERIC_FLAG=1"}
