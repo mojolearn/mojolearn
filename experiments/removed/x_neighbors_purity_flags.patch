@@ -1,8 +1,8 @@
 diff --git a/bindings/_mojolearn_x_neighbors.mojo b/bindings/_mojolearn_x_neighbors.mojo
-index ab5e35d58..a16bce623 100644
+index 8033bd0df..6f45ef428 100644
 --- a/bindings/_mojolearn_x_neighbors.mojo
 +++ b/bindings/_mojolearn_x_neighbors.mojo
-@@ -29,6 +29,7 @@ from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
+@@ -27,6 +27,7 @@ from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
  from x_neighbors.dev_pyapi import ocsvm_alpha_init_binding
  from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
  from x_neighbors.dev_pyapi import unit_ff_binding
@@ -10,7 +10,7 @@ index ab5e35d58..a16bce623 100644
  from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
  from x_neighbors.dev_pyapi import (
      kfeat_first_negative_binding,
-@@ -1207,8 +1208,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
+@@ -1182,8 +1183,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
          m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
          m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
          m.def_function[nc_fit_lean_binding]("x_neighbors_nc_fit_lean")
@@ -21,10 +21,10 @@ index ab5e35d58..a16bce623 100644
          # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
          # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
 diff --git a/bindings/_mojolearn_x_neighbors_host.mojo b/bindings/_mojolearn_x_neighbors_host.mojo
-index f1c46fd45..8a7058835 100644
+index 25ad628ca..b9c47cc99 100644
 --- a/bindings/_mojolearn_x_neighbors_host.mojo
 +++ b/bindings/_mojolearn_x_neighbors_host.mojo
-@@ -24,6 +24,7 @@ from x_neighbors.host_pyapi import unit_ff_binding
+@@ -22,6 +22,7 @@ from x_neighbors.host_pyapi import unit_ff_binding
  from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
  from x_neighbors.host_pyapi import kpca_resident_binding
  from x_neighbors.host_pyapi import lp_fast_resident_binding
@@ -32,7 +32,7 @@ index f1c46fd45..8a7058835 100644
  from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
  from x_neighbors.host_pyapi import kfeat_pcs_draw_idn_host_binding, kfeat_schi2_fit_idn_host_binding
  
-@@ -1208,8 +1209,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
+@@ -1183,8 +1184,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
          _add_ops(m)
          m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
          m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
@@ -43,11 +43,11 @@ index f1c46fd45..8a7058835 100644
          # lane/fam2-neighbors: the host column of the device alpha start
          comptime if XN_OCSVM_DEV_INIT:
 diff --git a/python/mojolearn/_surface_neighbors.py b/python/mojolearn/_surface_neighbors.py
-index 7f86e08f6..af7204f33 100644
+index 38be1af7e..c2868e10f 100644
 --- a/python/mojolearn/_surface_neighbors.py
 +++ b/python/mojolearn/_surface_neighbors.py
-@@ -116,6 +116,7 @@ FAMILIES = (
-             "x_neighbors_py2mojo_off",
+@@ -113,6 +113,7 @@ FAMILIES = (
+             "x_neighbors_numeric_mode",
              "x_neighbors_vendor",
              "x_neighbors_kpca_resident",
 +            "x_neighbors_purity_flags",
@@ -79,10 +79,10 @@ index f948542f3..54acdd7dc 100644
      return PythonObject(kfeat_flags())
  
 diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
-index 43e2e3e20..278226958 100644
+index 1f76f98d2..dc097674e 100644
 --- a/x_neighbors/gen.py
 +++ b/x_neighbors/gen.py
-@@ -745,6 +745,7 @@ def gpu_binding():
+@@ -719,6 +719,7 @@ def gpu_binding():
              + "from x_neighbors.dev_pyapi import lp_fast_resident_binding\n"
              + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
              + "from x_neighbors.dev_pyapi import ocsvm_resident_binding\n"
@@ -90,7 +90,7 @@ index 43e2e3e20..278226958 100644
              + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
              + "from x_neighbors.dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
              + wrappers() + """
-@@ -762,8 +763,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
+@@ -736,8 +737,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
          _add_ops(m)
          m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
          m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
@@ -100,7 +100,7 @@ index 43e2e3e20..278226958 100644
          m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
          # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
          # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
-@@ -789,6 +789,7 @@ def host_binding():
+@@ -763,6 +763,7 @@ def host_binding():
              + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
              + "from x_neighbors.host_pyapi import kpca_resident_binding\n"
              + "from x_neighbors.host_pyapi import lp_fast_resident_binding\n"
@@ -108,7 +108,7 @@ index 43e2e3e20..278226958 100644
              + wrappers() + """
  
  def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
-@@ -825,8 +826,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
+@@ -799,8 +800,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
          _add_ops(m)
          m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
          m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
@@ -118,9 +118,9 @@ index 43e2e3e20..278226958 100644
          m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
          return m.finalize()
      except e:
-@@ -846,7 +846,8 @@ if __name__ == "__main__":
+@@ -820,7 +820,8 @@ if __name__ == "__main__":
      names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
-              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
+              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["x_neighbors_numeric_mode",
                                                                              "x_neighbors_vendor",
 -                                                                            "x_neighbors_kpca_resident"]
 +                                                                            "x_neighbors_kpca_resident",
@@ -153,7 +153,7 @@ index baa48f959..5fb1e63f6 100644
      var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
      var a = Int(py=p[1])
 diff --git a/x_neighbors/sort_items.mojo b/x_neighbors/sort_items.mojo
-index 4f2fd1cb0..832bee397 100644
+index 5c8744541..832bee397 100644
 --- a/x_neighbors/sort_items.mojo
 +++ b/x_neighbors/sort_items.mojo
 @@ -224,5 +224,14 @@ def nc_med_std_pick_item(t: Int, std: FP, res: FP, key: FP, d: Int, p: Int, n_st

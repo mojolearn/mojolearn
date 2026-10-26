@@ -1,0 +1,166 @@
+diff --git a/bindings/_mojolearn_mamba.mojo b/bindings/_mojolearn_mamba.mojo
+index 18f579009..43e339c54 100644
+--- a/bindings/_mojolearn_mamba.mojo
++++ b/bindings/_mojolearn_mamba.mojo
+@@ -567,8 +567,15 @@ def mamba1_session_load_state_binding(
+     return PythonObject(0)
+ 
+ 
+-# TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_mamba.patch
++def mamba1_session_info_binding(session: PythonObject) raises -> PythonObject:
++    """[open, usable, B, d_model] as ints."""
++    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
++    var out = Python.list()
++    _ = py_call(out.append, PythonObject(1 if owner[].is_open() else 0))
++    _ = py_call(out.append, PythonObject(1 if owner[].usable else 0))
++    _ = py_call(out.append, PythonObject(owner[].b))
++    _ = py_call(out.append, PythonObject(owner[].dm))
++    return out
+ 
+ 
+ def mamba1_session_close_binding(session: PythonObject) raises -> PythonObject:
+@@ -1498,8 +1505,7 @@ def build__mojolearn_mamba() -> PythonObject:
+         m.def_function[mamba1_session_step_binding]("mamba1_session_step")
+         m.def_function[mamba1_session_export_state_binding]("mamba1_session_export_state")
+         m.def_function[mamba1_session_load_state_binding]("mamba1_session_load_state")
+-        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_mamba.patch
++        m.def_function[mamba1_session_info_binding]("mamba1_session_info")
+         m.def_function[mamba1_session_close_binding]("mamba1_session_close")
+         m.def_function[mamba2_backward_binding]("mamba2_backward")
+         m.def_function[mamba2_forward_binding]("mamba2_forward")
+diff --git a/bindings/_mojolearn_neural_host.mojo b/bindings/_mojolearn_neural_host.mojo
+index 1538213d4..ef0b47701 100644
+--- a/bindings/_mojolearn_neural_host.mojo
++++ b/bindings/_mojolearn_neural_host.mojo
+@@ -45,8 +45,8 @@ WHAT IT COMPUTES, and from which functions (no arithmetic of its own):
+       addresses (x, the nine weights, k_cache, v_cache, y) through the same
+       `transformer_host_forward` with the caller's caches, which are read
+       at entry and written back. Returns the post-call cached_tokens.
+-  `mamba3_forward_fresh`
+-      the block oracle from a constructed zero state, the final state
++  `mamba1_forward_fresh`, `mamba2_forward_fresh`, `mamba3_forward_fresh`
++      the three block oracles from a constructed zero state, the final state
+       discarded. `mamba3_forward_fresh` takes `_mojolearn_mamba`'s fifteen
+       addresses (the four report buffers included), the arity
+       `Mamba3Block._call_fresh` passes.
+@@ -547,8 +547,20 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
+     _write(a[12], state.h, b * di * D_STATE)
+ 
+ 
+-# TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_mamba.patch
++def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
++    """12 addresses (x, the ten `Mamba1Block` weights, y); params B, L,
++    d_model. Returns B * L * d_model, the cells written."""
++    var a = _addrs(addrs, 12, String("mamba1_forward_fresh"))
++    var s = _shape3(params, 3, String("mamba1_forward_fresh"))
++    var b = s[0]
++    var l = s[1]
++    var dm = s[2]
++    with GILReleased(Python()):
++        var w = _m1_weights(a, dm)
++        var state = MambaState(b, w.dims)
++        var st = mamba_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
++        _write(a[11], st.residual_out, b * l * dm)
++    return PythonObject(b * l * dm)
+ 
+ 
+ def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+@@ -636,6 +648,24 @@ def _mamba2_run(
+     return state.buf_len
+ 
+ 
++def mamba2_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
++    """11 addresses (x, the nine `Mamba2Block` weights, y); params B, L,
++    d_model, dt_lo, dt_hi. Returns B * L * d_model."""
++    var a = _addrs(addrs, 11, String("mamba2_forward_fresh"))
++    var s = _shape3(params, 5, String("mamba2_forward_fresh"))
++    var b = s[0]
++    var l = s[1]
++    var dm = s[2]
++    var dt_lo = Float32(Float64(py=params[3]))
++    var dt_hi = Float32(Float64(py=params[4]))
++    with GILReleased(Python()):
++        var w = _m2_weights(a, dm)
++        var state = Mamba2State(b, w.dims)
++        var st = mamba2_block_oracle(w, read_f32(a[0], b * l * dm), b, l, dt_lo, dt_hi, state)
++        _write(a[10], st.residual_out, b * l * dm)
++    return PythonObject(b * l * dm)
++
++
+ def mamba2_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+     """16 addresses; params B, L, d_model, buf_len, dt_lo, dt_hi. Returns
+     the post-call buf_len (lane/stateful-cpu-decoding)."""
+@@ -922,12 +952,10 @@ def build__mojolearn_neural_host() -> PythonObject:
+         module.def_function[transformer_forward_binding]("transformer_forward")
+         module.def_function[transformer_forward_int15_binding]("transformer_forward_int15")
+         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
+-        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_mamba.patch
++        module.def_function[mamba1_forward_fresh_binding]("mamba1_forward_fresh")
+         module.def_function[mamba1_forward_binding]("mamba1_forward")
+         module.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
+-        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_mamba.patch
++        module.def_function[mamba2_forward_fresh_binding]("mamba2_forward_fresh")
+         module.def_function[mamba2_forward_binding]("mamba2_forward")
+         module.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
+         module.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..823318d61 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -1763,8 +1763,8 @@ FAMILIES = (
+             "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
+             "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+             "transformer_forward", "transformer_decode_step", "transformer_forward_int15",
+-            "mamba1_forward", "mamba1_decode_step",
+-            "mamba2_forward", "mamba2_decode_step",
++            "mamba1_forward_fresh", "mamba1_forward", "mamba1_decode_step",
++            "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
+             "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
+             "embedding_forward", "rms_norm_forward", "linear_forward",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+diff --git a/python/mojolearn/tests/test_cpu_training_mamba.py b/python/mojolearn/tests/test_cpu_training_mamba.py
+index 553e86f18..e1afbffcd 100644
+--- a/python/mojolearn/tests/test_cpu_training_mamba.py
++++ b/python/mojolearn/tests/test_cpu_training_mamba.py
+@@ -68,7 +68,7 @@ def test_host_binding_registers_every_gpu_entry():
+     # Resident sessions own GPU buffers; CPU blocks expose ordinary stateful
+     # inference instead and decode_session explicitly refuses this GPU API.
+     resident = {"mamba1_session_" + name for name in
+-                ("create", "open", "step", "export_state", "load_state", "close")}
++                ("create", "open", "step", "export_state", "load_state", "info", "close")}
+     # The Mamba-2/3 resident sessions (769936f70) are the same kind of entry:
+     # on the host route their private session classes take the host arm over
+     # the per-call `mamba2_decode_step` / `mamba3_decode_step`, which the host
+diff --git a/python/mojolearn/tests/test_cpu_training_samba.py b/python/mojolearn/tests/test_cpu_training_samba.py
+index a349c5930..550db9077 100644
+--- a/python/mojolearn/tests/test_cpu_training_samba.py
++++ b/python/mojolearn/tests/test_cpu_training_samba.py
+@@ -112,7 +112,7 @@ def test_every_entry_samba_reaches_is_on_the_host():
+         # ordinary block entries, guarded by export checks in the wrappers.
+         resident = {
+             "mamba": {"mamba1_session_" + name for name in
+-                      ("create", "open", "step", "export_state", "load_state", "close")}
++                      ("create", "open", "step", "export_state", "load_state", "info", "close")}
+                 | {f"mamba{v}_session_{name}" for v in (2, 3) for name in
+                    ("create", "open", "step", "export_state", "load_state", "close")}  # 769936f70, probed by `_has`
+                 # NI48's retained tape: the host's `mamba3_forward_tape_enabled`
+diff --git a/python/mojolearn/tests/test_neural_inference.py b/python/mojolearn/tests/test_neural_inference.py
+index 6e46ea8bc..2b4cda289 100644
+--- a/python/mojolearn/tests/test_neural_inference.py
++++ b/python/mojolearn/tests/test_neural_inference.py
+@@ -86,8 +86,8 @@ def test_binding_exports_no_training_entry(binding):
+     assert names == {"neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
+                      "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+                      "transformer_forward", "transformer_decode_step",
+-                     "mamba1_forward", "mamba1_decode_step",
+-                     "mamba2_forward", "mamba2_decode_step",
++                     "mamba1_forward_fresh", "mamba1_forward", "mamba1_decode_step",
++                     "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
+                      "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
+                      "embedding_forward", "rms_norm_forward", "linear_forward",
+                      # numeric_profile="fixed15_v1" on the CPU route (lane/lowbit-blocks)

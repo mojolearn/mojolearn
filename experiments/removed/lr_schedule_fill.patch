@@ -1,20 +1,20 @@
 diff --git a/bindings/_mojolearn.mojo b/bindings/_mojolearn.mojo
-index 43d9bc78e..5f81a0c6c 100644
+index 6342cfe7d..12f9d01db 100644
 --- a/bindings/_mojolearn.mojo
 +++ b/bindings/_mojolearn.mojo
-@@ -114,7 +114,7 @@ from bindings.normal_dist_helpers import truncnorm_draws_binding
+@@ -113,7 +113,7 @@ from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_
+ from bindings.normal_dist_helpers import truncnorm_draws_binding
  from bindings.lr_table_helpers import (
      lr_schedule_exact_binding,
-     lr_schedule_exact_block_binding,
 -    lr_schedule_at_c, lr_schedule_series_c,
 +    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
  )
  from bindings.optimizer_public_door import entry_init
  from bindings.array_helpers import (
-@@ -2160,8 +2160,7 @@ def build__mojolearn() -> PythonObject:
-         m.def_function[row_stds_f64_binding]("row_stds_f64")
+@@ -2155,8 +2155,7 @@ def build__mojolearn() -> PythonObject:
          m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-         m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_core.patch
 -        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
 -        # Restore: git apply experiments/removed/lr_schedule_fill.patch
 +        m.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
@@ -22,22 +22,22 @@ index 43d9bc78e..5f81a0c6c 100644
          m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
          m.def_py_c_function(entry_init, "optimizer_door_init")
 diff --git a/bindings/_mojolearn_core_host.mojo b/bindings/_mojolearn_core_host.mojo
-index 7075f2b99..0454dc989 100644
+index 0505e0078..32ee30c55 100644
 --- a/bindings/_mojolearn_core_host.mojo
 +++ b/bindings/_mojolearn_core_host.mojo
-@@ -154,7 +154,7 @@ from bindings.normal_dist_helpers import truncnorm_draws_binding
+@@ -152,7 +152,7 @@ from bindings.hotpath_helpers import (
+ from bindings.normal_dist_helpers import truncnorm_draws_binding
  from bindings.lr_table_helpers import (
      lr_schedule_exact_binding,
-     lr_schedule_exact_block_binding,
 -    lr_schedule_at_c, lr_schedule_series_c,
 +    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
  )
  from bindings.optimizer_public_door import entry_init
  from bindings.array_helpers import (
-@@ -1295,8 +1295,7 @@ def build__mojolearn_core_host() -> PythonObject:
-         module.def_function[row_stds_f64_binding]("row_stds_f64")
+@@ -1291,8 +1291,7 @@ def build__mojolearn_core_host() -> PythonObject:
          module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-         module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_core.patch
 -        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
 -        # Restore: git apply experiments/removed/lr_schedule_fill.patch
 +        module.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
@@ -45,10 +45,10 @@ index 7075f2b99..0454dc989 100644
          module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
          module.def_py_c_function(entry_init, "optimizer_door_init")
 diff --git a/bindings/lr_table_helpers.mojo b/bindings/lr_table_helpers.mojo
-index 1927a35cd..52c9993bd 100644
+index dfc8e2489..24cd8002a 100644
 --- a/bindings/lr_table_helpers.mojo
 +++ b/bindings/lr_table_helpers.mojo
-@@ -98,8 +98,19 @@ def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
+@@ -61,8 +61,19 @@ def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
      )
  
  
@@ -71,7 +71,7 @@ index 1927a35cd..52c9993bd 100644
  
  # --------------------------------------- `lr_at(t)` and `lr_values(n)`, one call each
 diff --git a/python/mojolearn/_training_impl.py b/python/mojolearn/_training_impl.py
-index 74bc78239..0056500aa 100644
+index 473508692..f62483ae7 100644
 --- a/python/mojolearn/_training_impl.py
 +++ b/python/mojolearn/_training_impl.py
 @@ -1102,14 +1102,14 @@ def _f32_bits(value):
@@ -141,7 +141,7 @@ index cf50bfa34..2c14dc75a 100644
  # Import-time registration of built-in schedule identities, never a runtime hook.
  from . import _training_impl as _schedule_training
 diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
-index 9c051d385..6cb1e524c 100644
+index ab1821175..ad626f1f1 100644
 --- a/python/mojolearn/host_surface.py
 +++ b/python/mojolearn/host_surface.py
 @@ -1828,6 +1828,7 @@ FAMILIES = (

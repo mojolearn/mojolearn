@@ -1,0 +1,255 @@
+diff --git a/bindings/_mojolearn_x_metrics.mojo b/bindings/_mojolearn_x_metrics.mojo
+index 276667aa2..e663fdc12 100644
+--- a/bindings/_mojolearn_x_metrics.mojo
++++ b/bindings/_mojolearn_x_metrics.mojo
+@@ -9,12 +9,14 @@ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ from std.memory import bitcast
++from x_metrics.common import PY2MOJO_CORE_ON
++from x_metrics.cls_epi import IDN_CLS_EPI
+ from x_metrics.epilogue import expected_mi, row_sum_range
+ from x_metrics.epilogue import scatter_rows, first_rows_i32
+ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_metrics.device import (
+-    run_program_device, run_program_device_out, run_program_device_ranges,
++    run_program_device, run_program_device_out, run_program_device_ranges, metrics_ctx, X_METRICS_STORE,
+ )
+ 
+ 
+@@ -70,8 +72,41 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, sizes:
+     return PythonObject(s)
+ 
+ 
+-# TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_metrics.patch
++def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
++    """A resident copy of n_words host words (core/device_store.mojo); its id."""
++    var a = Int(py=addr)
++    var n = Int(py=n_words)
++    var id: Int
++    with GILReleased(Python()):
++        id = X_METRICS_STORE.get_or_create_ptr()[].put(metrics_ctx(), a, n)
++    return PythonObject(id)
++
++
++def dev_free_binding(id: PythonObject) raises -> PythonObject:
++    var i = Int(py=id)
++    with GILReleased(Python()):
++        X_METRICS_STORE.get_or_create_ptr()[].free(metrics_ctx(), i)
++    return PythonObject(None)
++
++
++def dev_take_rows_binding(
++    src_id: PythonObject, row_words: PythonObject, idx_addr: PythonObject, n_idx: PythonObject
++) raises -> PythonObject:
++    """A new resident slot: rows `idx` (n_idx host int64 words) of slot
++    src_id, gathered on the device (core/device_store.mojo `take_rows`,
++    lane cpu4-misc device-rows input); its id."""
++    var s = Int(py=src_id)
++    var w = Int(py=row_words)
++    var a = Int(py=idx_addr)
++    var n = Int(py=n_idx)
++    var id: Int
++    with GILReleased(Python()):
++        id = X_METRICS_STORE.get_or_create_ptr()[].take_rows(metrics_ctx(), s, w, a, n)
++    return PythonObject(id)
++
++
++def dev_live_binding() raises -> PythonObject:
++    return PythonObject(X_METRICS_STORE.get_or_create_ptr()[].live)
+ 
+ 
+ def first_rows_binding(codes: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+@@ -93,6 +128,23 @@ def vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
++def py2mojo_core_binding() raises -> PythonObject:
++    """1 when the label layouts run in the binding (lane apple-fast-py2mojo-core),
++    0 under -D MOJOLEARN_PY2MOJO_core_OFF (the Python layouts, the A/B arm)."""
++    comptime if PY2MOJO_CORE_ON:
++        return PythonObject(1)
++    else:
++        return PythonObject(0)
++
++
++def idn_fam2_binding() raises -> PythonObject:
++    """Lane fam2-prep-metrics: the bits of the IDENTICAL metric switches this
++    binding was built with (1 IDN_CLS_EPI: op 55, the set-wise classification
++    epilogue, x_metrics/cls_epi.mojo), read by
++    python/mojolearn/_expansion_metrics.py `_idn_fam2`."""
++    return PythonObject(1 if IDN_CLS_EPI else 0)
++
++
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics.mojo
+ # (the per-binding build) and in the merged roots tools/merged_bindings.py
+ # writes from bindings/merged_groups.json (one shared file per directory set).
+@@ -102,13 +154,15 @@ def build__mojolearn_x_metrics() -> PythonObject:
+         m.def_function[run_binding]("x_metrics_run")
+         m.def_function[run_out_binding]("x_metrics_run_out")
+         m.def_function[run_ranges_binding]("x_metrics_run_ranges")
+-        # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
++        m.def_function[dev_put_binding]("x_metrics_dev_put")
++        m.def_function[dev_free_binding]("x_metrics_dev_free")
++        m.def_function[dev_live_binding]("x_metrics_dev_live")
++        m.def_function[dev_take_rows_binding]("x_metrics_dev_take_rows")
+         m.def_function[first_rows_binding]("x_metrics_first_rows")
+         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
+         m.def_function[vendor_binding]("x_metrics_vendor")
+-        # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
++        m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")
++        m.def_function[idn_fam2_binding]("x_metrics_idn_fam2")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_metrics: ", e))
+diff --git a/bindings/_mojolearn_x_metrics_host.mojo b/bindings/_mojolearn_x_metrics_host.mojo
+index d94805336..621a0ac96 100644
+--- a/bindings/_mojolearn_x_metrics_host.mojo
++++ b/bindings/_mojolearn_x_metrics_host.mojo
+@@ -8,6 +8,8 @@ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ from std.memory import bitcast
++from x_metrics.common import PY2MOJO_CORE_ON
++from x_metrics.cls_epi import IDN_CLS_EPI
+ from x_metrics.epilogue import expected_mi, row_sum_range
+ from x_metrics.epilogue import scatter_rows, encode_small_i64, first_rows_i32
+ from x_metrics.epilogue import expected_mi_tasks, row_sum_range_tasks
+@@ -86,8 +88,21 @@ def x_metrics_vendor_binding() raises -> PythonObject:
+     return PythonObject(String("cpu"))
+ 
+ 
+-# TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_metrics.patch
++def py2mojo_core_binding() raises -> PythonObject:
++    """1 when the label layouts run in the binding (lane apple-fast-py2mojo-core),
++    0 under -D MOJOLEARN_PY2MOJO_core_OFF (the Python layouts, the A/B arm)."""
++    comptime if PY2MOJO_CORE_ON:
++        return PythonObject(1)
++    else:
++        return PythonObject(0)
++
++
++def idn_fam2_binding() raises -> PythonObject:
++    """Lane fam2-prep-metrics: the bits of the IDENTICAL metric switches this
++    binding was built with (1 IDN_CLS_EPI: op 55, the set-wise classification
++    epilogue, x_metrics/cls_epi.mojo), read by
++    python/mojolearn/_expansion_metrics.py `_idn_fam2`."""
++    return PythonObject(1 if IDN_CLS_EPI else 0)
+ 
+ 
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics_host.mojo
+@@ -105,8 +120,8 @@ def build__mojolearn_x_metrics_host() -> PythonObject:
+         m.def_function[first_rows_binding]("x_metrics_first_rows")
+         m.def_function[x_metrics_numeric_mode_binding]("x_metrics_numeric_mode")
+         m.def_function[x_metrics_vendor_binding]("x_metrics_vendor")
+-        # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
++        m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")
++        m.def_function[idn_fam2_binding]("x_metrics_idn_fam2")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_metrics_host: ", e))
+diff --git a/python/mojolearn/_native_arena_prog.py b/python/mojolearn/_native_arena_prog.py
+index b694063b5..ada065890 100644
+--- a/python/mojolearn/_native_arena_prog.py
++++ b/python/mojolearn/_native_arena_prog.py
+@@ -15,7 +15,8 @@ _FAMILIES = {
+                 "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"),
+                "numeric_mode must be fast, identical or None"),
+     "x_metrics": ("_mojolearn_x_metrics", "x_metrics_run",
+-                  ("x_metrics_run_out", "x_metrics_run_ranges"),
++                  ("x_metrics_run_out", "x_metrics_run_ranges",
++                   "x_metrics_dev_put", "x_metrics_dev_free", "x_metrics_dev_live", "x_metrics_dev_take_rows"),
+                   "numeric_mode must be 'fast' or 'identical'"),
+ }
+ 
+diff --git a/python/mojolearn/_native_arena_rows.py b/python/mojolearn/_native_arena_rows.py
+index d8266c89b..f5f45e26d 100644
+--- a/python/mojolearn/_native_arena_rows.py
++++ b/python/mojolearn/_native_arena_rows.py
+@@ -80,7 +80,8 @@ def connect():
+     # Do not admit arbitrary builtin callables by their type alone.
+     store_routes = []
+     live_entries = []
+-    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),):  # glue: fixed import-time resident-store ABI
++    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),  # glue: fixed import-time resident-store ABI
++                                ("_mojolearn_x_metrics", "x_metrics")):
+         for mode in ("identical", "fast"):  # glue: fixed supported numeric-mode connections
+             try:
+                 module = _backend.binding(module_name, mode)
+diff --git a/python/mojolearn/_surface_metrics.py b/python/mojolearn/_surface_metrics.py
+index 71008ce18..77156e9ef 100644
+--- a/python/mojolearn/_surface_metrics.py
++++ b/python/mojolearn/_surface_metrics.py
+@@ -122,6 +122,7 @@ FAMILIES = (
+             # lane metrics-apple3 (2026-09-28): integer label plumbing
+             "x_metrics_first_rows",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
++            "x_metrics_py2mojo_core", "x_metrics_idn_fam2",
+         ),
+         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+         wheel_note="Ships: the metrics lane's CPU route (the added evaluation metrics and model_selection helpers).",
+diff --git a/python/mojolearn/tests/test_arena_ranges.py b/python/mojolearn/tests/test_arena_ranges.py
+index 60d2c5bbe..9eb11b9ad 100644
+--- a/python/mojolearn/tests/test_arena_ranges.py
++++ b/python/mojolearn/tests/test_arena_ranges.py
+@@ -8,10 +8,9 @@ is zeroed on the device) and downloads only its outputs; `DeviceCache` /
+ `resident()` keep a big input on the device between programs. Every x_prep
+ and x_metrics program below runs three ways on the GPU binding: the
+ whole-arena entries (`MOJOLEARN_ARENA_RANGES=0`), the ranges entries, and
+-the ranges entries inside `resident()` (every x_prep input resident, the battery
+-run twice so the second pass re-uses the device copies; x_metrics programs
+-have no resident store and copy their inputs). All three must return the
+-same bytes, and the store must hold nothing after the block.
++the ranges entries inside `resident()` (every input resident, the battery
++run twice so the second pass re-uses the device copies). All three must
++return the same bytes, and the store must hold nothing after the block.
+ 
+     .pixi/envs/test/bin/python -m pytest python/mojolearn/tests/test_arena_ranges.py -q
+ """
+@@ -111,25 +110,25 @@ def test_ranges_and_resident_move_no_bit(monkeypatch):
+         res1 = run()
+         res2 = run()
+         stats = r.stats()
+-        live_inside = int(pb.x_prep_dev_live())
+-    live_after = int(pb.x_prep_dev_live())
++        live_inside = (int(mb.x_metrics_dev_live()), int(pb.x_prep_dev_live()))
++    live_after = (int(mb.x_metrics_dev_live()), int(pb.x_prep_dev_live()))
+     for arm, got in (("ranges", ranges), ("resident", res1), ("resident second pass", res2)):
+         assert got == whole, (arm, [n for (n, a), (_, c) in zip(whole, got) if a != c])
+     assert stats and all(u > 0 for u, _ in stats.values()), stats
+     assert all(h > 0 for _, h in stats.values()), stats
+-    assert live_inside > 0, live_inside
+-    assert live_after == 0, live_after
++    assert all(v > 0 for v in live_inside), live_inside
++    assert live_after == (0, 0), live_after
+ 
+ 
+ def test_device_cache_frees_deterministically():
+     b = _gpu_ranges()
+     if b is None:
+         pytest.skip("no GPU binding with the ranges entries in this process")
+-    _, pb = b
++    mb, _ = b
+     from mojolearn._array import Array
+     from mojolearn._verify_native_runtime import audit_native_call
+     a = Array.from_list([float(i) for i in range(1000)], "<f4")
+-    c = _arena_io.DeviceCache(pb, "x_prep")
++    c = _arena_io.DeviceCache(mb, "x_metrics")
+     base = c.live()
+     i1 = c.id_of(a)
+     assert audit_native_call(c.get, a).assert_native() == i1
+@@ -137,7 +136,7 @@ def test_device_cache_frees_deterministically():
+     assert c.live() == base + 1
+     c.release(a)
+     assert c.live() == base and audit_native_call(c.get, a).assert_native() is None
+-    with _arena_io.DeviceCache(pb, "x_prep") as c2:
++    with _arena_io.DeviceCache(mb, "x_metrics") as c2:
+         c2.id_of(a)
+         assert c2.live() == base + 1
+     assert c2.live() == base

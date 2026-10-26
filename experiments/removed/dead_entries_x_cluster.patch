@@ -1,0 +1,85 @@
+diff --git a/bindings/_mojolearn_x_cluster.mojo b/bindings/_mojolearn_x_cluster.mojo
+index 54747e1bd..9cf725d5f 100644
+--- a/bindings/_mojolearn_x_cluster.mojo
++++ b/bindings/_mojolearn_x_cluster.mojo
+@@ -24,6 +24,7 @@ from x_cluster.minibatch_ptr import minibatch_entry_ptr_idn
+ from x_cluster.out import ClusterOut
+ from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
+ from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
++from x_cluster.tree_cut import PY2MOJO_CLUSTER
+ 
+ 
+ def call_binding(
+@@ -127,8 +128,11 @@ def numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+ 
+ 
+-# TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_cluster.patch
++def py2mojo_binding() raises -> PythonObject:
++    """1: the steps `_expansion_cluster.py` / `_hierarchy_impl.py` ran in
++    Python run here (lane apple-fast-py2mojo-cluster); 0 under
++    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and Python takes its old path."""
++    return PythonObject(1 if PY2MOJO_CLUSTER else 0)
+ 
+ 
+ def vendor_binding() raises -> PythonObject:
+@@ -149,8 +153,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
+         m.def_function[mbk_devscan_binding]("x_cluster_mbk_devscan")
+         m.def_function[mbk_policy_binding]("x_cluster_mbk_policy")
+         m.def_function[vendor_binding]("x_cluster_vendor")
+-        # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
++        m.def_function[py2mojo_binding]("x_cluster_py2mojo")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_cluster: ", e))
+diff --git a/bindings/_mojolearn_x_cluster_host.mojo b/bindings/_mojolearn_x_cluster_host.mojo
+index 068cca059..d0ec4ad50 100644
+--- a/bindings/_mojolearn_x_cluster_host.mojo
++++ b/bindings/_mojolearn_x_cluster_host.mojo
+@@ -16,6 +16,7 @@ from x_cluster.entries import run_entry
+ from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
+ from x_cluster.out import ClusterOut
+ from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
++from x_cluster.tree_cut import PY2MOJO_CLUSTER
+ 
+ 
+ def call_binding(
+@@ -57,8 +58,11 @@ def numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+ 
+ 
+-# TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_cluster.patch
++def py2mojo_binding() raises -> PythonObject:
++    """1: the steps `_expansion_cluster.py` / `_hierarchy_impl.py` ran in
++    Python run here (lane apple-fast-py2mojo-cluster); 0 under
++    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and Python takes its old path."""
++    return PythonObject(1 if PY2MOJO_CLUSTER else 0)
+ 
+ 
+ def vendor_binding() raises -> PythonObject:
+@@ -78,8 +82,7 @@ def build__mojolearn_x_cluster_host() -> PythonObject:
+         m.def_function[call_binding]("x_cluster_call")
+         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
+         m.def_function[vendor_binding]("x_cluster_vendor")
+-        # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
++        m.def_function[py2mojo_binding]("x_cluster_py2mojo")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_cluster_host: ", e))
+diff --git a/python/mojolearn/_surface_cluster.py b/python/mojolearn/_surface_cluster.py
+index 172fa36f2..8e17c98e3 100644
+--- a/python/mojolearn/_surface_cluster.py
++++ b/python/mojolearn/_surface_cluster.py
+@@ -34,7 +34,7 @@ FAMILIES = (
+         ),
+         exports=(
+             "x_cluster_host_numeric_mode", "x_cluster_host_vendor", "x_cluster_host_column",
+-            "x_cluster_host_sabotage", "x_cluster_call", "x_cluster_numeric_mode", "x_cluster_vendor",
++            "x_cluster_host_sabotage", "x_cluster_call", "x_cluster_numeric_mode", "x_cluster_vendor", "x_cluster_py2mojo",
+         ),
+         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+         wheel_note="Ships: the cluster expansion lane's CPU route (x_cluster/, lane/algos-cluster).",

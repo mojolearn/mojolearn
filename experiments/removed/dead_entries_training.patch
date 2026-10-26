@@ -1,0 +1,272 @@
+diff --git a/bindings/_mojolearn_training.mojo b/bindings/_mojolearn_training.mojo
+index 5a7daabf7..92f043cc5 100644
+--- a/bindings/_mojolearn_training.mojo
++++ b/bindings/_mojolearn_training.mojo
+@@ -80,12 +80,13 @@ comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MO
+ from checks.vendor import COMPILED_VENDOR
+ from max.gpu.host import DeviceContext, HostBuffer
+ 
++from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
+ from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
+ from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
+ from bindings.optimizer_public_door import entry_zero
+ from bindings.optimizer_public_pyapi import (
+     optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
+-    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding,
++    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
+     optimizer_resident_download_binding, optimizer_resident_open_binding,
+     optimizer_resident_step_binding, optimizer_resident_step_io_binding,
+     optimizer_resident_upload_binding, maximize_dev_available_binding,
+@@ -195,8 +196,8 @@ def training_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_training.patch
++def clip_pool_fault_available_binding() raises -> PythonObject:
++    return PythonObject(clip_pool_fault_available())
+ 
+ 
+ def clip_parallel_available_binding() raises -> PythonObject:
+@@ -449,6 +450,58 @@ def ce_loss_dev_binding(
+     return PythonObject(count)
+ 
+ 
++def clip_grad_norm_binding(
++    grad_addr: PythonObject,
++    offsets_addr: PythonObject,
++    info_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """`torch.nn.utils.clip_grad_norm_` at `norm_type = 2`, section 3 of the
++    optimizer contract. Scales the gradient IN PLACE. Returns `N`.
++
++    `params` is, in this exact order (mirrored word for word in
++    `python/mojolearn/_training_impl.py`):
++
++        0  n_tensors    J; `offsets` holds J + 1 int32
++        1  max_norm     (float; must be > 0, refused otherwise)
++
++    THE BUFFERS. Let `N = offsets[J]`.
++
++        `grad_addr`     N float32, read and WRITTEN IN PLACE
++        `offsets_addr`  J + 1 int32, ascending, `offsets[0] == 0`
++        `info_addr`     2 float32: `0` the pre-clip global norm, `1` the
++                        clamped coefficient
++
++    `max_norm <= 0` is REFUSED here rather than treated as "no clipping":
++    reaching this entry point is the clip running. The optimizer step takes
++    `max_norm <= 0` as OFF because it has another job to do either way.
++
++    THE PER-TENSOR ORDER IS THE CALLER'S `offsets` ORDER AND NOTHING ELSE.
++    The reference folds twice, a norm per tensor and then a norm over those
++    (contract 3.1), and `j` is the `param_id` whose ascending order fixes the
++    cross-tensor summation. A registry that is stable across runs is the only
++    thing that makes the number reproducible; reordering the tensors is a
++    different, equally valid, different-bits answer.
++    """
++    if len(params) != 2:
++        raise Error(
++            "clip_grad_norm: params must contain 2 values, got "
++            + String(len(params))
++        )
++    var gp = _f32_ptr(Int(py=grad_addr))
++    var op = _i32_ptr(Int(py=offsets_addr))
++    var fp = _f32_ptr(Int(py=info_addr))
++    var n_tensors = Int(py=params[0])
++    var max_norm = Float32(Float64(py=params[1]))
++    var n_total = 0
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        n_total = parallel_clip_grad_norm_host(
++            ctx, gp, op, fp, n_tensors, max_norm,
++        )
++    return PythonObject(n_total)
++
++
+ def ce_loss_binding(
+     loss_addr: PythonObject,
+     row_addr: PythonObject,
+@@ -1412,8 +1465,7 @@ def build__mojolearn_training() -> PythonObject:
+         m.def_function[sha256_hex_binding]("sha256_hex")
+         m.def_function[training_vendor_binding]("training_vendor")
+         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
+-        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_training.patch
++        m.def_function[clip_pool_fault_available_binding]("clip_pool_fault_available")
+         m.def_function[clip_parallel_available_binding]("clip_parallel_available")
+         m.def_function[accumulate_pool_fault_available_binding]("accumulate_pool_fault_available")
+         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
+@@ -1444,10 +1496,9 @@ def build__mojolearn_training() -> PythonObject:
+             m.def_function[linear_forward_dev_binding]("linear_forward_dev")
+             m.def_function[linear_backward_dev_binding]("linear_backward_dev")
+             m.def_function[ce_loss_dev_binding]("ce_loss_dev")
+-            # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-            # Restore: git apply experiments/removed/dead_entries_training.patch
+-        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_training.patch
++            comptime if IDN_OPT_PARAMS_RESIDENT:
++                m.def_function[optimizer_resident_copy_dev_binding]("optimizer_resident_copy_dev")
++        m.def_function[clip_grad_norm_binding]("clip_grad_norm")
+         m.def_function[ce_loss_binding]("ce_loss")
+         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
+         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
+diff --git a/bindings/_mojolearn_training_host.mojo b/bindings/_mojolearn_training_host.mojo
+index b689f3dc6..f6b04ef10 100644
+--- a/bindings/_mojolearn_training_host.mojo
++++ b/bindings/_mojolearn_training_host.mojo
+@@ -34,6 +34,11 @@ lane/cpu-training-misc batch 3 (2026-09-15) adds, under the same names and
+ contracts, the neural primitives the optim-adam-clip, cross-entropy-arms and
+ training-primitives lanes reach:
+ 
++  `clip_grad_norm`
++                  `training/checks/optimizer_oracle.mojo::clip_grad_norm_oracle`
++                  behind `identical_clip_grad_norm_host`'s refusals
++                  (`training/estimator.mojo:465`) and its `info` convention
++                  (the pre-clip global norm, then the clamped coefficient).
+   `accumulate`, `accumulation_is_aligned`
+                   `training/host/samba_ops_oracle.mojo::host_samba_accumulate`,
+                   the clause 9.2 balanced tree, and
+@@ -79,6 +84,7 @@ from core.mojolearn_training_host_impl import (
+     _host_refuse_hyperparameters,
+     _write_f32,
+     neural_rng_host_into,
++    clip_grad_norm_host_into,
+     mlp_sum_rows_host_into,
+     mlp_relu_backward_host_into,
+     mlp_bias_activation_host_into,
+@@ -117,6 +123,7 @@ from training.checks.optimizer_oracle import (
+     OPT_ADAMW,
+     OPT_SGD,
+     OptimizerConfig,
++    clip_grad_norm_oracle,
+     microbatch_split_is_identical,
+     optimizer_step_oracle,
+     refuse_nonfinite_scalar,
+@@ -359,8 +366,35 @@ def mlp_sum_rows_binding(
+     return PythonObject(count)
+ 
+ 
+-# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_training.patch
++# ===========================================================================
++# THE CLIP ON ITS OWN (lane/cpu-training-misc, 2026-09-15)
++# ===========================================================================
++
++
++def clip_grad_norm_binding(
++    grad_addr: PythonObject,
++    offsets_addr: PythonObject,
++    info_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """`torch.nn.utils.clip_grad_norm_` at `norm_type = 2` on the host.
++    Scales the gradient IN PLACE. Returns `N`. `params`: `0 n_tensors,
++    1 max_norm` (the GPU binding's list, word for word); `info` receives the
++    pre-clip global norm and the clamped coefficient."""
++    if len(params) != 2:
++        raise Error(
++            "clip_grad_norm: params must contain 2 values, got "
++            + String(len(params))
++        )
++    var gp = f32_ptr(_index(grad_addr))
++    var op = i32_ptr(_index(offsets_addr))
++    var fp = f32_ptr(_index(info_addr))
++    var n_tensors = _index(params[0])
++    var max_norm = Float32(Float64(py=params[1]))
++    var n_total = 0
++    with GILReleased(Python()):
++        n_total = clip_grad_norm_host_into(gp, op, fp, n_tensors, max_norm)
++    return PythonObject(n_total)
+ 
+ 
+ # ===========================================================================
+@@ -755,8 +789,7 @@ def build__mojolearn_training_host() -> PythonObject:
+         module.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
+         module.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
+         module.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
+-        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_training.patch
++        module.def_function[clip_grad_norm_binding]("clip_grad_norm")
+         module.def_function[accumulate_binding]("accumulate")
+         module.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
+         module.def_function[embedding_forward_binding]("embedding_forward")
+diff --git a/bindings/optimizer_public_pyapi.mojo b/bindings/optimizer_public_pyapi.mojo
+index fd7466812..2f245ebf5 100644
+--- a/bindings/optimizer_public_pyapi.mojo
++++ b/bindings/optimizer_public_pyapi.mojo
+@@ -14,7 +14,7 @@ from std.python._cpython import GILReleased, PyObjectPtr
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from core.neural_context import neural_ctx
+ from training.optimizer_public import (
+-    public_accumulate, public_clip, public_io, public_step, resident_close,
++    public_accumulate, public_clip, public_io, public_step, resident_close, resident_copy_dev,
+     resident_download, resident_get, resident_open, resident_put, resident_step, resident_step_io,
+     resident_upload,
+ )
+@@ -256,6 +256,21 @@ def optimizer_resident_step_io_binding(
+     return PythonObject(n_total)
+ 
+ 
+-# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_training.patch
+-
++def optimizer_resident_copy_dev_binding(handle: PythonObject, params: PythonObject) raises -> PythonObject:
++    """A device-to-device copy between an optimizer handle's parameter or
++    gradient buffer and a device array. params = [which (0 parameters, 1
++    gradient), tensor handle, offset (floats, into the optimizer's flat
++    registry), n, direction (0: tensor -> optimizer, 1: optimizer ->
++    tensor)]. Returns `n`."""
++    if len(params) != 5:
++        raise Error("optimizer_resident_copy_dev: params must contain 5 values, got " + String(len(params)))
++    var h = Int(py=handle)
++    var which = Int(py=params[0])
++    var th = Int(py=params[1])
++    var off = Int(py=params[2])
++    var n = Int(py=params[3])
++    var direction = Int(py=params[4])
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        n = resident_copy_dev(ctx, h, which, th, off, n, direction)
++    return PythonObject(n)
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..6beabc552 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2853,7 +2853,7 @@ FAMILIES = (
+             "training_host_column", "training_host_sabotage",
+             "training_numeric_mode", "training_vendor", "optimizer_step",
+             "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
+-            "accumulate", "accumulation_is_aligned",
++            "clip_grad_norm", "accumulate", "accumulation_is_aligned",
+             "embedding_forward", "embedding_backward", "rms_norm_forward",
+             "rms_norm_backward", "linear_forward", "linear_backward",
+             "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
+diff --git a/python/mojolearn/tests/test_cpu_training_misc.py b/python/mojolearn/tests/test_cpu_training_misc.py
+index 5fa8ad58a..a6599f206 100644
+--- a/python/mojolearn/tests/test_cpu_training_misc.py
++++ b/python/mojolearn/tests/test_cpu_training_misc.py
+@@ -62,7 +62,7 @@ RESAMPLE_ORACLE = "resample/host/resample_host.mojo"
+ RESAMPLE_LANES = ("bootstrap", "permutation-test", "monte-carlo")
+ NEURAL_LANES = ("optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives")
+ SAMBA_ORACLE = "training/host/samba_ops_oracle.mojo"
+-NEURAL_EXPORTS = ("accumulate", "accumulation_is_aligned", "embedding_forward",
++NEURAL_EXPORTS = ("clip_grad_norm", "accumulate", "accumulation_is_aligned", "embedding_forward",
+                   "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward",
+                   "linear_backward")
+ GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
+diff --git a/training/clip_multi_gpu.mojo b/training/clip_multi_gpu.mojo
+index 1a6c4020f..b03b7e8b0 100644
+--- a/training/clip_multi_gpu.mojo
++++ b/training/clip_multi_gpu.mojo
+@@ -29,8 +29,8 @@ from gemm.contract import OP_NT
+ comptime CLIP_POOL_FAULT = is_defined["MOJOLEARN_CLIP_POOL_FAULT"]()
+ 
+ 
+-# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_training.patch
++def clip_pool_fault_available() -> Int:
++    return 1 if CLIP_POOL_FAULT else 0
+ 
+ 
+ struct OwnedClipTensor(Movable):

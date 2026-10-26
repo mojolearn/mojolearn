@@ -1,0 +1,440 @@
+diff --git a/bindings/_mojolearn_tokenizer_host.mojo b/bindings/_mojolearn_tokenizer_host.mojo
+index 11bdbeb91..aea72bc29 100644
+--- a/bindings/_mojolearn_tokenizer_host.mojo
++++ b/bindings/_mojolearn_tokenizer_host.mojo
+@@ -37,6 +37,11 @@ tokenizer.py`:
+         id), so `out_cap = n_bytes` always suffices; a count above `out_cap`
+         is refused before anything is written. `n_bytes = 0` reads and
+         writes nothing and returns 0.
++    bpe_decode(handle, ids_addr, n_ids, out_addr, out_cap)
++        reads `n_ids` int32 at `ids_addr`, writes the bytes at `out_addr`
++        and returns how many. An id outside [0, n_vocab) is refused BY NAME
++        AND POSITION (`encoding.mojo`'s own sentence) with nothing written;
++        `out_cap = n_ids * bpe_max_token_bytes` always suffices.
+ 
+ THE SABOTAGE. `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` makes `bpe_encode`
+ write the ids in REVERSE order. It is the Python gate's negative control: a
+@@ -84,6 +89,7 @@ from bindings.causal_model_config import model_config_c
+ from bindings.causal_checkpoint import checkpoint_c
+ from bindings.causal_lm_construct import causal_model_c
+ from bindings.neural_block_public import neural_block_c
++from bindings.neural_prefill_native import neural_prefill_c
+ from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
+ from bindings.samba_config_native import samba_config_c
+ from bindings.samba_public_native import samba_public_c
+@@ -99,7 +105,7 @@ from bindings.parallel_forecast_native import parallel_forecast_c
+ from bindings.parallel_shard_native import parallel_shard_c
+ from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
+ from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
+-from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
++from bindings.optimizer_lifecycle import optimizer_finalize_binding, optimizer_finalize_descriptor_binding
+ from bindings.optimizer_native_router import optimizer_native_c
+ from bindings.embedding_layer_native import embedding_layer_lifetime_c
+ from bindings.optimizer_device_native import device_finalize_c
+@@ -182,6 +188,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
+     bpe_check_ids,
+     bpe_decode_batch_append,
+     bpe_decode_batch_fit,
++    bpe_decode_into,
+     bpe_decode_seq_bytes,
+     bpe_encode_batch_into,
+     bpe_encode_corpus_into,
+@@ -205,7 +212,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
+ )
+ from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
+ from bindings.causal_lm_public import (
+-    GenerationHandle, causal_public_c, causal_lm_allocate_binding,
++    GenerationHandle, causal_public_c, causal_lm_admit_binding, causal_lm_allocate_binding,
+     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
+     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
+     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
+@@ -384,8 +391,30 @@ def bpe_encode_batch_binding(
+     return PythonObject(total)
+ 
+ 
+-# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
++def bpe_decode_binding(
++    handle: PythonObject,
++    ids_addr: PythonObject,
++    n_ids: PythonObject,
++    out_addr: PythonObject,
++    out_cap: PythonObject,
++) raises -> PythonObject:
++    """`BpeTokenizer.decode_bytes` on the host. Returns the byte count."""
++    var owner = handle.downcast_value_ptr[BpeHandle]()
++    _require_loaded(Bool(owner[].tok))
++    var n = _index(n_ids)
++    var cap = _index(out_cap)
++    if n < 0:
++        raise Error("bpe_decode: n_ids must be >= 0, got " + String(n))
++    if cap < 0:
++        raise Error("bpe_decode: out_cap must be >= 0, got " + String(cap))
++    if n == 0:
++        return PythonObject(0)
++    var ids_address = _index(ids_addr)
++    var out_address = _index(out_addr)
++    var count = 0
++    with GILReleased(Python()):
++        count = bpe_decode_into(owner[], ids_address, n, out_address, cap)
++    return PythonObject(count)
+ 
+ 
+ def bpe_train_binding(
+@@ -1299,8 +1328,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
+         module.def_py_c_function(neighbor_query_c, "neighbor_query_call")
+         module.def_py_c_function(neighbor_query_attribute_c, "neighbor_query_attribute_call")
+         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
+-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
++        module.def_function[optimizer_finalize_binding]("optimizer_finalize")
+         module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
+         module.def_py_c_function(optimizer_native_c, "optimizer_native")
+         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
+@@ -1364,8 +1392,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
+         module.def_function[bpe_max_token_bytes_binding]("bpe_max_token_bytes")
+         module.def_function[bpe_encode_binding]("bpe_encode")
+         module.def_function[bpe_encode_batch_binding]("bpe_encode_batch")
+-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
++        module.def_function[bpe_decode_binding]("bpe_decode")
+         _ = module.add_type[BpeTrainedHandle]("_BpeTrainedHandle")
+         module.def_function[bpe_train_binding]("bpe_train")
+         module.def_function[bpe_trained_sizes_binding]("bpe_trained_sizes")
+@@ -1420,8 +1447,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
+         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
+         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
+         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
+-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
++        module.def_py_c_function(neural_prefill_c, "neural_prefill_call")
+         module.def_py_c_function(mamba_native_c, "mamba_native_call")
+         _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
+         module.def_py_c_function(causal_model_c[0], "causal_model_init")
+@@ -1429,8 +1455,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
+         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
+         _ = module.add_type[GenerationHandle]("_GenerationHandle")
+         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
+-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
++        module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
+         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
+         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
+         module.def_py_c_function(causal_public_c[3], "causal_lm_forward")
+diff --git a/bindings/neural_prefill_native.mojo b/bindings/neural_prefill_native.mojo
+index c7a3b66f5..4810678b3 100644
+--- a/bindings/neural_prefill_native.mojo
++++ b/bindings/neural_prefill_native.mojo
+@@ -1,6 +1,9 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Native zero-state training prefill and immutable tape ownership."""
+ from std.python import Python, PythonObject
++from std.python._cpython import PyObjectPtr
++from std.python.bindings import ExceptionType, raise_python_exception
++from bindings.native_error_class import error_without_class
+ from bindings.py_balanced import py_call, py_get, py_setitem
+ from std.os import getenv
+ from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
+@@ -169,6 +172,27 @@ def neural_prefill_close(tape: PythonObject) raises:
+     _ = py_call(_native_function(tape[0], kind + "_close_tape"), tape[1])
+ 
+ 
+-# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
+-
++def neural_prefill_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
++    try:
++        var args = PythonObject(from_borrowed=args_ptr)
++        var op = String(args[0])
++        var values = args[1]
++        var context = args[2]
++        var result = PythonObject(None)
++        if op == "forward":
++            result = neural_prefill_forward(values[0], values[1], context)
++        elif op == "backward":
++            result = neural_prefill_backward(values[0], values[1], values[2], context)
++        elif op == "close":
++            neural_prefill_close(values[0])
++        else:
++            raise Error("neural prefill: unknown operation")
++        return result.steal_data()
++    except error:
++        if String(error).startswith("TypeError:"):
++            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
++        if String(error).startswith("RuntimeError:"):
++            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
++        if String(error).startswith("NotImplementedError:"):
++            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
++        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+diff --git a/python/mojolearn/_mamba_impl.py b/python/mojolearn/_mamba_impl.py
+index e8504ef20..24e3cf487 100644
+--- a/python/mojolearn/_mamba_impl.py
++++ b/python/mojolearn/_mamba_impl.py
+@@ -1423,6 +1423,18 @@ class Mamba3Block(_MambaBase):
+         return _native_neural_bridge.RUNTIME.mamba_native_call(
+             "forward_public", (self, x, state, lengths), _native_neural_bridge.CONTEXT)
+ 
++    def _forward_with_tape(self, x):
++        return _native_neural_bridge.RUNTIME.neural_prefill_call(
++            "forward", (self, x), _native_neural_bridge.CONTEXT)
++
++    def _backward_from_tape(self, tape, grad_output):
++        return _native_neural_bridge.RUNTIME.neural_prefill_call(
++            "backward", (self, tape, grad_output), _native_neural_bridge.CONTEXT)
++
++    def _close_forward_tape(self, tape):
++        return _native_neural_bridge.RUNTIME.neural_prefill_call(
++            "close", (tape,), _native_neural_bridge.CONTEXT)
++
+     def backward(self, x, grad_output):
+         """Gradients of a zero-state prefill (a vector-Jacobian product).
+ 
+diff --git a/python/mojolearn/_samba_impl.py b/python/mojolearn/_samba_impl.py
+index 1bae1e418..ec3763bcf 100644
+--- a/python/mojolearn/_samba_impl.py
++++ b/python/mojolearn/_samba_impl.py
+@@ -454,7 +454,7 @@ class SambaStack(object):
+         return _buffers.as_i32_c(x, ndim=2, name=what)[0]
+ 
+     def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True,
+-                 norm=True):
++                 norm=True, retain_tapes=False):
+         """The forward with every block input kept for the backward.
+         `head=False` stops after the final norm (`logits` is None): the
+         fused `samba_head_loss` runs the head itself. `norm=False` (with
+@@ -474,10 +474,16 @@ class SambaStack(object):
+                                             offset=token_offset * c.d_model,
+                                             stream=dropout_stream)
+         xs = []
++        tapes = []
+         for i in range(len(c.layers)):  # glue: dispatches each layer block
+             xs.append(x)
+             block = self._block(i)
+-            x = block.forward(x)
++            forward_tape = getattr(block, "_forward_with_tape", None)
++            if retain_tapes and callable(forward_tape):
++                x, tape = forward_tape(x)
++            else:
++                x, tape = block.forward(x), None
++            tapes.append(tape)
+         hn = None
+         logits = None
+         afn = self._afn() if (norm and head) else None
+@@ -489,7 +495,7 @@ class SambaStack(object):
+             if head:
+                 logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
+                                           self._head_weight(), self.numeric_mode)
+-        return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
++        return {"ids": ids, "key": key, "xs": xs, "tapes": tapes, "h": x, "hn": hn,
+                 "logits": logits}
+ 
+     def forward(self, inputs, state=None, *, lengths=None):
+diff --git a/python/mojolearn/_training_impl.py b/python/mojolearn/_training_impl.py
+index 473508692..a8d4e6187 100644
+--- a/python/mojolearn/_training_impl.py
++++ b/python/mojolearn/_training_impl.py
+@@ -1981,6 +1981,10 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
+     return _OPT_NATIVE("mlp_inference_sessions", None, (inputs, weight1, bias1, weight2, bias2), numeric_mode, _OPT_CONTEXT)
+ 
+ 
++# Import-time ABI connection only; finalization never invokes the selector.
++from .tokenizer import _binding as _connect_optimizer_lifecycle
++_optimizer_finalize_native = _connect_optimizer_lifecycle()._module.optimizer_finalize
++
+ # Package-import ABI connection; no product operation calls the Python loader.
+ from ._native_optimizer_bridge import connect as _connect_native_optimizer
+ import sys as _optimizer_sys
+diff --git a/python/mojolearn/_transformer_impl.py b/python/mojolearn/_transformer_impl.py
+index f1f82a5a3..7f1d5bef7 100644
+--- a/python/mojolearn/_transformer_impl.py
++++ b/python/mojolearn/_transformer_impl.py
+@@ -1218,6 +1218,19 @@ class TransformerBlock(NumericModeMixin):
+             tape._consumed = True
+             ext.transformer_session_backward_tape(tape._session, addrs, tape._token)
+         return dict(zip(("x",) + self._W_NAMES, grads))
++    def _forward_with_tape(self, x):
++        return _native_neural_bridge.RUNTIME.neural_prefill_call(
++            "forward", (self, x), _native_neural_bridge.CONTEXT)
++
++    def _backward_from_tape(self, tape, grad_output):
++        return _native_neural_bridge.RUNTIME.neural_prefill_call(
++            "backward", (self, tape, grad_output), _native_neural_bridge.CONTEXT)
++
++    @staticmethod
++    def _close_forward_tape(tape):
++        return _native_neural_bridge.RUNTIME.neural_prefill_call(
++            "close", (tape,), _native_neural_bridge.CONTEXT)
++
+     def backward(self, x, grad_output):
+         """Gradients of a zero-state prefill with respect to the input and the weights.
+ 
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..109c19de3 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -1666,13 +1666,13 @@ FAMILIES = (
+             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
+             "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
+             "native_codec_call", "native_process_call", "native_transport_call",
+-            "parallel_byte_call", "parallel_causal_call",
++            "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
+             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
+             "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
+             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
+             "tokenizer_host_column", "tokenizer_host_sabotage", "tokenizer_host_runtime_classical_abi", "bpe_load",
+             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
+-            "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
++            "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
+             "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
+             "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
+             "tokens_gather_rows",
+@@ -1682,7 +1682,7 @@ FAMILIES = (
+             # optimizer's resident finalization, the vocabulary fingerprint
+             # that binds resumable text state to its tokenizer, and the
+             # generation coordinator's setup
+-            "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
++            "optimizer_finalize", "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
+             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
+             # lane migrate-neural-2: the Embedding layer's native lifetime,
+             # parallel forecasting's owner and the GPU byte-LM trainer step
+diff --git a/python/mojolearn/tests/test_neural_prefill_native.py b/python/mojolearn/tests/test_neural_prefill_native.py
+new file mode 100644
+index 000000000..1a3a2c4ca
+--- /dev/null
++++ b/python/mojolearn/tests/test_neural_prefill_native.py
+@@ -0,0 +1,50 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Native immutable prefill ownership and retained no-tape arithmetic paths."""
++from types import SimpleNamespace
++
++import numpy as np
++import pytest
++
++from mojolearn import Mamba3Block
++from mojolearn import _native_neural_bridge as bridge
++from mojolearn._verify_native_runtime import audit_native_call
++from mojolearn.tests.test_causal_model_native_loading import _poison
++from mojolearn.tests.test_mamba23_backward_surface import host_fixture
++from mojolearn.tests.test_neural_backward_native import _case
++
++
++@pytest.mark.parametrize("family", ["transformer", "mamba3"])
++@pytest.mark.parametrize("disable_tape", [False, True])
++def test_native_prefill_and_backward_match_existing_independent_entries(tmp_path, monkeypatch, family, disable_tape):
++    if family == "transformer":
++        block, inputs, gradient = _case(tmp_path, "llama")
++    else:
++        weights, inputs = host_fixture(3)
++        block = Mamba3Block(weights)
++        gradient = np.random.default_rng(521).normal(size=inputs.shape).astype("f4")
++    expected_output = block.forward(inputs).tobytes()
++    expected_gradients = {name: value.tobytes() for name, value in block.backward(inputs, gradient).items()}
++    selected = bridge.CONTEXT["training_bindings"][block._native_route + ":identical"]
++    binding_family = "transformer" if family == "transformer" else "mamba"
++    if disable_tape:
++        replacement = SimpleNamespace(**vars(selected[binding_family]))
++        replacement.__dict__.pop(family + "_forward_tape_enabled", None)
++        monkeypatch.setitem(selected, binding_family, replacement)
++    with monkeypatch.context() as patch:
++        _poison(patch)
++        patch.setattr(type(block), "_extension", lambda *a: pytest.fail("Python binding selection"))
++        patch.setattr(type(block), "forward", lambda *a, **k: pytest.fail("Python forward callback"))
++        output, tape = audit_native_call(block._forward_with_tape, inputs).assert_native()
++        if tape is None:
++            gradients = audit_native_call(block.backward, inputs, gradient).assert_native()
++        else:
++            try:
++                gradients = audit_native_call(block._backward_from_tape, tape, gradient).assert_native()
++            finally:
++                audit_native_call(block._close_forward_tape, tape).assert_native()
++        if disable_tape:
++            assert tape is None
++    assert output.tobytes() == expected_output
++    assert set(gradients) == set(expected_gradients)
++    for name in gradients:
++        assert gradients[name].tobytes() == expected_gradients[name], name
+diff --git a/python/mojolearn/tests/test_optimizer_native_lifecycle.py b/python/mojolearn/tests/test_optimizer_native_lifecycle.py
+index abfcb51fd..670c0f60f 100644
+--- a/python/mojolearn/tests/test_optimizer_native_lifecycle.py
++++ b/python/mojolearn/tests/test_optimizer_native_lifecycle.py
+@@ -5,7 +5,7 @@ import numpy as np
+ import pytest
+ 
+ from mojolearn import _backend
+-from mojolearn._training_impl import _Optimizer
++from mojolearn._training_impl import _Optimizer, _optimizer_finalize_native
+ from mojolearn._verify_native_runtime import audit_native_call
+ 
+ 
+@@ -45,7 +45,7 @@ def test_python_close_callback_is_refused_without_invocation():
+     fields['_res'] = 17
+     fields['_res_binding'] = SimpleNamespace(optimizer_resident_close=lambda value: called.append(value))
+     try:
+-        audit = audit_native_call(_Optimizer.__del__, owner)
++        audit = audit_native_call(_optimizer_finalize_native, owner)
+         assert audit.exception is not None and 'compiled close' in str(audit.exception)
+         for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+             assert not audit.report()[key], audit.report()
+diff --git a/python/mojolearn/tests/test_tokenizer_manifest.py b/python/mojolearn/tests/test_tokenizer_manifest.py
+index 25972514a..4b04d89e3 100644
+--- a/python/mojolearn/tests/test_tokenizer_manifest.py
++++ b/python/mojolearn/tests/test_tokenizer_manifest.py
+@@ -135,7 +135,7 @@ def test_binding_source_reads_the_sabotage_define():
+ 
+ def test_batch_encoder_parallelizes_whole_documents_only():
+     src = _read("tokenizer/impl/tokenizer_host_shell_impl.mojo")
+-    body = src[src.index("def bpe_encode_batch_into("):src.index("def bpe_train_fill(")]
++    body = src[src.index("def bpe_encode_batch_into("):src.index("def bpe_decode_into(")]
+     assert "host_parallelize(_documents, tasks)" in body
+     assert "host_predict_task_count(n_docs) if n >= 16384 else 1" in body
+     assert "stagep.unsafe_store(a + j" in body
+diff --git a/python/mojolearn/tokenizer.py b/python/mojolearn/tokenizer.py
+index acb1d8d63..dc401ec22 100644
+--- a/python/mojolearn/tokenizer.py
++++ b/python/mojolearn/tokenizer.py
+@@ -67,7 +67,7 @@ _NO_VOCABULARY = (
+ #: since. A binding built before the rename (an older host directory under
+ #: MOJOLEARN_HOST_DIR) is read through its old names so it keeps loading;
+ #: the ids are the same arithmetic under either name.
+-_ABI = ("load", "n_vocab", "max_token_bytes", "encode", "encode_batch")
++_ABI = ("load", "n_vocab", "max_token_bytes", "encode", "encode_batch", "decode")
+ 
+ 
+ class _Entries:
+diff --git a/tokenizer/impl/tokenizer_host_shell_impl.mojo b/tokenizer/impl/tokenizer_host_shell_impl.mojo
+index 663e99ae7..8a8290982 100644
+--- a/tokenizer/impl/tokenizer_host_shell_impl.mojo
++++ b/tokenizer/impl/tokenizer_host_shell_impl.mojo
+@@ -321,8 +321,30 @@ def bpe_encode_batch_into(
+     return total
+ 
+ 
+-# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
++def bpe_decode_into(
++    handle: BpeHandle, ids_address: Int, n: Int, out_address: Int, cap: Int
++) raises -> Int:
++    """`bpe_decode`'s work: read `n` int32 ids, write the bytes."""
++    var src = i32_ptr(ids_address)
++    var ids = List[Int](capacity=n)
++    for k in range(n):
++        ids.append(Int(src[k]))
++    # THE ONE CALL THAT COMPUTES ANYTHING; an id outside [0, n_vocab) is
++    # refused here by name and position, nothing written.
++    var out = handle.tok.value().decode_bytes(ids)
++    var count = len(out)
++    if count > cap:
++        raise Error(
++            "bpe_decode: "
++            + String(count)
++            + " bytes do not fit an output of "
++            + String(cap)
++            + "; nothing written"
++        )
++    var dst = _u8_ptr(out_address)
++    if count > 0:
++        memcpy(dest=dst, src=out.unsafe_ptr(), count=count)
++    return count
+ 
+ 
+ def bpe_train_fill(

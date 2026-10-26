@@ -1,0 +1,151 @@
+diff --git a/bindings/_mojolearn_forecast_host.mojo b/bindings/_mojolearn_forecast_host.mojo
+index 357f6e912..f212a3030 100644
+--- a/bindings/_mojolearn_forecast_host.mojo
++++ b/bindings/_mojolearn_forecast_host.mojo
+@@ -23,7 +23,7 @@ a saved ARIMA model on any machine.
+ 
+ Since lane/inference-holtwinters (2026-09-15) it also serves saved
+ Holt-Winters models: `holtwinters_forecast` and `holtwinters_predict` (the
+-in-sample one-step predictions), from
++in-sample one-step predictions) and `tsa_vendor`, from
+ `bindings/holtwinters_host_predict.mojo`, the source the reference
+ `bindings/_mojolearn_tsa_host.mojo` registers them from, over
+ `holtwinters/host/hw_predict.mojo`. `holtwinters_fit` is absent, and so is
+@@ -98,8 +98,10 @@ def arima_vendor_binding() raises -> PythonObject:
+     return PythonObject(String("cpu"))
+ 
+ 
+-# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_host_aliases.patch
++def tsa_vendor_binding() raises -> PythonObject:
++    """"cpu": the `_mojolearn_tsa` route's vendor read-back when this binding
++    serves a saved Holt-Winters model."""
++    return PythonObject(String("cpu"))
+ 
+ 
+ def arima_numeric_mode_binding() raises -> PythonObject:
+@@ -122,8 +124,7 @@ def build__mojolearn_forecast_host() -> PythonObject:
+         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
+         module.def_function[arima_predict_binding]("arima_predict")
+         module.def_function[arima_forecast_binding]("arima_forecast")
+-        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
++        module.def_function[tsa_vendor_binding]("tsa_vendor")
+         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+         module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+         # The KPSS stationarity test (lane/expose-inference-surface,
+diff --git a/bindings/_mojolearn_hdbscan_host.mojo b/bindings/_mojolearn_hdbscan_host.mojo
+index 6dcb889df..773c9b49d 100644
+--- a/bindings/_mojolearn_hdbscan_host.mojo
++++ b/bindings/_mojolearn_hdbscan_host.mojo
+@@ -45,6 +45,7 @@ from bindings.hdbscan_host_predict import (
+ )
+ from hdbscan.host.hdbscan_host_oracle import (
+     HDBH_HOST_SABOTAGE,
++    HDBH_PREDICT_SABOTAGE,
+     hdbh_fit,
+ )
+ from hdbscan.impl.prediction_data import generate_prediction_data_host
+@@ -193,8 +194,10 @@ def hdbscan_generate_prediction_data_binding(
+     return PythonObject(n_ex)
+ 
+ 
+-# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_host_aliases.patch
++def hdbscan_host_predict_sabotage_binding() raises -> PythonObject:
++    """Whether this binary flips the lowest bit of every approximate_predict
++    probability on purpose (`HDBH_PREDICT_SABOTAGE`)."""
++    return PythonObject(HDBH_PREDICT_SABOTAGE)
+ 
+ 
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_hdbscan_host.mojo
+@@ -212,8 +215,7 @@ def build__mojolearn_hdbscan_host() -> PythonObject:
+         module.def_function[hdbscan_fit_binding]("hdbscan_fit")
+         module.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
+         module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
+-        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
++        module.def_function[hdbscan_host_predict_sabotage_binding]("hdbscan_host_predict_sabotage")
+         module.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
+         module.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")
+         return module.finalize()
+diff --git a/bindings/_mojolearn_tsa_host.mojo b/bindings/_mojolearn_tsa_host.mojo
+index 1155dbc96..bddcceb3a 100644
+--- a/bindings/_mojolearn_tsa_host.mojo
++++ b/bindings/_mojolearn_tsa_host.mojo
+@@ -22,7 +22,7 @@ CPU-only install through `_backend._HOST_MODULES` (`"_mojolearn_tsa":
+ the SAME address contract and packed layouts (level, trend, season each
+ `components_len = (n - frequency) * batch_size` and TIME-MAJOR; sse, alpha,
+ beta, gamma; niter, criterion; mirrored word for word in `_tsa_impl.py`
+-and `bindings/_mojolearn_tsa.mojo`).
++and `bindings/_mojolearn_tsa.mojo`), and `tsa_vendor` answering "cpu".
+ `select_d` (ARIMA's; lane py-runtime-b) is the first stationary order of
+ the same KPSS host test (`bindings/kpss_host_test.mojo`), so the CPU-only
+ route no longer loops over the flags in Python.
+@@ -117,8 +117,10 @@ def tsa_host_sabotage_binding() raises -> PythonObject:
+ # The GPU binding's names, same contract.
+ 
+ 
+-# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_host_aliases.patch
++def tsa_vendor_binding() raises -> PythonObject:
++    """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
++    read-back cross-check expects that string from every host binding."""
++    return PythonObject(String("cpu"))
+ 
+ 
+ def holtwinters_fit_binding(
+@@ -190,8 +192,7 @@ def build__mojolearn_tsa_host() -> PythonObject:
+         module.def_function[tsa_host_vendor_binding]("tsa_host_vendor")
+         module.def_function[tsa_host_column_binding]("tsa_host_column")
+         module.def_function[tsa_host_sabotage_binding]("tsa_host_sabotage")
+-        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
++        module.def_function[tsa_vendor_binding]("tsa_vendor")
+         module.def_function[holtwinters_fit_binding]("holtwinters_fit")
+         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+         module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..4e3719547 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2192,7 +2192,7 @@ FAMILIES = (
+                       "bindings/kpss_host_test.mojo"),
+         exports=(
+             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
+-            "tsa_host_sabotage", "holtwinters_fit",
++            "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
+             "holtwinters_forecast", "holtwinters_predict", "kpss_test",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "select_d",
+@@ -2587,7 +2587,7 @@ FAMILIES = (
+             "hdbscan_host_column", "hdbscan_host_sabotage",
+             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
+             "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
+-            "hdbscan_membership_vector",
++            "hdbscan_host_predict_sabotage", "hdbscan_membership_vector",
+             "hdbscan_all_points_membership_vectors",
+         ),
+         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+@@ -3212,7 +3212,7 @@ FAMILIES = (
+         exports=(
+             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
+             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
+-            "arima_predict", "arima_forecast", "holtwinters_forecast",
++            "arima_predict", "arima_forecast", "tsa_vendor", "holtwinters_forecast",
+             "holtwinters_predict", "kpss_test",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "select_d",
+diff --git a/python/mojolearn/tests/test_holtwinters_inference.py b/python/mojolearn/tests/test_holtwinters_inference.py
+index 977249ad3..a2256385b 100644
+--- a/python/mojolearn/tests/test_holtwinters_inference.py
++++ b/python/mojolearn/tests/test_holtwinters_inference.py
+@@ -49,7 +49,7 @@ def test_forecast_family_serves_holtwinters():
+     assert "_mojolearn_tsa" in f["serves"]
+     assert {"holtwinters", "holtwinters-multiplicative"} <= set(f["inference_lanes"])
+     assert "ExponentialSmoothing" in f["classes"]
+-    assert {"holtwinters_forecast", "holtwinters_predict"} <= set(f["exports"])
++    assert {"tsa_vendor", "holtwinters_forecast", "holtwinters_predict"} <= set(f["exports"])
+     assert "holtwinters_fit" not in f["exports"]
+     # Both ship since lane/ship-cpu-host-families (2026-09-16): this binding
+     # so a saved model predicts from a binary with no fit in it, the tsa

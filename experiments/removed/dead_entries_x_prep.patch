@@ -1,0 +1,144 @@
+diff --git a/bindings/_mojolearn_x_prep.mojo b/bindings/_mojolearn_x_prep.mojo
+index 5ec4715bc..5c5d370d7 100644
+--- a/bindings/_mojolearn_x_prep.mojo
++++ b/bindings/_mojolearn_x_prep.mojo
+@@ -25,8 +25,10 @@ from x_prep.pt_blocked import IDN_PT_BLOCKED
+ from x_prep.host.rr_eigh_host import IDN_RR_EIGH
+ from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
+ from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
++from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
++from x_prep.py2mojo import PY2MOJO_PREP
+ from x_prep.proba64 import PROBA64
+-from x_prep.prep3 import PREP3_MAXABS
++from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
+ from x_prep.fastmaxabs import maxabs_fit_direct
+ 
+ from x_prep.fastpt import PTIMPUTE_FLAGS
+@@ -146,8 +148,12 @@ def _seed(v: PythonObject) raises -> UInt64:
+     return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
+ 
+ 
+-# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_prep.patch
++def maxabs_pool_binding() raises -> PythonObject:
++    """1 when this binary's direct MaxAbsScaler fit uses pooled buffers
++    (lane/apple-fast-w4-small PREP3_MAXABS_POOL): the quality pair's reach."""
++    comptime if PREP3_MAXABS_POOL:
++        return PythonObject(1)
++    return PythonObject(0)
+ 
+ 
+ # lane/apple-fast-prep3 (FAST on Apple; registered under PREP3_MAXABS only, so
+@@ -260,6 +266,16 @@ def ptimpute_flags_binding() raises -> PythonObject:
+     return PythonObject(PTIMPUTE_FLAGS)
+ 
+ 
++def calib_folds_binding() raises -> PythonObject:
++    """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
++    the CalibratedClassifierCV(GaussianNB) program's constants [words per
++    Platt problem, line-search steps]; registered only when the ops exist."""
++    var out = Python.list()
++    out.append(PythonObject(CAL_ST))
++    out.append(PythonObject(CAL_LS))
++    return out
++
++
+ def proba64_binding() raises -> PythonObject:
+     """Lane apple-fast-q-clf (x_prep/proba64.mojo): registered only under
+     PROBA64 (FAST, not -D MOJOLEARN_PROBA64_QOLD); Python's probe for staging
+@@ -267,6 +283,12 @@ def proba64_binding() raises -> PythonObject:
+     return PythonObject(1)
+ 
+ 
++def py2mojo_binding() raises -> PythonObject:
++    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF
++    (x_prep/py2mojo.mojo); Python then takes its old loops."""
++    return PythonObject(1)
++
++
+ def c08_routes_binding() raises -> PythonObject:
+     """C08 routes compiled in (lane classical-encoders): 1 TargetEncoder fit codes,
+     2 OneHotEncoder.fit_transform, 4 OrdinalEncoder.fit_transform."""
+@@ -353,8 +375,7 @@ def build__mojolearn_x_prep() -> PythonObject:
+         m.def_function[dev_take_rows_binding]("x_prep_dev_take_rows")
+         comptime if PREP3_MAXABS:
+             m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
+-        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_prep.patch
++        m.def_function[maxabs_pool_binding]("x_prep_maxabs_pool")
+         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
+         m.def_function[vendor_binding]("x_prep_vendor")
+         comptime if X_PREP_FAST_UNIQUE:
+@@ -376,8 +397,10 @@ def build__mojolearn_x_prep() -> PythonObject:
+             m.def_function[pool_arena_binding]("x_prep_pool_arena")
+         comptime if CAT_CLS2_PACK:
+             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
+-        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_prep.patch
++        comptime if CALIB_FOLDS:
++            m.def_function[calib_folds_binding]("x_prep_calib_folds")
++        comptime if PY2MOJO_PREP:
++            m.def_function[py2mojo_binding]("x_prep_py2mojo")
+         comptime if PROBA64:
+             m.def_function[proba64_binding]("x_prep_proba64")
+         comptime if PTIMPUTE_FLAGS != 0:
+diff --git a/bindings/_mojolearn_x_prep_host.mojo b/bindings/_mojolearn_x_prep_host.mojo
+index 20def4e3c..78f520a59 100644
+--- a/bindings/_mojolearn_x_prep_host.mojo
++++ b/bindings/_mojolearn_x_prep_host.mojo
+@@ -14,6 +14,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_prep.common import X_PREP_HOST_SABOTAGE
+ from x_prep.host.program import run_program_host
+ from x_prep.user_host import F32P, F64P, I32P
++from x_prep.py2mojo import PY2MOJO_PREP
+ from x_prep.label_fast import IDN_LABEL
+ from x_prep.blocked import IDN_NB_ONEPASS
+ from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+@@ -75,8 +76,9 @@ def proba64_binding() raises -> PythonObject:
+     return PythonObject(1)
+ 
+ 
+-# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_prep.patch
++def py2mojo_binding() raises -> PythonObject:
++    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF."""
++    return PythonObject(1)
+ 
+ 
+ def label_present_binding() raises -> PythonObject:
+@@ -149,8 +151,8 @@ def build__mojolearn_x_prep_host() -> PythonObject:
+         m.def_function[run_binding]("x_prep_run")
+         m.def_function[x_prep_numeric_mode_binding]("x_prep_numeric_mode")
+         m.def_function[x_prep_vendor_binding]("x_prep_vendor")
+-        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_prep.patch
++        comptime if PY2MOJO_PREP:
++            m.def_function[py2mojo_binding]("x_prep_py2mojo")
+         # lane idn-int-prep: the host column runs the same programs as the
+         # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)
+         comptime if IDN_LABEL:
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 6a8e0f81b..a6c86b16a 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -80,7 +80,7 @@ _OPS = dict(
+     row_ones=135, ii_rcount=136, ii_rwrite=137, ii_gather=138, ii_scatter=139,
+     hcat=140, colblock=141,
+     # lane apple-fast-meta (x_prep/calib.mojo): only the FAST + Apple binding built with
+-    # -D MOJOLEARN_CALIB_GNB_FOLDS runs them; nothing stages
++    # -D MOJOLEARN_CALIB_GNB_FOLDS runs them (it exports x_prep_calib_folds); nothing stages
+     # them otherwise
+     cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
+     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
+diff --git a/python/mojolearn/_surface_prep.py b/python/mojolearn/_surface_prep.py
+index f56490aff..33a0ea9dd 100644
+--- a/python/mojolearn/_surface_prep.py
++++ b/python/mojolearn/_surface_prep.py
+@@ -97,6 +97,7 @@ FAMILIES = (
+         exports=(
+             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
+             "x_prep_run", "x_prep_numeric_mode", "x_prep_vendor",
++            "x_prep_py2mojo",
+             "x_prep_label_present", "x_prep_idn_int",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "x_prep_idn_fam", "x_prep_classical_shared", "x_prep_c08_routes",
