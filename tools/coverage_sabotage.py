@@ -212,7 +212,7 @@ def _oracle_caught(key, cell, repeats, evidence):
     return _refusal_caught(key, {"error": "\n".join(errors)}, review)
 
 
-def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, root=ROOT):
+def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, root=ROOT, batch_bindings=()):
     failures = []
     try:
         if restored_path is None:
@@ -261,17 +261,25 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
         if set(cb) != set(sb):
             raise ValueError("sabotaged native binding coverage differs from the clean build")
         changed = {name for name in cb if cb[name] != sb[name]}
-        expected = {"_mojolearn" if stem == "build" else "_mojolearn_" + stem.removeprefix("build_")
-                    for stem in arm["bindings"]}
-        # Host records key families without the _mojolearn_ prefix or _host suffix.
-        expected |= {stem.removeprefix("build_").removesuffix("_host")
-                     for stem in arm["bindings"] if stem.endswith("_host")}
+
+        def modules(stems):
+            out = {"_mojolearn" if stem == "build" else "_mojolearn_" + stem.removeprefix("build_")
+                   for stem in stems}
+            # Host records key families without the _mojolearn_ prefix or _host suffix.
+            return out | {stem.removeprefix("build_").removesuffix("_host")
+                          for stem in stems if stem.endswith("_host")}
+        expected = modules(arm["bindings"])
+        # A BATCHED RUN (`batch-plan`): one sabotaged build carries every arm
+        # of the batch, so the other arms' bindings changed too. They may
+        # change; this arm's own bindings still must. Attribution is the
+        # plan's: no other arm of the batch reaches this arm's lanes.
+        batch = modules(batch_bindings) | expected
         # Loaded-native-v2 records name modules by import path
         # (`mojolearn._sets.identical._mojolearn_training`); the arm names the
         # binding, so compare on the last path component.
         def base(name):
             return name.rsplit(".", 1)[-1]
-        affected_hashes = {cb[name] for name in cb if base(name) in expected}
+        affected_hashes = {cb[name] for name in cb if base(name) in batch}
         allowed = {name for name in cb if cb[name] in affected_hashes}
         if not changed or not ({base(name) for name in changed} & expected) or changed - allowed:
             raise ValueError("binary changes do not match the arm's declared binding closure")
@@ -393,6 +401,102 @@ def apply_check(table):
     print(f"apply-check: {len(table) - bad} of {len(table)} patches apply")
     return 1 if bad else 0
 
+PROVEN = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage_proven.tsv")
+
+
+def proven(path=PROVEN):
+    """{arm: verdict} from the proven table (`#` comments skipped)."""
+    out = {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if line.strip() and not line.startswith("#"):
+                    cols = line.rstrip("\n").split("\t")
+                    if len(cols) >= 3:
+                        out[cols[0]] = cols[2]
+    except OSError:
+        pass
+    return out
+
+
+def _family(stem):
+    """`build_x_decomp_host` -> `x_decomp`; `build` and `build_core_host` -> `core`."""
+    name = stem.removeprefix("build").removeprefix("_").removesuffix("_host")
+    return name or "core"
+
+
+def may_move(arm_table, audit, triage=None):
+    """{arm: the lanes any registration whose closure its patch edits is
+    covered by}: the lanes a sabotaged build of that arm can move. Read from
+    a `verify_coverage_audit.py --all --json` audit (each row's
+    `sabotage_patches` and its triage lanes)."""
+    if triage is None:
+        import verify_coverage_audit as audit_tool
+        triage = audit_tool.triage
+    by_patch = {}
+    for row in audit.get("native", ()):
+        status, lanes, _ = triage(row)
+        if status.startswith("n/a"):
+            continue
+        for patch in row.get("sabotage_patches", ()):
+            by_patch.setdefault(patch, set()).update(lanes)
+    return {name: set(by_patch.get(arm["patch"], ())) | set(arm["lanes"]) for name, arm in arm_table.items()}
+
+
+def _co_apply(patches, root=ROOT):
+    if not patches:
+        return True
+    r = subprocess.run(["git", "-C", root, "apply", "--check", *patches], capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
+    """Conflict-free batches: one sabotaged build per batch proves every arm
+    in it (clean -> sabotaged DIVERGENT -> restored IDENTICAL), grouped by
+    the binding family of each arm's first build. Two arms share a batch only
+    when neither one's lanes can be moved by the other's patch (`may_move`)
+    and their patches apply together, so a lane that moves is attributable to
+    its own arm."""
+    reach = may_move(arm_table, audit, triage)
+    groups = {}
+    for name in sorted(arm_table, key=lambda a: (_family(arm_table[a]["bindings"][0]), a)):
+        groups.setdefault(_family(arm_table[name]["bindings"][0]), []).append(name)
+    batches = []
+    for family, names in groups.items():
+        open_batches = []
+        for name in names:
+            arm = arm_table[name]
+            for batch in open_batches:
+                clash = any(set(arm["lanes"]) & reach[o] or set(arm_table[o]["lanes"]) & reach[name]
+                            for o in batch)
+                if not clash and co_apply([arm_table[o]["patch"] for o in batch] + [arm["patch"]]):
+                    batch.append(name)
+                    break
+            else:
+                open_batches.append([name])
+        for k, batch in enumerate(open_batches, 1):
+            builds, lanes = [], []
+            for o in batch:
+                builds += [b for b in arm_table[o]["bindings"] if b not in builds]
+                lanes += [x for x in arm_table[o]["lanes"] if x not in lanes]
+            batches.append(dict(id=f"{family}-{k}", family=family, arms=batch,
+                                patches=[arm_table[o]["patch"] for o in batch],
+                                arm_lanes={o: arm_table[o]["lanes"] for o in batch},
+                                builds=builds, lanes=lanes,
+                                columns=sorted({"cpu" if b.endswith("_host") else "device" for b in builds})))
+    return batches
+
+
+def print_batch_plan(batches, branch, plan_path, box="apple"):
+    arms_n = sum(len(b["arms"]) for b in batches)
+    builds = sorted({x for b in batches for x in b["builds"]})
+    print(f"# {arms_n} arm(s) in {len(batches)} batch(es); {len(builds)} distinct binding build(s): {' '.join(builds)}")
+    for b in batches:
+        print(f"# {b['id']}: {len(b['arms'])} arm(s), builds {','.join(b['builds'])}, columns {','.join(b['columns'])}, "
+              f"{len(b['lanes'])} lane(s)")
+        print(f"lq add {box} CMD {branch} sab-{b['id']} "
+              f"'bash tools/coverage_sabotage_batch.sh {plan_path or '<plan.json>'} {b['id']}'")
+
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -407,6 +511,14 @@ def main(argv=None):
     c.add_argument("--sabotaged", required=True)
     c.add_argument("--restored", required=True)
     c.add_argument("--evidence", help="hash-bound review of product refusals or unchanged source commits")
+    c.add_argument("--batch-bindings", default="",
+                   help="a batched run's build stems (comma separated): the other arms' bindings may change too")
+    b = sub.add_parser("batch-plan", help="group the arms into conflict-free batches, one sabotaged build each")
+    b.add_argument("--audit", required=True, help="tools/verify_coverage_audit.py --all --json output")
+    b.add_argument("--arms", default="", help="comma separated arms (default: every arm not yet proven)")
+    b.add_argument("--json", help="write the plan here")
+    b.add_argument("--branch", default="<branch>", help="the branch named in the printed lq commands")
+    b.add_argument("--box", default="apple", help="the lq box named in the printed commands")
     args = ap.parse_args(argv)
     table = arms()
     if args.cmd == "list":
@@ -415,12 +527,25 @@ def main(argv=None):
         return 0
     if args.cmd == "apply-check":
         return apply_check(table)
+    if args.cmd == "batch-plan":
+        names = [a for a in args.arms.split(",") if a] or [a for a in table if a not in proven()]
+        missing = [a for a in names if a not in table]
+        if missing:
+            raise SystemExit("no arm " + ", ".join(missing))
+        audit = json.loads(Path(args.audit).read_text())
+        batches = batch_plan({a: table[a] for a in names}, audit)
+        print_batch_plan(batches, args.branch, args.json, args.box)
+        if args.json:
+            Path(args.json).write_text(json.dumps(dict(audit_head=audit.get("head"), batches=batches),
+                                                  indent=1, sort_keys=True) + "\n")
+        return 0
     if args.arm not in table:
         raise SystemExit(f"no arm {args.arm}; `list` names them")
     if args.cmd == "plan":
         plan(table[args.arm])
         return 0
-    return check(table[args.arm], args.clean, args.sabotaged, args.restored, args.evidence)
+    return check(table[args.arm], args.clean, args.sabotaged, args.restored, args.evidence,
+                 batch_bindings=[x for x in args.batch_bindings.split(",") if x])
 
 
 if __name__ == "__main__":

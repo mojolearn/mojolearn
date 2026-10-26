@@ -29,7 +29,7 @@ def trial(tmp_path):
     sab['cells']['one/base']['hashes'] = ['d' * 16]
     restored = copy.deepcopy(clean)
 
-    def run(evidence=None):
+    def run(evidence=None, batch_bindings=()):
         paths = []
         for label, data in zip(('clean', 'sabotaged', 'restored'), (clean, sab, restored)):
             path = tmp_path / (label + '.json')
@@ -42,7 +42,7 @@ def trial(tmp_path):
                                      for key, path in zip(('clean', 'sabotaged', 'restored'), paths)})
             review = tmp_path / 'review.json'
             review.write_text(json.dumps(evidence))
-        return gate.check(arm, *paths, evidence_path=review, root=tmp_path)
+        return gate.check(arm, *paths, evidence_path=review, root=tmp_path, batch_bindings=batch_bindings)
 
     return arm, clean, sab, restored, run
 
@@ -183,3 +183,43 @@ def test_base_build_script_maps_to_the_base_extension(trial):
     for record in (clean, sab, restored):
         record['package']['bindings'][0]['module'] = '_mojolearn'
     assert run() == 0
+
+
+def test_batch_bindings_let_other_arms_change_their_bindings(trial):
+    arm, clean, sab, restored, run = trial
+    for record in (clean, sab, restored):
+        record['package']['bindings'].append({'module': '_mojolearn_gbdt_host', 'sha256': 'f' * 64, 'size': 10})
+    sab['package']['bindings'][1]['sha256'] = '9' * 64
+    assert run() == 1          # alone, another binding's change is not this arm's closure
+    assert run(batch_bindings=['build_gbdt_host']) == 0
+    sab['package']['bindings'][0]['sha256'] = 'a' * 64
+    assert run(batch_bindings=['build_gbdt_host']) == 1   # this arm's own binding must still change
+
+
+def test_batch_plan_separates_arms_whose_patches_reach_each_others_lanes():
+    table = {
+        'a': dict(arm='a', patch='a.patch', bindings=['build_x_decomp'], lanes=['la']),
+        'b': dict(arm='b', patch='b.patch', bindings=['build_x_decomp_host'], lanes=['lb']),
+        'c': dict(arm='c', patch='c.patch', bindings=['build_x_decomp'], lanes=['lc']),
+        'd': dict(arm='d', patch='d.patch', bindings=['build_gbdt'], lanes=['ld']),
+    }
+    audit = {'native': [
+        dict(entry='e1', sabotage_patches=['a.patch'], lanes=['la']),
+        dict(entry='e2', sabotage_patches=['c.patch'], lanes=['la', 'lc']),   # c's patch moves a's lane
+        dict(entry='e3', sabotage_patches=['b.patch'], lanes=['lb']),
+    ]}
+    batches = gate.batch_plan(table, audit, triage=lambda r: ('covered', r['lanes'], ''),
+                              co_apply=lambda patches: True)
+    got = {b['id']: b['arms'] for b in batches}
+    assert got == {'gbdt-1': ['d'], 'x_decomp-1': ['a', 'b'], 'x_decomp-2': ['c']}
+    first = [b for b in batches if 'a' in b['arms']][0]
+    assert first['builds'] == ['build_x_decomp', 'build_x_decomp_host']
+    assert first['columns'] == ['cpu', 'device']
+
+
+def test_batch_plan_splits_patches_that_do_not_apply_together():
+    table = {n: dict(arm=n, patch=n + '.patch', bindings=['build'], lanes=['l' + n]) for n in ('a', 'b')}
+    batches = gate.batch_plan(table, {'native': []}, triage=lambda r: ('covered', [], ''),
+                              co_apply=lambda patches: len(patches) < 2)
+    assert sorted(b['arms'] for b in batches) == [['a'], ['b']]
+    assert {b['family'] for b in batches} == {'core'}
