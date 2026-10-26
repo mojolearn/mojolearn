@@ -148,8 +148,9 @@ echo "== down refuses while busy"
 $N sh lane-a "printf '#!/bin/bash\nsleep 30\n' > /root/ev-lane-a/long.sh"
 idl=$($N submit lane-a /root/ev-lane-a/long.sh); sleep 3
 check "down refuses while a job runs" "! $N down $pa 2>/dev/null && [ -f $W/devpods/$pa/state.env ]"
+waitfor 30 "$N status $idl 2>/dev/null | grep -q ': running'"   # a job cancelled while queued never runs
 $N cancel lane-a $idl > /dev/null
-waitfor 60 "$N status $idl 2>/dev/null | grep -q cancelled"
+waitfor 90 "$N status $idl 2>/dev/null | grep -q cancelled"
 check "a cancelled job still uploads its final.tgz (the TERM trap)" "[ \$(ls $W/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | wc -l) -ge 2 ]"
 
 echo "== the Mac watcher deletes a pod that stops answering"
