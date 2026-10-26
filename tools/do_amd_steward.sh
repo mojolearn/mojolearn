@@ -27,6 +27,10 @@
 # THE LEASE. Both dead-men read a DEADLINE FILE instead of sleeping a fixed
 # time, so `extend` is one atomic write on each side and two extends can
 # never leave a stale timer behind. On the droplet the self-destruct is a
+# MOJOLEARN_STEWARD_PROVISION_ONLY=1 stops after state and fixed lease guards;
+# it requires MOJOLEARN_RENTAL_OWNER and MOJOLEARN_RENTAL_TASK, and starts no
+# bootstrap or steward queue service. The default keeps the existing flow.
+#
 # systemd service (Restart=always, so it survives a reboot) that DELETEs its
 # own droplet when the deadline passes or its deadline file is missing or
 # unreadable (fail safe). On the Mac a nohup'd loop DELETEs the droplet by
@@ -204,6 +208,12 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
 up)
     minutes="${1:-240}"
+    # An explicitly owned release run needs the fixed rental guards, but no
+    # persistent queue service, source bootstrap or compiler environment.
+    if [ "${MOJOLEARN_STEWARD_PROVISION_ONLY:-0}" = 1 ]; then
+        [ -n "${MOJOLEARN_RENTAL_OWNER:-}" ] && [ -n "${MOJOLEARN_RENTAL_TASK:-}" ] \
+            || die "provision-only requires MOJOLEARN_RENTAL_OWNER and MOJOLEARN_RENTAL_TASK"
+    fi
     [ ! -f "$S/state.env" ] || die "a steward droplet exists ($S/state.env); down it first"
     mkdir -p "$S"; load_token
     mkdir "$DO_GPU_LOCK" 2>/dev/null || die "$DO_GPU_LOCK is held (one GPU droplet per account): $(tr '\n' ' ' < "$DO_GPU_LOCK/owner" 2>/dev/null)"
@@ -261,6 +271,12 @@ for w in want:
     grep -qx active "$TMPD/sk.out" || die "the on-droplet self-destruct is not active; run: $0 down"
     set_mac_deadline $(( $(now) + minutes * 60 + 600 ))
     say "self-destruct active on the droplet; lease ${minutes} min"
+    if [ "${MOJOLEARN_STEWARD_PROVISION_ONLY:-0}" = 1 ]; then
+        printf 'RENTAL_OWNER=%q\nRENTAL_TASK=%q\nPROVISION_ONLY=1\n' \
+            "$MOJOLEARN_RENTAL_OWNER" "$MOJOLEARN_RENTAL_TASK" >> "$S/state.env"
+        say "provisioned owned droplet $DROPLET_ID; bootstrap and steward service deferred"
+        exit 0
+    fi
     bx 900 'export DEBIAN_FRONTEND=noninteractive; for i in $(seq 1 60); do fuser /var/lib/dpkg/lock-frontend > /dev/null 2>&1 || break; sleep 5; done
 command -v git > /dev/null || { apt-get -o DPkg::Lock::Timeout=300 update -qq && apt-get -o DPkg::Lock::Timeout=300 install -y -qq git; } > /dev/null
 [ -x /root/.pixi/bin/pixi ] || curl -fsSL https://pixi.sh/install.sh | bash > /dev/null 2>&1
