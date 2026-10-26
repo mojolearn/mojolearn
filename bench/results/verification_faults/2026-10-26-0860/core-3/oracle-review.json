@@ -1,0 +1,18 @@
+{
+  "arm": "coverage-precise-core-shard_topk_merge_host",
+  "records": {
+    "clean": "8686e5807676a3e15acf20f58c25214f51325e56a43aaeee3c806dc17f0fe17c",
+    "sabotaged": "24d9486f531d675b5163315941b47643f4507e5e04af995a082388c30f7cdc3f",
+    "restored": "511b79d23e3e859f2caee9c1050965090a0989822e0e031ffa23fcde6416b6e3"
+  },
+  "patch_sha256": "1abdce944c750217d7da77a9c666f9b7398f9f8684264cb314ed11bf75a83c9b",
+  "oracles": {
+    "par-reference-knn/base": {
+      "product_check": "ReferenceShardedNeighbors distance byte comparison against the plain neighbor implementation.",
+      "why_fault_reaches_check": "The retained patch changes shard_topk_merge_host output distance bits by one ULP and permutes adjacent neighbor indices. The independent plain distances remain unchanged; the recorded distance comparison detects 515 differing bytes.",
+      "errors": [
+        "ReferenceShardedNeighbors distances and plain distances differ: 515 bytes of 2048"
+      ]
+    }
+  }
+}

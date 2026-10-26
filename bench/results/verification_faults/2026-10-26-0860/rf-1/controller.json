@@ -1,0 +1,196 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-bindings-rf_aux_oob_score": [
+        "trees-oob-cv-link"
+      ]
+    },
+    "arms": [
+      "coverage-precise-bindings-rf_aux_oob_score"
+    ],
+    "builds": [
+      "build_rf"
+    ],
+    "columns": [
+      "device"
+    ],
+    "family": "rf",
+    "id": "rf-1",
+    "lanes": [
+      "trees-oob-cv-link"
+    ],
+    "patches": [
+      "bindings/sabotage/coverage_precise_rf_aux_oob_score.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "trees-oob-cv-link",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/clean_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.60225899994839
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "bindings/sabotage/coverage_precise_rf_aux_oob_score.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.012427292065694928
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "bindings/sabotage/coverage_precise_rf_aux_oob_score.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.010996541008353233
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_rf",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_rf",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/build/identical/_mojolearn_dev_rf",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/build/identical/_mojolearn_dev_rf/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 54.44498216698412
+    },
+    {
+      "name": "sab-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "trees-oob-cv-link",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/sab_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 6.242672541062348
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "bindings/sabotage/coverage_precise_rf_aux_oob_score.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.03575099993031472
+    },
+    {
+      "name": "restored-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "trees-oob-cv-link",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/restored_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 6.151306208921596
+    },
+    {
+      "name": "check-coverage-precise-bindings-rf_aux_oob_score-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-bindings-rf_aux_oob_score",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/restored_device.json",
+        "--batch-bindings",
+        "build_rf"
+      ],
+      "exit_code": 0,
+      "seconds": 0.056372374994680285
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_rf",
+      "members": [
+        "_mojolearn_rf"
+      ],
+      "sha256": "f392c2dbf4352c0fa5f03adbe39b4246207b8d70b9d43f9272114bd62b6f478b",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1/build/identical/_mojolearn_dev_rf/_mojolearn_dev_rf.so",
+      "original_path": ".development/32ac71555627c8437ee06a65ed6ab51ac53ea8efe8c626f8ae290be315a49ca5/_mojolearn_dev_rf.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/identical/.development/f392c2dbf4352c0fa5f03adbe39b4246207b8d70b9d43f9272114bd62b6f478b/_mojolearn_dev_rf.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-precise-bindings-rf_aux_oob_score",
+      "column": "device",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

@@ -168,7 +168,62 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-precise-core-shard_topk_merge_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/core-3/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-mamba-m3_load_weights",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/mamba-1/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-mamba-m3_session_copy_in",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/mamba-2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-mamba-m3_session_export",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/mamba-3/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-bindings-rf_aux_oob_score",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/rf-1/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 36
+  "remaining_declared_fault_arms": 31
 }

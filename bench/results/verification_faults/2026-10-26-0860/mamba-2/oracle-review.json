@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-precise-mamba-m3_session_copy_in",
+  "records": {
+    "clean": "96bca88d8986af499688ce73dc5d46026c096cdf1aab32112d3e854f06a96cb6",
+    "sabotaged": "edb4b2edbee0ee686aa13a4df8ba3f7e0e94e44b6e067a3e23cea20dab36c658",
+    "restored": "fd0cb2b6c16bef57849234ecbbccb15b408afb3c3d431a79bd556c49fd5a830b"
+  },
+  "patch_sha256": "0730e18496053850ea098e1f697a420f9c4d5fb61e99e1b1267f7f29dd80c141",
+  "refusals": {
+    "mamba3-decode-session/base": {
+      "product_check": "_coverage_decode_session: _same_bytes(steps after load_state, per-call steps after the same four tokens).",
+      "why_fault_reaches_check": "The patch swaps qrot and krot buffers during resident load_state. Initial steps pass; after reload the outputs differ from the independent per-call state continuation by 833 bytes.",
+      "error": "ValueError: steps after load_state and per-call steps after the same four tokens differ: 833 bytes of 1024\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 594, in _\n    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 557, in _coverage_decode_session\n    _same_bytes(\"steps after load_state\", after, \"per-call steps after the same four tokens\", want)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 2198, in _same_bytes\n    raise ValueError(message)\nValueError: steps after load_state and per-call steps after the same four tokens differ: 833 bytes of 1024"
+    }
+  }
+}

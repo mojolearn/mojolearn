@@ -1,0 +1,221 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-mamba-m3_load_weights": [
+        "mamba3-decode-session"
+      ]
+    },
+    "arms": [
+      "coverage-precise-mamba-m3_load_weights"
+    ],
+    "builds": [
+      "build_mamba"
+    ],
+    "columns": [
+      "device"
+    ],
+    "family": "mamba",
+    "id": "mamba-1",
+    "lanes": [
+      "mamba3-decode-session"
+    ],
+    "patches": [
+      "mamba/sabotage/coverage_precise_m3_load_weights.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "mamba3-decode-session",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/clean_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.087782416027039
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "mamba/sabotage/coverage_precise_m3_load_weights.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.013841249980032444
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "mamba/sabotage/coverage_precise_m3_load_weights.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.013146874960511923
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_mamba",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_mamba",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/build/identical/_mojolearn_dev_mamba",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/build/identical/_mojolearn_dev_mamba/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 65.57890375005081
+    },
+    {
+      "name": "sab-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "mamba3-decode-session",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/sab_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.717142791952938
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "mamba/sabotage/coverage_precise_m3_load_weights.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.011935124988667667
+    },
+    {
+      "name": "restored-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "mamba3-decode-session",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/restored_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 2.9654142919462174
+    },
+    {
+      "name": "check-coverage-precise-mamba-m3_load_weights-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-mamba-m3_load_weights",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/restored_device.json",
+        "--batch-bindings",
+        "build_mamba"
+      ],
+      "exit_code": 1,
+      "seconds": 0.04459095897618681
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_mamba",
+      "members": [
+        "_mojolearn_mamba"
+      ],
+      "sha256": "1d64c06a627e1a134705ddb0ab44f07414366eff4fc5f7d47d96cee94ae63212",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/build/identical/_mojolearn_dev_mamba/_mojolearn_dev_mamba.so",
+      "original_path": ".development/130d761a74c535f17b14ccfd18f91ba49520dbf7e7a9460054766a30fe696793/_mojolearn_dev_mamba.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/identical/.development/1d64c06a627e1a134705ddb0ab44f07414366eff4fc5f7d47d96cee94ae63212/_mojolearn_dev_mamba.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-precise-mamba-m3_load_weights",
+      "column": "device",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/oracle-review.json"
+    }
+  ],
+  "passed": true,
+  "original_checks": [
+    {
+      "arm": "coverage-precise-mamba-m3_load_weights",
+      "column": "device",
+      "exit_code": 1
+    }
+  ],
+  "review_command": [
+    "python3",
+    "tools/coverage_sabotage.py",
+    "check",
+    "--arm",
+    "coverage-precise-mamba-m3_load_weights",
+    "--clean",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/clean_device.json",
+    "--sabotaged",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/sab_device.json",
+    "--restored",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/restored_device.json",
+    "--batch-bindings",
+    "build_mamba",
+    "--evidence",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-1/oracle-review.json"
+  ]
+}

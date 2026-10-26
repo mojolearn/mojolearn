@@ -1,0 +1,59 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "rf-1",
+  "arms": [
+    {
+      "arm": "coverage-precise-bindings-rf_aux_oob_score",
+      "checks": [
+        {
+          "arm": "coverage-precise-bindings-rf_aux_oob_score",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "trees-oob-cv-link"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "1cccc458d4f9f48df832a389f7197071e11fa5c3e7960a7f69e1c83b0877be5a"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "d92144dca6ca004a48f32a7b195bf25ded4e707222f668e3e7aeb5c946a4b247"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "2f359204b6c228d940d1b80618620ed09162d3d02d2267903c5ad50284d4a634"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "df5e3bfe5c22d8b2c66ea75a83ea28d7b1301cf2d83a0a01e4c2f021f5442954"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "78ffcf2b069ee1c2a4e9be5407e7c8946d4ad44bfa5ba272c4ab2bd7e0c74333"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "99b0894f774bee923150c26f0111bc3ab6dda9600e87e44d6b4da1394644dba4"
+    },
+    "check-coverage-precise-bindings-rf_aux_oob_score-device.log": {
+      "path": "check-coverage-precise-bindings-rf_aux_oob_score-device.log",
+      "sha256": "57306693633400c9315ea809f1e844ad5ba7608ba9d08513e2bc7015c21d36b3"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/rf-1",
+  "r2_archive": "measurements/verification/0.8.60/rf-1-proof.tgz"
+}

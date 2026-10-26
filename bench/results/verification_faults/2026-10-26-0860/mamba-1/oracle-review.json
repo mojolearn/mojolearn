@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-precise-mamba-m3_load_weights",
+  "records": {
+    "clean": "ab8435379212f2125614239c74c083c5860178ad271ec19ed68ba1ff8fb26565",
+    "sabotaged": "b15fb14f7645fb4b17b734e3d5a6f5d7ced71309912328dcdebecfb12a50caa9",
+    "restored": "4c95fcce4ced9c092c22802f0b3dabf6ffb1ab0c12e7ca35b6dfa826ca555ae6"
+  },
+  "patch_sha256": "649f1413af630072d97093097928289f3205304c36c08e4f54fe2849af42ff9e",
+  "refusals": {
+    "mamba3-decode-session/base": {
+      "product_check": "_coverage_decode_session: _same_bytes(session steps, per-call block.step).",
+      "why_fault_reaches_check": "The resident loader reads C_norm.weight from the B_norm.weight address. The independent per-call step uses the original C weights. Their first four token outputs differ by 765 bytes.",
+      "error": "ValueError: session steps and per-call block.step differ: 765 bytes of 1024\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 594, in _\n    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 554, in _coverage_decode_session\n    _same_bytes(\"session steps\", first, \"per-call block.step\", want_first)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 2198, in _same_bytes\n    raise ValueError(message)\nValueError: session steps and per-call block.step differ: 765 bytes of 1024"
+    }
+  }
+}

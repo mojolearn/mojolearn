@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-precise-mamba-m3_session_export",
+  "records": {
+    "clean": "2c059d8d6c682bd35b87b47d8fd9c25f3ca8aac37dab6413f7ca6ed3a74b865c",
+    "sabotaged": "528eca08fe7573fc1d91ea62f680d72d985b41b235f1fbbfa84fb473af2f47fb",
+    "restored": "27f3d3b7f2b816c9ef4a7f4fc68d628b3b87e9d5872f92d8b5ae6ea818b070f2"
+  },
+  "patch_sha256": "f49c53e5861ed51f02f89224790ea91b87f44a47d3a00e496e8194f921378c4b",
+  "refusals": {
+    "mamba3-decode-session/base": {
+      "product_check": "_coverage_decode_session: _same_bytes(session sync_state, per-call state).",
+      "why_fault_reaches_check": "The patch swaps qrot and krot during session state export. First step outputs pass; the exported state differs from the independent per-call state by 7732 bytes.",
+      "error": "ValueError: session sync_state and per-call state differ: 7732 bytes of 232704\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 594, in _\n    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 555, in _coverage_decode_session\n    _same_bytes(\"session sync_state\", synced[0], \"per-call state\", plain_synced[0])\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 2198, in _same_bytes\n    raise ValueError(message)\nValueError: session sync_state and per-call state differ: 7732 bytes of 232704"
+    }
+  }
+}

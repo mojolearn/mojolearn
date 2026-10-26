@@ -1,0 +1,64 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "mamba-3",
+  "arms": [
+    {
+      "arm": "coverage-precise-mamba-m3_session_export",
+      "checks": [
+        {
+          "arm": "coverage-precise-mamba-m3_session_export",
+          "column": "device",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-3/oracle-review.json"
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "mamba3-decode-session"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "66de5dbdee145351b6c2dc911619bd7a1f85a21ec85fa9f109f39156b1cdc9cc"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "2c059d8d6c682bd35b87b47d8fd9c25f3ca8aac37dab6413f7ca6ed3a74b865c"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "c0168f1537ef59ef643e827dabc2dd253cf09cc52499bc762478411b5532751f"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "2f71fe7a0207d8bb92fd46cf3763193586de8bf0508dec8e5a3558eecb18a019"
+    },
+    "oracle-review.json": {
+      "path": "oracle-review.json",
+      "sha256": "6280bd55ebde49c05a128a1e13670967f61d7cbee322d642b0d950fe698beb83"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "27f3d3b7f2b816c9ef4a7f4fc68d628b3b87e9d5872f92d8b5ae6ea818b070f2"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "528eca08fe7573fc1d91ea62f680d72d985b41b235f1fbbfa84fb473af2f47fb"
+    },
+    "check-coverage-precise-mamba-m3_session_export-device.log": {
+      "path": "check-coverage-precise-mamba-m3_session_export-device.log",
+      "sha256": "0485fbf545c3ba79f7896124eed6cf75b5c8da420e85b0d85ab2c1180fe982ce"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-3",
+  "r2_archive": "measurements/verification/0.8.60/mamba-3-proof.tgz"
+}
