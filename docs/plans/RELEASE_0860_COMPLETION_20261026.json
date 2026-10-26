@@ -1,0 +1,108 @@
+{
+  "version": "0.8.60",
+  "status": "in-progress",
+  "owner_order": "2026-10-26: include everything remaining in the next release; finish 0.8.59 publication first; defer post-publication verification until afterward.",
+  "previous_publication": "bench/results/release_verification/2026-10-26_pypi_0859/publication.json",
+  "source_audit_revision": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42",
+  "rules": [
+    "Retain successful unchanged compilation and runtime evidence; never repeat solely for version or packaging changes.",
+    "Keep identical as the focus; retired deterministic, Apple fast investment and unsupported toolchain work remain excluded by owner instructions.",
+    "Performance measurements remain after the correctness loop; no unproven performance default is promoted.",
+    "Every unresolved item remains visible; unsupported upstream functionality is a blocker, never a claimed completion."
+  ],
+  "initial_counts": {
+    "worktrees": 79,
+    "unmatched_unique_historical_commits": 39,
+    "public_endpoints": 3802,
+    "source_findings_before_installed_slot_reconciliation": 1310,
+    "native_coverage_owed": 36,
+    "declared_fault_arms_unproven": 41,
+    "fault_batches": 29
+  },
+  "items": [
+    {
+      "id": "worktrees",
+      "task": "Reconcile every unmatched worktree change against the shipped source; integrate or repair any remaining implementation.",
+      "status": "pending",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/next-release-worktree-audit.json",
+        "sha256": "6a5ed51190b24df0769a3a5044a2592ba771f4b062e0335c4c93b3528a354fc6"
+      }
+    },
+    {
+      "id": "runtime-source",
+      "task": "Resolve actual prohibited runtime paths and qualify installed replacements; retain allowed owner exceptions explicitly.",
+      "status": "pending",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/next-runtime-endpoints.json",
+        "sha256": "4b5d072bd494afb539db1bd71e52882342d064e7ea8b64f6d664f9b70702dca4"
+      }
+    },
+    {
+      "id": "coverage-source",
+      "task": "Complete remaining native/public coverage routes and truthful exclusions; source reach alone is not runtime proof.",
+      "status": "pending",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/next-coverage-audit.json",
+        "sha256": "8acaebd16330427f32dcd0cab3f244396d4a125b12c5de212f9788aef45288b2"
+      }
+    },
+    {
+      "id": "fault-injection",
+      "task": "Complete every remaining fault-injection proof and repair missing or ineffective arms; retain clean, fault and restored executions.",
+      "status": "pending",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/next-sabotage-batches.json",
+        "sha256": "e8ea6b91dd8d02a5bdc9ab7460ca862bcc479fbd1c5a8a1c90878ac5e9dad04f"
+      }
+    },
+    {
+      "id": "runtime-vendors",
+      "task": "Complete missing installed runtime coverage on Apple, CPU, NVIDIA and AMD; reuse valid existing tests.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "multi-gpu-nvidia",
+      "task": "Complete the installed two-physical-GPU producer including placement, consumed output and negative controls.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "multi-gpu-amd",
+      "task": "Complete the installed two-physical-GPU producer including placement, consumed output and negative controls.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "hopper",
+      "task": "Complete the outstanding Hopper correctness/loading qualification and retain the actual route.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "identity",
+      "task": "Admit retained within-release Apple/NVIDIA/AMD/CPU/PTX evidence and run only missing or invalidated cells.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "installed-artifacts",
+      "task": "Complete final wheel, dependency, loader and adapter gates for all release platforms.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "publish",
+      "task": "Publish 0.8.60 with every remaining in-flight item accounted for; do not silently carry unfinished items forward.",
+      "status": "pending",
+      "evidence": null
+    },
+    {
+      "id": "post-publication",
+      "task": "After 0.8.60 publication, run the requested Mac/NVIDIA full routine and neural sweeps and compare both ways.",
+      "status": "pending",
+      "evidence": null
+    }
+  ]
+}
