@@ -193,12 +193,12 @@ def test_refuses_damaged_and_foreign_files(tmp_path):
 # ---------------------------------------------------------------- operation session
 def _has_ops_state():
     try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_save_state")
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call")
     except Exception:
         return False
 
 
-@pytest.mark.skipif(not _has_ops_state(), reason="the sequence binding has no ops_save_state entry")
+@pytest.mark.skipif(not _has_ops_state(), reason="the sequence binding has no ops_session_call entry")
 def test_session_parameters_and_counters_round_trip(tmp_path):
     from mojolearn import ops
     rng = np.random.default_rng(0)

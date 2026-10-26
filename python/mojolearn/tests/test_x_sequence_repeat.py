@@ -45,7 +45,7 @@ _CHILD = textwrap.dedent('''
             out += [m.predict(Xs)]
         for cls in (ml.LSTMClassifier, ml.GRUClassifier, ml.RNNClassifier):
             out += [cls(hidden_size=4, batch_size=16, max_epochs=2).fit(Xs, yc).predict_proba(Xs)]
-        for cls in (ml.RMSprop, ml.Adagrad, ml.Lion, ml.Adamax, ml.NAdam, ml.LAMB):  # opt_step, lamb_step
+        for cls in (ml.RMSprop, ml.Adagrad, ml.Lion, ml.Adamax, ml.NAdam, ml.LAMB):  # opt_step, seq_lamb_step
             p = np.ones((4, 3), dtype=np.float32)
             o = cls([p])
             for k in range(3):

@@ -649,7 +649,7 @@ def lamb_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
     """One LAMB step with exp_avg / exp_avg_sq and the table on the device
     (`lamb_core`). addrs = [param_0 .. param_{J-1}, grad_0 .. grad_{J-1},
     scalars]; ip = [J, t, flags]; fp = [lr, beta1, beta2, eps,
-    weight_decay, max_grad_norm, t0]; scalars as `lamb_step_py`'s. The
+    weight_decay, max_grad_norm, t0]; scalars as `lamb_step_impl`'s. The
     tensor sizes are the handle's offsets. Returns n."""
     var h = _handle(handle, RES_LAMB)
     if len(ip) != 3 or len(fp) != 7:

@@ -22,13 +22,13 @@ GUIDE = pathlib.Path(__file__).resolve().parents[3] / "docs-site" / "user_guide"
 def _has_entries():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        return hasattr(b, "ops_open") and hasattr(b, "model_fit")
+        return hasattr(b, "ops_session_call") and hasattr(b, "model_fit")
     except Exception:
         return False
 
 
 pytestmark = pytest.mark.skipif(not _has_entries(),
-                                reason="the sequence binding has no ops_open/model_fit entries (rebuild it)")
+                                reason="the sequence binding has no ops_session_call/model_fit entries (rebuild it)")
 
 
 def _blocks():
@@ -174,7 +174,7 @@ def test_guide_shapes_sequential(capsys):
 
 def test_guide_program(tmp_path, monkeypatch):
     b = _blocks()
-    if "program" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+    if "program" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call"):
         pytest.skip("no captured-program entries in this binding (rebuild it)")
     monkeypatch.chdir(tmp_path)
     ns = _run(b["program"])
@@ -208,7 +208,7 @@ def test_guide_import_model(tmp_path, monkeypatch):
     the cnn.onnx the block names. The imported logits are compared with the same operations called one by
     one in a session on the fixture's weights; the lowering's own tests hold that comparison word for word."""
     b = _blocks()
-    if "import" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+    if "import" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call"):
         pytest.skip("no captured-program entries in this binding (rebuild it)")
     pytest.importorskip("mojolearn.importers._program", reason="no model-import lowering in this tree")
     from mojolearn import ops
@@ -247,7 +247,7 @@ def test_guide_import_pretrained(tmp_path, monkeypatch):
     first run), imported directly and run on four seeded images. Finite (4, 1000) logits, a second run equal
     word for word, the saved program equal after loading; torch's own logits are a reference only."""
     b = _blocks()
-    if "import-pretrained" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+    if "import-pretrained" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call"):
         pytest.skip("no captured-program entries in this binding (rebuild it)")
     pytest.importorskip("mojolearn.importers._program", reason="no model-import lowering in this tree")
     torch = pytest.importorskip("torch")
@@ -306,7 +306,7 @@ def _docstring_examples():
                                   "Sequential.load_state_dict", "ops.Session.load_weights"])
 def test_docstring_examples_run(name):
     if name.startswith("ops.Program") or name == "ops.Session.capture":
-        if not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+        if not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call"):
             pytest.skip("no captured-program entries in this binding (rebuild it)")
     obj = dict(_docstring_examples())[name]
     finder = doctest.DocTestFinder(recurse=False)

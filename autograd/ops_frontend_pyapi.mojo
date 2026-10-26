@@ -10,7 +10,7 @@ from autograd.ops_api import ops_session
 from autograd.program_pyapi import program_input, _integer, ops_program_fit_native_py
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
-from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
+from autograd.pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
 from autograd.model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from autograd.program_save_pyapi import ops_program_save_native_py
 from bindings.native_json import native_path

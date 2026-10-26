@@ -16,13 +16,13 @@ from mojolearn import _backend
 
 def _has_ops_entries():
     try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_open")
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call")
     except Exception:
         return False
 
 
 pytestmark = pytest.mark.skipif(not _has_ops_entries(),
-                                reason="the sequence binding has no ops_open entry (rebuild it)")
+                                reason="the sequence binding has no ops_session_call entry (rebuild it)")
 
 
 def _ops():

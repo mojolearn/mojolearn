@@ -20,7 +20,7 @@ from mojolearn import _backend
 def _has_import_kinds():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        if not hasattr(b, "ops_open"):
+        if not hasattr(b, "ops_session_call"):
             return False
         from mojolearn import ops
         with ops.Session() as s:

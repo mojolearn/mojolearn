@@ -1441,8 +1441,6 @@ ANNOTATIONS = {
     "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
     **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_eigh_batch", "x_decomp_knn_select",
                                            "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},
-    "ops_metric": ("n/a", [], "no live caller: Session._metric is never called (accuracy and log_loss "
-                              "run through ops_session_call)"),
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)

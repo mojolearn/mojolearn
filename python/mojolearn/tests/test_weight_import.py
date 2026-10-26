@@ -25,7 +25,7 @@ from mojolearn.models.safetensors import write_safetensors
 def _has_entries():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        return hasattr(b, "model_import_params") and hasattr(b, "ops_load_weights")
+        return hasattr(b, "model_import_params") and hasattr(b, "ops_session_call")
     except Exception:
         return False
 

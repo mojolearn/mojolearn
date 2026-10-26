@@ -21,12 +21,11 @@ from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, FitValidation, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
-from autograd.ops_api import ops_session, ops_session_close, ops_session_open
+from autograd.ops_api import ops_session
 from autograd.program import OpsProgram
-from autograd.program_arrays_pyapi import initialize_program_arrays
 from autograd.rankn import ShapeN
 from sequence.ops import FP
-from autograd.rankn_api import rn_dims, rn_shape
+from autograd.rankn_api import rn_dims
 from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from core.cast_in import CastIn, cast_in_kind, label_kind_of
@@ -329,73 +328,8 @@ def model_import_params_py[E: Exec](
 # the session's executor.
 
 
-def _handle_list(p: PythonObject) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(len(p)):  # small-loop(p: an op's input handles, at most three): argument parsing, no data
-        out.append(ival(p, i))
-    return out^
-
-
-def _arg_ints(p: PythonObject) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(len(p)):  # small-loop(p: an op's integer arguments, a shape or axes list at most): argument parsing, no data
-        out.append(ival(p, i))
-    return out^
-
-
-def _arg_floats(p: PythonObject) raises -> List[Float32]:
-    var out = List[Float32]()
-    for i in range(len(p)):  # small-loop(p: an op's float arguments, at most one): argument parsing, no data
-        out.append(fval(p, i))
-    return out^
-
-
-def ops_open_py[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: PythonObject) raises -> PythonObject:
-    """A new session; record = 1 records a graph for backward. Returns its id."""
-    initialize_program_arrays()
-    return PythonObject(ops_session_open[E, KIND](ex^, Int(py=record) != 0))
-
-
-def ops_close_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) raises -> PythonObject:
-    ops_session_close[E, KIND](Int(py=sid))
-    return PythonObject(0)
-
-
-def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, desc: PythonObject, ip: PythonObject,
-) raises -> PythonObject:
-    """desc: the caller's (rows, cols) array as it is (`cast_in_of`; cast to
-    float32 on the executor); ip = [requires_grad], or [requires_grad,
-    ndim, d0 .. d(ndim-1)] for a C-order array of another rank whose
-    row-major (rows, cols) matrix view `desc` describes (lane
-    ag-rankn-python). Word 0 is a flag word: bit 0 requires_grad, bit 1
-    (lane ag-program-embedding) an ids tensor of int32 words
-    (OpsSession.upload_ids; the array must hold integers). Returns the new
-    tensor's handle."""
-    if len(ip) < 1:
-        raise Error("ops_upload: requires [requires_grad] or [requires_grad, ndim, dims...]")
-    var src = cast_in_of(desc, "x")
-    var p = ops_session[E, KIND](Int(py=sid))
-    var flags = ival(ip, 0)
-    var as_ids = (flags & 2) != 0
-    if as_ids and (flags & 1) != 0:
-        raise Error("ops: ids take no gradient")
-    if len(ip) == 1:
-        if as_ids:
-            var d2 = List[Int](capacity=2)
-            d2.append(src.rows)
-            d2.append(src.cols)
-            return PythonObject(p[].upload_ids(src, rn_shape(d2, "ops: ids")))
-        return PythonObject(p[].upload(src, (flags & 1) != 0))
-    var nd = ival(ip, 1)
-    if nd < 0 or len(ip) != 2 + nd:
-        raise Error("ops_upload: the shape takes ndim and ndim dimensions")
-    var dims = List[Int](capacity=nd)
-    for k in range(nd):  # small-loop(nd: the tensor rank, at most 8): argument parsing, no data
-        dims.append(ival(ip, 2 + k))
-    if as_ids:
-        return PythonObject(p[].upload_ids(src, rn_shape(dims, "ops: ids")))
-    return PythonObject(p[].upload_nd(src, rn_shape(dims, "ops: tensor"), (flags & 1) != 0))
+# TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_sequence.patch
 
 
 def ops_load_weights_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -410,41 +344,6 @@ def ops_load_weights_py[E: Exec & Movable & Deinitable, KIND: Int](
     return PythonObject(session_load_weights[E, KIND](Int(py=sid), r_, nm))
 
 
-def ops_download_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, h: PythonObject, addr: PythonObject,
-) raises -> PythonObject:
-    """The tensor's values into the caller's float32 array of its shape."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].download(Int(py=h), fptr(addr, "out"))
-    return PythonObject(0)
-
-
-def ops_op_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, code: PythonObject, hs: PythonObject, ip: PythonObject, fp: PythonObject,
-) raises -> PythonObject:
-    """Operation `code` (autograd/ops_api.mojo OPS_*) on the tensor handles
-    `hs` with integer arguments `ip` and float arguments `fp`; returns the
-    new tensor's handle."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].op(Int(py=code), _handle_list(hs), _arg_ints(ip), _arg_floats(fp)))
-
-
-def ops_op_packed_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, code: PythonObject, block: PythonObject,
-) raises -> PythonObject:
-    """`ops_op_py` with the handles and arguments in the session's packed
-    int64 block at address `block` (autograd/ops_api.mojo OPS_PACK_*): no
-    Python list is walked (lane ag-pass6-host idea G)."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].op_packed(Int(py=code), Int(py=block)))
-
-
-def ops_scalar_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    """The one value of a (1, 1) tensor."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(Float64(p[].scalar(Int(py=h))))
-
-
 def ops_shape_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
     """The dims of a tensor: [rows, cols] for a matrix, and the full
     shape of a tensor of any other rank."""
@@ -454,195 +353,6 @@ def ops_shape_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h
     for k in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
         _ = py_call(out.append, PythonObject(dims[k]))
     return out
-
-
-def ops_free_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].free(Int(py=h))
-    return PythonObject(0)
-
-
-def ops_reset_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) raises -> PythonObject:
-    """Drop computed tensors and the graph; uploaded tensors stay."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].reset()
-    return PythonObject(0)
-
-
-def ops_metric_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, kind: PythonObject, hs: PythonObject,
-) raises -> PythonObject:
-    """Metric `kind` (OPS_METRIC_*) of the handles [y_true, prediction]."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(Float64(p[].metric(Int(py=kind), _handle_list(hs))))
-
-
-def ops_backward_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, h: PythonObject, accumulate: PythonObject,
-) raises -> PythonObject:
-    """Differentiate the (1, 1) tensor `h` of a recording session."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].backward(Int(py=h), Int(py=accumulate) != 0)
-    return PythonObject(0)
-
-
-def ops_grad_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, h: PythonObject, addr: PythonObject,
-) raises -> PythonObject:
-    """The gradient of tensor `h` into the caller's float32 array of its shape."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].gradient_into(Int(py=h), fptr(addr, "grad"))
-    return PythonObject(0)
-
-
-# Higher-order gradients (autograd/ops_api.mojo OpsSession.backward_graph,
-# backward_seed, grad_handle, vjp, hvp, jvp; lane ag-ho-session): one call
-# each, handles and lists of handles only.
-def _input_handles(p: PythonObject) raises -> List[Int]:
-    var hs = List[Int]()
-    for i in range(len(p)):  # small-loop(p: the inputs or directions of vjp, jvp or hvp): argument parsing, no data
-        hs.append(ival(p, i))
-    return hs^
-
-
-def _handles_out(hs: List[Int]) raises -> PythonObject:
-    var res = Python.list()
-    for i in range(len(hs)):  # small-loop(hs: one result handle per input of vjp or hvp): handle list building, no data
-        _ = py_call(res.append, PythonObject(hs[i]))
-    return res
-
-
-def ops_backward_graph_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, h: PythonObject,
-) raises -> PythonObject:
-    """Differentiate the (1, 1) tensor `h`, recording the gradients as tensors."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].backward_graph(Int(py=h))
-    return PythonObject(0)
-
-
-def ops_backward_seed_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, h: PythonObject, seed: PythonObject, create_graph: PythonObject,
-) raises -> PythonObject:
-    """Differentiate tensor `h` against the seed tensor `seed` of its shape."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].backward_seed(Int(py=h), Int(py=seed), Int(py=create_graph) != 0)
-    return PythonObject(0)
-
-
-def ops_grad_handle_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, h: PythonObject,
-) raises -> PythonObject:
-    """The recorded gradient of tensor `h` as a new handle."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].grad_handle(Int(py=h)))
-
-
-def ops_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, out_h: PythonObject, inputs: PythonObject, seed: PythonObject, create_graph: PythonObject,
-) raises -> PythonObject:
-    """The vector-Jacobian products of `out_h` for `seed`: one handle per input."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    var hs = p[].vjp(Int(py=out_h), _input_handles(inputs), Int(py=seed), Int(py=create_graph) != 0)
-    return _handles_out(hs)
-
-
-def ops_hvp_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, loss: PythonObject, params: PythonObject, vs: PythonObject,
-) raises -> PythonObject:
-    """The Hessian-vector products of `loss` along `vs`: one handle per parameter."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    var hs = p[].hvp(Int(py=loss), _input_handles(params), _input_handles(vs))
-    return _handles_out(hs)
-
-
-def ops_jvp_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, out_h: PythonObject, inputs: PythonObject, us: PythonObject,
-) raises -> PythonObject:
-    """The Jacobian-vector product of `out_h` along `us`: one handle."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].jvp(Int(py=out_h), _input_handles(inputs), _input_handles(us)))
-
-
-# Session optimizers (autograd/ops_api.mojo OpsSession.optimizer / step):
-# one call each, handles and options only; every number is computed in the
-# session.
-def _param_handles(p: PythonObject) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(len(p)):  # small-loop(p: the step's parameter handles): argument parsing, no data
-        out.append(ival(p, i))
-    return out^
-
-
-def ops_optimizer_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, ip: PythonObject, fp: PythonObject,
-) raises -> PythonObject:
-    """ip = [kind (sequence/ops.mojo OPT_SGD, OPT_ADAM, OPT_ADAMW), nesterov,
-    schedule (autograd/model.mojo SCHED_*), step size]; fp = [lr, momentum,
-    beta1, beta2, eps, weight_decay, gamma]. Returns the optimizer's id."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].optimizer(_arg_ints(ip), _arg_floats(fp)))
-
-
-def ops_step_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, opt: PythonObject, hs: PythonObject,
-) raises -> PythonObject:
-    """One in-place update of the parameter handles `hs` by optimizer `opt`."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].step(Int(py=opt), _param_handles(hs))
-    return PythonObject(0)
-
-
-def ops_scheduler_step_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, opt: PythonObject,
-) raises -> PythonObject:
-    """Advance optimizer `opt`'s learning-rate schedule by one epoch."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].scheduler_step(Int(py=opt))
-    return PythonObject(0)
-
-
-def ops_learning_rate_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, opt: PythonObject,
-) raises -> PythonObject:
-    """Optimizer `opt`'s current learning rate."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(Float64(p[].learning_rate(Int(py=opt))))
-
-
-def ops_zero_grad_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) raises -> PythonObject:
-    """Forget every trainable tensor's gradient."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].zero_grad()
-    return PythonObject(0)
-
-
-def ops_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, opt: PythonObject, h: PythonObject,
-) raises -> PythonObject:
-    """[step count, beta1^t, beta2^t, mu product, buffer handle 1, 2, 3]
-    (0 for a buffer the optimizer does not use)."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    var st = p[].optimizer_state(Int(py=opt), Int(py=h))
-    var out = Python.list()
-    _ = py_call(out.append, PythonObject(st[0]))
-    _ = py_call(out.append, PythonObject(Float64(st[1])))
-    _ = py_call(out.append, PythonObject(Float64(st[2])))
-    _ = py_call(out.append, PythonObject(Float64(st[3])))
-    _ = py_call(out.append, PythonObject(st[4]))
-    _ = py_call(out.append, PythonObject(st[5]))
-    _ = py_call(out.append, PythonObject(st[6]))
-    return out
-
-
-def ops_load_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, opt: PythonObject, h: PythonObject, ip: PythonObject, fp: PythonObject,
-) raises -> PythonObject:
-    """ip = [step count, buffer handle 1, 2, 3]; fp = [beta1^t, beta2^t, mu
-    product]: the words ops_optimizer_state returns."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].load_optimizer_state(Int(py=opt), Int(py=h), _arg_ints(ip), _arg_floats(fp))
-    return PythonObject(0)
 
 
 # The process-wide launch profile (autograd/profile.mojo; MOJOLEARN_AG_PROFILE),
@@ -690,45 +400,3 @@ def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
     _ = py_call(res.append, kinds)
     return res
 
-
-def ops_capture_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, inputs: PythonObject, outputs: PythonObject,
-) raises -> PythonObject:
-    """Capture the logged operations computing the handles `outputs` from
-    the handles `inputs`; returns program_info."""
-    var p = ops_session[E, KIND](Int(py=sid))
-    var pid = p[].capture(_input_handles(inputs), _input_handles(outputs))
-    return program_info(pid, p[].program(pid))
-
-
-def ops_program_info_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject,
-) raises -> PythonObject:
-    var p = ops_session[E, KIND](Int(py=sid))
-    var pid_i = Int(py=pid)
-    return program_info(pid_i, p[].program(pid_i))
-
-
-def ops_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject,
-) raises -> PythonObject:
-    """Run program `pid`: descs holds one input descriptor (`cast_in_of`)
-    per input, addrs one float32 destination address per output (an array
-    of the output's shape)."""
-    var srcs = List[CastIn]()
-    for k in range(len(descs)):  # small-loop(descs: one descriptor per program input): argument parsing, no data
-        srcs.append(cast_in_of(descs[k], "program input"))
-    var dsts = List[FP]()
-    for k in range(len(addrs)):  # small-loop(addrs: one destination per program output): argument parsing, no data
-        dsts.append(fptr(addrs[k], "program output"))
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].run_program(Int(py=pid), srcs, dsts)
-    return PythonObject(0)
-
-
-def ops_program_free_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject,
-) raises -> PythonObject:
-    var p = ops_session[E, KIND](Int(py=sid))
-    p[].program_free(Int(py=pid))
-    return PythonObject(0)

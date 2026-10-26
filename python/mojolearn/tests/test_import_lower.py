@@ -35,7 +35,7 @@ BATCH = 3  # odd and small: no board shape
 def _has_entries():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        if not (hasattr(b, "ops_open") and hasattr(b, "ops_capture") and hasattr(b, "ops_load_weights")):
+        if not hasattr(b, "ops_session_call"):
             return False
         from mojolearn import ops
         with ops.Session() as s:
