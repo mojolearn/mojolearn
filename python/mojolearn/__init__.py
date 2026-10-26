@@ -636,6 +636,12 @@ from ._native_declared_constructors import install as _install_declared_construc
 _install_declared_constructors()
 del _install_declared_constructors
 
+# Layouts connected at module import (neighbor queries, host inference, ...)
+# predate the installers above: rebind their replaced __init__/set_params.
+from ._native_classical_bridge import refresh_installed_members as _refresh_installed_members
+_refresh_installed_members()
+del _refresh_installed_members
+
 # Connect CV's fixed native estimator ABIs after every public class exists.
 from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
 from . import _mode as _mode_metadata_owner
@@ -702,6 +708,11 @@ from ._native_declared_constructors import connect as _connect_declared_construc
 from ._native_declared_params import CONTEXT as _declared_constructor_setters
 _connect_declared_constructors(_declared_constructor_setters)
 del _connect_declared_constructors, _declared_constructor_setters
+
+# Default member estimators are constructed only after every constructor above is connected.
+from ._native_msel_prep import connect_estimator_defaults as _connect_estimator_defaults
+_connect_estimator_defaults()
+del _connect_estimator_defaults
 
 # The public parallel drivers' class/storage snapshots are taken last: every
 # import-time class connection above (native attribute slots, constructors)
