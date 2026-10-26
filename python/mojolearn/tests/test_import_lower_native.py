@@ -32,7 +32,7 @@ BATCH = 3  # odd and small: no board shape
 def _has_entry():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        return hasattr(b, "onnx_import") and hasattr(b, "ops_capture")
+        return hasattr(b, "onnx_import") and hasattr(b, "ops_session_call")
     except Exception:  # noqa: BLE001  no binding in this install
         return False
 

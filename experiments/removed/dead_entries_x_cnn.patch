@@ -1,0 +1,192 @@
+diff --git a/bindings/_mojolearn_x_cnn.mojo b/bindings/_mojolearn_x_cnn.mojo
+index 4d9b799b6..f898dfd63 100644
+--- a/bindings/_mojolearn_x_cnn.mojo
++++ b/bindings/_mojolearn_x_cnn.mojo
+@@ -183,8 +183,21 @@ def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) ra
+     return (cprm^, pprm^, pool)
+ 
+ 
+-# TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_cnn.patch
++def conv_block_forward_binding[resident: Bool = False](
++    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
++    conv_prm: PythonObject, pool_prm: PythonObject,
++) raises -> PythonObject:
++    """Conv2d -> ReLU -> MaxPool2d (CNNClassifier's block) in one call; out
++    and idx are the pool's (idx unused without a pool)."""
++    var t = _block_prms(conv_prm, pool_prm)
++    var x = _fp(x_addr)
++    var w = _fp(w_addr)
++    var b = _fp(b_addr)
++    var po = _fp(out_addr)
++    var pi = _ip(idx_addr)
++    with GILReleased(Python()):
++        conv_block_forward_into[resident](x, w, b, t[0], t[1], t[2], po, pi)
++    return PythonObject(0)
+ 
+ 
+ def _saved(saved: PythonObject) raises -> Tuple[Int, Int]:
+@@ -214,6 +227,31 @@ def conv_block_forward_r_binding(
+     return PythonObject(0)
+ 
+ 
++def conv_block_backward_binding[resident: Bool = False](
++    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
++    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
++) raises -> PythonObject:
++    """The block's backward from its output gradient g: outs = [dx address
++    (0: not wanted, the first block's), dW address, db address]."""
++    var t = _block_prms(conv_prm, pool_prm)
++    var dx_addr = outs[0]
++    var dw_addr = outs[1]
++    var db_addr = outs[2]
++    var need_dx = Int(py=dx_addr) != 0
++    var want = need_dx
++    var x = _fp(x_addr)
++    var w = _fp(w_addr)
++    var b = _fp(b_addr)
++    var g = _fp(g_addr)
++    var pi = _ip(idx_addr)
++    var pdx = _fp(dx_addr) if want else _fp(db_addr)
++    var pdw = _fp(dw_addr)
++    var pdb = _fp(db_addr)
++    with GILReleased(Python()):
++        conv_block_backward_into[resident](x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
++    return PythonObject(0)
++
++
+ def conv_block_backward_r_binding(
+     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+     outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
+@@ -1435,8 +1473,8 @@ def build__mojolearn_x_cnn() -> PythonObject:
+         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
+         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
+         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
+-        # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
++        m.def_function[conv_block_forward_binding[False]]("x_cnn_conv_block_forward")
++        m.def_function[conv_block_backward_binding[False]]("x_cnn_conv_block_backward")
+         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
+         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
+         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")
+diff --git a/bindings/_mojolearn_x_cnn_host.mojo b/bindings/_mojolearn_x_cnn_host.mojo
+index 5cef005f5..782af0c5f 100644
+--- a/bindings/_mojolearn_x_cnn_host.mojo
++++ b/bindings/_mojolearn_x_cnn_host.mojo
+@@ -147,8 +147,11 @@ def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) ra
+     return (cprm^, pprm^, pool)
+ 
+ 
+-# TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_x_cnn.patch
++def conv_block_forward_binding(
++    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
++    conv_prm: PythonObject, pool_prm: PythonObject,
++) raises -> PythonObject:
++    return _block_forward(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm, 0, 0)
+ 
+ 
+ def _block_forward(
+@@ -996,6 +999,10 @@ def fit_epoch_d_binding(
+     return out
+ 
+ 
++def numeric_mode_binding() raises -> PythonObject:
++    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
++
++
+ def vendor_binding() raises -> PythonObject:
+     return PythonObject(String("cpu"))
+ 
+@@ -1018,8 +1025,8 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
+         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
+         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
+         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
+-        # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
++        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward")
++        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward")
+         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
+         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
+         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")
+@@ -1041,8 +1048,7 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
+         m.def_function[pad2d_backward_binding]("x_cnn_pad2d_backward")
+         m.def_function[adaptive_pool_binding]("x_cnn_adaptive_pool")
+         m.def_function[graph_op_binding]("x_cnn_graph_op")
+-        # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
++        m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
+         m.def_function[vendor_binding]("x_cnn_vendor")
+         m.def_function[res_alloc_binding]("x_cnn_res_alloc")
+         m.def_function[res_free_binding]("x_cnn_res_free")
+diff --git a/python/mojolearn/_surface_cnn.py b/python/mojolearn/_surface_cnn.py
+index b9ef588fb..23f0a4f5f 100644
+--- a/python/mojolearn/_surface_cnn.py
++++ b/python/mojolearn/_surface_cnn.py
+@@ -38,6 +38,7 @@ FAMILIES = (
+         exports=(
+             "x_cnn_host_numeric_mode", "x_cnn_host_vendor", "x_cnn_host_column", "x_cnn_host_sabotage",
+             "x_cnn_gemm", "x_cnn_conv2d_forward", "x_cnn_conv2d_backward", "x_cnn_conv_shape",
++            "x_cnn_conv_block_forward", "x_cnn_conv_block_backward",
+             "x_cnn_pool_shape", "x_cnn_maxpool2d_forward", "x_cnn_maxpool2d_backward",
+             "x_cnn_avgpool2d_forward", "x_cnn_avgpool2d_backward",
+             "x_cnn_relu_forward", "x_cnn_relu_backward", "x_cnn_add", "x_cnn_linear_forward",
+@@ -45,7 +46,7 @@ FAMILIES = (
+             "x_cnn_batchnorm_forward", "x_cnn_batchnorm_backward", "x_cnn_dropout2d", "x_cnn_mul",
+             "x_cnn_spmm", "x_cnn_gcn_norm", "x_cnn_pad2d_forward", "x_cnn_pad2d_backward",
+             "x_cnn_adaptive_pool", "x_cnn_graph_op",
+-            "x_cnn_vendor",
++            "x_cnn_numeric_mode", "x_cnn_vendor",
+             "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_argmax", "x_cnn_res_gather",
+             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
+             "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r", "x_cnn_fit_epoch_r",
+diff --git a/python/mojolearn/tests/test_x_cnn_repeat.py b/python/mojolearn/tests/test_x_cnn_repeat.py
+index a41a093fe..e8618e2e9 100644
+--- a/python/mojolearn/tests/test_x_cnn_repeat.py
++++ b/python/mojolearn/tests/test_x_cnn_repeat.py
+@@ -84,9 +84,9 @@ def test_trainer_repeat():
+         _thrice(lambda n: _fit(n, **kw), 100, 7)
+ 
+ 
+-def test_resident_entries_repeat_with_saved_arrays():
+-    """The `_r` entries give the same bits with and without the forward's
+-    saved arrays."""
++def test_resident_entries_match_address_entries():
++    """The `_r` entries on resident arrays give the address entries' bits,
++    each called twice."""
+     import mojolearn as ml
+     from mojolearn._expansion_cnn import _Res
+     conv = ml.Conv2d(3, 4, 3, padding=1, random_state=3)
+@@ -99,9 +99,12 @@ def test_resident_entries_repeat_with_saved_arrays():
+     oshape = pool._out_shape(cshape)
+     out = np.empty(oshape, np.float32)
+     idx = np.empty(oshape, np.int32)
++    b.x_cnn_conv_block_forward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, out.ctypes.data,
++                               idx.ctypes.data, prm, pprm)
+     g = _x(oshape, 2)
+     dx, dw, db = np.empty(x.shape, np.float32), np.empty(conv.weight_.shape, np.float32), np.empty(4, np.float32)
+-    ref = None
++    b.x_cnn_conv_block_backward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, g.ctypes.data,
++                                idx.ctypes.data, [dx.ctypes.data, dw.ctypes.data, db.ctypes.data], prm, pprm)
+     for _ in (0, 1):
+         with _Res(b) as R:
+             h = {k: R.new(v.size) for k, v in dict(x=x, w=conv.weight_, b=conv.bias_, out=out, idx=idx, g=g, dx=dx,
+@@ -113,13 +116,11 @@ def test_resident_entries_repeat_with_saved_arrays():
+             b.x_cnn_conv_block_forward_r(h["x"], h["w"], h["b"], h["out"], h["idx"], prm, pprm, sv)
+             b.x_cnn_conv_block_backward_r(h["x"], h["w"], h["b"], h["g"], h["idx"], [h["dx"], h["dw"], h["db"]] + sv,
+                                           prm, pprm)
+-            got = dict(out=R.get(h["out"], out.shape), idx=R.get(h["idx"], idx.shape).view(np.int32),
+-                       dx=R.get(h["dx"], dx.shape), dw=R.get(h["dw"], dw.shape), db=R.get(h["db"], db.shape))
+-            if ref is None:
+-                ref = got
+-            else:
+-                for k in ref:
+-                    _same(got[k], ref[k])
++            _same(R.get(h["out"], out.shape), out)
++            _same(R.get(h["idx"], idx.shape).view(np.int32), idx)
++            _same(R.get(h["dx"], dx.shape), dx)
++            _same(R.get(h["dw"], dw.shape), dw)
++            _same(R.get(h["db"], db.shape), db)
+         rows = np.array([5, 0, 3], np.int32)
+         with _Res(b) as R:
+             src, dst = R.new(x.size), R.new(3 * 192)

@@ -113,9 +113,9 @@ def test_bindings_register_the_gpu_names():
         host = _registered(host_surface.binding_source(name))
         gpu = _registered(f"bindings/_mojolearn_{name}.mojo")
         readbacks = {f"{name}_host_{r}" for r in host_surface.READBACK}
-        # the device-resident embedding table (`embedding.py` resolves both
+        # the device-resident embedding table (`embedding.py` resolves it
         # with a None fallback and takes the per-call entries on the host)
-        device_only = {"embedding_resident", "embedding_table_release"} if name == "embedding" else set()
+        device_only = {"embedding_table_release"} if name == "embedding" else set()
         if name == "embedding":
             # device I/O (gap lanes, 2026-10-08): resident tensors and the
             # forward/backward on them; `Embedding._dev_module` refuses by name

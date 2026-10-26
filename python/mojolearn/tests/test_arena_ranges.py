@@ -8,9 +8,10 @@ is zeroed on the device) and downloads only its outputs; `DeviceCache` /
 `resident()` keep a big input on the device between programs. Every x_prep
 and x_metrics program below runs three ways on the GPU binding: the
 whole-arena entries (`MOJOLEARN_ARENA_RANGES=0`), the ranges entries, and
-the ranges entries inside `resident()` (every input resident, the battery
-run twice so the second pass re-uses the device copies). All three must
-return the same bytes, and the store must hold nothing after the block.
+the ranges entries inside `resident()` (every x_prep input resident, the battery
+run twice so the second pass re-uses the device copies; x_metrics programs
+have no resident store and copy their inputs). All three must return the
+same bytes, and the store must hold nothing after the block.
 
     .pixi/envs/test/bin/python -m pytest python/mojolearn/tests/test_arena_ranges.py -q
 """
@@ -110,25 +111,25 @@ def test_ranges_and_resident_move_no_bit(monkeypatch):
         res1 = run()
         res2 = run()
         stats = r.stats()
-        live_inside = (int(mb.x_metrics_dev_live()), int(pb.x_prep_dev_live()))
-    live_after = (int(mb.x_metrics_dev_live()), int(pb.x_prep_dev_live()))
+        live_inside = int(pb.x_prep_dev_live())
+    live_after = int(pb.x_prep_dev_live())
     for arm, got in (("ranges", ranges), ("resident", res1), ("resident second pass", res2)):
         assert got == whole, (arm, [n for (n, a), (_, c) in zip(whole, got) if a != c])
     assert stats and all(u > 0 for u, _ in stats.values()), stats
     assert all(h > 0 for _, h in stats.values()), stats
-    assert all(v > 0 for v in live_inside), live_inside
-    assert live_after == (0, 0), live_after
+    assert live_inside > 0, live_inside
+    assert live_after == 0, live_after
 
 
 def test_device_cache_frees_deterministically():
     b = _gpu_ranges()
     if b is None:
         pytest.skip("no GPU binding with the ranges entries in this process")
-    mb, _ = b
+    _, pb = b
     from mojolearn._array import Array
     from mojolearn._verify_native_runtime import audit_native_call
     a = Array.from_list([float(i) for i in range(1000)], "<f4")
-    c = _arena_io.DeviceCache(mb, "x_metrics")
+    c = _arena_io.DeviceCache(pb, "x_prep")
     base = c.live()
     i1 = c.id_of(a)
     assert audit_native_call(c.get, a).assert_native() == i1
@@ -136,7 +137,7 @@ def test_device_cache_frees_deterministically():
     assert c.live() == base + 1
     c.release(a)
     assert c.live() == base and audit_native_call(c.get, a).assert_native() is None
-    with _arena_io.DeviceCache(mb, "x_metrics") as c2:
+    with _arena_io.DeviceCache(pb, "x_prep") as c2:
         c2.id_of(a)
         assert c2.live() == base + 1
     assert c2.live() == base

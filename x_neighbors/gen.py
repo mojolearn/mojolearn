@@ -128,8 +128,6 @@ OPS = [
      [("ld", "fin", "count"), ("ystatic", "fin", "count"), ("res", "fout", "count"), ("count", "int"), ("alpha", "float")]),
     ("ls_laplacian", "items", "ls_laplacian_item", "n * n",
      [("a", "fin", "n * n"), ("res", "fout", "n * n"), ("n", "int")]),
-    ("knn_graph", "items", "knn_graph_item", "n",
-     [("idx", "iin", "n * k"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("k", "int")]),
     ("knn_impute", "items", "knn_impute_item", "n * d",
      [("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"), ("best_i", "iscr", "n * d * k"),
       ("res", "fout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int")]),
@@ -183,8 +181,7 @@ OPS = [
       ("part", "iscr", "xn_fold_blocks(n)"), ("n", "int")]),
     # lane apple-fast-py2mojo-neighbors (2026-10-03): the Python data loops
     # of _expansion_neighbors.py / neighbors.py as items
-    # (x_neighbors/py2mojo_items.mojo); -D MOJOLEARN_PY2MOJO_neighbors_OFF
-    # (read back as x_neighbors_py2mojo_off) restores the Python loops
+    # (x_neighbors/py2mojo_items.mojo)
     ("p2m_mask_value", "py2mojo_items", "p2m_mask_value_item", "count",
      [("x", "fin", "count"), ("res", "fout", "count"), ("count", "int"), ("want", "float")]),
     ("p2m_zero_cols", "py2mojo_items", "p2m_zero_cols_item", "n * d",
@@ -666,27 +663,8 @@ def _f(v: PythonObject, k: Int) raises -> Float32:
     return Float32(Float64(py=v[k]))
 
 
-def eigh_binding(a: PythonObject, i: PythonObject, f: PythonObject) raises -> PythonObject:
-    var x = _a(a, 0)
-    var w = _a(a, 1)
-    var v = _a(a, 2)
-    var n = _n(i, 0)
-    if n <= 0:
-        raise Error("x_neighbors: eigh needs n >= 1")
-    var sweeps = 0
-    with GILReleased(Python()):
-        sweeps = op_eigh(x, n, w, v)
-    return PythonObject(sweeps)
-
-
 def x_neighbors_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
-
-
-def x_neighbors_py2mojo_off_binding() raises -> PythonObject:
-    \"\"\"1 when built with -D MOJOLEARN_PY2MOJO_neighbors_OFF: Python runs its
-    old data loops instead of the p2m_* ops (lane apple-fast-py2mojo-neighbors).\"\"\"
-    return PythonObject(1 if is_defined["MOJOLEARN_PY2MOJO_neighbors_OFF"]() else 0)
 """]
     for name, params in [(o[0], o[4]) for o in OPS] + CUSTOM_OPS + [(k, v[2]) for k, v in OWN_DRIVERS.items()]:
         bufs, scal = split(params)
@@ -713,9 +691,7 @@ def x_neighbors_py2mojo_off_binding() raises -> PythonObject:
     s.append(f"""
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
-{reg}    m.def_function[eigh_binding]("xn_eigh")
-    m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
-    m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
+{reg}    m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 """)
     return "".join(s)
 
@@ -724,9 +700,7 @@ BIND_HEAD = """from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_neighbors.%s import op_eigh
 """
 
 
@@ -738,7 +712,7 @@ def own_imports(col):
 def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
-            + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
+            + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from x_neighbors.dev_pyapi import kpca_resident_binding\n"
@@ -784,7 +758,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
 def host_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
-            + BIND_HEAD % "eigh" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
+            + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from x_neighbors.host_pyapi import kpca_resident_binding\n"
@@ -844,7 +818,7 @@ if __name__ == "__main__":
     a = t.index("# BEGIN GENERATED EXPORTS")
     b = t.index("# END GENERATED EXPORTS")
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
-             "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
+             "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["x_neighbors_numeric_mode",
                                                                             "x_neighbors_vendor",
                                                                             "x_neighbors_kpca_resident"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "

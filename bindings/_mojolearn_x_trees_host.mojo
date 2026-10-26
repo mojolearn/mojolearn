@@ -150,10 +150,8 @@ def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> Python
     return PythonObject(0)
 
 
-def dart_idn_binding() raises -> PythonObject:
-    """Present only under `IDN_DART_DEVICE`: the IDENTICAL DART round (the
-    Python layer then takes it with or without a forest data session)."""
-    return PythonObject(1)
+# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
 def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
@@ -243,7 +241,8 @@ def build__mojolearn_x_trees_host() -> PythonObject:
             m.def_function[dart_step_binding]("x_trees_dart_step")
             m.def_function[dart_add_binding]("x_trees_dart_add")
             m.def_function[dart_close_binding]("x_trees_dart_close")
-            m.def_function[dart_idn_binding]("x_trees_dart_idn")
+            # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+            # Restore: git apply experiments/removed/dead_entries_trees.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_trees_host: ", e))

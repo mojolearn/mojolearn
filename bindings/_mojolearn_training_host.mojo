@@ -34,11 +34,6 @@ lane/cpu-training-misc batch 3 (2026-09-15) adds, under the same names and
 contracts, the neural primitives the optim-adam-clip, cross-entropy-arms and
 training-primitives lanes reach:
 
-  `clip_grad_norm`
-                  `training/checks/optimizer_oracle.mojo::clip_grad_norm_oracle`
-                  behind `identical_clip_grad_norm_host`'s refusals
-                  (`training/estimator.mojo:465`) and its `info` convention
-                  (the pre-clip global norm, then the clamped coefficient).
   `accumulate`, `accumulation_is_aligned`
                   `training/host/samba_ops_oracle.mojo::host_samba_accumulate`,
                   the clause 9.2 balanced tree, and
@@ -84,7 +79,6 @@ from core.mojolearn_training_host_impl import (
     _host_refuse_hyperparameters,
     _write_f32,
     neural_rng_host_into,
-    clip_grad_norm_host_into,
     mlp_sum_rows_host_into,
     mlp_relu_backward_host_into,
     mlp_bias_activation_host_into,
@@ -123,7 +117,6 @@ from training.checks.optimizer_oracle import (
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,
-    clip_grad_norm_oracle,
     microbatch_split_is_identical,
     optimizer_step_oracle,
     refuse_nonfinite_scalar,
@@ -366,35 +359,8 @@ def mlp_sum_rows_binding(
     return PythonObject(count)
 
 
-# ===========================================================================
-# THE CLIP ON ITS OWN (lane/cpu-training-misc, 2026-09-15)
-# ===========================================================================
-
-
-def clip_grad_norm_binding(
-    grad_addr: PythonObject,
-    offsets_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`torch.nn.utils.clip_grad_norm_` at `norm_type = 2` on the host.
-    Scales the gradient IN PLACE. Returns `N`. `params`: `0 n_tensors,
-    1 max_norm` (the GPU binding's list, word for word); `info` receives the
-    pre-clip global norm and the clamped coefficient."""
-    if len(params) != 2:
-        raise Error(
-            "clip_grad_norm: params must contain 2 values, got "
-            + String(len(params))
-        )
-    var gp = f32_ptr(_index(grad_addr))
-    var op = i32_ptr(_index(offsets_addr))
-    var fp = f32_ptr(_index(info_addr))
-    var n_tensors = _index(params[0])
-    var max_norm = Float32(Float64(py=params[1]))
-    var n_total = 0
-    with GILReleased(Python()):
-        n_total = clip_grad_norm_host_into(gp, op, fp, n_tensors, max_norm)
-    return PythonObject(n_total)
+# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_training.patch
 
 
 # ===========================================================================
@@ -789,7 +755,8 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         module.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         module.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
-        module.def_function[clip_grad_norm_binding]("clip_grad_norm")
+        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_training.patch
         module.def_function[accumulate_binding]("accumulate")
         module.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
         module.def_function[embedding_forward_binding]("embedding_forward")

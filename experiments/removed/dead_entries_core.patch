@@ -1,0 +1,279 @@
+diff --git a/bindings/_mojolearn.mojo b/bindings/_mojolearn.mojo
+index 6342cfe7d..51b9de8a5 100644
+--- a/bindings/_mojolearn.mojo
++++ b/bindings/_mojolearn.mojo
+@@ -113,6 +113,7 @@ from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_
+ from bindings.normal_dist_helpers import truncnorm_draws_binding
+ from bindings.lr_table_helpers import (
+     lr_schedule_exact_binding,
++    lr_schedule_exact_block_binding,
+     lr_schedule_at_c, lr_schedule_series_c,
+ )
+ from bindings.optimizer_public_door import entry_init
+@@ -126,6 +127,7 @@ from core.shard_merge_device import device_shard_topk_merge_f32
+ from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
+ from core.ic_min_device import device_ic_running_min
+ from bindings.hotpath_helpers import (
++    next_combination_i64_binding,
+     assign_fold_i64_binding,
+     count_fold_hits_i64_binding,
+     mark_split_roles_f32_binding,
+@@ -2106,8 +2108,12 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
+         m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
+         # DEVIATION 2500: label encode/decode and the class argmax, host side.
+-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_core.patch
++        m.def_function[encode_labels_f32_binding]("encode_labels_f32")
++        m.def_function[encode_labels_f64_binding]("encode_labels_f64")
++        m.def_function[encode_labels_i32_binding]("encode_labels_i32")
++        m.def_function[encode_labels_i64_binding]("encode_labels_i64")
++        m.def_function[encode_labels_u32_binding]("encode_labels_u32")
++        m.def_function[encode_labels_u8_binding]("encode_labels_u8")
+         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
+         # bindings/hotpath_helpers.mojo that stand in for per-row Python.
+         m.def_function[cast_elements_binding]("cast_elements")
+@@ -2123,8 +2129,7 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
+         m.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
+         m.def_function[count_mask_u8_binding]("count_mask_u8")
+-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_core.patch
++        m.def_function[next_combination_i64_binding]("next_combination_i64")
+         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
+         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
+         m.def_function[fold_pair_f32_binding]("fold_pair_f32")
+@@ -2153,8 +2158,7 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[fsum_f64_binding]("fsum_f64")
+         m.def_function[row_stds_f64_binding]("row_stds_f64")
+         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
+-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_core.patch
++        m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+         # Restore: git apply experiments/removed/lr_schedule_fill.patch
+         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
+diff --git a/bindings/_mojolearn_core_host.mojo b/bindings/_mojolearn_core_host.mojo
+index 0505e0078..8e085cf47 100644
+--- a/bindings/_mojolearn_core_host.mojo
++++ b/bindings/_mojolearn_core_host.mojo
+@@ -131,6 +131,7 @@ from bindings.hotpath_helpers import (
+     mask_from_indices_u8_binding,
+     select_mask_u8_i64_binding,
+     count_mask_u8_binding,
++    next_combination_i64_binding,
+     ic_running_min_f64_host_binding,
+     ic_running_min_f32_host_binding,
+     fold_pair_f32_binding,
+@@ -152,6 +153,7 @@ from bindings.hotpath_helpers import (
+ from bindings.normal_dist_helpers import truncnorm_draws_binding
+ from bindings.lr_table_helpers import (
+     lr_schedule_exact_binding,
++    lr_schedule_exact_block_binding,
+     lr_schedule_at_c, lr_schedule_series_c,
+ )
+ from bindings.optimizer_public_door import entry_init
+@@ -1241,8 +1243,12 @@ def build__mojolearn_core_host() -> PythonObject:
+         module.def_function[cast_elements_binding]("cast_elements")
+         module.def_function[reduce_stat_binding]("reduce_stat")
+         module.def_function[equal_elements_binding]("equal_elements")
+-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_core.patch
++        module.def_function[encode_labels_f32_binding]("encode_labels_f32")
++        module.def_function[encode_labels_f64_binding]("encode_labels_f64")
++        module.def_function[encode_labels_i32_binding]("encode_labels_i32")
++        module.def_function[encode_labels_i64_binding]("encode_labels_i64")
++        module.def_function[encode_labels_u32_binding]("encode_labels_u32")
++        module.def_function[encode_labels_u8_binding]("encode_labels_u8")
+         # lane migrate-shared-labels: the shared argument-and-label entry
+         module.def_function[prepare_targets_binding]("prepare_targets")
+         module.def_function[gather_i32_binding]("gather_i32")
+@@ -1255,8 +1261,7 @@ def build__mojolearn_core_host() -> PythonObject:
+         module.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
+         module.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
+         module.def_function[count_mask_u8_binding]("count_mask_u8")
+-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_core.patch
++        module.def_function[next_combination_i64_binding]("next_combination_i64")
+         module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
+         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
+         module.def_function[fold_pair_f32_binding]("fold_pair_f32")
+@@ -1289,8 +1294,7 @@ def build__mojolearn_core_host() -> PythonObject:
+         module.def_function[fsum_f64_binding]("fsum_f64")
+         module.def_function[row_stds_f64_binding]("row_stds_f64")
+         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
+-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_core.patch
++        module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+         # Restore: git apply experiments/removed/lr_schedule_fill.patch
+         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
+diff --git a/bindings/hotpath_helpers.mojo b/bindings/hotpath_helpers.mojo
+index 9da32abc8..06bb72d94 100644
+--- a/bindings/hotpath_helpers.mojo
++++ b/bindings/hotpath_helpers.mojo
+@@ -96,6 +96,7 @@ from core.hotpath_impl import (
+     indices_overlap_i64,
+     leave_range_i64,
+     mask_from_indices_u8,
++    next_combination_i64,
+     reduce_stat,
+     select_fold_i64,
+     select_mask_u8_i64,
+@@ -377,8 +378,13 @@ def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> Py
+     return PythonObject(c)
+ 
+ 
+-# TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_core.patch
++def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonObject) raises -> PythonObject:
++    """Advance the ascending p-combination of range(n) at `addr` (int64) to
++    its lexicographic successor; 1 when it advanced, 0 when it was the last."""
++    var k = Int(py=p)
++    var rows = Int(py=n)
++    var a = Int(py=addr)
++    return PythonObject(next_combination_i64(a, k, rows))
+ 
+ 
+ def ic_running_min_f32_host_binding(
+diff --git a/bindings/lr_table_helpers.mojo b/bindings/lr_table_helpers.mojo
+index dfc8e2489..fbb8af5a4 100644
+--- a/bindings/lr_table_helpers.mojo
++++ b/bindings/lr_table_helpers.mojo
+@@ -15,7 +15,7 @@ from bindings.optimizer_public_words import optimizer_python_error
+ from bindings.py_balanced import py_call
+ from sequence.lr_exact import LrOut, onecycle_exact, pow_exact, schedule_exact
+ from sequence.lr_table import (
+-    F32P, F64P, LR_BEYOND, LR_ONE_BASED, LrSpec, decide_many, lr_spec_fill, onecycle_fill,
++    F32P, F64P, LR_BEYOND, LR_ONE_BASED, U8P, LrSpec, decide_many, exact_block, lr_spec_fill, onecycle_fill,
+     pow_values, schedule_block_values,
+ )
+ 
+@@ -27,8 +27,18 @@ def _f64p(addr: PythonObject) raises -> F64P:
+     return F64P(unsafe_from_address=a)
+ 
+ 
+-# TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_core.patch
++def _ints(words: PythonObject, count: Int) raises -> List[Int]:
++    var out = List[Int]()
++    for i in range(count):  # driver-loop: over argument words (a fixed count per entry point)
++        out.append(Int(py=words[i]))
++    return out^
++
++
++def _floats(words: PythonObject, count: Int) raises -> List[Float64]:
++    var out = List[Float64]()
++    for i in range(count):  # driver-loop: over argument words (a fixed count per entry point)
++        out.append(Float64(py=words[i]))
++    return out^
+ 
+ 
+ # ----------------------------------------------------------- the exact route
+@@ -51,6 +61,33 @@ def lr_schedule_exact_binding(ip: PythonObject, fp: PythonObject) raises -> Pyth
+                                 Int(py=ip[2]), Int(py=ip[3])))
+ 
+ 
++def _status_pair(r: Tuple[Int, Int]) raises -> PythonObject:
++    return Python.list(PythonObject(r[0]), PythonObject(r[1]))
++
++
++def _exact_block(kind: Int, ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
++                 ok_addr: PythonObject) raises -> PythonObject:
++    """The exact route over a run: out[i] (float32 words) for every i < n
++    whose ok[i] is 0 (ok_addr 0: every i). kind 0: `_Schedule`, ip = [kind,
++    warmup, total, t0, n], fp = [peak, min_lr]; kind 1: OneCycleLR, ip =
++    [linear, three_phase, total_steps, t0, n], fp as lr_onecycle_exact.
++    Returns [status, index]."""
++    var words = _ints(ip, 5)
++    var oka = Int(py=ok_addr)
++    var r = exact_block(
++        kind, words, _floats(fp, 2 if kind == 0 else 5), words[3], words[4],
++        F32P(unsafe_from_address=Int(py=out_addr)), U8P(unsafe_from_address=oka), oka != 0,
++    )
++    if r[0] != 0:
++        return _status_pair(r)
++    return _status_pair((0, 0))
++
++
++def lr_schedule_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
++                                    ok_addr: PythonObject) raises -> PythonObject:
++    return _exact_block(0, ip, fp, out_addr, ok_addr)
++
++
+ # ------------------------------------------------- the public schedule methods
+ 
+ 
+diff --git a/python/mojolearn/_training_impl.py b/python/mojolearn/_training_impl.py
+index 473508692..af679c5d0 100644
+--- a/python/mojolearn/_training_impl.py
++++ b/python/mojolearn/_training_impl.py
+@@ -1187,7 +1187,7 @@ class _Schedule(_LrTable):
+     def _exact_params(self):
+         return ([self._KIND_CODE[self.kind], self.warmup_steps,
+                  -1 if self.total_steps is None else self.total_steps],
+-                [float(self.peak_lr), float(self.min_lr)])  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
++                [float(self.peak_lr), float(self.min_lr)], "lr_schedule_exact_block")  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
+ 
+     def _lr_at_slow(self, t):
+         """The exact route of one ONE-BASED step, in Mojo big rationals
+@@ -1196,7 +1196,7 @@ class _Schedule(_LrTable):
+         if t < 1:
+             raise ValueError(
+                 "mojolearn schedule: step t is ONE-BASED, got %d" % t)
+-        ip, fp = self._exact_params()
++        ip, fp, _ = self._exact_params()
+         st, v = _lr_native("lr_schedule_exact")(ip + [t], fp)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
+         _lr_status(st)
+         return float(v)
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..8c30134fe 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -1836,10 +1836,12 @@ FAMILIES = (
+             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
+             "argmax_rows_f64", "argmax_last_rows_f32",
+             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
+-            # of bindings/hotpath_helpers.mojo that stand in for per-row Python
+-            # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
+-            # prepare_targets).
++            # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
++            # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
++            # install used to run as a Python loop.
+             "cast_elements", "reduce_stat", "equal_elements",
++            "encode_labels_f32", "encode_labels_f64", "encode_labels_i32",
++            "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
+             "gather_i32", "check_indices_i64", "indices_overlap_i64",
+             "fold_ids", "select_fold_i64",
+             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
+@@ -1856,7 +1858,7 @@ FAMILIES = (
+             # lane migrate-shared-labels: the shared argument-and-label entry
+             "prepare_targets",
+             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
+-            "ic_running_min_f64", "ic_running_min_f32",
++            "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
+             "fold_pair_f32", "threshold_labels_i64",
+             "bincount_i64",
+             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
+@@ -1869,7 +1871,7 @@ FAMILIES = (
+             "ragged_rows_bytes", "nsum_f64", "row_means_f64",
+             "truncnorm_draws", "fsum_f64", "row_stds_f64",
+             "lr_schedule_exact",
+-            "class_ratio_f64",
++            "lr_schedule_exact_block", "class_ratio_f64",
+             "shard_topk_merge_f32",
+         ),
+         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
+diff --git a/python/mojolearn/tests/test_hotpath_native.py b/python/mojolearn/tests/test_hotpath_native.py
+index f85eb05ab..b9e54b39a 100644
+--- a/python/mojolearn/tests/test_hotpath_native.py
++++ b/python/mojolearn/tests/test_hotpath_native.py
+@@ -39,6 +39,8 @@ from mojolearn._array import Array
+ _HELPERS = (
+     "cast_elements", "reduce_stat", "equal_elements", "gather_i32",
+     "check_indices_i64", "indices_overlap_i64", "fold_ids", "select_fold_i64",
++    "encode_labels_i64", "encode_labels_f64", "encode_labels_i32",
++    "encode_labels_u8", "encode_labels_f32", "encode_labels_u32",
+     "gather_i64", "gather_f64", "prepare_targets",
+ )
+ try:

@@ -80,8 +80,7 @@ def connect():
     # Do not admit arbitrary builtin callables by their type alone.
     store_routes = []
     live_entries = []
-    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),  # glue: fixed import-time resident-store ABI
-                                ("_mojolearn_x_metrics", "x_metrics")):
+    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),):  # glue: fixed import-time resident-store ABI
         for mode in ("identical", "fast"):  # glue: fixed supported numeric-mode connections
             try:
                 module = _backend.binding(module_name, mode)

@@ -10,7 +10,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from x_decomp.api_pyapi import _f, _i, _n
-from x_decomp.kit_device import lda_online_dev_check, lda_online_dev_run, mcd_dev_check, mcd_dev_run
+from x_decomp.kit_device import mcd_dev_check, mcd_dev_run
 
 
 def mcd_dev_py(
@@ -33,25 +33,6 @@ def mcd_dev_py(
     return PythonObject(n)
 
 
-def lda_online_dev_py(
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`lda_online_py` on the resident kit."""
-    var n = _n(p, 0)
-    var v = _n(p, 1)
-    var nc = _n(p, 2)
-    var bs = _n(p, 3)
-    var mdi = _n(p, 4)
-    var seed = Int(py=p[5])
-    var draw = Int(py=p[6])
-    var nbi = Int(py=p[7])
-    lda_online_dev_check(n, v, nc, bs)
-    var fv = List[Float64]()
-    for i in range(6):  # small-loop(the six float words of f)
-        fv.append(Float64(py=f[i]))
-    var px = _f(x)
-    var pc = _f(comps)
-    var pe = _f(exp_dir)
-    with GILReleased(Python()):
-        lda_online_dev_run(px, pc, pe, n, v, nc, bs, mdi, seed, draw, nbi, fv)
-    return Python.tuple(draw, nbi)
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+

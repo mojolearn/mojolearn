@@ -1392,7 +1392,6 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "(host_surface ADAPTED_MODULES), whose TrainerOwnerEntries call it for every "
                  "SmallByteLanguageModelTrainer step; on a GPU install byte_lm_trainer_step runs the "
                  "same session ops inside Mojo")
-_DEAD_KIT = "no live caller (the _expansion_decomp helper that calls it is never called)"
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
 _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
@@ -1439,10 +1438,6 @@ ANNOTATIONS = {
     "device_plan_log": ("n/a", [], "the verifier's own two-device placement witness read (_verify_par "
                         "PoolWitness, lane native-parallel-driver-20261024): device groups, no data value"),
     "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
-    **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_eigh_batch", "x_decomp_knn_select",
-                                           "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},
-    "ops_metric": ("n/a", [], "no live caller: Session._metric is never called (accuracy and log_loss "
-                              "run through ops_session_call)"),
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
@@ -1459,13 +1454,6 @@ ANNOTATIONS = {
     "lr_schedule_exact": ("covered", ["samba-untied-dropout-accum"],
                           _SAMBA_OWNER + " (`exact_schedule`): samba_schedule_rate evaluates the stack's "
                           "WarmupCosineLR at every step through it"),
-    "lr_schedule_exact_block": ("n/a", [], "no live caller: _Schedule._exact_params names it and its one "
-                                           "reader, _lr_at_slow, discards the name; exact_block runs inside "
-                                           "lr_spec_fill (lr_schedule_at / lr_schedule_series), which the "
-                                           "optim-* and sequence-lr-schedulers lanes cover"),
-    "optimizer_finalize": ("n/a", [], "a finalizer: Optimizer.__del__ closes the resident slot through the "
-                                      "owning module's optimizer_resident_close and returns None; nothing it "
-                                      "writes is a value a part could hash"),
     "optimizer_maximize_dev": ("n/a", [], "a capability probe returning a build constant; its one caller "
                                           "(samba_train_step) tests its presence only, and the maximized "
                                           "step it selects is optimizer_resident_step_io"),
@@ -2006,11 +1994,6 @@ ANNOTATIONS_BY_SRC.update({
         "_native_optimizer_bridge retains it at import with the training binding's entries; "
         "training.cross_entropy on a TrainDeviceArray of logits takes it "
         "(bindings/training_cross_entropy_native.mojo, `ce_loss_dev`); GPU columns only"),
-    ("neural_prefill_call", _TOK): (
-        "n/a", [],
-        "no live caller: its callers are TransformerBlock's and the Mamba blocks' _forward_with_tape, "
-        "_backward_from_tape and _close_forward_tape, whose one caller (SambaStack._forward) takes them "
-        "only under retain_tapes=True, which no call in the package passes"),
 })
 
 
@@ -2180,20 +2163,15 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
 
 # lane verify-coverage-20261024: the whole-surface audit's last GAP rows,
 # each checked in the source.
-_DEAD_KIT_24 = ("no live caller: the _expansion_decomp._Kit method that calls it (als_cg, cd_rows, "
-                "chol, lda_rows, qr_r, rand_gamma) has no caller since the ALS, NMF, LDA and "
-                "linalg owners moved into Mojo (bindings/als_native.mojo, mani_kit.mojo, linalg_ops_kit.mojo)")
 _ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
                "owner context's arena_msel_put / _free / _take_rows; the arena owners "
                "(bindings/arena_resident_native.mojo, arena_materialize_native.mojo) put, gather and free "
                "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
                "take per fold (x-metrics-search reaches msel_free by name)")
 ANNOTATIONS.update({
-    **{e: ("n/a", [], _DEAD_KIT_24) for e in ("x_decomp_als_cg_rows", "x_decomp_cd_rows", "x_decomp_chol",
-                                              "x_decomp_dev_lda_rows", "x_decomp_dev_qr_r", "x_decomp_lda_rows",
-                                              "x_decomp_qr_r", "x_decomp_rand_gamma")},
     **{e: ("covered", ["x-metrics-search"], _ARENA_ROWS) for e in ("msel_put", "msel_take_rows")},
-    "nsum_f64": ("n/a", [], "no live caller: _portable_math.nsum, the only code that calls it, is never called"),
+    "nsum_f64": ("n/a", [], "a test seam: test_py_bugs.py holds the live Neumaier fold to CPython 3.12's sum "
+                            "through _portable_math.nsum and this export only"),
     "gemm_fused": ("n/a", [], "fast tier only (Apple): linalg_fast.matmul_fused, built only with "
                               "MOJOLEARN_AFN_GEMM_EPILOGUE; the verifier runs identical and refuses a fast process"),
     "host_archive_finalize_call": ("n/a", [], "a lifecycle finalizer: the saved-host-model archive's cleanup "
@@ -2395,11 +2373,11 @@ SABOTAGE_NA_ENTRIES = {
         "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
         "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
-        "msel_alloc", "msel_free", "x_metrics_dev_free", "x_prep_dev_free", "seq_tensor_alloc",
+        "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
         "mlp_resident_open", "mlp_resident_close", "rf_data_session_open", "rf_data_session_close")},
     **{e: _METADATA for e in (
         "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
-        "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_metrics_dev_live", "x_prep_dev_live",
+        "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_prep_dev_live",
         "gbdt_model_dim")},
 }
 

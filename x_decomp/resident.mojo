@@ -442,27 +442,8 @@ comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def dev_cd_rows_run(w: Int, hht: Int, xht: Int, pp: I32Ptr, viol: Int, n: Int, k: Int) raises -> Int:
-    """`x_decomp_cd_rows` on device matrices: w (n x k, swept in place), hht
-    (k x k), xht (n x k), viol (n, written); perm the host address of k
-    int32. p = [n, k]. Waits (the host permutation may die after it returns)."""
-    if n == 0 or k == 0:
-        return 0
-    if n * k > 2147483647:
-        raise Error("x_decomp: cd_rows exceeds the Int32 index bound")
-    var pw = _ptr(w, n * k)
-    var ph = _ptr(hht, k * k)
-    var px = _ptr(xht, n * k)
-    var pv = _ptr(viol, n)
-    var ctx = xd_ctx()
-    var dp = _up_i(ctx, pp, k)
-    ctx.enqueue_function[cd_rows_kernel](
-        pw, ph, px, dp.unsafe_ptr(), pv, Int32(n), Int32(k), grid_dim=_blocks(n), block_dim=TPB
-    )
-    # the permutation buffer dies here: wait for the launch that reads it
-    ctx.synchronize()
-    _ = dp^
-    return n
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_SVD_RESIDENT (IDENTICAL default) ----
@@ -812,22 +793,6 @@ comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 # grp_cls2_py (the compiled-in switch bits) lives in the shell next to this file.
 
 
-def dev_first_nonfinite_run(src: F32Ptr, cnt: Int) raises -> Int:
-    """The first flat index of a NaN or infinity among the n floats at
-    `addr`, or -1: one upload from the caller's buffer into a pooled device
-    buffer (no fresh allocation per fit) and one device scan. Registered
-    only under GRP_CLS2_DEVSCAN."""
-    if cnt <= 0:
-        return -1
-    var r = -1
-    var ctx = xd_ctx()
-    var buf = pool_take["MojoXDecompCls2Scan"](ctx, cnt)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
-    r = device_first_nonfinite(ctx, buf, cnt)
-    pool_give["MojoXDecompCls2Scan"](buf^)
-    return r
-
-
 def dev_move_run(
     src: Int, idx: Int, dst: Int, op: Int, count: Int, a1: Int, a2: Int, a3: Int, ist: Int, ioff: Int,
     nsrc: Int, ndst: Int, nidx: Int,
@@ -977,64 +942,8 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
 
 
-# ---- lane fix-d1-decomp (2026-10-04, audit F7): a device max |.| ----
-#: FastICA's convergence scalar (IDN_ICA_LIM_DEV) and `_polar`'s scale
-#: (IDN_POLAR_MAX_DEV) took a max over values Python downloaded. Here the
-#: max is reduced on the device and one word comes down. A max is exact and
-#: does not depend on the order it is taken in, so the value is the one the
-#: host max gives (NaN: any NaN makes the result NaN). No flush of
-#: subnormals, as the Python max took the stored words.
-comptime MAXABS_SLICE = 256
-
-
-def maxabs_slice_kernel(src: F32Ptr, dst: F32Ptr, count: Int32):
-    """dst[t] = max |src[q]| over the slice [t * MAXABS_SLICE, ...) of the
-    first `count` values; NaN when the slice holds a NaN."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var cnt = Int(count)
-    var nb = (cnt + MAXABS_SLICE - 1) // MAXABS_SLICE
-    if t < nb:
-        var best = Float32(0)
-        var nanv = Float32(0)
-        var seen_nan = False
-        var q1 = min(cnt, (t + 1) * MAXABS_SLICE)
-        for q in range(t * MAXABS_SLICE, q1):
-            var v = abs(src.unsafe_load(q))
-            if v != v:
-                seen_nan = True
-                nanv = v
-            elif v > best:
-                best = v
-        dst.unsafe_store(t, nanv if seen_nan else best)
-
-
-def dev_maxabs_run(a: Int, dst: Int, count: Int) raises -> Int:
-    """dst (a device matrix of >= 1 value) = max |a| over the first p[0]
-    values of the device matrix a (NaN if any is NaN). Slices of
-    MAXABS_SLICE values per thread, then the slice maxima the same way
-    until one value is left: ceil(log_256(count)) launches, no wait."""
-    if count < 1:
-        raise Error("x_decomp: maxabs needs at least one value")
-    var src = _ptr(a, count)
-    var pd = _ptr(dst, 1)
-    var ctx = xd_ctx()
-    var cur_id = -1
-    var cur = src
-    var cnt = count
-    while cnt > MAXABS_SLICE:
-        var nb = (cnt + MAXABS_SLICE - 1) // MAXABS_SLICE
-        var nid = pool_alloc(nb)
-        var pn = _ptr(nid, nb)
-        ctx.enqueue_function[maxabs_slice_kernel](cur, pn, Int32(cnt), grid_dim=_blocks(nb), block_dim=TPB)
-        if cur_id >= 0:
-            pool_free(cur_id)      # the context runs in order: a reuse comes after this read
-        cur_id = nid
-        cur = pn
-        cnt = nb
-    ctx.enqueue_function[maxabs_slice_kernel](cur, pd, Int32(cnt), grid_dim=1, block_dim=TPB)
-    if cur_id >= 0:
-        pool_free(cur_id)
-    return 1
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 # Test-only direct batched covariance seam, identical API on both arms.

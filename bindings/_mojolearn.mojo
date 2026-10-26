@@ -113,7 +113,6 @@ from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
     lr_schedule_exact_binding,
-    lr_schedule_exact_block_binding,
     lr_schedule_at_c, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
@@ -127,7 +126,6 @@ from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
 from core.ic_min_device import device_ic_running_min
 from bindings.hotpath_helpers import (
-    next_combination_i64_binding,
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
@@ -1801,9 +1799,8 @@ def argmax_last_rows_f32_binding(
     return PythonObject(0)
 
 
-def kmeans_parallel_available_binding() raises -> PythonObject:
-    """Version of the whole-row-tile multi-GPU assignment contract."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 # ===========================================================================
@@ -2109,12 +2106,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
         m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
-        m.def_function[encode_labels_f32_binding]("encode_labels_f32")
-        m.def_function[encode_labels_f64_binding]("encode_labels_f64")
-        m.def_function[encode_labels_i32_binding]("encode_labels_i32")
-        m.def_function[encode_labels_i64_binding]("encode_labels_i64")
-        m.def_function[encode_labels_u32_binding]("encode_labels_u32")
-        m.def_function[encode_labels_u8_binding]("encode_labels_u8")
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
         # bindings/hotpath_helpers.mojo that stand in for per-row Python.
         m.def_function[cast_elements_binding]("cast_elements")
@@ -2130,7 +2123,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
         m.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
         m.def_function[count_mask_u8_binding]("count_mask_u8")
-        m.def_function[next_combination_i64_binding]("next_combination_i64")
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_core.patch
         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
         m.def_function[fold_pair_f32_binding]("fold_pair_f32")
@@ -2159,7 +2153,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[fsum_f64_binding]("fsum_f64")
         m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
@@ -2172,7 +2167,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        m.def_function[kmeans_parallel_available_binding]("kmeans_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

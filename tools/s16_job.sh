@@ -52,9 +52,7 @@ for b in mamba-anglenaive mamba-ftzoff; do inst $b mamba; st $b
   timeout 1800 $PY tools/strides_digest.py 8 512 768 > $O/digest-default-$b.json 2>$O/digest-default-$b.err; rc digest-default-$b $?
 done
 inst mamba mamba
-# 3. session checks, the s16 set, the whole neural board (new flush), then the flush off
-for group in reuse refusals lifetime budget; do st session-$group
-  timeout 600 $PY tools/transformer_session_check.py --binding $T/_mojolearn_transformer.so --backend cuda --group $group --out $O/session-$group.json > $O/session-$group.log 2>&1; rc session-$group $?; done
+# 3. the s16 set, the whole neural board (new flush), then the flush off
 st set-s16; timeout 3600 $PY tools/neural_experiments.py --set s16 --lane mamba3-forward --lane samba-train-step --calls 10 --json $O/set-s16.json > $O/set-s16.log 2>&1; rc set-s16 $?
 st set-nvidia; timeout 7200 $PY tools/neural_experiments.py --set nvidia --calls 10 --json $O/set-nvidia.json > $O/set-nvidia.log 2>&1; rc set-nvidia $?
 for m in mamba transformer byte_lm; do inst $m-ftzoff $m; done

@@ -22,7 +22,6 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.py2mojo_cluster_est import estimators_py2mojo_cluster_binding
 from bindings.dbscan_core_device import dbscan_core_arrays_device
 from core.py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
@@ -88,7 +87,6 @@ from kde.resident_fit import (
     kde_score_samples_resident,
 )
 from decomposition.estimator import (
-    PCA_FAST_POOL,
     inverse_transform_host,
     pca_fit_host,
     pca_fit_full_host,
@@ -119,7 +117,6 @@ from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SO
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
-from decomposition.impl.pca_rank import pca_rank_finish
 from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 from core.estimators_impl import (
@@ -315,13 +312,8 @@ def pca_fit_binding(
     return PythonObject(noise)
 
 
-def pca_fast_pool_on_binding() raises -> PythonObject:
-    """lane/apple-fast-w4-decomp: 1 when this build compiled
-    PCA_FAST_POOL (decomposition/estimator.mojo), else 0 (a quality
-    capture's proof of which arm is installed)."""
-    comptime if PCA_FAST_POOL:
-        return PythonObject(1)
-    return PythonObject(0)
+# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_estimators.patch
 
 
 def pca_fit_full_binding(
@@ -720,28 +712,6 @@ def lm_intercept_binding(
     if nc <= 0:
         return PythonObject(ym - 0.0)
     return PythonObject(lm_intercept(_f32_ptr(Int(py=xmean_addr)), _f32_ptr(Int(py=coef_addr)), nc, ym))
-
-
-def pca_rank_finish_binding(
-    ratio_addr: PythonObject, ev_addr: PythonObject, params: PythonObject, frac: PythonObject,
-) raises -> PythonObject:
-    """Lane py-runtime: PCA's kept component count for a float n_components
-    (or the given MLE rank) and the dropped tail's noise variance
-    (decomposition/impl/pca_rank.mojo; it was Python in PCA.fit). params:
-    nc, keep (-1: choose by frac). Returns [keep, noise_variance]."""
-    if len(params) != 2:
-        raise Error("pca_rank_finish: params must contain nc, keep")
-    var nc = Int(py=params[0])
-    var keep_in = Int(py=params[1])
-    var noise: Float64 = 0.0
-    var keep = 0
-    if nc > 0:
-        keep = pca_rank_finish(_f32_ptr(Int(py=ratio_addr)), _f32_ptr(Int(py=ev_addr)), nc, keep_in,
-                               Float64(py=frac), noise)
-    var out = Python.list()
-    out.append(PythonObject(keep))
-    out.append(PythonObject(noise))
-    return out
 
 
 def pca_fit_owned_binding(
@@ -1510,11 +1480,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
-        m.def_function[gram_parallel_available_binding]("gram_parallel_available")
-        m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")
-        m.def_function[gram_parallel_available_binding]("qr_parallel_available")
-        m.def_function[glm_parallel_available_binding]("glm_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         m.def_function[py2mojo_rows_binding]("py2mojo_rows")
@@ -1522,7 +1489,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
-        m.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[labeled_reference_prepare_binding]("labeled_reference_prepare")
         m.def_function[labeled_reference_release_binding]("labeled_reference_release")
@@ -1537,7 +1505,8 @@ def build__mojolearn_estimators() -> PythonObject:
             m.def_function[scoped_gemm_count_binding]("scoped_gemm_count")
             m.def_function[scoped_gemm_metadata_binding]("scoped_gemm_metadata")
         m.def_function[pca_fit_binding]("pca_fit")
-        m.def_function[pca_fast_pool_on_binding]("pca_fast_pool_on")
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
         m.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
@@ -1555,7 +1524,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
         m.def_function[lm_means_finish_binding]("lm_means_finish")
         m.def_function[lm_intercept_binding]("lm_intercept")
-        m.def_function[pca_rank_finish_binding]("pca_rank_finish")
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[pca_fit_owned_binding]("pca_fit_owned")
         m.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         m.def_function[lm_center_binding]("lm_center")
@@ -1588,13 +1558,10 @@ def build__mojolearn_estimators() -> PythonObject:
         abort(String("failed to create _mojolearn_estimators: ", e))
 
 
-def gram_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
-def glm_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
-
-def dbscan_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)

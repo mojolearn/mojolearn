@@ -1,0 +1,364 @@
+diff --git a/bindings/_mojolearn_ivf.mojo b/bindings/_mojolearn_ivf.mojo
+index 5e24e1de8..c302a0121 100644
+--- a/bindings/_mojolearn_ivf.mojo
++++ b/bindings/_mojolearn_ivf.mojo
+@@ -11,7 +11,10 @@ four packaging lists `packaging/check_ext_lists.py` holds to it;
+ `python/mojolearn/_ivf_impl.py` is the Python half and the identity_break
+ lane is `ivf`.
+ 
+-The build and the search are two entries (below). `n_probes` has no default at this boundary (policy 1) and
++ONE ENTRY, ONE CARD. `ivf_flat_build_and_search_host` is the entry every
++gate uses (the estimator's policy 3): a build and a search under one
++identity card. The index itself does not cross, so there is no model
++column; `n_probes` has no default at this boundary (policy 1) and
+ `n_probes > n_lists` RAISES rather than clamps (policy 2), both on the
+ Mojo host.
+ 
+@@ -25,6 +28,7 @@ from std.sys.compile import is_defined
+ from std.memory import memcpy
+ from core.hostptr import f32_ptr, i32_ptr, copy_f32, read_f32
+ from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ from max.gpu.host import DeviceContext
+ from core.neural_context import process_ctx
+@@ -48,6 +52,7 @@ from bindings.ivf_index_arrays import (
+     ivf_write_search_result,
+ )
+ from ivf.estimator import (
++    ivf_flat_build_and_search_host,
+     ivf_flat_build_host,
+     ivf_flat_build_resident_host,
+     ivf_flat_extend_host,
+@@ -90,8 +95,130 @@ def ivf_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_ivf.patch
++def _ivf_run(
++    x: List[Float32],
++    n: Int,
++    dim: Int,
++    n_lists: Int,
++    queries: List[Float32],
++    m: Int,
++    k: Int,
++    n_probes: Int,
++    kmeans_n_iters: Int,
++    metric: Int,
++    seed: UInt64,
++    dp: MutPointer[Float32, MutUntrackedOrigin],
++    ip: MutPointer[Int32, MutUntrackedOrigin],
++    cp: MutPointer[Int32, MutUntrackedOrigin],
++) raises:
++    var ctx = process_ctx[_DEVCTX_SLOT]()
++    var r = ivf_flat_build_and_search_host(
++        ctx,
++        x,
++        n,
++        dim,
++        n_lists,
++        queries,
++        m,
++        k,
++        n_probes,
++        kmeans_n_iters,
++        metric,
++        seed,
++    )
++    ctx.synchronize()
++    copy_f32(r.distances.unsafe_ptr(), dp, m * k)
++    # ORIGINAL row ids, UInt32 on the Mojo side and below 2**31 by
++    # construction (n <= 46340 on every lane in this tree), so the int32
++    # bytes are the same bytes.
++    # cpu2-l6-bindings: one byte copy instead of a per-element conversion
++    memcpy(
++        dest=ip.bitcast[UInt32](), src=r.indices.unsafe_ptr(), count=m * k
++    )
++    comptime if is_defined["MOJOLEARN_IVF_BINDING_SABOTAGE"]():
++        # NEVER SHIPPED. Swaps the first two neighbor ids of query 0, the
++        # tie-class corruption a wrong (distance, id) order would produce, so
++        # the identity_break `ivf` lane is SEEN TO FAIL on its idx part.
++        if m * k >= 2:
++            var a = ip.unsafe_load(0)
++            ip.unsafe_store(0, ip.unsafe_load(1))
++            ip.unsafe_store(1, a)
++    memcpy(dest=cp, src=r.n_candidates.unsafe_ptr(), count=m)
++    _ = len(r.n_candidates)
++    # DEVIATION 1946: the context dies LAST, after every value built on it.
++    _ = ctx^
++
++
++def ivf_flat_build_and_search_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`ivf_flat::build` then `ivf_flat::search` under ONE identity card
++    (`ivf_flat_build_and_search_host`, policy 3). Returns 0.
++
++    `addrs`, in this exact order:
++
++        0  x               n * dim float32, row-major, read
++        1  queries         m * dim float32, row-major, read
++        2  dist_out        m * k float32, WRITTEN
++        3  idx_out         m * k int32, WRITTEN (original row ids)
++        4  cand_out        m int32, WRITTEN (candidates examined per query)
++
++    `params`, in this exact order:
++
++        0  n
++        1  dim
++        2  m               n_queries
++        3  k
++        4  n_lists
++        5  n_probes        REQUIRED, no default (policy 1); > n_lists RAISES
++        6  kmeans_n_iters  cuVS's 20
++        7  metric          0 L2Expanded (squared), 1 L2SqrtExpanded
++        8  seed
++    """
++    if len(addrs) != 5:
++        raise Error(
++            "ivf_flat_build_and_search: addrs must contain 5 addresses (x,"
++            " queries, dist_out, idx_out, cand_out), got "
++            + String(len(addrs))
++        )
++    if len(params) != 9:
++        raise Error(
++            "ivf_flat_build_and_search: params must contain 9 values (n, dim,"
++            " m, k, n_lists, n_probes, kmeans_n_iters, metric, seed), got "
++            + String(len(params))
++        )
++    var n = Int(py=params[0])
++    var dim = Int(py=params[1])
++    var m = Int(py=params[2])
++    var k = Int(py=params[3])
++    var n_lists = Int(py=params[4])
++    var n_probes = Int(py=params[5])
++    var kmeans_n_iters = Int(py=params[6])
++    var metric = Int(py=params[7])
++    var seed = UInt64(Int(py=params[8]))
++    var x = read_f32(Int(py=addrs[0]), max(0, n * dim))
++    var queries = read_f32(Int(py=addrs[1]), max(0, m * dim))
++    var dp = _f32_ptr(Int(py=addrs[2]))
++    var ip = _i32_ptr(Int(py=addrs[3]))
++    var cp = _i32_ptr(Int(py=addrs[4]))
++    with GILReleased(Python()):
++        _ivf_run(
++            x,
++            n,
++            dim,
++            n_lists,
++            queries,
++            m,
++            k,
++            n_probes,
++            kmeans_n_iters,
++            metric,
++            seed,
++            dp,
++            ip,
++            cp,
++        )
++    return PythonObject(0)
+ 
+ 
+ # ===========================================================================
+@@ -102,7 +229,7 @@ def ivf_vendor_binding() raises -> PythonObject:
+ # `ivf_flat_build_host` and the search `ivf_flat_search_host`, the two halves
+ # `ivf_flat_build_and_search_host` calls, over host lists the upload copies,
+ # so the split changes no bit. Each call writes its own identity card (policy
+-# 3's caveat).
++# 3's caveat); the one-card entry above stays for the trace gates.
+ # ===========================================================================
+ 
+ 
+@@ -450,8 +577,9 @@ def build__mojolearn_ivf() -> PythonObject:
+         # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+         comptime if is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
+             m.def_function[ivf_fast_balanced_hits_binding]("ivf_fast_balanced_hits")
+-        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_ivf.patch
++        m.def_function[ivf_flat_build_and_search_binding](
++            "ivf_flat_build_and_search"
++        )
+         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
+         m.def_function[ivf_flat_search_binding]("ivf_flat_search")
+         m.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
+diff --git a/bindings/_mojolearn_ivf_host.mojo b/bindings/_mojolearn_ivf_host.mojo
+index b1fd4c4f5..1a4aa2f11 100644
+--- a/bindings/_mojolearn_ivf_host.mojo
++++ b/bindings/_mojolearn_ivf_host.mojo
+@@ -10,17 +10,18 @@ with every device launch restated on the host (the quantizer through
+ `cluster/host/kmeans_oracle.mojo`); that file's header names every original.
+ 
+ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES (`bindings/_mojolearn_ivf.mojo`):
+-`ivf_flat_build` and `ivf_flat_search` with the SAME address and `params`
+-lists, plus the read-backs `ivf_numeric_mode` (1) and `ivf_vendor` ("cpu"), so
++`ivf_flat_build_and_search` with the SAME address and `params` lists, plus
++the read-backs `ivf_numeric_mode` (1) and `ivf_vendor` ("cpu"), so
+ `python/mojolearn/_ivf_impl.py` runs unchanged on a CPU-only install through
+ `_backend._HOST_MODULES` (`"_mojolearn_ivf": "_mojolearn_ivf_host"`). The
+ GPU binding exports nothing else.
+ """
+ from std.os import abort
+ from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ 
+-from core.hostptr import read_f32
++from core.hostptr import copy_f32, f32_ptr, i32_ptr, read_f32
+ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from bindings.ivf_index_arrays import ivf_merge_shards_host_binding, ivf_shard_plan_host_binding
+@@ -34,7 +35,8 @@ from bindings.ivf_host_search import (
+     ivf_flat_search_binding,
+ )
+ from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
+-from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build
++from ivf.index_arrays_impl import ivf_store_ids_counts
++from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build, host_ivf_build_and_search
+ 
+ 
+ def ivf_host_numeric_mode_binding() raises -> PythonObject:
+@@ -81,8 +83,48 @@ def ivf_vendor_binding() raises -> PythonObject:
+     return PythonObject(String("cpu"))
+ 
+ 
+-# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_ivf.patch
++def ivf_flat_build_and_search_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`ivf_flat::build` then `ivf_flat::search`, restated. Returns 0.
++
++    `addrs` = [x (n * dim f32, read), queries (m * dim f32, read), dist_out
++    (m * k f32, WRITTEN), idx_out (m * k i32, WRITTEN), cand_out (m i32,
++    WRITTEN)]; `params` = [n, dim, m, k, n_lists, n_probes, kmeans_n_iters,
++    metric (0 L2Expanded, 1 L2SqrtExpanded), seed]. The GPU binding's order."""
++    if len(addrs) != 5:
++        raise Error(
++            "ivf_flat_build_and_search: addrs must contain 5 addresses (x,"
++            " queries, dist_out, idx_out, cand_out), got "
++            + String(len(addrs))
++        )
++    if len(params) != 9:
++        raise Error(
++            "ivf_flat_build_and_search: params must contain 9 values (n, dim,"
++            " m, k, n_lists, n_probes, kmeans_n_iters, metric, seed), got "
++            + String(len(params))
++        )
++    var n = Int(py=params[0])
++    var dim = Int(py=params[1])
++    var m = Int(py=params[2])
++    var k = Int(py=params[3])
++    var n_lists = Int(py=params[4])
++    var n_probes = Int(py=params[5])
++    var kmeans_n_iters = Int(py=params[6])
++    var metric = Int(py=params[7])
++    var seed = UInt64(Int(py=params[8]))
++    var x = read_f32(Int(py=addrs[0]), max(0, n * dim))
++    var queries = read_f32(Int(py=addrs[1]), max(0, m * dim))
++    var dp = f32_ptr(Int(py=addrs[2]))
++    var ip = i32_ptr(Int(py=addrs[3]))
++    var cp = i32_ptr(Int(py=addrs[4]))
++    with GILReleased(Python()):
++        var r = host_ivf_build_and_search(
++            x, n, dim, n_lists, queries, m, k, n_probes, kmeans_n_iters, metric, seed,
++        )
++        copy_f32(r.distances.unsafe_ptr(), dp, m * k)
++        ivf_store_ids_counts(ip, cp, r.indices, r.n_candidates, m, k)
++    return PythonObject(0)
+ 
+ 
+ def ivf_flat_build_binding(
+@@ -117,8 +159,7 @@ def build__mojolearn_ivf_host() -> PythonObject:
+         m.def_function[ivf_host_sabotage_binding]("ivf_host_sabotage")
+         m.def_function[ivf_vendor_binding]("ivf_vendor")
+         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
+-        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_ivf.patch
++        m.def_function[ivf_flat_build_and_search_binding]("ivf_flat_build_and_search")
+         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
+         m.def_function[ivf_flat_search_binding]("ivf_flat_search")
+         m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
+diff --git a/ivf/host/ivf_host.mojo b/ivf/host/ivf_host.mojo
+index 8d589e8cc..ab26221da 100644
+--- a/ivf/host/ivf_host.mojo
++++ b/ivf/host/ivf_host.mojo
+@@ -3,8 +3,8 @@
+ lanes of tools/identity_break.py).
+ 
+ HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+-and no GPU binding imports this file. `host_ivf_build` and the search here are
+-`ivf/estimator.mojo`'s build and search with every device launch
++and no GPU binding imports this file. `host_ivf_build_and_search` is
++`ivf/estimator.mojo::ivf_flat_build_and_search_host` with every device launch
+ restated on the host, in the order `ivf_flat_build` and
+ `ivf_flat_search_traced` make them. The host-side pieces those two already
+ run on the host are CALLED, not copied: the validators of
+@@ -525,8 +525,26 @@ def host_ivf_search(
+     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
+ 
+ 
+-# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_ivf.patch
++def host_ivf_build_and_search(
++    x: List[Float32],
++    n_rows: Int,
++    dim: Int,
++    n_lists: Int,
++    queries: List[Float32],
++    n_queries: Int,
++    k: Int,
++    n_probes: Int,
++    kmeans_n_iters: Int,
++    metric: Int,
++    seed: UInt64,
++) raises -> IvfHostResult:
++    """`ivf_flat_build_and_search_host` on the host (module docstring): the
++    build, then the search over the index it returned. Since
++    lane/inference-embedding-ivf-cholesky (2026-09-15) the two halves are
++    `host_ivf_build` and `host_ivf_search`, the same statements in the same
++    order, so a saved index answers what this call answers."""
++    var index = host_ivf_build(x, n_rows, dim, n_lists, kmeans_n_iters, metric, seed)
++    return host_ivf_search(index, queries, n_queries, k, n_probes)
+ 
+ 
+ def host_ivf_extend(
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..ce5e3c1c0 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -3097,8 +3097,8 @@ FAMILIES = (
+     dict(
+         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
+         # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
+-        # GPU binding's whole surface (ivf_flat_build, ivf_flat_search and the
+-        # two read-backs): the build's k-means quantizer through the k-means
++        # GPU binding's whole surface (ivf_flat_build_and_search and the two
++        # read-backs): the build's k-means quantizer through the k-means
+         # lane's host restatement, the CSR layout and probe merge the device
+         # path already runs on the host, and the pinned distance tile and
+         # the identical top-k restated.
+@@ -3124,7 +3124,7 @@ FAMILIES = (
+         exports=(
+             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
+             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
+-            "ivf_flat_build", "ivf_flat_search",
++            "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
+             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
+             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+             "ivf_merge_shards",
+diff --git a/python/mojolearn/tests/test_ivf_embedding_cpu_inference.py b/python/mojolearn/tests/test_ivf_embedding_cpu_inference.py
+index 6b0a1c178..e518250ea 100644
+--- a/python/mojolearn/tests/test_ivf_embedding_cpu_inference.py
++++ b/python/mojolearn/tests/test_ivf_embedding_cpu_inference.py
+@@ -59,7 +59,7 @@ def test_inference_families_ship_and_carry_no_training():
+ def test_gpu_and_reference_bindings_register_build_and_search():
+     for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo"):
+         names = _registered(rel)
+-        assert {"ivf_flat_build", "ivf_flat_search"} <= names, rel
++        assert {"ivf_flat_build", "ivf_flat_search", "ivf_flat_build_and_search"} <= names, rel
+     shared = _read("bindings/ivf_index_arrays.mojo")
+     assert "ivf_validate_index_arrays" in shared
+     # Both bindings take their search from the ONE shared source, and since

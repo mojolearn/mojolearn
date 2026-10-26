@@ -8,8 +8,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
-from x_metrics.common import PY2MOJO_CORE_ON
-from x_metrics.cls_epi import IDN_CLS_EPI
 from x_metrics.epilogue import expected_mi, row_sum_range
 from x_metrics.epilogue import scatter_rows, encode_small_i64, first_rows_i32
 from x_metrics.epilogue import expected_mi_tasks, row_sum_range_tasks
@@ -88,21 +86,8 @@ def x_metrics_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-def py2mojo_core_binding() raises -> PythonObject:
-    """1 when the label layouts run in the binding (lane apple-fast-py2mojo-core),
-    0 under -D MOJOLEARN_PY2MOJO_core_OFF (the Python layouts, the A/B arm)."""
-    comptime if PY2MOJO_CORE_ON:
-        return PythonObject(1)
-    else:
-        return PythonObject(0)
-
-
-def idn_fam2_binding() raises -> PythonObject:
-    """Lane fam2-prep-metrics: the bits of the IDENTICAL metric switches this
-    binding was built with (1 IDN_CLS_EPI: op 55, the set-wise classification
-    epilogue, x_metrics/cls_epi.mojo), read by
-    python/mojolearn/_expansion_metrics.py `_idn_fam2`."""
-    return PythonObject(1 if IDN_CLS_EPI else 0)
+# TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_metrics.patch
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics_host.mojo
@@ -120,8 +105,8 @@ def build__mojolearn_x_metrics_host() -> PythonObject:
         m.def_function[first_rows_binding]("x_metrics_first_rows")
         m.def_function[x_metrics_numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[x_metrics_vendor_binding]("x_metrics_vendor")
-        m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")
-        m.def_function[idn_fam2_binding]("x_metrics_idn_fam2")
+        # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_metrics_host: ", e))

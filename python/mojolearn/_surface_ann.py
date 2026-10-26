@@ -35,7 +35,7 @@ FAMILIES = (
             "x_ann_cagra_build", "x_ann_cagra_search",
             "x_ann_ivf_sq_build", "x_ann_ivf_sq_search", "x_ann_refine",
             "x_ann_ivf_rabitq_build", "x_ann_ivf_rabitq_search", "x_ann_numeric_mode", "x_ann_vendor",
-            "x_ann_py2mojo", "x_ann_filter_topk",
+            "x_ann_filter_topk",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the ann lane's CPU route (IVF-PQ, IVF-SQ, IVF-RaBitQ, refine, t-SNE, CAGRA).",

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from mojolearn import _backend
-from mojolearn._training_impl import _Optimizer, _optimizer_finalize_native
+from mojolearn._training_impl import _Optimizer
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -45,7 +45,7 @@ def test_python_close_callback_is_refused_without_invocation():
     fields['_res'] = 17
     fields['_res_binding'] = SimpleNamespace(optimizer_resident_close=lambda value: called.append(value))
     try:
-        audit = audit_native_call(_optimizer_finalize_native, owner)
+        audit = audit_native_call(_Optimizer.__del__, owner)
         assert audit.exception is not None and 'compiled close' in str(audit.exception)
         for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
             assert not audit.report()[key], audit.report()

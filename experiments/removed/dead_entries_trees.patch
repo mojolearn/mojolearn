@@ -1,0 +1,1067 @@
+diff --git a/bindings/_mojolearn_gbdt.mojo b/bindings/_mojolearn_gbdt.mojo
+index 7898c8bef..3a5faa9d2 100644
+--- a/bindings/_mojolearn_gbdt.mojo
++++ b/bindings/_mojolearn_gbdt.mojo
+@@ -877,8 +877,8 @@ def build__mojolearn_gbdt() -> PythonObject:
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+-        # TOMBSTONE: gbdt_parallel_available, pointwise_parallel_available (dead native entries: constant probes no driver reads) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[gbdt_parallel_available_binding]("gbdt_parallel_available")
++        m.def_function[gbdt_parallel_available_binding]("pointwise_parallel_available")
+         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
+         m.def_function[gbdt_fit_binding]("gbdt_fit")
+         # lane/apple-fast-sym-feat: the row-major door and its probe, only
+@@ -915,6 +915,5 @@ def build__mojolearn_gbdt() -> PythonObject:
+         abort(String("failed to create _mojolearn_gbdt module: ", e))
+ 
+ 
+-# TOMBSTONE: gbdt_parallel_available, pointwise_parallel_available (dead native entries: constant probes no driver reads) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
+-
++def gbdt_parallel_available_binding() raises -> PythonObject:
++    return PythonObject(1)
+diff --git a/bindings/_mojolearn_rf.mojo b/bindings/_mojolearn_rf.mojo
+index 975a58d2e..4dc3b8f7c 100644
+--- a/bindings/_mojolearn_rf.mojo
++++ b/bindings/_mojolearn_rf.mojo
+@@ -29,7 +29,7 @@ sampler's first Python caller.
+ 
+ from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+ from std.memory import memcpy
+-from core.hostptr import copy_f32, list_f32, list_i32
++from core.hostptr import copy_f32, list_f32, list_i32, store_f32
+ from ensemble.device_layout import device_has_nan_f32, upload_forest_x
+ from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
+ from xtrees.dart_device import DART_SESSIONS, _DART_CTX
+@@ -42,12 +42,14 @@ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ 
+ from forest_inference_binding import (
+-    forest_prepare_gpu_binding, forest_release_gpu_binding,
+-    forest_predict_resident_into_gpu_binding,
++    forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
++    forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
+     forest_predict_resident_labels_gpu_binding,
+     forest_resident_layout_binding, forest_ordered_resident_binding,
+     forest_identical_fused_labels_binding,
++    forest_pool_available, forest_pool_fault_available,
+ )
++from core.forest_inference import forest_predict_gpu
+ from core.forest_inference_model import (
+     resident_prepare, resident_predict_into, resident_release,
+ )
+@@ -102,6 +104,7 @@ from ensemble.decisiontree.decisiontree import (
+ from ensemble.flatnode import SparseTreeNode
+ from ensemble.randomforest import (
+     CLASSIFICATION,
++    FUSED_BOOTSTRAP_GATHER,
+     REGRESSION,
+     RF_params,
+     RandomForest,
+@@ -890,8 +893,78 @@ def _session_shape_check(
+         )
+ 
+ 
+-# TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def rf_regressor_fit_session_binding(
++    handle: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject,
++) raises -> PythonObject:
++    """`rf_regressor_fit_export` on a data session's X: same params, same
++    checks, same export descriptor."""
++    if not _rf_params_len_ok(params):
++        raise Error(
++            "rf_regressor_fit_session: params must hold "
++            + String(N_RF_FIT_PARAMS)
++            + " values, got "
++            + String(len(params))
++        )
++    if Int(py=params[2]) != 0:
++        raise Error("rf_regressor_fit_session: n_classes (slot 2) must be 0")
++    var n_rows = Int(py=params[0])
++    var n_cols = Int(py=params[1])
++    var yp = _f32_ptr(Int(py=y_addr))
++    var crit = Int(py=criterion)
++    _check_criterion("rf_regressor_fit_session", crit, _reg_criteria())
++    var rf_params = _rf_params_from(params, crit)
++    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
++    var session_id = Int(py=handle)
++    var reg = RF_SESSIONS.get_or_create_ptr()
++    var si = reg[].find(session_id)
++    _session_shape_check(
++        "rf_regressor_fit_session", reg[].sessions[si].n_rows,
++        reg[].sessions[si].n_cols, n_rows, n_cols,
++    )
++    var share_tables = reg[].sessions[si].share_tables
++    var host_x = reg[].sessions[si].host_x
++    # the kept tables leave the session for the fit and return after it
++    var prep = List[ForestPrep]()
++    swap(prep, reg[].sessions[si].prep)
++
++    var forest: RandomForestMetaData[DT, RLT]
++    with GILReleased(Python()):
++        var ctx = process_ctx[_DEVCTX_SLOT]()
++        var dxv = reg[].sessions[si].dx.create_sub_buffer[DT](
++            0, n_rows * n_cols
++        )
++        var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
++        ctx.synchronize()
++        copy_f32(yp, hy.unsafe_ptr(), n_rows)
++        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
++        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
++        var dsw = ctx.enqueue_create_buffer[DT](1)
++        ctx.synchronize()
++        # the label scale, as `_rf_regressor_fit` chooses it
++        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
++        # blocked order the host column restates (`core/abs_sum_blocked`)
++        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
++        var scales = BinScales(
++            Float32(choose_scale(mag, n_rows)), Float32(1.0)
++        )
++        forest = fit_forest_prepared[RegObj](
++            ctx, dxv, dy, dsw, n_rows, n_cols, 1, rf_params, prep,
++            share_tables, scales, host_x_addr=host_x,
++        )
++        ctx.synchronize()
++        _ = dxv^
++        _ = dy^
++        _ = dsw^
++        _ = hy^
++        _ = ctx^
++    var back = RF_SESSIONS.get_or_create_ptr()
++    var bi = back[].find(session_id)
++    swap(prep, back[].sessions[bi].prep)
++    _ = prep^
++    var export_trees = forest.trees^
++    forest.trees = RFExportTrees()
++    return _retain_rf_export(export_trees^)
+ 
+ 
+ def rf_regressor_fit_dart_binding(
+@@ -906,7 +979,7 @@ def rf_regressor_fit_dart_binding(
+     `params[1]` sampled columns) are 0 when the round has none; X is laid
+     out column-major at them and the target gathered at the rows on the
+     device (`ensemble/dart_member.mojo`). Same params, checks and export
+-    descriptor as `rf_regressor_fit_session_rows_export`."""
++    descriptor as `rf_regressor_fit_session_export`."""
+     if not _rf_params_len_ok(params):
+         raise Error(
+             "rf_regressor_fit_dart: params must hold "
+@@ -1583,6 +1656,89 @@ def rf_predict_reg_binding(
+     )
+ 
+ 
++def _rf_predict_gpu_parallel(
++    offsets_addr: PythonObject, colid_addr: PythonObject,
++    quesval_addr: PythonObject, left_child_addr: PythonObject,
++    leaves_addr: PythonObject, x_addr: PythonObject,
++    out_addr: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """Opt-in GPU inference: fixed 32-grove reduction graph.
++
++    Borrowed arrays retain the existing prediction ABI; graph/finite validation
++    and GPU execution are shared by RF/ET in core.forest_inference.
++    """
++    if len(params) != 4:
++        raise Error("GPU parallel prediction expects rows, features, trees, outputs")
++    var rows = Int(py=params[0])
++    var features = Int(py=params[1])
++    var trees = Int(py=params[2])
++    var outputs = Int(py=params[3])
++    if rows < 0 or features < 1 or trees < 1 or outputs < 1:
++        raise Error("GPU parallel prediction dimensions are invalid")
++    if trees >= 2147483647 or rows > 2147483647 // features or rows > 2147483647 // outputs:
++        raise Error("GPU parallel prediction dimensions exceed Int32 indexing")
++    var offsets_p = _i32_ptr(Int(py=offsets_addr))
++    var columns_p = _i32_ptr(Int(py=colid_addr))
++    var thresholds_p = _f32_ptr(Int(py=quesval_addr))
++    var left_p = _i32_ptr(Int(py=left_child_addr))
++    var leaves_p = _f32_ptr(Int(py=leaves_addr))
++    var x_p = _f32_ptr(Int(py=x_addr))
++    var out_p = _f32_ptr(Int(py=out_addr))
++    var nodes = Int(offsets_p[trees])
++    if nodes < 1 or nodes > 2147483647 // outputs:
++        raise Error("GPU parallel prediction node/output count is invalid")
++    with GILReleased(Python()):
++        # one memcpy per array (no per-element host loop) feeding one upload each
++        var offsets = list_i32(offsets_p, trees + 1)
++        var columns = list_i32(columns_p, nodes)
++        var thresholds = list_f32(thresholds_p, nodes)
++        var left = list_i32(left_p, nodes)
++        var leaves = list_f32(leaves_p, nodes * outputs)
++        var x = list_f32(x_p, rows * features)
++        var ctx = process_ctx[_DEVCTX_SLOT]()
++        var result = forest_predict_gpu[True, True](
++            ctx, offsets, columns, thresholds, left, leaves, x,
++            rows, features, outputs,
++        )
++        store_f32(out_p, result, rows * outputs)
++        _ = result^
++        _ = ctx^
++    return PythonObject(rows)
++
++
++def rf_predict_proba_gpu_parallel_binding(
++    offsets_addr: PythonObject, colid_addr: PythonObject,
++    quesval_addr: PythonObject, left_child_addr: PythonObject,
++    leaves_addr: PythonObject, x_addr: PythonObject,
++    out_addr: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    if len(params) != 4:
++        raise Error("GPU parallel prediction requires four parameters")
++    var outputs = Int(py=params[3])
++    if outputs < 2:
++        raise Error("GPU parallel prediction output dimension does not match task")
++    return _rf_predict_gpu_parallel(
++        offsets_addr, colid_addr, quesval_addr, left_child_addr,
++        leaves_addr, x_addr, out_addr, params,
++    )
++
++
++def rf_predict_reg_gpu_parallel_binding(
++    offsets_addr: PythonObject, colid_addr: PythonObject,
++    quesval_addr: PythonObject, left_child_addr: PythonObject,
++    leaves_addr: PythonObject, x_addr: PythonObject,
++    out_addr: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    if len(params) != 4:
++        raise Error("GPU parallel prediction requires four parameters")
++    var outputs = Int(py=params[3])
++    if outputs != 1:
++        raise Error("GPU parallel prediction output dimension does not match task")
++    return _rf_predict_gpu_parallel(
++        offsets_addr, colid_addr, quesval_addr, left_child_addr,
++        leaves_addr, x_addr, out_addr, params,
++    )
++
+ def rf_device_finite_scan_binding() raises -> PythonObject:
+     """1 when this build's RF fits refuse a non-finite X cell through a
+     device scan (FOREST_DEVICE_FINITE, FAST on Apple), so the Python fit
+@@ -1619,6 +1775,11 @@ def rf_numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+ 
+ 
++def rf_fused_bootstrap_gather_binding() raises -> PythonObject:
++    """Whether this binary uses the fused bootstrap/gather arm."""
++    return PythonObject(Int(FUSED_BOOTSTRAP_GATHER))
++
++
+ def rf_vendor_binding() raises -> PythonObject:
+     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
+     'hip' or 'none'. A compile-time constant folded in from
+@@ -1655,36 +1816,32 @@ def build__mojolearn_rf() -> PythonObject:
+         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+         m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
+         m.def_function[rf_dt_default_bins_binding]("rf_dt_default_bins")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_fused_bootstrap_gather_binding](
++            "rf_fused_bootstrap_gather"
++        )
+         m.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
+         m.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
+         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_classifier_fit_rowmajor_binding[False]]("rf_classifier_fit_rowmajor")
+         m.def_function[rf_classifier_fit_rowmajor_binding[True]]("rf_classifier_fit_rowmajor_export")
+         m.def_function[rf_classifier_fit_weighted_binding[False]]("rf_classifier_fit_weighted")
+         m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_regressor_fit_binding[False]]("rf_regressor_fit")
+         m.def_function[rf_regressor_fit_binding[True]]("rf_regressor_fit_export")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_regressor_fit_weighted_binding[False]]("rf_regressor_fit_weighted")
+         m.def_function[rf_regressor_fit_weighted_binding[True]]("rf_regressor_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_regressor_fit_rowmajor_binding[False]]("rf_regressor_fit_rowmajor")
+         m.def_function[rf_regressor_fit_rowmajor_binding[True]]("rf_regressor_fit_rowmajor_export")
+         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
+         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
++        m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
+         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
+         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
+         m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[forest_pool_available]("forest_pool_available")
++        m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
+         m.def_function[rf_forest_export_binding]("forest_export")
+         m.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
+         m.def_function[rf_forest_export_release_binding]("forest_export_release")
+@@ -1692,17 +1849,15 @@ def build__mojolearn_rf() -> PythonObject:
+         # borrows its one I/O workspace (core/forest_inference_model.mojo,
+         # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
+         m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[forest_predict_resident_gpu_binding[True]]("forest_predict_resident_gpu")
+         m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[forest_vector_groves_binding]("forest_vector_groves")
++        m.def_function[forest_predict_resident_into_gpu_binding[True]]("forest_predict_resident_into_gpu")
+         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
+         m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
+         m.def_function[rf_data_session_open_binding]("rf_data_session_open")
+         m.def_function[rf_data_session_close_binding]("rf_data_session_close")
+-        # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
+         m.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
+         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
+diff --git a/bindings/_mojolearn_rf_host.mojo b/bindings/_mojolearn_rf_host.mojo
+index 1c7fcc0e1..61d0c3e7f 100644
+--- a/bindings/_mojolearn_rf_host.mojo
++++ b/bindings/_mojolearn_rf_host.mojo
+@@ -18,7 +18,7 @@ install (the infer column and the model column's reload check).
+ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
+ `python/mojolearn/randomforest.py` runs unchanged on a CPU-only install
+ through `_backend._HOST_MODULES` (`"_mojolearn_rf": "_mojolearn_rf_host"`):
+-`rf_classifier_fit_export`, `rf_regressor_fit_export` and their
++`rf_classifier_fit`, `rf_regressor_fit`, their `_export`, `_rowmajor` and
+ `_rowmajor_export` forms (the 16-slot params list and the criterion
+ argument of `bindings/_mojolearn_rf.mojo`), `forest_export`,
+ `forest_export_legacy`, `forest_export_release`, `rf_predict_proba`,
+@@ -33,7 +33,7 @@ and `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu` and
+ `core/forest_host_groves.mojo` (`RF_INPUT=True`: the input flushed).
+ ADDED 2026-10-02 (lane/fix-dart-host): the data session entries
+ `rf_data_session_open`, `rf_data_session_close`,
+-`rf_regressor_fit_session_rows_export`
++`rf_regressor_fit_session_export`, `rf_regressor_fit_session_rows_export`
+ and `rf_classifier_fit_weighted_session_export`, which DART opens by default
+ (e3372c826); each member fit is the plain entries' body on the session's X.
+ ADDED 2026-10-05 (box-run-2-dart-host): `rf_regressor_fit_dart_export`,
+@@ -531,8 +531,11 @@ def rf_regressor_fit_aux_export_binding(
+         importance_addr=_index(importance_addr))
+ 
+ 
+-# TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def rf_classifier_fit_binding(
++    x_addr: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject,
++) raises -> PythonObject:
++    return _rf_fit[True, False, False](x_addr, y_addr, params, criterion)
+ 
+ 
+ def rf_classifier_fit_export_binding(
+@@ -542,6 +545,13 @@ def rf_classifier_fit_export_binding(
+     return _rf_fit[True, True, False](x_addr, y_addr, params, criterion)
+ 
+ 
++def rf_classifier_fit_rowmajor_binding(
++    x_addr: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject,
++) raises -> PythonObject:
++    return _rf_fit[True, False, True](x_addr, y_addr, params, criterion)
++
++
+ def rf_classifier_fit_rowmajor_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject,
+     params: PythonObject, criterion: PythonObject,
+@@ -574,6 +584,13 @@ def rf_classifier_fit_weighted_export_binding(
+     return _rf_classifier_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr)
+ 
+ 
++def rf_regressor_fit_binding(
++    x_addr: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject,
++) raises -> PythonObject:
++    return _rf_fit[False, False, False](x_addr, y_addr, params, criterion)
++
++
+ def rf_regressor_fit_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject,
+     params: PythonObject, criterion: PythonObject,
+@@ -598,6 +615,14 @@ def _rf_regressor_fit_weighted[EXPORT: Bool](
+     )
+ 
+ 
++def rf_regressor_fit_weighted_binding(
++    x_addr: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
++    weight_max: PythonObject,
++) raises -> PythonObject:
++    return _rf_regressor_fit_weighted[False](x_addr, y_addr, params, criterion, weights_addr, weight_max)
++
++
+ def rf_regressor_fit_weighted_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject,
+     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+@@ -606,6 +631,13 @@ def rf_regressor_fit_weighted_export_binding(
+     return _rf_regressor_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr, weight_max)
+ 
+ 
++def rf_regressor_fit_rowmajor_binding(
++    x_addr: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject,
++) raises -> PythonObject:
++    return _rf_fit[False, False, True](x_addr, y_addr, params, criterion)
++
++
+ def rf_regressor_fit_rowmajor_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject,
+     params: PythonObject, criterion: PythonObject,
+@@ -742,6 +774,25 @@ def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises
+     return reg[].sessions[si].x.copy()
+ 
+ 
++def rf_regressor_fit_session_binding(
++    handle: PythonObject, y_addr: PythonObject,
++    params: PythonObject, criterion: PythonObject,
++) raises -> PythonObject:
++    """`rf_regressor_fit_export` on the session's X."""
++    comptime entry = "rf_regressor_fit_session"
++    var p = _session_params[False](entry, params, criterion)
++    var n_rows = _index(params[0])
++    var n_cols = _index(params[1])
++    var x = _session_x(entry, _index(handle), n_rows, n_cols)
++    var y_address = _index(y_addr)
++    var forest: RfHostForest
++    with GILReleased(Python()):
++        forest = _rf_fit_colmajor[False](
++            x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
++        )
++    return _retain_rf_export(forest^)
++
++
+ def rf_regressor_fit_session_rows_binding(
+     handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
+     params: PythonObject, criterion: PythonObject,
+@@ -1040,17 +1091,13 @@ def build__mojolearn_rf_host() -> PythonObject:
+         module.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+         module.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
+         module.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
+         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[rf_classifier_fit_rowmajor_binding]("rf_classifier_fit_rowmajor")
+         module.def_function[rf_classifier_fit_rowmajor_export_binding]("rf_classifier_fit_rowmajor_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
+         module.def_function[rf_regressor_fit_export_binding]("rf_regressor_fit_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[rf_regressor_fit_rowmajor_binding]("rf_regressor_fit_rowmajor")
+         module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
+         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
+         module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
+@@ -1061,16 +1108,14 @@ def build__mojolearn_rf_host() -> PythonObject:
+         module.def_function[rf_predict_reg_binding]("rf_predict_reg")
+         module.def_function[rf_classifier_fit_weighted_binding]("rf_classifier_fit_weighted")
+         module.def_function[rf_classifier_fit_weighted_export_binding]("rf_classifier_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[rf_regressor_fit_weighted_binding]("rf_regressor_fit_weighted")
+         module.def_function[rf_regressor_fit_weighted_export_binding]("rf_regressor_fit_weighted_export")
+         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
+         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
+         module.def_function[resident_release_binding]("forest_release_gpu")
+         module.def_function[rf_data_session_open_binding]("rf_data_session_open")
+         module.def_function[rf_data_session_close_binding]("rf_data_session_close")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+         module.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
+         # box-run-2-dart-host: the DART member fit on the host DART session
+         module.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
+diff --git a/bindings/_mojolearn_trees.mojo b/bindings/_mojolearn_trees.mojo
+index 12885f784..5692bd301 100644
+--- a/bindings/_mojolearn_trees.mojo
++++ b/bindings/_mojolearn_trees.mojo
+@@ -32,16 +32,18 @@ from ensemble.device_finite import FOREST_DEVICE_FINITE
+ from ensemble.instruments import StageTimes
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+-from core.hostptr import list_f32, list_i32
++from core.hostptr import list_f32, list_i32, store_f32
+ from std.python.bindings import PythonModuleBuilder
+ 
+ from forest_inference_binding import (
+-    forest_prepare_gpu_binding, forest_release_gpu_binding,
+-    forest_predict_resident_into_gpu_binding,
++    forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
++    forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
+     forest_predict_resident_labels_gpu_binding,
+-    forest_ordered_resident_binding,
++    forest_resident_layout_binding, forest_ordered_resident_binding,
+     forest_identical_fused_labels_binding,
++    forest_pool_available, forest_pool_fault_available,
+ )
++from core.forest_inference import forest_predict_gpu
+ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
+@@ -93,9 +95,10 @@ comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
+           "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
+ 
+ 
+-# TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++from xtrees.shap_device import shap_pair_count
+ 
++def trees_shap_pair_count_py() raises -> PythonObject:
++    return PythonObject(shap_pair_count())
+ 
+ def _retain_et_export(var result: FitResult) raises -> PythonObject:
+     var trees = len(result.forest.trees)
+@@ -566,9 +569,54 @@ def et_predict_binding(
+     return PythonObject(n_rows)
+ 
+ 
+-# TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def et_predict_gpu_parallel_binding(
++    offsets_addr: PythonObject, colid_addr: PythonObject,
++    quesval_addr: PythonObject, left_child_addr: PythonObject,
++    leaves_addr: PythonObject, x_addr: PythonObject,
++    out_addr: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """Opt-in GPU inference: fixed 32-grove reduction graph.
+ 
++    Borrowed arrays retain the existing prediction ABI; graph/finite validation
++    and GPU execution are shared by RF/ET in core.forest_inference.
++    """
++    if len(params) != 4:
++        raise Error("GPU parallel prediction expects rows, features, trees, outputs")
++    var rows = Int(py=params[0])
++    var features = Int(py=params[1])
++    var trees = Int(py=params[2])
++    var outputs = Int(py=params[3])
++    if rows < 0 or features < 1 or trees < 1 or outputs < 1:
++        raise Error("GPU parallel prediction dimensions are invalid")
++    if trees >= 2147483647 or rows > 2147483647 // features or rows > 2147483647 // outputs:
++        raise Error("GPU parallel prediction dimensions exceed Int32 indexing")
++    var offsets_p = _i32_ptr(Int(py=offsets_addr))
++    var columns_p = _i32_ptr(Int(py=colid_addr))
++    var thresholds_p = _f32_ptr(Int(py=quesval_addr))
++    var left_p = _i32_ptr(Int(py=left_child_addr))
++    var leaves_p = _f32_ptr(Int(py=leaves_addr))
++    var x_p = _f32_ptr(Int(py=x_addr))
++    var out_p = _f32_ptr(Int(py=out_addr))
++    var nodes = Int(offsets_p[trees])
++    if nodes < 1 or nodes > 2147483647 // outputs:
++        raise Error("GPU parallel prediction node/output count is invalid")
++    with GILReleased(Python()):
++        # one memcpy per array (no per-element host loop) feeding one upload each
++        var offsets = list_i32(offsets_p, trees + 1)
++        var columns = list_i32(columns_p, nodes)
++        var thresholds = list_f32(thresholds_p, nodes)
++        var left = list_i32(left_p, nodes)
++        var leaves = list_f32(leaves_p, nodes * outputs)
++        var x = list_f32(x_p, rows * features)
++        var ctx = process_ctx[_DEVCTX_SLOT]()
++        var result = forest_predict_gpu[False, True](
++            ctx, offsets, columns, thresholds, left, leaves, x,
++            rows, features, outputs,
++        )
++        store_f32(out_p, result, rows * outputs)
++        _ = result^
++        _ = ctx^
++    return PythonObject(rows)
+ 
+ def trees_vendor_binding() raises -> PythonObject:
+     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
+@@ -638,8 +686,7 @@ def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: Python
+ def build__mojolearn_trees() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_trees")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[trees_shap_pair_count_py]("trees_shap_pair_count")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+@@ -650,32 +697,28 @@ def build__mojolearn_trees() -> PythonObject:
+         m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
+         m.def_function[et_classifier_fit_binding[False]]("et_classifier_fit")
+         m.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[et_classifier_fit_rowmajor_binding[False]]("et_classifier_fit_rowmajor")
+         m.def_function[et_classifier_fit_rowmajor_binding[True]]("et_classifier_fit_rowmajor_export")
+         m.def_function[et_classifier_fit_weighted_binding[False]]("et_classifier_fit_weighted")
+         m.def_function[et_classifier_fit_weighted_binding[True]]("et_classifier_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[et_classifier_fit_weighted_binding[False, True]]("et_classifier_fit_weighted_rowmajor")
+         m.def_function[et_classifier_fit_weighted_binding[True, True]]("et_classifier_fit_weighted_rowmajor_export")
+         m.def_function[et_regressor_fit_binding[False]]("et_regressor_fit")
+         m.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[et_regressor_fit_rowmajor_binding[False]]("et_regressor_fit_rowmajor")
+         m.def_function[et_regressor_fit_rowmajor_binding[True]]("et_regressor_fit_rowmajor_export")
+         m.def_function[et_regressor_fit_weighted_binding[False]]("et_regressor_fit_weighted")
+         m.def_function[et_regressor_fit_weighted_binding[True]]("et_regressor_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[et_regressor_fit_weighted_binding[False, True]]("et_regressor_fit_weighted_rowmajor")
+         m.def_function[et_regressor_fit_weighted_binding[True, True]]("et_regressor_fit_weighted_rowmajor_export")
+         m.def_function[et_predict_binding]("et_predict")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
++        m.def_function[forest_resident_layout_binding]("forest_resident_layout")
+         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
+         # T38/C50 — NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+         m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[forest_pool_available]("forest_pool_available")
++        m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
+         m.def_function[et_forest_export_binding]("forest_export")
+         m.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
+         m.def_function[et_forest_export_release_binding]("forest_export_release")
+@@ -683,11 +726,10 @@ def build__mojolearn_trees() -> PythonObject:
+         # borrows its one I/O workspace (core/forest_inference_model.mojo,
+         # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
+         m.def_function[forest_prepare_gpu_binding[False]]("forest_prepare_gpu")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[forest_predict_resident_gpu_binding[False]]("forest_predict_resident_gpu")
+         m.def_function[forest_release_gpu_binding[False]]("forest_release_gpu")
+-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        m.def_function[forest_vector_groves_binding]("forest_vector_groves")
++        m.def_function[forest_predict_resident_into_gpu_binding[False]]("forest_predict_resident_into_gpu")
+         m.def_function[forest_predict_resident_into_gpu_binding[False, True]]("forest_predict_resident_reuse_gpu")
+         m.def_function[forest_predict_resident_labels_gpu_binding[False]]("forest_predict_resident_labels_gpu")
+         m.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
+diff --git a/bindings/_mojolearn_trees_host.mojo b/bindings/_mojolearn_trees_host.mojo
+index 30899ad26..861673d78 100644
+--- a/bindings/_mojolearn_trees_host.mojo
++++ b/bindings/_mojolearn_trees_host.mojo
+@@ -359,8 +359,10 @@ def et_classifier_fit_export_binding(
+     return _et_fit[True, True, False](x_addr, y_addr, params)
+ 
+ 
+-# TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def et_classifier_fit_rowmajor_binding(
++    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    return _et_fit[True, False, True](x_addr, y_addr, params)
+ 
+ 
+ def _et_classifier_fit_weighted[EXPORT: Bool, ROWMAJOR: Bool](
+@@ -390,6 +392,13 @@ def et_classifier_fit_weighted_export_binding(
+     return _et_classifier_fit_weighted[True, False](x_addr, y_addr, params, weights_addr)
+ 
+ 
++def et_classifier_fit_weighted_rowmajor_binding(
++    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
++    weights_addr: PythonObject,
++) raises -> PythonObject:
++    return _et_classifier_fit_weighted[False, True](x_addr, y_addr, params, weights_addr)
++
++
+ def et_classifier_fit_weighted_rowmajor_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+     weights_addr: PythonObject,
+@@ -415,6 +424,12 @@ def et_regressor_fit_export_binding(
+     return _et_fit[False, True, False](x_addr, y_addr, params)
+ 
+ 
++def et_regressor_fit_rowmajor_binding(
++    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    return _et_fit[False, False, True](x_addr, y_addr, params)
++
++
+ def et_regressor_fit_rowmajor_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
+ ) raises -> PythonObject:
+@@ -448,6 +463,13 @@ def et_regressor_fit_weighted_export_binding(
+     return _et_regressor_fit_weighted[True, False](x_addr, y_addr, params, weights_addr)
+ 
+ 
++def et_regressor_fit_weighted_rowmajor_binding(
++    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
++    weights_addr: PythonObject,
++) raises -> PythonObject:
++    return _et_regressor_fit_weighted[False, True](x_addr, y_addr, params, weights_addr)
++
++
+ def et_regressor_fit_weighted_rowmajor_export_binding(
+     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+     weights_addr: PythonObject,
+@@ -635,18 +657,15 @@ def build__mojolearn_trees_host() -> PythonObject:
+         module.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
+         module.def_function[et_classifier_fit_binding]("et_classifier_fit")
+         module.def_function[et_classifier_fit_export_binding]("et_classifier_fit_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[et_classifier_fit_rowmajor_binding]("et_classifier_fit_rowmajor")
+         module.def_function[et_classifier_fit_rowmajor_export_binding]("et_classifier_fit_rowmajor_export")
+         module.def_function[et_classifier_fit_weighted_binding]("et_classifier_fit_weighted")
+         module.def_function[et_classifier_fit_weighted_export_binding]("et_classifier_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[et_classifier_fit_weighted_rowmajor_binding]("et_classifier_fit_weighted_rowmajor")
+         module.def_function[et_classifier_fit_weighted_rowmajor_export_binding]("et_classifier_fit_weighted_rowmajor_export")
+         module.def_function[et_regressor_fit_binding]("et_regressor_fit")
+         module.def_function[et_regressor_fit_export_binding]("et_regressor_fit_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[et_regressor_fit_rowmajor_binding]("et_regressor_fit_rowmajor")
+         module.def_function[et_regressor_fit_rowmajor_export_binding]("et_regressor_fit_rowmajor_export")
+         module.def_function[et_forest_export_binding]("forest_export")
+         module.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
+@@ -657,8 +676,7 @@ def build__mojolearn_trees_host() -> PythonObject:
+         module.def_function[et_regressor_fit_weighted_shard_binding]("et_regressor_fit_weighted_shard")
+         module.def_function[et_regressor_fit_weighted_binding]("et_regressor_fit_weighted")
+         module.def_function[et_regressor_fit_weighted_export_binding]("et_regressor_fit_weighted_export")
+-        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        module.def_function[et_regressor_fit_weighted_rowmajor_binding]("et_regressor_fit_weighted_rowmajor")
+         module.def_function[et_regressor_fit_weighted_rowmajor_export_binding]("et_regressor_fit_weighted_rowmajor_export")
+         module.def_function[et_predict_binding]("et_predict")
+         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
+diff --git a/bindings/_mojolearn_x_trees.mojo b/bindings/_mojolearn_x_trees.mojo
+index 8c791b3b9..2c8823e5b 100644
+--- a/bindings/_mojolearn_x_trees.mojo
++++ b/bindings/_mojolearn_x_trees.mojo
+@@ -13,6 +13,7 @@ from xtrees.api_pyapi import register, tree_shap_cache_values_args
+ from xtrees import shap_device as shap_dev
+ from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
+ from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
++from xtrees.dart_units import IDN_DART_DEVICE
+ 
+ 
+ # F13 measurement audit lives in the binding used by public TreeExplainer.
+@@ -138,8 +139,12 @@ def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> Python
+     return PythonObject(0)
+ 
+ 
+-# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def dart_idn_binding() raises -> PythonObject:
++    """Present only under `IDN_DART_DEVICE` (lane fam2-forests): the
++    IDENTICAL DART round, the same words as the host twin
++    (xtrees/dart_host.mojo). The Python layer then takes the device loop
++    with or without a forest data session."""
++    return PythonObject(1)
+ 
+ 
+ def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
+@@ -231,8 +236,8 @@ def build__mojolearn_x_trees() -> PythonObject:
+             m.def_function[dart_step_binding]("x_trees_dart_step")
+             m.def_function[dart_add_binding]("x_trees_dart_add")
+             m.def_function[dart_close_binding]("x_trees_dart_close")
+-        # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_trees.patch
++        comptime if IDN_DART_DEVICE:
++            m.def_function[dart_idn_binding]("x_trees_dart_idn")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_trees: ", e))
+diff --git a/bindings/_mojolearn_x_trees_host.mojo b/bindings/_mojolearn_x_trees_host.mojo
+index 6e4b2126c..88261cbb2 100644
+--- a/bindings/_mojolearn_x_trees_host.mojo
++++ b/bindings/_mojolearn_x_trees_host.mojo
+@@ -150,8 +150,10 @@ def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> Python
+     return PythonObject(0)
+ 
+ 
+-# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def dart_idn_binding() raises -> PythonObject:
++    """Present only under `IDN_DART_DEVICE`: the IDENTICAL DART round (the
++    Python layer then takes it with or without a forest data session)."""
++    return PythonObject(1)
+ 
+ 
+ def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
+@@ -241,8 +243,7 @@ def build__mojolearn_x_trees_host() -> PythonObject:
+             m.def_function[dart_step_binding]("x_trees_dart_step")
+             m.def_function[dart_add_binding]("x_trees_dart_add")
+             m.def_function[dart_close_binding]("x_trees_dart_close")
+-            # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-            # Restore: git apply experiments/removed/dead_entries_trees.patch
++            m.def_function[dart_idn_binding]("x_trees_dart_idn")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_trees_host: ", e))
+diff --git a/bindings/forest_inference_binding.mojo b/bindings/forest_inference_binding.mojo
+index 692762c4a..edc67527e 100644
+--- a/bindings/forest_inference_binding.mojo
++++ b/bindings/forest_inference_binding.mojo
+@@ -5,13 +5,18 @@ The calling extension holds the GIL throughout prepare/predict/release, so no
+ native handle can be released while another call is using it.
+ """
+ from std.python import PythonObject
++from std.sys.compile import is_defined
+ from core.hostptr import list_f32, list_i32
+-from core.forest_inference import FOREST_PACKED_NODES
++from core.forest_inference import vector_groves_for, FOREST_PACKED_NODES
+ from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
+ 
+ 
+-# TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_trees.patch
++def forest_pool_available() raises -> PythonObject:
++    return PythonObject(1)
++
++
++def forest_pool_fault_available() raises -> PythonObject:
++    return PythonObject(1 if is_defined["MOJOLEARN_FOREST_POOL_FAULT"]() else 0)
+ 
+ 
+ def _i32_ptr(address: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
+@@ -67,11 +72,39 @@ def forest_prepare_gpu_binding[RF_INPUT: Bool](
+         offsets, columns, thresholds, left, leaves, features, outputs, ordered))
+ 
+ 
++def forest_predict_resident_gpu_binding[RF_INPUT: Bool](handle: PythonObject, x_addr: PythonObject,
++    out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
++    if len(params) != 3:
++        raise Error("resident prediction requires rows, features, outputs")
++    var rows = Int(py=params[0])
++    var features = Int(py=params[1])
++    var outputs = Int(py=params[2])
++    if rows < 0 or features < 1 or outputs < 1:
++        raise Error("invalid resident prediction dimensions")
++    if rows > 2147483647 // features or rows > 2147483647 // outputs:
++        raise Error("resident prediction dimensions exceed Int32")
++    var xp = _f32_ptr(Int(py=x_addr))
++    var op = _f32_ptr(Int(py=out_addr))
++    # borrowed rows go straight to the device and the result straight back
++    # into the borrowed output (no host List copies of X or of the result);
++    # same kernel and fold as the List route, fresh per-call buffers
++    resident_predict_into[RF_INPUT](Int(py=handle),
++        xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
++        rows, features, outputs, False)
++    return PythonObject(rows)
++
++
+ def forest_release_gpu_binding[RF_INPUT: Bool](handle: PythonObject) raises -> PythonObject:
+     resident_release[RF_INPUT](Int(py=handle))
+     return PythonObject(None)
+ 
+ 
++
++def forest_vector_groves_binding(outputs: PythonObject) raises -> PythonObject:
++    """Read actual compiled vector dispatch, not environment or filenames."""
++    return PythonObject(vector_groves_for(Int(py=outputs)))
++
++
+ def forest_ordered_resident_binding() raises -> PythonObject:
+     """Read the compiled experimental resident aggregation route."""
+     return PythonObject(1 if FOREST_ORDERED_RESIDENT else 0)
+@@ -80,12 +113,12 @@ def forest_ordered_resident_binding() raises -> PythonObject:
+ def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](
+     handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+     params: PythonObject) raises -> PythonObject:
+-    """Borrowed synchronous prediction; REUSE_IO=True is the public
+-    `forest_predict_resident_reuse_gpu`.
++    """Borrowed synchronous prediction; REUSE_IO=True is the public default.
+ 
+     DEVIATION 2483: parallel_groves already selects this pointer-through body
+-    through forest_predict_resident_reuse_gpu. Output may change on a
+-    nonfinite-result error; caller ownership lasts until return.
++    through forest_predict_resident_reuse_gpu. The REUSE_IO=False export and
++    List-based forest_predict_resident_gpu remain comparison arms. Output may
++    change on a nonfinite-result error; caller ownership lasts until return.
+     """
+     if len(params) != 3:
+         raise Error("resident prediction requires rows, features, outputs")
+diff --git a/bindings/trees_public_forest.mojo b/bindings/trees_public_forest.mojo
+index 316ab7d0d..c61b492a1 100644
+--- a/bindings/trees_public_forest.mojo
++++ b/bindings/trees_public_forest.mojo
+@@ -542,12 +542,10 @@ def forest_fit_arrays(result: PythonObject, context: PythonObject) raises -> Pyt
+ 
+ 
+ def _export_selection() raises -> String:
+-    """`MOJOLEARN_FOREST_EXPORT`: 'into' (default) or 'verify'."""
+-    # TOMBSTONE: the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries (dead native entries: no release, identity or CI path set it) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+-    # Restore: git apply experiments/removed/dead_entries_trees.patch
++    """`MOJOLEARN_FOREST_EXPORT`: 'into' (default), 'legacy' or 'verify'."""
+     var selection = trees_env("MOJOLEARN_FOREST_EXPORT", "into")
+-    if selection != "into" and selection != "verify":
+-        raise Error("MOJOLEARN_FOREST_EXPORT must be into or verify")
++    if selection != "legacy" and selection != "into" and selection != "verify":
++        raise Error("MOJOLEARN_FOREST_EXPORT must be legacy, into or verify")
+     return selection
+ 
+ 
+@@ -569,10 +567,10 @@ struct ForestFit(Copyable, Movable):
+ 
+ def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, params: PythonObject,
+             criterion: PythonObject, device_scan: Bool, context: PythonObject) raises -> PythonObject:
+-    """One fit launch and its export (a shard fit returns its lists)."""
++    """One fit launch and its export (or a legacy fit's lists)."""
+     var b = trees_builtins()
+-    var selection = _export_selection() if fit.exported else String("")
+-    var name = fit.name + ("_export" if fit.exported else "")
++    var selection = _export_selection() if fit.exported else String("legacy")
++    var name = fit.name + ("_export" if fit.exported and selection != "legacy" else "")
+     var entry = trees_need(native, name, "rebuild the forest binding for caller-buffer model export")
+     var args = Python.list(PythonObject(x.addr), PythonObject(y_addr), params)
+     if fit.criterion:
+@@ -587,7 +585,7 @@ def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, p
+             raise Error(TREES_NONFINITE)
+         raise error^
+     _ = x.keep
+-    if fit.exported:
++    if fit.exported and selection != "legacy":
+         return forest_export(native, out, selection, context)
+     return out
+ 
+diff --git a/python/mojolearn/_surface_trees.py b/python/mojolearn/_surface_trees.py
+index 4d79294d3..6dbd46dae 100644
+--- a/python/mojolearn/_surface_trees.py
++++ b/python/mojolearn/_surface_trees.py
+@@ -101,7 +101,7 @@ FAMILIES = (
+             "x_trees_remap_cols", "x_trees_positive_codes", "x_trees_spread_leaves", "x_trees_leaf_numbering",
+             "x_trees_iota_i32", "x_trees_fill_class_major_f64", "x_trees_code_counts", "x_trees_class_rows",
+             # fam2-forests: IDN_DART_DEVICE host twin, native tree shape, SHAP device-model entries
+-            "x_trees_dart_open", "x_trees_dart_step", "x_trees_dart_add", "x_trees_dart_close",
++            "x_trees_dart_open", "x_trees_dart_step", "x_trees_dart_add", "x_trees_dart_close", "x_trees_dart_idn",
+             "x_trees_dart_predict",
+             "x_trees_tree_shape",
+             "x_trees_agn_model_load", "x_trees_agn_model_release", "x_trees_kshap_solve_model", "x_trees_pshap_values_model",
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..e3020d4e8 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2292,16 +2292,16 @@ FAMILIES = (
+             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
+             "trees_host_sabotage", "trees_vendor", "trees_numeric_mode",
+             "et_classifier_fit", "et_classifier_fit_export",
+-            "et_classifier_fit_rowmajor_export",
++            "et_classifier_fit_rowmajor", "et_classifier_fit_rowmajor_export",
+             "et_regressor_fit", "et_regressor_fit_export",
+-            "et_regressor_fit_rowmajor_export",
++            "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
+             "forest_export", "forest_export_legacy", "forest_export_release",
+             "et_classifier_fit_shard", "et_regressor_fit_shard",
+             # the weighted fits (sample_weight; lanes sk-kernels / sk-final)
+             "et_classifier_fit_weighted", "et_classifier_fit_weighted_export",
+-            "et_classifier_fit_weighted_rowmajor_export",
++            "et_classifier_fit_weighted_rowmajor", "et_classifier_fit_weighted_rowmajor_export",
+             "et_regressor_fit_weighted", "et_regressor_fit_weighted_export",
+-            "et_regressor_fit_weighted_rowmajor_export",
++            "et_regressor_fit_weighted_rowmajor", "et_regressor_fit_weighted_rowmajor_export",
+             "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
+             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
+             "forest_release_gpu",
+@@ -2341,18 +2341,18 @@ FAMILIES = (
+         exports=(
+             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
+             "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
+-            "rf_classifier_fit_export",
+-            "rf_classifier_fit_rowmajor_export",
+-            "rf_regressor_fit_export",
+-            "rf_regressor_fit_rowmajor_export",
++            "rf_classifier_fit", "rf_classifier_fit_export",
++            "rf_classifier_fit_rowmajor", "rf_classifier_fit_rowmajor_export",
++            "rf_regressor_fit", "rf_regressor_fit_export",
++            "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
+             "forest_export", "forest_export_legacy", "forest_export_release",
+             "rf_predict_proba", "rf_predict_reg",
+             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
+-            "rf_regressor_fit_weighted_export",
++            "rf_regressor_fit_weighted", "rf_regressor_fit_weighted_export",
+             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
+             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
+             "rf_data_session_open", "rf_data_session_close",
+-            "rf_regressor_fit_session_rows_export",
++            "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
+             "rf_classifier_fit_weighted_session_export",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export",
+diff --git a/python/mojolearn/tests/test_cpu_training_e3.py b/python/mojolearn/tests/test_cpu_training_e3.py
+index b1fd2bad2..8908f0aa3 100644
+--- a/python/mojolearn/tests/test_cpu_training_e3.py
++++ b/python/mojolearn/tests/test_cpu_training_e3.py
+@@ -44,7 +44,7 @@ GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
+ FIT_NAMES = tuple(
+     f"rf_{kind}_fit{suffix}"
+     for kind in ("classifier", "regressor")
+-    for suffix in ("_export", "_rowmajor_export")
++    for suffix in ("", "_export", "_rowmajor", "_rowmajor_export")
+ )
+ 
+ 
+diff --git a/python/mojolearn/tests/test_forest_export_protocol.py b/python/mojolearn/tests/test_forest_export_protocol.py
+index e83ac6bf9..7b0a8dd09 100644
+--- a/python/mojolearn/tests/test_forest_export_protocol.py
++++ b/python/mojolearn/tests/test_forest_export_protocol.py
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""Same-fit model export through the real public fits (small inputs): both
+-MOJOLEARN_FOREST_EXPORT selections (into, verify) give the same model bytes and
+-the same archive, and an unknown selection is refused by name."""
++"""Same-fit model export through the real public fits (small inputs): every
++MOJOLEARN_FOREST_EXPORT selection gives the same model bytes and the same
++archive, and an unknown selection is refused by name."""
+ import numpy as np
+ import pytest
+ 
+@@ -24,7 +24,7 @@ def _fit(cls):
+ @pytest.mark.parametrize('cls', CLASSES)
+ def test_every_selection_exports_the_same_fit(cls, monkeypatch, tmp_path):
+     models, archives = {}, {}
+-    for selection in ('into', 'verify'):
++    for selection in ('legacy', 'into', 'verify'):
+         monkeypatch.setenv('MOJOLEARN_FOREST_EXPORT', selection)
+         model = _fit(cls)
+         models[selection] = [getattr(model, name).tobytes() for name in _ARRAYS]
+@@ -34,13 +34,12 @@ def test_every_selection_exports_the_same_fit(cls, monkeypatch, tmp_path):
+     monkeypatch.delenv('MOJOLEARN_FOREST_EXPORT', raising=False)
+     default = _fit(cls)
+     assert [getattr(default, name).tobytes() for name in _ARRAYS] == models['into']
+-    assert models['into'] == models['verify']
+-    assert archives['into'] == archives['verify']
++    assert models['legacy'] == models['into'] == models['verify']
++    assert archives['legacy'] == archives['into'] == archives['verify']
+ 
+ 
+ @pytest.mark.parametrize('cls', CLASSES)
+-@pytest.mark.parametrize('selection', ('typo', 'legacy'))
+-def test_invalid_selection_refused(cls, selection, monkeypatch):
+-    monkeypatch.setenv('MOJOLEARN_FOREST_EXPORT', selection)
+-    with pytest.raises(ValueError, match='into or verify'):
++def test_invalid_selection_refused(cls, monkeypatch):
++    monkeypatch.setenv('MOJOLEARN_FOREST_EXPORT', 'typo')
++    with pytest.raises(ValueError, match='legacy, into or verify'):
+         _fit(cls)
+diff --git a/python/mojolearn/tests/test_rf_leaf_budget.py b/python/mojolearn/tests/test_rf_leaf_budget.py
+index 7b5be0358..08ff52f29 100644
+--- a/python/mojolearn/tests/test_rf_leaf_budget.py
++++ b/python/mojolearn/tests/test_rf_leaf_budget.py
+@@ -372,10 +372,10 @@ def arm_provenance(rep):
+         ext = est._bind("_mojolearn_rf")
+     except Exception as exc:  # noqa: BLE001 - the whole run depends on this
+         raise GateAbort("the _mojolearn_rf extension did not load: %s" % exc)
+-    rep.check(arm, hasattr(ext, "rf_classifier_fit_export"),
+-              "the loaded binary exports rf_classifier_fit_export")
+-    rep.check(arm, hasattr(ext, "rf_regressor_fit_export"),
+-              "the loaded binary exports rf_regressor_fit_export")
++    rep.check(arm, hasattr(ext, "rf_classifier_fit"),
++              "the loaded binary exports rf_classifier_fit")
++    rep.check(arm, hasattr(ext, "rf_regressor_fit"),
++              "the loaded binary exports rf_regressor_fit")
+     compiled = est.numeric_mode_used()
+     rep.check(arm, compiled in ("fast", "identical"),
+               "the binding reports a tier it knows", str(compiled))

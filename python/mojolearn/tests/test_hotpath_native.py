@@ -39,8 +39,6 @@ from mojolearn._array import Array
 _HELPERS = (
     "cast_elements", "reduce_stat", "equal_elements", "gather_i32",
     "check_indices_i64", "indices_overlap_i64", "fold_ids", "select_fold_i64",
-    "encode_labels_i64", "encode_labels_f64", "encode_labels_i32",
-    "encode_labels_u8", "encode_labels_f32", "encode_labels_u32",
     "gather_i64", "gather_f64", "prepare_targets",
 )
 try:

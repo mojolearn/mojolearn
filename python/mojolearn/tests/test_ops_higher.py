@@ -17,7 +17,7 @@ from mojolearn import _backend
 def _has_higher_entries():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        return all(hasattr(b, name) for name in ("ops_backward_graph", "ops_grad_handle", "ops_hvp", "ops_jvp"))
+        return hasattr(b, "ops_session_call")
     except Exception:
         return False
 

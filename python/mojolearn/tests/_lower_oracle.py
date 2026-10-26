@@ -70,10 +70,7 @@ _BINARY = {
 }
 
 # autograd/weight_import.mojo WI_* (python/mojolearn/_weight_import.py): the record of one source tensor
-_WI_DTYPE = {"f32": (11, 4), "f16": (23, 2), "f64": (12, 8), "bf16": (4096, 2)}
 _WI_MAX_RANK = 4
-_WI_LAYOUT_AS_IS, _WI_LAYOUT_TRANSPOSE = 2, 3
-_WI_STRIDE_C = 0
 # NumPy views of an initializer's raw little-endian bytes (no copy, no conversion)
 _NP_VIEW = {"f32": "<f4", "f16": "<f2", "f64": "<f8", "i64": "<i8", "i32": "<i4", "bool": "?"}
 
@@ -495,18 +492,15 @@ class _Lowerer:
         np = require_numpy("mojolearn.importers")
         shape = session_shape(t.shape)
         if t.dtype == "bf16" or transpose:
-            # the weight import reads the raw words and widens or transposes them on the device
-            target = (t.shape[1], t.shape[0]) if transpose else shape
-            h = self._own(self.s.tensor(np.zeros(target, dtype=np.float32)))
-            src = tuple(t.shape) if t.shape else (1,)
-            code, size = _WI_DTYPE[t.dtype]
-            buf = np.frombuffer(t.data, dtype=np.uint8)
-            rec = ([int(h), 0, _WI_LAYOUT_TRANSPOSE if transpose else _WI_LAYOUT_AS_IS, int(buf.ctypes.data), 0,
-                    code, size, len(src)] + list(src) + [0] * (_WI_MAX_RANK - len(src))
-                   + [_WI_STRIDE_C] + [0] * _WI_MAX_RANK)
-            self.s._b.ops_load_weights(self.s._sid(), rec, [t.name])
-            del buf
-            return h
+            # the test side widens bfloat16 (exact: the high half of a float32) and transposes
+            # on the host, then uploads; the session casts to float32 as the weight import does
+            if t.dtype == "bf16":
+                words = np.frombuffer(t.data, dtype="<u2", count=_numel(t.shape)).astype(np.uint32)
+                a = (words << 16).view(np.float32)
+            else:
+                a = np.frombuffer(t.data, dtype=np.dtype(_NP_VIEW[t.dtype]), count=_numel(t.shape))
+            a = np.ascontiguousarray(a.reshape(t.shape).T) if transpose else a.reshape(shape)
+            return self._own(self.s.tensor(a))
         # a view of the raw bytes, cast to float32 on the device by the upload
         a = np.frombuffer(t.data, dtype=np.dtype(_NP_VIEW[t.dtype]), count=_numel(t.shape)).reshape(shape)
         return self._own(self.s.tensor(a))
@@ -1210,7 +1204,8 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     s = Session(record=False, numeric_mode=numeric_mode)
     try:
         low = lower(g, G, s)
-        info = s._b.ops_capture(s._sid(), Session._handles(low.input_handles), Session._handles(low.output_handles))
+        cap = s.capture(list(low.input_handles), list(low.output_handles))
+        info = (cap._id, cap.input_shapes, cap.output_shapes, cap.params, cap.input_kinds)
         inputs = [(name, G.shape(name), dtype_names.get(dt, dt)) for name, dt, _ in G.inputs]
         outputs = [(name, G.shape(name), "int32" if name in low.int32_outputs else "float32")
                    for name, _, _ in g.outputs]

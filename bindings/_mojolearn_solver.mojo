@@ -261,8 +261,8 @@ def solver_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def solver_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver.mojo
@@ -271,13 +271,15 @@ def solver_parallel_available() raises -> PythonObject:
 def build__mojolearn_solver() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
-        m.def_function[hierarchy_parallel_available_binding]("hierarchy_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[solver_vendor_binding]("solver_vendor")
         m.def_function[solver_numeric_mode_binding]("solver_numeric_mode")
-        m.def_function[solver_parallel_available]("solver_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[cd_fit_binding]("cd_fit")
         m.def_function[cd_predict_binding]("cd_predict")
         m.def_function[linkage_fit_binding]("linkage_fit")
@@ -286,5 +288,6 @@ def build__mojolearn_solver() -> PythonObject:
         abort(String("failed to create _mojolearn_solver: ", e))
 
 
-def hierarchy_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+

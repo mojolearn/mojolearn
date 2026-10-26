@@ -21,8 +21,8 @@ from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_optimize import ProgramOptimization, program_optimize
-from autograd.program_runtime import replay_values, parameter_buffers, train_program, train_program_control
-from autograd.pyapi import _input_handles, _seed, ival, fval, _dims_out
+from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
+from autograd.pyapi import _dims_out
 
 
 def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
@@ -224,11 +224,8 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     return out
 
 
-def ops_program_dynamic_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject, arrays: PythonObject,
-) raises -> PythonObject:
-    # Keep the previously exported entry ABI stable.
-    return ops_program_execute_py[E, KIND](sid, pid, sid, arrays, PythonObject(True), PythonObject(False), PythonObject(False))
+# TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_sequence.patch
 
 
 def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -274,33 +271,6 @@ def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
         _ = py_call(outputs.append, PythonObject(p.outs[k]))
     py_setitem(report, "outputs", outputs)
     return report
-
-
-def ops_program_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
-    parameters: PythonObject, ip: PythonObject, fp: PythonObject,
-) raises -> PythonObject:
-    # ip: optimizer, loss, epochs, batch, shuffle, seed low, seed high.
-    if len(ip) != 7 or len(fp) != 1:
-        raise Error("program fit: malformed options")
-    var srcs = List[CastIn]()
-    var shapes = List[ShapeN]()
-    for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data
-        var parsed = array_input(arrays[k], "program input")
-        srcs.append(parsed[0])
-        shapes.append(parsed[1])
-    var target = CastIn.f32_c(0, 1, 1)
-    if ival(ip, 1) != 0:
-        target = array_input(targets, "program targets")[0]
-    var epochs = ival(ip, 2)
-    if epochs < 1 or len(srcs) < 1:
-        raise Error("program fit: epochs and input count must be positive")
-    var curve = output_array(ShapeN.of([epochs]))
-    var s = ops_session[E, KIND](Int(py=sid))
-    train_program(s[], Int(py=pid), srcs, shapes, target, ival(ip, 1), fval(fp, 0),
-                  ival(ip, 0), _input_handles(parameters), epochs, ival(ip, 3), ival(ip, 4) != 0,
-                  _seed(ip, 5), FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
-    return curve
 
 
 def _integer(v: PythonObject, what: String, low: Int) raises -> Int:

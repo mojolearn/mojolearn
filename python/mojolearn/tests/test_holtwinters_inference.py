@@ -49,7 +49,7 @@ def test_forecast_family_serves_holtwinters():
     assert "_mojolearn_tsa" in f["serves"]
     assert {"holtwinters", "holtwinters-multiplicative"} <= set(f["inference_lanes"])
     assert "ExponentialSmoothing" in f["classes"]
-    assert {"tsa_vendor", "holtwinters_forecast", "holtwinters_predict"} <= set(f["exports"])
+    assert {"holtwinters_forecast", "holtwinters_predict"} <= set(f["exports"])
     assert "holtwinters_fit" not in f["exports"]
     # Both ship since lane/ship-cpu-host-families (2026-09-16): this binding
     # so a saved model predicts from a binary with no fit in it, the tsa

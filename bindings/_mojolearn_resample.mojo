@@ -82,11 +82,8 @@ def resample_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 
 
-def resample_ranges_parallel_available() raises -> PythonObject:
-    """1: bootstrap_host, permutation_test_host and monte_carlo_integrate_host
-    read MOJOLEARN_RESAMPLE_DEVICE_COUNT and move whole global replicate,
-    permutation and PINNED_SUM_W sample-chunk ranges to owners."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def _bootstrap_run(
@@ -575,7 +572,8 @@ def monte_carlo_integrate_binding(
 def build__mojolearn_resample() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_resample")
-        m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

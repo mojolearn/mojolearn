@@ -25,10 +25,8 @@ from x_prep.pt_blocked import IDN_PT_BLOCKED
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
-from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
-from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.proba64 import PROBA64
-from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
+from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
@@ -148,12 +146,8 @@ def _seed(v: PythonObject) raises -> UInt64:
     return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
 
 
-def maxabs_pool_binding() raises -> PythonObject:
-    """1 when this binary's direct MaxAbsScaler fit uses pooled buffers
-    (lane/apple-fast-w4-small PREP3_MAXABS_POOL): the quality pair's reach."""
-    comptime if PREP3_MAXABS_POOL:
-        return PythonObject(1)
-    return PythonObject(0)
+# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_prep.patch
 
 
 # lane/apple-fast-prep3 (FAST on Apple; registered under PREP3_MAXABS only, so
@@ -266,26 +260,10 @@ def ptimpute_flags_binding() raises -> PythonObject:
     return PythonObject(PTIMPUTE_FLAGS)
 
 
-def calib_folds_binding() raises -> PythonObject:
-    """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
-    the CalibratedClassifierCV(GaussianNB) program's constants [words per
-    Platt problem, line-search steps]; registered only when the ops exist."""
-    var out = Python.list()
-    out.append(PythonObject(CAL_ST))
-    out.append(PythonObject(CAL_LS))
-    return out
-
-
 def proba64_binding() raises -> PythonObject:
     """Lane apple-fast-q-clf (x_prep/proba64.mojo): registered only under
     PROBA64 (FAST, not -D MOJOLEARN_PROBA64_QOLD); Python's probe for staging
     `q64_softmax` (float64 predict_proba)."""
-    return PythonObject(1)
-
-
-def py2mojo_binding() raises -> PythonObject:
-    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF
-    (x_prep/py2mojo.mojo); Python then takes its old loops."""
     return PythonObject(1)
 
 
@@ -375,7 +353,8 @@ def build__mojolearn_x_prep() -> PythonObject:
         m.def_function[dev_take_rows_binding]("x_prep_dev_take_rows")
         comptime if PREP3_MAXABS:
             m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
-        m.def_function[maxabs_pool_binding]("x_prep_maxabs_pool")
+        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_prep.patch
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:
@@ -397,10 +376,8 @@ def build__mojolearn_x_prep() -> PythonObject:
             m.def_function[pool_arena_binding]("x_prep_pool_arena")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
-        comptime if CALIB_FOLDS:
-            m.def_function[calib_folds_binding]("x_prep_calib_folds")
-        comptime if PY2MOJO_PREP:
-            m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_prep.patch
         comptime if PROBA64:
             m.def_function[proba64_binding]("x_prep_proba64")
         comptime if PTIMPUTE_FLAGS != 0:

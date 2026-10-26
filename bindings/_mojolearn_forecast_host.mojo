@@ -23,7 +23,7 @@ a saved ARIMA model on any machine.
 
 Since lane/inference-holtwinters (2026-09-15) it also serves saved
 Holt-Winters models: `holtwinters_forecast` and `holtwinters_predict` (the
-in-sample one-step predictions) and `tsa_vendor`, from
+in-sample one-step predictions), from
 `bindings/holtwinters_host_predict.mojo`, the source the reference
 `bindings/_mojolearn_tsa_host.mojo` registers them from, over
 `holtwinters/host/hw_predict.mojo`. `holtwinters_fit` is absent, and so is
@@ -98,10 +98,8 @@ def arima_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-def tsa_vendor_binding() raises -> PythonObject:
-    """"cpu": the `_mojolearn_tsa` route's vendor read-back when this binding
-    serves a saved Holt-Winters model."""
-    return PythonObject(String("cpu"))
+# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_host_aliases.patch
 
 
 def arima_numeric_mode_binding() raises -> PythonObject:
@@ -124,7 +122,8 @@ def build__mojolearn_forecast_host() -> PythonObject:
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
         module.def_function[arima_predict_binding]("arima_predict")
         module.def_function[arima_forecast_binding]("arima_forecast")
-        module.def_function[tsa_vendor_binding]("tsa_vendor")
+        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
         module.def_function[holtwinters_predict_binding]("holtwinters_predict")
         # The KPSS stationarity test (lane/expose-inference-surface,

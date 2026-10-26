@@ -116,8 +116,7 @@ large-data training and prediction results separately.
 
 Public `parallel_groves` predictions now select
 `forest_predict_resident_reuse_gpu`, retaining one exact-size device input/output
-pair. `bench/speed/forest_inference_ab.py --reuse-io` explicitly compares it with
-`forest_predict_resident_into_gpu`, which still allocates per call. This changes
+pair. This changes
 storage lifetime, not the inference algorithm, arithmetic or archive format.
 
 Equal nonempty batch sizes reuse both allocations; a changed size releases the

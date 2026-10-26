@@ -1666,13 +1666,13 @@ FAMILIES = (
             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
             "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
-            "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
+            "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
             "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "tokenizer_host_runtime_classical_abi", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
-            "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
+            "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
             "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
             "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
             "tokens_gather_rows",
@@ -1682,7 +1682,7 @@ FAMILIES = (
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
+            "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
             # lane migrate-neural-2: the Embedding layer's native lifetime,
             # parallel forecasting's owner and the GPU byte-LM trainer step
@@ -1763,8 +1763,8 @@ FAMILIES = (
             "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
             "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
             "transformer_forward", "transformer_decode_step", "transformer_forward_int15",
-            "mamba1_forward_fresh", "mamba1_forward", "mamba1_decode_step",
-            "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
+            "mamba1_forward", "mamba1_decode_step",
+            "mamba2_forward", "mamba2_decode_step",
             "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
             "embedding_forward", "rms_norm_forward", "linear_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
@@ -1836,12 +1836,10 @@ FAMILIES = (
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "argmax_last_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
-            # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
-            # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
-            # install used to run as a Python loop.
+            # of bindings/hotpath_helpers.mojo that stand in for per-row Python
+            # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
+            # prepare_targets).
             "cast_elements", "reduce_stat", "equal_elements",
-            "encode_labels_f32", "encode_labels_f64", "encode_labels_i32",
-            "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
             "gather_i32", "check_indices_i64", "indices_overlap_i64",
             "fold_ids", "select_fold_i64",
             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
@@ -1858,7 +1856,7 @@ FAMILIES = (
             # lane migrate-shared-labels: the shared argument-and-label entry
             "prepare_targets",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
-            "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
+            "ic_running_min_f64", "ic_running_min_f32",
             "fold_pair_f32", "threshold_labels_i64",
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
@@ -1871,7 +1869,7 @@ FAMILIES = (
             "ragged_rows_bytes", "nsum_f64", "row_means_f64",
             "truncnorm_draws", "fsum_f64", "row_stds_f64",
             "lr_schedule_exact",
-            "lr_schedule_exact_block", "class_ratio_f64",
+            "class_ratio_f64",
             "shard_topk_merge_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
@@ -2034,7 +2032,7 @@ FAMILIES = (
             # lane fg-pca T1 (2026-10-09): tsvd_fit + tsvd_explained in one call
             "tsvd_fit_explained",
             "dbscan_fit_core", "labeled_reference_predict",
-            "dbscan_core_arrays", "estimators_py2mojo_cluster",
+            "dbscan_core_arrays",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
@@ -2047,7 +2045,7 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "py2mojo_rows", "py2mojo_linear_flags", "lm_classical_stats",
             "lm_col_sums_pair", "lm_means_finish", "lm_intercept",
-            "pca_rank_finish", "linear_gram_fit", "linear_gram_solve_default",
+            "linear_gram_fit", "linear_gram_solve_default",
             # lane activate-pca-owner (2026-10-21): PCA.fit / fit_transform in one call
             "pca_fit_owned", "pca_fit_randomized",
         ),
@@ -2194,7 +2192,7 @@ FAMILIES = (
                       "bindings/kpss_host_test.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
-            "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
+            "tsa_host_sabotage", "holtwinters_fit",
             "holtwinters_forecast", "holtwinters_predict", "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
@@ -2262,7 +2260,7 @@ FAMILIES = (
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
-            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm", "svc_portable_math",
+            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
             "svc_dual_gemv",
@@ -2294,16 +2292,16 @@ FAMILIES = (
             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
             "trees_host_sabotage", "trees_vendor", "trees_numeric_mode",
             "et_classifier_fit", "et_classifier_fit_export",
-            "et_classifier_fit_rowmajor", "et_classifier_fit_rowmajor_export",
+            "et_classifier_fit_rowmajor_export",
             "et_regressor_fit", "et_regressor_fit_export",
-            "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
+            "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "et_classifier_fit_shard", "et_regressor_fit_shard",
             # the weighted fits (sample_weight; lanes sk-kernels / sk-final)
             "et_classifier_fit_weighted", "et_classifier_fit_weighted_export",
-            "et_classifier_fit_weighted_rowmajor", "et_classifier_fit_weighted_rowmajor_export",
+            "et_classifier_fit_weighted_rowmajor_export",
             "et_regressor_fit_weighted", "et_regressor_fit_weighted_export",
-            "et_regressor_fit_weighted_rowmajor", "et_regressor_fit_weighted_rowmajor_export",
+            "et_regressor_fit_weighted_rowmajor_export",
             "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
@@ -2343,18 +2341,18 @@ FAMILIES = (
         exports=(
             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
             "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
-            "rf_classifier_fit", "rf_classifier_fit_export",
-            "rf_classifier_fit_rowmajor", "rf_classifier_fit_rowmajor_export",
-            "rf_regressor_fit", "rf_regressor_fit_export",
-            "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
+            "rf_classifier_fit_export",
+            "rf_classifier_fit_rowmajor_export",
+            "rf_regressor_fit_export",
+            "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
-            "rf_regressor_fit_weighted", "rf_regressor_fit_weighted_export",
+            "rf_regressor_fit_weighted_export",
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
             "rf_data_session_open", "rf_data_session_close",
-            "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
+            "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export",
@@ -2589,7 +2587,7 @@ FAMILIES = (
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
             "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
-            "hdbscan_host_predict_sabotage", "hdbscan_membership_vector",
+            "hdbscan_membership_vector",
             "hdbscan_all_points_membership_vectors",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -2855,7 +2853,7 @@ FAMILIES = (
             "training_host_column", "training_host_sabotage",
             "training_numeric_mode", "training_vendor", "optimizer_step",
             "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
-            "clip_grad_norm", "accumulate", "accumulation_is_aligned",
+            "accumulate", "accumulation_is_aligned",
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",
             "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
@@ -2882,9 +2880,7 @@ FAMILIES = (
         # CPU-only install with the GPU binding's bootstrap,
         # permutation_test and monte_carlo_integrate over
         # resample/host/resample_host.mojo (resample/estimator.mojo's entry
-        # points with every device kernel restated on the host);
-        # resample_ranges_parallel_available reports the one-device
-        # cooperative pool (f90ad45de, the par-resample CPU arm). The
+        # points with every device kernel restated on the host). The
         # option lanes (BCa, paired=False, permutation_type='samples',
         # resample / resample_indices) route through the same entries.
         family="resample",
@@ -2904,7 +2900,6 @@ FAMILIES = (
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
             "bootstrap", "permutation_test", "monte_carlo_integrate",
             "bootstrap_unpaired", "permutation_samples", "resample_indices",
-            "resample_ranges_parallel_available",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3102,8 +3097,8 @@ FAMILIES = (
     dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
         # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
-        # GPU binding's whole surface (ivf_flat_build_and_search and the two
-        # read-backs): the build's k-means quantizer through the k-means
+        # GPU binding's whole surface (ivf_flat_build, ivf_flat_search and the
+        # two read-backs): the build's k-means quantizer through the k-means
         # lane's host restatement, the CSR layout and probe merge the device
         # path already runs on the host, and the pinned distance tile and
         # the identical top-k restated.
@@ -3129,7 +3124,7 @@ FAMILIES = (
         exports=(
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
-            "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
+            "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
             "ivf_merge_shards",
@@ -3217,7 +3212,7 @@ FAMILIES = (
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_predict", "arima_forecast", "tsa_vendor", "holtwinters_forecast",
+            "arima_predict", "arima_forecast", "holtwinters_forecast",
             "holtwinters_predict", "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
@@ -3273,7 +3268,7 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
             "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
-            "transformer_session_forward_tape", "transformer_session_backward_tape", "transformer_attention_profile",
+            "transformer_session_forward_tape", "transformer_session_backward_tape",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise

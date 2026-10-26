@@ -9,7 +9,7 @@ from autograd.pyapi import program_info
 from autograd.ops_api import ops_session
 from autograd.model_checkpoint import (
     SEQ_MODEL_INTS, SEQ_OPT_INTS, SEQ_SAVE_INTS, model_checkpoint_info, model_load_checkpoint,
-    model_save_checkpoint, ops_load_program, ops_load_state, ops_save_program, ops_save_state,
+    model_save_checkpoint, ops_load_program, ops_load_state, ops_save_state,
 )
 
 
@@ -112,13 +112,8 @@ def ops_load_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     return res
 
 
-def ops_save_program_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject, path: PythonObject,
-) raises -> PythonObject:
-    """Write program `pid` of session `sid` and its parameters' current
-    values to `path`. Returns the byte count."""
-    var file = String(py=path)
-    return PythonObject(ops_save_program[E, KIND](Int(py=sid), Int(py=pid), file))
+# TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_sequence.patch
 
 
 def ops_load_program_py[E: Exec & Movable & Deinitable, KIND: Int](

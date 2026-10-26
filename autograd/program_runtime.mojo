@@ -307,10 +307,6 @@ def train_program_control[E: Exec & Movable & Deinitable](
     return (true_batches, false_batches)
 
 
-def train_program[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
-    target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
-    epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
-) raises:
-    _ = train_program_control(s, pid, srcs, shapes, target, loss_kind, delta, optimizer,
-                              parameters, epochs, batch, shuffle_rows, seed, curve, 0, 0)
+# TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_sequence.patch
+

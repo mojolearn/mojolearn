@@ -78,7 +78,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from svm.impl.svc_epilogue_pyapi import (
     svc_pair_epilogue_device_binding,
     svc_platt_train_device_binding,
-    svc_portable_math_device_binding,
     svc_splitmix_perm_device_binding,
 )
 from svm.estimator import (
@@ -659,8 +658,8 @@ def svm_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def svm_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def iforest_device_finite_scan_binding() raises -> PythonObject:
@@ -668,10 +667,6 @@ def iforest_device_finite_scan_binding() raises -> PythonObject:
     cell through a device scan (IF_FAST_ROWMAJOR, FAST on Apple), so the
     Python layer skips its host scan of the same cells; 0 otherwise."""
     return PythonObject(1 if IF_FAST_ROWMAJOR else 0)
-
-
-def iforest_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
 
 
 def iforest_resident_binding() raises -> PythonObject:
@@ -732,11 +727,13 @@ def svc_dual_gemv_binding(
 def build__mojolearn_svm() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_svm")
-        m.def_function[svm_parallel_available]("svm_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        m.def_function[iforest_parallel_available]("iforest_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[svm_vendor_binding]("svm_vendor")
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         m.def_function[svc_fit_binding]("svc_fit")
@@ -744,7 +741,8 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svc_pair_epilogue_device_binding]("svc_pair_epilogue")
         m.def_function[svc_platt_train_device_binding]("svc_platt_train")
         m.def_function[svc_splitmix_perm_device_binding]("svc_splitmix_perm")
-        m.def_function[svc_portable_math_device_binding]("svc_portable_math")
+        # TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_svm.patch
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")

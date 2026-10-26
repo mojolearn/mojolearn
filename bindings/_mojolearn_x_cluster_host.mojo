@@ -16,7 +16,6 @@ from x_cluster.entries import run_entry
 from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
 from x_cluster.out import ClusterOut
 from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
-from x_cluster.tree_cut import PY2MOJO_CLUSTER
 
 
 def call_binding(
@@ -58,11 +57,8 @@ def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
 
-def py2mojo_binding() raises -> PythonObject:
-    """1: the steps `_expansion_cluster.py` / `_hierarchy_impl.py` ran in
-    Python run here (lane apple-fast-py2mojo-cluster); 0 under
-    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and Python takes its old path."""
-    return PythonObject(1 if PY2MOJO_CLUSTER else 0)
+# TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_cluster.patch
 
 
 def vendor_binding() raises -> PythonObject:
@@ -82,7 +78,8 @@ def build__mojolearn_x_cluster_host() -> PythonObject:
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[vendor_binding]("x_cluster_vendor")
-        m.def_function[py2mojo_binding]("x_cluster_py2mojo")
+        # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cluster_host: ", e))

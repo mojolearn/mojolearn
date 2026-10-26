@@ -11,17 +11,17 @@ from std.python._cpython import GILReleased
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
-    eigh_batch_run, eigh_run, ew_run, gemm_run, knn_select_run, lle_apply_run, lle_local_run, lu_solve_run, rand_run,
+    eigh_run, ew_run, gemm_run, lle_apply_run, lle_local_run, lu_solve_run, rand_run,
     sqdist_run, svd_run, trisolve_run,
-    absmax_sign_run, lars_rows_run, lasso_rows_run, lda_rows_run, lu_aux_run, omp_rows_run, qr_r_run, r_signs_run,
-    rand_gamma_run, rank_above_run, tsqr_r_run,
-    accuracy_run, argmin_all_run, dsum_sq_run, gather_run, geqrf_run, idn_flags_run, lda_online_run, lu_gesv_run, mcd_run,
+    absmax_sign_run, lars_rows_run, lasso_rows_run, lu_aux_run, omp_rows_run, r_signs_run,
+    rank_above_run, tsqr_r_run,
+    argmin_all_run, dsum_sq_run, gather_run, geqrf_run, idn_flags_run, lu_gesv_run, mcd_run,
     move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
     topn_desc_run, tsqr_q_run,
 )
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
-from x_decomp.moves import F64Ptr, PY2MOJO_DECOMP, argsort_f32
+from x_decomp.moves import F64Ptr
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -160,18 +160,8 @@ def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject,
     return PythonObject(n)
 
 
-def knn_select_py[E: Exec](dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, m, k, exclude_self]: `knn_select_row` for every row."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var k = _n(p, 2)
-    var ex = _n(p, 3)
-    var pd = _f(dmat)
-    var ps = _f(dist)
-    var pi = _f(idx)
-    with GILReleased(Python()):
-        knn_select_run[E](pd, ps, pi, n, m, k, ex)
-    return PythonObject(n)
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -183,15 +173,6 @@ def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p
     var pb = _f(b)
     with GILReleased(Python()):
         lu_solve_run[E](pl, pp, pb, n, nrhs, trans)
-    return PythonObject(n)
-
-
-def chol_py[E: Exec](a: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var pa = _f(a)
-    var pi = _f(info)
-    with GILReleased(Python()):
-        E.chol(pa, pi, n)
     return PythonObject(n)
 
 
@@ -242,35 +223,6 @@ def lle_local_py[E: Exec](
     var pb = _f(b)
     with GILReleased(Python()):
         lle_local_run[E](px, pi, pb, method, n, d, nn, nc, tol)
-    return PythonObject(n)
-
-
-def eigh_batch_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [batch, n]: `batch` n x n symmetric problems stacked in `a`; w
-    (batch x n, ascending) and v (batch x n x n, vectors in columns), each
-    the words `eigh` gives it (x_decomp/rr_batch.mojo)."""
-    var batch = _n(p, 0)
-    var n = _n(p, 1)
-    var pa = _f(a)
-    var pw = _f(w)
-    var pv = _f(v)
-    with GILReleased(Python()):
-        eigh_batch_run[E](pa, pw, pv, batch, n)
-    return PythonObject(batch)
-
-
-def cd_rows_py[E: Exec](
-    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var pw = _f(w)
-    var ph = _f(hht)
-    var px = _f(xht)
-    var pp = _i(perm)
-    var pv = _f(viol)
-    with GILReleased(Python()):
-        E.cd_rows(pw, ph, px, pp, pv, n, k)
     return PythonObject(n)
 
 
@@ -378,48 +330,6 @@ def omp_rows_py[E: Exec](
     return PythonObject(n)
 
 
-def rand_gamma_py[E: Exec](dst: PythonObject, p: PythonObject, shape: PythonObject) raises -> PythonObject:
-    var count = _n(p, 0)
-    var seed = Int(py=p[1])
-    var stream = Int(py=p[2])
-    var a = Float32(Float64(py=shape))
-    var po = _f(dst)
-    with GILReleased(Python()):
-        rand_gamma_run[E](po, count, seed, stream, a)
-    return PythonObject(count)
-
-
-def lda_rows_py[E: Exec](
-    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, its: PythonObject, p: PythonObject,
-    f: PythonObject,
-) raises -> PythonObject:
-    # p = [n, k, v, max_iter]; f = [prior, tol]
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var max_iter = _n(p, 3)
-    var prior = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
-    var px = _f(x)
-    var pw = _f(ew)
-    var pd = _f(d)
-    var pe = _f(e)
-    var pi = _f(its)
-    with GILReleased(Python()):
-        lda_rows_run[E](px, pw, pd, pe, pi, n, k, v, max_iter, prior, tol)
-    return PythonObject(n)
-
-
-def dijkstra_rows_py[E: Exec](w: PythonObject, dist: PythonObject, reached: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var pw = _f(w)
-    var pd = _f(dist)
-    var pr = _f(reached)
-    with GILReleased(Python()):
-        E.dijkstra_rows(pw, pd, pr, n)
-    return PythonObject(n)
-
-
 def barycenter_rows_py[E: Exec](
     x: PythonObject, y: PythonObject, nbr: PythonObject, wt: PythonObject, flags: PythonObject, p: PythonObject,
     reg: PythonObject,
@@ -440,24 +350,6 @@ def barycenter_rows_py[E: Exec](
     return PythonObject(n)
 
 
-def als_rows_py[E: Exec](
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var r = Float32(Float64(py=reg))
-    var pc = _f(c)
-    var py_ = _f(y)
-    var pg = _f(yty)
-    var px = _f(x)
-    var pf = _f(flags)
-    with GILReleased(Python()):
-        E.als_rows(pc, py_, pg, px, pf, n, m, f, r)
-    return PythonObject(n)
-
-
 def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var d = _n(p, 1)
@@ -468,15 +360,6 @@ def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject)
     with GILReleased(Python()):
         r = absmax_sign_run[E](pa, pd, n, d, by_col)
     return PythonObject(r)
-
-
-def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    var pa = _f(a)
-    var pr = _f(r)
-    qr_r_run[E](pa, pr, m, n)
-    return PythonObject(n)
 
 
 def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -593,27 +476,6 @@ def orgqr_py[E: Exec](h: PythonObject, tau: PythonObject, q: PythonObject, p: Py
     return PythonObject(qc)
 
 
-def als_cg_rows_py[E: Exec](
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, steps: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    """implicit's conjugate-gradient half-sweep: x (n x f) is the start and
-    the result."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var cg = _n(p, 3)
-    var r = Float32(Float64(py=reg))
-    var pc = _f(c)
-    var py_ = _f(y)
-    var pg = _f(yty)
-    var px = _f(x)
-    var ps = _f(steps)
-    with GILReleased(Python()):
-        E.als_cg_rows(pc, py_, pg, px, ps, n, m, f, r, cg)
-    return PythonObject(n)
-
-
 def mcd_py[E: Exec](
     x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
     p: PythonObject,
@@ -644,38 +506,6 @@ def mcd_py[E: Exec](
     return PythonObject(n)
 
 
-def lda_online_py[E: Exec](
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """One online pass of LatentDirichletAllocation (x_decomp/lda_online.mojo)
-    over x (n x v): comps and exp_dir (nc x v) updated in place.
-    p = [n, v, nc, batch_size, max_doc_update_iter, seed, draw, n_batch_iter];
-    f = [doc_topic_prior, topic_word_prior, learning_offset, learning_decay,
-    mean_change_tol, total_samples]. Returns (draw, n_batch_iter)."""
-    var n = _n(p, 0)
-    var v = _n(p, 1)
-    var nc = _n(p, 2)
-    var bs = _n(p, 3)
-    var mdi = _n(p, 4)
-    var seed = Int(py=p[5])
-    var draw = Int(py=p[6])
-    var nbi = Int(py=p[7])
-    var fv = List[Float64]()
-    fv.append(Float64(py=f[0]))
-    fv.append(Float64(py=f[1]))
-    fv.append(Float64(py=f[2]))
-    fv.append(Float64(py=f[3]))
-    fv.append(Float64(py=f[4]))
-    fv.append(Float64(py=f[5]))
-    var px = _f(x)
-    var pc = _f(comps)
-    var pe = _f(exp_dir)
-    var r = (0, 0)
-    with GILReleased(Python()):
-        r = lda_online_run[E](px, pc, pe, n, v, nc, bs, mdi, seed, draw, nbi, fv)
-    return Python.tuple(r[0], r[1])
-
-
 def gather_py(src: PythonObject, idx: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
     """dst[a] = src[idx[a]] for a < m (exact copies; x_decomp/moves.mojo)."""
     var n = Int(py=m)
@@ -687,21 +517,7 @@ def gather_py(src: PythonObject, idx: PythonObject, m: PythonObject, dst: Python
     return PythonObject(n)
 
 
-def argsort_f32_py(x: PythonObject, m: PythonObject, order: PythonObject) raises -> PythonObject:
-    """The stable order of x (m float32 values); NaN refused."""
-    var n = Int(py=m)
-    var px = _f(x)
-    var po = _i(order)
-    argsort_f32(px, n, po)
-    return PythonObject(n)
-
-
 # ---- lane apple-fast-py2mojo-decomp (2026-10-03): host buffers, both bindings
-def py2mojo_py() raises -> PythonObject:
-    """1: the Mojo data path; 0: built with -D MOJOLEARN_PY2MOJO_decomp_OFF (the A/B arm)."""
-    return PythonObject(1 if PY2MOJO_DECOMP else 0)
-
-
 def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     """x_decomp/moves.mojo `move` on host buffers; p = [op, count, a1, a2, a3,
     ist, ioff, nsrc, ndst, nidx], every index checked."""
@@ -756,14 +572,6 @@ def argmin_all_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises ->
     return PythonObject(argmin_all_run(Int(py=x), n, Int(py=dst)))
 
 
-def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonObject) raises -> PythonObject:
-    """(matches, total): float64 labels against int32 predictions; w is
-    0 when unweighted, else a float64 weight address (sums in order)."""
-    var n = Int(py=m)
-    var r = accuracy_run(Int(py=y), Int(py=pred), Int(py=w), n)
-    return Python.tuple(r[0], r[1])
-
-
 def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObject:
     """The host column of `x_decomp_dev_pca_mle_rank` (x_decomp/pca_mle.mojo):
     sp = the address of d binary64 spectrum values, p = [d, n_samples]; the
@@ -789,16 +597,9 @@ def vendor_py[E: Exec]() raises -> PythonObject:
     return PythonObject(E.vendor())
 
 
-def fast_defines_py() raises -> PythonObject:
-    """The recovered Apple FAST switches the Python linalg doors read
-    (lane/apple-fast-rec-decomp, 2026-10-04; from
-    lane/apple-fast-decomp-linalg@74d52352b), comma-joined: the build's
-    switches. Both (MOJOLEARN_QR_FAST_DEV, MOJOLEARN_SVD_FAST_CHOLQR) were
-    deleted 2026-10-09 (lane/owed-deletions-D1), so this is always empty;
-    the binding stays for `_kit_fast_define` in
-    python/mojolearn/_expansion_decomp.py."""
-    # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
-    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch.
-    # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
-    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch.
-    return PythonObject(String(""))
+# x_decomp_fast_defines (fast_defines_py) left with the dead x_decomp exports (lane dead-entries-2-0859); its
+# body carried these two experiment tombstones:
+# TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
+# recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch.
+# TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
+# recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch.

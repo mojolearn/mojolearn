@@ -25,8 +25,8 @@ output: Z1, Z2, dW2, dH, dW1) and a square grid 64 .. 4096.
 Launch counts: with --launches (the default) a second pass runs in a child
 process with MOJOLEARN_AG_PROFILE=1 after the timing pass has finished (so the
 fork never sits between timed calls), one call per case, and reads the
-process-wide launch profile through the binding's ops_profile_reset /
-ops_profile_report entries. A binding without them records launches as null
+process-wide launch profile through Session.profile_reset /
+Session.profile_report. A build without them records launches as null
 and the JSON names the owed entries.
 
 Per-launch floor: 10 000 one-element adds, issued in 100 batches of 100
@@ -61,8 +61,8 @@ LINEAR_VARIANTS = (("nobias", False, None), ("bias", True, None), ("bias_relu", 
 BACKWARD_INPUTS = (64, 256)
 BACKWARD_HIDDEN = 256
 F32 = 4
-PROFILE_OWED = "ops_profile_reset() and ops_profile_report() -> str (autograd/profile.mojo " \
-               "ag_profile_reset / ag_profile_report) registered in bindings/_mojolearn_x_sequence.mojo"
+PROFILE_OWED = "Session.profile_reset() and Session.profile_report() -> str (autograd/profile.mojo " \
+               "ag_profile_reset / ag_profile_report through ops_session_call)"
 
 
 def _shape_str(r, c):
@@ -90,7 +90,7 @@ class Bench:
         self.rng = np.random.default_rng(args.seed)
         self.s = ops.Session(numeric_mode=args.numeric_mode)
         self.sentinel = self.s.tensor(np.zeros((1, 1), dtype=np.float32))
-        self.profile_ok = hasattr(self.s._b, "ops_profile_report") and hasattr(self.s._b, "ops_profile_reset")
+        self.profile_ok = hasattr(self.s, "profile_report") and hasattr(self.s, "profile_reset")
 
     # ------------------------------------------------------------ clocks
     def sync(self):
@@ -283,10 +283,10 @@ class Bench:
             if not isinstance(st, tuple):
                 st = case.setup(s)
             self.sync()
-            s._b.ops_profile_reset()
+            s.profile_reset()
             case.run(s, st, 1)
             self.sync()
-            text = str(s._b.ops_profile_report())
+            text = str(s.profile_report())
         finally:
             if isinstance(st, tuple):
                 for hh in st:  # driver-loop: over this case's uploads
@@ -389,7 +389,7 @@ class Bench:
                 if phase == "backward":
                     sync()
                     if launches_only:
-                        rs._b.ops_profile_reset()
+                        rs.profile_reset()
                     t0 = time.perf_counter_ns()
                     rs.backward(loss)
                 else:
@@ -405,12 +405,12 @@ class Bench:
                     rs.reset()
                     sync()
                     if phase == "forward":
-                        rs._b.ops_profile_reset()
+                        rs.profile_reset()
                         self._rec_forward(rs, m)
                     else:
                         one(False)
                     sync()
-                    text = str(rs._b.ops_profile_report())
+                    text = str(rs.profile_report())
                     mm = re.search(r"AG_PROFILE level=\d+ launches=(\d+)", text)
                     rec["launches"] = int(mm.group(1)) if mm else None
                 return rec

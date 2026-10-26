@@ -22,7 +22,7 @@ CPU-only install through `_backend._HOST_MODULES` (`"_mojolearn_tsa":
 the SAME address contract and packed layouts (level, trend, season each
 `components_len = (n - frequency) * batch_size` and TIME-MAJOR; sse, alpha,
 beta, gamma; niter, criterion; mirrored word for word in `_tsa_impl.py`
-and `bindings/_mojolearn_tsa.mojo`), and `tsa_vendor` answering "cpu".
+and `bindings/_mojolearn_tsa.mojo`).
 `select_d` (ARIMA's; lane py-runtime-b) is the first stationary order of
 the same KPSS host test (`bindings/kpss_host_test.mojo`), so the CPU-only
 route no longer loops over the flags in Python.
@@ -117,10 +117,8 @@ def tsa_host_sabotage_binding() raises -> PythonObject:
 # The GPU binding's names, same contract.
 
 
-def tsa_vendor_binding() raises -> PythonObject:
-    """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
-    read-back cross-check expects that string from every host binding."""
-    return PythonObject(String("cpu"))
+# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_host_aliases.patch
 
 
 def holtwinters_fit_binding(
@@ -192,7 +190,8 @@ def build__mojolearn_tsa_host() -> PythonObject:
         module.def_function[tsa_host_vendor_binding]("tsa_host_vendor")
         module.def_function[tsa_host_column_binding]("tsa_host_column")
         module.def_function[tsa_host_sabotage_binding]("tsa_host_sabotage")
-        module.def_function[tsa_vendor_binding]("tsa_vendor")
+        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
         module.def_function[holtwinters_fit_binding]("holtwinters_fit")
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
         module.def_function[holtwinters_predict_binding]("holtwinters_predict")

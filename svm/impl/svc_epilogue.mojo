@@ -212,10 +212,8 @@ def perm_kernel(dst: I32P, n: Int32, seed: UInt32):
         dst[i] = Int32(f(i))
 
 
-def pmath_kernel(dst: U64P, src: U64P, n: Int32, which: Int32):
-    var i = Int(block_idx.x) * FOLD_TPB + Int(thread_idx.x)
-    if i < Int(n):
-        dst[i] = sp_exp(src[i]) if Int(which) == 0 else sf64_log(src[i])
+# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_svm.patch
 
 
 # ------------------------------------------------------------ the row glue
@@ -648,19 +646,3 @@ def device_splitmix_perm(dst: Int, count: Int, seed_lo: Int, seed_hi: Int) raise
     _ = d^
     _ = ctx^
 
-
-def device_portable_math(ia: Int, oa: Int, count: Int, w: Int) raises:
-    """`sp_exp` (w 0) or `sf64_log` (w 1) over `count` float64 words on the
-    device."""
-    var ctx = _family_ctx()
-    var d_in = _up_u64(ctx, ia, count)
-    var d_out = ctx.enqueue_create_buffer[DType.uint64](count)
-    ctx.enqueue_function[pmath_kernel](
-        d_out.unsafe_ptr(), d_in.unsafe_ptr(), Int32(count), Int32(w),
-        grid_dim=_grid(count), block_dim=FOLD_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=oa), src_buf=d_out)
-    ctx.synchronize()
-    _ = d_in^
-    _ = d_out^
-    _ = ctx^

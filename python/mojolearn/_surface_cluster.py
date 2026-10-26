@@ -34,7 +34,7 @@ FAMILIES = (
         ),
         exports=(
             "x_cluster_host_numeric_mode", "x_cluster_host_vendor", "x_cluster_host_column",
-            "x_cluster_host_sabotage", "x_cluster_call", "x_cluster_numeric_mode", "x_cluster_vendor", "x_cluster_py2mojo",
+            "x_cluster_host_sabotage", "x_cluster_call", "x_cluster_numeric_mode", "x_cluster_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the cluster expansion lane's CPU route (x_cluster/, lane/algos-cluster).",

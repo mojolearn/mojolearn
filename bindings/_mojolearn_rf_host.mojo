@@ -18,7 +18,7 @@ install (the infer column and the model column's reload check).
 THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 `python/mojolearn/randomforest.py` runs unchanged on a CPU-only install
 through `_backend._HOST_MODULES` (`"_mojolearn_rf": "_mojolearn_rf_host"`):
-`rf_classifier_fit`, `rf_regressor_fit`, their `_export`, `_rowmajor` and
+`rf_classifier_fit_export`, `rf_regressor_fit_export` and their
 `_rowmajor_export` forms (the 16-slot params list and the criterion
 argument of `bindings/_mojolearn_rf.mojo`), `forest_export`,
 `forest_export_legacy`, `forest_export_release`, `rf_predict_proba`,
@@ -33,7 +33,7 @@ and `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu` and
 `core/forest_host_groves.mojo` (`RF_INPUT=True`: the input flushed).
 ADDED 2026-10-02 (lane/fix-dart-host): the data session entries
 `rf_data_session_open`, `rf_data_session_close`,
-`rf_regressor_fit_session_export`, `rf_regressor_fit_session_rows_export`
+`rf_regressor_fit_session_rows_export`
 and `rf_classifier_fit_weighted_session_export`, which DART opens by default
 (e3372c826); each member fit is the plain entries' body on the session's X.
 ADDED 2026-10-05 (box-run-2-dart-host): `rf_regressor_fit_dart_export`,
@@ -531,11 +531,8 @@ def rf_regressor_fit_aux_export_binding(
         importance_addr=_index(importance_addr))
 
 
-def rf_classifier_fit_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit[True, False, False](x_addr, y_addr, params, criterion)
+# TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
 def rf_classifier_fit_export_binding(
@@ -543,13 +540,6 @@ def rf_classifier_fit_export_binding(
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     return _rf_fit[True, True, False](x_addr, y_addr, params, criterion)
-
-
-def rf_classifier_fit_rowmajor_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit[True, False, True](x_addr, y_addr, params, criterion)
 
 
 def rf_classifier_fit_rowmajor_export_binding(
@@ -584,13 +574,6 @@ def rf_classifier_fit_weighted_export_binding(
     return _rf_classifier_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr)
 
 
-def rf_regressor_fit_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit[False, False, False](x_addr, y_addr, params, criterion)
-
-
 def rf_regressor_fit_export_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
@@ -615,27 +598,12 @@ def _rf_regressor_fit_weighted[EXPORT: Bool](
     )
 
 
-def rf_regressor_fit_weighted_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
-    weight_max: PythonObject,
-) raises -> PythonObject:
-    return _rf_regressor_fit_weighted[False](x_addr, y_addr, params, criterion, weights_addr, weight_max)
-
-
 def rf_regressor_fit_weighted_export_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
     weight_max: PythonObject,
 ) raises -> PythonObject:
     return _rf_regressor_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr, weight_max)
-
-
-def rf_regressor_fit_rowmajor_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit[False, False, True](x_addr, y_addr, params, criterion)
 
 
 def rf_regressor_fit_rowmajor_export_binding(
@@ -772,25 +740,6 @@ def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises 
             + ", the session holds " + String(sr) + " x " + String(sc)
         )
     return reg[].sessions[si].x.copy()
-
-
-def rf_regressor_fit_session_binding(
-    handle: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_regressor_fit_export` on the session's X."""
-    comptime entry = "rf_regressor_fit_session"
-    var p = _session_params[False](entry, params, criterion)
-    var n_rows = _index(params[0])
-    var n_cols = _index(params[1])
-    var x = _session_x(entry, _index(handle), n_rows, n_cols)
-    var y_address = _index(y_addr)
-    var forest: RfHostForest
-    with GILReleased(Python()):
-        forest = _rf_fit_colmajor[False](
-            x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
-        )
-    return _retain_rf_export(forest^)
 
 
 def rf_regressor_fit_session_rows_binding(
@@ -1091,13 +1040,17 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         module.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
         module.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
-        module.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
-        module.def_function[rf_classifier_fit_rowmajor_binding]("rf_classifier_fit_rowmajor")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_classifier_fit_rowmajor_export_binding]("rf_classifier_fit_rowmajor_export")
-        module.def_function[rf_regressor_fit_binding]("rf_regressor_fit")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_export_binding]("rf_regressor_fit_export")
-        module.def_function[rf_regressor_fit_rowmajor_binding]("rf_regressor_fit_rowmajor")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
@@ -1108,14 +1061,16 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_predict_reg_binding]("rf_predict_reg")
         module.def_function[rf_classifier_fit_weighted_binding]("rf_classifier_fit_weighted")
         module.def_function[rf_classifier_fit_weighted_export_binding]("rf_classifier_fit_weighted_export")
-        module.def_function[rf_regressor_fit_weighted_binding]("rf_regressor_fit_weighted")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_weighted_export_binding]("rf_regressor_fit_weighted_export")
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
         module.def_function[resident_release_binding]("forest_release_gpu")
         module.def_function[rf_data_session_open_binding]("rf_data_session_open")
         module.def_function[rf_data_session_close_binding]("rf_data_session_close")
-        module.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+        # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
         # box-run-2-dart-host: the DART member fit on the host DART session
         module.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")

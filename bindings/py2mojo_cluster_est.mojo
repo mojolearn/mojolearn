@@ -7,20 +7,14 @@
       -> [core_sample_indices array('i'), components array('f') (n_core x d,
          row-major), core labels array('i')], ascending training index, from
          the fit's own uint8 core mask (a byte other than 0 or 1 raises).
-  estimators_py2mojo_cluster() -> 1, or 0 under
-         `-D MOJOLEARN_PY2MOJO_cluster_OFF` (Python takes its old path).
 
 It acts on the host arrays the fit already returned (its
 outputs), so the two columns run the same loops."""
 from core.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
 from std.python import Python, PythonObject
-from std.sys.compile import is_defined
 
-comptime EST_PY2MOJO_CLUSTER = not is_defined["MOJOLEARN_PY2MOJO_cluster_OFF"]()
-
-
-def estimators_py2mojo_cluster_binding() raises -> PythonObject:
-    return PythonObject(1 if EST_PY2MOJO_CLUSTER else 0)
+# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_estimators.patch
 
 
 def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> PythonObject:

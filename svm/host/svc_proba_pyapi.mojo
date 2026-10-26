@@ -26,7 +26,6 @@ from svm.host.svc_proba import (
     host_gather,
     host_pair_epilogue,
     host_platt_train,
-    host_portable_math,
     host_select,
     host_splitmix_perm,
 )
@@ -160,16 +159,6 @@ def svc_splitmix_perm_binding(
     return PythonObject(count)
 
 
-def svc_portable_math_binding(in_addr: PythonObject, out_addr: PythonObject, n: PythonObject, which: PythonObject) raises -> PythonObject:
-    """THE TWIN'S OWN CHECK DOOR: `sp_exp` (which 0) or `sf64_log` (which 1)
-    over n float64, so a job can hold them to `_portable_math.exp/log` (the
-    C library) bit for bit on any sweep. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        return PythonObject(0)
-    var w = Int(py=which)
-    var ia = Int(py=in_addr)
-    var oa = Int(py=out_addr)
-    with GILReleased(Python()):
-        host_portable_math(ia, oa, count, w)
-    return PythonObject(count)
+# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_svm.patch
+

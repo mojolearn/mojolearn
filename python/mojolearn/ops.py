@@ -89,7 +89,6 @@ _COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
 _GELU = {"none": 0, "tanh": 1}
 # the largest tensor rank (autograd/rankn.mojo RN_MAX_RANK)
 _MAX_RANK = 8
-_METRIC = {"accuracy": 1, "log_loss": 2, "roc_auc": 3}
 _ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
 _REDUCTION = {"mean": 0, "sum": 1}
 _AXIS = {None: -1, 0: 0, 1: 1}
@@ -838,10 +837,6 @@ class Session:
         return self._session_native(self, "cross_entropy", (logits, codes, reduction))
 
     # ------------------------------------------------------------ metrics (values)
-    def _metric(self, name, y_true, prediction):
-        hs = [_int(y_true, "y_true", 1), _int(prediction, "prediction", 1)]
-        return float(self._b.ops_metric(self._sid(), _METRIC[name], hs))
-
     def accuracy(self, y_true, prediction):
         """The fraction of rows classified correctly, as a float.
 

@@ -20,7 +20,7 @@ from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
 from sequence.opt_public_pyapi import (
     seq_optimizer_init_py,
@@ -33,7 +33,7 @@ from sequence.opt_public_pyapi import (
     seq_optimizer_close_py,
 )
 from sequence.opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
-from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
+from autograd.program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from autograd.program_device_pyapi import ops_imported_run_device_py
 from autograd.torch_program_pyapi import ops_torch_program_run_py
 from autograd.program_control_pyapi import ops_program_control_py
@@ -53,18 +53,10 @@ from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
-from autograd.pyapi import model_import_params_py, ops_load_weights_py
+from autograd.pyapi import model_import_params_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
-from autograd.pyapi import (
-    ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
-    ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
-    ops_profile_reset_py, ops_profile_report_py, ops_op_packed_py,
-    ops_optimizer_py, ops_step_py, ops_scheduler_step_py, ops_learning_rate_py, ops_zero_grad_py,
-    ops_optimizer_state_py, ops_load_optimizer_state_py,
-    ops_backward_graph_py, ops_backward_seed_py, ops_grad_handle_py, ops_vjp_py, ops_hvp_py, ops_jvp_py,
-    ops_capture_py, ops_program_info_py, ops_program_run_py, ops_program_free_py,
-)
+from autograd.pyapi import ops_shape_py
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
@@ -74,10 +66,7 @@ from autograd.import_resolve_pyapi import onnx_resolve_py
 from autograd.import_frontend_pyapi import ops_import_model_c
 from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from autograd.model_checkpoint_pyapi import (
-    model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
-    ops_save_state_py, ops_load_program_py, ops_save_program_py,
-)
+from autograd.model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.pyapi import moe_backward_py, moe_backward_run
 from sequence.opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
@@ -276,48 +265,14 @@ def model_import_params_binding(
     return model_import_params_py(ex, prog, ptab, recs, names, params_addr)
 
 
-def ops_load_weights_binding(sid: PythonObject, recs: PythonObject, names: PythonObject) raises -> PythonObject:
-    """Session.load_weights (autograd/weight_import.mojo)."""
-    return ops_load_weights_py[DeviceExec, OPS_DEVICE](sid, recs, names)
+# TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_sequence.patch
 
 
 # The operation session (autograd/ops_api.mojo): one DeviceExec and one tape kept
 # between calls, tensors by handle.
-def ops_open_binding(record: PythonObject) raises -> PythonObject:
-    return ops_open_py[DeviceExec, OPS_DEVICE](DeviceExec(), record)
-
-
 def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
     return ops_session_create_py[DeviceExec, OPS_DEVICE](DeviceExec(), record)
-
-
-def ops_close_binding(sid: PythonObject) raises -> PythonObject:
-    return ops_close_py[DeviceExec, OPS_DEVICE](sid)
-
-
-def ops_upload_binding(sid: PythonObject, addr: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return ops_upload_py[DeviceExec, OPS_DEVICE](sid, addr, ip)
-
-
-def ops_download_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) raises -> PythonObject:
-    return ops_download_py[DeviceExec, OPS_DEVICE](sid, h, addr)
-
-
-def ops_op_binding(sid: PythonObject, code: PythonObject, hs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return ops_op_py[DeviceExec, OPS_DEVICE](sid, code, hs, ip, fp)
-
-
-def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonObject) raises -> PythonObject:
-    return ops_op_packed_py[DeviceExec, OPS_DEVICE](sid, code, block)
-
-
-# captured programs (autograd/program.mojo; OpsSession.capture / run_program)
-def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: PythonObject) raises -> PythonObject:
-    return ops_capture_py[DeviceExec, OPS_DEVICE](sid, inputs, outputs)
-
-
-def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
-    return ops_program_info_py[DeviceExec, OPS_DEVICE](sid, pid)
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
@@ -426,10 +381,6 @@ def ops_distributed_exit_binding(id: PythonObject) raises -> PythonObject:
 
 def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[DeviceExec, OPS_DEVICE](id)
-
-
-def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
-    return ops_program_dynamic_py[DeviceExec, OPS_DEVICE](sid, pid, arrays)
 
 
 def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -556,120 +507,8 @@ def ops_program_fit_native_binding(sid: PythonObject, pid: PythonObject, arrays:
                                                   options[5], options[6], options[7])
 
 
-def ops_program_fit_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
-                            parameters: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return ops_program_fit_py[DeviceExec, OPS_DEVICE](sid, pid, arrays, targets, parameters, ip, fp)
-
-
-def ops_program_run_binding(sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject) raises -> PythonObject:
-    return ops_program_run_py[DeviceExec, OPS_DEVICE](sid, pid, descs, addrs)
-
-
-def ops_program_free_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
-    return ops_program_free_py[DeviceExec, OPS_DEVICE](sid, pid)
-
-
-def ops_save_program_binding(sid: PythonObject, pid: PythonObject, path: PythonObject) raises -> PythonObject:
-    return ops_save_program_py[DeviceExec, OPS_DEVICE](sid, pid, path)
-
-
-def ops_load_program_binding(sid: PythonObject, path: PythonObject) raises -> PythonObject:
-    return ops_load_program_py[DeviceExec, OPS_DEVICE](sid, path)
-
-
-def ops_scalar_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    return ops_scalar_py[DeviceExec, OPS_DEVICE](sid, h)
-
-
 def ops_shape_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
     return ops_shape_py[DeviceExec, OPS_DEVICE](sid, h)
-
-
-def ops_free_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    return ops_free_py[DeviceExec, OPS_DEVICE](sid, h)
-
-
-def ops_reset_binding(sid: PythonObject) raises -> PythonObject:
-    return ops_reset_py[DeviceExec, OPS_DEVICE](sid)
-
-
-def ops_metric_binding(sid: PythonObject, kind: PythonObject, hs: PythonObject) raises -> PythonObject:
-    return ops_metric_py[DeviceExec, OPS_DEVICE](sid, kind, hs)
-
-
-def ops_backward_binding(sid: PythonObject, h: PythonObject, accumulate: PythonObject) raises -> PythonObject:
-    return ops_backward_py[DeviceExec, OPS_DEVICE](sid, h, accumulate)
-
-
-def ops_grad_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) raises -> PythonObject:
-    return ops_grad_py[DeviceExec, OPS_DEVICE](sid, h, addr)
-
-
-def ops_optimizer_binding(sid: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return ops_optimizer_py[DeviceExec, OPS_DEVICE](sid, ip, fp)
-
-
-def ops_step_binding(sid: PythonObject, opt: PythonObject, hs: PythonObject) raises -> PythonObject:
-    return ops_step_py[DeviceExec, OPS_DEVICE](sid, opt, hs)
-
-
-def ops_scheduler_step_binding(sid: PythonObject, opt: PythonObject) raises -> PythonObject:
-    return ops_scheduler_step_py[DeviceExec, OPS_DEVICE](sid, opt)
-
-
-def ops_learning_rate_binding(sid: PythonObject, opt: PythonObject) raises -> PythonObject:
-    return ops_learning_rate_py[DeviceExec, OPS_DEVICE](sid, opt)
-
-
-def ops_zero_grad_binding(sid: PythonObject) raises -> PythonObject:
-    return ops_zero_grad_py[DeviceExec, OPS_DEVICE](sid)
-
-
-def ops_optimizer_state_binding(sid: PythonObject, opt: PythonObject, h: PythonObject) raises -> PythonObject:
-    return ops_optimizer_state_py[DeviceExec, OPS_DEVICE](sid, opt, h)
-
-
-def ops_load_optimizer_state_binding(
-    sid: PythonObject, opt: PythonObject, h: PythonObject, ip: PythonObject, fp: PythonObject,
-) raises -> PythonObject:
-    return ops_load_optimizer_state_py[DeviceExec, OPS_DEVICE](sid, opt, h, ip, fp)
-
-
-# Higher-order gradients (lane ag-ho-session; autograd/ops_api.mojo).
-def ops_backward_graph_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    return ops_backward_graph_py[DeviceExec, OPS_DEVICE](sid, h)
-
-
-def ops_backward_seed_binding(
-    sid: PythonObject, h: PythonObject, seed: PythonObject, create_graph: PythonObject,
-) raises -> PythonObject:
-    return ops_backward_seed_py[DeviceExec, OPS_DEVICE](sid, h, seed, create_graph)
-
-
-def ops_grad_handle_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    return ops_grad_handle_py[DeviceExec, OPS_DEVICE](sid, h)
-
-
-def ops_vjp_binding(
-    sid: PythonObject, out_h: PythonObject, inputs: PythonObject, seed: PythonObject, create_graph: PythonObject,
-) raises -> PythonObject:
-    return ops_vjp_py[DeviceExec, OPS_DEVICE](sid, out_h, inputs, seed, create_graph)
-
-
-def ops_hvp_binding(sid: PythonObject, loss: PythonObject, params: PythonObject, vs: PythonObject) raises -> PythonObject:
-    return ops_hvp_py[DeviceExec, OPS_DEVICE](sid, loss, params, vs)
-
-
-def ops_jvp_binding(sid: PythonObject, out_h: PythonObject, inputs: PythonObject, us: PythonObject) raises -> PythonObject:
-    return ops_jvp_py[DeviceExec, OPS_DEVICE](sid, out_h, inputs, us)
-
-
-def ops_profile_reset_binding() raises -> PythonObject:
-    return ops_profile_reset_py()
-
-
-def ops_profile_report_binding() raises -> PythonObject:
-    return ops_profile_report_py()
 
 
 # Checkpoints (autograd/model_checkpoint.mojo, training/checkpoint.mojo's
@@ -705,23 +544,6 @@ def verify_fill_binding(addr: PythonObject, n: PythonObject, seed: PythonObject,
 
 def model_load_checkpoint_binding(path: PythonObject, addrs: PythonObject) raises -> PythonObject:
     return model_load_checkpoint_py(path, addrs)
-
-
-def ops_save_state_binding(
-    sid: PythonObject, path: PythonObject, params: PythonObject, optimizer: PythonObject, counters: PythonObject,
-) raises -> PythonObject:
-    return ops_save_state_py[DeviceExec, OPS_DEVICE](sid, path, params, optimizer, counters)
-
-
-def ops_load_state_binding(
-    sid: PythonObject, path: PythonObject, requires_grad: PythonObject, optimizer: PythonObject,
-) raises -> PythonObject:
-    return ops_load_state_py[DeviceExec, OPS_DEVICE](sid, path, requires_grad, optimizer)
-
-
-def lamb_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return lamb_step_py(ex, addrs, ip, fp)
 
 
 def layer_norm_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -909,40 +731,16 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[model_predict_labels_binding]("model_predict_labels")
         m.def_function[model_fit_labels_binding]("model_fit_labels")
         m.def_function[model_import_params_binding]("model_import_params")
-        m.def_function[ops_load_weights_binding]("ops_load_weights")
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[DeviceExec, OPS_DEVICE]]("_OpsSessionLifetime")
         m.def_function[ops_session_create_binding]("ops_session_create")
-        m.def_function[ops_open_binding]("ops_open")
-        m.def_function[ops_close_binding]("ops_close")
-        m.def_function[ops_upload_binding]("ops_upload")
-        m.def_function[ops_download_binding]("ops_download")
-        m.def_function[ops_op_binding]("ops_op")
-        m.def_function[ops_op_packed_binding]("ops_op_packed")
-        m.def_function[ops_scalar_binding]("ops_scalar")
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_shape_binding]("ops_shape")
-        m.def_function[ops_free_binding]("ops_free")
-        m.def_function[ops_reset_binding]("ops_reset")
-        m.def_function[ops_metric_binding]("ops_metric")
-        m.def_function[ops_backward_binding]("ops_backward")
-        m.def_function[ops_grad_binding]("ops_grad")
-        m.def_function[ops_optimizer_binding]("ops_optimizer")
-        m.def_function[ops_step_binding]("ops_step")
-        m.def_function[ops_scheduler_step_binding]("ops_scheduler_step")
-        m.def_function[ops_learning_rate_binding]("ops_learning_rate")
-        m.def_function[ops_zero_grad_binding]("ops_zero_grad")
-        m.def_function[ops_optimizer_state_binding]("ops_optimizer_state")
-        m.def_function[ops_load_optimizer_state_binding]("ops_load_optimizer_state")
-        m.def_function[ops_backward_graph_binding]("ops_backward_graph")
-        m.def_function[ops_backward_seed_binding]("ops_backward_seed")
-        m.def_function[ops_grad_handle_binding]("ops_grad_handle")
-        m.def_function[ops_vjp_binding]("ops_vjp")
-        m.def_function[ops_hvp_binding]("ops_hvp")
-        m.def_function[ops_jvp_binding]("ops_jvp")
-        m.def_function[ops_capture_binding]("ops_capture")
-        m.def_function[ops_program_info_binding]("ops_program_info")
-        m.def_function[ops_program_run_binding]("ops_program_run")
-        m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_py_c_function(ops_session_call_c_binding, "ops_session_call")
         m.def_py_c_function(ops_session_initialize_c_binding, "ops_session_initialize")
         m.def_py_c_function(ops_program_execute_c_binding, "ops_program_execute")
@@ -951,7 +749,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_py_c_function(ops_torch_program_run_c_binding, "ops_torch_program_run")
         m.def_py_c_function(ops_imported_run_device_c_binding, "ops_imported_run_device")
         m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
-        m.def_function[ops_program_fit_binding]("ops_program_fit")
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_partitioned_open_binding]("ops_partitioned_open")
         m.def_function[ops_partitioned_load_binding]("ops_partitioned_load")
         m.def_function[ops_partitioned_fit_binding]("ops_partitioned_fit")
@@ -974,11 +773,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_distributed_enter_binding]("ops_distributed_enter")
         m.def_function[ops_distributed_exit_binding]("ops_distributed_exit")
         m.def_py_c_function(ops_program_fit_native_c_binding, "ops_program_fit_native")
-        m.def_function[ops_program_free_binding]("ops_program_free")
-        m.def_function[ops_save_program_binding]("ops_save_program")
-        m.def_function[ops_load_program_binding]("ops_load_program")
-        m.def_function[ops_profile_reset_binding]("ops_profile_reset")
-        m.def_function[ops_profile_report_binding]("ops_profile_report")
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")
         m.def_function[model_checkpoint_info_binding]("model_checkpoint_info")
         m.def_function[model_load_checkpoint_binding]("model_load_checkpoint")
@@ -986,9 +782,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[verify_file_sha256_binding]("verify_file_sha256")
         m.def_function[verify_model_info_binding]("verify_model_info")
         m.def_function[verify_fill_binding]("verify_fill")
-        m.def_function[ops_save_state_binding]("ops_save_state")
-        m.def_function[ops_load_state_binding]("ops_load_state")
-        m.def_function[lamb_step_binding]("lamb_step")
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         # the resident optimizer state (sequence/opt_resident.mojo)
         m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")
         m.def_function[lamb_resident_open_binding]("lamb_resident_open")

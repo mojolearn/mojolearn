@@ -117,10 +117,6 @@ try:
     (out / 'manifest.json').write_text(json.dumps(receipts, indent=2) + '\n')
     env['MOJOLEARN_REPO_COMMIT'] = head
     rcs = {}
-    for group in ['reuse', 'refusals', 'lifetime', 'budget']:
-        phase = 'session-' + group
-        rcs[phase] = run([py, root / 'tools/transformer_session_check.py', '--binding', target / '_mojolearn_transformer.so',
-                          '--backend', backend, '--group', group, '--out', out / (phase + '.json')], phase + '.log', 600, False)
     if a.vendor == 'nvidia':
         phase = 'fresh-prefill'
         rcs[phase] = run([py, root / 'tools/transformer_fresh_prefill_check.py'], phase + '.log', 600, False)

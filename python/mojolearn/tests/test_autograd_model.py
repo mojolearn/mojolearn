@@ -244,12 +244,12 @@ def test_inputs_refused_by_name():
 
 def _has_ops():
     try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_open")
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call")
     except Exception:
         return False
 
 
-@pytest.mark.skipif(not _has_ops(), reason="the sequence binding has no ops_open entry (rebuild it)")
+@pytest.mark.skipif(not _has_ops(), reason="the sequence binding has no ops_session_call entry (rebuild it)")
 def test_session_tensor_takes_inputs_as_they_are():
     from mojolearn import ops
     X, _, y3, _ = _data()
@@ -284,7 +284,7 @@ def test_session_tensor_takes_inputs_as_they_are():
             s.tensor(X.astype(object))
 
 
-@pytest.mark.skipif(not _has_ops(), reason="the sequence binding has no ops_open entry (rebuild it)")
+@pytest.mark.skipif(not _has_ops(), reason="the sequence binding has no ops_session_call entry (rebuild it)")
 def test_session_embedding_takes_ids_as_they_are():
     from mojolearn import ops
     table = (np.arange(40, dtype=np.float32).reshape(10, 4) * 0.5 - 3.0)

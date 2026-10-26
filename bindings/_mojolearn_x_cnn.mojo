@@ -183,21 +183,8 @@ def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) ra
     return (cprm^, pprm^, pool)
 
 
-def conv_block_forward_binding[resident: Bool = False](
-    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
-    conv_prm: PythonObject, pool_prm: PythonObject,
-) raises -> PythonObject:
-    """Conv2d -> ReLU -> MaxPool2d (CNNClassifier's block) in one call; out
-    and idx are the pool's (idx unused without a pool)."""
-    var t = _block_prms(conv_prm, pool_prm)
-    var x = _fp(x_addr)
-    var w = _fp(w_addr)
-    var b = _fp(b_addr)
-    var po = _fp(out_addr)
-    var pi = _ip(idx_addr)
-    with GILReleased(Python()):
-        conv_block_forward_into[resident](x, w, b, t[0], t[1], t[2], po, pi)
-    return PythonObject(0)
+# TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_cnn.patch
 
 
 def _saved(saved: PythonObject) raises -> Tuple[Int, Int]:
@@ -224,31 +211,6 @@ def conv_block_forward_r_binding(
     var pi = _ip(idx_addr)
     with GILReleased(Python()):
         conv_block_forward_into[True](x, w, b, t[0], t[1], t[2], po, pi, sv[0], sv[1])
-    return PythonObject(0)
-
-
-def conv_block_backward_binding[resident: Bool = False](
-    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
-    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
-) raises -> PythonObject:
-    """The block's backward from its output gradient g: outs = [dx address
-    (0: not wanted, the first block's), dW address, db address]."""
-    var t = _block_prms(conv_prm, pool_prm)
-    var dx_addr = outs[0]
-    var dw_addr = outs[1]
-    var db_addr = outs[2]
-    var need_dx = Int(py=dx_addr) != 0
-    var want = need_dx
-    var x = _fp(x_addr)
-    var w = _fp(w_addr)
-    var b = _fp(b_addr)
-    var g = _fp(g_addr)
-    var pi = _ip(idx_addr)
-    var pdx = _fp(dx_addr) if want else _fp(db_addr)
-    var pdw = _fp(dw_addr)
-    var pdb = _fp(db_addr)
-    with GILReleased(Python()):
-        conv_block_backward_into[resident](x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
     return PythonObject(0)
 
 
@@ -1473,8 +1435,8 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
-        m.def_function[conv_block_forward_binding[False]]("x_cnn_conv_block_forward")
-        m.def_function[conv_block_backward_binding[False]]("x_cnn_conv_block_backward")
+        # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")

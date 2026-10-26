@@ -1,0 +1,502 @@
+diff --git a/bindings/_mojolearn.mojo b/bindings/_mojolearn.mojo
+index 6342cfe7d..5a64d5d8e 100644
+--- a/bindings/_mojolearn.mojo
++++ b/bindings/_mojolearn.mojo
+@@ -1799,8 +1799,9 @@ def argmax_last_rows_f32_binding(
+     return PythonObject(0)
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def kmeans_parallel_available_binding() raises -> PythonObject:
++    """Version of the whole-row-tile multi-GPU assignment contract."""
++    return PythonObject(1)
+ 
+ 
+ # ===========================================================================
+@@ -2167,8 +2168,7 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
+         m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
+         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[kmeans_parallel_available_binding]("kmeans_parallel_available")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn module: ", e))
+diff --git a/bindings/_mojolearn_estimators.mojo b/bindings/_mojolearn_estimators.mojo
+index 705bb06c6..66bc058d7 100644
+--- a/bindings/_mojolearn_estimators.mojo
++++ b/bindings/_mojolearn_estimators.mojo
+@@ -1480,8 +1480,11 @@ def build__mojolearn_estimators() -> PythonObject:
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
++        m.def_function[gram_parallel_available_binding]("gram_parallel_available")
++        m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")
++        m.def_function[gram_parallel_available_binding]("qr_parallel_available")
++        m.def_function[glm_parallel_available_binding]("glm_parallel_available")
+         m.def_function[estimators_vendor_binding]("estimators_vendor")
+         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
+         m.def_function[py2mojo_rows_binding]("py2mojo_rows")
+@@ -1558,10 +1561,13 @@ def build__mojolearn_estimators() -> PythonObject:
+         abort(String("failed to create _mojolearn_estimators: ", e))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def gram_parallel_available_binding() raises -> PythonObject:
++    return PythonObject(1)
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def glm_parallel_available_binding() raises -> PythonObject:
++    return PythonObject(1)
+ 
++
++def dbscan_parallel_available_binding() raises -> PythonObject:
++    return PythonObject(1)
+diff --git a/bindings/_mojolearn_gp.mojo b/bindings/_mojolearn_gp.mojo
+index dc639ac06..efb855b8f 100644
+--- a/bindings/_mojolearn_gp.mojo
++++ b/bindings/_mojolearn_gp.mojo
+@@ -592,8 +592,11 @@ def gpr_predict_cov_binding(
+ # ===========================================================================
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def cholesky_parallel_available() raises -> PythonObject:
++    """1: potrf_lower and cho_solve read MOJOLEARN_CHOLESKY_DEVICE_COUNT and
++    move whole trailing-update rows and right-hand-side columns
++    (cholesky/multi_gpu.mojo)."""
++    return PythonObject(1)
+ 
+ 
+ def cholesky_profile_jitter_binding() raises -> PythonObject:
+@@ -1315,6 +1318,10 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
+     return py_list_f64(gp_theta_params_values(vals))
+ 
+ 
++def gp_parallel_available() raises -> PythonObject:
++    return PythonObject(1)
++
++
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp.mojo
+ # (the per-binding build) and in the merged roots tools/merged_bindings.py
+ # writes from bindings/merged_groups.json (one shared file per directory set).
+@@ -1322,8 +1329,7 @@ def build__mojolearn_gp() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_gp")
+         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[gp_parallel_available]("gp_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+@@ -1347,8 +1353,7 @@ def build__mojolearn_gp() -> PythonObject:
+         m.def_function[gpr_fit_ptr_binding]("gpr_fit_ptr")
+         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
+         # The Cholesky door (workstream D, 2026-09-14).
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
+         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
+         m.def_function[cholesky_factor_binding]("cholesky_factor")
+         m.def_function[cholesky_solve_binding]("cholesky_solve")
+diff --git a/bindings/_mojolearn_hdbscan.mojo b/bindings/_mojolearn_hdbscan.mojo
+index a6a7b2366..311170a6c 100644
+--- a/bindings/_mojolearn_hdbscan.mojo
++++ b/bindings/_mojolearn_hdbscan.mojo
+@@ -66,8 +66,12 @@ def hdbscan_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def hdbscan_rows_parallel_available() raises -> PythonObject:
++    """1: the core-distance k-NN reads MOJOLEARN_NEIGHBORS_DEVICE_COUNT
++    (neighbors/impl/multi_gpu.mojo) and the dense pairwise distance matrix
++    reads MOJOLEARN_HIERARCHY_DEVICE_COUNT (hierarchy/impl/cluster/detail/
++    multi_gpu.mojo); parallel_classical.fit_hdbscan sets both in its worker."""
++    return PythonObject(1)
+ 
+ 
+ def hdbscan_fit_binding(
+@@ -512,8 +516,7 @@ def hdbscan_all_points_membership_vectors_binding(
+ def build__mojolearn_hdbscan() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_hdbscan")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[hdbscan_rows_parallel_available]("hdbscan_rows_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+diff --git a/bindings/_mojolearn_kernel_methods.mojo b/bindings/_mojolearn_kernel_methods.mojo
+index 3cdc035cb..9cbe84b12 100644
+--- a/bindings/_mojolearn_kernel_methods.mojo
++++ b/bindings/_mojolearn_kernel_methods.mojo
+@@ -109,8 +109,14 @@ def kernel_methods_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def kernel_methods_rows_parallel_available() raises -> PythonObject:
++    """1: km_kernel_matrix reaches svm kernel_op, which reads its owner count
++    through `core/device_plan.mojo::device_plan_setting`
++    (MOJOLEARN_SVM_DEVICE_COUNT without a plan), and potrf_lower/cho_solve
++    read MOJOLEARN_CHOLESKY_DEVICE_COUNT the same way;
++    parallel_classical.fit_kernel_method and apply_kernel_method bind a
++    device plan around the plain owners (`device_plan_enter`)."""
++    return PythonObject(1)
+ 
+ 
+ # ===========================================================================
+@@ -787,8 +793,9 @@ def km_scale_gamma_limbs_binding(
+ def build__mojolearn_kernel_methods() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[kernel_methods_rows_parallel_available](
++            "kernel_methods_rows_parallel_available"
++        )
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+diff --git a/bindings/_mojolearn_metrics.mojo b/bindings/_mojolearn_metrics.mojo
+index 03cfa8d12..313a99027 100644
+--- a/bindings/_mojolearn_metrics.mojo
++++ b/bindings/_mojolearn_metrics.mojo
+@@ -1397,8 +1397,7 @@ def metrics_vendor_binding() raises -> PythonObject:
+ def build__mojolearn_metrics() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_metrics")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[graph_parallel_available_binding]("graph_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+@@ -1453,6 +1452,5 @@ def build__mojolearn_metrics() -> PythonObject:
+         abort(String("failed to create _mojolearn_metrics: ", e))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+-
++def graph_parallel_available_binding() raises -> PythonObject:
++    return PythonObject(1)
+diff --git a/bindings/_mojolearn_mixture.mojo b/bindings/_mojolearn_mixture.mojo
+index 059e931a5..32e7cf045 100644
+--- a/bindings/_mojolearn_mixture.mojo
++++ b/bindings/_mojolearn_mixture.mojo
+@@ -82,8 +82,10 @@ def mixture_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def gmm_parallel_available() raises -> PythonObject:
++    """1: every E-step (fit and scoring) reads MOJOLEARN_GMM_DEVICE_COUNT and
++    row-shards through mixture/multi_gpu.mojo::gmm_e_step_dispatch."""
++    return PythonObject(1)
+ 
+ 
+ def gmm_fit_binding(
+@@ -295,8 +297,7 @@ def gmm_score_bic_aic_binding(
+ def build__mojolearn_mixture() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_mixture")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[gmm_parallel_available]("gmm_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+diff --git a/bindings/_mojolearn_resample.mojo b/bindings/_mojolearn_resample.mojo
+index bc486ac2c..7f43ee1f6 100644
+--- a/bindings/_mojolearn_resample.mojo
++++ b/bindings/_mojolearn_resample.mojo
+@@ -82,8 +82,11 @@ def resample_vendor_binding() raises -> PythonObject:
+ # ===========================================================================
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def resample_ranges_parallel_available() raises -> PythonObject:
++    """1: bootstrap_host, permutation_test_host and monte_carlo_integrate_host
++    read MOJOLEARN_RESAMPLE_DEVICE_COUNT and move whole global replicate,
++    permutation and PINNED_SUM_W sample-chunk ranges to owners."""
++    return PythonObject(1)
+ 
+ 
+ def _bootstrap_run(
+@@ -572,8 +575,7 @@ def monte_carlo_integrate_binding(
+ def build__mojolearn_resample() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_resample")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+diff --git a/bindings/_mojolearn_resample_host.mojo b/bindings/_mojolearn_resample_host.mojo
+index e4df85d8c..b7dd293f9 100644
+--- a/bindings/_mojolearn_resample_host.mojo
++++ b/bindings/_mojolearn_resample_host.mojo
+@@ -16,10 +16,12 @@ THE EXPORTED NAMES AND CONTRACTS ARE THE GPU BINDING'S
+ orders, plus `resample_numeric_mode` (1) and `resample_vendor` ("cpu"), so
+ `python/mojolearn/resample.py` runs unchanged on a CPU-only install through
+ `_backend._HOST_MODULES` (`"_mojolearn_resample": "_mojolearn_resample_host"`).
+-The CPU route admits the `resample` operation from a ONE-device cooperative
+-pool only, where the driver's range split is one shard and the host entry
+-points here ARE the plain path; two or more devices refuse by name before
+-reaching this module.
++`resample_ranges_parallel_available` is 1 (2026-09-28, the prep lane's
++coverage audit: par-resample had no CPU arm): the CPU route admits the
++`resample` operation from a ONE-device cooperative pool only
++(`_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE`), where the driver's range
++split is one shard and the host entry points here ARE the plain path; two or
++more devices refuse by name before reaching this module.
+ """
+ 
+ from std.os import abort
+@@ -93,8 +95,10 @@ def resample_numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(GLOBAL_NUMERIC_MODE)
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def resample_ranges_parallel_available() raises -> PythonObject:
++    """1: the one-device cooperative `resample` shard is served here (see the
++    module docstring); no device count is read, nothing is split."""
++    return PythonObject(1)
+ 
+ 
+ def resample_vendor_binding() raises -> PythonObject:
+@@ -533,8 +537,7 @@ def build__mojolearn_resample_host() -> PythonObject:
+         m.def_function[resample_host_column_binding]("resample_host_column")
+         m.def_function[resample_host_sabotage_binding]("resample_host_sabotage")
+         m.def_function[resample_vendor_binding]("resample_vendor")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
+         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
+         m.def_function[bootstrap_binding]("bootstrap")
+         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
+diff --git a/bindings/_mojolearn_solver.mojo b/bindings/_mojolearn_solver.mojo
+index 8da3ca042..dc2229695 100644
+--- a/bindings/_mojolearn_solver.mojo
++++ b/bindings/_mojolearn_solver.mojo
+@@ -261,8 +261,8 @@ def solver_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def solver_parallel_available() raises -> PythonObject:
++    return PythonObject(1)
+ 
+ 
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver.mojo
+@@ -271,15 +271,13 @@ def solver_vendor_binding() raises -> PythonObject:
+ def build__mojolearn_solver() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_solver")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[hierarchy_parallel_available_binding]("hierarchy_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+         m.def_function[solver_vendor_binding]("solver_vendor")
+         m.def_function[solver_numeric_mode_binding]("solver_numeric_mode")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[solver_parallel_available]("solver_parallel_available")
+         m.def_function[cd_fit_binding]("cd_fit")
+         m.def_function[cd_predict_binding]("cd_predict")
+         m.def_function[linkage_fit_binding]("linkage_fit")
+@@ -288,6 +286,5 @@ def build__mojolearn_solver() -> PythonObject:
+         abort(String("failed to create _mojolearn_solver: ", e))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+-
++def hierarchy_parallel_available_binding() raises -> PythonObject:
++    return PythonObject(1)
+diff --git a/bindings/_mojolearn_svm.mojo b/bindings/_mojolearn_svm.mojo
+index 106004920..ce1692573 100644
+--- a/bindings/_mojolearn_svm.mojo
++++ b/bindings/_mojolearn_svm.mojo
+@@ -658,8 +658,8 @@ def svm_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++def svm_parallel_available() raises -> PythonObject:
++    return PythonObject(1)
+ 
+ 
+ def iforest_device_finite_scan_binding() raises -> PythonObject:
+@@ -669,6 +669,10 @@ def iforest_device_finite_scan_binding() raises -> PythonObject:
+     return PythonObject(1 if IF_FAST_ROWMAJOR else 0)
+ 
+ 
++def iforest_parallel_available() raises -> PythonObject:
++    return PythonObject(1)
++
++
+ def iforest_resident_binding() raises -> PythonObject:
+     """1 when this binary keeps the fitted forest resident between calls
+     (`IDN_IF_RESIDENT`, lane fam2-forests) and `iforest_run` takes the
+@@ -727,13 +731,11 @@ def svc_dual_gemv_binding(
+ def build__mojolearn_svm() -> PythonObject:
+     try:
+         var m = PythonModuleBuilder("_mojolearn_svm")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[svm_parallel_available]("svm_parallel_available")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
++        m.def_function[iforest_parallel_available]("iforest_parallel_available")
+         m.def_function[svm_vendor_binding]("svm_vendor")
+         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
+         m.def_function[svc_fit_binding]("svc_fit")
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..8443ce182 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2880,7 +2880,9 @@ FAMILIES = (
+         # CPU-only install with the GPU binding's bootstrap,
+         # permutation_test and monte_carlo_integrate over
+         # resample/host/resample_host.mojo (resample/estimator.mojo's entry
+-        # points with every device kernel restated on the host). The
++        # points with every device kernel restated on the host);
++        # resample_ranges_parallel_available reports the one-device
++        # cooperative pool (f90ad45de, the par-resample CPU arm). The
+         # option lanes (BCa, paired=False, permutation_type='samples',
+         # resample / resample_indices) route through the same entries.
+         family="resample",
+@@ -2900,6 +2902,7 @@ FAMILIES = (
+             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
+             "bootstrap", "permutation_test", "monte_carlo_integrate",
+             "bootstrap_unpaired", "permutation_samples", "resample_indices",
++            "resample_ranges_parallel_available",
+         ),
+         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+         wheel_note=(
+diff --git a/python/mojolearn/tests/test_cpu_training_d.py b/python/mojolearn/tests/test_cpu_training_d.py
+index b996205fa..3c9579422 100644
+--- a/python/mojolearn/tests/test_cpu_training_d.py
++++ b/python/mojolearn/tests/test_cpu_training_d.py
+@@ -9,8 +9,8 @@ CPU-only path.
+ 
+ What the source checks hold: the manifest covers the eight lanes in the gp,
+ kernel_methods, mixture and hdbscan families; each new host binding
+-registers the GPU binding's fit and scoring names, and neither binding
+-registers the deleted multi-GPU probe; each new host oracle imports no DeviceContext and names the device
++registers the GPU binding's fit and scoring names and NOT the multi-GPU
++probe; each new host oracle imports no DeviceContext and names the device
+ statements whose spelling carries the bits; the Cholesky door keeps its
+ validation while the kernel ridge solve and the mixture's precision Cholesky
+ reach the unvalidated factorization, as `potrf_lower` does on the device;
+@@ -139,8 +139,8 @@ def test_bindings_register_the_gpu_names_and_not_the_probe():
+             assert _registers(src, name), f"the {fam} host binding does not register {name}"
+             assert _registers(gpu, name), f"{name} is not a {fam} GPU binding name"
+             assert name in host_surface.family(fam)["exports"]
+-        assert not _registers(gpu, probe) and not _registers(src, probe), (
+-            f"{probe} was deleted from both bindings (no driver reads it; lane dead-entries-2-0859)"
++        assert _registers(gpu, probe) and not _registers(src, probe), (
++            f"{probe} must stay absent from the {fam} host binding so the multi-GPU driver refuses by name"
+         )
+ 
+ 
+diff --git a/python/mojolearn/tests/test_cpu_training_misc.py b/python/mojolearn/tests/test_cpu_training_misc.py
+index 5fa8ad58a..76fcc6894 100644
+--- a/python/mojolearn/tests/test_cpu_training_misc.py
++++ b/python/mojolearn/tests/test_cpu_training_misc.py
+@@ -238,8 +238,8 @@ def test_manifest_covers_the_resample_lanes():
+     for name in ("bootstrap", "permutation_test", "monte_carlo_integrate", "resample_numeric_mode", "resample_vendor"):
+         assert f'("{name}")' in src and f'("{name}")' in gpu, name
+         assert name in fam["exports"], name
+-    assert '("resample_ranges_parallel_available")' not in gpu
+-    assert "resample_ranges_parallel_available" not in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
++    assert '("resample_ranges_parallel_available")' in gpu
++    assert "resample_ranges_parallel_available" in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
+     assert (ROOT / host_surface.build_shim("resample")).is_file()
+ 
+ 
+@@ -364,6 +364,10 @@ def test_bootstrap_runs_on_the_host_when_built():
+     assert 0.0 < p.pvalue <= 1.0
+     m = rs.monte_carlo_integrate("const", [0.0, 0.0], [1.0, 2.0], 1000)
+     assert m.integral == 2.0 and m.closed_form == 2.0
++    # The host binding serves the range probe since f90ad45de (par-resample's
++    # CPU arm): 1, the one-device cooperative shard; two or more devices
++    # refuse by name in the driver before reaching it.
++    assert int(_backend.binding("_mojolearn_resample").resample_ranges_parallel_available()) == 1
+ 
+ 
+ @reference_training()
+diff --git a/python/mojolearn/tests/test_expose_d_manifest.py b/python/mojolearn/tests/test_expose_d_manifest.py
+index b4ea936fd..e1fd2e7b3 100644
+--- a/python/mojolearn/tests/test_expose_d_manifest.py
++++ b/python/mojolearn/tests/test_expose_d_manifest.py
+@@ -31,10 +31,17 @@ NEW = {
+     "_mojolearn_ivf": ("build_ivf.sh", "python/mojolearn/_ivf_impl.py"),
+     "_mojolearn_embedding": ("build_embedding.sh", "python/mojolearn/embedding.py"),
+ }
+-#: the workstream D bindings whose multi-GPU driver binds a device plan
+-#: through `device_plan_enter` (since 2026-10-24,
++#: the availability flag each workstream D binding exports (its multi-GPU
++#: driver binds a device plan through `device_plan_enter` since 2026-10-24,
+ #: docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md)
+-PLAN_FAMILIES = {"kernel_methods", "mixture", "hdbscan", "resample"}
++PARALLEL_FLAGS = {
++    "kernel_methods": "kernel_methods_rows_parallel_available",
++    "mixture": "gmm_parallel_available",
++    "hdbscan": "hdbscan_rows_parallel_available",
++    "resample": "resample_ranges_parallel_available",
++    "ivf": None,
++    "embedding": None,
++}
+ CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN", "IVFIndex", "Embedding")
+ 
+ 
+@@ -96,12 +103,16 @@ def test_binding_exports_match_python_calls():
+         stem = binding.rsplit("/", 1)[1][len("_mojolearn_"):-len(".mojo")]
+         for suffix in ("_vendor", "_numeric_mode"):
+             assert stem + suffix in exported, (binding, stem + suffix)
+-        # A multi-GPU availability flag must name a driver that reads it. None
+-        # does any more (the generic names went on 2026-09-15, the ordered
+-        # drivers' flags on 2026-10-26, lane dead-entries-2-0859): the native
+-        # drivers bind a device plan instead.
+-        assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
+-        if stem in PLAN_FAMILIES:
++        # A multi-GPU availability flag must name a driver that reads it. The
++        # generic `<stem>_parallel_available` names returned 1 with no driver
++        # behind them and were removed on 2026-09-15; the flags the ordered
++        # drivers check are the ones below, and IVF and Embedding have none.
++        assert stem + "_parallel_available" not in exported, (binding, "stale flag", stem + "_parallel_available")
++        flag = PARALLEL_FLAGS[stem]
++        if flag is None:
++            assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
++        else:
++            assert flag in exported, (binding, flag)
+             # the native driver binds its device plan in this binding
+             assert "device_plan_enter" in exported and "device_plan_exit" in exported, (binding, "no plan entries")
+     gp = _exports("bindings/_mojolearn_gp.mojo")

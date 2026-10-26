@@ -372,10 +372,10 @@ def arm_provenance(rep):
         ext = est._bind("_mojolearn_rf")
     except Exception as exc:  # noqa: BLE001 - the whole run depends on this
         raise GateAbort("the _mojolearn_rf extension did not load: %s" % exc)
-    rep.check(arm, hasattr(ext, "rf_classifier_fit"),
-              "the loaded binary exports rf_classifier_fit")
-    rep.check(arm, hasattr(ext, "rf_regressor_fit"),
-              "the loaded binary exports rf_regressor_fit")
+    rep.check(arm, hasattr(ext, "rf_classifier_fit_export"),
+              "the loaded binary exports rf_classifier_fit_export")
+    rep.check(arm, hasattr(ext, "rf_regressor_fit_export"),
+              "the loaded binary exports rf_regressor_fit_export")
     compiled = est.numeric_mode_used()
     rep.check(arm, compiled in ("fast", "identical"),
               "the binding reports a tier it knows", str(compiled))

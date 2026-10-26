@@ -84,9 +84,9 @@ def test_trainer_repeat():
         _thrice(lambda n: _fit(n, **kw), 100, 7)
 
 
-def test_resident_entries_match_address_entries():
-    """The `_r` entries on resident arrays give the address entries' bits,
-    each called twice."""
+def test_resident_entries_repeat_with_saved_arrays():
+    """The `_r` entries give the same bits with and without the forward's
+    saved arrays."""
     import mojolearn as ml
     from mojolearn._expansion_cnn import _Res
     conv = ml.Conv2d(3, 4, 3, padding=1, random_state=3)
@@ -99,12 +99,9 @@ def test_resident_entries_match_address_entries():
     oshape = pool._out_shape(cshape)
     out = np.empty(oshape, np.float32)
     idx = np.empty(oshape, np.int32)
-    b.x_cnn_conv_block_forward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, out.ctypes.data,
-                               idx.ctypes.data, prm, pprm)
     g = _x(oshape, 2)
     dx, dw, db = np.empty(x.shape, np.float32), np.empty(conv.weight_.shape, np.float32), np.empty(4, np.float32)
-    b.x_cnn_conv_block_backward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, g.ctypes.data,
-                                idx.ctypes.data, [dx.ctypes.data, dw.ctypes.data, db.ctypes.data], prm, pprm)
+    ref = None
     for _ in (0, 1):
         with _Res(b) as R:
             h = {k: R.new(v.size) for k, v in dict(x=x, w=conv.weight_, b=conv.bias_, out=out, idx=idx, g=g, dx=dx,
@@ -116,11 +113,13 @@ def test_resident_entries_match_address_entries():
             b.x_cnn_conv_block_forward_r(h["x"], h["w"], h["b"], h["out"], h["idx"], prm, pprm, sv)
             b.x_cnn_conv_block_backward_r(h["x"], h["w"], h["b"], h["g"], h["idx"], [h["dx"], h["dw"], h["db"]] + sv,
                                           prm, pprm)
-            _same(R.get(h["out"], out.shape), out)
-            _same(R.get(h["idx"], idx.shape).view(np.int32), idx)
-            _same(R.get(h["dx"], dx.shape), dx)
-            _same(R.get(h["dw"], dw.shape), dw)
-            _same(R.get(h["db"], db.shape), db)
+            got = dict(out=R.get(h["out"], out.shape), idx=R.get(h["idx"], idx.shape).view(np.int32),
+                       dx=R.get(h["dx"], dx.shape), dw=R.get(h["dw"], dw.shape), db=R.get(h["db"], db.shape))
+            if ref is None:
+                ref = got
+            else:
+                for k in ref:
+                    _same(got[k], ref[k])
         rows = np.array([5, 0, 3], np.int32)
         with _Res(b) as R:
             src, dst = R.new(x.size), R.new(3 * 192)

@@ -39,6 +39,28 @@ in the tables after the sections.
 | [`byte_lm_launch_probe` (native entry)](#dead-native-entries-2026-10-26) | Byte LM (launch-cost probe, + byte_lm_session_launch_probe) | removed (dead native entry: no live caller) | 2026-10-26 | [byte_lm_launch_probe.patch](../experiments/removed/byte_lm_launch_probe.patch) |
 | [`x_neighbors_purity_flags` (native entry)](#dead-native-entries-2026-10-26) | Neighbors (+ MOJOLEARN_PURITY_3_OFF / _6_OFF) | removed (dead native entry: no live caller) | 2026-10-26 | [x_neighbors_purity_flags.patch](../experiments/removed/x_neighbors_purity_flags.patch) |
 | [`sched_exp_block` (native entry)](#dead-native-entries-2026-10-26) | Sequence schedules (+ MOJOLEARN_SCHED_FAST_TABLE) | removed (dead native entry: no live caller) | 2026-10-26 | [sched_exp_block.patch](../experiments/removed/sched_exp_block.patch) |
+| [ops_* per-op session entries (38) + lamb_step and the rest of the x_sequence batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Sequence / autograd session (x_sequence + host) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_sequence.patch](../experiments/removed/dead_entries_x_sequence.patch) |
+| [clip_grad_norm and the rest of the training batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Training (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_training.patch](../experiments/removed/dead_entries_training.patch) |
+| [transformer_attention_profile and the rest of the transformer batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Transformer (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_transformer.patch](../experiments/removed/dead_entries_transformer.patch) |
+| [byte_lm_context_keeper_active and the rest of the byte_lm batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Byte LM | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_byte_lm.patch](../experiments/removed/dead_entries_byte_lm.patch) |
+| [embedding_resident and the rest of the embedding batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Embedding | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_embedding.patch](../experiments/removed/dead_entries_embedding.patch) |
+| [bpe_decode and the rest of the tokenizer_host batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Tokenizer host | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_tokenizer_host.patch](../experiments/removed/dead_entries_tokenizer_host.patch) |
+| [mamba1_session_info and the rest of the mamba batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Mamba / neural host | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_mamba.patch](../experiments/removed/dead_entries_mamba.patch) |
+| [x_ann_py2mojo and the rest of the x_ann batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | ANN (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_ann.patch](../experiments/removed/dead_entries_x_ann.patch) |
+| [x_cluster_py2mojo and the rest of the x_cluster batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Clustering (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_cluster.patch](../experiments/removed/dead_entries_x_cluster.patch) |
+| [x_cnn_conv_block_forward / _backward (non-resident) and the rest of the x_cnn batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | CNN | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_cnn.patch](../experiments/removed/dead_entries_x_cnn.patch) |
+| [x_linear_glm_ydom and the rest of the x_linear batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Linear | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_linear.patch](../experiments/removed/dead_entries_x_linear.patch) |
+| [x_metrics_dev_put/_free/_live/_take_rows and the rest of the x_metrics batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Metrics | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_metrics.patch](../experiments/removed/dead_entries_x_metrics.patch) |
+| [x_prep_calib_folds and the rest of the x_prep batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Preprocessing | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_prep.patch](../experiments/removed/dead_entries_x_prep.patch) |
+| [xn_eigh and the rest of the x_neighbors batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Neighbors (+ x_neighbors/eigh*.mojo, knn_graph op) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_neighbors.patch](../experiments/removed/dead_entries_x_neighbors.patch) |
+| [the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries and the rest of the trees batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Forests / GBDT / x_trees | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_trees.patch](../experiments/removed/dead_entries_trees.patch) |
+| [17 *_parallel_available multi-GPU capability probes and the rest of the parallel_probes batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | GP, estimators, metrics, mixture, hdbscan, solver, svm, kernel methods, k-means, resample | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_parallel_probes.patch](../experiments/removed/dead_entries_parallel_probes.patch) |
+| [encode_labels_* exports and the rest of the core batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Core binding + core host | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_core.patch](../experiments/removed/dead_entries_core.patch) |
+| [estimators_py2mojo_cluster and the rest of the estimators batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Estimators (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_estimators.patch](../experiments/removed/dead_entries_estimators.patch) |
+| [hdbscan_host_predict_sabotage and the rest of the host_aliases batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | HDBSCAN / forecasting hosts | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_host_aliases.patch](../experiments/removed/dead_entries_host_aliases.patch) |
+| [ivf_flat_build_and_search and the rest of the ivf batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | IVF (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_ivf.patch](../experiments/removed/dead_entries_ivf.patch) |
+| [svc_portable_math and the rest of the svm batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | SVM (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_svm.patch](../experiments/removed/dead_entries_svm.patch) |
+| [59 x_decomp export rows (registration only for the owner-run bodies) and 13 *_pyapi.mojo files and the rest of the x_decomp batch (native entries)](#dead-native-entries-batch-2-2026-10-26) | Decomposition (both bindings) | removed (dead native entries: no live caller) | 2026-10-26 | [dead_entries_x_decomp.patch](../experiments/removed/dead_entries_x_decomp.patch) |
 | [Framework adapter per-operation surfaces](#framework-adapter-per-operation-surfaces) (`torch.ops.mojolearn.operation`, MAX `mojolearn_matmul` / `mojolearn_relu` / `mojolearn_operation0..3`, native `mojolearn_adapter_operation*`) | Framework adapters | removed (API: whole-model only) | 2026-10-24 | none (recoverable at `b022e2ea5`) |
 | [`MOJOLEARN_IDN_XTY_TILED_OFF`](#mojolearn_idn_xty_tiled_off) (+ `MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`, `MOJOLEARN_PCA_FAST_COLMEAN_OFF`, `MOJOLEARN_TSVD_FAST_COLVAR_OFF`) | Shared / decomposition | removed (serial shape: one block per column walking all n rows) | 2026-10-21 | [MOJOLEARN_IDN_XTY_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch) |
 | [`MOJOLEARN_QN_TILED_MULTI_OFF`](#mojolearn_qn_tiled_multi_off) (+ `MOJOLEARN_QN_TILED_MULTI_ALL`, now the rule) | Linear | removed (serial shape: one block per gradient cell walking all n rows) | 2026-10-21 | [MOJOLEARN_QN_TILED_MULTI_OFF.patch](../experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch) |
@@ -3570,3 +3592,59 @@ Hand-glue deletion (lane ag-transformer-owners, 2026-10-19). No define: the walk
   delete their refusals in `core/six_lane_experiment_guards.mojo`.
 - Guard: `tools/test_verify_coverage_rules.py::test_deleted_dead_entries_leave_the_table`; the host manifest test
   (`python/mojolearn/tests/test_host_surface.py`) fails if a host binding registers a name the manifest no longer lists.
+
+
+## Dead native entries, batch 2 (2026-10-26)
+
+- What they were: the 324 `dead` rows (218 distinct entries) of `tools/identity_lanes/coverage_declared.tsv` that lane
+  precise-coverage-0859 listed in `docs/plans/VERIFY_COVERAGE_ALL_20261026.md`. Lane dead-entries-2-0859 re-checked each
+  in the source at `a88745022` and deleted the ones with no caller, one commit per binding family. Where the export sat on
+  live Mojo (encode_labels_*, the decomp `*_run` bodies, causal_lm_admit, optimizer_finalize, resident_copy_dev) only the
+  registration and its wrapper went.
+- Verdict: removed as dead code, not an experiment. No timing or quality: no live path changed, so no identity bits move.
+- Inline tombstones: one at each registration block and one per file for the deleted definitions, each naming its
+  deletion commit and `code recoverable at a88745022`.
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| ops_* per-op session entries (38) + lamb_step | Sequence / autograd session (x_sequence + host) | `e4236afa3` | ops.Session runs everything through ops_session_call; LAMB through seq_lamb_step; Session._metric was never called | `experiments/removed/dead_entries_x_sequence.patch` |
+| clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev | Training (both bindings) | `c76141c5c` | clip_grad_norm_ runs optimizer_door_clip; the clip probe's only reader (tools/parallel_clip_check.py) is deleted with it; resident_copy_dev stays live | `experiments/removed/dead_entries_training.patch` |
+| transformer_attention_profile, transformer_session_info, transformer_decode_session_info, transformer_session_backward_time, transformer_backward_tape_time | Transformer (both bindings) | `79853ceba` | a constant nobody read, the September session-lifetime diagnostics (deleted), and the --time mode of a promoted A/B | `experiments/removed/dead_entries_transformer.patch` |
+| byte_lm_context_keeper_active, byte_lm_attention_estash_gate | Byte LM | `9d5242f68` | diagnostic read-backs of retired tools; attention_estash_gate_state goes with the gate | `experiments/removed/dead_entries_byte_lm.patch` |
+| embedding_resident | Embedding | `9aba8da70` | a compiled-constant probe with no reader | `experiments/removed/dead_entries_embedding.patch` |
+| bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize | Tokenizer host | `5206fc31b` | the exports had no caller; causal_lm_admit / optimizer_finalize bodies stay live, bpe_decode_into and the unreachable retain_tapes prefill branch go | `experiments/removed/dead_entries_tokenizer_host.patch` |
+| mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh | Mamba / neural host | `391118b63` | no caller composes or calls them | `experiments/removed/dead_entries_mamba.patch` |
+| x_ann_py2mojo | ANN (both bindings) | `f9b52032a` | constant A/B probe, no reader | `experiments/removed/dead_entries_x_ann.patch` |
+| x_cluster_py2mojo | Clustering (both bindings) | `15b81c461` | constant A/B probe, no reader | `experiments/removed/dead_entries_x_cluster.patch` |
+| x_cnn_conv_block_forward / _backward (non-resident), host x_cnn_numeric_mode | CNN | `352103272` | every caller uses the _r entries; the host loader reads x_cnn_host_numeric_mode | `experiments/removed/dead_entries_x_cnn.patch` |
+| x_linear_glm_ydom, x_linear_cls1_flags | Linear | `44fc3b5bb` | constant / switch-word probes with no reader | `experiments/removed/dead_entries_x_linear.patch` |
+| x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 | Metrics | `c209716bf` | no public call reaches the x_metrics resident store; the probes lost their reader in 0a6e7bc75 | `experiments/removed/dead_entries_x_metrics.patch` |
+| x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo | Preprocessing | `bb4259d55` | constant / reach probes with no reader | `experiments/removed/dead_entries_x_prep.patch` |
+| xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off | Neighbors (+ x_neighbors/eigh*.mojo, knn_graph op) | `00d4488cf` | no caller; gen.py edited by hand to match | `experiments/removed/dead_entries_x_neighbors.patch` |
+| the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries, rf_regressor_fit_session_export, rf/et *_gpu_parallel, forest probes and comparison arms, rf_fused_bootstrap_gather, trees_shap_pair_count, gbdt/pointwise_parallel_available, x_trees_dart_idn | Forests / GBDT / x_trees | `f515bbcb9` | no release, identity or CI path; bench/speed/forest_inference_ab.py (a no-op A/B) deleted | `experiments/removed/dead_entries_trees.patch` |
+| 17 *_parallel_available multi-GPU capability probes | GP, estimators, metrics, mixture, hdbscan, solver, svm, kernel methods, k-means, resample | `b3cad1ef6` | constant 1, no driver looks them up (the native drivers bind a device plan) | `experiments/removed/dead_entries_parallel_probes.patch` |
+| encode_labels_* exports, lr_schedule_exact_block, next_combination_i64 | Core binding + core host | `e9a91ed29` | registrations only for encode_labels_* (prepare_targets calls the Mojo functions); core/hotpath_impl.mojo next_combination_i64 kept for the live sabotage arm's patch context | `experiments/removed/dead_entries_core.patch` |
+| estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on | Estimators (both bindings) | `65f812332` | probes with no reader; pca_rank_finish runs inside the PCA owners | `experiments/removed/dead_entries_estimators.patch` |
+| hdbscan_host_predict_sabotage, host tsa_vendor (forecast + tsa host) | HDBSCAN / forecasting hosts | `2013bdd1e` | the host loader reads <prefix>_sabotage / <prefix>_vendor | `experiments/removed/dead_entries_host_aliases.patch` |
+| ivf_flat_build_and_search | IVF (both bindings) | `e760c256b` | the retired one-call door; IVFIndex uses ivf_flat_build / ivf_flat_search | `experiments/removed/dead_entries_ivf.patch` |
+| svc_portable_math | SVM (both bindings) | `f6700e77c` | only a one-off consolidation check called it; host_portable_math kept for the live sabotage arm's patch context | `experiments/removed/dead_entries_svm.patch` |
+| 59 x_decomp export rows (registration only for the owner-run bodies) and 13 *_pyapi.mojo files | Decomposition (both bindings) | `25b5daca2` | the decomp owners run the bodies directly; dead _expansion_decomp._Kit methods removed with them; accuracy_run kept for coverage_api.patch context | `experiments/removed/dead_entries_x_decomp.patch` |
+
+- Kept, with `n/a` and the reason in `coverage_declared.tsv` (each goes when its switch or tool goes): release and
+  harness read-backs (`msel_live`, `forest_host_column`, `gbdt_per_round_paths`, `gbdt_resident_info`); test seams of live
+  Mojo (`native_json_parse`, `native_transport_call`, `nsum_f64`, `truncnorm_draws`); the no_host_routes fence door
+  `x_neighbors_kfeat_schi2_draw` (debt: it hides the FAST SkewedChi2Sampler host draw); and the A/B, quality-tool or gate
+  witnesses of `-D` switches still in the tree (F02, F06, F07, F11, F12, F13, F14, F15, F16 counters; MCD_G1_GRAM,
+  MCD_ORDERED_COV, GRP_CLS2, SCOPED_GEMM_AUDIT, SOFTMAX_G2_AUDIT, ARIMA_K3_DF, KM_FAST_RBF_STAGED, X_PREP_POOL_ARENA,
+  the byte LM arm and fault witnesses, accumulate_pool_fault_available, the ET shared-count and stage-copy words).
+- Owed (not this lane): `core/hotpath_impl.mojo` `next_combination_i64`, `svm/host/svc_proba.mojo` `host_portable_math` and
+  `x_decomp/api.mojo` `accuracy_run` / `moves.accuracy` are now unreachable but stay so the proven sabotage patches keep
+  their bytes; delete them with a re-proof of `coverage-core-hotpath_impl`, `coverage_host_svc_proba` and `coverage_api`.
+  The plain et_/rf_*_fit registrations the legacy arm used to reach (`et_classifier_fit`, `et_regressor_fit`, their
+  `_weighted` forms, `rf_classifier_fit_weighted`) and `SambaStack._forward` are dead too but were not in the table.
+- Patches: `experiments/removed/dead_entries_<family>.patch`, the reverse of the family's deletion commit(s) merged onto the
+  lane head and restricted to code (`tools/`, `docs/`, `checks/`, `bench/`, `experiments/` and tables left out); each
+  passes `git apply --check` on the lane head. Restoring `experiments/removed/MOJOLEARN_QR_FAST_DEV.patch` or
+  `MOJOLEARN_SVD_FAST_CHOLQR.patch` now also needs `fast_defines_py` and `_kit_fast_define` back (dead_entries_x_decomp).
+  The batch-1 patches `byte_lm_launch_probe`, `lr_schedule_fill`, `x_decomp_knn_select` and `x_neighbors_purity_flags`
+  were refreshed to apply on the new head.

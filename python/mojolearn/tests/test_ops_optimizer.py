@@ -22,13 +22,13 @@ from mojolearn import _backend
 
 def _has_step_entry():
     try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_step")
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call")
     except Exception:
         return False
 
 
 pytestmark = pytest.mark.skipif(not _has_step_entry(),
-                                reason="the sequence binding has no ops_step entry (rebuild it)")
+                                reason="the sequence binding has no ops_session_call entry (rebuild it)")
 
 N, D, H = 24, 3, 5
 EPOCHS = 6

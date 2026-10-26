@@ -3,8 +3,8 @@
 lanes of tools/identity_break.py).
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
-and no GPU binding imports this file. `host_ivf_build_and_search` is
-`ivf/estimator.mojo::ivf_flat_build_and_search_host` with every device launch
+and no GPU binding imports this file. `host_ivf_build` and the search here are
+`ivf/estimator.mojo`'s build and search with every device launch
 restated on the host, in the order `ivf_flat_build` and
 `ivf_flat_search_traced` make them. The host-side pieces those two already
 run on the host are CALLED, not copied: the validators of
@@ -525,26 +525,8 @@ def host_ivf_search(
     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
 
 
-def host_ivf_build_and_search(
-    x: List[Float32],
-    n_rows: Int,
-    dim: Int,
-    n_lists: Int,
-    queries: List[Float32],
-    n_queries: Int,
-    k: Int,
-    n_probes: Int,
-    kmeans_n_iters: Int,
-    metric: Int,
-    seed: UInt64,
-) raises -> IvfHostResult:
-    """`ivf_flat_build_and_search_host` on the host (module docstring): the
-    build, then the search over the index it returned. Since
-    lane/inference-embedding-ivf-cholesky (2026-09-15) the two halves are
-    `host_ivf_build` and `host_ivf_search`, the same statements in the same
-    order, so a saved index answers what this call answers."""
-    var index = host_ivf_build(x, n_rows, dim, n_lists, kmeans_n_iters, metric, seed)
-    return host_ivf_search(index, queries, n_queries, k, n_probes)
+# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_ivf.patch
 
 
 def host_ivf_extend(

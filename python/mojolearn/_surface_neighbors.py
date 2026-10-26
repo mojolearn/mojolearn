@@ -26,7 +26,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components", "Louvain", "SVGP"),
         display="the neighbors + kernel expansion lane",
-        host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo",
+        host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo",
                       "x_neighbors/proba64_nc.mojo", "checks/f64_words.mojo"),
         exports=(
             # BEGIN GENERATED EXPORTS
@@ -66,7 +66,6 @@ FAMILIES = (
             "xn_lp_clamp",
             "xn_ls_clamp",
             "xn_ls_laplacian",
-            "xn_knn_graph",
             "xn_knn_impute",
             "xn_col_degree",
             "xn_ls_laplacian_deg",
@@ -111,9 +110,7 @@ FAMILIES = (
             "xn_louvain",
             "xn_pr_csr",
             "xn_louvain_csr",
-            "xn_eigh",
             "x_neighbors_numeric_mode",
-            "x_neighbors_py2mojo_off",
             "x_neighbors_vendor",
             "x_neighbors_kpca_resident",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source

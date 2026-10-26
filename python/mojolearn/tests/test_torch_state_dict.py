@@ -46,7 +46,7 @@ def _torch_and_binding():
     from mojolearn import _backend
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        ok = hasattr(b, "model_import_params") and hasattr(b, "ops_load_weights")
+        ok = hasattr(b, "model_import_params") and hasattr(b, "ops_session_call")
     except Exception:
         ok = False
     if not ok:

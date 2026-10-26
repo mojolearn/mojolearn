@@ -23,13 +23,13 @@ GUIDE = pathlib.Path(__file__).resolve().parents[3] / "docs-site" / "user_guide"
 def _has_entries():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        return hasattr(b, "ops_open") and hasattr(b, "ops_capture") and hasattr(b, "ops_program_run")
+        return hasattr(b, "ops_session_call")
     except Exception:
         return False
 
 
 pytestmark = pytest.mark.skipif(not _has_entries(),
-                                reason="the sequence binding has no ops_capture/ops_program_run entries (rebuild it)")
+                                reason="the sequence binding has no ops_session_call/ops_program_execute entries (rebuild it)")
 
 
 def _words(a):

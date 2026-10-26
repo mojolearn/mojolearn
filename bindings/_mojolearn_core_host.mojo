@@ -131,7 +131,6 @@ from bindings.hotpath_helpers import (
     mask_from_indices_u8_binding,
     select_mask_u8_i64_binding,
     count_mask_u8_binding,
-    next_combination_i64_binding,
     ic_running_min_f64_host_binding,
     ic_running_min_f32_host_binding,
     fold_pair_f32_binding,
@@ -153,7 +152,6 @@ from bindings.hotpath_helpers import (
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
     lr_schedule_exact_binding,
-    lr_schedule_exact_block_binding,
     lr_schedule_at_c, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
@@ -1243,12 +1241,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[cast_elements_binding]("cast_elements")
         module.def_function[reduce_stat_binding]("reduce_stat")
         module.def_function[equal_elements_binding]("equal_elements")
-        module.def_function[encode_labels_f32_binding]("encode_labels_f32")
-        module.def_function[encode_labels_f64_binding]("encode_labels_f64")
-        module.def_function[encode_labels_i32_binding]("encode_labels_i32")
-        module.def_function[encode_labels_i64_binding]("encode_labels_i64")
-        module.def_function[encode_labels_u32_binding]("encode_labels_u32")
-        module.def_function[encode_labels_u8_binding]("encode_labels_u8")
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane migrate-shared-labels: the shared argument-and-label entry
         module.def_function[prepare_targets_binding]("prepare_targets")
         module.def_function[gather_i32_binding]("gather_i32")
@@ -1261,7 +1255,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
         module.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
         module.def_function[count_mask_u8_binding]("count_mask_u8")
-        module.def_function[next_combination_i64_binding]("next_combination_i64")
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_core.patch
         module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
         module.def_function[fold_pair_f32_binding]("fold_pair_f32")
@@ -1294,7 +1289,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[fsum_f64_binding]("fsum_f64")
         module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")

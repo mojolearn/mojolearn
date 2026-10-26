@@ -26,7 +26,6 @@ from svm.impl.svc_epilogue import (
     device_gather,
     device_pair_epilogue,
     device_platt_train,
-    device_portable_math,
     device_select,
     device_splitmix_perm,
 )
@@ -189,18 +188,6 @@ def svc_splitmix_perm_device_binding(
     return PythonObject(count)
 
 
-def svc_portable_math_device_binding(
-    in_addr: PythonObject, out_addr: PythonObject, n: PythonObject, which: PythonObject
-) raises -> PythonObject:
-    """THE TWIN'S OWN CHECK DOOR: `sp_exp` (which 0) or `sf64_log` (which 1)
-    over n float64 on the device, so a job can hold them to
-    `_portable_math.exp/log` bit for bit. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        return PythonObject(0)
-    var w = Int(py=which)
-    var ia = Int(py=in_addr)
-    var oa = Int(py=out_addr)
-    with GILReleased(Python()):
-        device_portable_math(ia, oa, count, w)
-    return PythonObject(count)
+# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_svm.patch
+

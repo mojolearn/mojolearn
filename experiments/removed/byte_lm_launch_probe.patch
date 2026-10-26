@@ -1,5 +1,5 @@
 diff --git a/bindings/_mojolearn_byte_lm.mojo b/bindings/_mojolearn_byte_lm.mojo
-index d56b10d11..f387b2094 100644
+index b5529b825..3a3c3c803 100644
 --- a/bindings/_mojolearn_byte_lm.mojo
 +++ b/bindings/_mojolearn_byte_lm.mojo
 @@ -40,6 +40,7 @@ from training.byte_lm_binding_impl import (
@@ -10,7 +10,7 @@ index d56b10d11..f387b2094 100644
  )
  # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
  # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
-@@ -1462,8 +1463,48 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
+@@ -1448,8 +1449,48 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
      return PythonObject(owner[].completed)
  
  
@@ -61,19 +61,21 @@ index d56b10d11..f387b2094 100644
  
  
  def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
-@@ -1490,8 +1531,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
+@@ -1476,10 +1517,10 @@ def build__mojolearn_byte_lm() -> PythonObject:
          _ = module.add_type[ByteLMSession]("_ByteLMSession")
          module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
          module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
 -        # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
 -        # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
+         # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
 +        module.def_function[byte_lm_session_launch_probe_binding]("byte_lm_session_launch_probe")
 +        module.def_function[byte_lm_launch_probe_binding]("byte_lm_launch_probe")
-         module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
          # DEVIATION 2514: the device-owned session entries.
          module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")
+         module.def_function[byte_lm_session_step_binding]("byte_lm_session_step")
 diff --git a/training/byte_lm_binding_impl.mojo b/training/byte_lm_binding_impl.mojo
-index 9ae09bbfb..4a5066e4a 100644
+index 925c38a79..4a5066e4a 100644
 --- a/training/byte_lm_binding_impl.mojo
 +++ b/training/byte_lm_binding_impl.mojo
 @@ -381,8 +381,29 @@ def _stage_download(ctx: DeviceContext, mut host: HostBuffer[DType.float32],

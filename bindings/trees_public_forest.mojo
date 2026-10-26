@@ -542,10 +542,12 @@ def forest_fit_arrays(result: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _export_selection() raises -> String:
-    """`MOJOLEARN_FOREST_EXPORT`: 'into' (default), 'legacy' or 'verify'."""
+    """`MOJOLEARN_FOREST_EXPORT`: 'into' (default) or 'verify'."""
+    # TOMBSTONE: the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries (dead native entries: no release, identity or CI path set it) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+    # Restore: git apply experiments/removed/dead_entries_trees.patch
     var selection = trees_env("MOJOLEARN_FOREST_EXPORT", "into")
-    if selection != "legacy" and selection != "into" and selection != "verify":
-        raise Error("MOJOLEARN_FOREST_EXPORT must be legacy, into or verify")
+    if selection != "into" and selection != "verify":
+        raise Error("MOJOLEARN_FOREST_EXPORT must be into or verify")
     return selection
 
 
@@ -567,10 +569,10 @@ struct ForestFit(Copyable, Movable):
 
 def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, params: PythonObject,
             criterion: PythonObject, device_scan: Bool, context: PythonObject) raises -> PythonObject:
-    """One fit launch and its export (or a legacy fit's lists)."""
+    """One fit launch and its export (a shard fit returns its lists)."""
     var b = trees_builtins()
-    var selection = _export_selection() if fit.exported else String("legacy")
-    var name = fit.name + ("_export" if fit.exported and selection != "legacy" else "")
+    var selection = _export_selection() if fit.exported else String("")
+    var name = fit.name + ("_export" if fit.exported else "")
     var entry = trees_need(native, name, "rebuild the forest binding for caller-buffer model export")
     var args = Python.list(PythonObject(x.addr), PythonObject(y_addr), params)
     if fit.criterion:
@@ -585,7 +587,7 @@ def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, p
             raise Error(TREES_NONFINITE)
         raise error^
     _ = x.keep
-    if fit.exported and selection != "legacy":
+    if fit.exported:
         return forest_export(native, out, selection, context)
     return out
 

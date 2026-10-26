@@ -87,11 +87,8 @@ def trisolve_run[E: Exec](pl: F32Ptr, pi: F32Ptr, ps: F32Ptr, pd: F32Ptr, n: Int
     E.trisolve(pl, pi, ps, pd, n, nrhs, trans)
 
 
-def knn_select_run[E: Exec](pd: F32Ptr, ps: F32Ptr, pi: F32Ptr, n: Int, m: Int, k: Int, ex: Int) raises:
-    """`knn_select_py`'s typed entry: `knn_select_row` for every row."""
-    if m >= 1 << 24:
-        raise Error("x_decomp: knn_select columns exceed float32's exact integers")
-    E.knn_select(pd, ps, pi, n, m, k, ex)
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 def lu_solve_run[E: Exec](pl: F32Ptr, pp: I32Ptr, pb: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
@@ -130,16 +127,6 @@ def lle_local_run[E: Exec](
     if n * nn * n > 2147483647 or n * nn * nn > 2147483647 or n >= 16777216:
         raise Error("x_decomp: lle_local exceeds the Int32 index bound")
     E.lle_local(px, pi, pb, method, n, d, nn, nc, tol)
-
-
-def eigh_batch_run[E: Exec](pa: F32Ptr, pw: F32Ptr, pv: F32Ptr, batch: Int, n: Int) raises:
-    """`eigh_batch_py`'s typed entry: `batch` n x n symmetric problems
-    (x_decomp/rr_batch.mojo) after the shape checks."""
-    if n <= 0 or batch < 0:
-        raise Error("x_decomp: eigh_batch needs n >= 1, batch >= 0")
-    if batch * n * n > 2147483647:
-        raise Error("x_decomp: eigh_batch exceeds the Int32 index bound")
-    E.eigh_batch(pa, pw, pv, batch, n)
 
 
 def svd_run[E: Exec](pa: F32Ptr, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises:

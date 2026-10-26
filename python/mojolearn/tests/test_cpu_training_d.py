@@ -9,8 +9,8 @@ CPU-only path.
 
 What the source checks hold: the manifest covers the eight lanes in the gp,
 kernel_methods, mixture and hdbscan families; each new host binding
-registers the GPU binding's fit and scoring names and NOT the multi-GPU
-probe; each new host oracle imports no DeviceContext and names the device
+registers the GPU binding's fit and scoring names, and neither binding
+registers the deleted multi-GPU probe; each new host oracle imports no DeviceContext and names the device
 statements whose spelling carries the bits; the Cholesky door keeps its
 validation while the kernel ridge solve and the mixture's precision Cholesky
 reach the unvalidated factorization, as `potrf_lower` does on the device;
@@ -139,8 +139,8 @@ def test_bindings_register_the_gpu_names_and_not_the_probe():
             assert _registers(src, name), f"the {fam} host binding does not register {name}"
             assert _registers(gpu, name), f"{name} is not a {fam} GPU binding name"
             assert name in host_surface.family(fam)["exports"]
-        assert _registers(gpu, probe) and not _registers(src, probe), (
-            f"{probe} must stay absent from the {fam} host binding so the multi-GPU driver refuses by name"
+        assert not _registers(gpu, probe) and not _registers(src, probe), (
+            f"{probe} was deleted from both bindings (no driver reads it; lane dead-entries-2-0859)"
         )
 
 

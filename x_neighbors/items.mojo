@@ -1293,14 +1293,8 @@ def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
     res.unsafe_store(t, Int32(z))
 
 
-def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
-    """Row t of the connectivity graph: 1 at each of the row's k neighbors."""
-    for j in range(m):
-        res.unsafe_store(t * m + j, Float32(0))
-    for s in range(k):
-        var j = Int(idx.unsafe_load(t * k + s))
-        if j >= 0:
-            res.unsafe_store(t * m + j, Float32(1))
+# TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by 00d4488cf; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
 
 
 # ------------------------------------------------------------------ KNNImputer

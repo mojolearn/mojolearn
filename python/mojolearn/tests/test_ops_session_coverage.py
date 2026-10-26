@@ -12,13 +12,13 @@ from mojolearn import _backend
 
 def _has_ops_entries():
     try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_open")
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call")
     except Exception:
         return False
 
 
 pytestmark = pytest.mark.skipif(not _has_ops_entries(),
-                                reason="the sequence binding has no ops_open entry (rebuild it)")
+                                reason="the sequence binding has no ops_session_call entry (rebuild it)")
 
 A = np.array([[1.25, -2.75], [3.5, 4.0]], np.float32)
 B = np.array([[2.0, 2.0], [1.0, 0.5]], np.float32)

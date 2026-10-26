@@ -14,7 +14,6 @@ from x_decomp.resident import (
     dev_ew_run,
     dev_mcd_cov_run,
     dev_gemm_run,
-    dev_project_run,
     dev_rand_run,
     dev_trisolve_run,
     dev_colsum_run,
@@ -23,13 +22,9 @@ from x_decomp.resident import (
     dev_absmax_run,
     dev_orth_run,
     dev_orth_diag_run,
-    dev_lda_rows_run,
-    dev_lda_bound_run,
-    dev_cd_rows_run,
     dev_svd_run,
     dev_lu_run,
     dev_lu_aux_run,
-    dev_qr_r_run,
     dev_code_rows_run,
     dev_eigh_run,
     GRP_CLS2_NOSCAN,
@@ -37,10 +32,7 @@ from x_decomp.resident import (
     GRP_CLS2_LAZY,
     GRP_FAST_FUSED,
     GRP_FAST_SRP_STRAT,
-    dev_first_nonfinite_run,
     dev_move_run,
-    grp_fit_fused_run,
-    dev_maxabs_run,
     mcd_cov_probe_run,
 )
 
@@ -116,14 +108,8 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
     return PythonObject(dev_gemm_run(_id(a), _id(b), _id(c), m, k, n, ta, tb))
 
 
-def dev_project_py(a: PythonObject, b: PythonObject, c: PythonObject, flag: PythonObject, p: PythonObject) raises -> PythonObject:
-    """c = a b^T (a m x k, b n x k) by the tiled projection kernel, enqueued
-    (no sync); flag[0] = 1 when an entry of a is not finite. Returns -1,
-    launching nothing, on a device whose shared memory does not hold the tile."""
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
-    return PythonObject(dev_project_run(_id(a), _id(b), _id(c), _id(flag), m, k, n))
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -196,44 +182,6 @@ def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: 
     return PythonObject(r)
 
 
-def dev_lda_rows_py(
-    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`x_decomp_lda_rows` on device matrices: d and e (n x k) updated in place
-    on the device. p = [n, k, v, max_iter], f = [prior, tol]."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var max_iter = _n(p, 3)
-    var prior = Float64(py=f[0])
-    var tol = Float64(py=f[1])
-    return PythonObject(dev_lda_rows_run(_id(x), _id(ew), _id(d), _id(e), n, k, v, max_iter, prior, tol))
-
-
-def dev_lda_bound_py(
-    x: PythonObject, ddt: PythonObject, dcomp: PythonObject, dst: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """LatentDirichletAllocation's word-term bound cells on device matrices.
-    p = [n, k, v], f = [floor]."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var floor = Float64(py=f[0])
-    return PythonObject(dev_lda_bound_run(_id(x), _id(ddt), _id(dcomp), _id(dst), n, k, v, floor))
-
-
-def dev_cd_rows_py(
-    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """`x_decomp_cd_rows` on device matrices: w (n x k, swept in place), hht
-    (k x k), xht (n x k), viol (n, written); perm the host address of k
-    int32. p = [n, k]. Waits."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var pp = I32Ptr(unsafe_from_address=Int(py=perm))
-    return PythonObject(dev_cd_rows_run(_id(w), _id(hht), _id(xht), pp, _id(viol), n, k))
-
-
 def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
     """`x_decomp_svd` of the device matrix a (m x n, left as it is); s (n)
     and v (n x n) are host addresses. p = [m, n]. Waits."""
@@ -282,21 +230,6 @@ def dev_lu_aux_py(
     with GILReleased(Python()):
         r = dev_lu_aux_run(il, pv, p1, p2, pd, ps, n, clamp)
     return PythonObject(r)
-
-
-def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
-    address. p = [m, n] or [m, n, consume]. Returns 1 when a was consumed,
-    else 0. Waits."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    var consume = len(p) > 2 and Int(py=p[2]) != 0
-    var ia = _id(a)
-    var pr = F32Ptr(unsafe_from_address=Int(py=r))
-    var res = 0
-    with GILReleased(Python()):
-        res = dev_qr_r_run(ia, pr, m, n, consume)
-    return PythonObject(res)
 
 
 def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
@@ -351,17 +284,6 @@ def grp_cls2_py() raises -> PythonObject:
     return PythonObject(f)
 
 
-def dev_first_nonfinite_py(addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """The first flat index of a NaN or infinity among the n floats at
-    `addr`, or -1. Registered only under GRP_CLS2_DEVSCAN."""
-    var cnt = Int(py=n)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
-    var r = -1
-    with GILReleased(Python()):
-        r = dev_first_nonfinite_run(src, cnt)
-    return PythonObject(r)
-
-
 def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
     a2, a3, ist, ioff, nsrc, ndst, nidx]."""
@@ -378,41 +300,6 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
     return PythonObject(
         dev_move_run(_id(src), _id(idx), _id(dst), op, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx)
     )
-
-
-def grp_fit_fused_py(
-    xaddr: PythonObject, n: PythonObject, dst: PythonObject, hout: PythonObject, p: PythonObject, s: PythonObject
-) raises -> PythonObject:
-    """p = [count, seed, mode] (or [count, seed, 3, n_features, D]), s =
-    [scale, threshold]: the first flat index of a NaN or infinity among the
-    n floats at xaddr (or -1), the projection matrix into the device matrix
-    dst, and its words copied to the host floats at hout. Registered only
-    under GRP_FAST_FUSED."""
-    var cnt = Int(py=n)
-    var count = _n(p, 0)
-    var seed = Int(py=p[1])
-    var mode = Int(py=p[2])
-    var sd = 1
-    var sgrid = 0
-    comptime if GRP_FAST_SRP_STRAT:
-        if mode == 3:
-            sd = _n(p, 3)
-            sgrid = _n(p, 4)
-    var sc = Float64(py=s[0])
-    var thr = Float64(py=s[1])
-    var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
-    var host_out = F32Ptr(unsafe_from_address=Int(py=hout))
-    var idst = _id(dst)
-    var r = -1
-    with GILReleased(Python()):
-        r = grp_fit_fused_run(src, cnt, idst, host_out, count, seed, mode, sd, sgrid, sc, thr)
-    return PythonObject(r)
-
-
-def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (a device matrix of >= 1 value) = max |a| over the first p[0]
-    values of the device matrix a (NaN if any is NaN); no wait."""
-    return PythonObject(dev_maxabs_run(_id(a), _id(dst), _n(p, 0)))
 
 
 # Test-only direct batched covariance seam, identical API on both arms.

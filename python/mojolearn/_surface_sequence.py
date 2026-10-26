@@ -75,7 +75,7 @@ FAMILIES = (
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "lamb_step", "layer_norm", "theta", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
+            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "theta", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "prophet_days", "prophet_features",
             "prophet_changepoints",
@@ -86,20 +86,11 @@ FAMILIES = (
             "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
             "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
-            "ops_open", "ops_session_create", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
-            "ops_shape", "ops_free", "ops_reset", "ops_metric", "ops_backward", "ops_grad",
-            "ops_profile_reset", "ops_profile_report", "ops_op_packed",
+            "ops_session_create",
+            "ops_shape",
             # checkpoints (autograd/model_checkpoint.mojo)
             "model_save_checkpoint", "model_checkpoint_info", "model_load_checkpoint",
-            "ops_save_state", "ops_load_state",
-            "ops_optimizer", "ops_step", "ops_scheduler_step", "ops_learning_rate", "ops_zero_grad",
-            "ops_optimizer_state", "ops_load_optimizer_state",
-            # higher-order gradients (OpsSession.backward_graph ... jvp)
-            "ops_backward_graph", "ops_backward_seed", "ops_grad_handle", "ops_vjp", "ops_hvp", "ops_jvp",
-            # captured programs (OpsSession.capture / run_program)
-            "ops_capture", "ops_program_info", "ops_program_run", "ops_program_free",
-            "ops_save_program", "ops_load_program",
-            "ops_program_dynamic", "ops_program_fit", "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_execute",
+            "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_execute",
             "ops_program_inspect", "ops_program_control",
             "ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
             "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",
@@ -108,7 +99,7 @@ FAMILIES = (
             "ops_partitioned_run", "ops_partitioned_state", "ops_partitioned_residency",
             "ops_partitioned_save", "ops_partitioned_close", "ops_partitioned_enter", "ops_partitioned_exit", "ops_partitioned_profile",
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
-            "model_import_params", "ops_load_weights",
+            "model_import_params",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
             "onnx_read", "onnx_info", "onnx_buffers", "onnx_resolve", "onnx_close",
             # the lowering onto session operations (autograd/import_lower.mojo; importers.import_model)

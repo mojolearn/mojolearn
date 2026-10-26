@@ -1,0 +1,160 @@
+diff --git a/bindings/_mojolearn_svm.mojo b/bindings/_mojolearn_svm.mojo
+index 106004920..6b8e16625 100644
+--- a/bindings/_mojolearn_svm.mojo
++++ b/bindings/_mojolearn_svm.mojo
+@@ -78,6 +78,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from svm.impl.svc_epilogue_pyapi import (
+     svc_pair_epilogue_device_binding,
+     svc_platt_train_device_binding,
++    svc_portable_math_device_binding,
+     svc_splitmix_perm_device_binding,
+ )
+ from svm.estimator import (
+@@ -741,8 +742,7 @@ def build__mojolearn_svm() -> PythonObject:
+         m.def_function[svc_pair_epilogue_device_binding]("svc_pair_epilogue")
+         m.def_function[svc_platt_train_device_binding]("svc_platt_train")
+         m.def_function[svc_splitmix_perm_device_binding]("svc_splitmix_perm")
+-        # TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_svm.patch
++        m.def_function[svc_portable_math_device_binding]("svc_portable_math")
+         m.def_function[svr_fit_binding]("svr_fit")
+         m.def_function[svr_predict_binding]("svr_predict")
+         m.def_function[iforest_run_binding]("iforest_run")
+diff --git a/bindings/_mojolearn_svm_host.mojo b/bindings/_mojolearn_svm_host.mojo
+index d0e2fbba9..62dd8a86d 100644
+--- a/bindings/_mojolearn_svm_host.mojo
++++ b/bindings/_mojolearn_svm_host.mojo
+@@ -84,6 +84,7 @@ from isolation_forest.impl.rng.xorwow import (
+ from svm.host.svc_proba_pyapi import (
+     svc_pair_epilogue_binding,
+     svc_platt_train_binding,
++    svc_portable_math_binding,
+     svc_splitmix_perm_binding,
+ )
+ from svm.host.smo_oracle import (
+@@ -550,8 +551,7 @@ def build__mojolearn_svm_host() -> PythonObject:
+         module.def_function[svc_pair_epilogue_binding]("svc_pair_epilogue")
+         module.def_function[svc_platt_train_binding]("svc_platt_train")
+         module.def_function[svc_splitmix_perm_binding]("svc_splitmix_perm")
+-        # TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+-        # Restore: git apply experiments/removed/dead_entries_svm.patch
++        module.def_function[svc_portable_math_binding]("svc_portable_math")
+         module.def_function[svr_fit_binding]("svr_fit")
+         module.def_function[svr_predict_binding]("svr_predict")
+         module.def_function[iforest_run_binding]("iforest_run")
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index ab1821175..d3cba1dc4 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2260,7 +2260,7 @@ FAMILIES = (
+             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
+             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
+             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
+-            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm",
++            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm", "svc_portable_math",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
+             "svc_dual_gemv",
+diff --git a/svm/host/svc_proba_pyapi.mojo b/svm/host/svc_proba_pyapi.mojo
+index 43340a17c..a8930110a 100644
+--- a/svm/host/svc_proba_pyapi.mojo
++++ b/svm/host/svc_proba_pyapi.mojo
+@@ -26,6 +26,7 @@ from svm.host.svc_proba import (
+     host_gather,
+     host_pair_epilogue,
+     host_platt_train,
++    host_portable_math,
+     host_select,
+     host_splitmix_perm,
+ )
+@@ -159,6 +160,16 @@ def svc_splitmix_perm_binding(
+     return PythonObject(count)
+ 
+ 
+-# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_svm.patch
+-
++def svc_portable_math_binding(in_addr: PythonObject, out_addr: PythonObject, n: PythonObject, which: PythonObject) raises -> PythonObject:
++    """THE TWIN'S OWN CHECK DOOR: `sp_exp` (which 0) or `sf64_log` (which 1)
++    over n float64, so a job can hold them to `_portable_math.exp/log` (the
++    C library) bit for bit on any sweep. Returns n."""
++    var count = _ix(n)
++    if count == 0:
++        return PythonObject(0)
++    var w = Int(py=which)
++    var ia = Int(py=in_addr)
++    var oa = Int(py=out_addr)
++    with GILReleased(Python()):
++        host_portable_math(ia, oa, count, w)
++    return PythonObject(count)
+diff --git a/svm/impl/svc_epilogue.mojo b/svm/impl/svc_epilogue.mojo
+index d787c0e3a..fccf3aa4f 100644
+--- a/svm/impl/svc_epilogue.mojo
++++ b/svm/impl/svc_epilogue.mojo
+@@ -212,8 +212,10 @@ def perm_kernel(dst: I32P, n: Int32, seed: UInt32):
+         dst[i] = Int32(f(i))
+ 
+ 
+-# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_svm.patch
++def pmath_kernel(dst: U64P, src: U64P, n: Int32, which: Int32):
++    var i = Int(block_idx.x) * FOLD_TPB + Int(thread_idx.x)
++    if i < Int(n):
++        dst[i] = sp_exp(src[i]) if Int(which) == 0 else sf64_log(src[i])
+ 
+ 
+ # ------------------------------------------------------------ the row glue
+@@ -646,3 +648,19 @@ def device_splitmix_perm(dst: Int, count: Int, seed_lo: Int, seed_hi: Int) raise
+     _ = d^
+     _ = ctx^
+ 
++
++def device_portable_math(ia: Int, oa: Int, count: Int, w: Int) raises:
++    """`sp_exp` (w 0) or `sf64_log` (w 1) over `count` float64 words on the
++    device."""
++    var ctx = _family_ctx()
++    var d_in = _up_u64(ctx, ia, count)
++    var d_out = ctx.enqueue_create_buffer[DType.uint64](count)
++    ctx.enqueue_function[pmath_kernel](
++        d_out.unsafe_ptr(), d_in.unsafe_ptr(), Int32(count), Int32(w),
++        grid_dim=_grid(count), block_dim=FOLD_TPB,
++    )
++    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=oa), src_buf=d_out)
++    ctx.synchronize()
++    _ = d_in^
++    _ = d_out^
++    _ = ctx^
+diff --git a/svm/impl/svc_epilogue_pyapi.mojo b/svm/impl/svc_epilogue_pyapi.mojo
+index 5f34f873b..951d04913 100644
+--- a/svm/impl/svc_epilogue_pyapi.mojo
++++ b/svm/impl/svc_epilogue_pyapi.mojo
+@@ -26,6 +26,7 @@ from svm.impl.svc_epilogue import (
+     device_gather,
+     device_pair_epilogue,
+     device_platt_train,
++    device_portable_math,
+     device_select,
+     device_splitmix_perm,
+ )
+@@ -188,6 +189,18 @@ def svc_splitmix_perm_device_binding(
+     return PythonObject(count)
+ 
+ 
+-# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
+-# Restore: git apply experiments/removed/dead_entries_svm.patch
+-
++def svc_portable_math_device_binding(
++    in_addr: PythonObject, out_addr: PythonObject, n: PythonObject, which: PythonObject
++) raises -> PythonObject:
++    """THE TWIN'S OWN CHECK DOOR: `sp_exp` (which 0) or `sf64_log` (which 1)
++    over n float64 on the device, so a job can hold them to
++    `_portable_math.exp/log` bit for bit. Returns n."""
++    var count = _ix(n)
++    if count == 0:
++        return PythonObject(0)
++    var w = Int(py=which)
++    var ia = Int(py=in_addr)
++    var oa = Int(py=out_addr)
++    with GILReleased(Python()):
++        device_portable_math(ia, oa, count, w)
++    return PythonObject(count)

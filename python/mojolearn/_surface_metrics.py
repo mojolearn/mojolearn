@@ -122,7 +122,6 @@ FAMILIES = (
             # lane metrics-apple3 (2026-09-28): integer label plumbing
             "x_metrics_first_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "x_metrics_py2mojo_core", "x_metrics_idn_fam2",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the metrics lane's CPU route (the added evaluation metrics and model_selection helpers).",
