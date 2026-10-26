@@ -907,9 +907,16 @@ def _lane_sets():
 
 
 def test_every_lane_that_reaches_an_importer_reaches_what_it_imports():
-    """INVERSION 1. If F imports B then a lane reaching F executes B, so
-    lanes(F) must be a subset of lanes(B). A break here means the import walk
-    stopped somewhere it should not have."""
+    """INVERSION 1. If F's import-time region imports B then a lane reaching
+    F executes B, so lanes(F) must be a subset of lanes(B). A break here means
+    the import walk stopped somewhere it should not have.
+
+    THE IMPORT-TIME REGION, NOT THE WHOLE FILE (2026-10-26). The lane map
+    reads each file in the region its importers ask for
+    (`lane_select._region_closure`), so an import inside a function counts
+    for the lanes whose region holds that function, as `_own_walk` has done
+    since 2026-10-15. Every lane reaching F runs F's module-level statements
+    and the functions they call, and that is the edge set checked here."""
     sources, rev = _lane_sets()
     # A subpackage registry (`models/__init__.py`) is included and not
     # followed, like the enumerators: a name imported from it resolves to the
@@ -919,7 +926,7 @@ def test_every_lane_that_reaches_an_importer_reaches_what_it_imports():
     for f in lane_select._python_files():
         if f in sinks:
             continue
-        for b in lane_select._python_imports(f):
+        for b in lane_select._region_import_edges(f, frozenset(), narrow_unused=False):
             if b in sinks:
                 continue
             missing = rev.get(f, set()) - rev.get(b, set())
@@ -2453,14 +2460,13 @@ def test_a_seam_check_oracle_and_a_generator_select_their_expansion_lane():
     assert "x_neighbors/device_ops.mojo" in gen[1], gen[1]
 
 
-@_pending_precision("The neighbors generator inherits unresolved generic-owner reach through its four outputs; "
-                    "see tools/LANE_SELECTOR_PRECISION.md. The desired less-than-half bound is retained.")
-def test_pending_precision_neighbors_generator_selects_fewer_than_half_the_lanes():
+def test_neighbors_generator_selects_fewer_than_half_the_lanes():
+    # Debt cleared 2026-10-26: once each Python file is read in the region its
+    # importers ask for (`lane_select._region_closure`), the bound holds again.
     selection = lane_select.select(["x_neighbors/gen.py"])
     assert not selection["unattributed"] and not selection["every_rules"], selection["reasons"]
-    if len(selection["lanes"]) >= len(lane_select.lane_sources()[0]) // 2:
-        assert selection["precision_limitations"], "missing generator precision diagnostics"
-        raise _UnprovedPrecision(f"neighbors generator selects {len(selection['lanes'])} lanes")
+    assert len(selection["lanes"]) < len(lane_select.lane_sources()[0]) // 2, \
+        f"neighbors generator selects {len(selection['lanes'])} lanes"
 
 
 def test_generated_output_markers_exclude_prose_and_quoted_templates():
