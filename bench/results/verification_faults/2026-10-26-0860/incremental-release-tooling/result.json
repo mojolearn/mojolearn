@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "tests": 54,
+  "subtests": 50,
+  "scope": "Cross-version byte reuse and targeted host-boundary evidence; metadata, unknown native changes, wrong candidate, tampered logs and skipped runtime cases are rejected.",
+  "evidence": [
+    {
+      "path": "incremental-gate-tests-r2.log",
+      "sha256": "f20636969ef10455860ff2785dce3e88f401eeb18e7c092318a060a19cdb535a"
+    },
+    {
+      "path": "incremental-gate-integration-tests-r2.log",
+      "sha256": "4cdf77614f55e49bee1caabb0ebca9e506d98a653f64f15b947f19ac122b3bad"
+    }
+  ]
+}

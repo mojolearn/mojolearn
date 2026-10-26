@@ -104,6 +104,7 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
     producer = receipt.get("producer", {})
     pair = (wanted.get("kind"), producer.get("tool") if isinstance(producer, dict) else None)
     supported = {("candidate", "tools/gate_smoke_box.py"), ("candidate", "tools/release_gate_reuse.py"),
+                 ("candidate", "tools/release_incremental_gate.py"),
                  ("source", "tools/public_runtime_inventory.py"),
                  ("compile", "tools/linux_surface_qualification.sh"),
                  ("runtime", "tools/release_public_runtime_evidence.py"),
@@ -273,6 +274,9 @@ def candidate_autograd_errors(gate, identity):
 
 def candidate_gate_errors(gate, identity):
     """Validate the existing gate producer schema, including actual counts."""
+    from release_incremental_gate import SCHEMA as incremental_schema, errors as incremental_errors
+    if isinstance(gate, dict) and gate.get('schema') == incremental_schema:
+        return incremental_errors(gate, identity)
     from release_gate_reuse import SCHEMA as component_schema, errors as component_errors
     if isinstance(gate, dict) and gate.get('schema') == component_schema:
         return component_errors(gate, identity)
@@ -417,6 +421,9 @@ def _candidate_payload(requirement_id, wanted, report_path, identity, provenance
     if gate.get("schema") == "mojolearn.release.component-gate.v1":
         receipt["producer"] = dict(tool="tools/release_gate_reuse.py", report_type="execution",
                                    execution_scope="retained-and-executed-components")
+    if gate.get("schema") == "mojolearn.release.incremental-gate.v1":
+        receipt["producer"] = dict(tool="tools/release_incremental_gate.py", report_type="execution",
+                                   execution_scope="retained-runtime-and-qualified-changed-boundaries")
     return receipt
 
 

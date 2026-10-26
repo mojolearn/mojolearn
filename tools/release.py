@@ -2898,6 +2898,11 @@ class Release:
         doc = read_json(output / "gate-smoke.json")
         if not doc:
             return False, f"no gate report at {output / 'gate-smoke.json'}"
+        from release_incremental_gate import SCHEMA as incremental_schema, errors as incremental_errors
+        if doc.get('schema') == incremental_schema:
+            errors = incremental_errors(doc, identity)
+            return (False, '; '.join(errors)) if errors else (True,
+                'PASS: unchanged runtime and adapter evidence retained; changed host and verifier boundaries qualified')
         from release_gate_reuse import SCHEMA as component_schema, errors as component_errors
         if doc.get('schema') == component_schema:
             errors = component_errors(doc, identity)

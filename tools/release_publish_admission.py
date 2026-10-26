@@ -26,7 +26,7 @@ POLICY_FILES = ("tools/release_publish_admission.py", "tools/release_evidence.py
                 "tools/release_requirement_dependencies.py", "tools/candidate_wheel_install.py",
                 "tools/gate_smoke_box.py", "tools/adapter_gate.py", "tools/autograd_smoke.py",
                 "tools/gate_autograd_artifacts.py", "tools/pypi_wheel_install.py",
-                "tools/release_gate_reuse.py", "tools/native_adapter_composition.py",
+                "tools/release_gate_reuse.py", "tools/release_incremental_gate.py", "tools/native_adapter_composition.py",
                 "tools/retained_release_composition.py", "tools/release_macos_assembly.py")
 
 
