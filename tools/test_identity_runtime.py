@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Exercise interruption/resume and reporting with fake fits, no native bindings."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -409,3 +410,99 @@ def test_ptx_record_needs_the_ptx_label_and_back(run_fixture, monkeypatch, ptx_l
             ib._run_reference(args)
         except SystemExit as exc:
             assert 'vendor label' not in str(exc)
+
+
+def test_new_scheduler_lease_resumes_without_repeating_completed_fits(run_fixture, monkeypatch):
+    args, state, _ = run_fixture
+    first, second = "first-private-lease-token", "second-private-lease-token"
+    monkeypatch.setenv("MOJOLEARN_SLOT_TOKEN", first)
+    state["crash_at"] = 3
+    with pytest.raises(KeyboardInterrupt):
+        ib._run_reference(args)
+    prior = json.loads(Path(args.json).read_text())
+    assert prior["resume_signature"]["schema"] == 2
+    assert "MOJOLEARN_SLOT_TOKEN" not in prior["resume_signature"]["environment_digests"]
+    args.resume = True
+    state["crash_at"] = None
+    monkeypatch.setenv("MOJOLEARN_SLOT_TOKEN", second)
+    assert ib._run_reference(args) == 0
+    final = json.loads(Path(args.json).read_text())
+    assert state["calls"] == 5  # retained first fixture's two fits never repeated
+    assert final["cells"]["tiny/base"] == prior["cells"]["tiny/base"]
+    assert final["resume_signature"] == prior["resume_signature"]
+    assert final["execution_leases"] == [
+        {"kind": "mac_slot", "token_present": True, "token_sha256": hashlib.sha256(value.encode()).hexdigest()}
+        for value in (first, second)]
+    assert first not in Path(args.json).read_text() and second not in Path(args.json).read_text()
+
+
+@pytest.mark.parametrize("name", ["MOJOLEARN_SLOT_TOKEN_OTHER", "MODULAR_TEST_INPUT", "OMP_NUM_THREADS",
+                                 "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+                                 "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS"])
+def test_only_exact_scheduler_token_is_excluded_from_environment(run_fixture, monkeypatch, name):
+    args, state, _ = run_fixture
+    monkeypatch.setenv(name, "private-runtime-value-before")
+    assert ib._run_reference(args) == 0
+    prior = json.loads(Path(args.json).read_text())
+    digests = prior["resume_signature"]["environment_digests"]
+    assert digests[name] == hashlib.sha256(b"private-runtime-value-before").hexdigest()
+    assert prior["resume_signature"]["environment_sha256"] == hashlib.sha256(
+        json.dumps(digests, sort_keys=True).encode()).hexdigest()
+    assert "private-runtime-value-before" not in Path(args.json).read_text()
+    monkeypatch.setenv(name, "private-runtime-value-after")
+    args.resume = True
+    with pytest.raises(SystemExit, match="REFUSING TO RESUME.*environment"):
+        ib._run_reference(args)
+    assert state["calls"] == 4
+
+
+def test_removing_recorded_runtime_variable_refuses_resume(run_fixture, monkeypatch):
+    args, state, _ = run_fixture
+    monkeypatch.setenv("MOJOLEARN_CPU_THREADS", "3")
+    assert ib._run_reference(args) == 0
+    monkeypatch.delenv("MOJOLEARN_CPU_THREADS")
+    args.resume = True
+    with pytest.raises(SystemExit, match="REFUSING TO RESUME"):
+        ib._run_reference(args)
+    assert state["calls"] == 4
+
+
+def test_changed_existing_binary_refuses_even_with_new_lease(run_fixture, monkeypatch):
+    args, state, package = run_fixture
+    binary = package / "binding.so"
+    binary.write_bytes(b"original native binary")
+    monkeypatch.setenv("MOJOLEARN_SLOT_TOKEN", "original-lease")
+    assert ib._run_reference(args) == 0
+    binary.write_bytes(b"modified native binary")
+    monkeypatch.setenv("MOJOLEARN_SLOT_TOKEN", "new-lease")
+    args.resume = True
+    with pytest.raises(SystemExit, match="REFUSING TO RESUME"):
+        ib._run_reference(args)
+    assert state["calls"] == 4
+
+
+@pytest.mark.parametrize("schema", [1, None, "2", 3])
+def test_legacy_or_unknown_resume_schema_refuses_without_retroactive_admission(run_fixture, schema):
+    args, state, _ = run_fixture
+    assert ib._run_reference(args) == 0
+    path = Path(args.json)
+    prior = json.loads(path.read_text())
+    prior["resume_signature"]["schema"] = schema
+    path.write_text(json.dumps(prior))
+    args.resume = True
+    with pytest.raises(SystemExit, match="legacy or unsupported signature schema"):
+        ib._run_reference(args)
+    assert state["calls"] == 4
+
+
+def test_version_two_requires_its_per_key_environment_witnesses(run_fixture):
+    args, state, _ = run_fixture
+    assert ib._run_reference(args) == 0
+    path = Path(args.json)
+    prior = json.loads(path.read_text())
+    del prior["resume_signature"]["environment_digests"]
+    path.write_text(json.dumps(prior))
+    args.resume = True
+    with pytest.raises(SystemExit, match="REFUSING TO RESUME"):
+        ib._run_reference(args)
+    assert state["calls"] == 4

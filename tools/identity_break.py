@@ -633,12 +633,28 @@ class CellTimer:
         return dict(total_seconds=time.perf_counter() - self.started, stages=dict(self.stages))
 
 
+RESUME_SIGNATURE_SCHEMA = 2
+# A fresh mac_slot lease generates a new UUID. The token is scheduler
+# bookkeeping (the harness records whether it holds a slot), never a runtime
+# option. Exclude this exact name only; all other environment inputs stay bound.
+RESUME_LEASE_ENV = "MOJOLEARN_SLOT_TOKEN"
+
+
+def execution_lease():
+    """Retain lease provenance separately, without publishing its raw token."""
+    token = os.environ.get(RESUME_LEASE_ENV)
+    return dict(kind="mac_slot", token_present=bool(token),
+                token_sha256=hashlib.sha256(token.encode()).hexdigest() if token is not None else None)
+
+
 def resume_signature(args, package_dir, harness, provenance):
     """Bind reuse to Python/binary bytes, execution settings and full protocol.
 
     Native modules load lazily, so hash all installed candidates before any fit,
     not just the subset imported at checkpoint time. Reject a changed installation
     or source harness even when its declared version/commit did not change.
+    Schema 2 separates a nonsemantic scheduler lease from runtime settings and
+    retains per-key digests so changed inputs can be identified without secrets.
     """
     files = [Path(harness)]
     # Checkout fragments live outside package_dir but define executable probes.
@@ -647,7 +663,8 @@ def resume_signature(args, package_dir, harness, provenance):
     files += sorted(p for p in root.rglob("*") if p.is_file() and p.suffix in (".py", ".so", ".dylib"))
     # Some host/sabotage installations live outside the Python package.
     for key, value in os.environ.items():
-        if key.startswith("MOJOLEARN_") and (key.endswith("HOST_DIR") or value.endswith((".so", ".dylib"))):
+        if (key != RESUME_LEASE_ENV and key.startswith("MOJOLEARN_")
+                and (key.endswith("HOST_DIR") or value.endswith((".so", ".dylib")))):
             path = Path(value)
             if path.is_file() and path.suffix in (".so", ".dylib"):
                 files.append(path)
@@ -660,17 +677,24 @@ def resume_signature(args, package_dir, harness, provenance):
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 h.update(block)
     options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose")}
-    env = {k: v for k, v in os.environ.items() if k.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_", "VECLIB_"))}
-    # Environment values can contain credentials. Compare them without publishing them.
+    env = {k: hashlib.sha256(v.encode()).hexdigest() for k, v in os.environ.items()
+           if k != RESUME_LEASE_ENV and k.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_",
+                                                     "VECLIB_", "NUMEXPR_", "BLIS_"))}
+    # Values can contain credentials. Store only per-key digests and their
+    # aggregate; never publish values, including the scheduler token.
     env_hash = hashlib.sha256(json.dumps(env, sort_keys=True).encode()).hexdigest()
-    return dict(schema=1, source_sha256=h.hexdigest(), options=options,
-                environment_sha256=env_hash, provenance=provenance)
+    return dict(schema=RESUME_SIGNATURE_SCHEMA, source_sha256=h.hexdigest(), options=options,
+                environment_sha256=env_hash, environment_digests=env, provenance=provenance)
 
 
 def resume_cells(path, signature):
     with open(path) as stream:
         previous = json.load(stream)
-    if previous.get("resume_signature") != signature:
+    saved = previous.get("resume_signature")
+    if not isinstance(saved, dict) or saved.get("schema") != RESUME_SIGNATURE_SCHEMA:
+        raise SystemExit("REFUSING TO RESUME: legacy or unsupported signature schema; "
+                         "schema 2 requires its own source and runtime-environment witnesses")
+    if saved != signature:
         raise SystemExit("REFUSING TO RESUME: sources, bindings, environment or run protocol changed")
     return previous["cells"]
 
@@ -12154,10 +12178,15 @@ def _run_reference(args):
                                      dict(commit=commit, mode=mode, vendor=vendor,
                                           platform=platform.platform(), python=platform.python_version(),
                                           numpy=np.__version__, fixtures=fixture_hashes, heldout=heldout_hashes))
+    leases = [execution_lease()]
     if getattr(args, "resume", False):
         cells.update(resume_cells(args.json, signature))
         with open(args.json) as stream:
-            package["bindings"] = json.load(stream).get("package", {}).get("bindings", [])
+            previous = json.load(stream)
+        package["bindings"] = previous.get("package", {}).get("bindings", [])
+        # Keep the lease that produced retained cells as well as this attempt's
+        # lease. These are provenance, not inputs to the equality guard above.
+        leases = list(previous.get("execution_leases", [])) + leases
         print(f"# RESUME {len(cells)} completed cells", flush=True)
 
     def dump(complete):
@@ -12279,6 +12308,7 @@ def _run_reference(args):
             package["bindings_error"] = f"{type(exc).__name__}: {exc}"[:200]
         record["package"] = package
         record["resume_signature"] = signature
+        record["execution_leases"] = leases
         atomic_json(args.json, record)
         # The untruncated text of every refusal, beside the JSON. A cell's
         # own error field is capped; this file never is.
