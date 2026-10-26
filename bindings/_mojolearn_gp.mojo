@@ -87,7 +87,6 @@ from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
-    gp_log64,
     gp_theta_param,
 )
 from std.python import Python, PythonObject
@@ -112,7 +111,6 @@ from gaussian_process.gp_binding_entries import (
     _gpr_sample_y_run,
     _i32_ptr,
     _rebuild_kernel_spec,
-    gp_log64_values,
     gp_theta_params_values,
 )
 
@@ -1311,15 +1309,6 @@ def gpr_lml_grad_binding(
     return PythonObject(info)
 
 
-def gp_log64_binding(values: PythonObject) raises -> PythonObject:
-    """`identical_log64` over a list of floats: theta of hyperparameter values
-    and bounds (DEVIATION 2880)."""
-    var vals = List[Float64]()
-    for i in range(len(values)):  # small-loop(theta words: one per kernel hyperparameter)
-        vals.append(Float64(py=values[i]))
-    return py_list_f64(gp_log64_values(vals))
-
-
 def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
     """`Float32(identical_exp64(theta))` over a list, widened back to Python
     floats: the float32 hyperparameters that run at theta (DEVIATION 2880)."""
@@ -1352,7 +1341,8 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         m.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
         m.def_function[gpr_optimize_binding]("gpr_optimize")
-        m.def_function[gp_log64_binding]("gp_log64")
+        # TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/gp_log64.patch
         m.def_function[gp_theta_params_binding]("gp_theta_params")
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")

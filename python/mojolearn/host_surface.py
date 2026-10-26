@@ -2418,7 +2418,7 @@ FAMILIES = (
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
-            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
+            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_theta_params", "gpr_predict_cov",
             "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve", "gpr_optimize",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source

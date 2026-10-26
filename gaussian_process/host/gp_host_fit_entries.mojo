@@ -6,7 +6,6 @@ that shell, so a Python-free caller reaches the same source; no Python here).
 The address and params contracts are that file's."""
 from core.hostptr import f32_ptr, f64_ptr
 from gaussian_process.host.gp_theta import (
-    gp_log64,
     gp_theta_param,
 )
 from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
@@ -284,12 +283,8 @@ def _gpr_lml_grad_run(
     return info
 
 
-def gp_log64_list(values: List[Float64]) -> List[Float64]:
-    """`gp_log64` of each value, in order."""
-    var out = List[Float64]()
-    for i in range(len(values)):
-        out.append(gp_log64(values[i]))
-    return out^
+# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/gp_log64.patch
 
 
 def gp_theta_params_list(values: List[Float64]) -> List[Float64]:
