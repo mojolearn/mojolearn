@@ -285,6 +285,24 @@ def fetch_bundle(expected_sha, destination):
     Path(destination).write_bytes(data)
 
 
+def upload_bundle(path, key):
+    """Stream large private evidence through the established multipart client.
+
+    The JSON ledger client's single urllib PUT broke its connection on a
+    232-MiB admission archive. AWS CLI multipart uploads retain the exact
+    content-addressed archive and retry transport without rerunning tests.
+    Credentials remain in the local process environment, never command text.
+    """
+    client = r2_client()
+    environment = dict(os.environ, AWS_ACCESS_KEY_ID=client.creds['R2_ACCESS_KEY_ID'],
+                       AWS_SECRET_ACCESS_KEY=client.creds['R2_SECRET_ACCESS_KEY'],
+                       AWS_DEFAULT_REGION='auto')
+    environment.pop('AWS_SESSION_TOKEN', None)
+    subprocess.run(['aws', 's3', 'cp', str(path), 's3://' + client.creds['R2_BUCKET'] + '/' + key,
+                    '--endpoint-url', 'https://' + client.creds['R2_ACCOUNT_ID'] + '.r2.cloudflarestorage.com',
+                    '--only-show-errors'], env=environment, check=True, stdout=sys.stderr)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("bundle", "verify", "wheels"))
@@ -304,7 +322,7 @@ def main(argv=None):
             parser.error("bundle requires --ledger and --output")
         result = create_bundle(args.ledger, args.root, args.source, wheels, args.output)
         if args.upload:
-            r2_client().put(result["key"], args.output.read_bytes())
+            upload_bundle(args.output, result["key"])
         print(json.dumps(result, sort_keys=True))
         return 0
     with tempfile.TemporaryDirectory(prefix="mojolearn-private-admission-") as temporary:

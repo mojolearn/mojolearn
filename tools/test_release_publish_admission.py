@@ -11,6 +11,24 @@ import csv
 import pytest
 import yaml
 
+
+def test_large_bundle_upload_streams_file_without_credentials_in_command(tmp_path, monkeypatch):
+    import types
+    import release_publish_admission as admission
+    archive = tmp_path / 'evidence.tar.gz'
+    archive.write_bytes(b'retained archive')
+    creds = dict(R2_ACCESS_KEY_ID='test-access', R2_SECRET_ACCESS_KEY='test-secret',
+                 R2_BUCKET='test-bucket', R2_ACCOUNT_ID='test-account')
+    monkeypatch.setattr(admission, 'r2_client', lambda: types.SimpleNamespace(creds=creds))
+    calls = []
+    monkeypatch.setattr(admission.subprocess, 'run', lambda argv, **options: calls.append((argv, options)))
+    admission.upload_bundle(archive, 'release-readiness/v1/digest.tar.gz')
+    argv, options = calls[0]
+    assert argv[:4] == ['aws', 's3', 'cp', str(archive)]
+    assert options['check'] is True
+    assert options['env']['AWS_SECRET_ACCESS_KEY'] == 'test-secret'
+    assert 'test-secret' not in ' '.join(argv) and 'test-access' not in ' '.join(argv)
+
 import release_publish_admission as A
 import release_requirement_receipts as R
 import release_requirements as L
