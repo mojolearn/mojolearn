@@ -1,0 +1,26 @@
+{
+  "arm": "coverage-precise-core-msel_rebase_device",
+  "records": {
+    "clean": "1b339294edc3eb6f9d0df0e6927c73481b2ef26af6502a3894a826e5c035fb45",
+    "sabotaged": "98a96b0300b20280b2ef2ffa6bb6c8f81774025dd4609bef6f529db92ac0f461",
+    "restored": "ea08aa165428b23f3b59a32af65478629f3260fa589d53f1793fc17bc0622d93"
+  },
+  "patch_sha256": "7f0db7d221a28317efeda46df636db3e0bc54168c1b2f04af72d0fb3ed7d9059",
+  "refusals": {
+    "par-forest/base": {
+      "product_check": "Native device offset rebase rejects a nonzero kernel overflow status before returning a merged forest",
+      "why_fault_reaches_check": "core/msel_device.mojo _rebase_kernel is patched to set status=1 at merged offset o=1 for otherwise valid input. device_rebase_offsets_i32 returns False; bindings/msel_device.mojo:198 raises the merged-offset error. parallel_shard_native._rebase_offsets calls this entry during fit_forest. The outer native boundary collapses the message to a pending Python exception; this proof establishes rejection, not preservation of the inner diagnostic. All three clean and restored forest fits pass. The other two batched patches affect model-selection put and neighbor merge, not forest offset rebase.",
+      "error": "ValueError: mojolearn-optimizer: a Python exception is pending\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 6782, in _\n    par = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/parallel_ensemble.py\", line 105, in fit_forest\n    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard))\nValueError: mojolearn-optimizer: a Python exception is pending"
+    },
+    "par-forest-reg/base": {
+      "product_check": "Native device offset rebase rejects a nonzero kernel overflow status before returning a merged forest",
+      "why_fault_reaches_check": "core/msel_device.mojo _rebase_kernel is patched to set status=1 at merged offset o=1 for otherwise valid input. device_rebase_offsets_i32 returns False; bindings/msel_device.mojo:198 raises the merged-offset error. parallel_shard_native._rebase_offsets calls this entry during fit_forest. The outer native boundary collapses the message to a pending Python exception; this proof establishes rejection, not preservation of the inner diagnostic. All three clean and restored forest fits pass. The other two batched patches affect model-selection put and neighbor merge, not forest offset rebase.",
+      "error": "ValueError: mojolearn-optimizer: a Python exception is pending\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 8011, in _\n    par = fit_forest(ml.RandomForestRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/parallel_ensemble.py\", line 105, in fit_forest\n    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard))\nValueError: mojolearn-optimizer: a Python exception is pending"
+    },
+    "par-forest-et-clf/base": {
+      "product_check": "Native device offset rebase rejects a nonzero kernel overflow status before returning a merged forest",
+      "why_fault_reaches_check": "core/msel_device.mojo _rebase_kernel is patched to set status=1 at merged offset o=1 for otherwise valid input. device_rebase_offsets_i32 returns False; bindings/msel_device.mojo:198 raises the merged-offset error. parallel_shard_native._rebase_offsets calls this entry during fit_forest. The outer native boundary collapses the message to a pending Python exception; this proof establishes rejection, not preservation of the inner diagnostic. All three clean and restored forest fits pass. The other two batched patches affect model-selection put and neighbor merge, not forest offset rebase.",
+      "error": "ValueError: mojolearn-optimizer: a Python exception is pending\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 8027, in _\n    par = fit_forest(ml.ExtraTreesClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/parallel_ensemble.py\", line 105, in fit_forest\n    return _native_parallel_shard('fit_forest', (estimator, X, y, devices, trees_per_shard))\nValueError: mojolearn-optimizer: a Python exception is pending"
+    }
+  }
+}

@@ -1,0 +1,197 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-svm-svc_ovo_layout_host": [
+        "x-neighbors-svc-multiclass"
+      ]
+    },
+    "arms": [
+      "coverage-precise-svm-svc_ovo_layout_host"
+    ],
+    "builds": [
+      "build_svm_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "svm",
+    "id": "svm-1",
+    "lanes": [
+      "x-neighbors-svc-multiclass"
+    ],
+    "patches": [
+      "svm/sabotage/coverage_precise_svc_ovo_layout_host.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-neighbors-svc-multiclass",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 8.467492291005328
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "svm/sabotage/coverage_precise_svc_ovo_layout_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.02720445895101875
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "svm/sabotage/coverage_precise_svc_ovo_layout_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.026184916961938143
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_svm_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_svm_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/build/host/_mojolearn_dev_svm_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/build/host/_mojolearn_dev_svm_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 25.07308191701304,
+      "reused": false
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-neighbors-svc-multiclass",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 36.79223579203244
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "svm/sabotage/coverage_precise_svc_ovo_layout_host.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.025457584066316485
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-neighbors-svc-multiclass",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 8.50181337504182
+    },
+    {
+      "name": "check-coverage-precise-svm-svc_ovo_layout_host-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-svm-svc_ovo_layout_host",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_svm_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.11567895801272243
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_svm_host",
+      "members": [
+        "_mojolearn_svm_host"
+      ],
+      "sha256": "db6ac61eaa20a3e116895db5d93070982fd689f52b72a3d041b3007422752460",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1/build/host/_mojolearn_dev_svm_host/_mojolearn_dev_svm_host.so",
+      "original_path": ".development/fcb82b8b4e273f52561718344f394242bf6504dc8f44e7567389ea63cbfaed3c/_mojolearn_dev_svm_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/db6ac61eaa20a3e116895db5d93070982fd689f52b72a3d041b3007422752460/_mojolearn_dev_svm_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-precise-svm-svc_ovo_layout_host",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

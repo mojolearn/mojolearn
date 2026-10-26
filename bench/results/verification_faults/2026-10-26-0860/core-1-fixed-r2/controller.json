@@ -1,0 +1,432 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-core-msel_host_put": [
+        "x-metrics-search"
+      ],
+      "coverage-precise-core-msel_rebase_device": [
+        "par-forest",
+        "par-forest-reg",
+        "par-forest-et-clf"
+      ],
+      "coverage-precise-core-shard_topk_merge_device": [
+        "par-reference-knn",
+        "par-reference-knn-reg"
+      ]
+    },
+    "arms": [
+      "coverage-precise-core-msel_host_put",
+      "coverage-precise-core-msel_rebase_device",
+      "coverage-precise-core-shard_topk_merge_device"
+    ],
+    "builds": [
+      "build_core_host",
+      "build"
+    ],
+    "columns": [
+      "cpu",
+      "device"
+    ],
+    "family": "core",
+    "id": "core-1",
+    "lanes": [
+      "x-metrics-search",
+      "par-forest",
+      "par-forest-reg",
+      "par-forest-et-clf",
+      "par-reference-knn",
+      "par-reference-knn-reg"
+    ],
+    "patches": [
+      "core/sabotage/coverage_precise_msel_host_put.patch",
+      "core/sabotage/coverage_precise_msel_rebase_device.patch",
+      "core/sabotage/coverage_precise_shard_topk_merge_device.patch"
+    ]
+  },
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-search,par-forest,par-forest-reg,par-forest-et-clf,par-reference-knn,par-reference-knn-reg",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 70.29216287494637
+    },
+    {
+      "name": "clean-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-search,par-forest,par-forest-reg,par-forest-et-clf,par-reference-knn,par-reference-knn-reg",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 62.81680062506348
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "core/sabotage/coverage_precise_msel_host_put.patch",
+        "core/sabotage/coverage_precise_msel_rebase_device.patch",
+        "core/sabotage/coverage_precise_shard_topk_merge_device.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.027750875102356076
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "core/sabotage/coverage_precise_msel_host_put.patch",
+        "core/sabotage/coverage_precise_msel_rebase_device.patch",
+        "core/sabotage/coverage_precise_shard_topk_merge_device.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.024459791951812804
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_core",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_core",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/build/identical/_mojolearn_dev_core",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/build/identical/_mojolearn_dev_core/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 157.35703870805446,
+      "reused": false
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_core_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_core_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/build/host/_mojolearn_dev_core_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/build/host/_mojolearn_dev_core_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 47.98806133400649,
+      "reused": false
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-search,par-forest,par-forest-reg,par-forest-et-clf,par-reference-knn,par-reference-knn-reg",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 64.3827924579382
+    },
+    {
+      "name": "sab-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-search,par-forest,par-forest-reg,par-forest-et-clf,par-reference-knn,par-reference-knn-reg",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_device.json"
+      ],
+      "exit_code": 1,
+      "seconds": 26.568881375016645
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "core/sabotage/coverage_precise_shard_topk_merge_device.patch",
+        "core/sabotage/coverage_precise_msel_rebase_device.patch",
+        "core/sabotage/coverage_precise_msel_host_put.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.029077958082780242
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-search,par-forest,par-forest-reg,par-forest-et-clf,par-reference-knn,par-reference-knn-reg",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 56.434730624896474
+    },
+    {
+      "name": "restored-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-metrics-search,par-forest,par-forest-reg,par-forest-et-clf,par-reference-knn,par-reference-knn-reg",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 64.5952402909752
+    },
+    {
+      "name": "check-coverage-precise-core-msel_host_put-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-core-msel_host_put",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_cpu.json",
+        "--batch-bindings",
+        "build_core_host,build"
+      ],
+      "exit_code": 0,
+      "seconds": 0.16409012500662357
+    },
+    {
+      "name": "check-coverage-precise-core-msel_rebase_device-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-core-msel_rebase_device",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_device.json",
+        "--batch-bindings",
+        "build_core_host,build"
+      ],
+      "exit_code": 1,
+      "seconds": 0.14115854201372713
+    },
+    {
+      "name": "check-coverage-precise-core-shard_topk_merge_device-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-core-shard_topk_merge_device",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_device.json",
+        "--batch-bindings",
+        "build_core_host,build"
+      ],
+      "exit_code": 1,
+      "seconds": 0.1376835840055719
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_core",
+      "members": [
+        "_mojolearn"
+      ],
+      "sha256": "79b9a17927fd7195df3e89235dc2fa8058a55d83cd2ebaf5dcf58d9b5fb3470d",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/build/identical/_mojolearn_dev_core/_mojolearn_dev_core.so",
+      "original_path": ".development/f121ed416089ebf729ce88056d1ab6b386e32c30d1d4b34195a681614e6a66e9/_mojolearn_dev_core.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/.development/79b9a17927fd7195df3e89235dc2fa8058a55d83cd2ebaf5dcf58d9b5fb3470d/_mojolearn_dev_core.so",
+      "created": true
+    },
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_core_host",
+      "members": [
+        "_mojolearn_core_host"
+      ],
+      "sha256": "20822394a6e033d53f50dd343b2be4643b0c491b68ca808925f5d34ced5f1bf5",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/build/host/_mojolearn_dev_core_host/_mojolearn_dev_core_host.so",
+      "original_path": ".development/a60999f0a9e1151654c5bff02520da50ba818fb344f55436fbeed1cc6ec143e3/_mojolearn_dev_core_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/.development/20822394a6e033d53f50dd343b2be4643b0c491b68ca808925f5d34ced5f1bf5/_mojolearn_dev_core_host.so",
+      "created": true
+    }
+  ],
+  "baseline_composition": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/fixed-proof-baseline.json",
+  "checks": [
+    {
+      "arm": "coverage-precise-core-msel_host_put",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-core-msel_rebase_device",
+      "column": "device",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/oracle-review-coverage-precise-core-msel_rebase_device-device.json"
+    },
+    {
+      "arm": "coverage-precise-core-shard_topk_merge_device",
+      "column": "device",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/oracle-review-coverage-precise-core-shard_topk_merge_device-device.json"
+    }
+  ],
+  "passed": true,
+  "original_checks": [
+    {
+      "arm": "coverage-precise-core-msel_host_put",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-core-msel_rebase_device",
+      "column": "device",
+      "exit_code": 1
+    },
+    {
+      "arm": "coverage-precise-core-shard_topk_merge_device",
+      "column": "device",
+      "exit_code": 1
+    }
+  ],
+  "review_commands": [
+    [
+      "python3",
+      "tools/coverage_sabotage.py",
+      "check",
+      "--arm",
+      "coverage-precise-core-shard_topk_merge_device",
+      "--clean",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_device.json",
+      "--sabotaged",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_device.json",
+      "--restored",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_device.json",
+      "--evidence",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/oracle-review-coverage-precise-core-shard_topk_merge_device-device.json",
+      "--batch-bindings",
+      "build_core_host,build"
+    ],
+    [
+      "python3",
+      "tools/coverage_sabotage.py",
+      "check",
+      "--arm",
+      "coverage-precise-core-msel_rebase_device",
+      "--clean",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/clean_device.json",
+      "--sabotaged",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/sab_device.json",
+      "--restored",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/restored_device.json",
+      "--evidence",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/oracle-review-coverage-precise-core-msel_rebase_device-device.json",
+      "--batch-bindings",
+      "build_core_host,build"
+    ]
+  ]
+}

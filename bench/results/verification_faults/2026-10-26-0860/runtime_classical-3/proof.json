@@ -1,0 +1,61 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "runtime_classical-3",
+  "arms": [
+    {
+      "arm": "coverage-neighbors-knn_door",
+      "checks": [
+        {
+          "arm": "coverage-neighbors-knn_door",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "knn-clf",
+    "knn-reg",
+    "knn-clf-distance"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "cb816535cb1547ce09c5eb4ed1541822c8b735cb5384ec0f0d73faf5bc0d4ac9"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "635126b482d077d7d1be9087ea00d67f90b9d6de178b7202101c316b34131d75"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "9b696555c9cdb9c92c7363b25035d406fcbcc06d0f1a229a3ca7f218ecc7c4f5"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "3ec8ddd71bd86a13bd7b2eb23bf336c004a2f844c6f47cb5648894f490e270fe"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "c8093f86f12ecb1fe3b3da96c5eff959bfc1a982538c86a61390a88cd94c9c16"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "e0d2ad1a0539cace97ee10fa502bc4745ab8e081ea0848d0d2ce056de8404733"
+    },
+    "check-coverage-neighbors-knn_door-cpu.log": {
+      "path": "check-coverage-neighbors-knn_door-cpu.log",
+      "sha256": "ba1b35a55e0943f02c70130c0d474ae06ec8eaf3e3c0975153458cc36e407939"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3",
+  "r2_archive": "measurements/verification/0.8.60/runtime_classical-3-proof.tgz"
+}

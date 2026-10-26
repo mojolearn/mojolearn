@@ -1,0 +1,9 @@
+Collecting mojolearn-core==0.8.59
+  Downloading mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl.metadata (16 kB)
+Downloading mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl (27.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 27.0/27.0 MB 132.9 MB/s eta 0:00:00
+Saved /home/runner/work/_temp/forest-component/wheels/mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn-core
+
+[notice] A new release of pip is available: 25.0.1 -> 26.2.2
+[notice] To update, run: python -m pip install --upgrade pip

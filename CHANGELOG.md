@@ -4,6 +4,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- **Sharded forests.** A fresh process can fit a sharded forest directly from NumPy arrays, whether NumPy is imported before or after mojolearn.
+- **Split-wheel verification.** Distributed verification checks each native GPU payload against the installed package that owns it, including the NVIDIA PTX package.
+- **Verifier evidence.** Additional fault-injection proofs cover the expanded native verification lanes. Two-GPU checks on NVIDIA and AMD retain placement, consumed results and negative controls, with matching cross-vendor results.
+
 ## 0.8.59 (published 2026-10-26)
 
 - **Native parameter setup and arrays.** Estimator constructors and more `Array` operations enter compiled bindings directly. Nested parameter updates retain their validation and object lifetimes.

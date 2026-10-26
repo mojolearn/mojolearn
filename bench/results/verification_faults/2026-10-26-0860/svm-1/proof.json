@@ -1,0 +1,59 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "svm-1",
+  "arms": [
+    {
+      "arm": "coverage-precise-svm-svc_ovo_layout_host",
+      "checks": [
+        {
+          "arm": "coverage-precise-svm-svc_ovo_layout_host",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-neighbors-svc-multiclass"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "3856cb8c803cc8dbf8f66c9e2bb48ef94229446f98f5ad7243fb328d2fdbb583"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "949bee6107b678232164dd33ba674ee98cd362cd9a5f50d76517bff5676fec81"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "72193259633beb4512ec7091f1c9011f9a047f9cee8f404a552c05db05ceb629"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "ef088c81c4438b33a728401ea53deedca95d9a653946e7087bee4d7ba4c78acd"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "a47993a6ca0a76075a2785c2158d037174f432fc4278f5fe0ccec726e1181b92"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "91a07da7f4f6087939b8981054e36f2aaae6dff314a47326f2fe9fdc9b35afee"
+    },
+    "check-coverage-precise-svm-svc_ovo_layout_host-cpu.log": {
+      "path": "check-coverage-precise-svm-svc_ovo_layout_host-cpu.log",
+      "sha256": "570fe782749c07d54a0e46a42e1e636763c81a299ef3ce2609432925fe5f053b"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/svm-1",
+  "r2_archive": "measurements/verification/0.8.60/svm-1-proof.tgz"
+}

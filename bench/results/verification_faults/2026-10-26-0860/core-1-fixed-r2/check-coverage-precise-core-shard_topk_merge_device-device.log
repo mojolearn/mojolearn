@@ -1,0 +1,3 @@
+par-reference-knn/base: independent byte oracle caught the reviewed fault
+par-reference-knn-reg/base: independent byte oracle caught the reviewed fault
+ARM coverage-precise-core-shard_topk_merge_device CAUGHT

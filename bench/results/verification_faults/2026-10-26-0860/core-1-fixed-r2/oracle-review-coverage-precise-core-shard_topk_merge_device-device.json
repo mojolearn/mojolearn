@@ -1,0 +1,25 @@
+{
+  "arm": "coverage-precise-core-shard_topk_merge_device",
+  "records": {
+    "clean": "1b339294edc3eb6f9d0df0e6927c73481b2ef26af6502a3894a826e5c035fb45",
+    "sabotaged": "98a96b0300b20280b2ef2ffa6bb6c8f81774025dd4609bef6f529db92ac0f461",
+    "restored": "ea08aa165428b23f3b59a32af65478629f3260fa589d53f1793fc17bc0622d93"
+  },
+  "patch_sha256": "74e0dea256b1646adf3f3b2183c3083599e0fb9bb9a31c48c9f3af11da289aa8",
+  "oracles": {
+    "par-reference-knn/base": {
+      "product_check": "ReferenceShardedNeighbors distances compared byte-for-byte with plain neighbors",
+      "why_fault_reaches_check": "The device merge patch adds one ULP to each merged distance and flips the last neighbor index; the independent plain computation is untouched. The retained lane stops at the exact distance comparator (515/2048 bytes).",
+      "errors": [
+        "ReferenceShardedNeighbors distances and plain distances differ: 515 bytes of 2048"
+      ]
+    },
+    "par-reference-knn-reg/base": {
+      "product_check": "ReferenceShardedNeighbors regressor predictions compared byte-for-byte with plain predictions",
+      "why_fault_reaches_check": "The last merged neighbor index is deliberately flipped, changing consumed regression predictions. The independent plain regressor remains untouched; its exact comparator reports 216/256 differing bytes.",
+      "errors": [
+        "ReferenceShardedNeighbors predict and plain predict differ: 216 bytes of 256"
+      ]
+    }
+  }
+}

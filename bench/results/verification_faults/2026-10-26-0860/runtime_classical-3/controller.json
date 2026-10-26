@@ -1,0 +1,208 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-neighbors-knn_door": [
+        "knn-clf",
+        "knn-reg",
+        "knn-clf-distance"
+      ]
+    },
+    "arms": [
+      "coverage-neighbors-knn_door"
+    ],
+    "builds": [
+      "build_runtime_classical_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "runtime_classical",
+    "id": "runtime_classical-3",
+    "lanes": [
+      "knn-clf",
+      "knn-reg",
+      "knn-clf-distance"
+    ],
+    "patches": [
+      "neighbors/checks/sabotage/coverage_knn_door.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "knn-clf,knn-reg,knn-clf-distance",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 17.42188937496394
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "neighbors/checks/sabotage/coverage_knn_door.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.02388633298687637
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "neighbors/checks/sabotage/coverage_knn_door.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.020622916985303164
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_runtime_classical_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_runtime_classical_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/runtime_classical-3/build/host/_mojolearn_dev_runtime_classical_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/runtime_classical-3/build/host/_mojolearn_dev_runtime_classical_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 493.884847166948,
+      "reused": true
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "knn-clf,knn-reg,knn-clf-distance",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 15.478013916988857
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "neighbors/checks/sabotage/coverage_knn_door.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.020240374957211316
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "knn-clf,knn-reg,knn-clf-distance",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 69.5049940419849
+    },
+    {
+      "name": "check-coverage-neighbors-knn_door-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-neighbors-knn_door",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/restored_cpu.json",
+        "--batch-bindings",
+        "build_runtime_classical_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.1224465420236811
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_runtime_classical_host",
+      "members": [
+        "_mojolearn_runtime_classical_host"
+      ],
+      "sha256": "cd3973c99b92e43dd8e6512d62fa121c4e0f2e1361f5d10fd5ba8f52f5ba83b0",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-3/build/host/_mojolearn_dev_runtime_classical_host/_mojolearn_dev_runtime_classical_host.so",
+      "original_path": ".development/ab1935c48c30d6939c32ce2c019decc2c794d4dcbf2e797248f372ffc25073c6/_mojolearn_dev_runtime_classical_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/cd3973c99b92e43dd8e6512d62fa121c4e0f2e1361f5d10fd5ba8f52f5ba83b0/_mojolearn_dev_runtime_classical_host.so",
+      "created": true
+    }
+  ],
+  "reused_fault_compilation": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/runtime_classical-3",
+      "receipt_sha256": "120adc1c76c86cf67f80c2eee67c9ef2b7c73d474ba5087f339c6e14efa6c720",
+      "source_sha256": "3ec8ddd71bd86a13bd7b2eb23bf336c004a2f844c6f47cb5648894f490e270fe"
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-neighbors-knn_door",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

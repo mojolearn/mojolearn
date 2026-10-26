@@ -1,0 +1,118 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "verdict": "CAUGHT",
+  "batch": "core-1-fixed-r2",
+  "arms": [
+    {
+      "arm": "coverage-precise-core-msel_host_put",
+      "checks": [
+        {
+          "arm": "coverage-precise-core-msel_host_put",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-msel_rebase_device",
+      "checks": [
+        {
+          "arm": "coverage-precise-core-msel_rebase_device",
+          "column": "device",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/oracle-review-coverage-precise-core-msel_rebase_device-device.json"
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-shard_topk_merge_device",
+      "checks": [
+        {
+          "arm": "coverage-precise-core-shard_topk_merge_device",
+          "column": "device",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2/oracle-review-coverage-precise-core-shard_topk_merge_device-device.json"
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-metrics-search",
+    "par-forest",
+    "par-forest-reg",
+    "par-forest-et-clf",
+    "par-reference-knn",
+    "par-reference-knn-reg"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "f781df5cad39b83259188a1b4fe1ba717808fc4dc5950eb67b4c08a9840f5753"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "dcd52e1bec8c96b5bfaae1f74baa67288c6a5a96a10e01cd144f524f080da8d4"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "1b339294edc3eb6f9d0df0e6927c73481b2ef26af6502a3894a826e5c035fb45"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "9e2786d89eef121daa42fda6ee60bcae8e825b0f68d9a9b5aad1cdba6caf3fa3"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "e7a8b324dcd68dcc89a655ee4617beed0700b26804b56a9f0028a41264c86774"
+    },
+    "fixed-proof-baseline.json": {
+      "path": "fixed-proof-baseline.json",
+      "sha256": "16187d625bcbc3fca2e549967ffdce0e59750d5fcef08c7f0068c7067d102592"
+    },
+    "oracle-review-coverage-precise-core-msel_rebase_device-device.json": {
+      "path": "oracle-review-coverage-precise-core-msel_rebase_device-device.json",
+      "sha256": "43bfa62636d4f6bbedefab702195ab3c8328cd9e16832904f8c7f8955a69ae48"
+    },
+    "oracle-review-coverage-precise-core-shard_topk_merge_device-device.json": {
+      "path": "oracle-review-coverage-precise-core-shard_topk_merge_device-device.json",
+      "sha256": "ba85c0eefbb9050392bc54f3c0db6faf20b383904e72487e843dad720ab81654"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "3fc318e2783e1f0d8de06062c172a478b7ef903d5dbc86bc420caf702548e272"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "ea08aa165428b23f3b59a32af65478629f3260fa589d53f1793fc17bc0622d93"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "62e7a7199ed02e43288865ce62a5cd7812c40c607b93190e1d7ec3a7128eeeb0"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "98a96b0300b20280b2ef2ffa6bb6c8f81774025dd4609bef6f529db92ac0f461"
+    },
+    "check-coverage-precise-core-msel_host_put-cpu.log": {
+      "path": "check-coverage-precise-core-msel_host_put-cpu.log",
+      "sha256": "df10d49ed9ca4147479ea65782fd6de5a1c320a6d094dadd9cdde0965926c03c"
+    },
+    "check-coverage-precise-core-msel_rebase_device-device.log": {
+      "path": "check-coverage-precise-core-msel_rebase_device-device.log",
+      "sha256": "3ff7ff30dc8f8f624dc6b8629f425cab90138f69b1e4c021dbdc3e9eac0848f0"
+    },
+    "check-coverage-precise-core-shard_topk_merge_device-device.log": {
+      "path": "check-coverage-precise-core-shard_topk_merge_device-device.log",
+      "sha256": "b1dae63a4c1fe0cb352384a31612648937670200c13814d6b988c2dec62725e4"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-1-fixed-r2",
+  "r2_archive": "measurements/verification/0.8.60/core-1-fixed-r2-proof.tgz"
+}

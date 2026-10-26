@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-core-sequential_inputs_impl",
+  "records": {
+    "clean": "a4be46ccd8a17d7b20c4f936c380dc26c8453f9af019b05480a9523be99f472d",
+    "sabotaged": "979737289bdfbe258a44871a57a19e023be431d1756811d7d55da7e680c26d4e",
+    "restored": "82677590383d2c8236e19e7d1571526c651ad842ec553cf8cdef0025f404edca"
+  },
+  "patch_sha256": "700108ae44e7dd9a499e134dadc5204d40ae4f06c479b757802d471004b4e845",
+  "refusals": {
+    "classical-float16-sequences/base": {
+      "product_check": "_same_bytes: OLS coefficients from float16 row lists versus the identical float16 ndarray.",
+      "why_fault_reaches_check": "The native sequence_narrow_halves patch flips the low bit of every stored half during sequence conversion. List-of-half-row input reaches that conversion; the contiguous half ndarray provides the independent route. OLS coefficient bytes differ by 19 of 64 bytes. Both clean and exact restoration pass.",
+      "error": "ValueError: ols coef_ from a list of float16 rows and ols coef_ from a float16 ndarray differ: 19 bytes of 64\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 1228, in _\n    _same_bytes(f\"{tag} coef_ from a list of float16 rows\", coef,\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                f\"{tag} coef_ from a float16 ndarray\", np.asarray(whole.coef_, dtype=np.float64))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 2198, in _same_bytes\n    raise ValueError(message)\nValueError: ols coef_ from a list of float16 rows and ols coef_ from a float16 ndarray differ: 19 bytes of 64"
+    }
+  }
+}

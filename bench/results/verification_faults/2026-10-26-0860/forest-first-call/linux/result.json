@@ -1,0 +1,22 @@
+{
+  "schema": "mojolearn.targeted-host-component.v1",
+  "passed": true,
+  "exit_code": 0,
+  "cases": 4,
+  "native_source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "tooling_commit": "4a0603fb1f0bee104854850807f28f9927063c90",
+  "baseline_wheel_sha256": "534d8f4ffe07044a0133f5adf5b2dcbced389ca6e3019492225f95981083d92b",
+  "baseline_native_sha256": "c37d26955fc0fb2563ae74b665f86ec4339f8750ef71771b12741e810459de40",
+  "native_sha256": "b65680c7ffcefe47097acdf4dbb2a2309d7bf7bd57a4e14a16f410c853c9d452",
+  "native_members": [
+    "_mojolearn_tokenizer_host",
+    "_mojolearn_tsa_host",
+    "_mojolearn_arima_host",
+    "_mojolearn_forecast_host",
+    "_mojolearn_resample_host",
+    "_mojolearn_x_metrics_host"
+  ],
+  "host_proof_sha256": "f92f21b9ff2f9039aa36372faa23a30838d2a6937be7da358794c48f5bf8a66a",
+  "test_sha256": "26b64cfc440b8c3294fceee94b6c81e07b21f56b0eb37fa4ec40a503feb47b44",
+  "qualification": "Four fresh-process public CPU regressions with the separately compiled host component over an installed baseline. No final-wheel RECORD or GPU-runtime claim."
+}

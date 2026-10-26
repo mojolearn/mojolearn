@@ -1,0 +1,296 @@
+smoke	Set up job	﻿2026-10-26T22:59:09.6757527Z Current runner version: '2.338.0'
+smoke	Set up job	2026-10-26T22:59:09.6782384Z ##[group]Runner Image Provisioner
+smoke	Set up job	2026-10-26T22:59:09.6783204Z Hosted Compute Agent
+smoke	Set up job	2026-10-26T22:59:09.6783775Z Version: 20261021.618
+smoke	Set up job	2026-10-26T22:59:09.6784338Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+smoke	Set up job	2026-10-26T22:59:09.6785209Z Build Date: 2026-10-21T00:45:21Z
+smoke	Set up job	2026-10-26T22:59:09.6785856Z Worker ID: {7d927214-9746-4dbe-805c-310fb5d094d0}
+smoke	Set up job	2026-10-26T22:59:09.6786496Z Region: centralus
+smoke	Set up job	2026-10-26T22:59:09.6787000Z Cloud: Azure
+smoke	Set up job	2026-10-26T22:59:09.6787547Z ##[endgroup]
+smoke	Set up job	2026-10-26T22:59:09.6788987Z ##[group]Operating System
+smoke	Set up job	2026-10-26T22:59:09.6789599Z Ubuntu
+smoke	Set up job	2026-10-26T22:59:09.6790109Z 24.04.5
+smoke	Set up job	2026-10-26T22:59:09.6790566Z LTS
+smoke	Set up job	2026-10-26T22:59:09.6791063Z ##[endgroup]
+smoke	Set up job	2026-10-26T22:59:09.6791552Z ##[group]Runner Image
+smoke	Set up job	2026-10-26T22:59:09.6792099Z Image: ubuntu-24.04
+smoke	Set up job	2026-10-26T22:59:09.6792618Z Version: 20261012.334.1
+smoke	Set up job	2026-10-26T22:59:09.6793583Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+smoke	Set up job	2026-10-26T22:59:09.6795373Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+smoke	Set up job	2026-10-26T22:59:09.6796584Z ##[endgroup]
+smoke	Set up job	2026-10-26T22:59:09.6797707Z ##[group]GITHUB_TOKEN Permissions
+smoke	Set up job	2026-10-26T22:59:09.6799866Z Actions: read
+smoke	Set up job	2026-10-26T22:59:09.6800476Z Contents: read
+smoke	Set up job	2026-10-26T22:59:09.6800956Z Metadata: read
+smoke	Set up job	2026-10-26T22:59:09.6801511Z ##[endgroup]
+smoke	Set up job	2026-10-26T22:59:09.6803524Z Secret source: Actions
+smoke	Set up job	2026-10-26T22:59:09.6804409Z Cache mode: write
+smoke	Set up job	2026-10-26T22:59:09.6805481Z Prepare workflow directory
+smoke	Set up job	2026-10-26T22:59:09.7178882Z Prepare all required actions
+smoke	Set up job	2026-10-26T22:59:09.7250332Z Getting action download info
+smoke	Set up job	2026-10-26T22:59:09.9951050Z Download action repository 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683' (SHA:11bd71901bbe5b1630ceea73d27597364c9af683)
+smoke	Set up job	2026-10-26T22:59:10.1197863Z Download action repository 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+smoke	Set up job	2026-10-26T22:59:10.1859790Z Download action repository 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093' (SHA:d3f86a106a0bac45b974a628896c90dbdf5c8093)
+smoke	Set up job	2026-10-26T22:59:10.6737464Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+smoke	Set up job	2026-10-26T22:59:10.8587483Z Complete job name: smoke
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	﻿2026-10-26T22:59:10.9510404Z ##[group]Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9511900Z with:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9512423Z   persist-credentials: false
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9513011Z   repository: mojolearn/mojolearn
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9517182Z   token: ***
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9517665Z   ssh-strict: true
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9518163Z   ssh-user: git
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9518645Z   clean: true
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9519157Z   sparse-checkout-cone-mode: true
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9519736Z   fetch-depth: 1
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9520225Z   fetch-tags: false
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9520755Z   show-progress: true
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9521262Z   lfs: false
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9521735Z   submodules: false
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9522221Z   set-safe-directory: true
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:10.9523018Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7746037Z Syncing repository: mojolearn/mojolearn
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7747534Z ##[group]Getting Git version info
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7747999Z Working directory is '/home/runner/work/mojolearn/mojolearn'
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7748764Z [command]/usr/bin/git version
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7939018Z git version 2.55.0
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7958191Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7972627Z Temporarily overriding HOME='/home/runner/work/_temp/29d0b15b-149b-4d4d-8cd8-c212d17fefe5' before making global git config changes
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7974183Z Adding repository directory to the temporary git global config as a safe directory
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.7979046Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/mojolearn/mojolearn
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8030525Z Deleting the contents of '/home/runner/work/mojolearn/mojolearn'
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8035033Z ##[group]Initializing the repository
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8040317Z [command]/usr/bin/git init /home/runner/work/mojolearn/mojolearn
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8152048Z hint: Using 'master' as the name for the initial branch. This default branch name
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8153260Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8154389Z hint: to use in all of your new repositories, which will suppress this warning,
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8155393Z hint: call:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8155814Z hint:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8156400Z hint: 	git config --global init.defaultBranch <name>
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8157032Z hint:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8157680Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8158717Z hint: 'development'. The just-created branch can be renamed via this command:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8159491Z hint:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8159948Z hint: 	git branch -m <name>
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8160497Z hint:
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8161190Z hint: Disable this message with "git config set advice.defaultBranchName false"
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8166731Z Initialized empty Git repository in /home/runner/work/mojolearn/mojolearn/.git/
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8193877Z [command]/usr/bin/git remote add origin https://github.com/mojolearn/mojolearn
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8229535Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8230540Z ##[group]Disabling automatic garbage collection
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8234455Z [command]/usr/bin/git config --local gc.auto 0
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8261472Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8262278Z ##[group]Setting up auth
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8270575Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8298229Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8639207Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8668904Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8870345Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8905555Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8919340Z ##[group]Fetching the repository
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:13.8920393Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4a0603fb1f0bee104854850807f28f9927063c90:refs/remotes/origin/main
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8524651Z From https://github.com/mojolearn/mojolearn
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8525739Z  * [new ref]           4a0603fb1f0bee104854850807f28f9927063c90 -> origin/main
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8529580Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8530332Z ##[group]Determining the checkout info
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8535877Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8541139Z [command]/usr/bin/git sparse-checkout disable
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8592214Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8619359Z ##[group]Checking out the ref
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:33.8645979Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.0689864Z Updating files:  36% (13187/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.0840833Z Updating files:  37% (13417/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.0914186Z Updating files:  38% (13779/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1057562Z Updating files:  39% (14142/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1319036Z Updating files:  40% (14504/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1456008Z Updating files:  41% (14867/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1547856Z Updating files:  42% (15230/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1629418Z Updating files:  43% (15592/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1715148Z Updating files:  44% (15955/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1800627Z Updating files:  45% (16317/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1871673Z Updating files:  46% (16680/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.1942843Z Updating files:  47% (17043/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.2029360Z Updating files:  48% (17405/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.2132386Z Updating files:  49% (17768/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.2453358Z Updating files:  50% (18130/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.3674097Z Updating files:  51% (18493/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.4056229Z Updating files:  52% (18856/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.4326605Z Updating files:  53% (19218/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.4588768Z Updating files:  54% (19581/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.4880948Z Updating files:  55% (19943/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.5175275Z Updating files:  56% (20306/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.5489804Z Updating files:  57% (20669/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.5760179Z Updating files:  58% (21031/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.6050112Z Updating files:  59% (21394/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.6344253Z Updating files:  60% (21756/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.6639679Z Updating files:  61% (22119/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.6931251Z Updating files:  62% (22482/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.7116353Z Updating files:  63% (22844/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.7300544Z Updating files:  64% (23207/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.8022250Z Updating files:  65% (23569/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.8139190Z Updating files:  66% (23932/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.8946350Z Updating files:  67% (24295/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:35.9597353Z Updating files:  67% (24390/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.0024581Z Updating files:  68% (24657/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.0244620Z Updating files:  69% (25020/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.0505439Z Updating files:  70% (25382/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.0729699Z Updating files:  71% (25745/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.0952568Z Updating files:  72% (26108/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.1161641Z Updating files:  73% (26470/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.1278682Z Updating files:  74% (26833/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.1542575Z Updating files:  75% (27195/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.2616495Z Updating files:  76% (27558/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.4392312Z Updating files:  77% (27921/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.4868056Z Updating files:  78% (28283/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.5996835Z Updating files:  79% (28646/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.6391990Z Updating files:  80% (29008/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.6591967Z Updating files:  81% (29371/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.6654589Z Updating files:  82% (29734/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.6808888Z Updating files:  83% (30096/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.7017731Z Updating files:  84% (30459/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.7194235Z Updating files:  85% (30821/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.7322518Z Updating files:  86% (31184/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.7554089Z Updating files:  87% (31547/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.7938711Z Updating files:  88% (31909/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.8162635Z Updating files:  89% (32272/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.8386176Z Updating files:  90% (32634/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.8575403Z Updating files:  91% (32997/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.8809002Z Updating files:  92% (33360/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.8919134Z Updating files:  93% (33722/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.9080740Z Updating files:  93% (33888/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.9238955Z Updating files:  94% (34085/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.9487107Z Updating files:  95% (34447/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.9647651Z Updating files:  96% (34810/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:36.9917579Z Updating files:  97% (35173/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.0085030Z Updating files:  98% (35535/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.0279128Z Updating files:  99% (35898/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.0280051Z Updating files: 100% (36260/36260)
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.0280791Z Updating files: 100% (36260/36260), done.
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3813997Z Switched to a new branch 'main'
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3818730Z branch 'main' set up to track 'origin/main'.
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3911983Z ##[endgroup]
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3953773Z [command]/usr/bin/git log -1 --format=%H
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3977121Z 4a0603fb1f0bee104854850807f28f9927063c90
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3989701Z ##[group]Removing auth
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.3991606Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.4020426Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.4234220Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.4259628Z http.https://github.com/.extraheader
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.4266349Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.4295161Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+smoke	Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:37.4496945Z ##[endgroup]
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	﻿2026-10-26T22:59:37.4788096Z ##[group]Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4788495Z with:
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4788701Z   python-version: 3.12
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4788915Z   check-latest: false
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4791267Z   token: ***
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4791472Z   update-environment: true
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4791713Z   allow-prereleases: false
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4791936Z   freethreaded: false
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.4792144Z ##[endgroup]
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.6287785Z ##[group]Installed versions
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.6374323Z (node:2334) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.6375164Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.6376245Z Successfully set up CPython (3.12.15)
+smoke	Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:37.6377174Z ##[endgroup]
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	﻿2026-10-26T22:59:37.6555610Z ##[group]Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6556040Z with:
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6556258Z   name: host-build
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6556461Z   run-id: 40413024743
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6558765Z   github-token: ***
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6558973Z   path: host-build
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6559183Z   merge-multiple: false
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6559414Z   repository: mojolearn/mojolearn
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6559650Z env:
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6559896Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6560334Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6560739Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6561104Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6561475Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6561835Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.6562180Z ##[endgroup]
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.8113861Z Downloading single artifact
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.8182923Z (node:2342) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.8184148Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:37.8920542Z (node:2342) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:38.1707040Z Preparing to download the following artifacts:
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:38.1708239Z - host-build (ID: 12694793060, Size: 45755927, Expected Digest: sha256:5b4f0df2c86092c3f33c2bbc8da2e760738318c4076b68c856fe2261e64e98ba)
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:38.1743009Z Downloading artifact '12694793060' from 'mojolearn/mojolearn'
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:38.3874593Z Redirecting to blob download url: https://productionresultssa19.blob.core.windows.net/actions-results/b8a57515-cc62-461a-95aa-72360c80f023/workflow-job-run-7f9dc9d8-b427-5915-a71d-525d358fd422/artifacts/79d883e8e8651e4fd8c6b41475b38a6e6825f531488563c3569fce52fe8d21bc.zip
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:38.3876734Z Starting download of artifact to: /home/runner/work/mojolearn/mojolearn/host-build
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:38.5948486Z (node:2342) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:40.0967286Z SHA256 digest of downloaded artifact is 5b4f0df2c86092c3f33c2bbc8da2e760738318c4076b68c856fe2261e64e98ba
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:40.0967899Z Artifact download completed successfully.
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:40.0968191Z Total of 1 artifact(s) downloaded
+smoke	Run actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093	2026-10-26T22:59:40.0972509Z Download artifact has finished successfully
+smoke	Test only the changed public forest boundary	﻿2026-10-26T22:59:40.1704657Z ##[group]Run python3 tools/qualify_forest_host_component.py \
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.1705430Z [36;1mpython3 tools/qualify_forest_host_component.py \[0m
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.1705881Z [36;1m  --host-build host-build --source-commit "$SOURCE_COMMIT" \[0m
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.1706402Z [36;1m  --baseline-version "$BASELINE_VERSION" --baseline-sha256 "$BASELINE_SHA256" \[0m
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.1707001Z [36;1m  --out "$RUNNER_TEMP/forest-component" > "$RUNNER_TEMP/forest-component-controller.log" 2>&1[0m
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4800875Z shell: /usr/bin/bash -e {0}
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4801470Z env:
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4801950Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4802854Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4803366Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4803749Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4804123Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4804555Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4805170Z   SOURCE_COMMIT: 04af3a7565a4d418eaebdebb55655e05ef212001
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4805482Z   BASELINE_VERSION: 0.8.59
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4805869Z   BASELINE_SHA256: 534d8f4ffe07044a0133f5adf5b2dcbced389ca6e3019492225f95981083d92b
+smoke	Test only the changed public forest boundary	2026-10-26T22:59:40.4806269Z ##[endgroup]
+smoke	Retain complete test logs and provenance	﻿2026-10-26T22:59:56.1895333Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1895751Z with:
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1895974Z   name: forest-component-smoke
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1897135Z   path: /home/runner/work/_temp/forest-component-controller.log
+smoke	Retain complete test logs and provenance	/home/runner/work/_temp/forest-component/*.log
+smoke	Retain complete test logs and provenance	/home/runner/work/_temp/forest-component/*.exit
+smoke	Retain complete test logs and provenance	/home/runner/work/_temp/forest-component/*.json
+smoke	Retain complete test logs and provenance	/home/runner/work/_temp/forest-component/*.xml
+smoke	Retain complete test logs and provenance	/home/runner/work/_temp/forest-component/test_parallel_forest_first_call.py
+smoke	Retain complete test logs and provenance	
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1898302Z   if-no-files-found: warn
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1898532Z   compression-level: 6
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1898745Z   overwrite: false
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1898962Z   include-hidden-files: false
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1899187Z env:
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1899433Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1899915Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1900326Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1900743Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1901110Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1901478Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.1901784Z ##[endgroup]
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3493519Z (node:2492) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3494705Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3609622Z Multiple search paths detected. Calculating the least common ancestor of all paths
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3611576Z The least common ancestor is /home/runner/work/_temp. This will be the root directory of the artifact
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3612966Z With the provided path, there will be 12 files uploaded
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3614002Z Artifact name is valid!
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.3614527Z Root directory input is valid!
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.6448651Z Beginning upload of artifact content to blob storage
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.7338846Z (node:2492) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.9114065Z Uploaded bytes 4389
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.9621827Z Finished uploading artifact content to blob storage!
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.9622729Z SHA256 digest of uploaded artifact zip is 07672067d6717f88d5167b52c1bfd0f686db46cec190c51f3d700ba01bad3431
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:56.9625091Z Finalizing artifact upload
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:57.3655134Z Artifact forest-component-smoke.zip successfully finalized. Artifact ID 12694858724
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:57.3656376Z Artifact forest-component-smoke has been successfully uploaded! Final size is 4389 bytes. Artifact ID is 12694858724
+smoke	Retain complete test logs and provenance	2026-10-26T22:59:57.3662446Z Artifact download URL: https://github.com/mojolearn/mojolearn/actions/runs/40416513888/artifacts/12694858724
+smoke	Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	﻿2026-10-26T22:59:57.3914464Z Post job cleanup.
+smoke	Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:57.5074031Z (node:2504) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke	Post Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065	2026-10-26T22:59:57.5074871Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	﻿2026-10-26T22:59:57.5226145Z Post job cleanup.
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6149320Z [command]/usr/bin/git version
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6197253Z git version 2.55.0
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6249559Z Temporarily overriding HOME='/home/runner/work/_temp/432102ef-f105-44cf-af5f-a964ff40d35b' before making global git config changes
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6251265Z Adding repository directory to the temporary git global config as a safe directory
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6256898Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/mojolearn/mojolearn
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6316183Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6359537Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6710182Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+smoke	Post Run actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683	2026-10-26T22:59:57.6759658Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+smoke	Complete job	﻿2026-10-26T22:59:57.7243837Z Cleaning up orphan processes
+smoke	Complete job	2026-10-26T22:59:57.7569397Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683, actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

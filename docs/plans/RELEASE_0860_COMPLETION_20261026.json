@@ -273,9 +273,75 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-core-sequential_inputs_impl",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/runtime_classical-2/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-msel_host_put",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/core-1-fixed-r2/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-msel_rebase_device",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/core-1-fixed-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-shard_topk_merge_device",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/core-1-fixed-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-neighbors-knn_door",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/runtime_classical-3/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-svm-svc_ovo_layout_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/svm-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 27,
+  "remaining_declared_fault_arms": 21,
   "verifier_findings": [
     {
       "id": "reviewed-independent-oracles",
@@ -300,7 +366,7 @@
     },
     {
       "id": "parallel-forest-first-native-numpy-call",
-      "status": "cpu-and-apple-repair-proven-linux-pending",
+      "status": "fixed-and-qualified-cpu-apple-linux",
       "scope": [
         "core-1",
         "rf-2"
@@ -311,7 +377,9 @@
         "python/mojolearn/tests/test_parallel_forest_first_call.py"
       ],
       "evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/forest-first-call-baseline-r2.log",
-      "proof": "bench/results/verification_faults/2026-10-26-0860/forest-first-call/proof.json"
+      "proof": "bench/results/verification_faults/2026-10-26-0860/forest-first-call/proof.json",
+      "linux_proof": "bench/results/verification_faults/2026-10-26-0860/forest-first-call/linux/result.json",
+      "r2_archive": "measurements/verification/0.8.60/linux-forest-component.tgz"
     },
     {
       "id": "split-wheel-verifier-record-ownership",
