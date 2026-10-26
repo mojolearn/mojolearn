@@ -74,6 +74,26 @@ def _worker_snapshot(root, request):
     result = dict(schema=SCHEMA, revision=_git(root, "rev-parse", "HEAD"))
     facts = rr.tree_facts(root) if request.get("compile") or request.get("lanes") else None
     result["bindings"] = []
+    if request.get("identity_scope") or request.get("lanes"):
+        import lane_applicability as applicability
+        import verify_lanes
+        columns = {vendor: verify_lanes.PASS_COLUMN[backend] for vendor, backend in
+                   (("apple", "metal"), ("nvidia", "cuda"), ("amd", "hip"), ("cpu", "cpu"))}
+        scoped = {}
+        for lane, scope in applicability.scopes().items():
+            applicable = {vendor: scope.applicable(column) for vendor, column in columns.items()}
+            scoped[lane] = dict(kind=scope.kind, claim_devices=scope.claim_devices,
+                oracle=scope.oracle, anchor=scope.anchor,
+                required_columns=[v for v in ("apple", "nvidia", "amd", "cpu") if applicable[v][0]],
+                excluded={v: reason for v, (ok, reason) in applicable.items() if not ok},
+                separate_requirements=(["multi-gpu-nvidia", "multi-gpu-amd"] if scope.claim_devices >= 2 else []))
+        paths = ["tools/lane_applicability.py", "tools/lane_select.py", "tools/verify_lanes.py",
+                 "tools/identity_break.py", "python/mojolearn/host_surface.py"]
+        paths += [str(p.relative_to(root)) for p in (root / "tools/identity_lanes").glob("*.py")]
+        proof = dict(schema="mojolearn.release-identity-applicability.v1", source_revision=result["revision"],
+                     columns=columns, lanes=scoped, sources={p: _file_hash(root, p) for p in sorted(paths)})
+        proof["digest"] = digest(proof)
+        result["identity_scope"] = proof
     if facts:
         # Only identical is authorized. Host bindings are included by bindings().
         for target in (rr.LINUX, rr.MACOS):
@@ -522,6 +542,11 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
             expanded.append(_unit(spec, recipe.get("id", "unmapped"), resolved,
                 list(sources) + recipe.get("source_inputs", []), missing, coverage))
             expanded[-1]["dependency_limitations"] = limitations
+            if kind == "identity" and "identity_scope" in snapshot:
+                scope = identity_unit_scope(snapshot["identity_scope"], lane_ids[0], vendor)
+                expanded[-1]["dependency_provenance"] = dict(identity_applicability=scope)
+                if not scope["applicable"]:
+                    expanded[-1]["required"] = False
     result = copy.deepcopy(catalog)
     result["requirements"] = expanded
     result["dependency_provenance"] = dict(schema=SCHEMA, source_revision=snapshot["revision"])
@@ -530,6 +555,48 @@ def expand_catalog(root, revision, catalog, configuration=None, *, log_dir=None)
     ids = [s["id"] for s in expanded]
     if len(ids) != len(set(ids)):
         raise ValueError("duplicate dependency unit IDs")
+    return result
+
+
+def identity_unit_scope(snapshot, lane, vendor):
+    """Scope annotation is provenance, never a rewritten compilation/identity input."""
+    row = snapshot["lanes"][lane]
+    return dict(schema=snapshot["schema"], source_revision=snapshot["source_revision"], lane=lane,
+                vendor=vendor, kind=row["kind"], claim_devices=row["claim_devices"],
+                oracle=row["oracle"], anchor=row["anchor"], required_columns=row["required_columns"],
+                applicable=vendor in row["required_columns"], excluded=row["excluded"],
+                separate_requirements=row["separate_requirements"], snapshot_digest=snapshot["digest"])
+
+
+@lru_cache(maxsize=32)
+def identity_scope_snapshot(root, revision, log_dir=None):
+    return frozen_snapshot(root, revision, dict(identity_scope=True), log_dir=log_dir)["identity_scope"]
+
+
+def scope_identity_manifest(root, manifest, *, log_dir=None):
+    """Reconcile old catalogs without altering any original run or input fingerprint.
+
+    Multi-device lanes remain linked to the existing separate multi-GPU gates;
+    their single-device identity units cannot qualify those separate claims.
+    """
+    result = copy.deepcopy(manifest)
+    scope = identity_scope_snapshot(str(Path(root).resolve()), manifest["source_revision"], str(log_dir) if log_dir else None)
+    for wanted in result["requirements"].values():
+        if wanted.get("kind") != "identity":
+            continue
+        unit = wanted["inputs"]["unit"]
+        if len(unit.get("lanes", [])) != 1 or unit["lanes"][0] not in scope["lanes"]:
+            raise ValueError("identity scope has no exact lane declaration")
+        before = wanted["fingerprint"]
+        annotation = identity_unit_scope(scope, unit["lanes"][0], unit["vendor"])
+        wanted["dependency_provenance"] = dict(wanted.get("dependency_provenance", {}), identity_applicability=annotation)
+        if not annotation["applicable"]:
+            wanted["required"] = False
+        if wanted["fingerprint"] != before or digest(wanted["inputs"]) != before:
+            raise ValueError("applicability reconciliation changed identity inputs")
+    # These links describe a separate two-device proposition. Preserve the
+    # catalog's existing gate policy; source scoping does not reopen deferred
+    # multi-GPU/sabotage campaigns or manufacture a publication prerequisite.
     return result
 
 

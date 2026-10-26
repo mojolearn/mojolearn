@@ -324,8 +324,24 @@ def ptx_required(wanted):
         key.split("/")[1:3] == ["cuda", "sm_80"] for key in environment.get("bindings", {}))
 
 
+def unit_scope(wanted):
+    from release_requirement_dependencies import identity_scope_snapshot, identity_unit_scope
+    source = wanted["source_revision"]
+    snapshot = identity_scope_snapshot(str(ROOT), source)
+    lane, vendor = unit_lane(wanted), wanted["inputs"]["unit"]["vendor"]
+    require(lane in snapshot["lanes"], "frozen applicability has no identity lane: " + str(lane))
+    actual = identity_unit_scope(snapshot, lane, vendor)
+    claimed = wanted.get("dependency_provenance", {}).get("identity_applicability")
+    require(claimed is None or claimed == actual, "identity applicability annotation differs from the frozen source")
+    return actual
+
+
 def required_classes(wanted):
-    return GPU_CLASSES + ("cpu",) + ((PTX_CLASS,) if ptx_required(wanted) else ())
+    scope = unit_scope(wanted)
+    require(scope["applicable"], "identity unit is inapplicable on this column; "
+            + scope["excluded"].get(wanted["inputs"]["unit"]["vendor"], "separate device claim"))
+    classes = tuple(scope["required_columns"])
+    return classes + ((PTX_CLASS,) if ptx_required(wanted) and "nvidia" in classes else ())
 
 
 # ------------------------------------------------------------------ derivation
@@ -340,13 +356,32 @@ def _parts(cells):
     return [p for p in ALL_PARTS if p in found]
 
 
-def derive(lane, records, own, *, ptx, declared_gpu_only):
+def derive(lane, records, own, *, ptx, declared_gpu_only, host_only=False):
     """Per-slot agreement for one lane from parsed records keyed by device class.
 
     Returns (contract, column, counts, problems); contract and column are
     (expected, completed) over every (fixture, part) slot.
     """
     v = _vref()
+    if host_only:
+        require(own == "cpu" and set(records) == {"cpu"}, "host-only identity requires exactly its CPU column")
+        counts = dict(slots=0, numerical=0, declared_na=0, cpu_declared_na=0, contract_agree=0, column_agree=0)
+        problems = []
+        record = records["cpu"]
+        for fixture in sorted(record["fixtures"]):
+            key = f"{lane}/{fixture}"
+            cell = record["cells"].get(key)
+            for part in _parts([cell]):
+                counts["slots"] += 1
+                value = v._part_value(cell, part) if isinstance(cell, dict) else None
+                ok = value is not None
+                if ok:
+                    counts["declared_na" if value.startswith("n/a:") else "numerical"] += 1
+                else:
+                    problems.append(f"{key}/{part}: CPU host-route result is unusable")
+                counts["contract_agree"] += ok
+                counts["column_agree"] += ok
+        return counts, sorted(problems)
     gpu_records = [records[c] for c in GPU_CLASSES]
     fixtures = sorted(gpu_records[0]["fixtures"])
     for name, record in records.items():
@@ -506,7 +541,10 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
         detail_records[cls] = dict(ref, label=record.get("vendor"), platform=record.get("platform"))
     declared = gpu_only(lane, source)
     require(report.get("gpu_only") is declared, "harness GPU-only declaration differs from the frozen source")
-    counts, problems = derive(lane, records, vendor, ptx=PTX_CLASS in wanted_classes, declared_gpu_only=declared)
+    scope = unit_scope(wanted)
+    host_only = wanted_classes == ("cpu",)
+    counts, problems = derive(lane, records, vendor, ptx=PTX_CLASS in wanted_classes,
+                              declared_gpu_only=declared, host_only=host_only)
     proof_path, proof_hash = receipts._producer_stamp(requirement_id, wanted, report_path, provenance)
     proof_ref = dict(path=str(proof_path), sha256=proof_hash); refs.append(proof_ref)
     slots = counts["slots"]
@@ -518,6 +556,9 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
     ok = all(row["status"] == "passed" for row in rows)
     detail = dict(lane=lane, column=vendor, target=environment["target"], ptx_required=PTX_CLASS in wanted_classes,
                   launch_phase=launch["phase"], gpu_only_declared=declared, counts=counts,
+                  applicability=scope,
+                  comparison=("CPU-only host-route observation; no GPU arithmetic or cross-GPU comparison claim"
+                              if host_only else "bitwise agreement across applicable execution routes"),
                   problems=problems[:50], problem_count=len(problems), records=detail_records)
     if revision_detail:
         detail["revisions"] = revision_detail
@@ -532,7 +573,7 @@ def producer_payload(requirement_id, wanted, report_path, provenance):
 # ------------------------------------------------------------------ commands
 def identity_units(doc, vendor=None):
     for name, wanted in doc["requirements"].items():
-        if wanted.get("kind") == "identity" and supports_requirement(wanted):
+        if wanted.get("kind") == "identity" and wanted.get("required") is not False and supports_requirement(wanted):
             if vendor is None or wanted["inputs"]["unit"]["vendor"] == vendor:
                 yield name, wanted
 

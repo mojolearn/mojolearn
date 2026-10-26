@@ -17,6 +17,7 @@ import test_release_identity_evidence as fixtures
 def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(G, 'source_preflight', lambda root, source: source)
     monkeypatch.setattr(G, 'applicability', lambda root, vendor, source: {})
+    monkeypatch.setattr(E, 'unit_scope', fixtures.synthetic_scope)
     monkeypatch.setattr(E, 'declarations', lambda revision: (frozenset(), ()))
     ledger = fixtures.ledger_with(tmp_path / 'ledger')
     root = tmp_path / 'tree'
