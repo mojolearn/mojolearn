@@ -10,6 +10,7 @@ schema proof (tools/native_full_reset_constructor_schemas.json) pins the
 complete original write sequence independently.
 """
 import array
+import importlib
 import inspect
 import json
 from pathlib import Path
@@ -17,10 +18,14 @@ from pathlib import Path
 import pytest
 
 import mojolearn as ml
-from mojolearn._native_full_reset_params import _CLASSES, _CONTEXT
+from mojolearn._native_full_reset_params import _CLASSES as _EAGER, _CONTEXT, _DEFERRED_MODULES
 from mojolearn import _native_declared_constructors as _declared
 from mojolearn._verify_native_runtime import audit_native_call
 
+# The NumPy-backed owners connect when their module loads (connect_module);
+# importing them here covers all 77.
+_CLASSES = _EAGER + tuple(getattr(importlib.import_module('mojolearn.' + module), name)
+                          for module, names in _DEFERRED_MODULES.items() for name in names)
 PROOF = Path(__file__).resolve().parents[3] / 'tools/native_full_reset_constructor_schemas.json'
 CONTEXTS = {cls: _CONTEXT for cls in _CLASSES} | {cls: _declared._CONTEXT for cls in _declared._CLASSES}
 OWNERS = tuple(CONTEXTS)
