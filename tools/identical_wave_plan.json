@@ -286,7 +286,7 @@
       "arms": [
         "on"
       ],
-      "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against source portable_float64, <=1ULP."
+      "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against a float64 NumPy reference, <=1ULP."
     },
     {
       "id": "eigh_block_expected_refusal",

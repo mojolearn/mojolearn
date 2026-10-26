@@ -1864,7 +1864,7 @@ FAMILIES = (
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
-            "normal_init_f32", "adam_hyper_f64",
+            "normal_init_f32",
             "first_seen_i32", "strat_fold_assign_i32",
             "strat_alloc_i64",
             "group_fold_assign_i32",

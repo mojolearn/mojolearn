@@ -47,7 +47,6 @@ from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
 from core.hotpath_impl_rows import (
-    adam_hyper_f64,
     assign_fold_i64,
     bincount2_i32,
     bincount_i64,
@@ -636,24 +635,8 @@ def normal_init_f32_binding(
     return PythonObject(r)
 
 
-def adam_hyper_f64_binding(
-    dst_addr: PythonObject, step0: PythonObject, nsteps: PythonObject, fp: PythonObject,
-) raises -> PythonObject:
-    """The Adam / AdamW hyper block of steps step0, step0 + 1, ... (nsteps
-    rows of 9 float64): [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd,
-    decoupled, 1 - lr wd] with bc = 1 - beta ** step. fp = [lr, b1, b2, eps,
-    wd, decoupled]."""
-    var s0 = Int(py=step0)
-    var ns = Int(py=nsteps)
-    if s0 < 1 or ns < 0:
-        # argument check before the fp words are read, as before the move
-        raise Error("adam_hyper_f64: step0 >= 1, nsteps >= 0")
-    return PythonObject(
-        adam_hyper_f64(
-            Int(py=dst_addr), s0, ns, Float64(py=fp[0]), Float64(py=fp[1]), Float64(py=fp[2]),
-            Float64(py=fp[3]), Float64(py=fp[4]), Float64(py=fp[5]),
-        )
-    )
+# TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/adam_hyper_f64.patch
 
 
 def first_seen_i32_binding(

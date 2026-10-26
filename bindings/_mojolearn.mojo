@@ -131,7 +131,6 @@ from bindings.hotpath_helpers import (
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
-    adam_hyper_f64_binding,
     strat_alloc_i64_binding,
     group_fold_assign_i32_binding,
     strat_group_plan_i32_binding,
@@ -2143,7 +2142,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
         m.def_function[normal_init_f32_binding]("normal_init_f32")
-        m.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
+        # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/adam_hyper_f64.patch
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
         m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
