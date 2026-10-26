@@ -6,6 +6,8 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
+
 spec = importlib.util.spec_from_file_location("adapter_wheel_smoke", Path(__file__).with_name("adapter_wheel_smoke.py"))
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
@@ -48,14 +50,63 @@ def test_require_turns_an_absent_framework_into_a_failure(tmp_path):
     assert (code, report["status"]) == (1, "FAILED")
 
 
+#: the [torch]/[max] extras as an installed wheel's metadata lists them (setuptools orders the specifiers)
+EXTRAS = dict(torch=["torch<2.14,>=2.13", "onnx>=1.18", "onnxscript>=0.5"], max=["max==26.5.0"],
+              numpy=["numpy>=1.26.4"])
+
+
 def test_install_uses_the_index_the_registration_was_built_against():
-    cmds = smoke.install_commands("py", ADAPTERS, ["torch", "max"])
+    cmds = smoke.install_commands("py", ADAPTERS, ["torch", "max"], EXTRAS)
     assert cmds["install-torch"][-4:] == ["--index-url", "https://download.pytorch.org/whl/rocm7.2",
                                           "--extra-index-url", "https://pypi.org/simple"]
-    assert "torch>=2.13,<2.14" in cmds["install-torch"]
+    assert "torch<2.14,>=2.13" in cmds["install-torch"]
     assert cmds["install-max"][-1] == "max==26.5.0"
     pypi = dict(ADAPTERS, torch=dict(ADAPTERS["torch"], index_url="https://pypi.org/simple"))
-    assert "--index-url" not in smoke.install_commands("py", pypi, ["torch"])["install-torch"]
+    assert "--index-url" not in smoke.install_commands("py", pypi, ["torch"], EXTRAS)["install-torch"]
+
+
+def test_install_is_the_users_extra_with_onnx_and_test_dependencies():
+    # 0.8.57 gate-apple: the venv got only the torch pin, so torch.onnx.export found no onnx
+    cmd = smoke.install_commands("py", ADAPTERS, ["torch"], EXTRAS, test_deps={"torch": ("torchvision",)})["install-torch"]
+    i = cmd.index("install") + 2
+    assert cmd[i:i + 4] == ["torch<2.14,>=2.13", "onnx>=1.18", "onnxscript>=0.5", "torchvision"]
+    assert "numpy>=1.26.4" not in cmd
+
+
+def test_install_refuses_a_missing_or_disagreeing_extra():
+    with pytest.raises(ValueError, match=r"declares no \[torch\] extra"):
+        smoke.install_commands("py", ADAPTERS, ["torch"], dict(EXTRAS, torch=[]))
+    with pytest.raises(ValueError, match="does not carry the adapters' pin"):
+        smoke.install_commands("py", ADAPTERS, ["torch"], dict(EXTRAS, torch=["torch>=2.12", "onnx>=1.18"]))
+    with pytest.raises(ValueError, match=r"declares no \[max\] extra"):
+        smoke.install_commands("py", ADAPTERS, ["max"], None)
+
+
+def test_a_wheel_without_the_extra_fails_the_install(tmp_path):
+    code, report = verdict(tmp_path, dict(adapters=ADAPTERS, torch_importable=False, max_importable=False),
+                           "--install", "torch")
+    assert (code, report["status"]) == (1, "FAILED")
+    assert "declares no [torch] extra" in report["problems"][0]
+
+
+def test_the_probe_reads_the_installed_extras(tmp_path):
+    # the probe itself, in this interpreter: extras come from mojolearn-core on Linux, mojolearn on macOS
+    import subprocess
+    import sys
+    pkg = tmp_path / "site" / "mojolearn_core-9.9.9.dist-info"
+    pkg.mkdir(parents=True)
+    (pkg / "METADATA").write_text("Metadata-Version: 2.4\nName: mojolearn-core\nVersion: 9.9.9\n"
+                                  "Provides-Extra: torch\nRequires-Dist: torch>=2.13,<2.14; extra == \"torch\"\n"
+                                  "Requires-Dist: onnx>=1.18; extra == \"torch\"\n"
+                                  "Provides-Extra: max\nRequires-Dist: max==26.5.0; extra == \"max\"\n"
+                                  "Requires-Dist: mojolearn-nvidia==9.9.9\n\n")
+    env = dict(os.environ, PYTHONPATH=str(tmp_path / "site"))
+    facts = json.loads(subprocess.run([sys.executable, "-c", smoke.PROBE], env=env, capture_output=True,
+                                      text=True, check=True).stdout.splitlines()[-1])
+    assert facts["extras_distribution"] == "mojolearn-core", facts
+    assert facts["extras"]["max"] == ["max==26.5.0"]
+    assert facts["extras"]["torch"][1] == "onnx>=1.18"
+    assert smoke._requirement_key(facts["extras"]["torch"][0]) == smoke._requirement_key("torch>=2.13,<2.14")
 
 
 def test_the_loader_refusal_is_recognized(tmp_path):

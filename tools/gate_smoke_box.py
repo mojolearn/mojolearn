@@ -92,6 +92,10 @@ def gate_verdict(state):
 TORCH_INTEROP = ("import-torch-smoke", "real-model-smoke")
 #: pytest -k expression deselecting the torchvision interop tests inside native autograd entries
 TORCH_INTEROP_TESTS = "not test_guide_import_pretrained"
+#: test-only packages installed with the [torch] extra: the interop entries' pretrained torchvision models
+TORCH_TEST_DEPENDENCIES = {"torch": ("torchvision",)}
+#: the ROCm runtime PyTorch's ROCm 7.2 wheels load (tools/amd_box_runtime_setup.sh installs it)
+AMD_TORCH_ROCM = "/opt/rocm-7.2.3/lib"
 
 
 def light_verdict(state):
@@ -241,9 +245,15 @@ class Gate:
 
     def setup_light(self):
         # Exact candidate installer, without bench_board's opponent environment.
-        # Torch/ONNX here are test dependencies for the importer probes; they
-        # are pinned by the shipped adapter manifest, never opponent versions.
+        # Torch, ONNX and onnxscript come from the installed wheel's own [torch] extra
+        # (what `pip install "mojolearn[torch]"` installs; checked against the shipped
+        # adapter manifest's pin), never opponent versions. torchvision is a test
+        # dependency only (real-model-smoke, test_guide_import_pretrained), resolved
+        # together with that torch.
         self.mark(phase="setup", status="running", setup_started=time.time())
+        if self.vendor == "amd" and self.adapters_on and not os.path.isdir(AMD_TORCH_ROCM):
+            raise RuntimeError("AMD box lacks the ROCm 7.2.3 runtime %s that the ROCm torch build needs; "
+                               "run tools/amd_box_runtime_setup.sh on the box first" % AMD_TORCH_ROCM)
         python = str(self.root / "venv/bin/python")
         manifest = str(self.out / "wheel-manifest.json")
         commands = [[sys.executable, "-m", "venv", str(self.root / "venv")]]
@@ -258,7 +268,7 @@ class Gate:
                        "--version", self.version, "--vendor", self.vendor, "--manifest", manifest,
                        "--dir", str(self.out / "wheels")]
         commands += [command, [python, "-m", "pip", "install", "--disable-pip-version-check",
-                               "numpy", "pytest", "onnx", "onnxscript"]]
+                               "numpy", "pytest"]]
         for command in commands:
             if self.launch_light(command, self.out / "logs/install.log"):
                 raise RuntimeError("light gate setup failed; see setup/logs/install.log")
@@ -267,9 +277,11 @@ class Gate:
         if self.launch_light([python, "-c", AW.PROBE], probe_log):
             raise RuntimeError("installed framework manifest probe failed")
         facts = json.loads(probe_log.read_text().splitlines()[-1])
-        installs = AW.install_commands(python, facts.get("adapters") or {}, ["torch"])
-        if "install-torch" not in installs:
-            raise RuntimeError("installed wheel lacks the Torch test dependency pin")
+        try:
+            installs = AW.install_commands(python, facts.get("adapters") or {}, ["torch"], facts.get("extras"),
+                                           test_deps=TORCH_TEST_DEPENDENCIES)
+        except ValueError as exc:
+            raise RuntimeError("installed wheel cannot install its Torch extra: %s" % exc)
         if self.launch_light(installs["install-torch"], self.out / "logs/install.log"):
             raise RuntimeError("pinned importer test dependency installation failed")
         self.mark(phase="setup", status="ready", python=python, wheel_manifest=manifest,

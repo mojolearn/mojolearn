@@ -9,8 +9,9 @@ tools/gate_smoke_box.py (gate-nvidia, gate-amd, ON the held box) and tools/relea
     venv     a FRESH venv (never the gate's measurement venv: its torch is the opponents' pinned build, the
              adapters are built against packaging/adapters/pins.json's) holding the gate's mojolearn wheels
     smoke    tools/adapter_wheel_smoke.py --install torch,max --require torch,max --device <vendor's device>:
-             the frameworks the shipped adapters.json names (Torch from its index: PyPI for CUDA and Metal, the
-             PyTorch ROCm 7.2 index for HIP), then the three whole-model phases torch-compile (models through
+             what `pip install "mojolearn[torch]"` / `[max]` installs (the installed wheel's own extras, on Linux
+             mojolearn-core's: torch with onnx and onnxscript, max), each holding the pin the shipped adapters.json
+             names (Torch from its index: PyPI for CUDA and Metal, the PyTorch ROCm 7.2 index for HIP), then the three whole-model phases torch-compile (models through
              torch.compile(backend="mojolearn"), bit for bit mojolearn.import_model's output), torch-training
              and max-training (torch.ops.mojolearn.train and MAX mojolearn_train/_resume, bit for bit
              mojolearn.Sequential's fit) on that device. No per-operation phase: the per-op surfaces were removed

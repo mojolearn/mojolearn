@@ -19,9 +19,11 @@ checkers against the SHIPPED files (mojolearn/.../_adapters/), never this tree's
 The adapters are whole-model only (Andrew, 2026-10-24): there is no per-operation
 phase, because there is no per-operation surface.
 
---install first pip-installs the framework releases the shipped adapters.json
-names (its `requirements`; Torch from the index it was built against, so the
-ROCm build on AMD) into VENV. A framework that does not import is recorded as
+--install first pip-installs what a user gets from `pip install "mojolearn[torch]"`
+/ `[max]` (on Linux the extras live on mojolearn-core): the installed wheel's own
+extra, which must carry the pin the shipped adapters.json names (its
+`requirements`); Torch from the index it was built against, so the ROCm build
+on AMD. A framework that does not import is recorded as
 absent, and one of another release than the adapters were built for is
 recorded as refused (the loader's designed answer): neither is a pass.
 --require makes an absent or refused framework a failure.
@@ -37,6 +39,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import signal
 import subprocess
 import sys
@@ -65,6 +68,33 @@ try:
                            paths={role: _shipped.path(role) for role in _shipped.FILES})
 except Exception as exc:
     out["adapters_error"] = "%s: %s" % (type(exc).__name__, exc)
+# The extras a user installs (`pip install "mojolearn[torch]"`; on Linux they live on mojolearn-core):
+# each extra's Requires-Dist lines without their markers, from the installed distribution's metadata.
+try:
+    try:
+        from packaging.requirements import Requirement
+    except ImportError:
+        from pip._vendor.packaging.requirements import Requirement
+    for dist in ("mojolearn-core", "mojolearn"):
+        try:
+            provided = md.metadata(dist).get_all("Provides-Extra") or []
+        except md.PackageNotFoundError:
+            continue
+        if not provided:
+            continue
+        extras = {}
+        for extra in provided:
+            picked = []
+            for line in md.requires(dist) or []:
+                r = Requirement(line)
+                if r.marker is not None and r.marker.evaluate({"extra": extra}) and not r.marker.evaluate({"extra": ""}):
+                    r.marker = None
+                    picked.append(str(r))
+            extras[extra] = picked
+        out["extras"], out["extras_distribution"] = extras, dist
+        break
+except Exception as exc:
+    out["extras_error"] = "%s: %s" % (type(exc).__name__, exc)
 print(json.dumps(out))
 '''
 
@@ -107,19 +137,37 @@ def probe(python, out):
         return {"probe_error": text[-5:]}
 
 
-def install_commands(python, adapters, wanted):
-    """The pip commands that install the framework releases the shipped manifest names."""
+def _requirement_key(text):
+    """(name, specifier set) of a requirement string, enough to compare a manifest pin with an extra's line."""
+    m = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(.*)", text.split(";", 1)[0])
+    name, spec = (m.group(1), m.group(2)) if m else (text, "")
+    return re.sub(r"[-_.]+", "-", name).lower(), frozenset(p.replace(" ", "") for p in spec.split(",") if p.strip())
+
+
+def install_commands(python, adapters, wanted, extras, test_deps=None):
+    """The pip commands that install what `pip install "mojolearn[<framework>]"` installs: the installed
+    wheel's own extra (EXTRAS, the probe's `extras`), checked against the pin the shipped adapters.json
+    names, plus TEST_DEPS[framework] (test-only packages such as torchvision) in the same resolve. Torch
+    comes from the index the adapters were built against (PyTorch's ROCm index on AMD, as the install
+    guide says), everything else from PyPI. Raises ValueError when the wheel declares no such extra or
+    the extra and the shipped manifest disagree."""
     reqs = adapters.get("requirements") or {}
     torch = adapters.get("torch") or {}
+    test_deps = test_deps or {}
     cmds = {}
-    if "torch" in wanted and reqs.get("torch"):
-        cmd = [python, "-m", "pip", "install", "--disable-pip-version-check", reqs["torch"]]
-        if torch.get("index_url") and "pypi.org" not in torch["index_url"]:
+    for w in ("torch", "max"):
+        if w not in wanted:
+            continue
+        listed = list((extras or {}).get(w) or [])
+        if not listed:
+            raise ValueError(f"the installed wheel declares no [{w}] extra; a user cannot install {w} through it")
+        if reqs.get(w) and _requirement_key(reqs[w]) not in {_requirement_key(r) for r in listed}:
+            raise ValueError(f"the installed [{w}] extra {listed} does not carry the adapters' pin {reqs[w]!r}")
+        cmd = [python, "-m", "pip", "install", "--disable-pip-version-check", *listed, *test_deps.get(w, ())]
+        if w == "torch" and torch.get("index_url") and "pypi.org" not in torch["index_url"]:
             # the backend's own index (PyTorch's ROCm wheels); dependencies still from PyPI
             cmd += ["--index-url", torch["index_url"], "--extra-index-url", "https://pypi.org/simple"]
-        cmds["install-torch"] = cmd
-    if "max" in wanted and reqs.get("max"):
-        cmds["install-max"] = [python, "-m", "pip", "install", "--disable-pip-version-check", reqs["max"]]
+        cmds["install-" + w] = cmd
     return cmds
 
 
@@ -157,7 +205,12 @@ def main(argv=None):
         report["problems"].append("the installed wheel carries no usable framework adapters: "
                                   + str(facts.get("adapters_error") or facts.get("probe_error")))
     else:
-        for name, cmd in install_commands(a.python, adapters, install).items():
+        try:
+            cmds = install_commands(a.python, adapters, install, facts.get("extras"))
+        except ValueError as exc:
+            cmds = {}
+            report["problems"].append("install: %s%s" % (exc, (" (%s)" % facts["extras_error"]) if facts.get("extras_error") else ""))
+        for name, cmd in cmds.items():
             report["phases"][name] = run(name, cmd, out, a.seconds)
             if report["phases"][name]["exit"] != 0:
                 report["problems"].append(f"{name} failed (exit {report['phases'][name]['exit']})")

@@ -101,13 +101,16 @@ def test_light_setup_installs_only_candidate_and_test_dependencies(tmp_path, mon
     (instance.out / "logs").mkdir(parents=True)
     instance.state = {}
     instance.vendor, instance.version, instance.source_commit = 'amd', '0.8.57', 'a' * 40
+    instance.adapters_on = True
+    monkeypatch.setattr(gate, 'AMD_TORCH_ROCM', str(tmp_path))  # the box's ROCm 7.2.3 runtime
     instance.candidate_wheels = ['/candidate/core.whl', '/candidate/amd.whl']
     instance.mark = lambda **fields: instance.state.update(fields)
     calls = []
     def launch(command, log):
         calls.append(command)
         if command[-1] == adapter_wheel_smoke.PROBE:
-            log.write_text(json.dumps({'adapters': {'requirements': {'torch': 'torch==2.13.0'}, 'torch': {}}}) + '\n')
+            log.write_text(json.dumps({'adapters': {'requirements': {'torch': 'torch==2.13.0'}, 'torch': {}},
+                                       'extras': {'torch': ['torch==2.13.0', 'onnx>=1.18', 'onnxscript>=0.5']}}) + '\n')
         return 0
     instance.launch_light = launch
     instance.B = SimpleNamespace(setup_python=lambda *args: pytest.fail('opponent setup invoked'))
@@ -115,8 +118,9 @@ def test_light_setup_installs_only_candidate_and_test_dependencies(tmp_path, mon
     assert len(calls) == 5
     assert calls[1].count('--wheel') == 2
     assert 'candidate_wheel_install.py' in calls[1][1]
-    assert calls[2][-4:] == ['numpy', 'pytest', 'onnx', 'onnxscript']
-    assert calls[-1][-1] == 'torch==2.13.0'
+    assert calls[2][-2:] == ['numpy', 'pytest']
+    # the user's [torch] extra (torch, onnx, onnxscript) plus torchvision as a test dependency
+    assert calls[-1][-4:] == ['torch==2.13.0', 'onnx>=1.18', 'onnxscript>=0.5', 'torchvision']
     assert instance.state['setup_elapsed_seconds'] >= 0
 
 
@@ -269,3 +273,13 @@ def test_partial_artifact_reuse_builds_only_changed_sources_and_preserves_origin
     assert artifacts.build(args) == 0 and len(compiled) == 10
     kept[0]["retained_artifact"]["manifest"]["compiler"]["sha256"] = "f" * 64
     assert not artifacts.retained_artifact_valid(doc, kept[0])
+
+
+def test_amd_light_setup_refuses_without_the_rocm_runtime_torch_needs(tmp_path, monkeypatch):
+    instance = object.__new__(gate.Gate)
+    instance.root, instance.out, instance.state = tmp_path, tmp_path / "setup", {}
+    instance.vendor, instance.adapters_on = 'amd', True
+    instance.mark = lambda **fields: instance.state.update(fields)
+    monkeypatch.setattr(gate, 'AMD_TORCH_ROCM', str(tmp_path / 'missing'))
+    with pytest.raises(RuntimeError, match='amd_box_runtime_setup.sh'):
+        instance.setup_light()
