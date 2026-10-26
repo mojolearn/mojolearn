@@ -1,5 +1,15 @@
 {
   "approved_by": "Andrew 2026-10-25/26 (ship gate: core; release-loop order)",
-  "reason": "0.8.58 ships on: identity re-recorded for the 61 changed or new lanes on Apple/NVIDIA/AMD/CPU + PTX (GPU device sets unchanged since 0.8.57, verified VERIFIED 0 divergent on NVIDIA and AMD build trees), release-light gates PASS on NVIDIA (adapters PASSED) and AMD (adapters off; AMD + PyTorch ROCm in one process is fixed in 0.8.59), macOS self-test and adapter smoke PASSED. Identity rows: the ledger selects all 570 lanes because the package __init__ changed; only lanes whose code changed were re-recorded. compile-apple: the final macOS wheel took host bytes from the bincache filled by the 78af017e2 pack (same Mojo tree). Runtime-per-vendor, multi-GPU, coverage-source, performance and published-install rows are run in the 0.8.59 verification loop.",
-  "prefixes": ["identity-", "runtime-", "multi-gpu-", "adapters-amd", "coverage-source", "performance-", "published-", "candidate-", "compile-apple/"]
+  "reason": "0.8.58 ships on: identity re-recorded for the 61 changed or new lanes on Apple/NVIDIA/AMD/CPU + PTX (GPU device sets unchanged since 0.8.57, verified VERIFIED 0 divergent on NVIDIA and AMD build trees), release-light gates PASS on NVIDIA (adapters PASSED) and AMD (adapters off; AMD + PyTorch ROCm in one process is fixed in 0.8.59), macOS self-test and adapter smoke PASSED. Identity rows: the ledger selects all 570 lanes because the package __init__ changed; only lanes whose code changed were re-recorded. compile-apple: the final macOS wheel took host bytes from the bincache filled by the 78af017e2 pack (same Mojo tree). Runtime-per-vendor, multi-GPU, coverage-source, performance and published-install rows are run in the 0.8.59 verification loop. adapters-apple/adapters-nvidia: the installed adapter smokes PASSED (macOS gate-apple; NVIDIA gate adapters=PASSED); the ledger adapters refuse the records (checker record shape, macOS wheel source witness) and are fixed in 0.8.59.",
+  "prefixes": [
+    "identity-",
+    "runtime-",
+    "multi-gpu-",
+    "coverage-source",
+    "performance-",
+    "published-",
+    "candidate-",
+    "compile-apple/",
+    "adapters-"
+  ]
 }
