@@ -10,6 +10,8 @@
 #      down refusal while busy, the watcher's delete when a pod stops answering
 #   3. tools/dev_pod.sh refusals: NVIDIA up without the central tool, and
 #      extend/down/run/sync of a shared pod key
+#   4. submit persists every job to R2 from the pod (tools/box_persist_run.sh): a fake S3
+#      (tools/test_box_persist.py --serve) on the Mac, reached from the containers at host.docker.internal
 # Needs docker and network (apt git; the pod's git tree fetches the merge base
 # from GitHub). Run it under one Mac slot:
 #   bash tools/mac_slot.sh run -- bash tools/test_nvidia_central.sh
@@ -23,6 +25,7 @@ bad() { echo "FAIL: $*"; FAILS=$((FAILS + 1)); }
 check() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
 waitfor() { local i=0; while [ $i -lt $1 ]; do eval "$2" && return 0; sleep 1; i=$((i + 1)); done; return 1; }
 cleanup() {
+    [ -z "${S3PID:-}" ] || kill "$S3PID" 2>/dev/null
     for p in $(cat "$W"/devpods/nvc*/deadman.pid 2>/dev/null); do pkill -P "$p" 2>/dev/null; kill "$p" 2>/dev/null; done
     docker rm -f $C1 $C2 > /dev/null 2>&1; rm -rf "$W"
 }
@@ -36,7 +39,7 @@ grep '^FAIL' "$W/box.log"
 echo "== 2. fake pods"
 for c in $C1 $C2; do
     docker run -d --name $c --cpus 1 ubuntu:22.04 sleep 7200 > /dev/null
-    docker exec $c bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq > /dev/null && apt-get install -y -qq git ca-certificates procps > /dev/null' \
+    docker exec $c bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq > /dev/null && apt-get install -y -qq git ca-certificates procps curl > /dev/null' \
         || { echo "apt failed in $c"; exit 1; }
 done
 # two GPUs on $C1 (the 2x pod), four would be the same code; a stand-in lease watchdog and key file on each
@@ -78,6 +81,13 @@ export MOJOLEARN_ORCHESTRATOR=1 PATH="$W/bin:$PATH" MOJOLEARN_DEVPOD_STATE="$W/d
     MOJOLEARN_NVC_NO_API=1 MOJOLEARN_NVC_DEVPOD="$W/fake_devpod.sh" MOJOLEARN_NVC_WATCH_FAKE_DELETE=1 NVC_WATCH_SECONDS=3 \
     NVC_STOCK_WAIT=0 NVC_STOCK_WAIT_1=0
 N="$ROOT/tools/nvidia_central.sh"
+# the fake S3 every submitted job persists to (the containers reach the Mac at host.docker.internal)
+S3PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1])')
+python3 "$ROOT/tools/test_box_persist.py" --serve $S3PORT "$W/s3" > "$W/s3.log" 2>&1 & S3PID=$!
+printf 'R2_ACCOUNT_ID=acct\nR2_ACCESS_KEY_ID=AKFAKE\nR2_SECRET_ACCESS_KEY=fakesecret/123\nR2_BUCKET=fakebucket\n' > "$W/r2"
+export MOJOLEARN_R2_CREDS="$W/r2" MOJOLEARN_R2_ENDPOINT="http://host.docker.internal:$S3PORT" MOJOLEARN_PERSIST_HOME="$W/persist" \
+    NVC_PERSIST_EVERY_MIN=0.05
+unset MOJOLEARN_ALLOW_UNPERSISTED
 
 echo "== up"
 check "up refuses without the orchestrator flag" "MOJOLEARN_ORCHESTRATOR=0 $ROOT/tools/nvidia_central.sh up 1 2>&1 | grep -q 'only the orchestrator provisions machines'"
@@ -123,6 +133,11 @@ $N cancel lane-a $id2 > /dev/null
 waitfor 30 "$N status $id1 2>/dev/null | grep -q '^job 0001: done'"
 check "status: the 2-GPU job done, saw CUDA 0,1" "$N status $id1 | grep -q '^job 0001: done' && $N log $id1 | grep -q 'gpus=0,1 job=0001'"
 check "the cancelled job is cancelled" "$N status $id2 | grep -q 'cancelled'"
+fin1=$(ls "$W"/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | head -1)
+check "submit persisted the job: final.tgz in the fake R2 with the job's output" "[ -n \"$fin1\" ] && tar -xzOf \"$fin1\" ./command.log | grep -q 'gpus=0,1 job=0001'"
+check "the final.tgz sha256 sidecar matches" "[ -n \"$fin1\" ] && [ \"\$(cut -c1-64 \"$fin1.sha256\")\" = \"\$(shasum -a 256 \"$fin1\" | cut -c1-64)\" ]"
+check "submit --no-persist refuses without MOJOLEARN_ALLOW_UNPERSISTED=1" "! $N submit lane-a --no-persist /root/ev-lane-a/gate.sh 2>/dev/null && grep -q REFUSED $W/persist/unpersisted.log"
+check "submit refuses a script that is not on the box" "! $N submit lane-a /root/ev-lane-a/nope.sh 2>/dev/null"
 check "run takes a free slot and sees one GPU" "[ \"\$($N run lane-b 'echo \$CUDA_VISIBLE_DEVICES' 2>/dev/null)\" = 0 ]"
 $N sh lane-a 'echo result > /root/ev-lane-a/out.txt'
 $N fetch lane-a /root/ev-lane-a "$W/fetched" > /dev/null
@@ -134,6 +149,8 @@ $N sh lane-a "printf '#!/bin/bash\nsleep 30\n' > /root/ev-lane-a/long.sh"
 idl=$($N submit lane-a /root/ev-lane-a/long.sh); sleep 3
 check "down refuses while a job runs" "! $N down $pa 2>/dev/null && [ -f $W/devpods/$pa/state.env ]"
 $N cancel lane-a $idl > /dev/null
+waitfor 60 "$N status $idl 2>/dev/null | grep -q cancelled"
+check "a cancelled job still uploads its final.tgz (the TERM trap)" "[ \$(ls $W/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | wc -l) -ge 2 ]"
 
 echo "== the Mac watcher deletes a pod that stops answering"
 wb=$(cat "$W/devpods/$pb/deadman.pid"); cb=$( [ $pb = nvc1 ] && echo $C1 || echo $C2 )
