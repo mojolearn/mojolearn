@@ -381,29 +381,8 @@ def _stage_download(ctx: DeviceContext, mut host: HostBuffer[DType.float32],
 
 
 
-def _launch_probe_kernel(p: MutPointer[Float32, MutAnyOrigin]):
-    """One store: the smallest launch, for the per-launch host cost probe."""
-    p[0] = Float32(1.0)
-
-
-def _launch_probe(ctx: DeviceContext, count: Int) raises -> List[Float64]:
-    """[us per enqueue, us per launch including the final wait] over `count`
-    one-thread launches on `ctx` after 10 untimed ones."""
-    var flag = ctx.enqueue_create_buffer[DType.float32](1)
-    for _ in range(10):
-        ctx.enqueue_function[_launch_probe_kernel](flag.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
-    ctx.synchronize()
-    var t0 = Int(perf_counter_ns())
-    for _ in range(count):
-        ctx.enqueue_function[_launch_probe_kernel](flag.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
-    var t1 = Int(perf_counter_ns())
-    ctx.synchronize()
-    var t2 = Int(perf_counter_ns())
-    _ = flag^
-    var out = List[Float64]()
-    out.append(Float64(t1 - t0) / 1e3 / Float64(count))
-    out.append(Float64(t2 - t0) / 1e3 / Float64(count))
-    return out^
+# TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/byte_lm_launch_probe.patch
 
 
 def _write_flags_n(address: Int, flags: List[Bool], n: Int):
@@ -411,9 +390,3 @@ def _write_flags_n(address: Int, flags: List[Bool], n: Int):
     var flags_out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
     for i in range(n):
         flags_out.unsafe_store(i, Int32(flags[i]))
-
-
-def _launch_probe_fresh(count: Int) raises -> List[Float64]:
-    """`_launch_probe` on a fresh context with no session buffers alive on it."""
-    var ctx = DeviceContext()
-    return _launch_probe(ctx, count)
