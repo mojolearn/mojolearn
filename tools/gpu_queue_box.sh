@@ -121,6 +121,11 @@ lease_delete() {  # <who>
     # every box-persisted job's results to R2 first (tools/box_persist_run.sh; bounded at 120 s)
     local bp=${BOX_PERSIST_ROOT:-/root/box-persist}/bin/box_persist_run.sh
     [ ! -f "$bp" ] || bash "$bp" --flush-all 120 >> $Q/lease.log 2>&1 || true
+    # ... and the queue dir itself (every job's log and record) to the pod's own R2 archive (nvidia_central.sh install)
+    if [ -f "$bp" ] && [ -s $Q/pod_persist ]; then
+        echo "$(now) $1: archiving $Q to R2 before the delete" >> $Q/lease.log
+        PERSIST_FINAL_PUT_MAX_SEC=120 bash "$bp" --snapshot "$(cat $Q/pod_persist)" $Q final >> $Q/lease.log 2>&1 || true
+    fi
     if [ "$FAKE_DELETE" = 1 ]; then echo "$(now) FAKE DELETE $POD_ID by $1" >> $Q/lease.deleted; return 0; fi
     [ -s "$CURLRC" ] || { echo "$(now) $1: NO KEY FILE $CURLRC; cannot delete" >> $Q/lease.log; return 1; }
     local u c

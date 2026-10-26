@@ -419,6 +419,22 @@ class TestRun(Base):
         self.assertEqual(rc, 5)
         self.assertIn("FAILED name=final.tgz http=000", self.plog(res))
 
+    def test_failed_final_retried_by_flush_all(self):
+        tag, js = self.stage()
+        self.srv.fail_puts = 100                   # every PUT fails: the final does not land
+        res = os.path.join(self.w, "res")
+        rc, _, _ = self.runner(js, res, "echo late > \"$MOJOLEARN_RESULTS_DIR/l.txt\"; exit 2")
+        self.assertEqual(rc, 2)
+        self.assertIn("KEPT-ACTIVE", self.plog(res))
+        self.assertTrue(os.path.exists(os.path.join(self.box, "active", tag + ".env")))
+        self.srv.fail_puts = 0                     # the box's dead-man path: flush-all before the delete
+        r = subprocess.run(["bash", os.path.join(self.box, "bin", "box_persist_run.sh"), "--flush-all", "30"],
+                           env=self.env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("l.txt", tar_names(self.obj(tag, "final.tgz")))
+        self.assertTrue(self.wait_for(lambda: not os.path.exists(os.path.join(self.box, "active", tag + ".env")), 5),
+                        "a flushed job that already ended is unregistered")
+
     def test_retry_after_5xx(self):
         tag, js = self.stage()
         self.srv.fail_puts = 1                     # curl --retry covers one transient 500

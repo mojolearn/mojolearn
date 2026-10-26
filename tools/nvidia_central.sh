@@ -259,6 +259,15 @@ export GQ_DIR=$QD GQ_LOCKD=$LOCKD GQ_UNIT=nvq; $NVQ ensure; sleep 7; $NVQ lease-
     # the fixed-deadline runpod_guard watchdog would delete the pod under running jobs; the queue lease replaces it
     BOX_TIMEOUT=60 box "p=\$(cat /tmp/mojolearn-lease.pid 2>/dev/null); [ -z \"\$p\" ] || kill \$p 2>/dev/null; rm -f /tmp/mojolearn-lease.pid; echo 'retired by nvidia_central.sh install: the queue lease ($NVQ lease-check) owns this pod' >> /tmp/mojolearn-lease.out; true" < /dev/null
     echo "the queue lease ($NVQ, idle $NVC_IDLE_MIN min) owns this pod since $(date -u +%FT%TZ)" > "$STATE_ROOT/$k/QUEUE_LEASE"
+    # the pod's own R2 archive: before the lease deletes the pod it flushes every box-persisted job and uploads the
+    # queue dir (every job's log and record) with these URLs (7 days, the presign limit; `install` re-mints them)
+    if bp_prepare "nvc-pod-$k" nvidia_central-pod "$TMPD/podpersist.sh" --slots 1 --every-min 60 --days 7 --exclude 'gpu*.lock'; then
+        out=$({ cat "$TMPD/podpersist.sh"; printf 'echo %s > %s/pod_persist\n' "$(sq "$BP_JSON")" "$QD"; } | BOX_TIMEOUT=120 box "bash -s") || true
+        printf '%s\n' "$out" | grep -q '^BOX_PERSIST_STAGED ' && say "$k: the queue dir goes to R2 ($BP_TAG) before any lease delete" \
+            || say "$k: WARNING: the pod archive did not stage; jobs still persist one by one"
+    else
+        say "$k: WARNING: could not mint the pod archive; jobs still persist one by one"
+    fi
     start_watch $k
     say "$k: queue up, $n GPU slots, pod $POD_ID deletes itself $NVC_IDLE_MIN idle minutes after its last job"
 }

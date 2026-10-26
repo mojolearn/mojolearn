@@ -12,7 +12,8 @@
 #       THE DEAD-MAN HOOK: uploads final.tgz for every active job on this box, bounded by <seconds> (default
 #       120). The self-destruct paths (tools/runpod_guard.sh watchdog, the gpu_queue_box.sh lease delete,
 #       tools/do_amd_steward.sh's mojolearn-selfkill unit) call it before they delete the box.
-#   box_persist_run.sh --snapshot <persist.json> <results-dir> [periodic|final|flush]   (internal)
+#   box_persist_run.sh --snapshot <persist.json> <results-dir> [periodic|final|flush]
+#       one upload now (flush-all uses it per job; the gpu_queue_box.sh idle delete uses it for the pod's queue dir)
 #
 # <persist.json> is minted on the Mac by tools/box_persist.py (`mint`/`prepare`) and reaches the box on ssh
 # stdin as a 0600 file. It holds presigned PUT/GET URLs for this job's keys only, which expire (at most 7
@@ -207,8 +208,10 @@ flush_all() {  # <seconds>
     t0=$(date +%s)
     for f in "$ROOT"/active/*.env; do
         [ -f "$f" ] || continue
-        ( JSON=''; RES=''; . "$f"; [ -n "$JSON" ] && [ -n "$RES" ] || exit 1
-          PERSIST_FINAL_PUT_MAX_SEC=$budget exec bash "$SELF" --snapshot "$JSON" "$RES" flush ) &
+        ( JSON=''; RES=''; PID=''; . "$f"; [ -n "$JSON" ] && [ -n "$RES" ] || exit 1
+          PERSIST_FINAL_PUT_MAX_SEC=$budget bash "$SELF" --snapshot "$JSON" "$RES" flush || exit 1
+          # a job that already ended (its final had failed): done once this flush landed
+          [ -n "$PID" ] && kill -0 "$PID" 2> /dev/null || rm -f "$f" ) &
         pids="$pids $!"
         echo "box_persist: flush $(basename "$f" .env) pid $!"
     done
@@ -237,7 +240,9 @@ final_upload() {  # <exit> <why>
     IN_FINAL=1
     trap '' TERM INT        # ignored dispositions are inherited: curl and tar finish (bounded by their own timeouts)
     snapshot final "$1" "$2"; local r=$?
-    FINAL_DONE=1; unregister
+    FINAL_DONE=1
+    # a final that did not land stays registered (its pid dead): the box's --flush-all retries it before any delete
+    if [ $r = 0 ] || [ $r = 2 ]; then unregister; else plog "KEPT-ACTIVE the final upload is retried by --flush-all"; fi
     if [ $r = 0 ]; then say "final upload of $TAG done: $(tail -1 "$RES/persist.log" 2> /dev/null)"
     else say "final upload of $TAG NOT done (rc=$r): $(tail -1 "$RES/persist.log" 2> /dev/null)"; fi
 }
