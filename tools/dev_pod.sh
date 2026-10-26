@@ -11,7 +11,9 @@
 #                                              brings the box's git HEAD to the worktree's merge
 #                                              base with origin/main, then tracked + modified
 #                                              files -> /root/mojolearn
-#   tools/dev_pod.sh run    <lane> [--vendor amd] <command>   in /root/mojolearn, as root
+#   tools/dev_pod.sh run    <lane> [--vendor amd] [--results DIR] [--no-persist] <command>
+#                                              in /root/mojolearn, as root, under tools/box_persist_run.sh:
+#                                              DIR (default box-out/<tag>) persists to R2 from the box
 #   tools/dev_pod.sh extend <lane> [--vendor amd] [minutes]   the heartbeat: on-box lease AND Mac dead-man
 #   tools/dev_pod.sh down   <lane> [--vendor amd]             delete, verify gone, disarm the Mac dead-man
 #   tools/dev_pod.sh list                                     every box, from the state files
@@ -130,6 +132,7 @@ CURLRC="$TMPD/curlrc"
 HA_STOCK_WAIT_MINUTES=${MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES:-30}
 HA_SLOT_WAIT_MINUTES=${MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES:-10}
 . "$ROOT/tools/hotaisle_vm_lib.sh"
+. "$ROOT/tools/box_persist_lib.sh"
 
 cmd="${1:-}"; lane="${2:-}"; lane_arg=""; VENDOR=nvidia
 case "$cmd" in
@@ -639,11 +642,30 @@ sync)
     say "synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:$BOX_DIR (box HEAD = merge base $(git -C "$wt" rev-parse --short "$base"))"
     ;;
 run)
-    load_state; [ $# -gt 0 ] || die "run needs a command"
+    load_state
+    _res=''; _persist=1
+    while :; do
+        case "${1:-}" in
+            --results) _res="${2:?--results DIR}"; shift 2 ;;
+            --no-persist) _persist=0; shift ;;
+            *) break ;;
+        esac
+    done
+    [ $# -gt 0 ] || die "run needs a command"
+    # every run persists its results dir to R2 from the box (tools/box_persist_run.sh): default box-out/<tag> in
+    # the tree, the command sees it as $MOJOLEARN_RESULTS_DIR; an ssh drop leaves the job running and uploading
+    _cmd="$*"
+    if [ "$_persist" = 1 ]; then
+        bp_prepare "dp-$KEY" dev_pod "$TMPD/persist.sh" --slots 4 --every-min 10 --days 3 || die "$BP_MINT_FAILED"
+        bx 120 "bash -s" < "$TMPD/persist.sh" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $KEY; nothing ran"
+        _cmd=$(bp_wrap "${_res:-box-out/$BP_TAG}" "$_cmd")
+    else
+        bp_opt_out dev_pod "run $KEY $*" || exit 1
+    fi
     # shellcheck disable=SC2086
     _lk=""; [ -z "$CENTRAL_KEY" ] || [ "$KEY" != "$CENTRAL_KEY" ] \
         || _lk="mkdir -p /var/lock/mojolearn-central; exec 9>/var/lock/mojolearn-central/gpu0.lock; flock 9; echo 'lane=$KEY (dev_pod run)' > /var/lock/mojolearn-central/gpu0.owner; "
-    ssh $SSH_OPTS $SSH_TARGET "$(box_cmd "$_lk$BOX_PATH; ${BOX_ENV:+export $BOX_ENV; }cd $BOX_DIR && $*")"
+    ssh $SSH_OPTS $SSH_TARGET "$(box_cmd "$_lk$BOX_PATH; ${BOX_ENV:+export $BOX_ENV; }cd $BOX_DIR && $_cmd")"
     ;;
 extend)
     load_state; minutes="${1:-120}"

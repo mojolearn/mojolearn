@@ -118,6 +118,9 @@ lease_conf() { IDLE_MIN=60; GRACE_MIN=15; POD_ID=''; CURLRC=/tmp/mojolearn-lease
 lease_delete() {  # <who>
     lease_conf
     echo "$(now) $1: DELETING pod $POD_ID (idle since $(date -u -d @"$(cat $Q/lease.last_busy 2>/dev/null || echo 0)" +%FT%TZ 2>/dev/null))" >> $Q/lease.log
+    # every box-persisted job's results to R2 first (tools/box_persist_run.sh; bounded at 120 s)
+    local bp=${BOX_PERSIST_ROOT:-/root/box-persist}/bin/box_persist_run.sh
+    [ ! -f "$bp" ] || bash "$bp" --flush-all 120 >> $Q/lease.log 2>&1 || true
     if [ "$FAKE_DELETE" = 1 ]; then echo "$(now) FAKE DELETE $POD_ID by $1" >> $Q/lease.deleted; return 0; fi
     [ -s "$CURLRC" ] || { echo "$(now) $1: NO KEY FILE $CURLRC; cannot delete" >> $Q/lease.log; return 1; }
     local u c
