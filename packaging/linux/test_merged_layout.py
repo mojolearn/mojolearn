@@ -72,11 +72,25 @@ def test_switch():
         ml.enabled({ml.SWITCH: "yes"})
 
 
-def test_linux_plan_serves_one_file_per_directory():
-    assert list(ml.plan("fast", False)) == ["_mojolearn_native.so"]
-    assert "_mojolearn_byte_lm" in ml.plan("identical", True)["_mojolearn_native.so"]
-    assert "_mojolearn_byte_lm" not in ml.plan("fast", True)["_mojolearn_native.so"]
-    assert list(ml.plan("host", True)) == ["_mojolearn_native_host.so"]
+def test_linux_plan_serves_one_file_per_group():
+    # several groups per directory (0.8.59: one compile each must fit a 16 GB runner)
+    for key in ("fast", "identical", "host"):
+        plan = ml.plan(key, True)
+        assert len(plan) > 1
+        members = [n for m in plan.values() for n in m]
+        assert len(members) == len(set(members))
+        assert not set(f[:-3] for f in plan) & set(members)   # a stem never equals a member
+    assert all(f.endswith("_host.so") for f in ml.plan("host", True))   # the packers' host glob
+    assert not any(f.endswith("_host.so") for f in ml.plan("identical", True))
+    # the byte LM joins exactly one group, and only where the manifest names its platform
+    assert sum("_mojolearn_byte_lm" in m for m in ml.plan("identical", True).values()) == 1
+    assert "_mojolearn_byte_lm" in ml.plan("identical", True)["_mojolearn_native_sequence.so"]
+    assert not any("_mojolearn_byte_lm" in m for m in ml.plan("identical", False).values())
+    assert not any("_mojolearn_byte_lm" in m for m in ml.plan("fast", True).values())
+    # the heavy host members compile in different groups
+    owner = {n: f for f, m in ml.plan("host", True).items() for n in m}
+    heavy = ["_mojolearn_tokenizer_host", "_mojolearn_neural_host", "_mojolearn_byte_lm_host", "_mojolearn_forest_host"]
+    assert len({owner[n] for n in heavy}) == len(heavy)
 
 
 def manifest(rows, indexes=None):
