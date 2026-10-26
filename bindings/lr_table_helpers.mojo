@@ -98,19 +98,8 @@ def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
     )
 
 
-def lr_schedule_fill_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
-                             res_addr: PythonObject) raises -> PythonObject:
-    """`lr_at` and `lr_values` of every built-in schedule (sequence/
-    lr_table.mojo::lr_spec_fill): the float32 rates of ONE-BASED steps t0 ..
-    t0 + n - 1 into `out_addr` (n float32). ip = [kind, a, b, c, t0, n] and
-    fp = [f0, f1, f2, f3] are `LrSpec`'s words. `res_addr` (one int64)
-    receives the index of the first failing step. Returns the status: 0, or
-    1 overflow, 2 a float32 straddle, 3 a bad progress, 4 a step below 1, 5
-    a OneCycleLR step past total_steps + 1."""
-    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=res_addr))
-    var r = lr_spec_fill(_spec(ip, fp), Int(py=ip[4]), Int(py=ip[5]), F32P(unsafe_from_address=Int(py=out_addr)))
-    res[0] = Int64(r[1])
-    return PythonObject(r[0])
+# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller; OneCycleLR._lr_at_slow calls lr_schedule_at with the exact-only kind) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/lr_schedule_fill.patch
 
 
 # --------------------------------------- `lr_at(t)` and `lr_values(n)`, one call each

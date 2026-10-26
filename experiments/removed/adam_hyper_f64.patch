@@ -1,0 +1,146 @@
+diff --git a/bindings/_mojolearn.mojo b/bindings/_mojolearn.mojo
+index 5f81a0c6c..983b9a300 100644
+--- a/bindings/_mojolearn.mojo
++++ b/bindings/_mojolearn.mojo
+@@ -131,6 +131,7 @@ from bindings.hotpath_helpers import (
+     assign_fold_i64_binding,
+     count_fold_hits_i64_binding,
+     mark_split_roles_f32_binding,
++    adam_hyper_f64_binding,
+     strat_alloc_i64_binding,
+     group_fold_assign_i32_binding,
+     strat_group_plan_i32_binding,
+@@ -2142,8 +2143,7 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
+         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
+         m.def_function[normal_init_f32_binding]("normal_init_f32")
+-        # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/adam_hyper_f64.patch
++        m.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
+         m.def_function[first_seen_i32_binding]("first_seen_i32")
+         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+         m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
+diff --git a/bindings/_mojolearn_core_host.mojo b/bindings/_mojolearn_core_host.mojo
+index 0454dc989..460abf48f 100644
+--- a/bindings/_mojolearn_core_host.mojo
++++ b/bindings/_mojolearn_core_host.mojo
+@@ -143,6 +143,7 @@ from bindings.hotpath_helpers import (
+     scatter_rows_bytes_host_binding,
+     uniform_init_f32_binding,
+     normal_init_f32_binding,
++    adam_hyper_f64_binding,
+     first_seen_i32_binding,
+     strat_fold_assign_i32_binding,
+     strat_alloc_i64_binding,
+@@ -1273,8 +1274,7 @@ def build__mojolearn_core_host() -> PythonObject:
+         module.def_function[scatter_rows_bytes_host_binding]("scatter_rows_bytes")
+         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
+         module.def_function[normal_init_f32_binding]("normal_init_f32")
+-        # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/adam_hyper_f64.patch
++        module.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
+         module.def_function[first_seen_i32_binding]("first_seen_i32")
+         module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+         module.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
+diff --git a/bindings/hotpath_helpers.mojo b/bindings/hotpath_helpers.mojo
+index a3de6449c..8b4caa53e 100644
+--- a/bindings/hotpath_helpers.mojo
++++ b/bindings/hotpath_helpers.mojo
+@@ -47,6 +47,7 @@ from sequence.schedule import fill_epoch_order, splitmix64
+ from checks.numerics import portable_cosf, portable_log64
+ from metrics.checks.pinned_sum import canonicalize_nan
+ from core.hotpath_impl_rows import (
++    adam_hyper_f64,
+     assign_fold_i64,
+     bincount2_i32,
+     bincount_i64,
+@@ -635,8 +636,24 @@ def normal_init_f32_binding(
+     return PythonObject(r)
+ 
+ 
+-# TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/adam_hyper_f64.patch
++def adam_hyper_f64_binding(
++    dst_addr: PythonObject, step0: PythonObject, nsteps: PythonObject, fp: PythonObject,
++) raises -> PythonObject:
++    """The Adam / AdamW hyper block of steps step0, step0 + 1, ... (nsteps
++    rows of 9 float64): [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd,
++    decoupled, 1 - lr wd] with bc = 1 - beta ** step. fp = [lr, b1, b2, eps,
++    wd, decoupled]."""
++    var s0 = Int(py=step0)
++    var ns = Int(py=nsteps)
++    if s0 < 1 or ns < 0:
++        # argument check before the fp words are read, as before the move
++        raise Error("adam_hyper_f64: step0 >= 1, nsteps >= 0")
++    return PythonObject(
++        adam_hyper_f64(
++            Int(py=dst_addr), s0, ns, Float64(py=fp[0]), Float64(py=fp[1]), Float64(py=fp[2]),
++            Float64(py=fp[3]), Float64(py=fp[4]), Float64(py=fp[5]),
++        )
++    )
+ 
+ 
+ def first_seen_i32_binding(
+diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
+index 7eb5cfe37..1bf2056eb 100644
+--- a/core/hotpath_impl_rows.mojo
++++ b/core/hotpath_impl_rows.mojo
+@@ -267,8 +267,43 @@ def normal_init_f32(
+ 
+ 
+ @always_inline
+-# TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller; tools/identical_wave_quality.py holds x_cnn_adam_hyper_d to a NumPy reference) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/adam_hyper_f64.patch
++def _powi64(b: Float64, e: Int) -> Float64:
++    """b ** e for e >= 0 by squaring, in a fixed order (the same bits on
++    every column)."""
++    var r = Float64(1)
++    var x = b
++    var k = e
++    while k > 0:
++        if (k & 1) != 0:
++            r = r * x
++        x = x * x
++        k >>= 1
++    return r
++
++
++def adam_hyper_f64(
++    dst_addr: Int, s0: Int, ns: Int, lr: Float64, b1: Float64, b2: Float64, eps: Float64,
++    wd: Float64, dec: Float64,
++) raises -> Int:
++    """The Adam / AdamW hyper block of nsteps rows of 9 float64."""
++    if s0 < 1 or ns < 0:
++        raise Error("adam_hyper_f64: step0 >= 1, nsteps >= 0")
++    var dp = _ptr[DType.float64](dst_addr)
++    for t in range(ns):
++        var step = s0 + t
++        var bc1 = 1.0 - _powi64(b1, step)
++        var bc2 = 1.0 - _powi64(b2, step)
++        var row = t * 9
++        dp.unsafe_store(row + 0, lr / bc1)
++        dp.unsafe_store(row + 1, 1.0 - b1)
++        dp.unsafe_store(row + 2, b2)
++        dp.unsafe_store(row + 3, 1.0 - b2)
++        dp.unsafe_store(row + 4, eps)
++        dp.unsafe_store(row + 5, sqrt(bc2))
++        dp.unsafe_store(row + 6, wd)
++        dp.unsafe_store(row + 7, dec)
++        dp.unsafe_store(row + 8, 1.0 - lr * wd)
++    return 0
+ 
+ 
+ def first_seen_i32(codes_addr: Int, rows: Int, kk: Int, enc_addr: Int, counts_addr: Int) raises -> Int:
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index 6cb1e524c..f50cc16b3 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -1864,7 +1864,7 @@ FAMILIES = (
+             "bincount_i64",
+             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
+             "scatter_rows_bytes", "uniform_init_f32",
+-            "normal_init_f32",
++            "normal_init_f32", "adam_hyper_f64",
+             "first_seen_i32", "strat_fold_assign_i32",
+             "strat_alloc_i64",
+             "group_fold_assign_i32",

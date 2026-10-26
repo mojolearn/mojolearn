@@ -144,27 +144,8 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     return PythonObject(count)
 
 
-def gbdt_sigmoid_binding(
-    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """`out[i] = 1 / (1 + exp(-raw[i]))` in double, `n` values, through
-    `identical_exp64` -- DEVIATION 258: under IDENTICAL the Logloss /
-    CrossEntropy probability is the same bits on every host (the wrapper
-    used numpy's exp, whose last bit is the host libm's); under FAST this
-    is the host stdlib and the wrapper keeps numpy. Both buffers are
-    float64, the caller's."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("gbdt_sigmoid: n must be non-negative")
-    var raw_address = Int(py=raw_addr)
-    var out_address = Int(py=out_addr)
-    if count > 0 and (raw_address == 0 or out_address == 0):
-        raise Error("mojolearn: null buffer address")
-    with GILReleased(Python()):
-        # cpu2-l6-bindings: soft binary64 on the device (`sigmoid_f64_kernel`),
-        # the words the host loop wrote; the host column keeps its loop
-        sigmoid_f64_device(raw_address, out_address, count, False, False)
-    return PythonObject(count)
+# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller; every tier's link runs gbdt_sigmoid_pair) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 
 #: The identity gate's negative control for `gbdt_sigmoid_pair`: the same
@@ -179,8 +160,8 @@ def gbdt_sigmoid_pair_binding(
 ) raises -> PythonObject:
     """DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both columns of
     a Logloss or CrossEntropy `predict_proba` in one pass, `out[2 * i] =
-    1 - p` and `out[2 * i + 1] = p` with `p` exactly `gbdt_sigmoid`'s
-    value, `n` rows, both buffers float64 and the caller's. `1.0 - p` is
+    1 - p` and `out[2 * i + 1] = p` with `p = 1 / (1 + exp(-raw[i]))`
+    in double through `identical_exp64`, `n` rows, both buffers float64 and the caller's. `1.0 - p` is
     the one IEEE double subtraction the Python layer computed per row
     (DEVIATION 2333, retired where the binary carries this entry point);
     a lone subtraction has no fusion partner and no association, so the
@@ -920,7 +901,8 @@ def build__mojolearn_gbdt() -> PythonObject:
         m.def_function[gbdt_per_round_paths_binding]("gbdt_per_round_paths")
         m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
-        m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/gbdt_sigmoid.patch
         m.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
         # DEVIATION 2980: the device-resident parsed model
         m.def_function[gbdt_resident_prepare_binding]("gbdt_resident_prepare")

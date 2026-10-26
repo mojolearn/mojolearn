@@ -97,15 +97,8 @@ def forest_host_gbdt_expand_ctr_into(
         op[i] = out[i]
 
 
-def forest_host_gbdt_sigmoid_into(
-    rp: MutPointer[Float64, MutUntrackedOrigin],
-    op: MutPointer[Float64, MutUntrackedOrigin],
-    count: Int,
-):
-    """`out[i] = 1 / (1 + exp(-raw[i]))` in double through `identical_exp64`."""
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+# TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 65616e765; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/forest_host_gbdt_sigmoid.patch
 
 
 def forest_host_gbdt_sigmoid_pair_into(

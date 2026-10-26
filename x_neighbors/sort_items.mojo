@@ -224,14 +224,5 @@ def nc_med_std_pick_item(t: Int, std: FP, res: FP, key: FP, d: Int, p: Int, n_st
     res.unsafe_store(1, Float32(1) if z else Float32(0))
 
 
-def purity_flags() -> Int:
-    """lane apple-fast-purity switches the Python layer reads
-    (`x_neighbors_purity_flags`): bit 1 the per-row argmax on the device
-    (off under -D MOJOLEARN_PURITY_3_OFF), bit 2 NearestCentroid's median
-    std on the device (off under -D MOJOLEARN_PURITY_6_OFF)."""
-    var f = 0
-    comptime if not is_defined["MOJOLEARN_PURITY_3_OFF"]():
-        f |= 1
-    comptime if not is_defined["MOJOLEARN_PURITY_6_OFF"]():
-        f |= 2
-    return f
+# TOMBSTONE: purity_flags (x_neighbors_purity_flags) (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/x_neighbors_purity_flags.patch

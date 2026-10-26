@@ -267,43 +267,8 @@ def normal_init_f32(
 
 
 @always_inline
-def _powi64(b: Float64, e: Int) -> Float64:
-    """b ** e for e >= 0 by squaring, in a fixed order (the same bits on
-    every column)."""
-    var r = Float64(1)
-    var x = b
-    var k = e
-    while k > 0:
-        if (k & 1) != 0:
-            r = r * x
-        x = x * x
-        k >>= 1
-    return r
-
-
-def adam_hyper_f64(
-    dst_addr: Int, s0: Int, ns: Int, lr: Float64, b1: Float64, b2: Float64, eps: Float64,
-    wd: Float64, dec: Float64,
-) raises -> Int:
-    """The Adam / AdamW hyper block of nsteps rows of 9 float64."""
-    if s0 < 1 or ns < 0:
-        raise Error("adam_hyper_f64: step0 >= 1, nsteps >= 0")
-    var dp = _ptr[DType.float64](dst_addr)
-    for t in range(ns):
-        var step = s0 + t
-        var bc1 = 1.0 - _powi64(b1, step)
-        var bc2 = 1.0 - _powi64(b2, step)
-        var row = t * 9
-        dp.unsafe_store(row + 0, lr / bc1)
-        dp.unsafe_store(row + 1, 1.0 - b1)
-        dp.unsafe_store(row + 2, b2)
-        dp.unsafe_store(row + 3, 1.0 - b2)
-        dp.unsafe_store(row + 4, eps)
-        dp.unsafe_store(row + 5, sqrt(bc2))
-        dp.unsafe_store(row + 6, wd)
-        dp.unsafe_store(row + 7, dec)
-        dp.unsafe_store(row + 8, 1.0 - lr * wd)
-    return 0
+# TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller; tools/identical_wave_quality.py holds x_cnn_adam_hyper_d to a NumPy reference) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/adam_hyper_f64.patch
 
 
 def first_seen_i32(codes_addr: Int, rows: Int, kk: Int, enc_addr: Int, counts_addr: Int) raises -> Int:

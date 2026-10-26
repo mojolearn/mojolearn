@@ -1573,7 +1573,7 @@ FAMILIES = (
             # association sabotage read-back
             "forest_host_groves_sabotage", "forest_host_groves_prepare",
             "forest_host_groves_predict", "forest_host_groves_release",
-            "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid", "forest_host_gbdt_sigmoid_pair",
+            "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid_pair",
             "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
@@ -1828,7 +1828,6 @@ FAMILIES = (
             # Native C-entry registrations are part of the exported ABI too.
             "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
-            "lr_schedule_fill",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "knn_classify_neighbors", "knn_regress_neighbors",
@@ -1864,7 +1863,7 @@ FAMILIES = (
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
-            "normal_init_f32", "adam_hyper_f64",
+            "normal_init_f32",
             "first_seen_i32", "strat_fold_assign_i32",
             "strat_alloc_i64",
             "group_fold_assign_i32",
@@ -2419,7 +2418,7 @@ FAMILIES = (
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
-            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
+            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_theta_params", "gpr_predict_cov",
             "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve", "gpr_optimize",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
@@ -2774,7 +2773,7 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
-            "gbdt_sigmoid", "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
+            "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
             "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",

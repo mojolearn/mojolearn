@@ -1,0 +1,177 @@
+diff --git a/bindings/_mojolearn_gbdt.mojo b/bindings/_mojolearn_gbdt.mojo
+index abf252677..493b087ed 100644
+--- a/bindings/_mojolearn_gbdt.mojo
++++ b/bindings/_mojolearn_gbdt.mojo
+@@ -144,8 +144,27 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
+     return PythonObject(count)
+ 
+ 
+-# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller; every tier's link runs gbdt_sigmoid_pair) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/gbdt_sigmoid.patch
++def gbdt_sigmoid_binding(
++    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
++) raises -> PythonObject:
++    """`out[i] = 1 / (1 + exp(-raw[i]))` in double, `n` values, through
++    `identical_exp64` -- DEVIATION 258: under IDENTICAL the Logloss /
++    CrossEntropy probability is the same bits on every host (the wrapper
++    used numpy's exp, whose last bit is the host libm's); under FAST this
++    is the host stdlib and the wrapper keeps numpy. Both buffers are
++    float64, the caller's."""
++    var count = Int(py=n)
++    if count < 0:
++        raise Error("gbdt_sigmoid: n must be non-negative")
++    var raw_address = Int(py=raw_addr)
++    var out_address = Int(py=out_addr)
++    if count > 0 and (raw_address == 0 or out_address == 0):
++        raise Error("mojolearn: null buffer address")
++    with GILReleased(Python()):
++        # cpu2-l6-bindings: soft binary64 on the device (`sigmoid_f64_kernel`),
++        # the words the host loop wrote; the host column keeps its loop
++        sigmoid_f64_device(raw_address, out_address, count, False, False)
++    return PythonObject(count)
+ 
+ 
+ #: The identity gate's negative control for `gbdt_sigmoid_pair`: the same
+@@ -160,8 +179,8 @@ def gbdt_sigmoid_pair_binding(
+ ) raises -> PythonObject:
+     """DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both columns of
+     a Logloss or CrossEntropy `predict_proba` in one pass, `out[2 * i] =
+-    1 - p` and `out[2 * i + 1] = p` with `p = 1 / (1 + exp(-raw[i]))`
+-    in double through `identical_exp64`, `n` rows, both buffers float64 and the caller's. `1.0 - p` is
++    1 - p` and `out[2 * i + 1] = p` with `p` exactly `gbdt_sigmoid`'s
++    value, `n` rows, both buffers float64 and the caller's. `1.0 - p` is
+     the one IEEE double subtraction the Python layer computed per row
+     (DEVIATION 2333, retired where the binary carries this entry point);
+     a lone subtraction has no fusion partner and no association, so the
+@@ -901,8 +920,7 @@ def build__mojolearn_gbdt() -> PythonObject:
+         m.def_function[gbdt_per_round_paths_binding]("gbdt_per_round_paths")
+         m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
+         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
+-        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/gbdt_sigmoid.patch
++        m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+         m.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
+         # DEVIATION 2980: the device-resident parsed model
+         m.def_function[gbdt_resident_prepare_binding]("gbdt_resident_prepare")
+diff --git a/bindings/_mojolearn_gbdt_host.mojo b/bindings/_mojolearn_gbdt_host.mojo
+index 19c793dca..0b512413d 100644
+--- a/bindings/_mojolearn_gbdt_host.mojo
++++ b/bindings/_mojolearn_gbdt_host.mojo
+@@ -29,7 +29,7 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
+ `gbdt_fit` (the same eight arguments, the same 35-slot params list with its
+ counted class-weight tail and optional float tail, the same four strings,
+ the same five-element return), `gbdt_predict` and `gbdt_model_dim` (the
+-model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid_pair`
++model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid`
+ (its body), `gbdt_binary_probabilities` and `gbdt_binary_classes` (the
+ classifier adapter's transforms, `bindings/_mojolearn_gbdt.mojo:107-130`
+ over `gbdt/binary_prediction.mojo`'s kernel, restated per element),
+@@ -117,6 +117,7 @@ from gbdt.host.gbdt_host_entries_impl import (
+     gbdt_host_predict_into,
+     gbdt_host_predict_multi_into,
+     gbdt_host_read_pairs,
++    gbdt_host_sigmoid_into,
+     gbdt_host_sigmoid_pair_into,
+ )
+ from checks.kernel_matrix import (
+@@ -1886,8 +1887,16 @@ def gbdt_fit_ordered_rmse_binding(
+     return PythonObject(text)
+ 
+ 
+-# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/gbdt_sigmoid.patch
++def gbdt_sigmoid_binding(
++    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
++) raises -> PythonObject:
++    """`gbdt_sigmoid_binding` (`bindings/_mojolearn_gbdt.mojo:133-148`),
++    its body: `1 / (1 + identical_exp64(-raw))` in double."""
++    var rp = f64_ptr(Int(py=raw_addr))
++    var op = f64_ptr(Int(py=out_addr))
++    var count = Int(py=n)
++    gbdt_host_sigmoid_into(rp, op, count)
++    return PythonObject(count)
+ 
+ 
+ def gbdt_sigmoid_pair_binding(
+@@ -1895,7 +1904,7 @@ def gbdt_sigmoid_pair_binding(
+ ) raises -> PythonObject:
+     """`gbdt_sigmoid_pair_binding` (`bindings/_mojolearn_gbdt.mojo`, DEVIATION
+     2902), its body: `out[2 * i] = 1 - p`, `out[2 * i + 1] = p` with `p`
+-    exactly `1 / (1 + identical_exp64(-raw))`, `n` rows, both buffers float64. The
++    exactly `gbdt_sigmoid`'s value, `n` rows, both buffers float64. The
+     `1.0 - p` is the one IEEE double subtraction the Python layer computed
+     per row. Under the forest walk's sabotage define
+     (`MOJOLEARN_FOREST_HOST_SABOTAGE`, the lane's negative control) the two
+@@ -1967,8 +1976,7 @@ def build__mojolearn_gbdt_host() -> PythonObject:
+         module.def_function[gbdt_predict_binding]("gbdt_predict")
+         module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
+         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
+-        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/gbdt_sigmoid.patch
++        module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+         module.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
+         module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
+         module.def_function[gbdt_binary_classes_binding]("gbdt_binary_classes")
+diff --git a/gbdt/host/gbdt_host_entries_impl.mojo b/gbdt/host/gbdt_host_entries_impl.mojo
+index a5aec346d..2f39839ca 100644
+--- a/gbdt/host/gbdt_host_entries_impl.mojo
++++ b/gbdt/host/gbdt_host_entries_impl.mojo
+@@ -575,13 +575,16 @@ def gbdt_host_predict_multi_into(
+ 
+ 
+ # ===========================================================================
+-# THE LINKS (`gbdt_sigmoid_pair_binding`,
++# THE LINKS (`gbdt_sigmoid_binding`, `gbdt_sigmoid_pair_binding`,
+ # `gbdt_binary_prediction_binding`)
+ # ===========================================================================
+ 
+ 
+-# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/gbdt_sigmoid.patch
++def gbdt_host_sigmoid_into(rp: MutPointer[Float64, MutUntrackedOrigin], op: MutPointer[Float64, MutUntrackedOrigin], count: Int):
++    """`1 / (1 + identical_exp64(-raw))` in double, `count` words."""
++    for i in range(count):
++        var r = rp.unsafe_load(i)
++        op.unsafe_store(i, bitcast[DType.float64](sf64_sigmoid_f64(bitcast[DType.uint64](r))))
+ 
+ 
+ def gbdt_host_sigmoid_pair_into(rp: MutPointer[Float64, MutUntrackedOrigin], op: MutPointer[Float64, MutUntrackedOrigin], count: Int):
+diff --git a/python/mojolearn/_backend.py b/python/mojolearn/_backend.py
+index bac665367..cf2d472b2 100644
+--- a/python/mojolearn/_backend.py
++++ b/python/mojolearn/_backend.py
+@@ -1638,7 +1638,7 @@ def host_families_built():
+ #:     with NewtonL2); every other option value refuses by name inside
+ #:     gbdt_fit,
+ #:     gbdt_predict and gbdt_model_dim over the model text and
+-#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid_pair; gbdt_fit_ordered_rmse
++#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_fit_ordered_rmse
+ #:     over gbdt/host/gbdt_oracle_ordered.mojo and
+ #:     gbdt_fit_two_level_feature_freq over
+ #:     gbdt/host/gbdt_oracle_feature_freq.mojo (gbdt-ordered-rmse,
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index 9ca4d77d3..2e3fdb889 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2773,7 +2773,7 @@ FAMILIES = (
+             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
+             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
+             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
+-            "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
++            "gbdt_sigmoid", "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
+             "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
+         ),
+         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+diff --git a/python/mojolearn/tests/test_cpu_training_e3_gbdt.py b/python/mojolearn/tests/test_cpu_training_e3_gbdt.py
+index d5d704f2a..662ede6c5 100644
+--- a/python/mojolearn/tests/test_cpu_training_e3_gbdt.py
++++ b/python/mojolearn/tests/test_cpu_training_e3_gbdt.py
+@@ -79,7 +79,7 @@ def test_manifest_declares_the_gbdt_family():
+ def test_binding_registers_the_gpu_names():
+     src = _read(host_surface.binding_source("gbdt"))
+     exports = host_surface.family("gbdt")["exports"]
+-    for name in ("gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid_pair",
++    for name in ("gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+                  "gbdt_vendor", "gbdt_numeric_mode", "gbdt_binary_probabilities",
+                  "gbdt_binary_classes", "gbdt_predict_multi"):
+         assert f'("{name}")' in src, f"the gbdt host binding does not register {name}"

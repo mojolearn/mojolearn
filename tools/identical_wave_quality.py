@@ -121,9 +121,22 @@ def qr_memory():
     return rows
 
 
+def _adam_hyper_reference(count,params):
+    """The Adam / AdamW hyper block of steps 1..count in float64, the formula of the
+    retired `adam_hyper_f64` entry (TOMBSTONE in core/hotpath_impl_rows.mojo): rows of
+    [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd, decoupled, 1 - lr wd],
+    bc = 1 - beta ** step."""
+    lr,b1,b2,eps,wd,dec=(float(x) for x in params)
+    step=np.arange(1,count+1,dtype=np.float64)
+    bc1=1.0-np.power(b1,step);bc2=1.0-np.power(b2,step)
+    out=np.empty((count,9),dtype=np.float64)
+    out[:,0]=lr/bc1;out[:,1]=1.0-b1;out[:,2]=b2;out[:,3]=1.0-b2;out[:,4]=eps
+    out[:,5]=np.sqrt(bc2);out[:,6]=wd;out[:,7]=dec;out[:,8]=1.0-lr*wd
+    return out
+
+
 def cnn_controls():
     from mojolearn import _backend
-    from mojolearn._buffer import _native
     b=_backend.binding('_mojolearn_x_cnn','identical')
     rows=[]
     for n in (1,2,3,1000,65537):
@@ -135,12 +148,12 @@ def cnn_controls():
         count=100000;actual=np.zeros((count,9),dtype=np.float64);expected=np.zeros_like(actual)
         params=[0.001,*betas,1e-8,0.01,1.0]
         b.x_cnn_adam_hyper_d(actual.ctypes.data,[1,count],params)
-        _native('adam_hyper_f64')(expected.ctypes.data,1,count,params)
+        expected[:]=_adam_hyper_reference(count,params)
         assert np.isfinite(actual).all() and np.isfinite(expected).all()
         allowance=np.spacing(np.abs(expected).astype(np.float32)).astype(np.float64)
         error=np.abs(actual.astype(np.float64)-expected.astype(np.float64))
         assert np.all(error<=allowance),(betas,float(np.max(error-allowance)))
-        rows.append(dict(gate='adam_hyper',betas=betas,steps=count,max_error=float(np.max(error)),tolerance='one float32 ULP against source portable_float64 helper'))
+        rows.append(dict(gate='adam_hyper',betas=betas,steps=count,max_error=float(np.max(error)),tolerance='one float32 ULP against a float64 NumPy reference'))
     return rows
 
 

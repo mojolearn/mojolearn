@@ -53,7 +53,6 @@ from std.memory import memcpy
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
-    gp_log64,
     gp_theta_param,
 )
 from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
@@ -94,7 +93,6 @@ from gaussian_process.host.gp_host_fit_entries import (
     _gpr_lml_grad_run,
     _gpr_predict_cov_run,
     _gpr_sample_y_run,
-    gp_log64_list,
     gp_theta_params_list,
 )
 from bindings.py_lists import py_list_f64
@@ -494,14 +492,6 @@ def gpr_optimize_binding(
     return PythonObject(best)
 
 
-def gp_log64_binding(values: PythonObject) raises -> PythonObject:
-    """The GPU binding's `gp_log64`."""
-    var vals = List[Float64]()
-    for i in range(len(values)):  # small-loop(theta words: one per kernel hyperparameter)
-        vals.append(Float64(py=values[i]))
-    return py_list_f64(gp_log64_list(vals))
-
-
 def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
     """The GPU binding's `gp_theta_params`."""
     var vals = List[Float64]()
@@ -604,7 +594,8 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
         module.def_function[gpr_optimize_binding]("gpr_optimize")
-        module.def_function[gp_log64_binding]("gp_log64")
+        # TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/gp_log64.patch
         module.def_function[gp_theta_params_binding]("gp_theta_params")
         module.def_function[gpc_fit_binding]("gpc_fit")
         module.def_function[gpc_predict_binding]("gpc_predict")

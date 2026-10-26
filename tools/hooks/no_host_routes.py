@@ -215,7 +215,7 @@ _NATIVE_GLUE = frozenset("""
 accumulation_is_aligned byte_lm_attention_estash_gate byte_lm_attention_memory_profile
 byte_lm_config_profile byte_lm_model_pool_open byte_lm_model_pool_ownership byte_lm_offload_open
 byte_lm_parallel_ownership byte_lm_session_info byte_lm_step_glue_arm gbdt_model_dim
-gbdt_resident_info gp_log64 gp_theta_params iforest_resident_release x_cnn_conv_shape
+gbdt_resident_info gp_theta_params iforest_resident_release x_cnn_conv_shape
 x_cnn_pool_shape forest_export forest_export_legacy
 """.split())
 # A GPU-path Python line that runs on an explicit CPU-only route (a

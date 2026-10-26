@@ -12,7 +12,6 @@ from x_neighbors.kapprox_host import kpca_resident
 from x_neighbors.kfeat_rng import op_kfeat_pcs_draw_idn_host, op_kfeat_schi2_fit_idn_host
 from x_neighbors.ocsvm_host import op_ocsvm_alpha_init, op_unit_ff
 from x_neighbors.ocsvm_init import oci_nu_hi, oci_nu_lo
-from x_neighbors.sort_items import purity_flags
 
 
 def kpca_resident_binding() raises -> PythonObject:
@@ -23,11 +22,6 @@ def kpca_resident_binding() raises -> PythonObject:
 def lp_fast_resident_binding() raises -> PythonObject:
     """0: the host column never takes the resident kNN-graph loop."""
     return PythonObject(lp_fast_resident())
-
-
-def purity_flags_binding() raises -> PythonObject:
-    """The lane apple-fast-purity switch bits (`x_neighbors/sort_items.mojo`)."""
-    return PythonObject(purity_flags())
 
 
 def _kfeat_args(p: PythonObject, what: String) raises -> Tuple[UInt32, Int, Int]:

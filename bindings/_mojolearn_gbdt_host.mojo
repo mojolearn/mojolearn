@@ -29,7 +29,7 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 `gbdt_fit` (the same eight arguments, the same 35-slot params list with its
 counted class-weight tail and optional float tail, the same four strings,
 the same five-element return), `gbdt_predict` and `gbdt_model_dim` (the
-model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid`
+model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid_pair`
 (its body), `gbdt_binary_probabilities` and `gbdt_binary_classes` (the
 classifier adapter's transforms, `bindings/_mojolearn_gbdt.mojo:107-130`
 over `gbdt/binary_prediction.mojo`'s kernel, restated per element),
@@ -117,7 +117,6 @@ from gbdt.host.gbdt_host_entries_impl import (
     gbdt_host_predict_into,
     gbdt_host_predict_multi_into,
     gbdt_host_read_pairs,
-    gbdt_host_sigmoid_into,
     gbdt_host_sigmoid_pair_into,
 )
 from checks.kernel_matrix import (
@@ -1887,16 +1886,8 @@ def gbdt_fit_ordered_rmse_binding(
     return PythonObject(text)
 
 
-def gbdt_sigmoid_binding(
-    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """`gbdt_sigmoid_binding` (`bindings/_mojolearn_gbdt.mojo:133-148`),
-    its body: `1 / (1 + identical_exp64(-raw))` in double."""
-    var rp = f64_ptr(Int(py=raw_addr))
-    var op = f64_ptr(Int(py=out_addr))
-    var count = Int(py=n)
-    gbdt_host_sigmoid_into(rp, op, count)
-    return PythonObject(count)
+# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 
 def gbdt_sigmoid_pair_binding(
@@ -1904,7 +1895,7 @@ def gbdt_sigmoid_pair_binding(
 ) raises -> PythonObject:
     """`gbdt_sigmoid_pair_binding` (`bindings/_mojolearn_gbdt.mojo`, DEVIATION
     2902), its body: `out[2 * i] = 1 - p`, `out[2 * i + 1] = p` with `p`
-    exactly `gbdt_sigmoid`'s value, `n` rows, both buffers float64. The
+    exactly `1 / (1 + identical_exp64(-raw))`, `n` rows, both buffers float64. The
     `1.0 - p` is the one IEEE double subtraction the Python layer computed
     per row. Under the forest walk's sabotage define
     (`MOJOLEARN_FOREST_HOST_SABOTAGE`, the lane's negative control) the two
@@ -1976,7 +1967,8 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         module.def_function[gbdt_predict_binding]("gbdt_predict")
         module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
-        module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/gbdt_sigmoid.patch
         module.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
         module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
         module.def_function[gbdt_binary_classes_binding]("gbdt_binary_classes")

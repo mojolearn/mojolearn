@@ -18,9 +18,7 @@ DEVIATION 2880: THE HYPERPARAMETERS, THEIR LOGS AND THE GRADIENT'S FOLD.
              ARD length scale contributes one entry per feature. A leaf whose
              bounds are "fixed" contributes none.
   log        the optimizer's start and bounds: `ftz(identical_log(v))` of
-             the float32 value, on the device (`gp_optim_items.mojo`);
-             `gp_log64` (`identical_log64`) remains the binding's float64
-             log for callers that want one.
+             the float32 value, on the device (`gp_optim_items.mojo`).
   exp        `ftz(identical_exp(Float32(theta)))`, `gp_theta_param`: the
              hyperparameter that runs is that float32, the value the device
              optimizer (`gp_optim_items.mojo`) writes from its float32
@@ -54,7 +52,6 @@ from std.sys.compile import is_defined
 from checks.numerics import (
     ftz,
     identical_exp,
-    identical_log64,
     identical_mul,
     identical_mul_add,
 )
@@ -73,9 +70,8 @@ comptime _K_SUM = 4
 comptime _K_PROD = 5
 
 
-def gp_log64(v: Float64) -> Float64:
-    """theta of one hyperparameter value or bound (DEVIATION 2880)."""
-    return identical_log64(v)
+# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/gp_log64.patch
 
 
 def gp_theta_param(theta: Float64) -> Float32:

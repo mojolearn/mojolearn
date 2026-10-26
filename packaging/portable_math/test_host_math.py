@@ -140,9 +140,8 @@ def test_affected_python_surfaces():
 def test_existing_mojo_primitive_parity():
     from mojolearn import _backend
     binding = _backend.binding('_mojolearn_gp', 'identical')
-    inputs = [x for x in samples() if math.isfinite(x) and x > 0]
-    expected = binding.gp_log64(inputs)
-    assert b''.join(map(bits, expected)) == b''.join(bits(owned.log(x)) for x in inputs)
+    # The float64 log half went with the retired `gp_log64` entry (no live caller);
+    # owned.log is held to the stdlib in test_transcendental_accuracy_and_cross_host_digest.
     theta = [i/32 for i in range(-2048, 2049)]
     expected = binding.gp_theta_params(theta)
     assert b''.join(struct.pack('<f', x) for x in expected) == b''.join(

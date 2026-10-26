@@ -1463,11 +1463,6 @@ ANNOTATIONS = {
                                            "reader, _lr_at_slow, discards the name; exact_block runs inside "
                                            "lr_spec_fill (lr_schedule_at / lr_schedule_series), which the "
                                            "optim-* and sequence-lr-schedulers lanes cover"),
-    "lr_schedule_fill": ("n/a", [], "no live caller in the runtime: _lr_fill's one caller is OneCycleLR."
-                                    "_lr_at_slow, the exact-route reference tools/sched_table_check.py holds "
-                                    "lr_at to; lr_at and lr_values run lr_schedule_at / lr_schedule_series "
-                                    "(the same lr_spec_fill), which the optim-* and sequence-lr-schedulers "
-                                    "lanes cover"),
     "optimizer_finalize": ("n/a", [], "a finalizer: Optimizer.__del__ closes the resident slot through the "
                                       "owning module's optimizer_resident_close and returns None; nothing it "
                                       "writes is a value a part could hash"),
@@ -2412,47 +2407,19 @@ SABOTAGE_NA_ENTRIES.update({
 })
 
 # lane coverage-sabotage-arms-20261025: the 0.8.57 coverage-source rows whose
-# sabotage read `owed`. Each was checked in the source at 4d7a0e8ad: no package
-# code, native owner or identity lane calls the entry (its native status is n/a
-# for the same reason), so a value fault in its definitions has no lane to move
-# and an arm could never read CAUGHT. Where the closure is shared with a live
-# entry, that entry carries its own arm.
-_NO_LIVE_CALLER = "no live caller, so no lane can run it and a value fault has nothing to move: "
+# sabotage read `owed`, checked in the source at 4d7a0e8ad. Lane
+# dead-native-entries-0859 (2026-10-26) deleted the nine with no live caller
+# (adam_hyper_f64, lr_schedule_fill, gp_log64, gbdt_sigmoid,
+# forest_host_gbdt_sigmoid, the device x_decomp_knn_select, byte_lm_launch_probe,
+# x_neighbors_purity_flags, sched_exp_block; docs/TOMBSTONES.md). The two left
+# are A/B tools' reach probes of FAST switches still in the tree.
 _REACH_PROBE = "a quality/A-B tool's build or reach probe, no data value: "
 SABOTAGE_NA_ENTRIES.update({
-    "adam_hyper_f64": _NO_LIVE_CALLER + (
-        "the CPU Adam hyper block (core/hotpath_impl_rows.mojo) left every route in lane cpu3-python; "
-        "the CNN steps run x_cnn_adam_hyper_d (python/mojolearn/_expansion_cnn.py), only "
-        "tools/identical_wave_quality.py calls it"),
-    "lr_schedule_fill": _NO_LIVE_CALLER + (
-        "_lr_fill's one caller is OneCycleLR._lr_at_slow, the exact-route reference of "
-        "tools/sched_table_check.py; lr_at and lr_values run lr_schedule_at / lr_schedule_series over the "
-        "same lr_spec_fill, armed by coverage-native-schedule-series"),
-    "forest_host_gbdt_sigmoid": _NO_LIVE_CALLER + (
-        "the host column's single-column sigmoid; ensemble.py and the native host archive "
-        "(_native_host_archive_bridge) call forest_host_gbdt_sigmoid_pair, armed by FOREST_HOST_SABOTAGE"),
-    "gbdt_sigmoid": _NO_LIVE_CALLER + (
-        "the single-column sigmoid (gbdt_host_sigmoid_into on the host binding); every tier's link runs "
-        "gbdt_sigmoid_pair (python/mojolearn/ensemble.py), armed by FOREST_HOST_SABOTAGE on both "
-        "bindings and coverage_binary_prediction on the device"),
-    "gp_log64": _NO_LIVE_CALLER + (
-        "only gp_log64_values / gp_log64_list call gp_theta.gp_log64, and no package code, native owner or "
-        "lane calls the entry"),
-    "x_decomp_knn_select": _NO_LIVE_CALLER + (
-        "the _expansion_decomp helper that calls it is never called (native status n/a, _DEAD_KIT); "
-        "the host twin carries the e2e_host seam patches"),
-    "byte_lm_launch_probe": ("a launch-cost timing probe for tools/byte_lm_launch_probe.py: it returns "
-                             "microseconds per launch of a one-store kernel, no data value, and no package "
-                             "code or lane calls it"),
-    "km_rbf_staged": _REACH_PROBE + ("1 when KM_FAST_RBF_STAGED is compiled in (tools/kfeat_quality.py), "
-                                     "registered only under KM_FAST_RBF_RESIDENT (FAST + Apple)"),
+    "km_rbf_staged": _REACH_PROBE + ("1 when KM_FAST_RBF_STAGED is compiled in (tools/kfeat_quality.py, "
+                                     "tools/kfeat_pair.py REACH_EXTRA), registered only under "
+                                     "KM_FAST_RBF_RESIDENT (FAST + Apple)"),
     "x_decomp_mcd_cov_reach": _REACH_PROBE + ("MCD_ORDERED_COV's flag and reach counters "
                                               "(tools/mcd_ordered_quality.py)"),
-    "x_neighbors_purity_flags": _REACH_PROBE + ("the compile-time PURITY_3/PURITY_6 switch word "
-                                                "(x_neighbors/sort_items.mojo purity_flags); no package code "
-                                                "reads it"),
-    "sched_exp_block": ("fast tier only: registered only under SCHED_FAST_TABLE (FAST + Apple, "
-                        "bindings/_mojolearn_x_sequence.mojo); the verifier refuses a fast process"),
 })
 #: (entry, binding) -> reason, for one registration of an entry its twin covers.
 SABOTAGE_NA_BY_SRC = {

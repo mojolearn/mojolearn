@@ -40,7 +40,6 @@ from training.byte_lm_binding_impl import (
     _require_binding_profile, _validate_slot_table,
     _read_flags, _read_ids, _write_flags, _write_flags_n, _write_loss, _nonfinite,
     _same_optimizer_bits, _require_open, _mark_if_lost, _admit_session_scalars, _stage_download,
-    _launch_probe, _launch_probe_fresh,
 )
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
@@ -1463,48 +1462,8 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
     return PythonObject(owner[].completed)
 
 
-def byte_lm_session_launch_probe_binding(session: PythonObject, count: PythonObject) raises -> PythonObject:
-    """lane/neural-pass43: the per-launch host cost ON THE OPEN SESSION'S
-    context (Metal pays per live allocation on every launch, so this reads
-    the session's buffer count), beside the arena pool's state. Returns
-    [us_per_enqueue, us_per_launch_with_wait, arena_on, chunks, chunks_in_use,
-    chunk_floats, views]. Diagnostic: no model state is read or written."""
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    _require_open(owner[])
-    var n = Int(py=Python.import_module("operator").index(count))
-    if n < 1 or n > 100000:
-        raise Error("byte LM launch probe: count outside [1, 100000]")
-    var res: List[Float64]
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            ref ctx = owner[].ctx.value()
-            res = _launch_probe(ctx, n)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    var st = arena_stats()
-    var out = Python.list()
-    out.append(PythonObject(res[0]))
-    out.append(PythonObject(res[1]))
-    out.append(PythonObject(1 if device_arena_on() else 0))
-    for i in range(len(st)):  # small-loop(st: a few arena stat counters): copies counters to Python, not data
-        out.append(PythonObject(st[i]))
-    return out
-
-
-def byte_lm_launch_probe_binding(count: PythonObject) raises -> PythonObject:
-    """The same probe on a FRESH context with no session buffers alive on
-    it: the floor the open session's number is compared with."""
-    var n = Int(py=Python.import_module("operator").index(count))
-    if n < 1 or n > 100000:
-        raise Error("byte LM launch probe: count outside [1, 100000]")
-    var res = _launch_probe_fresh(n)
-    var out = Python.list()
-    out.append(PythonObject(res[0]))
-    out.append(PythonObject(res[1]))
-    return out
+# TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe; byte_lm_session_launch_probe with it) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/byte_lm_launch_probe.patch
 
 
 def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
@@ -1531,8 +1490,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
-        module.def_function[byte_lm_session_launch_probe_binding]("byte_lm_session_launch_probe")
-        module.def_function[byte_lm_launch_probe_binding]("byte_lm_launch_probe")
+        # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
         module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
         # DEVIATION 2514: the device-owned session entries.
         module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")

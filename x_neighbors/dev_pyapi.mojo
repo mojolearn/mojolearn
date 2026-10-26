@@ -22,7 +22,6 @@ from x_neighbors.kfeat_dev import (
 from x_neighbors.nan_cells_device import nc_fit_lean
 from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_ocsvm_x, op_unit_ff
 from x_neighbors.ocsvm_init import oci_nu_hi, oci_nu_lo
-from x_neighbors.sort_items import purity_flags
 
 
 def kpca_resident_binding() raises -> PythonObject:
@@ -38,11 +37,6 @@ def lp_fast_resident_binding() raises -> PythonObject:
 def nc_fit_lean_binding() raises -> PythonObject:
     """1 when this binary's fit-time count op ignores the cell list."""
     return PythonObject(nc_fit_lean())
-
-
-def purity_flags_binding() raises -> PythonObject:
-    """The lane apple-fast-purity switch bits (`x_neighbors/sort_items.mojo`)."""
-    return PythonObject(purity_flags())
 
 
 def kfeat_flags_binding() raises -> PythonObject:
