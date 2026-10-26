@@ -87,6 +87,12 @@ def _call_tuple(callable: PythonObject, arguments: PythonObject) raises -> Pytho
     return PythonObject(from_owned=result)
 
 
+def _attr(owner: PythonObject, name: String) raises -> PythonObject:
+    """`getattr(owner, name)`: a Python attribute whose name is also a Mojo
+    `PythonObject` member (a dunder, `copy`), read through the builtin."""
+    return _call(native_loaded_module("builtins").getattr, owner, PythonObject(name))
+
+
 def _truth(value: PythonObject) raises -> Bool:
     return Bool(py=_call(native_loaded_module("builtins").bool, value))
 
@@ -244,7 +250,7 @@ def _new_store(code: PythonObject, size: Int, context: PythonObject) raises -> P
     if size == 0:
         return _call(context["array_type"], code)
     var seed = _call(context["array_type"], code, Python.list(PythonObject(0)))
-    return _call(seed.__mul__, PythonObject(size))
+    return _call(_attr(seed, "__mul__"), PythonObject(size))
 
 
 def _values(view: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -279,19 +285,19 @@ def _strided_copy(src_addr: PythonObject, dst_addr: PythonObject, itemsize: Int,
     _ = dims  # the dimension words stay alive through the native copy
 
 
-def _reorder(a: PythonObject, src_order: String, out: PythonObject, context: PythonObject) raises:
-    """`_reorder`: the elements of `a` into `out` in the other layout."""
+def _reorder(a: PythonObject, src_order: String, target: PythonObject, context: PythonObject) raises:
+    """`_reorder`: the elements of `a` into `target` in the other layout."""
     var shape = _ints(a.shape)
     if len(shape) <= 1 or Int(py=a.size) == 0:
         var b = native_loaded_module("builtins")
-        _ = _call(native_buffer_view(out).__setitem__, _call(b.slice, PythonObject(None)), a._mv)
+        _ = _call(_attr(native_buffer_view(target), "__setitem__"), _call(b.slice, PythonObject(None)), a._mv)
         return
     var cs = _c_strides(shape, 1)
     var fs = _f_strides(shape, 1)
     if src_order == "C":
-        _strided_copy(a._addr, _call(out.buffer_info)[0], Int(py=a.itemsize), shape, cs, fs, 0, 0, context)
+        _strided_copy(a._addr, _call(target.buffer_info)[0], Int(py=a.itemsize), shape, cs, fs, 0, 0, context)
     else:
-        _strided_copy(a._addr, _call(out.buffer_info)[0], Int(py=a.itemsize), shape, fs, cs, 0, 0, context)
+        _strided_copy(a._addr, _call(target.buffer_info)[0], Int(py=a.itemsize), shape, fs, cs, 0, 0, context)
 
 
 def _as_c(a: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -400,7 +406,7 @@ def _row(c: PythonObject, shape: PythonObject, step: Int, i: Int, context: Pytho
     py_setattr(view, "_store", c._store)
     py_setattr(view, "_base", c)
     py_setattr(view, "_pin", c._pin)
-    var part = _call(c._mv.__getitem__, _call(b.slice, PythonObject(offset), PythonObject(offset + step)))
+    var part = _call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(offset), PythonObject(offset + step)))
     py_setattr(view, "_mv", part)
     py_setattr(view, "_addr", PythonObject(Int(py=c._addr) + offset * Int(py=c.itemsize)))
     py_setattr(view, "_readonly", c._readonly)
@@ -512,7 +518,7 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
             steps.append(step)
             counts.append(count)
         elif _truth(_call(b.isinstance, k, b.int)) or _truth(_call(b.hasattr, k, PythonObject("__index__"))):
-            var index = _call(k.__index__)
+            var index = _call(_attr(k, "__index__"))
             if (_truth(_call(operator.lt, index, PythonObject(-n)))
                     or _truth(_call(operator.ge, index, PythonObject(n)))):
                 raise Error("IndexError: mojolearn: index " + _text(index) + " out of range for axis "
@@ -545,7 +551,7 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
             out_strides.append(steps[axis] * cs[axis])
     var dtype = String(c.dtype)
     if len(out_shape) == 0:
-        var one = _call(c._mv.__getitem__, _call(b.slice, PythonObject(base), PythonObject(base + 1)))
+        var one = _call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(base), PythonObject(base + 1)))
         return _values(one, dtype, context)[0]
     # `_contiguous_block`: leading integer indices, at most one step-1
     # slice, then only whole axes is ONE run; `_block_store` copies a run of
@@ -565,8 +571,9 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
         var run_start = offset + first[axis] * cs[axis]
         var run_length = counts[axis] * cs[axis]
         if run_length >= Int(py=context["native_min"]):
-            var raw = _call(_call(c._mv.__getitem__, _call(b.slice, PythonObject(run_start),
-                                                          PythonObject(run_start + run_length))).cast, PythonObject("B"))
+            var raw = _call(_call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(run_start),
+                                                                    PythonObject(run_start + run_length))).cast,
+                            PythonObject("B"))
             store = _same_dtype_store(raw, dtype, context)
     if store is None:
         var total = _prod(out_shape)
@@ -871,7 +878,7 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
             var store = _zero_flags(size, context)
             if v is not None:
                 var x = _as_c(a, context)
-                var fill = _call(_call(context["array_type"], _code(dtype, context), Python.list(v)).__mul__,
+                var fill = _call(_attr(_call(context["array_type"], _code(dtype, context), Python.list(v)), "__mul__"),
                                  PythonObject(size))
                 _ = _call(equal, x._addr, _call(fill.buffer_info)[0], code, PythonObject(size),
                           _call(store.buffer_info)[0])
@@ -938,7 +945,7 @@ def _array_protocol(a: PythonObject, dtype: PythonObject, copy: PythonObject, co
             raise Error("ValueError: mojolearn: a dtype change needs a copy")
         return _call(out.astype, dtype)
     if _truth(copy):
-        return _call(out.copy)
+        return _call(_attr(out, "copy"))
     return out
 
 
