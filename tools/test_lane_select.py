@@ -1476,7 +1476,7 @@ def test_a_mojo_import_resolves_against_the_importing_files_own_directory():
         assert "bindings/forest_inference_binding.mojo" not in blind, \
             ("root-only resolution still found the sibling import, so this test "
              "cannot fail and is not a check")
-        assert "core/forest_inference.mojo" in blind, \
+        assert "core/hostptr.mojo" in blind, \
             "root-only resolution lost an ordinary root import too; the arm is not clean"
     finally:
         lane_select._mojo_module_files = keep
