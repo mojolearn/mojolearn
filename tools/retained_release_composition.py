@@ -157,6 +157,9 @@ def _host_keys(context):
 
 
 def _source_record(source, compiler):
+    if source.get('kind') == 'compiled-ptx-shard-stage':
+        from release_ptx_assembly import record
+        return record(source, compiler)
     contract, variant = hc._record(source, compiler)
     proof, capture = hc.decoded(source['proof']), hc.decoded(source['capture'])
     prefix = 'mojolearn/' + source['leg'] + '/'
@@ -270,6 +273,9 @@ def validate(proof, source_root=None):
         for source, captured in ((device, before), (host, hbefore)):
             original_revision = hc.decoded(source['proof'])['source_commit']
             require(same_source_context(source_context(root, original_revision), captured), 'original source inputs do not reproduce')
+        if device.get('kind') == 'compiled-ptx-shard-stage':
+            from release_ptx_assembly import record as validate_device_record
+            validate_device_record(device, compiler, root)
         if hcapture.get('retained_inputs') is not None:
             retained_revision = hc.decoded(host['runtime_source']['proof'])['source_commit']
             require(source_context(root, retained_revision) == hcapture['retained_inputs'],
@@ -296,6 +302,9 @@ def validate_bytes(proof, root):
     adapters = {p.name: hc.file_sha(p) for p in (root / '_adapters').glob('*') if p.is_file()}
     expected = {prefix + '_adapters': dict(files=adapters, manifest_sha256=adapters.get('adapters.json'))} if adapters else {}
     require(expected == proof['adapters'], 'shipped adapters differ from original producer')
+    if proof['original_device'].get('kind') == 'compiled-ptx-shard-stage':
+        from release_ptx_assembly import validate_bytes as validate_device_bytes
+        validate_device_bytes(proof['original_device'], root, proof['compiler_sha256'], composed=True)
     return True
 
 
@@ -332,7 +341,11 @@ def validate_ptx(doc, root):
 
 def prepare(device_build, host_build, source_root, compiler, output):
     """Create a new set and assembly proof; originals and their proofs stay untouched."""
-    device, device_set = hc.inspect_build(device_build)
+    if (Path(device_build) / 'device-stage-proof.json').is_file():
+        from release_ptx_assembly import inspect as inspect_device
+        device, device_set = inspect_device(device_build)
+    else:
+        device, device_set = hc.inspect_build(device_build)
     if (Path(host_build) / 'host-build-proof.json').is_file():
         from release_host_build import inspect
         host, host_set = inspect(host_build)
@@ -352,6 +365,10 @@ def prepare(device_build, host_build, source_root, compiler, output):
     validate(proof, source_root)
     # Check originals before copying. Each source is checked with its own host.
     for original, directory in ((device, device_set), (host, host_set)):
+        if original.get('kind') == 'compiled-ptx-shard-stage':
+            from release_ptx_assembly import validate_bytes as validate_device_bytes
+            validate_device_bytes(original, directory, compiler)
+            continue
         if original.get('kind') == 'independent-host-build':
             from release_host_build import validate_bytes as validate_host_bytes
             validate_host_bytes(original, directory, compiler)
