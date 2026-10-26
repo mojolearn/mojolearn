@@ -59,7 +59,7 @@ def test_inference_families_ship_and_carry_no_training():
 def test_gpu_and_reference_bindings_register_build_and_search():
     for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo"):
         names = _registered(rel)
-        assert {"ivf_flat_build", "ivf_flat_search", "ivf_flat_build_and_search"} <= names, rel
+        assert {"ivf_flat_build", "ivf_flat_search"} <= names, rel
     shared = _read("bindings/ivf_index_arrays.mojo")
     assert "ivf_validate_index_arrays" in shared
     # Both bindings take their search from the ONE shared source, and since

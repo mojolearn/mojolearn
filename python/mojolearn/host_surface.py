@@ -3097,8 +3097,8 @@ FAMILIES = (
     dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
         # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
-        # GPU binding's whole surface (ivf_flat_build_and_search and the two
-        # read-backs): the build's k-means quantizer through the k-means
+        # GPU binding's whole surface (ivf_flat_build, ivf_flat_search and the
+        # two read-backs): the build's k-means quantizer through the k-means
         # lane's host restatement, the CSR layout and probe merge the device
         # path already runs on the host, and the pinned distance tile and
         # the identical top-k restated.
@@ -3124,7 +3124,7 @@ FAMILIES = (
         exports=(
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
-            "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
+            "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
             "ivf_merge_shards",

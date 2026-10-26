@@ -10,18 +10,17 @@ with every device launch restated on the host (the quantizer through
 `cluster/host/kmeans_oracle.mojo`); that file's header names every original.
 
 THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES (`bindings/_mojolearn_ivf.mojo`):
-`ivf_flat_build_and_search` with the SAME address and `params` lists, plus
-the read-backs `ivf_numeric_mode` (1) and `ivf_vendor` ("cpu"), so
+`ivf_flat_build` and `ivf_flat_search` with the SAME address and `params`
+lists, plus the read-backs `ivf_numeric_mode` (1) and `ivf_vendor` ("cpu"), so
 `python/mojolearn/_ivf_impl.py` runs unchanged on a CPU-only install through
 `_backend._HOST_MODULES` (`"_mojolearn_ivf": "_mojolearn_ivf_host"`). The
 GPU binding exports nothing else.
 """
 from std.os import abort
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from core.hostptr import copy_f32, f32_ptr, i32_ptr, read_f32
+from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.ivf_index_arrays import ivf_merge_shards_host_binding, ivf_shard_plan_host_binding
@@ -35,8 +34,7 @@ from bindings.ivf_host_search import (
     ivf_flat_search_binding,
 )
 from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
-from ivf.index_arrays_impl import ivf_store_ids_counts
-from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build, host_ivf_build_and_search
+from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build
 
 
 def ivf_host_numeric_mode_binding() raises -> PythonObject:
@@ -83,48 +81,8 @@ def ivf_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-def ivf_flat_build_and_search_binding(
-    addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """`ivf_flat::build` then `ivf_flat::search`, restated. Returns 0.
-
-    `addrs` = [x (n * dim f32, read), queries (m * dim f32, read), dist_out
-    (m * k f32, WRITTEN), idx_out (m * k i32, WRITTEN), cand_out (m i32,
-    WRITTEN)]; `params` = [n, dim, m, k, n_lists, n_probes, kmeans_n_iters,
-    metric (0 L2Expanded, 1 L2SqrtExpanded), seed]. The GPU binding's order."""
-    if len(addrs) != 5:
-        raise Error(
-            "ivf_flat_build_and_search: addrs must contain 5 addresses (x,"
-            " queries, dist_out, idx_out, cand_out), got "
-            + String(len(addrs))
-        )
-    if len(params) != 9:
-        raise Error(
-            "ivf_flat_build_and_search: params must contain 9 values (n, dim,"
-            " m, k, n_lists, n_probes, kmeans_n_iters, metric, seed), got "
-            + String(len(params))
-        )
-    var n = Int(py=params[0])
-    var dim = Int(py=params[1])
-    var m = Int(py=params[2])
-    var k = Int(py=params[3])
-    var n_lists = Int(py=params[4])
-    var n_probes = Int(py=params[5])
-    var kmeans_n_iters = Int(py=params[6])
-    var metric = Int(py=params[7])
-    var seed = UInt64(Int(py=params[8]))
-    var x = read_f32(Int(py=addrs[0]), max(0, n * dim))
-    var queries = read_f32(Int(py=addrs[1]), max(0, m * dim))
-    var dp = f32_ptr(Int(py=addrs[2]))
-    var ip = i32_ptr(Int(py=addrs[3]))
-    var cp = i32_ptr(Int(py=addrs[4]))
-    with GILReleased(Python()):
-        var r = host_ivf_build_and_search(
-            x, n, dim, n_lists, queries, m, k, n_probes, kmeans_n_iters, metric, seed,
-        )
-        copy_f32(r.distances.unsafe_ptr(), dp, m * k)
-        ivf_store_ids_counts(ip, cp, r.indices, r.n_candidates, m, k)
-    return PythonObject(0)
+# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_ivf.patch
 
 
 def ivf_flat_build_binding(
@@ -159,7 +117,8 @@ def build__mojolearn_ivf_host() -> PythonObject:
         m.def_function[ivf_host_sabotage_binding]("ivf_host_sabotage")
         m.def_function[ivf_vendor_binding]("ivf_vendor")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
-        m.def_function[ivf_flat_build_and_search_binding]("ivf_flat_build_and_search")
+        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_ivf.patch
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
         m.def_function[ivf_flat_search_binding]("ivf_flat_search")
         m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
