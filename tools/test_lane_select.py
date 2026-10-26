@@ -2746,6 +2746,62 @@ def test_an_unplaceable_registry_diff_is_refused_by_name_never_every_lane():
     assert "`family`" in sel["reasons"][path], sel["reasons"][path]
 
 
+def test_registry_executable_helper_edits_follow_proved_callers():
+    path = lane_select.BACKEND
+    old = lane_select._read(path)
+    new = old.replace("def _layout():\n", "def _layout():\n    raise RuntimeError('changed loader')\n", 1)
+    assert new != old
+    with _Seeded({path: old}, {path: new}):
+        result = lane_select.select([path], ref=_FAKE_REF)
+    assert not result["unattributed"], result["reasons"]
+    assert result["lanes"] and "named executable definitions" in result["reasons"][path]
+    assert not result["every_rules"], "a caller proof must not be replaced by an all-lanes rule"
+    with _Seeded({path: old}, {path: old + "\n_UNPLACED = unknown_side_effect()\n"}):
+        result = lane_select.select([path], ref=_FAKE_REF)
+    assert result["unattributed"] == [path], result["reasons"]
+
+
+def test_merged_layout_changes_select_members_of_changed_link_units():
+    import json
+    from unittest.mock import patch
+    path = "bindings/merged_groups.json"
+    old = {"index_file": "_merged.json", "dirs": {"identical": {
+        "path": "identical", "groups": {"one": ["_a", "_b"], "other": ["_c"]},
+        "optional": {"_d": {"group": "one", "platforms": ["darwin"]}}}}}
+    new = json.loads(json.dumps(old))
+    new["dirs"]["identical"]["groups"] = {"one": ["_a"], "two": ["_b"], "other": ["_c"]}
+    reverse = {"bindings/_" + name + ".mojo": {name} for name in "abcd"}
+    with patch.object(lane_select, "_git_show", return_value=json.dumps(old)), \
+            patch.object(lane_select, "_read", return_value=json.dumps(new)):
+        users, members = lane_select.merged_group_lanes("base", path, reverse)
+    assert users == {"a", "b", "d"} and members == {"_a", "_b", "_d"}
+    # A newly named unknown binding cannot be called unexecuted merely
+    # because the reverse map has no entry for it.
+    with patch.object(lane_select, "_git_show", return_value=json.dumps(old)), \
+            patch.object(lane_select, "_read", return_value=json.dumps(new)):
+        assert lane_select.merged_group_lanes("base", path, {k: v for k, v in reverse.items()
+                                                            if "_b.mojo" not in k}) is None
+    # The previous one-group format gave optional members just platform
+    # lists. Splitting that unit must still retain those optional members.
+    before = json.loads(json.dumps(old))
+    before["dirs"]["identical"]["groups"] = {"one": ["_a", "_b", "_c"]}
+    before["dirs"]["identical"]["optional"]["_d"] = ["darwin"]
+    with patch.object(lane_select, "_git_show", return_value=json.dumps(before)), \
+            patch.object(lane_select, "_read", return_value=json.dumps(new)):
+        users, members = lane_select.merged_group_lanes("base", path, reverse)
+    assert users == set("abcd") and members == {"_" + name for name in "abcd"}
+    platform = json.loads(json.dumps(old))
+    platform["dirs"]["identical"]["optional"]["_d"]["platforms"] = ["linux"]
+    with patch.object(lane_select, "_git_show", return_value=json.dumps(old)), \
+            patch.object(lane_select, "_read", return_value=json.dumps(platform)):
+        users, members = lane_select.merged_group_lanes("base", path, reverse)
+    assert users == {"a", "b", "d"}, "optional platform admission affects its entire link unit"
+    new["index_file"] = "unmodeled-index-policy.json"
+    with patch.object(lane_select, "_git_show", return_value=json.dumps(old)), \
+            patch.object(lane_select, "_read", return_value=json.dumps(new)):
+        assert lane_select.merged_group_lanes("base", path, reverse) is None
+
+
 def test_explicit_path_selection_preserves_the_comparison_ref():
     from unittest.mock import patch
     sources = {"example": {"bindings/changed.mojo"}}
