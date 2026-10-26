@@ -58,13 +58,12 @@
 #   CPU_THREADS=3           every CPU thread pool (MOJOLEARN_CPU_THREADS, OMP...)
 #   PYTHON=...              the interpreter (default: `pixi run -e default python`
 #                           when pixi and pixi.toml are present, else python3)
-#   ALLOW_DIRTY=1           record from a tree with modified tracked files
-#                           (the record then names a commit that is not its
-#                           source; admission tooling will not know)
+#   MOJOLEARN_IDENTITY_LAUNCH  guarded launch from release_identity_run.py
+#                           (required for columns; records the actual missing work)
 #
-# Rerunning the same command in the SAME tree resumes (identity_break --resume);
-# a refused resume (new tree path, rebuilt bindings) moves the old file aside
-# and starts that record again. A finished record is left untouched.
+# Start release columns through release_identity_run.py. The ledger retains
+# finished work and refuses duplicate active runs. A refused resume is retained
+# for diagnosis; it never silently starts every completed fit again.
 #
 # Output, per record: <outdir>/<file>.identical.json, its .log, an IDCOLUMN
 # line from tools/identity_columns.py check (admissible=yes|NO), and
@@ -104,6 +103,14 @@ elif command -v pixi > /dev/null 2>&1 && [ -f pixi.toml ]; then
     PY=(pixi run -e default python)
 else
     PY=(python3)
+fi
+
+# A column needs the ledger's concrete work selection before any product import.
+if [ "$MODE" = column ]; then
+    [ -n "${MOJOLEARN_IDENTITY_LAUNCH:-}" ] || die "start with tools/release_identity_run.py run (a guarded launch is required)"
+    "${PY[@]}" "${MOJOLEARN_IDENTITY_GUARD:-$ROOT/tools/release_identity_run.py}" validate \
+        --launch "$MOJOLEARN_IDENTITY_LAUNCH" --root "$ROOT" --label "$LABEL" --out "$OUT" \
+        || die "release identity launch validation failed"
 fi
 
 # --- the environment the record claims -------------------------------------
@@ -209,7 +216,7 @@ fi
 # One sample per part (the old ">= 2" refusal is gone): the second witness of a
 # reference is the other GPU vendor's column, and NVIDIA == AMD is the rule.
 REPEATS=${REPEATS:-1}
-[ "$REPEATS" -ge 1 ] 2>/dev/null || die "REPEATS=$REPEATS: must be a positive integer"
+[ "$REPEATS" = 1 ] || die "release identity collects each part once"
 
 JSON=$OUT/$NAME.identical.json
 LOG=$OUT/$NAME.log
@@ -233,10 +240,8 @@ else
         "${PY[@]}" -u "${args[@]}" --resume >> "$LOG" 2>&1
         rc=$?
         if grep -q "REFUSING TO RESUME" <(tail -n 5 "$LOG"); then
-            mv "$JSON" "$JSON.unresumable-$(date -u +%Y%m%dT%H%M%SZ)"
-            echo "# resume refused (new tree or rebuilt bindings); recording $NAME again" >> "$LOG"
-            "${PY[@]}" -u "${args[@]}" >> "$LOG" 2>&1
-            rc=$?
+            echo "# resume refused; retained completed work for explicit provenance repair" >> "$LOG"
+            die "resume refused; see $LOG (no completed fits restarted)"
         fi
     else
         "${PY[@]}" -u "${args[@]}" >> "$LOG" 2>&1
