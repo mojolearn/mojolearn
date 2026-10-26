@@ -389,6 +389,11 @@ def test_retained_device_and_linux_host_units_require_exact_identities():
                  members=['_mojolearn_core_host'], evidence=[])
     assert compiled.supports_requirement(wanted)
     compiled._host_check('compile-nvidia/' + key, wanted, facts, dict(binding_key=key))
+    origin = dict(action='retain', source_commit='b'*40, original_proof_sha256='c'*64)
+    retained = dict(facts, group_origins={'host.so':origin}, member_groups={host['name']:'host.so'})
+    compiled._host_check('compile-nvidia/' + key, wanted, retained, dict(binding_key=key, compilation_origin=origin))
+    with pytest.raises(ValueError, match='compilation origin'):
+        compiled._host_check('compile-nvidia/' + key, wanted, retained, dict(binding_key=key))
     with pytest.raises(ValueError, match='compiler executable'):
         compiled._host_check('compile-nvidia/' + key, wanted, dict(facts, compiler_sha256='b' * 64),
                              dict(binding_key=key))

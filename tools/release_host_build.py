@@ -27,6 +27,7 @@ import release_host_composition as hc
 # bindings/merged_groups.json (hc.host_plan); every per-file field is a
 # {file: value} map and binding-stamp.json holds one stamp per file.
 SCHEMA = 'mojolearn.linux.host-build.v2'
+INCREMENTAL_SCHEMA = 'mojolearn.linux.host-build.v3'
 CAPTURE_SCHEMA = 'mojolearn.linux.host-compile-inputs.v1'
 KIND = 'independent-host-build'
 PREFIX = 'mojolearn/cpu/'  # Proof namespace only; the wheel uses mojolearn/host/.
@@ -126,12 +127,31 @@ def command(pixi_env):
     return ['pixi', 'run', '-e', pixi_env, 'bash', 'bindings/merged_build.sh', 'host']
 
 
+def incremental_plan(before, current, donor, pixi_env):
+    """Derive group admission; never translate a cache key or compiler hash."""
+    import retained_release_composition as rc
+    require(rc.runtime_inputs(before) == rc.runtime_inputs(current), 'retained runtime inputs changed')
+    require(before['merged_build_inputs'] == current['merged_build_inputs'], 'merged group recipe changed')
+    require(before['source_inventory'] == donor['source_inventory'], 'retained inventory differs')
+    require(rc._host_keys(before) == donor['host_identities'], 'retained host identities differ')
+    result = {}
+    for filename, names in hc.host_plan().items():
+        keys = ['linux-64/host/-/host/' + name for name in names]
+        same = sorted(donor['index']['files'].get(filename, [])) == sorted(names) and all(
+            rc.compilation_identity(before, before['binding_identities'][key], key)
+            == rc.compilation_identity(current, current['binding_identities'][key], key) for key in keys)
+        result[filename] = dict(action='retain' if same else 'compile', members=names,
+            command=None if same else command(pixi_env) + ['--group', filename[:-3]])
+    return result
+
+
 def record(source, compiler):
     """Validate original host-only witnesses, without requiring a GPU producer."""
     require(source.get('kind') == KIND and source.get('leg') == 'cpu', 'wrong producer scope')
     proof, capture, inventory, index, stamp, stage, readback = (hc.decoded(source[k]) for k in
         ('proof', 'capture', 'inventory', 'index', 'stamp', 'stage', 'readback'))
-    require(proof.get('schema') == SCHEMA and proof.get('action') == 'build-host-only'
+    incremental = proof.get('schema') == INCREMENTAL_SCHEMA
+    require(proof.get('schema') in (SCHEMA, INCREMENTAL_SCHEMA) and proof.get('action') == 'build-host-only'
             and proof.get('complete') is True and 'extensions' not in proof,
             'incomplete host proof or invented device output')
     require(all(type(proof.get(k)) is int and proof[k] == 0 for k in
@@ -166,8 +186,32 @@ def record(source, compiler):
     environment = capture.get('build_environment', {})
     require(environment == FLAGS, 'actual host invocation flags differ')
     pixi_env = capture.get('pixi_environment', '')
-    require(re.fullmatch('[A-Za-z0-9_-]+', pixi_env) and capture.get('command') == command(pixi_env)
-            and proof.get('command') == command(pixi_env), 'host-only compiler command differs')
+    require(re.fullmatch('[A-Za-z0-9_-]+', pixi_env), 'unsafe pixi environment name')
+    if incremental:
+        donor_contract, donor_variant = hc._record(source['runtime_source'], compiler)
+        before, current = capture['retained_inputs'], capture['admitted_inputs']
+        require(current['source_inventory'] == inventory and current['binding_identities']
+                and {k:v for k,v in current['binding_identities'].items() if '/host/' in k} == identities,
+                'incremental current source inputs differ')
+        require(current['runtime_identity'] == capture['runtime_identity'], 'incremental runtime identity differs')
+        group_plan = incremental_plan(before, current, donor_contract, pixi_env)
+        require(capture.get('group_plan') == proof.get('group_plan') == group_plan, 'incremental group plan differs')
+        expected_commands = [row['command'] for row in group_plan.values() if row['action'] == 'compile']
+        require(capture.get('command') == proof.get('command') == expected_commands, 'incremental compiler commands differ')
+        origins = {}
+        for filename, row in group_plan.items():
+            retained = row['action'] == 'retain'
+            origins[filename] = dict(action=row['action'], source_commit=donor_contract.get('group_compilation_sources', {}).get(filename, donor_contract['source_commit']) if retained else revision,
+                original_proof_sha256=source['runtime_source']['proof']['sha256'] if retained else None,
+                input_stage='retained-staged' if retained else 'compiler-output')
+            if retained:
+                require(proof['raw_host_sha256'][filename] == donor_variant['host_sha256'][filename],
+                        'retained group bytes differ from original staged output')
+        require(proof.get('group_origins') == origins, 'incremental compilation origins differ')
+        compiled = {f for f, row in group_plan.items() if row['action'] == 'compile'}
+    else:
+        require(capture.get('command') == proof.get('command') == command(pixi_env), 'host-only compiler command differs')
+        compiled = set(host_paths())
     packages, toolchain = capture.get('installed_packages'), capture.get('toolchain')
     require(isinstance(packages, list) and packages and isinstance(toolchain, dict)
             and toolchain.get('packages') and set(toolchain['packages']) <= set(packages)
@@ -177,7 +221,7 @@ def record(source, compiler):
         sha256=source['index']['sha256'], files=index['files'])}, 'host index proof differs')
     paths = host_paths()
     # one stamp per merged host file (tools/binding_stamps.py write-merged), naming its members
-    require(isinstance(stamp, dict) and set(stamp) == set(paths), 'host stamp differs')
+    require(isinstance(stamp, dict) and set(stamp) == compiled, 'host stamp differs')
     for f, one in stamp.items():
         require(isinstance(one, dict) and one.get('schema') == 2 and one.get('binding') == paths[f]
                 and one.get('script') == 'merged_build.sh' and one.get('commit') == revision
@@ -232,6 +276,7 @@ def record(source, compiler):
     contract = dict(source_commit=revision, source_inventory=inventory, compiler_sha256=compiler,
         host_identities=identities, installed_packages=packages, toolchain=toolchain,
         index=index, runtime_libraries=libraries, generated_sources=generated,
+        group_origins=proof.get('group_origins', {}),
         host_dependencies={f: {k: stage[k][f] for k in ('needed', 'runpath', 'rpath')} for f in paths})
     return contract, dict(leg='cpu', host_sha256=stage['staged_sha256'],
                           unstaged_sha256=proof['raw_host_sha256'], proof_sha256=source['proof']['sha256']), proof, capture
@@ -296,9 +341,8 @@ def run_logged(argv, root, env, log):
     return result.returncode
 
 
-def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=None):
-    """The actual host compile (every host group, one after another: each fits a free runner) followed by
-    standard staging and native readback."""
+def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=None, reuse_unchanged_host=False):
+    """Compile all or precisely changed groups, then stage/read back the complete host."""
     require(sys.platform == 'linux', 'the host producer runs on Linux')
     import retained_release_composition as rc
     import binding_stamps
@@ -310,8 +354,10 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     donor, donor_set = hc.inspect_build(runtime_build)
     donor_contract, _ = hc._record(donor, compiler_sha)
     revision, inventory, context = rc.current_source(root)
-    require(context['runtime_identity'] == rc.source_context(str(root), hc.decoded(donor['proof'])['source_commit'])['runtime_identity'],
-            'retained runtime inputs changed')
+    before = rc.source_context(str(root), hc.decoded(donor['proof'])['source_commit'])
+    require(rc.runtime_inputs(context) == rc.runtime_inputs(before), 'retained runtime inputs changed')
+    group_plan = incremental_plan(before, context, donor_contract, pixi_env) if reuse_unchanged_host else None
+    commands = [row['command'] for row in group_plan.values() if row['action'] == 'compile'] if group_plan is not None else [command(pixi_env)]
     prefix = root / '.pixi/envs' / pixi_env
     compiler = prefix / 'bin/mojo'
     packages = sorted(p.stem for p in (prefix / 'conda-meta').glob('*.json'))
@@ -343,13 +389,24 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
         runtime_identity=context['runtime_identity'], build_environment=FLAGS, pixi_environment=pixi_env,
         merged_build_inputs=context['merged_build_inputs'],
         command=command(pixi_env), producer_sha256=hc.file_sha(Path(__file__)), created_ns=time.time_ns())
-    write(out / 'compile-inputs.json', capture)  # Written before subprocess begins.
-    build_exit = run_logged(command(pixi_env), root, env, out / 'build.log')
+    if group_plan is not None:
+        capture.update(command=commands, group_plan=group_plan, retained_inputs=before, admitted_inputs=context)
+    write(out / 'compile-inputs.json', capture)  # Written before any subprocess begins.
+    build_exit = 0
+    for number, argv in enumerate(commands):
+        build_exit = run_logged(argv, root, env, out / ('build-%s.log' % number))
     require(rc.current_source(root)[:2] == (revision, inventory) and hc.file_sha(compiler) == compiler_sha,
             'source/compiler changed during compilation')
     (out / 'raw').mkdir()
     stamps = {}
+    stamp_exit = 0
     for f, raw_output in raw_outputs.items():
+        if group_plan is not None and group_plan[f]['action'] == 'retain':
+            require(hc.file_sha(donor_set / paths[f]) == hc._record(donor, compiler_sha)[1]['host_sha256'][f], 'retained host bytes changed')
+            raw_output.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(donor_set / paths[f], raw_output)
+            shutil.copy2(raw_output, out / 'raw' / f)
+            continue
         shutil.copy2(raw_output, out / 'raw' / f)
         stamp_exit = run_logged(['python3','tools/binding_stamps.py','write-merged',str(raw_output),
                                 ','.join(sorted(plan[f]))], root, env, out / ('stamp-' + f[:-3] + '.log'))
@@ -360,7 +417,9 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     # Retain them with their tracked generator inputs and each reaching
     # member's closure rows, so record() can join stamp and identity exactly.
     generated_closures = {}
-    for name in sorted(hc.expected_names()):
+    compiled_names = {name for filename, names in plan.items() for name in names
+                      if group_plan is None or group_plan[filename]['action'] == 'compile'}
+    for name in sorted(compiled_names):
         rows, _ = gs.closure_rows(root, binding_stamps.member_script(name))
         if any(r[0] in gs.GENERATED for r in rows):
             generated_closures[name] = rows
@@ -378,7 +437,7 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     (staged / 'host').mkdir(parents=True)
     for f, raw_output in raw_outputs.items():
         shutil.copy2(raw_output, staged / paths[f])
-    shutil.copy2(root / 'python/mojolearn' / HOST_INDEX, staged / HOST_INDEX)
+    write(staged / HOST_INDEX, dict(format=1, files=plan))
     shutil.copytree(donor_set / '.libs', staged / '.libs')
     require({p.name: hc.file_sha(p) for p in (staged / '.libs').iterdir() if p.is_file()}
             == donor_contract['runtime_libraries'], 'retained runtime bytes changed')
@@ -427,6 +486,13 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
         readback_sha256=hc.file_sha(out / 'readback.json'), runtime_identity=context['runtime_identity'],
         generated_sources=generated_sources, generated_closures=generated_closures,
         qualification='One real CPU host compile and native metadata readback; no GPU, adapter, public runtime, or installed-wheel qualification')
+    if group_plan is not None:
+        proof.update(schema=INCREMENTAL_SCHEMA, command=commands, group_plan=group_plan,
+            group_origins={f:dict(action=row['action'],
+                source_commit=donor_contract.get('group_compilation_sources', {}).get(f, donor_contract['source_commit']) if row['action'] == 'retain' else revision,
+                original_proof_sha256=donor['proof']['sha256'] if row['action'] == 'retain' else None,
+                input_stage='retained-staged' if row['action'] == 'retain' else 'compiler-output') for f,row in group_plan.items()},
+            qualification='Selective CPU compilation plus explicitly retained original groups; staging and native metadata readback only, no installed-wheel or runtime qualification')
     write(out / 'host-build-proof.json', proof)
     source, directory = inspect(out)
     validate_bytes(source, directory, compiler_sha)
@@ -443,6 +509,7 @@ def main(argv=None):
     production.add_argument('--compiler-sha256',required=True)
     production.add_argument('--pixi-env',default='gbmbench')
     production.add_argument('--patchelf')
+    production.add_argument('--reuse-unchanged-host', action='store_true')
     probe = sub.add_parser('readback-member')
     for name in ('root','binary','output'):
         probe.add_argument('--'+name,type=Path,required=True)
@@ -452,7 +519,7 @@ def main(argv=None):
         readback_member(args.root,args.binary,args.name,args.output)
     else:
         try:
-            result=build(args.root,args.runtime_build,args.output,args.compiler_sha256,args.pixi_env,args.patchelf)
+            result=build(args.root,args.runtime_build,args.output,args.compiler_sha256,args.pixi_env,args.patchelf,args.reuse_unchanged_host)
             print(json.dumps(dict(schema=SCHEMA,source_commit=result['source_commit'],host_outputs=len(result['host_extension']))))
         except BaseException:
             if args.output.is_dir():

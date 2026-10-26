@@ -269,3 +269,89 @@ def test_generated_tokenizer_table_cannot_hide_other_source_changes(fixture, tmp
     with pytest.raises(ValueError) as caught:
         hb.record(source, COMPILER)
     assert dict(REFUSALS)[changed] in str(caught.value)
+
+
+def incremental_host(fixture, tmp_path):
+    directory = host_only(fixture, tmp_path)
+    _, old, _, before, current = fixture
+    donor, donor_dir = hc.inspect_build(old[0])
+    contract, variant = hc._record(donor, COMPILER)
+    # The test fixture's host stamps add fields the original full proof omitted.
+    # Align only those descriptive fields; the changed tokenizer closure remains.
+    for key, ident in contract['host_identities'].items():
+        closure = current['binding_identities'][key]['closure']['digest']
+        current['binding_identities'][key] = copy.deepcopy(ident)
+        current['binding_identities'][key]['closure'].update(scope='closure', digest=closure)
+        current['binding_identities'][key]['script'] = binding_stamps.member_script(ident['name'])
+        before['binding_identities'][key]['script'] = binding_stamps.member_script(ident['name'])
+        before['binding_identities'][key]['closure']['scope'] = 'closure'
+    # Original synthetic build permits tree scope; make its captured host inputs
+    # describe the same exact closures needed for incremental admission.
+    for original in old:
+        from test_retained_release_composition import update
+        update(original/'compile-inputs.json', lambda d: [(v['closure'].update(scope='closure'), v.update(script=binding_stamps.member_script(v['name'])))
+            for k,v in d['binding_identities'].items() if '/host/' in k])
+        update(original/'build-provenance.json', lambda d:d.update(compile_inputs_sha256=hc.file_sha(original/'compile-inputs.json')))
+    donor, donor_dir = hc.inspect_build(old[0])
+    contract, variant = hc._record(donor, COMPILER)
+    hb.write(directory/'runtime-source.json', donor)
+    capture = json.loads((directory/'compile-inputs.json').read_text())
+    capture['binding_identities'] = {k:v for k,v in current['binding_identities'].items() if '/host/' in k}
+    plan = hb.incremental_plan(before, current, contract, 'gbmbench')
+    proof = json.loads((directory/'host-build-proof.json').read_text())
+    stage = json.loads((directory/'stage.json').read_text())
+    stage['runtime_origin_proof_sha256'] = donor['proof']['sha256']
+    stamps = json.loads((directory/'binding-stamp.json').read_text())
+    for filename, row in plan.items():
+        if row['action'] == 'retain':
+            shutil.copy2(donor_dir/'host'/filename, directory/'raw'/filename)
+            stage['raw_sha256'][filename] = variant['host_sha256'][filename]
+            stamps.pop(filename)
+    commands = [row['command'] for row in plan.values() if row['action'] == 'compile']
+    capture.update(group_plan=plan, command=commands, retained_inputs=before, admitted_inputs=current)
+    hb.write(directory/'compile-inputs.json', capture)
+    hb.write(directory/'binding-stamp.json', stamps)
+    hb.write(directory/'stage.json', stage)
+    proof.update(schema=hb.INCREMENTAL_SCHEMA, command=commands, group_plan=plan,
+        group_origins={f:dict(action=row['action'], source_commit=OLD if row['action']=='retain' else NEW,
+            original_proof_sha256=donor['proof']['sha256'] if row['action']=='retain' else None,
+            input_stage='retained-staged' if row['action']=='retain' else 'compiler-output') for f,row in plan.items()},
+        compile_inputs_sha256=hc.file_sha(directory/'compile-inputs.json'),
+        stamp_sha256=hc.file_sha(directory/'binding-stamp.json'), stage_sha256=hc.file_sha(directory/'stage.json'),
+        raw_host_sha256=stage['raw_sha256'])
+    hb.write(directory/'host-build-proof.json', proof)
+    return directory, plan
+
+
+def test_incremental_host_rebuilds_changed_group_preserving_compilation_origins(fixture, tmp_path):
+    directory, plan = incremental_host(fixture, tmp_path)
+    assert [r['action'] for r in plan.values()].count('compile') == 1
+    assert [r['action'] for r in plan.values()].count('retain') == 4
+    source, staged = hb.inspect(directory)
+    contract, _, proof, capture = hb.record(source, COMPILER)
+    assert hb.validate_bytes(source, staged, COMPILER)
+    assert len(capture['command']) == 1 and capture['command'][0][-2] == '--group'
+    assert {r['source_commit'] for r in contract['group_origins'].values()} == {OLD, NEW}
+    original_source, builds, *_ = fixture
+    composition = rc.prepare(builds[0], directory, original_source, COMPILER, tmp_path/'composed-incremental')
+    origins = [r for path,r in composition['artifact_origins'].items() if '/host/' in path]
+    assert sum(r['source_commit'] == OLD for r in origins) == 4
+    assert all('staging_proof_sha256' in r for r in origins)
+
+
+@pytest.mark.parametrize('tamper', ['changed-retained-bytes', 'invented-origin', 'skip-changed-group', 'wrong-command'])
+def test_incremental_host_rejects_false_reuse(fixture, tmp_path, tamper):
+    directory, plan = incremental_host(fixture, tmp_path)
+    source, _ = hb.inspect(directory)
+    retained = next(f for f,r in plan.items() if r['action'] == 'retain')
+    if tamper == 'changed-retained-bytes':
+        change_witness(source, 'proof', lambda d:d['raw_host_sha256'].update({retained:'f'*64}))
+    elif tamper == 'invented-origin':
+        change_witness(source, 'proof', lambda d:d['group_origins'][retained].update(source_commit=NEW))
+    elif tamper == 'skip-changed-group':
+        changed = next(f for f,r in plan.items() if r['action'] == 'compile')
+        change_witness(source, 'proof', lambda d:d['group_plan'][changed].update(action='retain'))
+    else:
+        change_witness(source, 'proof', lambda d:d.update(command=[]))
+    with pytest.raises(ValueError):
+        hb.record(source, COMPILER)

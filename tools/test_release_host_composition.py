@@ -271,3 +271,38 @@ def test_unknown_host_format_scope_cannot_exempt_a_flag_difference(fixture):
     doc.pop('host_format_scope')
     with pytest.raises(ValueError, match='scope witness'):
         hc.validate_document(doc)
+
+
+def _text_witness(text):
+    return {'utf8':text,'sha256':hashlib.sha256(text.encode()).hexdigest()}
+
+
+def test_restored_shard_requires_successful_matching_original_compilation(tmp_path):
+    source_dir=tmp_path/'source'; source_dir.mkdir(); (source_dir/'sample.mojo').write_text('source\n')
+    for rel in hc.HOST_FORMAT_SOURCES:
+        path=source_dir/rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('source\n')
+    directory=build(tmp_path/'build', 'hip','gfx942',b'host',source_dir)
+    source,_=hc.inspect_build(directory)
+    proof=hc.decoded(source['proof']); keys=hc.decoded(source['host_cache_key'])
+    origins={}
+    for filename,key in keys.items():
+        cache=proof['bincache']['mojolearn/hip/gfx942/host/'+filename]
+        cache['outcome']='hot-hit'
+        outcome='miss+built-not-uploaded:no-slot'
+        origins[filename]=dict(
+            shard=_text_witness('host:merged_build.sh:'+filename[:-3]+'\tok\t'+outcome+'\t1.0\t'+cache['key']+'\n'),
+            key=_text_witness(json.dumps(key)),
+            provenance=_text_witness('date\tbindings/merged_build.sh\t'+outcome+'\t'+cache['key']+'\t1.0\tpython/mojolearn/host/'+filename+'='+cache['unstaged_sha256']+'\n'),
+            archive=_text_witness(cache['key']+'\t'+'a'*64+'\n'),
+            assembly_archive=_text_witness(cache['key']+'\t'+'a'*64+'\n'))
+    source['proof']=_text_witness(json.dumps(proof)); source['host_shard_origins']=origins
+    hc._record(source,COMPILER)
+    filename=next(iter(origins))
+    for field in ('shard','key','provenance','archive','assembly_archive'):
+        bad=copy.deepcopy(source)
+        bad['host_shard_origins'][filename][field]=_text_witness('{}' if field=='key' else 'not-the-compiled-group\n')
+        with pytest.raises((ValueError, KeyError), match='shard|Shard|Assembly|compiler'):
+            hc._record(bad,COMPILER)
+    bad=copy.deepcopy(source);bad.pop('host_shard_origins')
+    with pytest.raises(ValueError,match='receipt'):
+        hc._record(bad,COMPILER)

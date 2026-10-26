@@ -415,6 +415,38 @@ def builder_view(rel, data, members):
     return hashlib.sha256(("%s\0%s\0" % (BUILDER_RULE, rel) + view).encode()).hexdigest()
 
 
+# The CUDA transform runs after Mojo, metadata readback, and runtime staging.
+# Keep the original whole-builder identities; these separate views authorize
+# only compilation reuse, never reuse of differently processed CUDA bytes.
+CUDA_PHASE_START = '# ------------------------------------------- IDENTICAL PTX, ROUNDING PINNED\n'
+CUDA_PHASE_END = '# ------------------------------------------------- CPU ISA BASELINE\n'
+CUDA_PHASE_HELPERS = ('packaging/linux/ptx_contract.py', 'packaging/linux/cubin_contract.py')
+
+
+def linux_phase_builders(tree, identities):
+    tree = Path(tree)
+    rel = 'packaging/linux/build_sets.sh'
+    text = (tree / rel).read_text()
+    if text.count(CUDA_PHASE_START) != 1 or text.count(CUDA_PHASE_END) != 1:
+        raise ValueError('unrecognized CUDA post-compilation boundary')
+    first, rest = text.split(CUDA_PHASE_START)
+    phase, last = rest.split(CUDA_PHASE_END)
+    if not phase.rstrip().endswith('fi') or 'if [[ "$VENDOR" = cuda ]]' not in phase:
+        raise ValueError('unrecognized CUDA post-compilation guard')
+    compile_bytes = (first + CUDA_PHASE_END + last).encode()
+    if any(Path(name).name.encode() in compile_bytes for name in CUDA_PHASE_HELPERS):
+        raise ValueError('CUDA helper now executes outside its post-compilation boundary')
+    data = {name: (compile_bytes if name == rel else (tree / name).read_bytes())
+            for name in LINUX_BUILDERS if name not in CUDA_PHASE_HELPERS}
+    def view(members):
+        return {name: builder_view(name, content, members) for name, content in data.items()}
+    return dict(schema='mojolearn.linux.builder-phases.v1',
+        bindings={key: view(binding_members(ident['name'])) for key, ident in identities.items()},
+        runtime=view(None), adapters=view({'packaging/adapters/build.sh', 'adapters'}),
+        cuda_postcompile=dict(block=hashlib.sha256(phase.encode()).hexdigest(),
+            helpers={name: sha256(tree / name) for name in CUDA_PHASE_HELPERS}))
+
+
 def binding_members(name):
     """The list tokens that name a binding: its name and its build script."""
     return frozenset((name, "build.sh" if name == "_mojolearn" else "build_" + name[len("_mojolearn_"):] + ".sh"))

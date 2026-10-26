@@ -94,6 +94,7 @@ def source_context(root, revision):
         identities = {b.key: rr.identity(b, facts) for b in rr.bindings(rr.LINUX, ['identical'])}
         require(all(not rr.unreadable(i) and i['closure']['scope'] == 'closure' for i in identities.values()),
                 'unresolved binding identity')
+        phases = rr.linux_phase_builders(directory, identities)
         runtime = rr.runtime_identity(facts)
         require(not rr.unreadable_runtime(runtime), 'unresolved runtime identity')
         adapters = adapter_inputs(Path(directory))
@@ -106,7 +107,34 @@ def source_context(root, revision):
         builders = {name: rr.builder_view(name, (Path(directory) / name).read_bytes(),
                     {'packaging/adapters/build.sh', 'adapters'}) for name in rr.LINUX_BUILDERS}
     return dict(binding_identities=identities, runtime_identity=runtime, source_inventory=inventory,
-                adapter_sources=adapters, adapter_builders=builders, merged_build_inputs=merged_inputs)
+                adapter_sources=adapters, adapter_builders=builders, merged_build_inputs=merged_inputs, builder_phases=phases)
+
+
+def compilation_identity(context, identity, key=None):
+    """Project only builder hashes; all original identities remain in the proof."""
+    phases = context.get('builder_phases')
+    if phases is None:
+        return identity
+    require(phases.get('schema') == 'mojolearn.linux.builder-phases.v1', 'unknown builder phase policy')
+    builders = phases['bindings'][key] if key is not None else phases['runtime']
+    require(builders and all(builders.values()), 'unresolved compilation builder inputs')
+    return dict(identity, builders=builders)
+
+
+def compilation_bindings(context, bindings):
+    return {key: compilation_identity(context, value, key) for key, value in bindings.items()}
+
+
+def runtime_inputs(context):
+    return compilation_identity(context, context['runtime_identity'])
+
+
+def same_source_context(actual, recorded):
+    # Existing v1 receipts retain their original strict whole-builder policy.
+    # The additive phase views must not invalidate an otherwise valid receipt.
+    if 'builder_phases' not in recorded:
+        actual = {key:value for key,value in actual.items() if key != 'builder_phases'}
+    return actual == recorded
 
 
 def current_source(root):
@@ -173,10 +201,17 @@ def _projection(device, host, compiler):
     host_outputs = {prefix + p[len(hprefix):]: v for p, v in hp['host_extension'].items()}
     indexes = {p: v for p, v in dp['merged_indexes'].items() if not p.startswith(prefix + 'host/')}
     indexes.update({prefix + p[len(hprefix):]: v for p, v in hp['merged_indexes'].items() if p.startswith(hprefix + 'host/')})
-    origins = {p: dict(source_commit=dp['source_commit'], proof_sha256=device['proof']['sha256'], sha256=v,
+    origins = {p: dict(source_commit=dp.get('bincache', {}).get(p, {}).get('compiled_from_commit', dp['source_commit']),
+                        proof_sha256=device['proof']['sha256'], sha256=v,
                         leg=device['leg']) for p, v in dp['extensions'].items()}
-    origins.update({p: dict(source_commit=hp['source_commit'], proof_sha256=host['proof']['sha256'], sha256=v,
-                            leg=host['leg']) for p, v in host_outputs.items()})
+    for p, value in host_outputs.items():
+        group = hp.get('group_origins', {}).get(Path(p).name)
+        origins[p] = dict(source_commit=group['source_commit'] if group else hp['source_commit'],
+                         proof_sha256=(group.get('original_proof_sha256') if group else None) or host['proof']['sha256'],
+                         sha256=value, leg=host['leg'])
+        if group:
+            origins[p].update(compilation_action=group['action'], input_stage=group['input_stage'],
+                              staging_proof_sha256=host['proof']['sha256'])
     return dict(extensions=dp['extensions'], host_extension=host_outputs, merged_indexes=indexes,
                 adapters=dp.get('adapters', {}), runtime_libraries=dc['runtime_libraries'], artifact_origins=origins)
 
@@ -205,13 +240,15 @@ def validate(proof, source_root=None):
     for source, inputs in ((device, before), (host, hbefore)):
         require(inputs.get('source_inventory') == hc.decoded(source['inventory']),
                 'original inventory differs from committed source inputs')
-    require(_device_keys(device['leg'], before) == _device_keys(device['leg'], current)
-            == {k: v for k, v in dcapture['binding_identities'].items() if '/host/' not in k},
+    require(_device_keys(device['leg'], before)
+            == {k: v for k, v in dcapture['binding_identities'].items() if '/host/' not in k}
+            and compilation_bindings(before, _device_keys(device['leg'], before))
+            == compilation_bindings(current, _device_keys(device['leg'], current)),
             'device compiler/target/flags/source identity changed')
-    require(_host_keys(hbefore) == _host_keys(current)
-            == {k: v for k, v in hcapture['binding_identities'].items() if '/host/' in k},
+    require(_host_keys(hbefore) == {k: v for k, v in hcapture['binding_identities'].items() if '/host/' in k}
+            and compilation_bindings(hbefore, _host_keys(hbefore)) == compilation_bindings(current, _host_keys(current)),
             'selected host compiler/flags/source identity changed')
-    require(before['runtime_identity'] == hbefore['runtime_identity'] == current['runtime_identity'],
+    require(runtime_inputs(before) == runtime_inputs(hbefore) == runtime_inputs(current),
             'runtime compiler/flags/source identity changed')
     require(before['merged_build_inputs'] == hbefore['merged_build_inputs'] == current['merged_build_inputs'],
             'merged compiler script, defines, generator, or manifest changed')
@@ -220,15 +257,24 @@ def validate(proof, source_root=None):
                 and hcapture['merged_build_inputs'] == hbefore['merged_build_inputs'], 'independent host runtime/build inputs differ')
     if projection['adapters']:
         require(before['adapter_sources'] == current['adapter_sources']
-                and before['adapter_builders'] == current['adapter_builders'], 'adapter source/build inputs changed')
+                and before.get('builder_phases', {}).get('adapters', before['adapter_builders'])
+                == current.get('builder_phases', {}).get('adapters', current['adapter_builders']), 'adapter source/build inputs changed')
+    if device['leg'].startswith('cuda/'):
+        require(before.get('builder_phases', {}).get('cuda_postcompile')
+                == current.get('builder_phases', {}).get('cuda_postcompile'), 'CUDA post-compilation packaging policy changed')
     if source_root is not None:
         root = str(Path(source_root).resolve())
         actual_revision, actual_inventory, actual = current_source(root)
-        require(actual_revision == revision and actual_inventory == inventory and actual == current,
+        require(actual_revision == revision and actual_inventory == inventory and same_source_context(actual, current),
                 'admission does not match current committed source')
         for source, captured in ((device, before), (host, hbefore)):
             original_revision = hc.decoded(source['proof'])['source_commit']
-            require(source_context(root, original_revision) == captured, 'original source inputs do not reproduce')
+            require(same_source_context(source_context(root, original_revision), captured), 'original source inputs do not reproduce')
+        if hcapture.get('retained_inputs') is not None:
+            retained_revision = hc.decoded(host['runtime_source']['proof'])['source_commit']
+            require(source_context(root, retained_revision) == hcapture['retained_inputs'],
+                    'original retained host inputs do not reproduce')
+            require(hcapture.get('admitted_inputs') == hbefore, 'incremental host admission inputs differ')
     return True
 
 
