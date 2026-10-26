@@ -24,6 +24,10 @@ import zipfile
 SCHEMA = "mojolearn.macos.development-assembly.v1"
 INDEX = "_mojolearn_merged.json"
 MODES = ("host", "identical")
+STAGING_TOOLS = ("packaging/macos/stage_dylibs.py", "packaging/macos/compatibility.py",
+                 "packaging/macos/check_gpu_embedded.py", "packaging/isa_baseline.py",
+                 "packaging/portable_math/stage.py", "packaging/portable_math/portable_math.c",
+                 "packaging/portable_math/powers_of_ten.h", "packaging/adapters/manifest.py")
 
 
 def require(condition, message):
@@ -129,9 +133,93 @@ output.write_text(json.dumps(dict(active=sorted(map(str, active)),
 '''
 
 
+FROZEN_ADMIT = r'''
+import hashlib, json, os, pathlib, shutil, subprocess, sys
+snapshot, original, cache, assembly, admission, output = (pathlib.Path(p).resolve() for p in sys.argv[1:])
+sys.path.insert(0, str(snapshot/'tools'))
+import development_build as dev
+document = json.loads(assembly.read_text())
+current = json.loads(admission.read_text())
+generated = {}
+prepared_commit = document.get('prepared_source_commit', document['source_commit'])
+for row in document['groups']:
+    receipt = json.loads(pathlib.Path(row['receipt']['path']).read_text())
+    for name, value in receipt['fields']['source']['files'].items():
+        target = snapshot/name
+        if target.is_file():
+            continue
+        if not target.resolve().is_relative_to(snapshot):
+            raise ValueError('escaping captured source path')
+        tracked = subprocess.check_output(['git', '-C', str(original), 'ls-tree', '-r', '--name-only', prepared_commit, '--', name], text=True).strip()
+        if tracked:
+            raise ValueError('frozen source deleted a tracked compiler input: '+name)
+        source = original/name
+        if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != value:
+            raise ValueError('retained generated input is missing or changed: '+name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        generated[name] = dict(source=str(source), sha256=value,
+            basis='untracked compiler input retained byte-for-byte from the admitted receipt')
+support = current['support'][0]
+support_receipt = json.loads(pathlib.Path(support['receipt']).read_text())
+rows = []
+for mode in ('host', 'identical'):
+    originals = [row for row in document['groups'] if row['mode'] == mode]
+    by_stem = {pathlib.Path(row['staged']).stem: row for row in originals}
+    first = json.loads(pathlib.Path(originals[0]['receipt']['path']).read_text())['fields']
+    env = {'PATH': os.environ.get('PATH', ''), **first['environment'], **first['link_environment']}
+    plan = dev.make_plan(snapshot, cache, [mode], env, facts=first['toolchain'],
+                         c_facts=support_receipt['fields']['c_toolchain'], plat='darwin')
+    if {r['stem'] for r in plan['groups']} != set(by_stem):
+        raise ValueError('frozen group coverage differs')
+    for row in plan['groups']:
+        old = json.loads(pathlib.Path(by_stem[row['stem']]['receipt']['path']).read_text())
+        fields = row['fields']
+        # Relocation is not compilation: the snapshot has no toolchain and
+        # is never used to build. Preserve the original absolute build root,
+        # compiler/cache facts and generator interpreter identity explicitly.
+        fields['repo'] = str(original)
+        fields['environment']['MOJOLEARN_MERGED_PYTHON'] = old['fields']['environment']['MOJOLEARN_MERGED_PYTHON']
+        if fields != old['fields'] or dev.digest(fields) != old['key']:
+            raise ValueError(dev.input_change_reason(mode+':'+row['stem'], old['fields'], fields))
+        rows.append({'mode': mode, 'stem': row['stem'], 'original_key': old['key'], 'inputs_equal': True})
+    if len(plan['support']) != 1:
+        raise ValueError('unexpected frozen support coverage')
+    fields = plan['support'][0]['fields']
+    fields['repo'] = str(original)
+    if fields != support_receipt['fields'] or dev.digest(fields) != support_receipt['key']:
+        raise ValueError('frozen portable-math compiler/source inputs changed')
+# Frozen package metadata may differ; native adapters and retained frontend
+# source closures may not differ from their individually admitted origins.
+import retained_release_composition as retained
+proof = json.loads(pathlib.Path(document['adapters']['proof']['path']).read_text())
+native = json.loads(pathlib.Path(proof['origins']['native']['before_build']['path']).read_text())
+if retained.adapter_inputs(snapshot) != native['adapter_inputs']:
+    raise ValueError('frozen native adapter source closure changed')
+for role in ('torch', 'max'):
+    for name, value in proof['origins'][role]['source_inputs'].items():
+        import hashlib
+        if hashlib.sha256((snapshot/name).read_bytes()).hexdigest() != value:
+            raise ValueError('frozen '+role+' input changed: '+name)
+output.write_text(json.dumps(dict(schema='mojolearn.macos.frozen-input-equality.v1',
+    complete=True, groups=rows, support_inputs_equal=True, adapter_inputs_equal=True,
+    retained_generated_inputs=generated,
+    normalizations=['snapshot directory -> original build root',
+                    'verification Python -> recorded root-generator interpreter']), indent=2)+'\n')
+'''
+
+
 class Runner:
     def __init__(self, output, document):
         self.output, self.document = Path(output), document
+        origin = reference(__file__)
+        directory = self.output / "controllers"
+        directory.mkdir(exist_ok=True)
+        retained = directory / (origin["sha256"] + ".py")
+        if not retained.exists():
+            shutil.copy2(__file__, retained)
+        controllers = self.document.setdefault("controllers", {})
+        controllers[origin["sha256"]] = dict(source=origin, retained=reference(retained))
 
     def save(self):
         write(self.output / "assembly.json", self.document)
@@ -340,7 +428,7 @@ def compose_adapters(root, native_result, published_wheel, output):
     return dict(state="adapters-composed", counts={"built": 1, "retained": 2}, proof=str(proof_path), runtime_qualified=False)
 
 
-def adapter_copy(root, directory, proof_path, destination, document):
+def adapter_copy(root, directory, proof_path, destination, document, copy_files=True):
     api = module(root / "packaging/adapters/manifest.py", "assembly_adapter_manifest")
     directory = Path(directory).resolve()
     doc = api.check(directory, vendor="metal", arch="apple")
@@ -369,6 +457,8 @@ def adapter_copy(root, directory, proof_path, destination, document):
             "adapter Mojo compiler version changed")
     require(doc.get("max", {}).get("version") == api.conda_version(root / ".pixi/envs/default", "max"),
             "adapter MAX dependency changed")
+    if not copy_files:
+        return api
     require(not destination.exists(), "staging already contains adapters")
     shutil.copytree(directory, destination, symlinks=False)
     document["adapters"] = dict(source=reference(directory / api.MANIFEST), proof=reference(proof_path),
@@ -422,41 +512,122 @@ def verify_wheel(wheel, pkg, document):
                 if name.endswith((".so", ".dylib", ".mojoc"))}
 
 
-def pack(output, adapters, adapters_proof):
+def refresh_source(output, document, runner, adapters, adapters_proof, source_ref=None):
+    """Fresh frozen Python/package sources beside unchanged, admitted native bytes."""
+    root, stage = Path(document["source_root"]), output / "source"
+    commit = git(root, "rev-parse", source_ref or "HEAD")
+    # Reconstruct the current original-root compiler/source/flags/dependency
+    # admission. A commit/version name alone neither validates nor invalidates it.
+    runner.run("frozen-admission", [document["python"], "-c", ADMIT, root, document["cache"],
+                                   output / "frozen-admission.json"])
+    current = json.loads((output / "frozen-admission.json").read_text())
+    require(set(current["active"]) == {row["source"]["path"] for row in document["groups"]},
+            "frozen source selected different native groups")
+    require(current["indexes"] == {mode: row["source_document"] for mode, row in document["indexes"].items()},
+            "frozen source group membership differs")
+    for row in document["groups"]:
+        verified(row["source"])
+    for name, value in document["staging_tools"].items():
+        require(sha(root / name) == value, "staging/check implementation changed; its check must be rerun: " + name)
+    for ref in document["dependency_inputs"].values():
+        verified(ref)
+    verified(document["portable_math"]["source"])
+    adapter_copy(root, adapters, adapters_proof, None, document, copy_files=False)
+    pkg = stage / "python/mojolearn"
+    for name, value in document["staged_files"].items():
+        require(sha(pkg / name) == value, "staged bytes changed: " + name)
+    fresh = output / "frozen-source"
+    require(not fresh.exists(), "frozen-source staging already exists")
+    fresh.mkdir()
+    archive = output / "frozen-source.tar"
+    with archive.open("wb") as stream:
+        subprocess.run(["git", "-C", str(root), "archive", "--format=tar", commit], stdout=stream, check=True)
+    with tarfile.open(archive) as source:
+        source.extractall(fresh, filter="data")
+    for name, value in document["staging_tools"].items():
+        require(sha(fresh / name) == value, "frozen staging/check code changed: " + name)
+    runner.run("frozen-input-equality", [document["python"], "-c", FROZEN_ADMIT, fresh, root,
+        document["cache"], output / "assembly.json", output / "frozen-admission.json", output / "frozen-input-equality.json"])
+    equality = json.loads((output / "frozen-input-equality.json").read_text())
+    generated_archive = output / "frozen-generated-inputs.tar"
+    with tarfile.open(generated_archive, "w") as retained:
+        for name in equality.get("retained_generated_inputs", {}):
+            retained.add(fresh / name, arcname=name)
+    fresh_pkg = fresh / "python/mojolearn"
+    require(not list(fresh_pkg.rglob("*.so")), "frozen source contains unadmitted extensions")
+    # Copy just admitted staged artifacts/indexes, never the old package's
+    # Python files. Deleted or renamed modules cannot survive the refresh.
+    for name in document["staged_files"]:
+        destination = fresh_pkg / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(pkg / name, destination)
+        require(sha(destination) == document["staged_files"][name], "staged artifact refresh copy differs")
+    stage.rename(output / "prepared-source")
+    fresh.rename(stage)
+    document.update(prepared_source_commit=document["source_commit"], source_commit=commit,
+                    frozen_source_archive=reference(archive), frozen_admission=reference(output / "frozen-admission.json"),
+                    frozen_input_equality=reference(output / "frozen-input-equality.json"),
+                    frozen_generated_inputs=reference(generated_archive),
+                    reused_staging_checks=True)
+    runner.save()
+
+
+def pack(output, adapters, adapters_proof, stage_only=False, source_ref=None):
     output = Path(output).resolve()
     document = json.loads((output / "assembly.json").read_text())
-    require(document.get("schema") == SCHEMA and document.get("state") == "prepared", "assembly is not prepared")
+    require(document.get("schema") == SCHEMA and document.get("state") in ("prepared", "staged"), "assembly is not prepared/staged")
+    require(not stage_only or document["state"] == "prepared", "assembly has already been staged")
     runner = Runner(output, document)
     root, stage = Path(document["source_root"]), output / "source"
     pkg, python = stage / "python/mojolearn", document["python"]
     try:
-        require(revision(root) == document["source_commit"], "source changed since preparation; prepare a new assembly")
-        for row in document["groups"]:
-            require(sha(pkg / row["staged"]) == row["copied_sha256"], "prepared group was modified")
-        for row in document["indexes"].values():
-            verified(row["staged"])
         helper = verified(document["portable_math"]["retained"])
-        api = adapter_copy(root, adapters, adapters_proof, pkg / "_adapters", document)
-        native = [pkg / row["staged"] for row in document["groups"]]
-        adapter_native = pkg / "_adapters/libmojolearn_adapter.so"
-        torch = pkg / "_adapters/mojolearn_torch.so"
-        all_native = native + [adapter_native]
-        gpu = [pkg / row["staged"] for row in document["groups"] if row["mode"] == "identical"] + [adapter_native]
         env = dict(os.environ, MOJOLEARN_RELEASE_MODES="identical", MOJOLEARN_RELEASE_ADAPTERS="1",
                    MOJOLEARN_PORTABLE_MATH_HELPER=str(helper), MOJOLEARN_STAGE_SKIP="")
+        if document["state"] == "staged":
+            refresh_source(output, document, runner, adapters, adapters_proof, source_ref)
+        else:
+            for row in document["groups"]:
+                require(sha(pkg / row["staged"]) == row["copied_sha256"], "prepared group was modified")
+            for row in document["indexes"].values():
+                verified(row["staged"])
+            api = adapter_copy(root, adapters, adapters_proof, pkg / "_adapters", document)
+            native = [pkg / row["staged"] for row in document["groups"]]
+            adapter_native = pkg / "_adapters/libmojolearn_adapter.so"
+            torch = pkg / "_adapters/mojolearn_torch.so"
+            all_native = native + [adapter_native]
+            gpu = [pkg / row["staged"] for row in document["groups"] if row["mode"] == "identical"] + [adapter_native]
+            document["state"] = "staging"
+            document["staging_tools"] = {name: sha(stage / name) for name in STAGING_TOOLS}
+            runner.run("stage-dylibs", [python, stage / "packaging/macos/stage_dylibs.py", *all_native,
+                       root / ".pixi/envs/default/lib"], cwd=stage, env=env)
+            document["dependency_inputs"] = {p.name: reference(root / ".pixi/envs/default/lib" / p.name)
+                                             for p in (pkg / ".dylibs").iterdir() if p.is_file()}
+            runner.run("stage-portable-math", [python, stage / "packaging/portable_math/stage.py", pkg / ".dylibs",
+                       "--helper", helper, "--receipt", output / "portable-math-stage.json"], cwd=stage, env=env)
+            manifest = pkg / "_adapters/adapters.json"
+            manifest.write_bytes(api.refresh(manifest.read_bytes(), lambda n: (manifest.parent / n).read_bytes(),
+                                 "release_macos_assembly.py: dependency staging and ad-hoc signing"))
+            api.check(manifest.parent, vendor="metal", arch="apple")
+            document["staged_native"] = {str(p.relative_to(pkg)): sha(p) for p in all_native + [torch]}
+            runner.run("compatibility", [python, stage / "packaging/macos/compatibility.py", "--package", pkg], env=env)
+            runner.run("isa-baseline", [python, stage / "packaging/isa_baseline.py", *all_native, torch], env=env)
+            runner.run("metal-embedded", [python, stage / "packaging/macos/check_gpu_embedded.py", *gpu], env=env)
+            retained = all_native + [torch, manifest, pkg / "_adapters/mojolearn_ops.mojoc"]
+            retained += list((pkg / ".dylibs").iterdir()) + [pkg / mode / INDEX for mode in MODES]
+            document["staged_files"] = {str(p.relative_to(pkg)): sha(p) for p in retained if p.is_file()}
+            for row in document["groups"]:
+                verified(row["source"])
+            verified(document["portable_math"]["source"])
+            for ref in document["adapters"]["files"].values():
+                verified(ref)
+            document["state"] = "staged"
+            runner.save()
+            if stage_only:
+                return document
+            if source_ref and git(root, "rev-parse", source_ref) != document["source_commit"]:
+                refresh_source(output, document, runner, adapters, adapters_proof, source_ref)
         document["state"] = "packing"
-        runner.run("stage-dylibs", [python, stage / "packaging/macos/stage_dylibs.py", *all_native,
-                   root / ".pixi/envs/default/lib"], cwd=stage, env=env)
-        runner.run("stage-portable-math", [python, stage / "packaging/portable_math/stage.py", pkg / ".dylibs",
-                   "--helper", helper, "--receipt", output / "portable-math-stage.json"], cwd=stage, env=env)
-        manifest = pkg / "_adapters/adapters.json"
-        manifest.write_bytes(api.refresh(manifest.read_bytes(), lambda n: (manifest.parent / n).read_bytes(),
-                             "release_macos_assembly.py: dependency staging and ad-hoc signing"))
-        api.check(manifest.parent, vendor="metal", arch="apple")
-        document["staged_native"] = {str(p.relative_to(pkg)): sha(p) for p in all_native + [torch]}
-        runner.run("compatibility", [python, stage / "packaging/macos/compatibility.py", "--package", pkg], env=env)
-        runner.run("isa-baseline", [python, stage / "packaging/isa_baseline.py", *all_native, torch], env=env)
-        runner.run("metal-embedded", [python, stage / "packaging/macos/check_gpu_embedded.py", *gpu], env=env)
         payload(stage, document["source_commit"], runner, python, env)
         runner.run("wheel-build", [python, "-m", "build", "--wheel", "--no-isolation"], cwd=stage / "python", env=env)
         wheels = list((stage / "python/dist").glob("*.whl"))
@@ -497,6 +668,11 @@ def main(argv=None):
     wheel.add_argument("--output", type=Path, required=True)
     wheel.add_argument("--adapters", type=Path, required=True)
     wheel.add_argument("--adapters-proof", type=Path, required=True)
+    wheel.add_argument("--source-ref", help="frozen package commit; original build checkout remains unchanged")
+    stage = commands.add_parser("stage")
+    stage.add_argument("--output", type=Path, required=True)
+    stage.add_argument("--adapters", type=Path, required=True)
+    stage.add_argument("--adapters-proof", type=Path, required=True)
     compose = commands.add_parser("compose-adapters")
     compose.add_argument("--source-root", type=Path, required=True)
     compose.add_argument("--native-result", type=Path, required=True)
@@ -509,7 +685,8 @@ def main(argv=None):
         elif args.command == "compose-adapters":
             result = compose_adapters(args.source_root, args.native_result, args.published_wheel, args.output)
         else:
-            result = pack(args.output, args.adapters, args.adapters_proof)
+            result = pack(args.output, args.adapters, args.adapters_proof, stage_only=args.command == "stage",
+                          source_ref=getattr(args, "source_ref", None))
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         print(f"Mac assembly refused: {exc}", file=sys.stderr)
         return 1
