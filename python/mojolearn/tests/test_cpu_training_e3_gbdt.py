@@ -79,7 +79,7 @@ def test_manifest_declares_the_gbdt_family():
 def test_binding_registers_the_gpu_names():
     src = _read(host_surface.binding_source("gbdt"))
     exports = host_surface.family("gbdt")["exports"]
-    for name in ("gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+    for name in ("gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid_pair",
                  "gbdt_vendor", "gbdt_numeric_mode", "gbdt_binary_probabilities",
                  "gbdt_binary_classes", "gbdt_predict_multi"):
         assert f'("{name}")' in src, f"the gbdt host binding does not register {name}"

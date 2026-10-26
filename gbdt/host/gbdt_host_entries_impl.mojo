@@ -575,16 +575,13 @@ def gbdt_host_predict_multi_into(
 
 
 # ===========================================================================
-# THE LINKS (`gbdt_sigmoid_binding`, `gbdt_sigmoid_pair_binding`,
+# THE LINKS (`gbdt_sigmoid_pair_binding`,
 # `gbdt_binary_prediction_binding`)
 # ===========================================================================
 
 
-def gbdt_host_sigmoid_into(rp: MutPointer[Float64, MutUntrackedOrigin], op: MutPointer[Float64, MutUntrackedOrigin], count: Int):
-    """`1 / (1 + identical_exp64(-raw))` in double, `count` words."""
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        op.unsafe_store(i, bitcast[DType.float64](sf64_sigmoid_f64(bitcast[DType.uint64](r))))
+# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 
 def gbdt_host_sigmoid_pair_into(rp: MutPointer[Float64, MutUntrackedOrigin], op: MutPointer[Float64, MutUntrackedOrigin], count: Int):
