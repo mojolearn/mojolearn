@@ -4,6 +4,7 @@ Receipts explicitly distinguish old executions from new executions. They never
 rewrite the source, wheel hashes, failures, or elapsed time of an original run.
 """
 import hashlib
+import io
 import json
 from pathlib import Path
 import zipfile
@@ -11,6 +12,7 @@ import zipfile
 import adapter_gate
 import release_gate_profiles as profiles
 import release_host_composition as hc
+import release_evidence as evidence
 
 SCHEMA = 'mojolearn.release.component-gate.v1'
 VERIFIER = {'mojolearn/' + name for name in (
@@ -19,7 +21,7 @@ VERIFIER = {'mojolearn/' + name for name in (
 
 
 def inventory(path):
-    with zipfile.ZipFile(path) as z:
+    with zipfile.ZipFile(io.BytesIO(evidence.read_bytes(path))) as z:
         return {n: hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if not n.endswith('/')}
 
 
@@ -44,18 +46,21 @@ def wheel_delta(before, after):
 
 def checked_ref(record, relocations=None):
     p = Path(record['path'])
-    if not p.is_file():
+    try:
+        found = evidence.sha256(p)
+    except FileNotFoundError:
         for old, new in (relocations or {}).items():
             if p.is_relative_to(old):
                 p = Path(new) / p.relative_to(old)
                 break
-    if hc.file_sha(p) != record['sha256']:
+        found = evidence.sha256(p)
+    if found != record['sha256']:
         raise ValueError('evidence bytes changed: ' + str(p))
     return p
 
 
 def read(record):
-    return json.loads(checked_ref(record).read_text())
+    return json.loads(evidence.read_text(checked_ref(record)))
 
 
 def errors(document, identity):
@@ -118,7 +123,7 @@ def validate(document, identity):
     require(proof['original_device']['leg'] == {'nvidia':'cuda/sm_89','amd':'hip/gfx942'}[identity['vendor']],
             'assembly belongs to another device')
     package = 'mojolearn-' + identity['vendor']
-    with zipfile.ZipFile(checked_ref(document['wheels'][package]['after'])) as wheel:
+    with zipfile.ZipFile(io.BytesIO(evidence.read_bytes(checked_ref(document['wheels'][package]['after'])))) as wheel:
         prefix = 'mojolearn/' + {'nvidia':'cuda_native/sm_89','amd':'hip_native/gfx942'}[identity['vendor']] + '/_adapters/'
         for name, value in next(iter(proof['adapters'].values()))['files'].items():
             require(hashlib.sha256(wheel.read(prefix + name)).hexdigest() == value,

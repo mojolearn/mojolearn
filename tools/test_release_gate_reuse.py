@@ -37,3 +37,15 @@ def test_removed_verifier_not_admitted(tmp_path):
     after = wheel(tmp_path/'after.whl', {})
     with pytest.raises(ValueError, match='outside'):
         reuse.wheel_delta(before, after)
+
+
+def test_admission_bundle_reads_retained_bytes_without_original_paths(tmp_path):
+    import hashlib
+    import release_evidence
+    raw = b'{"retained": true}'
+    digest = hashlib.sha256(raw).hexdigest()
+    (tmp_path/digest).write_bytes(raw)
+    original = '/absent/release/retained.json'
+    record = dict(path=original, sha256=digest)
+    with release_evidence.evidence_context(objects=tmp_path, mapping={original:digest}):
+        assert reuse.read(record) == {'retained':True}
