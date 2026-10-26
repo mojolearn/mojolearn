@@ -29,7 +29,6 @@ from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
 from x_neighbors.dev_pyapi import ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from x_neighbors.dev_pyapi import unit_ff_binding
-from x_neighbors.dev_pyapi import purity_flags_binding
 from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
 from x_neighbors.dev_pyapi import (
     kfeat_first_negative_binding,
@@ -1208,7 +1207,8 @@ def build__mojolearn_x_neighbors() -> PythonObject:
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[nc_fit_lean_binding]("x_neighbors_nc_fit_lean")
-        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)

@@ -116,7 +116,6 @@ FAMILIES = (
             "x_neighbors_py2mojo_off",
             "x_neighbors_vendor",
             "x_neighbors_kpca_resident",
-            "x_neighbors_purity_flags",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             # xn_softmax64 is not listed: bindings/_mojolearn_x_neighbors_host.mojo:1238 registers it only under
             # NC_PROBA64, which is FAST-only, and a host binding is IDENTICAL (0.8.37 macOS wheel qualification).

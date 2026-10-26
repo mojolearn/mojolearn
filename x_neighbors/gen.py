@@ -745,7 +745,6 @@ def gpu_binding():
             + "from x_neighbors.dev_pyapi import lp_fast_resident_binding\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
             + "from x_neighbors.dev_pyapi import ocsvm_resident_binding\n"
-            + "from x_neighbors.dev_pyapi import purity_flags_binding\n"
             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
             + "from x_neighbors.dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
             + wrappers() + """
@@ -763,7 +762,8 @@ def build__mojolearn_x_neighbors() -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
-        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
@@ -789,7 +789,6 @@ def host_binding():
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from x_neighbors.host_pyapi import kpca_resident_binding\n"
             + "from x_neighbors.host_pyapi import lp_fast_resident_binding\n"
-            + "from x_neighbors.host_pyapi import purity_flags_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -826,7 +825,8 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
-        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         return m.finalize()
     except e:
@@ -846,8 +846,7 @@ if __name__ == "__main__":
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
                                                                             "x_neighbors_vendor",
-                                                                            "x_neighbors_kpca_resident",
-                                                                            "x_neighbors_purity_flags"]
+                                                                            "x_neighbors_kpca_resident"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])
     print(f"x_neighbors/gen.py: {len(OPS)} ops -> device_ops, host_ops and the two bindings")
