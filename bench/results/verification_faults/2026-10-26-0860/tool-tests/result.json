@@ -1,0 +1,26 @@
+{
+  "schema": "mojolearn.verifier-tool-tests.v1",
+  "exit_code": 0,
+  "passed": 89,
+  "failed": 0,
+  "tests": [
+    "tools/test_coverage_sabotage.py",
+    "tools/test_coverage_sabotage_main_regressions.py",
+    "tools/test_verify_coverage_declared.py",
+    "tools/test_verify_coverage_rules.py"
+  ],
+  "source_commit": "8239b252ee70a6d0eaeff0ea6e149141065c8f9a",
+  "source_sha256": {
+    "tools/test_coverage_sabotage.py": "c1d45f33ba42daf6503a93186485b15d914a42e06c33e83dfb6a0f98494a3c7c",
+    "tools/test_coverage_sabotage_main_regressions.py": "54f4fef2d074497606c9e49856ae76df0224e5263e2b9f848ee2fa7bfe58bc2f",
+    "tools/test_verify_coverage_declared.py": "d92086c4dca78754ac049973ccba2994ca7e8867b0df0227b5ff581d33cfb17b",
+    "tools/test_verify_coverage_rules.py": "539890a63e38242c5b4f4586cd20bfebe0b1e9e85fcbb000d7f9d2e2c77e12c9",
+    "tools/coverage_sabotage.py": "f3d3b655d819e445812d8dd06c83f242b6f1e8c1337bed909ab4f9afb5833a27",
+    "tools/verify_coverage_audit.py": "361617d0c14eeb0add9035e44e90eaa9179c374b881ffd36395cce4661963bc5",
+    "tools/identity_lanes/coverage_declared.tsv": "48a140244c27fbb8689097b390011842523eea06796f3d7d30dd9f46afae7f84",
+    "tools/identity_lanes/coverage_sabotage.tsv": "197b4321e143b9e0543a08a32d513c55d96255ee42f42625f14d16bf24739b07"
+  },
+  "scope": "Verifier tools and coverage declarations; no product runtime or cross-vendor identity claim.",
+  "python": "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+  "log_sha256": "8ed47c95f1fd4c2952a5200c44bb40c135313170cc7e191047715080d370ef58"
+}

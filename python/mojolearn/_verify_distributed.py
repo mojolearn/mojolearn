@@ -162,10 +162,28 @@ def compare(left, right):
 
 
 def verify_distribution_records(dist, package, source_files, bindings):
-    """Require actual source/native bytes to match this installed wheel RECORD."""
+    """Require source/native bytes to match their installed owning wheel."""
     records = {str(path): path for path in (dist.files or ())}
     def check(relative, sha):
         record = records.get(relative)
+        if record is None:
+            # Linux splits the package across core and vendor/PTX wheels.
+            # Resolve only the registered payload owner, at this exact
+            # installation and version; never accept another distribution's
+            # matching hash as a substitute for a corrupt owning RECORD.
+            from importlib import metadata
+            from . import gpu_plugins
+            profile = gpu_plugins.member_payload(relative)
+            if profile is not None:
+                name = gpu_plugins.PAYLOADS[profile]['distribution']
+                try:
+                    owner = metadata.distribution(name)
+                except metadata.PackageNotFoundError as error:
+                    raise ValueError('missing installed payload owner: ' + name) from error
+                if (owner.version != dist.version or
+                        Path(owner.locate_file(relative)).resolve() != (package.parent / relative).resolve()):
+                    raise ValueError('installed payload owner version or location differs: ' + relative)
+                record = {str(path): path for path in (owner.files or ())}.get(relative)
         expected = base64.urlsafe_b64encode(bytes.fromhex(sha)).decode().rstrip('=')
         if record is None or record.hash is None or record.hash.mode != 'sha256' or record.hash.value != expected:
             raise ValueError('installed file differs from wheel RECORD: ' + relative)
