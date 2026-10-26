@@ -62,7 +62,7 @@ RESAMPLE_ORACLE = "resample/host/resample_host.mojo"
 RESAMPLE_LANES = ("bootstrap", "permutation-test", "monte-carlo")
 NEURAL_LANES = ("optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives")
 SAMBA_ORACLE = "training/host/samba_ops_oracle.mojo"
-NEURAL_EXPORTS = ("clip_grad_norm", "accumulate", "accumulation_is_aligned", "embedding_forward",
+NEURAL_EXPORTS = ("accumulate", "accumulation_is_aligned", "embedding_forward",
                   "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward",
                   "linear_backward")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)

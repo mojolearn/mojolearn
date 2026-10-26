@@ -29,8 +29,8 @@ from gemm.contract import OP_NT
 comptime CLIP_POOL_FAULT = is_defined["MOJOLEARN_CLIP_POOL_FAULT"]()
 
 
-def clip_pool_fault_available() -> Int:
-    return 1 if CLIP_POOL_FAULT else 0
+# TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_training.patch
 
 
 struct OwnedClipTensor(Movable):

@@ -80,13 +80,12 @@ comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MO
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext, HostBuffer
 
-from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
-from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
+from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
 from bindings.optimizer_public_door import entry_zero
 from bindings.optimizer_public_pyapi import (
     optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
-    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
+    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding,
     optimizer_resident_download_binding, optimizer_resident_open_binding,
     optimizer_resident_step_binding, optimizer_resident_step_io_binding,
     optimizer_resident_upload_binding, maximize_dev_available_binding,
@@ -196,16 +195,12 @@ def training_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def clip_pool_fault_available_binding() raises -> PythonObject:
-    return PythonObject(clip_pool_fault_available())
+# TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_training.patch
 
 
 def clip_parallel_available_binding() raises -> PythonObject:
     return PythonObject(1)
-
-
-def accumulate_pool_fault_available_binding() raises -> PythonObject:
-    return PythonObject(accumulate_pool_fault_available())
 
 
 def accumulate_parallel_available_binding() raises -> PythonObject:
@@ -448,58 +443,6 @@ def ce_loss_dev_binding(
             label_smoothing,
         )
     return PythonObject(count)
-
-
-def clip_grad_norm_binding(
-    grad_addr: PythonObject,
-    offsets_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`torch.nn.utils.clip_grad_norm_` at `norm_type = 2`, section 3 of the
-    optimizer contract. Scales the gradient IN PLACE. Returns `N`.
-
-    `params` is, in this exact order (mirrored word for word in
-    `python/mojolearn/_training_impl.py`):
-
-        0  n_tensors    J; `offsets` holds J + 1 int32
-        1  max_norm     (float; must be > 0, refused otherwise)
-
-    THE BUFFERS. Let `N = offsets[J]`.
-
-        `grad_addr`     N float32, read and WRITTEN IN PLACE
-        `offsets_addr`  J + 1 int32, ascending, `offsets[0] == 0`
-        `info_addr`     2 float32: `0` the pre-clip global norm, `1` the
-                        clamped coefficient
-
-    `max_norm <= 0` is REFUSED here rather than treated as "no clipping":
-    reaching this entry point is the clip running. The optimizer step takes
-    `max_norm <= 0` as OFF because it has another job to do either way.
-
-    THE PER-TENSOR ORDER IS THE CALLER'S `offsets` ORDER AND NOTHING ELSE.
-    The reference folds twice, a norm per tensor and then a norm over those
-    (contract 3.1), and `j` is the `param_id` whose ascending order fixes the
-    cross-tensor summation. A registry that is stable across runs is the only
-    thing that makes the number reproducible; reordering the tensors is a
-    different, equally valid, different-bits answer.
-    """
-    if len(params) != 2:
-        raise Error(
-            "clip_grad_norm: params must contain 2 values, got "
-            + String(len(params))
-        )
-    var gp = _f32_ptr(Int(py=grad_addr))
-    var op = _i32_ptr(Int(py=offsets_addr))
-    var fp = _f32_ptr(Int(py=info_addr))
-    var n_tensors = Int(py=params[0])
-    var max_norm = Float32(Float64(py=params[1]))
-    var n_total = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        n_total = parallel_clip_grad_norm_host(
-            ctx, gp, op, fp, n_tensors, max_norm,
-        )
-    return PythonObject(n_total)
 
 
 def ce_loss_binding(
@@ -1465,9 +1408,11 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[sha256_hex_binding]("sha256_hex")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
-        m.def_function[clip_pool_fault_available_binding]("clip_pool_fault_available")
+        # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_training.patch
         m.def_function[clip_parallel_available_binding]("clip_parallel_available")
-        m.def_function[accumulate_pool_fault_available_binding]("accumulate_pool_fault_available")
+        # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_training.patch
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
@@ -1496,9 +1441,10 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[linear_forward_dev_binding]("linear_forward_dev")
             m.def_function[linear_backward_dev_binding]("linear_backward_dev")
             m.def_function[ce_loss_dev_binding]("ce_loss_dev")
-            comptime if IDN_OPT_PARAMS_RESIDENT:
-                m.def_function[optimizer_resident_copy_dev_binding]("optimizer_resident_copy_dev")
-        m.def_function[clip_grad_norm_binding]("clip_grad_norm")
+            # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+            # Restore: git apply experiments/removed/dead_entries_training.patch
+        # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_training.patch
         m.def_function[ce_loss_binding]("ce_loss")
         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")

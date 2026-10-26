@@ -14,7 +14,7 @@ from std.python._cpython import GILReleased, PyObjectPtr
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.optimizer_public import (
-    public_accumulate, public_clip, public_io, public_step, resident_close, resident_copy_dev,
+    public_accumulate, public_clip, public_io, public_step, resident_close,
     resident_download, resident_get, resident_open, resident_put, resident_step, resident_step_io,
     resident_upload,
 )
@@ -256,21 +256,6 @@ def optimizer_resident_step_io_binding(
     return PythonObject(n_total)
 
 
-def optimizer_resident_copy_dev_binding(handle: PythonObject, params: PythonObject) raises -> PythonObject:
-    """A device-to-device copy between an optimizer handle's parameter or
-    gradient buffer and a device array. params = [which (0 parameters, 1
-    gradient), tensor handle, offset (floats, into the optimizer's flat
-    registry), n, direction (0: tensor -> optimizer, 1: optimizer ->
-    tensor)]. Returns `n`."""
-    if len(params) != 5:
-        raise Error("optimizer_resident_copy_dev: params must contain 5 values, got " + String(len(params)))
-    var h = Int(py=handle)
-    var which = Int(py=params[0])
-    var th = Int(py=params[1])
-    var off = Int(py=params[2])
-    var n = Int(py=params[3])
-    var direction = Int(py=params[4])
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        n = resident_copy_dev(ctx, h, which, th, off, n, direction)
-    return PythonObject(n)
+# TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_training.patch
+
