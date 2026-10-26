@@ -45,6 +45,17 @@ def test_rewrite_is_length_preserving_and_complete():
         assert keep in new
 
 
+def test_binary_constant_before_ptx_is_not_part_of_the_module():
+    prefix = b"\x7fELF\0" + b"\xa1\xed\xcc" * 61
+    data = prefix + PTX + b"\0trailing\0"
+    assert pc.modules(data) == [(len(prefix), len(prefix) + len(PTX))]
+    patched, count, changed = pc.patch_bytes(data)
+    assert count == 1 and changed == 5
+    assert patched[:len(prefix)] == prefix
+    assert patched[len(prefix):len(prefix) + len(PTX)] == pc.rewrite_ptx(PTX)[0]
+    assert patched[len(prefix) + len(PTX):] == b"\0trailing\0"
+
+
 def test_rewrite_is_idempotent():
     once, _ = pc.rewrite_ptx(PTX)
     twice, n = pc.rewrite_ptx(once)

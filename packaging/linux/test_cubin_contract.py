@@ -128,6 +128,26 @@ def test_patch_replaces_ptx_in_place_and_audit_passes(tmp_path):
     assert r["ptx_modules"] == 0 and r["fatbins"] == 2 and r["errors"] == []
 
 
+def test_binary_constant_before_ptx_survives_assembly(tmp_path):
+    prefix = b"\xa1\xed\xcc" * 61
+    before, code = mini_elf([prefix + PTX89], [0])
+    before = bytearray(before)
+    # The compiler points to its PTX header, past the adjacent constant.
+    displacement = struct.unpack_from("<i", before, code + 3)[0]
+    struct.pack_into("<i", before, code + 3, displacement + len(prefix))
+    start = before.index(PTX89)
+    so = tmp_path / "_mojolearn.so"
+    so.write_bytes(before)
+    rows = cc.patch_files([so], *fake_tools(tmp_path), arch="sm_89")
+    after = so.read_bytes()
+    assert rows[0]["modules"] == 1 and rows[0]["in_place"] == 1
+    assert after[:start] == before[:start]
+    assert after[start:start + len(cc._FATBIN_MAGIC)] == cc._FATBIN_MAGIC
+    target = cc._vaddr(cc._segments(after), start)
+    assert cc.lea_refs(after, {target})[target] == [code]
+    assert cc.audit_bytes(after, arch="sm_89")["errors"] == []
+
+
 def test_a_module_too_big_in_place_is_moved_and_its_leas_repointed(tmp_path):
     big = PTX89.replace(BODY, BODY * 4)   # converts in place, leaves padding
     small = PTX89                          # its fatbin (forced large) must move
