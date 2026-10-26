@@ -80,14 +80,14 @@ swap_up() {
     (( made >= want )) || echo "::warning::swap: ${made} of ${want} GiB on $dir; the compile may run out of memory"
     return 0
 }
-MODE=${1:?shard, assemble, host or swap}
+MODE=${1:?shard, assemble, host, ptx-stage or swap}
 if [[ "$MODE" = swap ]]; then swap_up "${2:?GiB}" "${3:?record file}"; exit $?; fi
 ARCH=${2:?arch}
 R=/root/mojolearn
 T=/tooling
 OUT=/root/leg_out
 PIXIVER=0.77.0
-case "$MODE" in shard|assemble|host) ;; *) echo "mode must be shard, assemble, host or swap" >&2; exit 2 ;; esac
+case "$MODE" in shard|assemble|host|ptx-stage) ;; *) echo "mode must be shard, assemble, host, ptx-stage or swap" >&2; exit 2 ;; esac
 case "$MODE:$ARCH" in
     host:host) VENDOR=none ;;
     host:*) echo "host mode takes the arch 'host'" >&2; exit 2 ;;
@@ -114,7 +114,7 @@ ph start
 need=""
 command -v curl > /dev/null || need="$need curl ca-certificates"
 command -v xz > /dev/null || need="$need xz-utils"
-[[ "$MODE" = host ]] && ! command -v git > /dev/null && need="$need git"
+[[ "$MODE" = host || "$MODE" = ptx-stage ]] && ! command -v git > /dev/null && need="$need git"
 if [[ -n "$need" ]]; then
     say "apt-get install$need"
     ( export DEBIAN_FRONTEND=noninteractive
@@ -167,6 +167,29 @@ done
 [[ "$ok" = 1 ]] || { say "pixi install --locked -e default failed"; tail -8 "$G/pixi_env_default.log"; exit 3; }
 "$R/.pixi/envs/default/bin/mojo" --version >> "$G/box.txt" 2>&1 || { say "mojo does not run"; exit 3; }
 ph env_end
+
+if [[ "$MODE" = ptx-stage ]]; then
+    [[ "$ARCH" = sm_80 ]] || { say "PTX staging requires sm_80"; exit 3; }
+    git config --global --add safe.directory "$R"
+    [[ "$(git -C "$R" rev-parse HEAD)" = "$MOJOLEARN_COMMIT" ]] || { say "source checkout differs"; exit 3; }
+    "$R/.pixi/envs/default/bin/python3" -m venv /root/release-tools > "$G/patchelf.log" 2>&1
+    /root/release-tools/bin/python -m pip install -q --disable-pip-version-check --only-binary=:all: \
+        --retries 2 --timeout 30 'patchelf==0.17.2.4' >> "$G/patchelf.log" 2>&1
+    [[ $(/root/release-tools/bin/patchelf --version) = "patchelf 0.17.2" ]] || exit 3
+    COMPILER_SHA=$(sha256sum "$R/.pixi/envs/default/bin/mojo" | cut -c1-64)
+    rc=0
+    # This branch precedes portable-math and device build setup deliberately:
+    # every binary is retained; the producer invokes only packaging and audits.
+    "$R/.pixi/envs/default/bin/python3" tools/release_ptx_assembly.py assemble \
+        --root "$R" --shards /root/compiled-shards --host-build /root/host-build \
+        --out "$OUT/ptx-assembly" --pixi-env default --compiler-sha256 "$COMPILER_SHA" \
+        --patchelf /root/release-tools/bin/patchelf > "$G/ptx-assembly.log" 2>&1 || rc=$?
+    printf 'exit=%s\nruntime_qualified=false\n' "$rc" > "$G/ptx-assembly.txt"
+    kill $SAMPLER 2>/dev/null || true
+    cat "$G/memory.sampled" > "$G/memory.txt" 2>/dev/null || true
+    printf 'cgroup_peak_bytes=%s\n' "$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
+    exit "$rc"
+fi
 
 if [[ "$MODE" = host ]]; then
     # ------------------------------------------------ the host producer

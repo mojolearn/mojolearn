@@ -1,0 +1,114 @@
+name: Release PTX assembly
+run-name: "release-ptx-assembly @ ${{ inputs.commit }} [${{ inputs.tag }}]"
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Current source and assembly tooling commit (40 hex)"
+        required: true
+      shard_commit:
+        description: "Original device compilation source commit (40 hex)"
+        required: true
+      shard_run:
+        description: "Successful four-device-group sm_80 compilation run"
+        required: true
+      host_run:
+        description: "Successful independent host producer run"
+        required: true
+      host_commit:
+        description: "Host producer source commit (40 hex)"
+        required: true
+      donor_commit:
+        description: "Original host/runtime donor source commit (40 hex)"
+        required: true
+      tag:
+        description: "Dispatcher label"
+        default: ""
+permissions:
+  contents: read
+  actions: read
+env:
+  IMAGE: rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Validate inputs
+        env:
+          SOURCE: ${{ inputs.commit }}
+          ORIGINAL: ${{ inputs.shard_commit }}
+          HOST_SOURCE: ${{ inputs.host_commit }}
+          DONOR_SOURCE: ${{ inputs.donor_commit }}
+          SHARDS: ${{ inputs.shard_run }}
+          HOST: ${{ inputs.host_run }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE" =~ ^[0-9a-f]{40}$ && "$ORIGINAL" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HOST_SOURCE" =~ ^[0-9a-f]{40}$ && "$DONOR_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SHARDS" =~ ^[0-9]+$ && "$HOST" =~ ^[0-9]+$ ]]
+          mkdir -p "$RUNNER_TEMP/ptx/out/GHA"
+          printf 'source=%s\noriginal_device_source=%s\nshard_run=%s\nhost_run=%s\n' \
+            "$SOURCE" "$ORIGINAL" "$SHARDS" "$HOST" > "$RUNNER_TEMP/ptx/out/GHA/inputs.txt"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          path: src
+      - name: Retain original source for input comparison
+        env:
+          ORIGINAL: ${{ inputs.shard_commit }}
+          HOST_SOURCE: ${{ inputs.host_commit }}
+          DONOR_SOURCE: ${{ inputs.donor_commit }}
+        run: git -C src fetch --depth=1 origin "$ORIGINAL" "$HOST_SOURCE" "$DONOR_SOURCE"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: shard-sm_80-*
+          run-id: ${{ inputs.shard_run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ptx/compiled-shards/shard-artifacts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: host-build
+          run-id: ${{ inputs.host_run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ptx/host-build
+      - name: Pinned image
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if docker pull "$IMAGE" >> "$RUNNER_TEMP/ptx/out/GHA/image.log" 2>&1; then break; fi
+            [[ "$attempt" -lt 3 ]] || exit 1
+            sleep 15
+          done
+          docker image inspect "$IMAGE" > "$RUNNER_TEMP/ptx/out/GHA/image.json"
+      - name: Assemble and audit retained bytes
+        timeout-minutes: 65
+        env:
+          SOURCE: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          code=0
+          timeout --signal=TERM --kill-after=60s 60m docker run --rm --name "ptx-assembly-${GITHUB_RUN_ID}" \
+            -e MOJOLEARN_COMMIT="$SOURCE" -e GHA_RUNNER="$RUNNER_NAME" \
+            -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
+            -v "$GITHUB_WORKSPACE/src:/root/mojolearn" -v "$GITHUB_WORKSPACE/src:/tooling:ro" \
+            -v "$RUNNER_TEMP/ptx/compiled-shards:/root/compiled-shards:ro" \
+            -v "$RUNNER_TEMP/ptx/host-build:/root/host-build:ro" \
+            -v "$RUNNER_TEMP/ptx/out:/root/leg_out" \
+            "$IMAGE" bash /tooling/tools/gha_release_box.sh ptx-stage sm_80 \
+            > "$RUNNER_TEMP/ptx/out/GHA/container.log" 2>&1 || code=$?
+          echo "$code" > "$RUNNER_TEMP/ptx/out/GHA/container.exit"
+          docker rm -f "ptx-assembly-${GITHUB_RUN_ID}" >/dev/null 2>&1 || true
+          exit "$code"
+      - name: Retain complete output, including failures
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/ptx/out"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: retained-ptx-assembly
+          path: ${{ runner.temp }}/ptx/out
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
