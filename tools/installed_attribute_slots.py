@@ -69,6 +69,23 @@ def source_snapshot(root):
             "files": files, "files_sha256": digest(files)}
 
 
+def validate_source(source, root):
+    """Reuse an observation only while every package and policy byte is equal.
+
+    Revision/tree identify where the observation was collected. An unrelated
+    tooling or documentation commit does not change its import-time connections.
+    Keep those original labels in the evidence, while independently checking the
+    complete current source membership and byte map (including this policy).
+    """
+    current = source_snapshot(root)
+    require(type(source) is dict and set(source) == set(current)
+            and all(type(source.get(key)) is str and source[key] for key in ("revision", "tree")),
+            "installed-slot source snapshot is malformed")
+    require(source["files"] == current["files"] and source["files_sha256"] == current["files_sha256"],
+            "installed-slot source bytes/policy are stale")
+    return current
+
+
 def reference(path):
     path = Path(path).resolve()
     return {"path": str(path), "sha256": sha256(path)}
@@ -111,7 +128,7 @@ def validate_build(root, proof):
     """Reconcile actual loaded bytes with the existing successful cache receipt.
 
     No compiler is invoked. A valid older receipt may qualify unchanged native
-    inputs, while the Python connection witness is exact-revision evidence.
+    inputs, while the Python connection witness is exact-source evidence.
     """
     import development_build as build
     import merged_bindings as merged
@@ -193,7 +210,7 @@ def validate(path, root):
     require(data.get("schema") == OBSERVATIONS and data.get("owner") == OWNER,
             "unsupported installed-slot observation producer")
     require(data.get("runtime_qualified") is False, "slot witness cannot qualify runtime safety")
-    require(data.get("source") == source_snapshot(root), "installed-slot source revision/bytes/policy are stale")
+    current_source = validate_source(data.get("source"), root)
     build_keys = validate_build(root, data["provenance"])
     admitted, seen = {}, set()
     require(type(data.get("rows")) is list, "installed-slot rows missing")
@@ -215,7 +232,9 @@ def validate(path, root):
                          "build_keys": build_keys,
                          "binary_sha256s": {name: item["binary"]["sha256"]
                                             for name, item in data["provenance"]["owners"].items()},
-                         "source_revision": data["source"]["revision"]}
+                         "source_revision": data["source"]["revision"],
+                         "validated_source_revision": current_source["revision"],
+                         "source_files_sha256": data["source"]["files_sha256"]}
     return admitted
 
 
