@@ -4,6 +4,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- **Native parameter setup and arrays.** Estimator constructors and more `Array` operations enter compiled bindings directly. Nested parameter updates retain their validation and object lifetimes.
+- **NVIDIA builds.** Embedded PTX extraction starts at the compiler's module header, fixing an assembler crash caused by preceding binary data.
+- **AMD framework loading.** The library and its PyTorch adapter share one HIP runtime when loaded together.
+- **Neighbor queries.** Invalid saved IVF indexes report the original validation error through the public query methods.
+- **Verification and builds.** Expanded identity coverage includes parameter updates, tree models, neighbors, isotonic regression and neural decoding. Smaller compilation groups and retained build receipts allow unchanged groups to be reused.
+
 ## 0.8.58 (published 2026-10-26)
 
 - **Extras on Linux.** `pip install "mojolearn[verify]"`, `"mojolearn[torch]"` and `"mojolearn[max]"` install their
