@@ -807,12 +807,16 @@ def core_project(proj, version):
 
 
 def meta_project(proj, version):
-    """The Linux `mojolearn` wheel's fields: no files, no extras, and exactly
-    the core and both vendors at this version (gpu_plugins.meta_requirements)."""
+    """The Linux `mojolearn` wheel's fields: no files, exactly the core and both
+    vendors at this version (gpu_plugins.meta_requirements), and every core extra
+    forwarded to mojolearn-core, so `pip install "mojolearn[verify]"` installs what
+    `mojolearn-core[verify]` does (0.8.57 dropped them and verify could not run)."""
     out = {k: proj[k] for k in ("name", "authors", "maintainers", "license", "urls", "keywords",
                                 "classifiers", "requires-python", "license-files", "description") if k in proj}
     out.update(name=gpu_plugins.META_DISTRIBUTION, version=version,
-               dependencies=gpu_plugins.meta_requirements(version))
+               dependencies=gpu_plugins.meta_requirements(version),
+               **{"optional-dependencies": {extra: [f"{gpu_plugins.CORE_DISTRIBUTION}[{extra}]=={version}"]
+                                            for extra in proj.get("optional-dependencies", {})}})
     readme = (f"# mojolearn\n\n"
               f"On Linux x86-64, `pip install mojolearn` installs mojolearn-core with NVIDIA "
               f"(mojolearn-nvidia) and AMD (mojolearn-amd) support. "

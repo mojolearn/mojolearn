@@ -210,10 +210,15 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: filename differs from package metadata')
             if payload:
                 problems.append(f'{wheel.name}: the mojolearn meta wheel carries files, e.g. {payload[0]}')
-            if requires != plugins.meta_requirements(version):
+            base = [r for r in requires if 'extra ==' not in r]
+            if base != plugins.meta_requirements(version):
                 problems.append(f'{wheel.name}: Requires-Dist differs from the core and both vendors at {version}')
-            if metadata.get_all('Provides-Extra', []):
-                problems.append(f'{wheel.name}: the mojolearn meta wheel must not declare extras')
+            # Extras only forward to the core: `mojolearn[x]` == `mojolearn-core[x]` at this version.
+            extras = sorted(metadata.get_all('Provides-Extra', []))
+            forwarded = sorted(r for r in requires if 'extra ==' in r)
+            if (set(extras) - {'verify', 'numpy', 'torch', 'max'}
+                    or forwarded != sorted(f'{plugins.CORE_DISTRIBUTION}[{x}]=={version}; extra == "{x}"' for x in extras)):
+                problems.append(f'{wheel.name}: meta extras must each forward exactly to {plugins.CORE_DISTRIBUTION}[extra]=={version}')
             marker_name, expected = plugins.PLUGIN_MARKER, plugins.meta_marker(version)
         elif name in packages:
             package = packages[name]
