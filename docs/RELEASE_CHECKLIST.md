@@ -1032,18 +1032,24 @@ pass its three output directories and the proofs directory through the
 attached and checked. Use `none` first to see the workflow's own checks
 without uploading.
 
-## 5b. Release verification on this Mac: the Apple column (the CPU column opt-in)
+## 5b. Optional bounded diagnostics on this Mac
+
+These commands are diagnostics, not release identity qualification: they use
+three fixtures and omit batch and rlpair probes. They require an explicit
+`--diagnostic-only` acknowledgement before execution. For release identity,
+reconcile retained evidence first and use `tools/release_identity_run.py` to
+produce only missing or invalidated full-protocol records. A new version or
+an empty new ledger does not justify repeating existing verification.
 
 ```sh
-pixi run -e test release-check                # the Apple pass, on this Mac, nothing rented
-pixi run -e test release-check --cpu-column   # opt-in: the Apple pass and the CPU pass AT ONCE
+pixi run -e test release-check --diagnostic-only
+pixi run -e test release-check --diagnostic-only --cpu-column
 # which is, concurrently (tools/release_check.py):
-pixi run -e test apple-pass               # the Apple GPU: Metal lock + one of the 5 Mac slots
-MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass   # the CPU route on the other 4 slots
+pixi run -e test apple-pass --diagnostic-only
+MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass --diagnostic-only
 ```
 
-The Apple column is the reference the NVIDIA and AMD wheel columns are diffed
-against (`gpu-column-nvidia`, `gpu-column-amd`, above).
+These partial columns must not be substituted for full release records.
 
 Both refuse to start unless every binding in `python/mojolearn` was built
 from this tree's sources (`tools/binding_stamps.py check`: the macOS release
@@ -1051,9 +1057,10 @@ build stamps each binding with its source-closure digest; a missing or stale
 stamp names the binding and nothing runs). Build the macOS wheel (step 6's
 build script) first, then run the check.
 
-Both run LOCALLY, with no pod and no R2 staging. Each pass is `base,denormal,odd`, fitted once, end model only.
+Both run locally, with no pod and no R2 staging. Each pass is
+`base,denormal,odd`, fitted once, with batch and rlpair probes omitted.
 
-**Only the lanes the release touched are required, and that is automatic.**
+**Diagnostics select lanes affected by changes.**
 With no selection given, a pass checks the lanes whose sources changed since
 the last pass on the same backend that FINISHED on this Mac (complete, same
 fixtures, one fit, a clean tree, and itself anchored on a full pass, a tag or
@@ -1080,7 +1087,7 @@ pixi run -e test release-check --plan                       # the diff since eac
 pixi run -e test release-check --plan --paths=a.mojo,b.py   # a hypothetical change
 ```
 
-**Sharded Metal is opt-in and unproven.** `pixi run -e test apple-pass
+**Sharded Metal is opt-in and unproven.** `pixi run -e test apple-pass --diagnostic-only
 --metal-shards N` (N = 2 or 3) splits the lanes over N processes that share the
 one GPU under a single Metal slot, to overlap their host-to-device waits.
 Concurrent Metal jobs returned NaN and zero outputs on 2026-09-15, so N stays 1
@@ -1090,11 +1097,11 @@ until this has been run once, after a release, on a quiet Mac:
 C=$(git rev-parse --short=12 HEAD); E=~/mojolearn-evidence/metal-shards; mkdir -p $E
 for n in 1 2 3; do
   MOJOLEARN_RELEASE_CHECK_DIR=$E/n$n /usr/bin/time -p pixi run -e test \
-    python3 tools/verify_lanes.py --apple-pass --all --metal-shards $n 2>&1 | tee $E/n$n.log
+    python3 tools/verify_lanes.py --apple-pass --diagnostic-only --all --metal-shards $n 2>&1 | tee $E/n$n.log
 done
 # every part of every cell, sharded against unsharded, then against the CPU
 # column of the same commit (the reference the Apple column must equal; make
-# it full first with `pixi run -e test cpu-pass --all` at this commit):
+# it cover those diagnostic lanes with `pixi run -e test cpu-pass --diagnostic-only --all`):
 pixi run -e test python3 tools/identity_break.py --diff $E/n1/$C/metal/column.json $E/n2/$C/metal/column.json
 pixi run -e test python3 tools/identity_break.py --diff $E/n1/$C/metal/column.json $E/n3/$C/metal/column.json
 pixi run -e test python3 tools/identity_break.py --diff \

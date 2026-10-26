@@ -209,6 +209,7 @@ def inherit_record(backend, anchor, covers, fixtures, dropped, base=None, commit
     (Path(out) / "column.json").write_bytes(column.read_bytes())
     digest = hashlib.sha256(column.read_bytes()).hexdigest()
     new_manifest = dict(commit=commit, lanes=[], shards=[], weights=[], fixtures=fixtures, repeats=1,
+                        purpose="diagnostic", release_admissible=False,
                         runner="inherited", backend=backend, probe_group=manifest.get("probe_group", "core"),
                         budget=0, timeout=0, jobs=0, registry_total=len(lane_select.all_lanes()),
                         selection="derived", fallback=False, covers=covers, dirty_lanes=[], metal_shards=1,
@@ -217,6 +218,7 @@ def inherit_record(backend, anchor, covers, fixtures, dropped, base=None, commit
                                             lanes=len(manifest.get("lanes") or [])))
     (Path(out) / "manifest.json").write_text(json.dumps(new_manifest, indent=1) + "\n")
     (Path(out) / "run-summary.json").write_text(json.dumps(dict(
+        purpose="diagnostic", release_admissible=False,
         pending=[], running=[], exit_codes={}, complete=True, execution_complete=True, budget=0,
         elapsed_seconds=0.0, validation_failures=[], inherited_from=anchor), indent=2) + "\n")
     return out
@@ -673,6 +675,9 @@ def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None, fixtures=None
     if summary.exists():
         result = json.loads(summary.read_text())
         result.update(complete=not failures, validation_failures=failures)
+        manifest_path = Path(out_dir) / "manifest.json"
+        if manifest_path.exists() and json.loads(manifest_path.read_text()).get("purpose") == "diagnostic":
+            result.update(purpose="diagnostic", release_admissible=False)
         tmp = summary.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(result, indent=2) + "\n")
         tmp.replace(summary)
@@ -718,17 +723,15 @@ def main(argv=None):
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--full-selection", action="store_true", help="accepted and inert since 2026-09-22: the selector never falls back to every lane")
     ap.add_argument("--metal-diagnostic", action="store_true")
+    ap.add_argument("--diagnostic-only", action="store_true",
+                    help="explicitly run a bounded diagnostic; it does not qualify a release column")
     ap.add_argument("--cpu-pass", action="store_true",
-                    help="the CPU half of a release, locally: the Apple pass's cells on the CPU route, "
-                         "one shard per Mac CPU slot, nothing rented")
+                    help="bounded CPU diagnostic; requires --diagnostic-only for execution")
     ap.add_argument("--apple-pass", action="store_true",
-                    help="the whole Apple check: Metal, one fit per cell, the end model only "
-                         f"(train, infer, save/reload), fixtures {APPLE_PASS_FIXTURES}, "
-                         f"a {APPLE_PASS_BUDGET}-second total budget")
+                    help=f"bounded Metal diagnostic: fixtures {APPLE_PASS_FIXTURES}, batch and rlpair omitted; "
+                         "requires --diagnostic-only for execution")
     ap.add_argument("--gpu-pass", choices=("cuda", "hip"), default=None,
-                    help="the NVIDIA (cuda) or AMD (hip) release column: the Apple pass's cells "
-                         f"(fixtures {APPLE_PASS_FIXTURES}, one fit, end model only) on that backend, "
-                         "run in the rental that built the set (--gpu-set)")
+                    help="bounded NVIDIA/AMD diagnostic; requires --diagnostic-only for execution")
     ap.add_argument("--write-selection", metavar="FILE", default="",
                     help="a pass only: work out its lanes exactly as the pass would (changed since the "
                          "last finished pass on the backend, else the newest v* tag), write them with "
@@ -757,6 +760,11 @@ def main(argv=None):
     ap.add_argument("--build", default="core,estimators", help="host families for the pod plan")
     ap.add_argument("extra", nargs="*", help="legacy extra arguments are rejected; use explicit scope controls")
     args = ap.parse_args(argv)
+    if (args.apple_pass or args.cpu_pass or args.gpu_pass) and not (
+            args.diagnostic_only or args.plan or args.write_selection or args.runner == "pods"):
+        ap.error("these pass aliases run bounded diagnostics, not release qualification. "
+                 "Use tools/release_identity_run.py for release work; use --diagnostic-only "
+                 "only when the bounded diagnostic is intended. Nothing has run.")
     if args.cpu_pass:
         # The CPU half of a release, on this machine: the same cells as the
         # Apple pass, spread over the Mac's CPU slots. Nothing is rented.
@@ -1010,6 +1018,8 @@ def main(argv=None):
                     selection_file=given.get("schema") if given is not None else None,
                     dropped=given.get("dropped") if given is not None else dropped,
                     union=union or None)
+    if is_pass or args.diagnostic_only:
+        manifest.update(purpose="diagnostic", release_admissible=False)
     if args.plan or args.runner == "pods":
         _plan(groups, load, args, out_dir)
         return 0

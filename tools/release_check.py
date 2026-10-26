@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The local release verification: the Apple (Metal) column of the changed
-lanes, one fit per cell, and the CPU column only when asked (2026-09-25).
+"""Bounded local diagnostics; these records do not qualify release columns.
 
-    pixi run -e test release-check                  the Apple pass
-    pixi run -e test release-check --cpu-column     the Apple pass and the CPU pass AT ONCE
+    pixi run -e test release-check --diagnostic-only
+    pixi run -e test release-check --diagnostic-only --cpu-column
 
-The Apple column is the reference tools/release.py diffs the NVIDIA and AMD
-wheel columns against, so the CPU pass is OPT-IN. With --cpu-column the two
+For release work use tools/release_identity_run.py, which selects missing work
+from retained evidence. These diagnostics use three fixtures and omit batch
+and rlpair probes. With --cpu-column the two
 passes run together: the Apple pass holds the Metal lock and ONE of the
 MAC_SLOTS (default half the logical cores, tools/mac_slot.py slot_count), and the CPU pass takes the rest (MAC_SLOTS - 1 shards,
 through MOJOLEARN_CPU_PASS_SLOTS), at nice 19 so it yields to the GPU's host
@@ -112,6 +112,10 @@ def main():
                 backends = tuple(a.split("=", 1)[1].split(","))
         paths = next((a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--paths=")), None)
         return plan(backends=backends, paths=paths)
+    if "--diagnostic-only" not in sys.argv[1:]:
+        raise SystemExit("REFUSING: release-check runs bounded diagnostics, not release qualification. "
+                         "Use tools/release_identity_run.py for release work, or explicitly request "
+                         "--diagnostic-only. Nothing has run.")
     sys.path.insert(0, str(ROOT / "tools"))
     import verify_lanes
     passes = [("apple", "--apple-pass", {})]
@@ -131,7 +135,8 @@ def main():
     for name, flag, env in passes:
         log = logs / f"release-check.{name}.log"
         fh = open(log, "w")
-        proc = subprocess.Popen([sys.executable, str(ROOT / "tools" / "verify_lanes.py"), flag],
+        proc = subprocess.Popen([sys.executable, str(ROOT / "tools" / "verify_lanes.py"), flag,
+                                 "--diagnostic-only"],
                                 cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT, env=dict(os.environ, **env))
         runs[name] = (proc, fh, log)
         print(f"# {name} pass started, transcript {log}", flush=True)

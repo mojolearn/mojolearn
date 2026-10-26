@@ -197,11 +197,12 @@ class ReleaseCheck(unittest.TestCase):
                 return 0
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.dict(os.environ, MOJOLEARN_RELEASE_CHECK_DIR=d), \
-                mock.patch.object(sys, "argv", ["release_check.py", *argv]), \
+                mock.patch.object(sys, "argv", ["release_check.py", "--diagnostic-only", *argv]), \
                 mock.patch.object(release_check, "subprocess",
                                   argparse.Namespace(Popen=Proc, STDOUT=release_check.subprocess.STDOUT)):
             self.assertEqual(release_check.main(), 0)
-        return [c[-1] for c in started]
+        self.assertTrue(all("--diagnostic-only" in c for c in started))
+        return [c[-2] for c in started]
 
     def test_default_runs_the_apple_pass_alone(self):
         self.assertEqual(self.run_main([]), ["--apple-pass"])
