@@ -23,7 +23,19 @@ import subprocess
 import sys
 import time
 
-from nvidia_serial_guard import memory, stop_group
+from nvidia_serial_guard import memory as ram_memory, stop_group
+
+
+def memory(group):
+    """RSS of the group and the memory a build can still use: RAM available
+    plus free swap. A build box with swap (the GitHub runners add a swapfile
+    sized from the compile's recorded peak) pages instead of being killed;
+    counting RAM alone stopped run 40298728905 at 13 GB with its swap unused."""
+    rss, available = ram_memory(group)
+    swap_free = next((int(line.split()[1]) * 1024
+                      for line in Path('/proc/meminfo').read_text().splitlines()
+                      if line.startswith('SwapFree:')), 0)
+    return rss, available + swap_free
 
 
 def visible_devices():
