@@ -187,10 +187,12 @@ if [[ "$MODE" = host ]]; then
       echo "producer_sha256=$(sha256sum "$R/tools/release_host_build.py" | cut -c1-64)"; } > "$G/host.txt"
     ph run_start
     rc=0
+    reuse_host_args=()
+    [[ "${GHA_REUSE_HOST_GROUPS:-false}" = true ]] && reuse_host_args+=(--reuse-unchanged-host)
     ( cd "$R" && env -u MOJOLEARN_COMMIT HOME=/root PATH="/root/.pixi/bin:$PATH" \
         "$R/.pixi/envs/default/bin/python3" tools/release_host_build.py build --root "$R" \
         --runtime-build /root/donor/build --output "$OUT/host-build" --pixi-env default \
-        --patchelf /root/release-tools/bin/patchelf --compiler-sha256 "$COMPILER_SHA" ) > "$G/host.log" 2>&1 || rc=$?
+        --patchelf /root/release-tools/bin/patchelf --compiler-sha256 "$COMPILER_SHA" "${reuse_host_args[@]}" ) > "$G/host.log" 2>&1 || rc=$?
     ph run_end
     echo "exit=$rc" >> "$G/host.txt"
     tail -5 "$G/host.log" >> "$G/host.txt"

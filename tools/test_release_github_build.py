@@ -396,8 +396,11 @@ class JobMap(unittest.TestCase):
         d = Path(tempfile.mkdtemp())
         (d / "src/build").mkdir(parents=True)
         (d / "src/build/build-provenance.json").write_text(json.dumps({"source_commit": C}))
+        (d / "src/GHA/shards/0").mkdir(parents=True)
+        (d / "src/GHA/shards/0/shard.tsv").write_text("original compile receipt\n")
         with tarfile.open(d / "donor.tar.gz", "w:gz") as tf:
             tf.add(str(d / "src/build"), arcname="build")
+            tf.add(str(d / "src/GHA"), arcname="GHA")
         good = hashlib.sha256((d / "donor.tar.gz").read_bytes()).hexdigest()
         for sha, ok in (("0" * 64, False), (good, True)):
             (d / "event.json").write_text(json.dumps({"inputs": {"host_donor_url": (d / "donor.tar.gz").as_uri(),
@@ -408,6 +411,7 @@ class JobMap(unittest.TestCase):
                                            "--github-output", str(d / "gho")]), 0)
                 self.assertEqual((d / "gho").read_text(), "revision=%s\n" % C)
                 self.assertTrue((dest / "build/build-provenance.json").is_file())
+                self.assertEqual((dest / "GHA/shards/0/shard.tsv").read_text(), "original compile receipt\n")
             else:
                 with self.assertRaisesRegex(SystemExit, "the dispatch named"):
                     rgb.main(["donor", "--event", str(d / "event.json"), "--dest", str(dest)])

@@ -721,8 +721,8 @@ def cmd_donor(a):
         raise SystemExit(f"donor: the fetched archive is {got}, the dispatch named {want}")
     with tarfile.open(arc) as tf:
         names = tf.getnames()
-        if not names or any(n != "build" and not n.startswith("build/") for n in names):
-            raise SystemExit("donor: the archive holds more than build/")
+        if not names or any(n not in ("build", "GHA") and not n.startswith(("build/", "GHA/")) for n in names):
+            raise SystemExit("donor: the archive holds more than build/ and its GHA evidence")
         tf.extractall(dest, filter="data")
     arc.unlink()
     proof = json.loads((dest / "build" / "build-provenance.json").read_text())
@@ -971,6 +971,18 @@ def upload_donor(creds, donor, tag):
         skip = lambda ti: None if re.fullmatch(r"build/cuda-tools-[^/]*", ti.name) else ti
         with tarfile.open(arc, "w:gz", compresslevel=1) as tf:
             tf.add(str(donor), arcname="build", filter=skip)
+            # Restored shard archives retain their original compile receipts.
+            # Transport those beside the donor, never relabel a cache hit as
+            # a fresh compilation during host composition.
+            import release_host_composition as hc
+            evidence = hc.shard_evidence_root(donor)
+            if evidence:
+                for path in sorted(evidence.rglob("*")):
+                    rel = path.relative_to(evidence)
+                    if path.is_file() and (rel.as_posix() == "assemble/hot_sha256.tsv" or
+                            (rel.parts[0] == "shards" and (path.name in ("shard.tsv", "provenance.tsv", "hot_sha256.tsv")
+                             or "bincache/keys/" in rel.as_posix()))):
+                        tf.add(str(path), arcname="GHA/" + rel.as_posix())
         digest = sha256(arc)
         code = bincache.http_put(bincache.presign("PUT", key, 3600, creds), str(arc))
         if code != 200:
@@ -1014,6 +1026,8 @@ def cmd_run(a):
         raise SystemExit("--arch and/or --host is required")
     if a.compile_groups and (not a.arch or a.host or a.host_donor):
         raise SystemExit("--compile-groups requires one --arch and no host producer/donor")
+    if a.reuse_host_groups and not a.host:
+        raise SystemExit("--reuse-host-groups requires --host")
     if a.arch and a.arch not in ARCHS:
         raise SystemExit(f"--arch must be one of {' '.join(ARCHS)}")
     if a.host and not a.arch and not a.host_donor and not a.run_id:
@@ -1061,11 +1075,13 @@ def cmd_run(a):
         gh("workflow", "run", wid, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={sets}",
            "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}",
            "-f", f"modes={' '.join(modes)}", "-f", f"host_donor_url={donor_url}",
-           "-f", f"host_donor_sha256={donor_sha}", "-f", f"compile_groups={a.compile_groups}")
+           "-f", f"host_donor_sha256={donor_sha}", "-f", f"compile_groups={a.compile_groups}",
+           "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}")
         (gha / "dispatch.json").write_text(json.dumps(dict(
             tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
             host_donor_sha256=donor_sha or None, r2_objects=cleanup, compile_groups=a.compile_groups,
+            reuse_host_groups=a.reuse_host_groups,
             dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
@@ -1207,6 +1223,7 @@ def main(argv=None):
                    help="no R2: the runners reuse their actions/cache hot archives instead")
     p.add_argument("--allow-cold-amd", action="store_true")
     p.add_argument("--compile-groups", default="", help="retain only selected compilation archives; no assembly")
+    p.add_argument("--reuse-host-groups", action="store_true", help="host producer compiles only changed groups against donor")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)

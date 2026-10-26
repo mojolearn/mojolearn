@@ -90,6 +90,11 @@ on:
         description: "Compile only: device, or exact merged shard entries; no assembly"
         required: false
         default: ""
+      reuse_host_groups:
+        description: "Host producer retains proven unchanged donor groups"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -429,6 +434,7 @@ jobs:
             case "$FIRST" in sm_*) V=cuda ;; *) V=hip ;; esac
             mkdir -p "$RUNNER_TEMP/w/donor"
             mv "$RUNNER_TEMP/donor-art/leg/$V-$FIRST/release-build/build" "$RUNNER_TEMP/w/donor/build"
+            cp -r "$RUNNER_TEMP/donor-art/leg/GHA" "$RUNNER_TEMP/w/donor/GHA"
           fi
           rev=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["source_commit"])' "$RUNNER_TEMP/w/donor/build/build-provenance.json")
           echo "donor revision $rev"
@@ -440,10 +446,12 @@ jobs:
       - name: Build the host
         env:
           COMMIT: ${{ inputs.commit }}
+          REUSE_HOST_GROUPS: ${{ inputs.reuse_host_groups }}
         run: |
           set -u
           mkdir -p "$RUNNER_TEMP/w/out"
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" \
+            -e GHA_REUSE_HOST_GROUPS="$REUSE_HOST_GROUPS" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$GITHUB_WORKSPACE/src:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/donor:/root/donor:ro" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
