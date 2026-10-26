@@ -8493,7 +8493,9 @@ def main(argv=None):
         sel = dict(lanes=[n for n in every if n in set(args.lane)], fallback=False,
                    reasons={n: "named" for n in args.lane}, unattributed=[], inert=[], total=len(sources))
     elif args.lanes_for_paths:
-        sel = select(args.lanes_for_paths, sources=sources)
+        # An explicit path scope may still need definition-level attribution
+        # against a prior release. Ignoring its ref silently loses that proof.
+        sel = select(args.lanes_for_paths, ref=args.changed_since, sources=sources)
     elif args.changed_since:
         paths = changed_paths(args.changed_since)
         sel = select(paths, ref=args.changed_since, sources=sources)
