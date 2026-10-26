@@ -82,9 +82,14 @@ on:
         description: "sha256 of that donor archive"
         required: false
         default: ""
+      reuse_shards_run:
+        description: "Retry assembly using this run's shard artifacts; refuse any compilation"
+        required: false
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 env:
   IMAGE: rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484
@@ -110,12 +115,14 @@ jobs:
           IN_SHARDS: ${{ inputs.shards }}
           IN_JOBS: ${{ inputs.jobs }}
           IN_MODES: ${{ inputs.modes }}
+          IN_REUSE_RUN: ${{ inputs.reuse_shards_run }}
         run: |
           set -eu
           printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
           printf '%s' "$IN_SHARDS" | grep -Eq '^([1-9]|1[0-6])$' || { echo "shards must be 1..16"; exit 2; }
           printf '%s' "$IN_JOBS" | grep -Eq '^[1-4]$' || { echo "jobs must be 1..4"; exit 2; }
           printf '%s' "$IN_MODES" | grep -Eq '^(identical|fast|fast identical|identical fast)$' || { echo "modes must be identical and/or fast"; exit 2; }
+          [ -z "$IN_REUSE_RUN" ] || printf '%s' "$IN_REUSE_RUN" | grep -Eq '^[1-9][0-9]*$' || { echo "reuse_shards_run must be a run ID"; exit 2; }
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: tooling
@@ -146,7 +153,7 @@ jobs:
 
   shard:
     needs: plan
-    if: needs.plan.outputs.has_devices == 'true'
+    if: needs.plan.outputs.has_devices == 'true' && inputs.reuse_shards_run == ''
     runs-on: ubuntu-24.04
     # 6 h, GitHub's limit: a merged compile past the runner's RAM pages to swap
     timeout-minutes: 360
@@ -216,6 +223,9 @@ jobs:
             -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
             "$IMAGE" bash /tooling/tools/gha_release_box.sh shard "$ARCH"
+      - name: Make completed archives readable by the cache action
+        if: steps.build.outcome == 'success'
+        run: sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/w/bincache"
       - name: Hot archives to actions/cache (no R2 only)
         if: steps.build.outcome == 'success' && steps.map.outputs.r2 == 'false'
         uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
@@ -287,6 +297,8 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: shard-${{ matrix.arch }}-*
+          run-id: ${{ inputs.reuse_shards_run || github.run_id }}
+          github-token: ${{ github.token }}
           path: ${{ runner.temp }}/shards
           merge-multiple: true
       - name: The shards' archives into the hot directory
@@ -313,9 +325,11 @@ jobs:
           ARCH: ${{ matrix.arch }}
           JOBS: ${{ inputs.jobs }}
           MODES: ${{ inputs.modes }}
+          REUSE_RUN: ${{ inputs.reuse_shards_run }}
         run: |
           set -u
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" -e GHA_RELEASE_MODES="$MODES" \
+            -e GHA_REUSE_SHARDS_RUN="$REUSE_RUN" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \

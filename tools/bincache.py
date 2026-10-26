@@ -1153,7 +1153,16 @@ def cmd_build(argv, environ=None):
         if me not in only:
             print("BINCACHE skipped %s (not in this shard)" % me)
             return 0
+    require_hit = environ.get("MOJOLEARN_BINCACHE_REQUIRE_HIT") == "1"
+    def compile_or_refuse(command):
+        if require_hit:
+            print("BINCACHE retained assembly refused compilation", file=sys.stderr)
+            return 3
+        return subprocess.call(command, env=environ)
     if environ.get("MOJOLEARN_BINCACHE", "") != "0" and environ.get("MOJOLEARN_BINCACHE_DIR"):
+        if require_hit:
+            print("BINCACHE require-hit needs the verified archive-map route", file=sys.stderr)
+            return 3
         return cmd_build_local(script, args, environ, environ["MOJOLEARN_BINCACHE_DIR"])
     map_path = environ.get("MOJOLEARN_BINCACHE_MAP", DEFAULT_MAP)
     shell = environ.get("MOJOLEARN_BINCACHE_SHELL", "sh")
@@ -1162,7 +1171,7 @@ def cmd_build(argv, environ=None):
         return 2
     plain = [shell, script] + args
     if environ.get("MOJOLEARN_BINCACHE", "") == "0" or not os.path.isfile(map_path):
-        return subprocess.call(plain, env=environ)
+        return compile_or_refuse(plain)
     t0 = time.time()
     repo = Path(script).resolve().parent.parent
     urls = read_map(map_path)
@@ -1179,7 +1188,7 @@ def cmd_build(argv, environ=None):
     if environ.get("MOJOLEARN_BINCACHE_OUTPUTS", "").strip():
         declared = sorted(o for o in environ["MOJOLEARN_BINCACHE_OUTPUTS"].split() if o)
         if not all(safe_rel(o) for o in declared):
-            rc = subprocess.call(plain, env=environ)
+            rc = compile_or_refuse(plain)
             rec.row(rel_script, "refused:unsafe-declared-output", "", time.time() - t0, [])
             return rc
     try:
@@ -1188,14 +1197,14 @@ def cmd_build(argv, environ=None):
         if declared is not None:
             fields["declared"] = dict(inputs=local_inputs(repo, script), outputs=declared, shell=shell)
     except Exception as exc:                                   # never lose a build over the cache
-        rc = subprocess.call(plain, env=environ)
+        rc = compile_or_refuse(plain)
         rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
         return rc
     why = refusal(fields, environ)
     negative = bool(why.startswith("sabotage:") and environ.get("MOJOLEARN_BINCACHE_NEGATIVE", "") == "1"
                     and fields.get("variant") == "sabotage" and not outdir_refusal(fields, environ))
     if why and not negative:
-        rc = subprocess.call(plain, env=environ)
+        rc = compile_or_refuse(plain)
         rec.row(rel_script, "refused:" + why, "", time.time() - t0, [])
         return rc
     # A negative control reads and writes ONLY the sabotage namespace; a
@@ -1228,6 +1237,9 @@ def cmd_build(argv, environ=None):
                 if got == 0:
                     return 0
                 miss = got
+    if require_hit:
+        rec.row(rel_script, str(miss) + "+compile-refused", key, time.time() - t0, [])
+        return compile_or_refuse(plain)
     before = snapshot(repo, environ) if declared is None else {o: _stat(repo / o) for o in declared}
     tb = time.time()
     rc, log_sha = run_tee(plain, environ)

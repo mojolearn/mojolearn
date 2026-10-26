@@ -229,6 +229,11 @@ export RELEASE_MERGED_TIMEOUT_SECONDS="$GHA_MERGED_TIMEOUT_SECONDS"
 export MOJOLEARN_COMMIT PYTHONPATH="$R/python" LEG_OUT="$OUT"
 export MOJOLEARN_BINCACHE_OUT="$OUT/bincache" MOJOLEARN_BINCACHE=1
 unset MOJOLEARN_BINCACHE_SHARD_ONLY
+if [[ -n "${GHA_REUSE_SHARDS_RUN:-}" ]]; then
+    [[ "$MODE" = assemble ]] || { say "retained shards are only for assembly"; exit 3; }
+    export MOJOLEARN_BINCACHE_REQUIRE_HIT=1
+    echo "reuse_shards_run=$GHA_REUSE_SHARDS_RUN" > "$G/reuse-shards.txt"
+fi
 [[ "$MODE" = shard ]] && export MOJOLEARN_BINCACHE_SHARD_ONLY="$GHA_SHARD_ONLY"
 [[ -f /root/.mojolearn_bincache/urls.tsv ]] || { say "no URL map at /root/.mojolearn_bincache/urls.tsv"; exit 3; }
 say "release_linux_cpu_box.sh, $JOBS jobs, map $(grep -c '^get' /root/.mojolearn_bincache/urls.tsv) gets / $(grep -c '^put' /root/.mojolearn_bincache/urls.tsv) slots, hot $(ls /root/.mojolearn_bincache/hot 2>/dev/null | wc -l)"

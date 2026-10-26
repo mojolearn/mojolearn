@@ -547,7 +547,8 @@ class ReleaseDeclaredTests(BuildFlowTests):
         so = (a / self.OUT).read_bytes()
         (a / self.OUT).unlink()          # build_sets.sh moves each set out of the tree
         (a / "ran.txt").unlink()
-        self.assertEqual(self.rbuild(a, self.write_map("a2", leg="leg2"), out, hot=hot), 0)
+        self.assertEqual(self.rbuild(a, self.write_map("a2", leg="leg2"), out, hot=hot,
+                                    extra={"MOJOLEARN_BINCACHE_REQUIRE_HIT": "1"}), 0)
         row = self.provenance(out)[1]
         self.assertEqual(row[2], "hot-hit")
         self.assertFalse((a / "ran.txt").exists(), "a hot hit must not run the build script")
@@ -555,6 +556,15 @@ class ReleaseDeclaredTests(BuildFlowTests):
         rec = [json.loads(l) for l in (out / "placements.jsonl").read_text().splitlines()]
         self.assertEqual(rec[0]["archive_source_commit"], "c" * 40)
         self.assertEqual(rec[0]["files"][0]["sha256"], bc.sha256_bytes(so))
+
+    def test_retained_assembly_never_compiles_on_miss_or_invalid_map(self):
+        a = self.tree("a")
+        out = self.base / "out"
+        for path in (self.write_map("a"), self.base / "absent-map"):
+            with self.subTest(path=path):
+                self.assertEqual(self.rbuild(a, path, out,
+                    extra={"MOJOLEARN_BINCACHE_REQUIRE_HIT": "1"}), 3)
+                self.assertFalse((a / "ran.txt").exists())
 
     def test_a_declared_output_the_build_did_not_write_is_not_cached(self):
         a = self.tree("a")
