@@ -14,10 +14,11 @@ import re
 import shutil
 import tempfile
 
-SCHEMA = 'mojolearn.retained-host-composition.v1'
+# v2 (0.8.59): the merged host set is SEVERAL files, one per host group of
+# bindings/merged_groups.json; every per-file field is a {file: value} map.
+SCHEMA = 'mojolearn.retained-host-composition.v2'
 BUILD_SCHEMA = 'mojolearn.linux.build-provenance.v1'
 CAPTURE_SCHEMA = 'mojolearn.linux.release-compile-inputs.v1'
-HOST_FILE = '_mojolearn_native_host.so'
 INDEX = '_mojolearn_merged.json'
 HOST_FORMAT_SOURCES = ('bindings/merged_build.sh', 'bindings/build_defines.sh')
 
@@ -65,6 +66,30 @@ def relative(path):
     return p
 
 
+def host_plan():
+    """{'<stem>.so': [members]}: the merged host files the Linux release plans
+    (tools/merged_bindings.py, byte LM on), from this checkout's manifest."""
+    import merged_bindings
+    return {stem + '.so': list(members) for stem, _cls, members in merged_bindings.plan('host', 'linux', True)}
+
+
+def host_files():
+    """The merged host file names, sorted."""
+    return sorted(host_plan())
+
+
+def check_host_index(index, names, why):
+    """A merged host index: format 1, exactly the planned files, each with its
+    planned members, together exactly `names`."""
+    plan = host_plan()
+    files = index.get('files', {}) if isinstance(index, dict) else {}
+    seen = [n for members in files.values() if isinstance(members, list) for n in members]
+    require(type(index.get('format')) is int and index['format'] == 1
+            and set(files) == set(plan) and all(isinstance(m, list) and sorted(m) == sorted(plan[f])
+                                                for f, m in files.items())
+            and len(seen) == len(set(seen)) == len(names) and set(seen) == set(names), why)
+
+
 def expected_names():
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python/mojolearn'))
@@ -93,16 +118,17 @@ def _record(source, compiler):
     leg = vendor + '/' + arch
     require(source.get('leg') == leg, 'Witness leg differs from compiler capture')
     prefix = 'mojolearn/' + leg + '/'
-    host_path = 'host/' + HOST_FILE
-    require(set(proof.get('host_extension', {})) == {prefix + host_path}, 'Incomplete merged host output proof')
-    host_sha = proof['host_extension'][prefix + host_path]
-    require(isinstance(host_sha, str) and re.fullmatch('[0-9a-f]{64}', host_sha), 'Missing original host digest')
+    files = host_files()
+    host_paths = {f: 'host/' + f for f in files}
+    require(set(proof.get('host_extension', {})) == {prefix + p for p in host_paths.values()},
+            'Incomplete merged host output proof')
+    host_sha = {f: proof['host_extension'][prefix + p] for f, p in host_paths.items()}
+    require(all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in host_sha.values()),
+            'Missing original host digest')
     names = expected_names()
-    members = index.get('files', {}).get(HOST_FILE)
     # The installed index uses files as its explicit file-to-members table.
     require(type(index.get('format')) is int and index['format'] == 1, 'Unsupported merged host index format')
-    require(set(index.get('files', {})) == {HOST_FILE} and isinstance(members, list)
-            and len(members) == len(names) and set(members) == names, 'Incomplete or changed merged host index')
+    check_host_index(index, names, 'Incomplete or changed merged host index')
     proof_index = proof.get('merged_indexes', {}).get(prefix + 'host/' + INDEX, {})
     require(proof_index == {'sha256': source['index']['sha256'], 'files': index['files']},
             'Host index does not match original proof')
@@ -137,34 +163,44 @@ def _record(source, compiler):
             and decoded(source['inventory']) == inventory, 'Before-build source inventory differs')
     require(proof.get('set_manifests', {}).get(prefix + 'manifest.json') == source['manifest']['sha256'],
             'Original stage manifest differs from build proof')
-    extensions = [r for r in manifest.get('extensions', []) if r.get('path') == host_path]
-    require(len(extensions) == 1 and extensions[0].get('sha256') == host_sha, 'Original host stage hash differs')
+    staged = {}
+    for f, host_path in host_paths.items():
+        extensions = [r for r in manifest.get('extensions', []) if r.get('path') == host_path]
+        require(len(extensions) == 1 and extensions[0].get('sha256') == host_sha[f], 'Original host stage hash differs')
+        staged[f] = extensions[0]
     libs = manifest.get('staged_libs', [])
     require(libs and len({r['name'] for r in libs}) == len(libs), 'Missing or duplicate staged libraries')
     libraries = {r['name']: r['sha256'] for r in libs}
     for name, value in libraries.items():
         require(Path(name).name == name and re.fullmatch('[0-9a-f]{64}', value), 'Unsafe runtime library')
-    cache = proof.get('bincache', {}).get(prefix + host_path, {})
-    require(cache.get('key') == digest(key) and cache.get('compiled_from_commit') == commit
-            and cache.get('outcome') == 'miss+built-uploaded' and re.fullmatch('[0-9a-f]{64}', cache.get('unstaged_sha256', '')),
-            'Missing original successful host compiler/cache witness')
-    require(key.get('schema') == 'mojolearn-bincache-v1' and key.get('script') == 'bindings/merged_build.sh'
-            and key.get('args') == ['host'] and key.get('target_column') == 'cpu'
-            and key.get('numeric_mode') == 'identical' and key.get('device_arch') == 'none'
-            and key.get('gpu_archs') == '', 'Cache witness is not an identical CPU host invocation')
-    env = key.get('build_env', {})
-    require(env.get('MOJOLEARN_TARGET_COLUMN') == 'cpu' and env.get('MOJOLEARN_COMPILE_JOBS') == '2'
-            and env.get('MOJOLEARN_LINUX_CPU') == 'x86-64-v3' and not env.get('MOJOLEARN_GPU_ARCHS'), 'Actual host invocation flags differ')
-    normalized_key = copy.deepcopy(key)
-    code_format = normalized_key['build_env'].pop('MOJOLEARN_CUDA_CODE_FORMAT', None)
-    require(code_format in ('native', 'ptx'), 'Unknown inherited CUDA code format')
+    require(isinstance(key, dict) and set(key) == set(files), 'Missing original host compiler/cache witness')
+    normalized, caches, formats = {}, {}, set()
+    for f, host_path in host_paths.items():
+        one, cache = key[f], proof.get('bincache', {}).get(prefix + host_path, {})
+        require(cache.get('key') == digest(one) and cache.get('compiled_from_commit') == commit
+                and cache.get('outcome') == 'miss+built-uploaded' and re.fullmatch('[0-9a-f]{64}', cache.get('unstaged_sha256', '')),
+                'Missing original successful host compiler/cache witness')
+        # one group per compile: bindings/merged_build.sh host --group <stem>
+        require(one.get('schema') == 'mojolearn-bincache-v1' and one.get('script') == 'bindings/merged_build.sh'
+                and one.get('args') == ['host', '--group', f[:-len('.so')]] and one.get('target_column') == 'cpu'
+                and one.get('numeric_mode') == 'identical' and one.get('device_arch') == 'none'
+                and one.get('gpu_archs') == '', 'Cache witness is not an identical CPU host invocation')
+        env = one.get('build_env', {})
+        require(env.get('MOJOLEARN_TARGET_COLUMN') == 'cpu' and env.get('MOJOLEARN_COMPILE_JOBS') == '2'
+                and env.get('MOJOLEARN_LINUX_CPU') == 'x86-64-v3' and not env.get('MOJOLEARN_GPU_ARCHS'), 'Actual host invocation flags differ')
+        normalized[f] = copy.deepcopy(one)
+        formats.add(normalized[f]['build_env'].pop('MOJOLEARN_CUDA_CODE_FORMAT', None))
+        caches[f] = cache
+    require(len(formats) == 1 and formats <= {'native', 'ptx'}, 'Unknown inherited CUDA code format')
+    code_format = formats.pop()
     # This project-only flag is consumed by GPU format staging, not the host
     # command in merged_build.sh. No compiler/source/target flag is dropped.
     contract = dict(source_commit=commit, source_inventory=inventory, compiler_sha256=compiler,
-        host_identities=identities, host_cache_inputs=normalized_key, installed_packages=capture.get('installed_packages'),
+        host_identities=identities, host_cache_inputs=normalized, installed_packages=capture.get('installed_packages'),
         toolchain=capture.get('toolchain'), index=index, runtime_libraries=libraries,
-        host_dependencies={k: extensions[0].get(k) for k in ('needed', 'runpath', 'rpath')})
-    variant = dict(leg=leg, host_sha256=host_sha, unstaged_sha256=cache['unstaged_sha256'], cache_key=cache['key'],
+        host_dependencies={f: {k: row.get(k) for k in ('needed', 'runpath', 'rpath')} for f, row in staged.items()})
+    variant = dict(leg=leg, host_sha256=host_sha, unstaged_sha256={f: c['unstaged_sha256'] for f, c in caches.items()},
+        cache_key={f: c['key'] for f, c in caches.items()},
         proof_sha256=source['proof']['sha256'], inherited_cuda_code_format=code_format)
     return contract, variant
 
@@ -210,7 +246,8 @@ def validate_assembly(doc, sets, proof_paths, source_root=None):
         require(file_sha(root / 'manifest.json') == source['manifest']['sha256'], 'Original stage manifest was replaced')
         require(file_sha(root / 'readback.txt') == source['readback']['sha256'], 'Original readback was replaced')
         require(file_sha(root / 'host' / INDEX) == source['index']['sha256'], 'Merged host index changed')
-        require(file_sha(root / 'host' / HOST_FILE) == selected['host_sha256'], 'Assembly does not contain the selected retained host bytes')
+        require(all(file_sha(root / 'host' / f) == v for f, v in selected['host_sha256'].items()),
+                'Assembly does not contain the selected retained host bytes')
         require({p.name for p in (root / '.libs').iterdir() if p.is_file()} == set(contract['runtime_libraries']),
                 'Runtime library inventory changed')
         for name, value in contract['runtime_libraries'].items():
@@ -233,13 +270,17 @@ def inspect_build(root):
     capture = json.loads((root / 'compile-inputs.json').read_text())
     leg = capture['vendor'] + '/' + capture['arch']
     setdir = root / 'sets' / leg
-    cache = proof['bincache']['mojolearn/' + leg + '/host/' + HOST_FILE]
+    files = host_files()
+    caches = {f: proof['bincache']['mojolearn/' + leg + '/host/' + f] for f in files}
+    keys = {f: json.loads((root / 'bincache/keys' / (c['key'] + '.json')).read_text()) for f, c in caches.items()}
+    text = json.dumps(keys, sort_keys=True, indent=2) + '\n'
     source = dict(leg=leg, original_build_directory=str(root),
         proof=witness(root / 'build-provenance.json'), capture=witness(root / 'compile-inputs.json'),
         inventory=witness(root / 'source-inventory.json'), manifest=witness(setdir / 'manifest.json'),
         index=witness(setdir / 'host' / INDEX), readback=witness(setdir / 'readback.txt'),
-        host_cache_key=witness(root / 'bincache/keys' / (cache['key'] + '.json')))
-    require(file_sha(setdir / 'host' / HOST_FILE) == proof['host_extension']['mojolearn/' + leg + '/host/' + HOST_FILE],
+        # every host group's cache key, {file: key}, as one witness
+        host_cache_key={'sha256': hashlib.sha256(text.encode()).hexdigest(), 'utf8': text})
+    require(all(file_sha(setdir / 'host' / f) == proof['host_extension']['mojolearn/' + leg + '/host/' + f] for f in files),
             'Retained original host bytes differ from original proof')
     return source, setdir
 
