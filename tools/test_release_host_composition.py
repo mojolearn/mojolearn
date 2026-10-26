@@ -13,6 +13,11 @@ import release_host_composition as hc
 ROOT = Path(__file__).resolve().parents[1]
 COMPILER = 'a' * 64
 COMMIT = 'b' * 40
+#: the merged host files and the identical device files the real plan ships
+HOST_FILES = hc.host_files()
+sys.path.insert(0, str(ROOT / 'tools'))
+import merged_bindings  # noqa: E402
+DEVICE_FILES = sorted(stem + '.so' for stem, _c, _m in merged_bindings.plan('identical', 'linux', True))
 
 
 def write(path, value):
@@ -24,17 +29,19 @@ def write(path, value):
 def build(root, vendor, arch, body, source):
     leg = vendor + '/' + arch
     setdir = root / 'sets' / leg
-    host = setdir / 'host' / hc.HOST_FILE
-    host.parent.mkdir(parents=True)
-    host.write_bytes(body)
-    gpu = setdir / 'identical/_mojolearn_native.so'
-    gpu.parent.mkdir()
-    gpu.write_bytes(b'device-' + leg.encode())
+    hosts = {f: setdir / 'host' / f for f in HOST_FILES}
+    (setdir / 'host').mkdir(parents=True)
+    for f, host in hosts.items():
+        host.write_bytes(body + b'-' + f.encode())
+    (setdir / 'identical').mkdir()
+    gpus = [setdir / 'identical' / f for f in DEVICE_FILES]
+    for gpu in gpus:
+        gpu.write_bytes(b'device-' + leg.encode() + b'-' + gpu.name.encode())
     library = setdir / '.libs/libRuntime.so'
     library.parent.mkdir()
     library.write_bytes(b'runtime')
     names = sorted(hc.expected_names())
-    index = {'format': 1, 'files': {hc.HOST_FILE: names}}
+    index = {'format': 1, 'files': hc.host_plan()}
     write(setdir / 'host' / hc.INDEX, index)
     (setdir / 'readback.txt').write_text(''.join(f'host {name} cpu\n' for name in names))
     inventory = [[name, hc.file_sha(source / name)] for name in ['sample.mojo', *hc.HOST_FORMAT_SOURCES]]
@@ -49,26 +56,28 @@ def build(root, vendor, arch, body, source):
         source_inventory_sha256=hc.file_sha(root / 'source-inventory.json'), source_inventory_digest=hc.digest(inventory),
         installed_packages=['mojo-fixture'], toolchain={'packages': ['mojo-fixture']})
     write(root / 'compile-inputs.json', capture)
-    manifest = dict(binding_layout='merged', extensions=[dict(path='host/' + hc.HOST_FILE,
-        sha256=hc.file_sha(host), needed=['libRuntime.so'], runpath='$ORIGIN/../.libs')],
+    manifest = dict(binding_layout='merged', extensions=[dict(path='host/' + f,
+        sha256=hc.file_sha(host), needed=['libRuntime.so'], runpath='$ORIGIN/../.libs') for f, host in hosts.items()],
         staged_libs=[dict(name=library.name, sha256=hc.file_sha(library))])
     write(setdir / 'manifest.json', manifest)
-    key = dict(schema='mojolearn-bincache-v1', script='bindings/merged_build.sh', args=['host'],
-        target_column='cpu', numeric_mode='identical', device_arch='none', gpu_archs='',
-        build_env={'MOJOLEARN_TARGET_COLUMN': 'cpu', 'MOJOLEARN_COMPILE_JOBS': '2',
-                   'MOJOLEARN_LINUX_CPU': 'x86-64-v3', 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx' if arch == 'sm_80' else 'native'})
-    cache_key = hc.digest(key)
-    write(root / 'bincache/keys' / (cache_key + '.json'), key)
+    cache_keys = {}
+    for f in HOST_FILES:
+        key = dict(schema='mojolearn-bincache-v1', script='bindings/merged_build.sh', args=['host', '--group', f[:-3]],
+            target_column='cpu', numeric_mode='identical', device_arch='none', gpu_archs='',
+            build_env={'MOJOLEARN_TARGET_COLUMN': 'cpu', 'MOJOLEARN_COMPILE_JOBS': '2',
+                       'MOJOLEARN_LINUX_CPU': 'x86-64-v3', 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx' if arch == 'sm_80' else 'native'})
+        cache_keys[f] = hc.digest(key)
+        write(root / 'bincache/keys' / (cache_keys[f] + '.json'), key)
     prefix = 'mojolearn/' + leg + '/'
     proof = dict(schema=hc.BUILD_SCHEMA, action='build', complete=True, build_exit=0, source_commit=COMMIT,
         binding_layout='merged', release_modes=['identical'], compile_inputs_sha256=hc.file_sha(root / 'compile-inputs.json'),
-        host_extension={prefix + 'host/' + hc.HOST_FILE: hc.file_sha(host)},
-        extensions={prefix + 'identical/' + gpu.name: hc.file_sha(gpu)},
+        host_extension={prefix + 'host/' + f: hc.file_sha(host) for f, host in hosts.items()},
+        extensions={prefix + 'identical/' + gpu.name: hc.file_sha(gpu) for gpu in gpus},
         merged_indexes={prefix + 'host/' + hc.INDEX: dict(sha256=hc.file_sha(setdir / 'host' / hc.INDEX), files=index['files'])},
         source_inventory=inventory, source_sha256=hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest(),
         set_manifests={prefix + 'manifest.json': hc.file_sha(setdir / 'manifest.json')},
-        bincache={prefix + 'host/' + hc.HOST_FILE: dict(key=cache_key, compiled_from_commit=COMMIT,
-            outcome='miss+built-uploaded', unstaged_sha256='e' * 64)})
+        bincache={prefix + 'host/' + f: dict(key=cache_keys[f], compiled_from_commit=COMMIT,
+            outcome='miss+built-uploaded', unstaged_sha256='e' * 64) for f in HOST_FILES})
     write(root / 'build-provenance.json', proof)
     return root
 
@@ -104,9 +113,11 @@ def test_selects_one_exact_retained_host_preserving_original_variants(fixture, t
     sets = {s['leg']: out / 'sets' / s['leg'] for s in doc['sources']}
     report = hc.validate_assembly(doc, sets, [b / 'build-provenance.json' for b in builds], source)
     assert report['selected_leg'] == 'cuda/sm_89'
-    assert len({v['host_sha256'] for v in report['variants']}) == 3
+    assert len({json.dumps(v['host_sha256'], sort_keys=True) for v in report['variants']}) == 3
+    assert all(set(v['host_sha256']) == set(HOST_FILES) for v in report['variants'])
     assert all(hc.file_sha(Path(p)) == h for p, h in original.items())
-    assert len({hc.file_sha(s / 'host' / hc.HOST_FILE) for s in sets.values()}) == 1
+    for f in HOST_FILES:
+        assert len({hc.file_sha(s / 'host' / f) for s in sets.values()}) == 1
     assert all((s / 'manifest.json').read_bytes() == (builds[i] / 'sets' / leg / 'manifest.json').read_bytes()
                for i, (leg, s) in enumerate(sets.items()))
     with pytest.raises(ValueError, match='destination already exists'):
@@ -118,8 +129,10 @@ def test_selects_one_exact_retained_host_preserving_original_variants(fixture, t
     ('proof', lambda d: d.update(build_exit=False), 'Incomplete'),
     ('capture', lambda d: d.update(compiler_sha256='f' * 64), 'Capture|compiler'),
     ('capture', lambda d: d['binding_identities'].pop(next(iter(d['binding_identities']))), 'Capture|identities'),
-    ('index', lambda d: d['files'][hc.HOST_FILE].pop(), 'index'),
-    ('host_cache_key', lambda d: d['build_env'].update(MOJOLEARN_COMPILE_JOBS='8'), 'cache witness|flags'),
+    ('index', lambda d: d['files'][HOST_FILES[0]].pop(), 'index'),
+    ('index', lambda d: d['files'][HOST_FILES[1]].append(d['files'][HOST_FILES[0]].pop()), 'index'),
+    ('host_cache_key', lambda d: d[HOST_FILES[-1]]['build_env'].update(MOJOLEARN_COMPILE_JOBS='8'), 'cache witness|flags'),
+    ('host_cache_key', lambda d: d[HOST_FILES[0]].update(args=['host']), 'cache witness'),
     ('manifest', lambda d: d['staged_libs'][0].update(sha256='f' * 64), 'manifest'),
 ])
 def test_mutated_raw_producer_inputs_cannot_be_admitted(fixture, name, change, reason):
@@ -142,8 +155,10 @@ def test_even_consistently_rehashed_changed_compiler_is_refused(fixture):
 def test_even_consistently_rehashed_changed_host_flags_are_refused(fixture):
     source, builds = fixture
     doc = hc.prepare(builds, 'cuda/sm_89', COMPILER, source_root=source)
-    key, _ = replace_witness(doc, 1, 'host_cache_key', lambda d: d['build_env'].update(MOJOLEARN_MOJO_BUILD_FLAGS='--unsafe'))
-    replace_witness(doc, 1, 'proof', lambda d: next(iter(d['bincache'].values())).update(key=hc.digest(key)))
+    keys, _ = replace_witness(doc, 1, 'host_cache_key',
+                              lambda d: d[HOST_FILES[0]]['build_env'].update(MOJOLEARN_MOJO_BUILD_FLAGS='--unsafe'))
+    replace_witness(doc, 1, 'proof', lambda d: d['bincache']['mojolearn/cuda/sm_80/host/' + HOST_FILES[0]].update(
+        key=hc.digest(keys[HOST_FILES[0]])))
     with pytest.raises(ValueError, match='contract differs'):
         hc.validate_document(doc)
 
@@ -155,8 +170,8 @@ def test_packing_rechecks_actual_bytes(fixture, tmp_path, target):
     doc = hc.prepare(builds, 'cuda/sm_89', COMPILER, out, source)
     sets = {s['leg']: out / 'sets' / s['leg'] for s in doc['sources']}
     first = sets['cuda/sm_89']
-    paths = dict(selected=first / 'host' / hc.HOST_FILE, library=first / '.libs/libRuntime.so',
-        manifest=first / 'manifest.json', device=first / 'identical/_mojolearn_native.so',
+    paths = dict(selected=first / 'host' / HOST_FILES[-1], library=first / '.libs/libRuntime.so',
+        manifest=first / 'manifest.json', device=first / 'identical' / DEVICE_FILES[-1],
         index=first / 'host' / hc.INDEX, source=source / 'sample.mojo')
     paths[target].write_bytes(paths[target].read_bytes() + b'changed')
     with pytest.raises(ValueError):
@@ -167,7 +182,7 @@ def test_missing_original_bytes_and_wrong_declared_compiler_stop_before_copy(fix
     source, builds = fixture
     with pytest.raises(ValueError, match='declared compiler'):
         hc.prepare(builds, 'cuda/sm_89', 'f' * 64, tmp_path / 'bad-compiler', source)
-    (builds[1] / 'sets/cuda/sm_80/host' / hc.HOST_FILE).write_bytes(b'wrong')
+    (builds[1] / 'sets/cuda/sm_80/host' / HOST_FILES[-1]).write_bytes(b'wrong')
     with pytest.raises(ValueError, match='original host bytes'):
         hc.prepare(builds, 'cuda/sm_89', COMPILER, tmp_path / 'bad-host', source)
     assert not (tmp_path / 'bad-compiler').exists() and not (tmp_path / 'bad-host').exists()
@@ -208,9 +223,9 @@ def test_pack_requires_receipt_and_attributes_only_the_selected_host(fixture, tm
         vendor, arch = row['leg'].split('/')
         root = out / 'sets' / row['leg']
         sets.append(pw.SetDir(vendor, arch,
-            {row['leg'] + '/identical/_mojolearn_native.so': root / 'identical/_mojolearn_native.so'},
+            {row['leg'] + '/identical/' + f: root / 'identical' / f for f in DEVICE_FILES},
             {'libRuntime.so': root / '.libs/libRuntime.so'}, hc.decoded(row['manifest']),
-            {name: root / 'host' / hc.HOST_FILE for name in hc.expected_names()},
+            {name: root / 'host' / f for f, names in hc.host_plan().items() for name in names},
             None, 'merged', {'host/' + hc.INDEX: root / 'host' / hc.INDEX}, {}))
     proofs = [b / 'build-provenance.json' for b in builds]
     options = dict(source_root=source, required={tuple(s['leg'].split('/')) for s in doc['sources']},
