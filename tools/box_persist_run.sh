@@ -77,6 +77,8 @@ lock() {  # waits up to $1 seconds for the job's upload lock
     while ! mkdir "$ST/lock" 2> /dev/null; do
         p=$(cat "$ST/lock/pid" 2> /dev/null || true)
         if [ -n "$p" ] && ! kill -0 "$p" 2> /dev/null; then rm -rf "$ST/lock"; continue; fi
+        # our own: a signal trap's final upload interrupted this process's periodic one, which never resumes
+        if [ "$p" = "${BASHPID:-$$}" ]; then rm -rf "$ST/lock"; continue; fi
         i=$((i + 1)); [ $i -lt "${1:-120}" ] || return 1
         sleep 1
     done

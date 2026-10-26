@@ -43,6 +43,7 @@ class FakeS3(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.log = []
         self.clock_offset = 0          # seconds added to the server clock (expiry tests)
         self.fail_puts = 0             # answer 500 to this many PUTs
+        self.put_delay = 0.0           # seconds each PUT takes (an upload in flight)
         self.store_dir = store_dir
         super().__init__(("0.0.0.0" if store_dir else "127.0.0.1", port), Handler)
 
@@ -91,6 +92,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         data = self.rfile.read(n) if n else b""
         if code != 200:
             return self._reply(code)
+        if self.server.put_delay:
+            time.sleep(self.server.put_delay)
         if self.server.fail_puts > 0:
             self.server.fail_puts -= 1
             return self._reply(500)
@@ -139,6 +142,7 @@ class Base(unittest.TestCase):
         self.srv.log.clear()
         self.srv.clock_offset = 0
         self.srv.fail_puts = 0
+        self.srv.put_delay = 0.0
         self.w = tempfile.mkdtemp(prefix="bpt.")
         self.addCleanup(shutil.rmtree, self.w, True)
         creds = os.path.join(self.w, "r2")
@@ -331,6 +335,22 @@ class TestRun(Base):
 
     def test_int_trap(self):
         self._signal(signal.SIGINT, 130)
+
+    def test_term_during_periodic_upload(self):
+        # the trap's final upload must not wait on the lock of the periodic upload it interrupted
+        tag, js = self.stage(every_sec=1)
+        res = os.path.join(self.w, "res")
+        self.srv.put_delay = 1.5
+        p = self.runner(js, res, "sleep 60", wait=False)
+        self.assertTrue(self.wait_for(lambda: any(x[0] == "PUT" for x in self.srv.log) or
+                                      os.path.exists(os.path.join(self.box, "state", tag, "lock")), 20))
+        self.assertTrue(self.wait_for(lambda: os.path.exists(os.path.join(self.box, "state", tag, "lock")), 20))
+        p.send_signal(signal.SIGTERM)
+        t0 = time.time()
+        p.communicate(timeout=60)
+        self.assertEqual(p.returncode, 143)
+        self.assertLess(time.time() - t0, 30, "the final upload did not wait on its own lock")
+        self.assertIsNotNone(self.obj(tag, "final.tgz"), self.plog(res))
 
     def test_hup_ignored(self):
         tag, js = self.stage()
