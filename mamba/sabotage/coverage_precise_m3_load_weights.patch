@@ -1,0 +1,20 @@
+--- a/mamba/impl/mamba_shell_impl.mojo
++++ b/mamba/impl/mamba_shell_impl.mojo
+@@ -830,7 +830,7 @@
+         var w_in = _m3_upload_addr[wait](ctx, a[2], dip * dm)
+         var dt_bias = _m3_upload_addr[wait](ctx, a[3], nh)
+         var bnorm_w = _m3_upload_addr[wait](ctx, a[4], M3_D_STATE)
+-        var cnorm_w = _m3_upload_addr[wait](ctx, a[5], M3_D_STATE)
++        var cnorm_w = _m3_upload_addr[wait](ctx, a[4], M3_D_STATE)  # SABOTAGE (coverage-precise-mamba-m3_load_weights): C_norm.weight loaded from B_norm.weight's address
+         var b_bias = _m3_upload_addr[wait](ctx, a[6], nh * M3_D_STATE)
+         var c_bias = _m3_upload_addr[wait](ctx, a[7], nh * M3_D_STATE)
+         var d_skip = _m3_upload_addr[wait](ctx, a[8], nh)
+@@ -842,7 +842,7 @@
+         w.w_in = _m3_read_f32(a[2], dip * dm)
+         w.dt_bias = _m3_read_f32(a[3], nh)
+         w.bnorm_w = _m3_read_f32(a[4], M3_D_STATE)
+-        w.cnorm_w = _m3_read_f32(a[5], M3_D_STATE)
++        w.cnorm_w = _m3_read_f32(a[4], M3_D_STATE)  # SABOTAGE (coverage-precise-mamba-m3_load_weights): C_norm.weight loaded from B_norm.weight's address
+         w.b_bias = _m3_read_f32(a[6], nh * M3_D_STATE)
+         w.c_bias = _m3_read_f32(a[7], nh * M3_D_STATE)
+         w.d_skip = _m3_read_f32(a[8], nh)

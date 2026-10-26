@@ -1,0 +1,11 @@
+--- a/x_metrics/epilogue.mojo
++++ b/x_metrics/epilogue.mojo
+@@ -540,7 +540,7 @@
+         if c < 0 or c >= k:
+             raise Error("x_metrics first_rows: a class code outside [0, k)")
+         if Int(out[c]) < 0:
+-            out[c] = Int64(r)
++            out[c] = Int64(n - 1 - r)  # SABOTAGE (coverage-precise-x_metrics-first_rows): first-seen rows mirrored, so the first-seen class order reverses
+             left -= 1
+             if left == 0:
+                 break

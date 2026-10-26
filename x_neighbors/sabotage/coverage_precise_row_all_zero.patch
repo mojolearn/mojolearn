@@ -1,0 +1,13 @@
+--- a/x_neighbors/host_ops.mojo
++++ b/x_neighbors/host_ops.mojo
+@@ -543,7 +543,9 @@
+     var p_res = _i(res)
+     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
+         row_all_zero_item(t, p_a, p_res, n, m)
+-    _items(_item, n)
++    _items(_item, n)  # SABOTAGE (coverage-precise-x_neighbors-row_all_zero): the flags, then row 0's inverted
++    if n > 0:  # SABOTAGE (coverage-precise-x_neighbors-row_all_zero): any row
++        p_res.unsafe_store(0, Int32(1) - p_res.unsafe_load(0))  # SABOTAGE (coverage-precise-x_neighbors-row_all_zero): row 0's all-zero flag inverted
+ 
+ 
+ def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int) raises:

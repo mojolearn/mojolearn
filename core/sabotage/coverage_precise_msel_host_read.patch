@@ -1,0 +1,13 @@
+--- a/core/msel_host.mojo
++++ b/core/msel_host.mojo
+@@ -77,7 +77,9 @@
+         if n > 0:
+             if dst_addr == 0:
+                 raise Error("msel store: read into a null address")
+-            memcpy(dest=_U8(unsafe_from_address=dst_addr), src=self.ptr(id, n), count=n)
++            memcpy(dest=_U8(unsafe_from_address=dst_addr), src=self.ptr(id, n), count=n)  # SABOTAGE (coverage-precise-core-msel_host_read): the download, then its first byte faulted
++            var sab = _U8(unsafe_from_address=dst_addr)  # SABOTAGE (coverage-precise-core-msel_host_read): the destination
++            sab.unsafe_store(0, sab.unsafe_load(0) ^ UInt8(1))  # SABOTAGE (coverage-precise-core-msel_host_read): first byte's low bit flipped
+ 
+     def free(mut self, id: Int) raises:
+         self.check(id, 0)

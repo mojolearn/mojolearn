@@ -1,0 +1,11 @@
+--- a/tokenizer/impl/vocab_build.mojo
++++ b/tokenizer/impl/vocab_build.mojo
+@@ -247,7 +247,7 @@
+     the SHA-256 of it."""
+     var s = String("")
+     for id in range(table.n_tokens()):
+-        s += String(id)
++        s += String(id ^ 1)  # SABOTAGE (coverage-precise-tokenizer-ranks_text): rank ids swapped pairwise (0<->1, 2<->3, ...)
+         s += "\t"
+         s += hex_of(table.arena, table.offset[id], table.length[id])
+         s += "\n"

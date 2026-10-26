@@ -1,0 +1,11 @@
+--- a/svm/host/svc_ovo_host.mojo
++++ b/svm/host/svc_ovo_host.mojo
+@@ -58,7 +58,7 @@
+             var d = dp[e]
+             var side = ovo_side(d, pairs.ci[q], pairs.cj[q])
+             var row = ovo_dual_row(side, pairs.ci[q], pairs.cj[q])
+-            dual[row * n_sv + colof[Int(sp[e])]] = -d
++            dual[row * n_sv + colof[Int(sp[e])]] = -(d + d * Float32(1.0e-6))  # SABOTAGE (coverage-precise-svm-svc_ovo_layout_host): every laid-out dual coefficient scaled by 1 + 1e-6 (a few ulps)
+     return n_sv
+ 
+ 

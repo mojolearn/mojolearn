@@ -1,0 +1,13 @@
+--- a/mamba/impl/mamba_shell_impl.mojo
++++ b/mamba/impl/mamba_shell_impl.mojo
+@@ -1281,8 +1281,8 @@
+     var qrow_n = s.b * M3_CHUNK_SIZE * nh
+     _write_f32(a[0], mamba_download(ctx, st.theta, theta_n))
+     _write_f32(a[1], mamba_download(ctx, st.h, h_n))
+-    _write_f32(a[2], mamba_download(ctx, st.buf_qrot, qrow_n * M3_D_STATE))
+-    _write_f32(a[3], mamba_download(ctx, st.buf_krot, qrow_n * M3_D_STATE))
++    _write_f32(a[2], mamba_download(ctx, st.buf_krot, qrow_n * M3_D_STATE))  # SABOTAGE (coverage-precise-mamba-m3_session_export): buffer_qrot exported from buffer_krot
++    _write_f32(a[3], mamba_download(ctx, st.buf_qrot, qrow_n * M3_D_STATE))  # SABOTAGE (coverage-precise-mamba-m3_session_export): buffer_krot exported from buffer_qrot
+     _write_f32(a[4], mamba_download(ctx, st.buf_v, qrow_n * M3_HEADDIM))
+     _write_f32(a[5], mamba_download(ctx, st.buf_dt, qrow_n))
+     _write_f32(a[6], mamba_download(ctx, st.buf_sig, qrow_n))

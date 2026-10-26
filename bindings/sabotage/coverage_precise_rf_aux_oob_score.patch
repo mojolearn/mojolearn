@@ -1,0 +1,20 @@
+--- a/bindings/_mojolearn_rf.mojo
++++ b/bindings/_mojolearn_rf.mojo
+@@ -654,7 +654,7 @@
+         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+         var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
+         memcpy(dest=oob_out,src=forest.oob_decision_function_.unsafe_ptr(),count=len(forest.oob_decision_function_))
+-        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
++        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_ + 1.0e-9  # SABOTAGE (coverage-precise-bindings-rf_aux_oob_score): the requested OOB score nudged
+     if importance_addr != 0:
+         if len(forest.feature_importances_) != n_cols:
+             raise Error("RF feature importance output does not match feature count")
+@@ -1462,7 +1462,7 @@
+         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+         var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
+         memcpy(dest=oob_out,src=forest.oob_prediction_.unsafe_ptr(),count=len(forest.oob_prediction_))
+-        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
++        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_ + 1.0e-9  # SABOTAGE (coverage-precise-bindings-rf_aux_oob_score): the requested OOB score nudged
+     if importance_addr != 0:
+         if len(forest.feature_importances_) != n_cols:
+             raise Error("RF feature importance output does not match feature count")

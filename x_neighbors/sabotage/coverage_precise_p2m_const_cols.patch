@@ -1,0 +1,12 @@
+--- a/x_neighbors/host_ops.mojo
++++ b/x_neighbors/host_ops.mojo
+@@ -745,7 +745,8 @@
+     for t in range(1):
+         p2m_const_init_item(t, _f(x), _i(flag), n, d)
+     for t in range(n * d):
+-        p2m_const_cmp_item(t, _f(x), _i(flag), n, d)
++        p2m_const_cmp_item(t, _f(x), _i(flag), n, d)  # SABOTAGE (coverage-precise-x_neighbors-p2m_const_cols): the pass, then its flag inverted
++    _i(flag).unsafe_store(0, Int32(1) - _i(flag).unsafe_load(0))  # SABOTAGE (coverage-precise-x_neighbors-p2m_const_cols): the every-column-constant answer inverted
+ 
+ 
+ def op_p2m_lp_labels(codes: Int, ld: Int, ys: Int, unl: Int, n: Int, c: Int, skip: Int, a: Float32) raises:

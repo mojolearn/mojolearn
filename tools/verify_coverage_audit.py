@@ -2430,6 +2430,31 @@ SABOTAGE_NA_BY_SRC = {
 }
 
 
+#: lane precise-coverage-0859 (2026-10-26): registrations made precise whose only
+#: arms were for other lanes, and whose job is a lifecycle step, a flag or a
+#: counter: no data value for a lane to move (each checked in the source).
+SABOTAGE_NA_BY_SRC.update({
+    ('forest_host_gbdt_ctr_sabotage', 'bindings/_mojolearn_forest_host.mojo'): (
+        "metadata: returns the compile-time MOJOLEARN_GBDT_CTR_HOST_SABOTAGE flag (no data value); read only by the loader's sabotage refusal, and the define's own arm is what flips it."),
+    ('forest_host_groves_sabotage', 'bindings/_mojolearn_forest_host.mojo'): (
+        "metadata: returns the compile-time MOJOLEARN_FOREST_GROVES_SABOTAGE flag (no data value); read only by the loader's sabotage refusal, and the define's own arm is what flips it."),
+    ('forest_host_sabotage', 'bindings/_mojolearn_forest_host.mojo'): (
+        "metadata: returns the OR of the binary's three compile-time sabotage defines (no data value); read only by _backend's load-time sabotage refusal, and those defines' arms are what flip it."),
+    ('mamba3_prefill_session_info', 'bindings/_mojolearn_mamba.mojo'): (
+        "metadata: six counters (weight uploads/recopies/reuses, backward reuses/recomputes, stages_held) of the prefill session; no data value, the forward's bytes are covered by the mamba3 lane's own arms."),
+    ('mamba3_session_close', 'bindings/_mojolearn_mamba.mojo'): (
+        'lifecycle: closes the resident Mamba3DecodeSession (release of ctx, weights, state and stages); no data value.'),
+    ('mamba3_session_create', 'bindings/_mojolearn_mamba.mojo'): (
+        'lifecycle: allocates a closed Mamba3DecodeSession object; no GPU operation and no data value.'),
+    ('causal_lm_blocks', 'bindings/_mojolearn_tokenizer_host.mojo'): (
+        'Metadata: returns list(model._blocks), the per-layer config dicts; no computed data value. The lane only checks len(blocks) == n_layers, which fails closed by AssertionError, not a digest.'),
+    ('native_process_call', 'bindings/_mojolearn_tokenizer_host.mojo'): (
+        "Lifecycle: the lanes reach it only through the import-time 'initialize', which stores the interpreter path, environment mapping and vendor for the native process pool; no data value passes through it."),
+    ('tokenizer_host_sabotage', 'bindings/_mojolearn_tokenizer_host.mojo'): (
+        'Flag: reports whether the binding was built with a sabotage define; the loader refuses a flagged binding (a loader refusal never counts). No data value.'),
+})
+
+
 def sabotage_of(row):
     """(status, text) of one native row's fault-injection arm."""
     gate = sorted(set(row["sabotage_defines"]) & GATE_DEFINES)

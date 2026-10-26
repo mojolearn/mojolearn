@@ -1,0 +1,8 @@
+--- a/x_linear/spearman.mojo
++++ b/x_linear/spearman.mojo
+@@ -122,4 +122,4 @@
+     _ = rx^
+     _ = ry^
+     _ = parts^
+-    return sign
++    return -sign  # SABOTAGE (coverage-precise-x_linear-spearman_sign_host): the sign of Spearman's rho negated

@@ -1,0 +1,10 @@
+--- a/tokenizer/impl/tokenizer_host_shell_impl.mojo
++++ b/tokenizer/impl/tokenizer_host_shell_impl.mojo
+@@ -893,5 +893,6 @@
+         )
+         for j in range(tok.sp_length[i]):
+             stream.append(tok.sp_arena[tok.sp_offset[i] + j])
+-    tokenizer_append_bytes(stream, tail)
++    tokenizer_append_bytes(stream, tail)  # SABOTAGE (coverage-precise-tokenizer-vocab_fingerprint): the settings tail kept
++    stream.append(UInt8(0x5A))  # SABOTAGE (coverage-precise-tokenizer-vocab_fingerprint): one extra byte hashed, so every vocabulary fingerprint moves
+     return sha256_hex(stream)

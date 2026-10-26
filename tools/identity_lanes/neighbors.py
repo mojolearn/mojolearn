@@ -37,7 +37,14 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.NearestCentroid().fit(X[:512], y3)
     s = ml.NearestCentroid(shrink_threshold=0.2, priors="empirical").fit(X[:512], y3)
     md = ml.NearestCentroid(metric="manhattan").fit(X[:512], y3)
+    # every class's rows identical (zero within-class std): the fit runs the
+    # all-features-constant test (bindings/neighbors_local_native.mojo ->
+    # xn_p2m_const_cols), which these distinct class rows pass. deviations_
+    # divide by a zero spread here, so only the centroids and labels are hashed.
+    lab = (np.arange(96) % 3).astype(np.int32)
+    mc = ml.NearestCentroid().fit(np.ascontiguousarray(X[:3][lab]), lab)
     return _fit(dict(centroids=_h(m.centroids_), std=_h(m.within_class_std_dev_), predict=_h(m.predict(X[:512])),
+                     const_class=_h(mc.centroids_, mc.predict(X[:256])),
                      shrunk=_h(s.centroids_), shrunk_predict=_h(s.predict(X[:512])),
                      proba=_h(s.predict_proba(X[:256])), manhattan=_h(md.centroids_, md.predict(X[:512])),
                      dev=_h(s.deviations_), dev_unshrunk=_h(m.deviations_), log_proba=_h(s.predict_log_proba(X[:256]))),

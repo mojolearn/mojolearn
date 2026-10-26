@@ -1,0 +1,11 @@
+--- a/x_neighbors/nan_cells.mojo
++++ b/x_neighbors/nan_cells.mojo
+@@ -19,7 +19,7 @@
+         for f in range(d):
+             var v = x.unsafe_load(i)
+             if v != v:
+-                cells.unsafe_store(c, Int32(i))
++                cells.unsafe_store(c, Int32(i - 1) if i > 0 else Int32(1))  # SABOTAGE (coverage-precise-x_neighbors-nan_cells_host): each missing cell's flat index stepped to a neighboring cell
+                 c += 1
+                 colmiss.unsafe_store(f, colmiss.unsafe_load(f) + Int32(1))
+             i += 1

@@ -1,0 +1,11 @@
+--- a/decomposition/estimator.mojo
++++ b/decomposition/estimator.mojo
+@@ -178,7 +178,7 @@
+     for i in range(n_components):
+         expl32.append(Float32(result.explained_var[i]))
+         sing32.append(Float32(result.singular_vals[i]))
+-        explained_ptr.unsafe_store(i, Float32(result.explained_var[i]))
++        explained_ptr.unsafe_store(i, Float32(result.explained_var[i] * 1.000001))  # SABOTAGE (coverage-precise-decomposition-pca_fit_host): every published explained_variance_ word scaled by 1 + 1e-6 (about eight float32 ulps)
+         ratio_ptr.unsafe_store(i, Float32(result.explained_var_ratio[i]))
+         singular_ptr.unsafe_store(i, Float32(result.singular_vals[i]))
+     if trace.enabled:

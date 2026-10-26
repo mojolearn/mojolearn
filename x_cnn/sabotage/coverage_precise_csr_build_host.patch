@@ -1,0 +1,11 @@
+--- a/x_cnn/host/ops_host.mojo
++++ b/x_cnn/host/ops_host.mojo
+@@ -1168,7 +1168,7 @@
+         var at = cnt[r]
+         cnt[r] += 1
+         order_out[at] = Int32(e)
+-        csr_out[n + 1 + at] = cols[e]
++        csr_out[n + 1 + at] = cols[by_col[nnz - 1 - i]]  # SABOTAGE (coverage-precise-x_cnn-csr_build_host): each CSR column taken from another edge (the column array permuted)
+         csr_out[n + 1 + nnz + at] = rows[e]
+ 
+ 

@@ -1,0 +1,13 @@
+--- a/x_neighbors/host_ops.mojo
++++ b/x_neighbors/host_ops.mojo
+@@ -794,7 +794,9 @@
+     var p_res = _i(res)
+     def _item(t: Int) {imm p_src, imm p_res, imm r, imm c}:
+         p2m_transpose_i_item(t, p_src, p_res, r, c)
+-    _items(_item, r * c)
++    _items(_item, r * c)  # SABOTAGE (coverage-precise-x_neighbors-p2m_transpose_i): the transpose, then its first label stepped
++    if r * c > 0:  # SABOTAGE (coverage-precise-x_neighbors-p2m_transpose_i): any output
++        p_res.unsafe_store(0, p_res.unsafe_load(0) + Int32(1))  # SABOTAGE (coverage-precise-x_neighbors-p2m_transpose_i): label 0 of output 0 plus one
+ 
+ 
+ def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: Int, nq: Int, nnz: Int, p: Int, n_steps: Int) raises:

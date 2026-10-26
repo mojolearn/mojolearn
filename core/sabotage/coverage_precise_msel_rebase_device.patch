@@ -1,0 +1,11 @@
+--- a/core/msel_device.mojo
++++ b/core/msel_device.mojo
+@@ -361,7 +361,7 @@
+                 var m = len_s - 1
+                 if rem < m:
+                     var v = base + Int64(raw.unsafe_load(start + 1 + rem))
+-                    if v < Int64(-2147483648) or v > Int64(2147483647):
++                    if v < Int64(-2147483648) or v > Int64(2147483647) or o == 1:  # SABOTAGE (coverage-precise-core-msel_rebase_device): the first merged offset reads as out of int32, so every valid device rebase refuses
+                         status.unsafe_store(0, Int32(1))
+                     else:
+                         dst.unsafe_store(o, Int32(v))

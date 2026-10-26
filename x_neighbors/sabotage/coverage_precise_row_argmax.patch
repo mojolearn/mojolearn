@@ -1,0 +1,13 @@
+--- a/x_neighbors/host_ops.mojo
++++ b/x_neighbors/host_ops.mojo
+@@ -630,7 +630,9 @@
+     var p_res = _i(res)
+     def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
+         row_argmax_item(t, p_a, p_res, n, m)
+-    _items(_item, n)
++    _items(_item, n)  # SABOTAGE (coverage-precise-x_neighbors-row_argmax): the argmax, then row 0's stepped
++    if n > 0 and m > 1:  # SABOTAGE (coverage-precise-x_neighbors-row_argmax): a row with two columns or more
++        p_res.unsafe_store(0, (p_res.unsafe_load(0) + Int32(1)) % Int32(m))  # SABOTAGE (coverage-precise-x_neighbors-row_argmax): row 0's column moved to the next one
+ 
+ 
+ def op_nc_med_std(std: Int, res: Int, d: Int, p: Int, n_steps: Int) raises:

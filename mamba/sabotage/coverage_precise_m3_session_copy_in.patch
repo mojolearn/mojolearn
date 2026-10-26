@@ -1,0 +1,13 @@
+--- a/mamba/impl/mamba_shell_impl.mojo
++++ b/mamba/impl/mamba_shell_impl.mojo
+@@ -1199,8 +1199,8 @@
+     var v_n = s.b * nh * M3_HEADDIM
+     mamba_copy_in(ctx, st.theta, f32_ptr(a[0]), theta_n)
+     mamba_copy_in(ctx, st.h, f32_ptr(a[1]), h_n)
+-    mamba_copy_in(ctx, st.buf_qrot, f32_ptr(a[2]), qrow_n * M3_D_STATE)
+-    mamba_copy_in(ctx, st.buf_krot, f32_ptr(a[3]), qrow_n * M3_D_STATE)
++    mamba_copy_in(ctx, st.buf_qrot, f32_ptr(a[3]), qrow_n * M3_D_STATE)  # SABOTAGE (coverage-precise-mamba-m3_session_copy_in): buffer_qrot loaded from buffer_krot
++    mamba_copy_in(ctx, st.buf_krot, f32_ptr(a[2]), qrow_n * M3_D_STATE)  # SABOTAGE (coverage-precise-mamba-m3_session_copy_in): buffer_krot loaded from buffer_qrot
+     mamba_copy_in(ctx, st.buf_v, f32_ptr(a[4]), qrow_n * M3_HEADDIM)
+     mamba_copy_in(ctx, st.buf_dt, f32_ptr(a[5]), qrow_n)
+     mamba_copy_in(ctx, st.buf_sig, f32_ptr(a[6]), qrow_n)

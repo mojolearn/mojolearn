@@ -1,0 +1,20 @@
+--- a/mamba/impl/modeling/modeling_mamba.mojo
++++ b/mamba/impl/modeling/modeling_mamba.mojo
+@@ -964,7 +964,7 @@
+     for j in range(dm):
+         var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+         out_buf.unsafe_store(
+-            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
++            t * dm + j, bitcast[DType.float32](bitcast[DType.uint32](ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))) ^ UInt32(1))  # SABOTAGE (coverage-precise-mamba-rms_out): the block norm's output low bit flipped
+         )
+ 
+ 
+@@ -1031,7 +1031,7 @@
+     var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+     var inner = ftz(identical_mul(ftz(x.unsafe_load(cell)), rstd))
+     out_buf.unsafe_store(
+-        cell, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
++        cell, bitcast[DType.float32](bitcast[DType.uint32](ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))) ^ UInt32(1))  # SABOTAGE (coverage-precise-mamba-rms_out): the block norm's output low bit flipped
+     )
+ 
+ 

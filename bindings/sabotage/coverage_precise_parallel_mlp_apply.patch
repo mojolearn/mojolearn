@@ -1,0 +1,12 @@
+--- a/bindings/parallel_mlp_native.mojo
++++ b/bindings/parallel_mlp_native.mojo
+@@ -468,7 +468,8 @@
+         var value = next["weights"][names[j]]
+         var n = Int(py=value.size)
+         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
+-        memcpy(dest=dst, src=pp + offset, count=n)
++        memcpy(dest=dst, src=pp + offset, count=n)  # SABOTAGE (coverage-precise-bindings-parallel_mlp_apply): the publication copy kept
++        dst[0] = dst[0] ^ UInt32(1)  # SABOTAGE (coverage-precise-bindings-parallel_mlp_apply): every published parameter tensor's first float32 word low bit flipped
+         offset += n
+     py_setitem(saved, "step", step + 1)
+     _ = params^

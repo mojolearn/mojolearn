@@ -1,0 +1,11 @@
+--- a/x_decomp/pca_mle.mojo
++++ b/x_decomp/pca_mle.mojo
+@@ -243,7 +243,7 @@
+         if sf64_gt(x, _M_NINF) and _better(x, xi, best, bi):
+             best = x
+             bi = xi
+-    return bi
++    return bi + 1 if bi + 1 < d else bi - 1  # SABOTAGE (coverage-precise-x_decomp-pca_mle_pick): the MLE rank stepped to a neighboring valid rank
+ 
+ 
+ # ------------------------------------------------------------ kernels ----
