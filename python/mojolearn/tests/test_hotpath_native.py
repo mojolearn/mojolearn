@@ -83,6 +83,10 @@ class _Spy:
 
     def __enter__(self):
         self.saved = dict(_buffer._NATIVE)
+        # The native Array operations (bindings/array_native.mojo) call the
+        # helpers they captured at connection, so those are counted too.
+        self.array_helpers = _array._ARRAY_CONTEXT["helpers"]
+        self.saved_array = dict(self.array_helpers)
         for key in _HELPERS:
             real = _buffer._native(key)
 
@@ -91,11 +95,15 @@ class _Spy:
                 return _real(*args)
 
             _buffer._NATIVE[key] = wrapped
+            if key in self.array_helpers:
+                self.array_helpers[key] = wrapped
         return self
 
     def __exit__(self, *exc):
         _buffer._NATIVE.clear()
         _buffer._NATIVE.update(self.saved)
+        self.array_helpers.clear()
+        self.array_helpers.update(self.saved_array)
         return False
 
 
@@ -236,17 +244,19 @@ def test_astype_matches_the_item_setter(src, dst):
                 a = _arr(_values_for(src, max(n, 64), flavor)[:n].copy())
             native = n >= 1 and src != dst  # every non-empty block (lane apple-fast-py2mojo-core)
             _same(lambda: a.astype(dst), ("cast_elements",) if native else (),
-                  group="astype")
+                  group="astype", ref_fn=lambda: _array._ArrayReference.astype(a, dst))
 
 
 def test_astype_keeps_layout_and_reads_a_readonly_source():
     block = np.asfortranarray(_RNG.integers(0, 9, (300, 7)).astype(np.int32))
     a = _arr(block)
     assert a.order == "F"
-    _same(lambda: a.astype("<f4"), ("cast_elements",), group="astype")
+    _same(lambda: a.astype("<f4"), ("cast_elements",), group="astype",
+          ref_fn=lambda: _array._ArrayReference.astype(a, "<f4"))
     frozen = _arr(_RNG.integers(0, 9, 5000).astype(np.int64).tobytes())
     assert frozen.dtype == "<u1" and frozen._readonly
-    _same(lambda: frozen.astype("<i8"), ("cast_elements",), group="astype")
+    _same(lambda: frozen.astype("<i8"), ("cast_elements",), group="astype",
+          ref_fn=lambda: _array._ArrayReference.astype(frozen, "<i8"))
 
 
 def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
@@ -262,7 +272,8 @@ def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
     ref = lambda sel: (lambda: _arr(np.ascontiguousarray(quiet[sel]).view(np.float32)))
     _same(lambda: a[0:900], ("cast_elements",), group="getitem", ref_fn=ref(slice(0, 900)))
     _same(lambda: a[1:900:2], ("cast_elements",), group="getitem", ref_fn=ref(slice(1, 900, 2)))
-    _same(lambda: a.astype("<f8"), ("cast_elements",), group="astype")
+    _same(lambda: a.astype("<f8"), ("cast_elements",), group="astype",
+          ref_fn=lambda: _array._ArrayReference.astype(a, "<f8"))
 
 
 # ------------------------------------------------------------- reductions
@@ -302,9 +313,9 @@ def test_reductions_match_python(what):
         # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
         native = a.size >= 1
         _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
-              group="reduce")
+              group="reduce", ref_fn=lambda: getattr(_array._ArrayReference, what)(a))
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))
-    _same(lambda: f.argmax(), ("reduce_stat",), group="reduce")
+    _same(lambda: f.argmax(), ("reduce_stat",), group="reduce", ref_fn=lambda: _array._ArrayReference.argmax(f))
 
 
 # --------------------------------------------------------------- equality
@@ -320,18 +331,21 @@ def test_equality_matches_python():
             x[1::13] = -0.0
             y[1::13] = 0.0
         a, b = _arr(x), _arr(y)
-        _same(lambda: a == b, ("equal_elements",), group="equal")
-        _same(lambda: a != b, ("equal_elements",), group="equal")
-        _same(lambda: a == a, ("equal_elements",), group="equal")
-        _same(lambda: a[:100] == b[:100], (), group="equal")
-        _same(lambda: a == 1, (), group="equal")
+        _same(lambda: a == b, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, b))
+        _same(lambda: a != b, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__ne__(a, b))
+        _same(lambda: a == a, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, a))
+        _same(lambda: a[:100] == b[:100], (), group="equal",
+              ref_fn=lambda: _array._ArrayReference.__eq__(_array._ArrayReference.__getitem__(a, slice(None, 100)),
+                                        _array._ArrayReference.__getitem__(b, slice(None, 100))))
+        _same(lambda: a == 1, (), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, 1))
     a = _arr(_RNG.integers(0, 3, 5000).astype(np.int64))
     b = _arr(_RNG.integers(0, 3, 5000).astype(np.float64))
-    _same(lambda: a == b, (), group="equal")  # two dtypes: Python compares exactly
-    _same(lambda: a == b[:4999], (), group="equal")  # the shape refusal
+    _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, b))  # two dtypes: Python compares exactly
+    _same(lambda: a == b[:4999], (), group="equal",
+          ref_fn=lambda: _array._ArrayReference.__eq__(a, _array._ArrayReference.__getitem__(b, slice(None, 4999))))  # the shape refusal
     f = _arr(np.asfortranarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
     c = _arr(np.ascontiguousarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
-    _same(lambda: f == c, ("equal_elements",), group="equal")
+    _same(lambda: f == c, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(f, c))
 
 
 # --------------------------------------------------------------- indexing
@@ -354,9 +368,9 @@ def test_getitem_matches_the_per_run_copy():
     for block in blocks:
         a = _arr(block)
         for key in keys:
-            _same(lambda: a[key], (), group="getitem")
+            _same(lambda: a[key], (), group="getitem", ref_fn=lambda: _array._ArrayReference.__getitem__(a, key))
     a = _arr(blocks[1])
-    ref, new = _both(lambda: a[5:650], ("cast_elements",))
+    ref, new = _both(lambda: a[5:650], ("cast_elements",), ref_fn=lambda: _array._ArrayReference.__getitem__(a, slice(5, 650)))
     assert _EXPECT_SABOTAGE or ref == new
 
 
@@ -813,9 +827,11 @@ def test_flatten_fast_is_pinned(index):
 
 def test_block_copy_is_pinned():
     a = _arr(_RNG.integers(0, 99, (700, 6)).astype(np.int64))
-    _pinned(_array, "_block_store", lambda: a[5:650], answers=True)
-    _pinned(_array, "_block_store", lambda: a[5:650:2], answers=False)
-    _pinned(_array, "_block_store", lambda: a[5:20], answers=False)  # a short run
+    # The block copy is native now (bindings/array_native.mojo _getitem); its
+    # Python definition, the oracle above, keeps its pinned run rule.
+    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
+    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
+    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
     block = _RNG.integers(0, 99, (4000, 3)).astype(np.int64)
     _pinned(_buffer, "_same_dtype_store", lambda: _buffer.as_i64_c(block[::2], ndim=2, name="X"),
             answers=True)

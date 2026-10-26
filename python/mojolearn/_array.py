@@ -32,9 +32,12 @@ arithmetic in half precision.
 from __future__ import annotations
 
 import array
+import functools
+import operator
 import struct
 import sys
 from itertools import chain
+from types import BuiltinFunctionType
 
 # NumPy before 2.4 treats a null interface pointer as a scalar conversion,
 # even for an empty shape. Keep a stable, non-null address for empty exports.
@@ -353,10 +356,7 @@ class Array:
     )
 
     def __init__(self, shape, dtype="<f4"):
-        dtype = normalize_dtype(dtype)
-        shape = _check_shape(shape)
-        store = _new_store(_CODE[dtype], _prod(shape))
-        self._init_owned(store, shape, dtype, "C")
+        return _ARRAY_NATIVE("init", self, _ARRAY_CONTEXT, shape, dtype)
 
     # ------------------------------------------------------------ construction
     def _init_owned(self, store, shape, dtype, order):
@@ -516,6 +516,326 @@ class Array:
     @property
     def flags(self):
         """``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans."""
+        return _ARRAY_NATIVE("flags", self, _ARRAY_CONTEXT)
+
+    @property
+    def __array_interface__(self):
+        return _ARRAY_NATIVE("interface", self, _ARRAY_CONTEXT)
+
+    def __array__(self, dtype=None, copy=None):
+        """`numpy.asarray(a)` through the `__array__` protocol.
+
+        NumPy itself reads `__array_interface__` above and never gets here;
+        this exists for the libraries that test `hasattr(x, "__array__")`
+        before converting. scikit-learn's `type_of_target` (reached by
+        `accuracy_score`, `f1_score`, `confusion_matrix`, ...) refused a
+        classifier's `predict` output as "Expected array-like" without it
+        (Sep 22 pip smoke). Only NumPy calls this method, so NumPy is
+        already loaded: it is read from `sys.modules`, never imported, and
+        the module keeps its no-NumPy import contract.
+        """
+        return _ARRAY_NATIVE("array", self, _ARRAY_CONTEXT, dtype, copy)
+
+    def __buffer__(self, flags):
+        """Python 3.12+ buffer protocol: a memoryview of the backing store
+        with this Array's shape.
+
+        An F-order block of rank 2+ and a `'<f2'` block RAISE BufferError:
+        a memoryview built from Python cannot carry column-major strides or
+        the `'e'` format, and handing out the flat store instead would be
+        wrong in a way that matters. NumPy consults the buffer protocol
+        BEFORE `__array_interface__` (measured on numpy 2.4 / CPython
+        3.14), so a flat view here would make `numpy.asarray` return a 1-D
+        array for a matrix; on the BufferError it falls through to
+        `__array_interface__`, which describes both cases exactly and is
+        still zero-copy. `tobytes()` and `_flat()` reach the raw store.
+        """
+        return _ARRAY_NATIVE("buffer", self, _ARRAY_CONTEXT)
+
+    def _flat(self):
+        """A 1-D Array over the storage IN STORAGE ORDER, no copy. For an
+        F-order matrix that is the column-major flat, `flat[f * rows + r]
+        == a[r, f]`; the shape used by the gbdt quantizer."""
+        return Array._view_of(self, (self.size,), "C")
+
+    # ------------------------------------------------------------- basic ops
+    def __reduce__(self):
+        return _ARRAY_NATIVE("reduce", self, _ARRAY_CONTEXT)
+
+    def tobytes(self):
+        """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
+        return _ARRAY_NATIVE("tobytes", self, _ARRAY_CONTEXT)
+
+    def _values(self):
+        return _to_py_values(self._mv, self.dtype)
+
+    def _as_c(self):
+        """Self if C-order, else a C-order copy."""
+        if self.order == "C":
+            return self
+        if self._both_orders():
+            return Array._view_of(self, self.shape, "C")
+        out = _new_store(_CODE[self.dtype], self.size)
+        _reorder(self, "F", out)
+        return Array._owned(out, self.shape, self.dtype, "C")
+
+    def _as_order(self, order):
+        """Self when already laid out as `order`, a relabeled view when
+        both layouts coincide, else a copy in `order`."""
+        if order == self.order:
+            return self
+        if self._both_orders():
+            return Array._view_of(self, self.shape, order)
+        if order == "C":
+            return self._as_c()
+        out = _new_store(_CODE[self.dtype], self.size)
+        _reorder(self, "C", out)
+        return Array._owned(out, self.shape, self.dtype, "F")
+
+    def tolist(self):
+        """The values as nested Python lists (a scalar for a 0-d Array)."""
+        return _ARRAY_NATIVE("tolist", self, _ARRAY_CONTEXT)
+
+    def copy(self):
+        """A new Array with the same dtype, shape, order and values."""
+        return _ARRAY_NATIVE("copy", self, _ARRAY_CONTEXT)
+
+    def astype(self, dtype):
+        """A converted copy (always a copy, even for the same dtype).
+
+        Float to ``"<f4"`` rounds to nearest even; float to ``"<f8"`` and integers
+        up to 2**53 to float are exact. Float to integer truncates toward zero, like
+        NumPy. The memory order is kept.
+
+        Parameters
+        ----------
+        dtype : str
+            Target element type.
+
+        Returns
+        -------
+        Array
+        """
+        return _ARRAY_NATIVE("astype", self, _ARRAY_CONTEXT, dtype)
+
+    def _astype_reference(self, dtype):
+        """`astype`'s Python definition (the differential test's reference)."""
+        src = self.dtype
+        code = _CODE[dtype]
+        if src == "<f2" or dtype == "<f2":
+            values = self._values()
+            if dtype in _INT:
+                values = [int(v) for v in values]  # cpu-route: the refusal path and the test reference arm only
+            out = Array._from_flat(values, self.shape, dtype)
+        elif dtype in _FLOAT:
+            # C-level loop: array.array's item setter converts each element
+            # exactly as `(float)` / `(double)` would.
+            out = Array._owned(
+                array.array(code, self._mv), self.shape, dtype, "C"
+            )
+        elif src in _INT:
+            try:
+                store = array.array(code, self._mv)
+            except OverflowError as e:
+                raise OverflowError(
+                    f"mojolearn: value does not fit {dtype}: {e}"
+                ) from None
+            out = Array._owned(store, self.shape, dtype, "C")
+        else:
+            values = [int(v) for v in self._mv]  # cpu-route: the refusal path and the test reference arm only
+            out = Array._from_flat(values, self.shape, dtype)
+        out.order = self.order
+        out._set_meta(self.shape, dtype, self.order)
+        return out
+
+    def _native_astype(self, dtype):
+        """DEVIATION 3100: `astype` through the core helper `cast_elements`,
+        or None. The routine below it is `array.array(code, <memoryview>)`,
+        a C loop that builds one Python object per element (22 to 31 ns);
+        the helper performs the same single conversion per element with no
+        object. When the helper meets an element the routine below REFUSES
+        (an integer outside the target, a NaN or infinity headed for an
+        integer dtype) it reports so and the routine below runs and raises
+        its own words."""
+        sc = _NATIVE_CODE.get(self.dtype)
+        dc = _NATIVE_CODE.get(dtype)
+        if sc is None or dc is None:
+            return None
+        fn = _helper("cast_elements", self.size)
+        if fn is None:
+            return None
+        from . import _buffer
+        store = _buffer._output_store(_CODE[dtype], self.size)
+        if int(fn(self._addr, sc, store.buffer_info()[0], dc, self.size)):
+            return None
+        return Array._owned(store, self.shape, dtype, self.order)
+
+    def reshape(self, shape):
+        """A C-order view with a new shape (one dimension may be ``-1``).
+
+        An F-order Array is copied to C order first, as NumPy does.
+
+        Parameters
+        ----------
+        shape : int or tuple of int
+
+        Returns
+        -------
+        Array
+        """
+        return _ARRAY_NATIVE("reshape", self, _ARRAY_CONTEXT, shape)
+
+    def ravel(self):
+        """A 1-D view, same as ``reshape(-1)``."""
+        return _ARRAY_NATIVE("ravel", self, _ARRAY_CONTEXT)
+
+    def __len__(self):
+        # The first-axis length is read natively (bindings/array_native.mojo).
+        # PYTHON COMPATIBILITY EXCEPTION (Andrew, 2026-10-25), narrowed: the
+        # native Voting/Stacking/MultiOutput/Calibrated meta-estimator paths
+        # still reach this one-line wrapper through len(Array); it does no
+        # Python work besides the native call. See _runtime_fallbacks.py.
+        return _ARRAY_NATIVE("len", self, _ARRAY_CONTEXT)
+
+    def __iter__(self):
+        return _ARRAY_NATIVE("iter", self, _ARRAY_CONTEXT)
+
+    def _row_view(self, i, shape, step):
+        """Row `i` of a C-order Array as a zero-copy view (`shape` = the
+        trailing dimensions, `step` = their element count): the same
+        memory, kept alive through `_base`, as NumPy's iteration gives."""
+        v = Array.__new__(Array)
+        v._store = self._store
+        v._base = self
+        v._pin = self._pin
+        off = i * step
+        v._mv = self._mv[off:off + step]
+        v._addr = self._addr + off * self.itemsize
+        v._readonly = self._readonly
+        v._set_meta(shape, self.dtype, "C")
+        return v
+
+    def __repr__(self):
+        return _ARRAY_NATIVE("repr", self, _ARRAY_CONTEXT)
+
+    def __bool__(self):
+        return _ARRAY_NATIVE("bool", self, _ARRAY_CONTEXT)
+
+    # ------------------------------------------------------------- indexing
+    def __getitem__(self, key):
+        """Int / slice / tuple of them. Full integer indexing returns a
+        Python scalar; anything else a COPY as a C-order Array."""
+        return _ARRAY_NATIVE("getitem", self, _ARRAY_CONTEXT, key)
+
+    def __eq__(self, other):
+        """Elementwise equality against an Array of the same shape or a
+        scalar, as a `'<u1'` Array of 0/1."""
+        return _ARRAY_NATIVE("eq", self, _ARRAY_CONTEXT, other)
+
+    def _native_eq(self, other):
+        """DEVIATION 3102: elementwise equality of two same-shape Arrays of
+        ONE dtype through the core helper `equal_elements`, or None. IEEE
+        equality is Python's float equality; two dtypes (an int against a
+        float compares exactly in Python) keep the Python routine."""
+        code = _NATIVE_CODE.get(self.dtype)
+        if code is None or other.dtype != self.dtype:
+            return None
+        fn = _helper("equal_elements", self.size)
+        if fn is None:
+            return None
+        a = self._as_c()
+        b = other._as_c()
+        store = array.array("B", bytes(self.size))
+        fn(a._addr, b._addr, code, self.size, store.buffer_info()[0])
+        return Array._owned(store, self.shape, "<u1", "C")
+
+    def _native_eq_scalar(self, other):
+        """lane apple-fast-py2mojo-core: equality against a Python scalar
+        through `equal_elements`, the scalar repeated in C as this dtype, or
+        None. Python compares exactly (an int against a float included), so
+        the scalar is first taken to this dtype EXACTLY; a scalar no element
+        can equal (NaN, a non-integer against an integer dtype, a value out
+        of the dtype's range or not representable in float32) answers all
+        zeros without a pass."""
+        code = _NATIVE_CODE.get(self.dtype)
+        if code is None:
+            return None
+        fn = _helper("equal_elements", self.size)
+        if fn is None:
+            return None
+        v = _exact_in(other, self.dtype)
+        store = array.array("B", bytes(self.size))
+        if v is not None:
+            a = self._as_c()
+            fill = array.array(_CODE[self.dtype], [v]) * self.size
+            fn(a._addr, fill.buffer_info()[0], code, self.size, store.buffer_info()[0])
+        return Array._owned(store, self.shape, "<u1", "C")
+
+    def __ne__(self, other):
+        return _ARRAY_NATIVE("ne", self, _ARRAY_CONTEXT, other)
+
+    __hash__ = None
+
+    # ------------------------------------------------------------ reductions
+    # HOST reductions in Python scalars, sequential in storage order. They
+    # are NOT part of any identity claim and no kernel path uses them.
+    def _reduce_values(self, what):
+        if self.size == 0:
+            raise ValueError(f"mojolearn: {what} of an empty Array")
+        return self._values()
+
+    def _native_reduce(self, what):
+        """DEVIATION 3101: `what` through the core helper `reduce_stat`, or
+        None. Sequential in storage order with Python's own comparison, so a
+        NaN or a signed zero answers as `min(list)` / `max(list)` does."""
+        code = _NATIVE_CODE.get(self.dtype)
+        if code is None:
+            return None
+        fn = _helper("reduce_stat", self.size)
+        if fn is None:
+            return None
+        return fn(self._addr, code, self.size, what)
+
+    def _no_reduce(self, what):
+        """An empty Array refuses `what`; else the helper is missing: the
+        reference arm answers in Python, a production binary is rebuilt."""
+        if self.size == 0:
+            raise ValueError(f"mojolearn: {what} of an empty Array")
+        if not _reference():
+            raise _rebuild("reduce_stat")
+
+    def min(self):
+        """Smallest element, in storage order; ValueError for an empty Array."""
+        return _ARRAY_NATIVE("min", self, _ARRAY_CONTEXT)
+
+    def max(self):
+        """Largest element, in storage order; ValueError for an empty Array."""
+        return _ARRAY_NATIVE("max", self, _ARRAY_CONTEXT)
+
+    def sum(self):
+        """Sum of all elements: an exact ``int`` for integer dtypes, a float summed in storage order for float dtypes."""
+        return _ARRAY_NATIVE("sum", self, _ARRAY_CONTEXT)
+
+    def argmax(self):
+        """Flat (C-order) index of the first maximum."""
+        return _ARRAY_NATIVE("argmax", self, _ARRAY_CONTEXT)
+
+
+class _ArrayReference:
+    """The Python definitions of Array's public operations, kept ONLY as the
+    test oracles of `bindings/array_native.mojo` (test_hotpath_native.py,
+    test_native_array_operations.py). The product never calls them: every
+    public Array operation is one `array_native_call`. Called as
+    `_ArrayReference.<name>(array, ...)`; never instantiated."""
+
+    def __init__(self, shape, dtype="<f4"):
+        dtype = normalize_dtype(dtype)
+        shape = _check_shape(shape)
+        store = _new_store(_CODE[dtype], _prod(shape))
+        self._init_owned(store, shape, dtype, "C")
+
+    def flags(self):
+        """``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans."""
         both = self._both_orders()
         return {
             "C_CONTIGUOUS": self.order == "C" or both,
@@ -523,7 +843,6 @@ class Array:
             "WRITEABLE": not self._readonly,
         }
 
-    @property
     def __array_interface__(self):
         # Version 3. `strides` None means C-contiguous; an F-order block
         # reports its real strides so NumPy views it without copying.
@@ -600,13 +919,6 @@ class Array:
             )
         return self._mv.cast("B").cast(_CODE[self.dtype], self.shape)
 
-    def _flat(self):
-        """A 1-D Array over the storage IN STORAGE ORDER, no copy. For an
-        F-order matrix that is the column-major flat, `flat[f * rows + r]
-        == a[r, f]`; the shape used by the gbdt quantizer."""
-        return Array._view_of(self, (self.size,), "C")
-
-    # ------------------------------------------------------------- basic ops
     def __reduce__(self):
         return (_restore_array, (self.tobytes(), self.shape, self.dtype,
                                  self.order, self._readonly))
@@ -614,32 +926,6 @@ class Array:
     def tobytes(self):
         """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
         return self._mv.tobytes()
-
-    def _values(self):
-        return _to_py_values(self._mv, self.dtype)
-
-    def _as_c(self):
-        """Self if C-order, else a C-order copy."""
-        if self.order == "C":
-            return self
-        if self._both_orders():
-            return Array._view_of(self, self.shape, "C")
-        out = _new_store(_CODE[self.dtype], self.size)
-        _reorder(self, "F", out)
-        return Array._owned(out, self.shape, self.dtype, "C")
-
-    def _as_order(self, order):
-        """Self when already laid out as `order`, a relabeled view when
-        both layouts coincide, else a copy in `order`."""
-        if order == self.order:
-            return self
-        if self._both_orders():
-            return Array._view_of(self, self.shape, order)
-        if order == "C":
-            return self._as_c()
-        out = _new_store(_CODE[self.dtype], self.size)
-        _reorder(self, "C", out)
-        return Array._owned(out, self.shape, self.dtype, "F")
 
     def tolist(self):
         """The values as nested Python lists (a scalar for a 0-d Array)."""
@@ -672,7 +958,7 @@ class Array:
         """
         dtype = normalize_dtype(dtype)
         if dtype == self.dtype:
-            return self.copy()
+            return _ArrayReference.copy(self)
         src = self.dtype
         code = _CODE[dtype]
         if self.size == 0:
@@ -688,58 +974,6 @@ class Array:
         # outside the target): the Python definition raises its own words
         # (it never returns here: every element it accepts, the helper did)
         return self._astype_reference(dtype)
-
-    def _astype_reference(self, dtype):
-        """`astype`'s Python definition (the differential test's reference)."""
-        src = self.dtype
-        code = _CODE[dtype]
-        if src == "<f2" or dtype == "<f2":
-            values = self._values()
-            if dtype in _INT:
-                values = [int(v) for v in values]  # cpu-route: the refusal path and the test reference arm only
-            out = Array._from_flat(values, self.shape, dtype)
-        elif dtype in _FLOAT:
-            # C-level loop: array.array's item setter converts each element
-            # exactly as `(float)` / `(double)` would.
-            out = Array._owned(
-                array.array(code, self._mv), self.shape, dtype, "C"
-            )
-        elif src in _INT:
-            try:
-                store = array.array(code, self._mv)
-            except OverflowError as e:
-                raise OverflowError(
-                    f"mojolearn: value does not fit {dtype}: {e}"
-                ) from None
-            out = Array._owned(store, self.shape, dtype, "C")
-        else:
-            values = [int(v) for v in self._mv]  # cpu-route: the refusal path and the test reference arm only
-            out = Array._from_flat(values, self.shape, dtype)
-        out.order = self.order
-        out._set_meta(self.shape, dtype, self.order)
-        return out
-
-    def _native_astype(self, dtype):
-        """DEVIATION 3100: `astype` through the core helper `cast_elements`,
-        or None. The routine below it is `array.array(code, <memoryview>)`,
-        a C loop that builds one Python object per element (22 to 31 ns);
-        the helper performs the same single conversion per element with no
-        object. When the helper meets an element the routine below REFUSES
-        (an integer outside the target, a NaN or infinity headed for an
-        integer dtype) it reports so and the routine below runs and raises
-        its own words."""
-        sc = _NATIVE_CODE.get(self.dtype)
-        dc = _NATIVE_CODE.get(dtype)
-        if sc is None or dc is None:
-            return None
-        fn = _helper("cast_elements", self.size)
-        if fn is None:
-            return None
-        from . import _buffer
-        store = _buffer._output_store(_CODE[dtype], self.size)
-        if int(fn(self._addr, sc, store.buffer_info()[0], dc, self.size)):
-            return None
-        return Array._owned(store, self.shape, dtype, self.order)
 
     def reshape(self, shape):
         """A C-order view with a new shape (one dimension may be ``-1``).
@@ -775,7 +1009,7 @@ class Array:
 
     def ravel(self):
         """A 1-D view, same as ``reshape(-1)``."""
-        return self.reshape((-1,))
+        return _ArrayReference.reshape(self, (-1,))
 
     def __len__(self):
         # PYTHON COMPATIBILITY EXCEPTION (Andrew, 2026-10-25): native
@@ -801,21 +1035,6 @@ class Array:
             return iter(self._values())
         return _RowIter(self._as_c())
 
-    def _row_view(self, i, shape, step):
-        """Row `i` of a C-order Array as a zero-copy view (`shape` = the
-        trailing dimensions, `step` = their element count): the same
-        memory, kept alive through `_base`, as NumPy's iteration gives."""
-        v = Array.__new__(Array)
-        v._store = self._store
-        v._base = self
-        v._pin = self._pin
-        off = i * step
-        v._mv = self._mv[off:off + step]
-        v._addr = self._addr + off * self.itemsize
-        v._readonly = self._readonly
-        v._set_meta(shape, self.dtype, "C")
-        return v
-
     def __repr__(self):
         return f"Array(shape={self.shape}, dtype={self.dtype!r})"
 
@@ -827,7 +1046,6 @@ class Array:
             )
         return bool(self._values()[0])
 
-    # ------------------------------------------------------------- indexing
     def __getitem__(self, key):
         """Int / slice / tuple of them. Full integer indexing returns a
         Python scalar; anything else a COPY as a C-order Array."""
@@ -897,136 +1115,6 @@ class Array:
                         fn(at, 0, at, 0, total)  # in place: slot i reads and writes slot i only
         return Array._owned(store, out_shape, a.dtype, "C")
 
-    def __eq__(self, other):
-        """Elementwise equality against an Array of the same shape or a
-        scalar, as a `'<u1'` Array of 0/1."""
-        if isinstance(other, Array) and other.shape == self.shape:
-            fast = self._native_eq(other)
-            if fast is not None:
-                return fast
-        elif isinstance(other, (int, float, bool)):
-            if self.size == 0:
-                return Array._owned(array.array("B"), self.shape, "<u1", "C")
-            fast = self._native_eq_scalar(other)
-            if fast is not None:
-                return fast
-            if not _reference():
-                raise _rebuild("equal_elements")
-        if isinstance(other, Array) and other.shape == self.shape and not _reference():
-            if self.size == 0:
-                return Array._owned(array.array("B"), self.shape, "<u1", "C")
-            if other.dtype == self.dtype:
-                raise _rebuild("equal_elements")
-            # two dtypes (lane py-runtime round 2): both widened EXACTLY to one
-            # dtype by the cast helper, then one native comparison. int64
-            # against a float is the one pair no exact widening covers.
-            a_int, b_int = self.dtype in _INT, other.dtype in _INT
-            wide = "<i8" if (a_int and b_int) else ("<f8" if "<i8" not in (self.dtype, other.dtype) else None)
-            if wide is not None:
-                return self.astype(wide).__eq__(other.astype(wide))
-            # int64 against a float (lane py-runtime round 3): the float side
-            # widened exactly to float64, then the helper's exact int == float
-            fn = _helper("equal_elements", self.size)
-            if fn is None:
-                raise _rebuild("equal_elements")
-            ints, flts = (self, other) if self.dtype in _INT else (other, self)
-            ia = ints.astype("<i8")._as_c() if ints.dtype != "<i8" else ints._as_c()
-            fa = flts.astype("<f8")._as_c() if flts.dtype != "<f8" else flts._as_c()
-            store = array.array("B", bytes(self.size))
-            fn(ia._addr, fa._addr, _EQ_I64_F64, self.size, store.buffer_info()[0])
-            return Array._owned(store, self.shape, "<u1", "C")
-        mine = self._as_c()._values()
-        if isinstance(other, Array):
-            if other.shape != self.shape:
-                raise ValueError(
-                    f"mojolearn: shapes {self.shape} and {other.shape} differ"
-                )
-            theirs = other._as_c()._values()
-            bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]  # cpu-route: the differential test reference arm only
-        elif isinstance(other, (int, float, bool)):
-            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the differential test's reference arm only
-        else:
-            return NotImplemented
-        return Array._owned(array.array("B", bits), self.shape, "<u1", "C")
-
-    def _native_eq(self, other):
-        """DEVIATION 3102: elementwise equality of two same-shape Arrays of
-        ONE dtype through the core helper `equal_elements`, or None. IEEE
-        equality is Python's float equality; two dtypes (an int against a
-        float compares exactly in Python) keep the Python routine."""
-        code = _NATIVE_CODE.get(self.dtype)
-        if code is None or other.dtype != self.dtype:
-            return None
-        fn = _helper("equal_elements", self.size)
-        if fn is None:
-            return None
-        a = self._as_c()
-        b = other._as_c()
-        store = array.array("B", bytes(self.size))
-        fn(a._addr, b._addr, code, self.size, store.buffer_info()[0])
-        return Array._owned(store, self.shape, "<u1", "C")
-
-    def _native_eq_scalar(self, other):
-        """lane apple-fast-py2mojo-core: equality against a Python scalar
-        through `equal_elements`, the scalar repeated in C as this dtype, or
-        None. Python compares exactly (an int against a float included), so
-        the scalar is first taken to this dtype EXACTLY; a scalar no element
-        can equal (NaN, a non-integer against an integer dtype, a value out
-        of the dtype's range or not representable in float32) answers all
-        zeros without a pass."""
-        code = _NATIVE_CODE.get(self.dtype)
-        if code is None:
-            return None
-        fn = _helper("equal_elements", self.size)
-        if fn is None:
-            return None
-        v = _exact_in(other, self.dtype)
-        store = array.array("B", bytes(self.size))
-        if v is not None:
-            a = self._as_c()
-            fill = array.array(_CODE[self.dtype], [v]) * self.size
-            fn(a._addr, fill.buffer_info()[0], code, self.size, store.buffer_info()[0])
-        return Array._owned(store, self.shape, "<u1", "C")
-
-    def __ne__(self, other):
-        eq = self.__eq__(other)
-        if eq is NotImplemented:
-            return eq
-        # `bytes.translate` flips 0 and 1 in C (was a comprehension per element)
-        return Array._owned(
-            array.array("B", eq._mv.tobytes().translate(_NOT)), self.shape, "<u1", "C"
-        )
-
-    __hash__ = None
-
-    # ------------------------------------------------------------ reductions
-    # HOST reductions in Python scalars, sequential in storage order. They
-    # are NOT part of any identity claim and no kernel path uses them.
-    def _reduce_values(self, what):
-        if self.size == 0:
-            raise ValueError(f"mojolearn: {what} of an empty Array")
-        return self._values()
-
-    def _native_reduce(self, what):
-        """DEVIATION 3101: `what` through the core helper `reduce_stat`, or
-        None. Sequential in storage order with Python's own comparison, so a
-        NaN or a signed zero answers as `min(list)` / `max(list)` does."""
-        code = _NATIVE_CODE.get(self.dtype)
-        if code is None:
-            return None
-        fn = _helper("reduce_stat", self.size)
-        if fn is None:
-            return None
-        return fn(self._addr, code, self.size, what)
-
-    def _no_reduce(self, what):
-        """An empty Array refuses `what`; else the helper is missing: the
-        reference arm answers in Python, a production binary is rebuilt."""
-        if self.size == 0:
-            raise ValueError(f"mojolearn: {what} of an empty Array")
-        if not _reference():
-            raise _rebuild("reduce_stat")
-
     def min(self):
         """Smallest element, in storage order; ValueError for an empty Array."""
         fast = self._native_reduce(_REDUCE_MIN)
@@ -1083,6 +1171,67 @@ class Array:
                 best = i
                 best_v = v
         return best
+
+    def __eq__(self, other):
+        """Elementwise equality against an Array of the same shape or a
+        scalar, as a `'<u1'` Array of 0/1."""
+        if isinstance(other, Array) and other.shape == self.shape:
+            fast = self._native_eq(other)
+            if fast is not None:
+                return fast
+        elif isinstance(other, (int, float, bool)):
+            if self.size == 0:
+                return Array._owned(array.array("B"), self.shape, "<u1", "C")
+            fast = self._native_eq_scalar(other)
+            if fast is not None:
+                return fast
+            if not _reference():
+                raise _rebuild("equal_elements")
+        if isinstance(other, Array) and other.shape == self.shape and not _reference():
+            if self.size == 0:
+                return Array._owned(array.array("B"), self.shape, "<u1", "C")
+            if other.dtype == self.dtype:
+                raise _rebuild("equal_elements")
+            # two dtypes (lane py-runtime round 2): both widened EXACTLY to one
+            # dtype by the cast helper, then one native comparison. int64
+            # against a float is the one pair no exact widening covers.
+            a_int, b_int = self.dtype in _INT, other.dtype in _INT
+            wide = "<i8" if (a_int and b_int) else ("<f8" if "<i8" not in (self.dtype, other.dtype) else None)
+            if wide is not None:
+                return self.astype(wide).__eq__(other.astype(wide))
+            # int64 against a float (lane py-runtime round 3): the float side
+            # widened exactly to float64, then the helper's exact int == float
+            fn = _helper("equal_elements", self.size)
+            if fn is None:
+                raise _rebuild("equal_elements")
+            ints, flts = (self, other) if self.dtype in _INT else (other, self)
+            ia = ints.astype("<i8")._as_c() if ints.dtype != "<i8" else ints._as_c()
+            fa = flts.astype("<f8")._as_c() if flts.dtype != "<f8" else flts._as_c()
+            store = array.array("B", bytes(self.size))
+            fn(ia._addr, fa._addr, _EQ_I64_F64, self.size, store.buffer_info()[0])
+            return Array._owned(store, self.shape, "<u1", "C")
+        mine = self._as_c()._values()
+        if isinstance(other, Array):
+            if other.shape != self.shape:
+                raise ValueError(
+                    f"mojolearn: shapes {self.shape} and {other.shape} differ"
+                )
+            theirs = other._as_c()._values()
+            bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]  # cpu-route: the differential test reference arm only
+        elif isinstance(other, (int, float, bool)):
+            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the differential test's reference arm only
+        else:
+            return NotImplemented
+        return Array._owned(array.array("B", bits), self.shape, "<u1", "C")
+
+    def __ne__(self, other):
+        eq = _ArrayReference.__eq__(self, other)
+        if eq is NotImplemented:
+            return eq
+        # `bytes.translate` flips 0 and 1 in C (was a comprehension per element)
+        return Array._owned(
+            array.array("B", eq._mv.tobytes().translate(_NOT)), self.shape, "<u1", "C"
+        )
 
 
 class _RowIter:
@@ -1205,3 +1354,37 @@ def _empty_nest(shape):
     if not shape or shape[0] == 0:
         return []
     return [_empty_nest(shape[1:]) for _ in range(shape[0])]  # glue: list structure of an empty block, no elements
+
+
+# Every public Array operation is one call of this native entry
+# (bindings/array_native.mojo, in the tokenizer host binding). `_buffer`
+# imports this module, so the binding is loaded here directly; the core
+# helpers the operations share (cast_elements, reduce_stat,
+# strided_copy_bytes) are connected by `_buffer` once it is defined.
+def _array_binding():
+    from . import _backend
+    return _backend.load_host_module("_mojolearn_tokenizer_host")
+
+
+_ARRAY_NATIVE = _array_binding().array_native_call
+if type(_ARRAY_NATIVE) is not BuiltinFunctionType:
+    raise TypeError("mojolearn: Array operations require a compiled native entry")
+_ARRAY_CONTEXT = dict(
+    array_class=Array, interface_class=_ArrayInterface, array_type=array.array,
+    codes=dict(_CODE), itemsizes=dict(_ITEMSIZE), native_codes=dict(_NATIVE_CODE),
+    aliases=dict(_ALIAS), supported=SUPPORTED_DTYPES, native_min=_NATIVE_MIN,
+    empty_address=_EMPTY_ARRAY_STORAGE.buffer_info()[0], empty_storage=_EMPTY_ARRAY_STORAGE,
+    struct_pack=struct.pack, struct_unpack=struct.unpack, operator=operator,
+    partial=functools.partial, sys_modules=sys.modules, restore=_restore_array,
+    entry=_ARRAY_NATIVE, helpers={}, int_bounds=dict(_INT_BOUNDS), infinity=float("inf"),
+    minus_infinity=float("-inf"), scalar_types=(int, float, bool), eq_i64_f64=_EQ_I64_F64,
+    not_implemented=NotImplemented, not_table=_NOT)
+
+
+def connect_helpers(resolve):
+    """Capture the shared core helpers once (`_buffer._native_optional`);
+    an absent helper is refused by name by the operation that needs it."""
+    for key in ("cast_elements", "reduce_stat", "strided_copy_bytes"):  # glue: three fixed helper names
+        fn = resolve(key)
+        if fn is not None:
+            _ARRAY_CONTEXT["helpers"][key] = fn

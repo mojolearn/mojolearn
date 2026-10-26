@@ -170,6 +170,7 @@ def test_import_installed_entries_name_their_lanes():
                        ("declared_params_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
                        ("linear_constructor_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
                        ("full_reset_constructor_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
+                       ("array_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
                        ("params_setter_native_call", "bindings/_mojolearn_tokenizer_host.mojo"),
                        ("public_attribute_native_call", "bindings/_mojolearn_tokenizer_host.mojo")):
         st, lanes, why = audit_tool.triage(_native_row(entry, src=src, py_files=1))

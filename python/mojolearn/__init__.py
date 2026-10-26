@@ -615,6 +615,12 @@ from ._native_trees_bridge import connect_cpu_prediction as _connect_cpu_tree_pr
 _connect_cpu_tree_prediction()
 del _connect_cpu_tree_prediction
 
+# The native Array operations share the base binding's core helpers.
+from ._array import connect_helpers as _connect_array_helpers
+from ._buffer import _native_optional as _array_helper
+_connect_array_helpers(_array_helper)
+del _connect_array_helpers, _array_helper
+
 # Field-only constructors must precede every method/storage identity snapshot.
 from ._native_linear_constructors import install as _install_linear_constructors
 _install_linear_constructors()
