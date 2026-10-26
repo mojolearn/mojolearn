@@ -6,15 +6,31 @@ CUDA signatures: https://docs.nvidia.com/cuda/cuda-driver-api/cuda_driver_api/gr
 HIP signatures: https://rocm.docs.amd.com/projects/HIP/en/docs-6.4.2/doxygen/html/hip__runtime__api_8h_source.html
 """
 import ctypes as C
-from ctypes.util import find_library
 import os
 import re
 import sys
 
 
 def _library(vendor):
-    return C.CDLL('libcuda.so.1' if vendor == 'cuda' else
-                  (find_library('amdhip64') or 'libamdhip64.so'))
+    if vendor == 'cuda':
+        return C.CDLL('libcuda.so.1')
+    # The HIP runtime this process already has (the MAX runtime's or torch's),
+    # else the bare name MAX itself opens. Never find_library('amdhip64'): the
+    # ld.so cache can name another ROCm release's copy, and two HIP runtimes
+    # cannot share a process (2026-10-26, amd-torch-interop).
+    # (Self-contained: this file also runs as a script, tools/algos_lane_check.py.)
+    have = None
+    try:
+        with open('/proc/self/maps') as fh:
+            for line in fh:  # glue: loader loop over mapped files of this process
+                parts = line.split(None, 5)
+                base = os.path.basename(parts[5].strip()) if len(parts) == 6 else ''
+                if base == 'libamdhip64.so' or base.startswith(('libamdhip64.so.', 'libamdhip64-')):
+                    have = parts[5].strip()
+                    break
+    except OSError:
+        pass
+    return C.CDLL(have or 'libamdhip64.so')
 
 
 def visible_gpu_inventory(vendor):

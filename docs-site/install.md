@@ -57,7 +57,8 @@ build; mojolearn never substitutes the CPU for a GPU it cannot serve.
 
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver
 and the ROCm HIP runtime (`libamdhip64`, ROCm 6 or 7). The `torch` extra on AMD installs PyTorch's ROCm
-build, which needs ROCm 7.
+build, which needs ROCm 7. To use PyTorch and mojolearn in one process on AMD, import mojolearn first;
+see [the adapters guide](user_guide/framework_adapters.md#install) for the other order.
 
 ## Check your machine
 
