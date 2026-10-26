@@ -938,9 +938,16 @@ def verify_host(out, commit):
         proof = json.loads((Path(out) / "host-build-proof.json").read_text())
     except (OSError, ValueError):
         return False, f"no host-build-proof.json under {out}"
-    if (proof.get("schema") != "mojolearn.linux.host-build.v1" or proof.get("complete") is not True
+    import release_host_build as host
+    if (proof.get("schema") not in ("mojolearn.linux.host-build.v1", host.SCHEMA, host.INCREMENTAL_SCHEMA) or proof.get("complete") is not True
             or proof.get("build_exit") != 0 or proof.get("source_commit") != commit):
         return False, "the host proof is not complete, not exit 0 or not of " + commit[:12]
+    if proof["schema"] != "mojolearn.linux.host-build.v1":
+        try:
+            record, directory = host.inspect(out)
+            host.validate_bytes(record, directory, proof.get("compiler_sha256"))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return False, "host provenance validation failed: " + str(exc)
     ext = proof.get("host_extension") or {}
     if not ext:
         return False, "the host proof names no binary"
