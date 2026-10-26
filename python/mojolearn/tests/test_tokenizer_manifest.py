@@ -61,7 +61,7 @@ def test_manifest_declares_the_family():
                                    "tokenized-corpus", "hf-tokenizer",
                                    "cross-vendor-fold",
                                    # lane verify-gaps-20261022: the models reader surface
-                                   "hf-model-surface") and f["inference_lanes"] == ()
+                                   "hf-model-surface", "public-set-params") and f["inference_lanes"] == ()
     assert host_surface.PUBLIC_HOST_ONLY_LANES["cross-vendor-fold"] == "tokenizer"
     # The trainer's own arm is in the gate's set too: the encoder arm above
     # cannot reach `bpe-trainer`, which never encodes (measured: that lane's
