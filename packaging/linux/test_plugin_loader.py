@@ -40,7 +40,9 @@ def fresh_backend():
     pkg = types.ModuleType(ALIAS)
     pkg.__path__ = [str(PKG_SRC)]
     sys.modules[ALIAS] = pkg
-    return importlib.import_module(ALIAS + "._backend")
+    B = importlib.import_module(ALIAS + "._backend")
+    B._rocm_prepare = lambda vendor: None  # fabricated installs: never load a real ROCm runtime
+    return B
 
 
 def probe(B, cuda=False, hip=False):
@@ -141,6 +143,11 @@ class PluginLoader(unittest.TestCase):
         B._ARCH_SELECTED = B._ARCH_HOW = None
         B._SPLIT = None
         B._pkg_dir = lambda: str(self.pkg)
+        # importlib.metadata caches a directory listing per (path, directory mtime). On Linux
+        # the mtime clock is coarse (ms ticks), so a .dist-info written in the same tick as an
+        # earlier lookup stayed invisible: 3 to 6 of these cases failed at random on the AMD
+        # box (2026-10-26) and never on macOS. Clear the cache with each fabricated install.
+        importlib.invalidate_caches()
         B._probe_box = lambda: probe(B, cuda, hip)
         B._device_arch = lambda vendor: device if vendor == "cuda" else ("gfx942", "fixture")
 

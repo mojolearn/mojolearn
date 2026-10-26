@@ -15,7 +15,12 @@
 #                                           self-destruct and Mac dead-man) to now + minutes
 #   tools/do_amd_steward.sh update [sha]    the droplet's tree to origin/main (or a pushed sha), steward restarted
 #                                           (drains: claims nothing new, waits for the running work; the queue never moves)
-#   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root
+#   tools/do_amd_steward.sh run [--no-persist] <tag> <results-dir> <command>
+#                                           THE WAY TO LAUNCH A DROPLET JOB: <command> in /root/mojolearn as root,
+#                                           under tools/box_persist_run.sh, so <results-dir> (relative to the tree)
+#                                           persists to R2 from the droplet (measurements/box-jobs/<date>/<tag>-..)
+#                                           every 10 min and on any exit, also when the droplet self-destructs
+#   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root (status and housekeeping only)
 #   tools/do_amd_steward.sh status          droplet, deadlines, service, queue
 #   tools/do_amd_steward.sh down            DELETE, verify 404, disarm, release the lock
 #
@@ -55,6 +60,7 @@ say() { echo "do-amd-steward: $*"; }
 now() { date +%s; }
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/do-steward.XXXXXX")"
 trap 'rm -rf "$TMPD"' EXIT
+. "$ROOT/tools/box_persist_lib.sh"
 
 load_token() {
     [ -f "$DO_TOKFILE" ] || die "no DigitalOcean token ($DO_TOKFILE)"
@@ -123,6 +129,8 @@ while :; do
     [ "\$(date +%s)" -ge "\$d" ] && break
     sleep 20
 done
+# every box-persisted job's results to R2 before the delete (tools/box_persist_run.sh; bounded at 120 s)
+[ ! -f /root/box-persist/bin/box_persist_run.sh ] || bash /root/box-persist/bin/box_persist_run.sh --flush-all 120 >> $G/selfkill.out 2>&1 || true
 n=1
 while [ \$n -le 40 ]; do
     c=\$(curl -K $G/curlrc --max-time 60 -o $G/selfkill.body -w '%{http_code}' -X DELETE '$DO_API/droplets/$1')
@@ -308,6 +316,23 @@ rmdir \${H}d 2>/dev/null; true" < /dev/null
     bx 60 "systemctl restart mojolearn-steward.service; rm -f $Qd/drain; sleep 3; systemctl is-active mojolearn-steward.service" < /dev/null
     trap 'rm -rf "$TMPD"' EXIT
     ;;
+run)
+    load_state
+    persist=1; [ "${1:-}" != --no-persist ] || { persist=0; shift; }
+    tag="${1:?run [--no-persist] <tag> <results-dir> <command>}"; res="${2:?run <tag> <results-dir> <command>}"; shift 2
+    [ $# -gt 0 ] || die "run needs a command"
+    cmd="$*"
+    if [ "$persist" = 1 ]; then
+        bp_prepare "$tag" do_amd_steward "$TMPD/persist.sh" --slots 4 --every-min 10 --days 3 || die "$BP_MINT_FAILED"
+        staged=$(bx 120 'bash -s' < "$TMPD/persist.sh") || true
+        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on the droplet; nothing ran"
+        cmd=$(bp_wrap "$res" "$cmd")
+    else
+        bp_opt_out do_amd_steward "run $tag $res $*" || exit 1
+    fi
+    # shellcheck disable=SC2086
+    ssh $SSH_OPTS "root@$IP" "export PATH=/root/.pixi/bin:/opt/rocm/bin:\$PATH; cd /root/mojolearn && $cmd"
+    ;;
 ssh)
     load_state; [ $# -gt 0 ] || die "ssh needs a command"
     # shellcheck disable=SC2086
@@ -339,5 +364,5 @@ down)
     mv "$S" "$S.down-$(date -u +%Y%m%dT%H%M%SZ)"
     say "droplet $DROPLET_ID verified gone (GET 404)"
     ;;
-*) sed -n 2,20p "$0"; exit 2 ;;
+*) sed -n 2,25p "$0"; exit 2 ;;
 esac

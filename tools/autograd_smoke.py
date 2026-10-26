@@ -354,6 +354,12 @@ def probe_import_torch():
     (2026-10-22, lane purge-user-objects: retargeted from the removed torch.export reader.)"""
     import tempfile
     import numpy as np
+    # mojolearn BEFORE torch (2026-10-26, amd-torch-interop): on AMD the import loads the
+    # ROCm runtime the MAX runtime uses, and torch then reuses it. In the other order torch
+    # maps its bundled copy first and mojolearn refuses at import unless LD_LIBRARY_PATH
+    # leads with torch/lib (python/mojolearn/_rocm_runtime.py); real-model-smoke already
+    # imports mojolearn first.
+    import mojolearn
     try:
         import torch
         import torch.onnx  # noqa: F401
@@ -363,7 +369,6 @@ def probe_import_torch():
             print("SMOKE_FAIL import-torch MOJOLEARN_REQUIRE_TORCH=1 and torch does not import")
             return 1
         return 0
-    import mojolearn
     print("RUN torch %s" % torch.__version__, flush=True)
     fx = _load_onnx_fixture()
     with tempfile.TemporaryDirectory() as tmp:

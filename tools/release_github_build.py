@@ -10,6 +10,8 @@ opt-in) and the planner its workflow calls.
     python3 tools/release_github_build.py plan --src SRC --sets 'sm_89 gfx942' --shards 6   (the workflow)
     python3 tools/release_github_build.py job-map ...                                       (the workflow)
     python3 tools/release_github_build.py layout --commit C [--planner]    merged | per-binding
+    python3 tools/release_github_build.py run --commit C --host --host-donor <leg>/release-build/build --out DIR
+    python3 tools/release_github_build.py estimate [--sets 'sm_89 sm_80 gfx942 host'] [--modes identical]
 
 WHAT RUNS WHERE. .github/workflows/release-linux-build.yml (workflow_dispatch
 only) builds one or more sets on ubuntu-24.04 runners (4 vCPU, 16 GB): a plan
@@ -29,14 +31,41 @@ the artifact into the leg layout release.py reads (leg_layout "github", the
 cpu-box layout), verify the tree against its proof, promote the cache uploads,
 and exit 0 only for a verified tree. A failure names the job.
 
-THE MERGED LAYOUT IS NOT BUILT HERE (2026-10-21). A source whose
-packaging/linux/merged_layout.py says merged (MOJOLEARN_MERGED_BINDINGS=1,
-the default since 2026-10-20) builds ONE compile per tier, measured at up to
-46.4 GB; a free runner has 15. `plan` plans exactly build_sets.sh's merged
-pool (fast, identical and host merged_build.sh, one per shard) and then
-refuses it, and `run` refuses before dispatching, both with merged_refusal(),
-unless --runner-mem-gib says the runners have NEEDED_GIB. Such a source
-builds on the cpu-box route (tools/release.py's default for it).
+THE MERGED LAYOUT, ONE COMPILE PER JOB (2026-10-26; Andrew: compiling never
+uses paid rentals, GitHub's free runners build programmatically). A source
+whose packaging/linux/merged_layout.py says merged builds ONE compile per
+directory set (the identical tier, the host set; the fast tier when the
+release modes name it). A merged compile is one `mojo build` of one root:
+Mojo has no separate compilation of the members into objects that link into
+the same bytes, so a merged file cannot be split across jobs without becoming
+a different artifact. `plan` therefore gives every merged compile of a set its
+OWN shard job (each job holds exactly one compile, built by the unchanged
+cpu-box route in the same image, path, flags and compiler worker count, so the
+bytes and cache keys are the cpu-box route's), and sizes each job's swap from
+UNIT_PEAK_GIB: a compile whose recorded peak exceeds the runner's 15 GiB gets a
+swapfile on the runner's scratch disk (the workflow's Swap step), up to
+SWAP_MAX_GIB; beyond that the plan refuses with unit_refusal(). The release
+modes (MOJOLEARN_RELEASE_MODES, the workflow's `modes`) choose the tiers, as
+on the cpu box (tools/release_linux_build.sh exports them to the box).
+
+THE HOST PRODUCER. `host` in the workflow's `sets` adds one job that runs the
+SOURCE's tools/release_host_build.py build (the retained-composition host
+producer, docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md) in the same
+image at /root/mojolearn from a git checkout of the commit, its donor runtime
+build either this run's first assembled device set or a retained device leg
+the Mac uploads to R2 and passes as ONE presigned GET (`host_donor_url`, read
+from the event file and masked, never interpolated; its sha256 in
+`host_donor_sha256`). Its artifact `host-build` is the producer's output
+directory, which tools/retained_release_composition.py --host-build takes.
+
+THE CACHE. With a map_url the binding cache is R2 (below). Without one, each
+shard restores its hot directory from actions/cache (key rlb1-<arch>-<unit>-
+<commit>, falling back to the newest entry of the same <arch>-<unit>): an
+archive is named by its bincache content key and placed only after its key,
+fields and every file's sha256 verify, so a stale archive is never used, only
+skipped. The job saves back only the archives its own builds used or made.
+gfx942 bytes are frozen by R2, not by a GitHub cache: with a map_url the
+GitHub cache is neither read nor written.
 
 THE BINDING CACHE WITHOUT A SECRET. R2 credentials never leave this Mac. The
 Mac lists the cache partition and presigns a GET for every object and a PUT
@@ -84,6 +113,8 @@ ARCHS = {"sm_90a": "cuda", "sm_89": "cuda", "sm_80": "cuda", "gfx942": "hip"}
 SLOTS_PER_JOB = 80
 MAP_HOURS = 8
 MAP_PREFIX = "bincache/gha-maps"
+#: Where `run --host-donor` stages a retained donor build for one run (deleted after).
+DONOR_PREFIX = "bincache/gha-donors"
 #: tools/release_linux_build.sh's route overlay (a test holds them equal).
 OVERLAY = ("tools/release061_remote_build.sh", "tools/cpu_build_guard.py", "tools/release_linux_cpu_box.sh",
            "tools/bincache.py", "tools/release_modes.py")
@@ -149,28 +180,93 @@ def partition():
 
 
 # ---------------------------------------------------------------- the plan (on a runner)
-#: THE MERGED LAYOUT DOES NOT FIT A FREE RUNNER (2026-10-21). With
-#: MOJOLEARN_MERGED_BINDINGS=1 (packaging/linux/merged_layout.py, the default
-#: since lane/merged-bindings, 2026-10-20) build_sets.sh's pool runs ONE merged
-#: compile per directory set (tools/merged_bindings.py plan --platform linux
-#: --byte-lm 1: one group `_mojolearn_native` per tier, `_mojolearn_native_host`
-#: for host/). Measured on the DO MI325X 2026-10-20, two compiler workers each:
-#: host 6m23s peak 6.9 GB, fast 16m peak 36.6 GB, identical (+ byte LM)
-#: 18m45s peak 46.4 GB. GiB a runner must have for each, the peak rounded up
-#: with headroom for the toolchain and the read-backs:
-NEEDED_GIB = {"fast": 40, "identical": 50, "host": 8}
-MEASURED_PEAK = "identical (+ byte LM) 46.4 GB, fast 36.6 GB, host 6.9 GB"
-#: GitHub's free ubuntu-24.04 runner (4 vCPU); the org has no larger runners.
+#: GitHub's free ubuntu-24.04 runner for a public repository: 4 vCPU, 16 GB
+#: (15 GiB usable); the org has no larger runners.
 FREE_RUNNER = "4 vCPU, 15 GB"
+RUNNER_RAM_GIB = 15
+#: The largest swapfile a job may add. The hosted image keeps its scratch disk
+#: at /mnt (~70 GB free; the image's own 4 GB swapfile lives there); the Swap
+#: step takes the larger of /mnt and / and caps the file at that disk's free
+#: space less SWAP_DISK_RESERVE_GIB, recording what it made (GHA/swap.txt).
+SWAP_MAX_GIB = 56
+SWAP_DISK_RESERVE_GIB = 4
+#: Headroom over a recorded peak before swap is sized: 20%, as
+#: tools/development_build.py PEAK_HEADROOM["passed"].
+PEAK_HEADROOM = 1.2
+#: THE PLANNING PEAK OF ONE MERGED COMPILE, GiB: the LARGEST RSS recorded for
+#: it on any box, so swap is never sized from the smallest. Unused swap costs
+#: nothing; a compile killed for memory costs the run.
+#:   identical, cuda  0.8.57 cpu box (c00c4d800, 2 compiler workers): sm_89
+#:                    48.59, sm_80 48.12 (the set's build-group peak, guard);
+#:                    2026-10-26 one sm_89 identical set ~17 GB
+#:   identical, hip   0.8.57 cpu box gfx942 47.87 (8 workers); 2026-10-26 ~39 GB
+#:   fast             DO MI325X 2026-10-20, 36.6 GB (2 workers)
+#:   host             GitHub run 40272710760 (2026-10-26, source 78af017e2, the
+#:                    host producer, 2 workers): SIGKILLed by the kernel at the
+#:                    free runner's 16.0 GB cgroup peak after 1123 s, so its peak
+#:                    is ABOVE 15 GiB (a lower bound only); planned at the
+#:                    identical tier's 48 until a run with swap records it.
+#:                    Run 40275379578 (same source, 43 GiB swap on /mnt):
+#:                    built in 5275 s, RAM cgroup at the runner's 15.98 GB
+#:                    the whole time (the swap use was not sampled then; the
+#:                    sampler records memory.swap.current since).
+#:                    Older: DO MI325X 2026-10-20, 6.9 GB.
+#: Each shard records its own peak (GHA/memory.txt): raise a row when a run
+#: records more, never lower one below a recorded value.
+UNIT_PEAK_GIB = {
+    ("identical", "cuda"): 49, ("identical", "hip"): 48,
+    ("fast", "cuda"): 37, ("fast", "hip"): 37,
+    ("host", "cuda"): 48, ("host", "hip"): 48,
+}
+#: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
+PER_BINDING_PEAK_GIB = 6
+#: The host producer's one compile (tools/release_host_build.py, the merged host):
+#: the host row of UNIT_PEAK_GIB (run 40272710760 was killed at 16 GB without swap).
+HOST_PRODUCER_PEAK_GIB = UNIT_PEAK_GIB[("host", "cuda")]
+#: Measured seconds of one merged compile on the 16-vCPU RunPod cpu box (0.8.57,
+#: c00c4d800, full46-build.log start/built lines), for `estimate` only.
+UNIT_SECONDS_CPU_BOX = {
+    ("identical", "cuda"): 1262, ("identical", "hip"): 1295, ("fast", "cuda"): 960, ("fast", "hip"): 960,
+    ("host", "cuda"): 2046, ("host", "hip"): 1735, ("adapters", "cuda"): 61, ("adapters", "hip"): 256,
+}
+#: Per-job fixed cost on a runner: checkout, image pull, pixi env (0.8.52 run
+#: jobs.tsv less the route's phases.tsv: ~260 s), and the assemble route over
+#: verified hot hits (~240 s).
+JOB_OVERHEAD_SECONDS = 260
+ASSEMBLE_ROUTE_SECONDS = 240
+CPU_BOX_VCPU, RUNNER_VCPU = 16, 4
+#: Seconds measured ON a free runner, which replace the scaled cpu-box figure:
+#: the merged host compile paging to swap (run 40275379578, 78af017e2).
+UNIT_SECONDS_RUNNER = {("host", "cuda"): 5275, ("host", "hip"): 5275}
 
 
-def merged_refusal(needed_gib):
-    """The one sentence every GitHub entry point refuses the merged layout with."""
-    return (f"the merged binding layout (MOJOLEARN_MERGED_BINDINGS=1) cannot build on GitHub's free runners "
-            f"({FREE_RUNNER}): one merged compile per tier peaked at {MEASURED_PEAK} on the DO MI325X "
-            f"2026-10-20, so build the Linux sets on the cpu-box route (`pixi run release <v>` defaults to "
-            f"it; one set: `bash tools/release_linux_build.sh <commit> --rent --archs <arch>`), or pass "
-            f"--runner-mem-gib N when the runners have N >= {needed_gib} GiB")
+def unit_tier(entry):
+    """The tier a pool entry compiles: identical, fast, host or adapters."""
+    return entry.split(":")[0]
+
+
+def unit_peak_gib(entry, vendor, merged):
+    if not merged:
+        return PER_BINDING_PEAK_GIB
+    return UNIT_PEAK_GIB.get((unit_tier(entry), vendor), max(UNIT_PEAK_GIB.values()))
+
+
+def swap_gib(peak_gib):
+    """Swap a job adds for a compile of `peak_gib`: 0 when it fits the runner."""
+    need = int(-(-peak_gib * PEAK_HEADROOM // 1))
+    return max(0, need - RUNNER_RAM_GIB)
+
+
+def unit_refusal(entry, vendor, need):
+    """The one sentence a plan refuses a compile no free runner can hold with."""
+    return (f"the merged compile {entry} for {vendor} needs {need} GiB with headroom (UNIT_PEAK_GIB), more "
+            f"than a free runner's {RUNNER_RAM_GIB} GiB plus SWAP_MAX_GIB {SWAP_MAX_GIB} GiB of swap; build it "
+            f"on the cpu-box route (`bash tools/release_linux_build.sh <commit> --rent --archs <arch>`)")
+
+
+def unit_slug(entry):
+    """A cache-key-safe name for a pool entry ("identical:merged_build.sh" -> "identical-merged_build")."""
+    return re.sub(r"[^A-Za-z0-9_.-]", "-", entry.replace(".sh", ""))
 
 
 def layout_merged(text, environ):
@@ -210,10 +306,11 @@ def commit_merged(commit, environ=None, root=ROOT):
     return layout_merged(r.stdout if r.returncode == 0 else None, planner_env() if environ is None else environ)
 
 
-def plan_set(src):
+def plan_set(src, modes=None):
     """One set's builds from the SOURCE's own build_sets.sh: its list variables,
     tier_scripts() and pool_jobs() are evaluated (not retyped) with the
-    release's MOJOLEARN_PACKAGE_BYTE_LM=1, over its tiers. Returns
+    release's MOJOLEARN_PACKAGE_BYTE_LM=1, over its tiers (MODES, the release
+    modes the box is given, else build_sets.sh's own default). Returns
     dict(builds=[(entry, is_host)], per_binding=[(entry, is_host)],
     merged=bool, weights={entry: w}, members={entry: n}). `builds` is exactly
     what pool_jobs() runs: the per-binding scripts, or (merged) one
@@ -228,6 +325,8 @@ def plan_set(src):
     t = re.search(r'^TIERS="\$\{MOJOLEARN_BUILD_TIERS:-([a-z ]+)\}"', text, re.M)
     if t:
         tiers = t.group(1)
+    if modes:
+        tiers = " ".join(modes)
     merged = source_merged(src)
     pj = re.search(r"^pool_jobs\(\) \{.*?^\}\n", text, re.M | re.S)
     if merged and not pj:
@@ -269,14 +368,16 @@ def set_builds(src):
     return plan_set(src)["builds"]
 
 
-def check_counts(src, builds):
-    """The GPU builds per tier must be the verifier's expected bindings."""
+def check_counts(src, builds, modes=None):
+    """The GPU builds per planned tier must be the verifier's expected bindings."""
     sys.path.insert(0, str(Path(src) / "tools"))
     try:
         from verify_linux_surface_qualification import MODES, expected_bindings
     finally:
         sys.path.pop(0)
     for mode in MODES:
+        if modes and mode not in modes:
+            continue
         got = sum(1 for e, host in builds if not host and e.split(":")[0] == mode)
         want = len(expected_bindings(mode, True))
         if got != want:
@@ -297,38 +398,137 @@ def split(builds, shards, weights=None):
     return [dict(shard=i, only=" ".join(sorted(es)), n=len(es), weight=wt) for wt, i, es in sorted(load, key=lambda x: x[1])]
 
 
-def cmd_plan(a):
-    sets = a.sets.split()
-    if not sets or any(s not in ARCHS for s in sets) or len(set(sets)) != len(sets):
-        raise SystemExit(f"plan: sets must be distinct names from {' '.join(ARCHS)}")
-    if not 1 <= a.shards <= 16:
+#: Upload-slot jobs per set the Mac mints at least (a merged set plans one
+#: shard per compile, at most identical + fast + host, plus the assemble job).
+MERGED_JOBS_PER_SET = 5
+
+
+def unit_seconds(entry, vendor, merged):
+    """Estimated compile seconds of one shard entry on a free runner: the cpu
+    box's measured seconds, scaled by the compiler workers the runner's 4 vCPU
+    cannot run at once (AMD GPU tiers: 8 workers; everything else 2, which a
+    runner runs at full width). No swap penalty is modelled: a lower bound."""
+    if not merged:
+        return WEIGHTS.get(entry, DEFAULT_GPU_WEIGHT)
+    tier = unit_tier(entry)
+    if (tier, vendor) in UNIT_SECONDS_RUNNER:
+        return UNIT_SECONDS_RUNNER[(tier, vendor)]
+    base = UNIT_SECONDS_CPU_BOX.get((tier, vendor), max(UNIT_SECONDS_CPU_BOX.values()))
+    workers = 8 if vendor == "hip" and tier in ("identical", "fast") else 2
+    return int(base * min(workers, CPU_BOX_VCPU) / min(workers, RUNNER_VCPU))
+
+
+def estimate(include, merged, sets, host, host_donor=False):
+    """{arch: dict(jobs, wall_s, runner_s)} and the run's totals, from the plan's rows."""
+    out, adapters = {}, lambda v: UNIT_SECONDS_CPU_BOX[("adapters", v)]
+    for arch in sets:
+        vendor = ARCHS[arch]
+        rows = [r for r in include if r["arch"] == arch]
+        shard_s = [JOB_OVERHEAD_SECONDS + sum(unit_seconds(e, vendor, merged) for e in r["only"].split())
+                   // (1 if merged else 2) + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
+        asm = JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
+        out[arch] = dict(jobs=len(rows) + 1, wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
+                         swap_gib=max([r["swap_gib"] for r in rows] or [0]))
+    if host:
+        h = JOB_OVERHEAD_SECONDS + UNIT_SECONDS_RUNNER[("host", "cuda")] + ASSEMBLE_ROUTE_SECONDS
+        # the donor is an uploaded build, else this run's first device set (its assemble job)
+        donor_wall = out[sets[0]]["wall_s"] if sets and not host_donor else 0
+        out["host"] = dict(jobs=1, wall_s=donor_wall + h, runner_s=h, swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB))
+    total = dict(jobs=1 + sum(v["jobs"] for v in out.values()), wall_s=max([v["wall_s"] for v in out.values()] or [0]),
+                 runner_s=sum(v["runner_s"] for v in out.values()))
+    return out, total
+
+
+def build_plan(src, tokens, shards, modes=None, host_donor=False):
+    """The run's plan document: one shard row per compile slice (merged: one
+    compile per row), its swap, the device sets, the host producer, and the
+    estimate. Refuses what a free runner cannot build."""
+    if not tokens or len(set(tokens)) != len(tokens) or any(t not in ARCHS and t != "host" for t in tokens):
+        raise SystemExit(f"plan: sets must be distinct names from {' '.join(ARCHS)} host")
+    if not 1 <= shards <= 16:
         raise SystemExit("plan: shards must be 1..16")
-    ps = plan_set(a.src)
-    builds = ps["builds"]
-    # the verifier's bindings are the per-binding members, in either layout
-    check_counts(a.src, ps["per_binding"])
-    shards = a.shards
-    if ps["merged"]:
-        needed = max(NEEDED_GIB[e.split(":")[0]] for e, _ in builds)
-        if a.runner_mem_gib < needed:
-            raise SystemExit("plan: " + merged_refusal(needed))
-        # one merged compile per shard at most: a merged build cannot be split
-        shards = min(shards, len(builds))
-    include = []
-    for si, arch in enumerate(sets):
-        for sh in split(builds, shards, ps["weights"]):
-            include.append(dict(arch=arch, vendor=ARCHS[arch], set_index=si, **sh))
-    doc = dict(matrix=dict(include=include), sets=sets, builds=len(builds), shards=shards,
-               layout="merged" if ps["merged"] else "per-binding", members=ps["members"])
+    host = "host" in tokens
+    sets = [t for t in tokens if t != "host"]
+    if host and not sets and not host_donor:
+        raise SystemExit("plan: the host producer needs a donor runtime build: a device set in the same run "
+                         "or host_donor_url (tools/release_github_build.py run --host --host-donor DIR)")
+    include, merged, nbuilds, members = [], None, 0, {}
+    jobs_per_set = shards + 1
+    if sets:
+        ps = plan_set(src, modes)
+        builds, merged, members = ps["builds"], ps["merged"], ps["members"]
+        nbuilds = len(builds)
+        # the verifier's bindings are the per-binding members, in either layout
+        check_counts(src, ps["per_binding"], modes)
+        if merged:
+            # ONE merged compile per shard: a merged file is one `mojo build` and cannot be split
+            shards = len(builds)
+            jobs_per_set = max(shards + 1, MERGED_JOBS_PER_SET)
+        for si, arch in enumerate(sets):
+            vendor = ARCHS[arch]
+            for sh in split(builds, shards, ps["weights"]):
+                if not sh["n"]:
+                    continue
+                entries = sh["only"].split()
+                peak = max(unit_peak_gib(e, vendor, merged) for e in entries)
+                sw = swap_gib(peak)
+                if sw > SWAP_MAX_GIB:
+                    raise SystemExit("plan: " + unit_refusal(sh["only"], vendor, sw + RUNNER_RAM_GIB))
+                include.append(dict(arch=arch, vendor=vendor, set_index=si, swap_gib=sw, peak_gib=peak,
+                                    unit=unit_slug(sh["only"]) if merged else f"shard{sh['shard']}", **sh))
+    per_set, total = estimate(include, bool(merged), sets, host, host_donor)
+    return dict(matrix=dict(include=include), sets=sets, host=host, builds=nbuilds, shards=shards,
+                jobs_per_set=jobs_per_set, modes=list(modes or []),
+                layout=None if merged is None else ("merged" if merged else "per-binding"), members=members,
+                assemble_swap_gib=max([r["swap_gib"] for r in include] or [0]),
+                host_swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB) if host else 0,
+                estimate=dict(per_set=per_set, total=total))
+
+
+def cmd_plan(a):
+    import release_modes
+    modes = release_modes.parse_modes(a.modes) if a.modes else None
+    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor)
     text = json.dumps(doc, indent=1)
     if a.json:
         Path(a.json).write_text(text + "\n")
     if a.github_output:
         with open(a.github_output, "a") as fh:
             fh.write("matrix=" + json.dumps(doc["matrix"], separators=(",", ":")) + "\n")
-            fh.write("sets=" + json.dumps(sets, separators=(",", ":")) + "\n")
-    for row in include:
-        print(f"{row['vendor']}-{row['arch']} shard {row['shard']}: {row['n']} builds, weight {row['weight']}")
+            fh.write("sets=" + json.dumps(doc["sets"], separators=(",", ":")) + "\n")
+            fh.write("has_devices=" + ("true" if doc["sets"] else "false") + "\n")
+            fh.write("host=" + ("true" if doc["host"] else "false") + "\n")
+            fh.write("host_donor=" + ("true" if doc["host"] and a.host_donor else "false") + "\n")
+            fh.write("jobs_per_set=%d\n" % doc["jobs_per_set"])
+            fh.write("assemble_swap_gib=%d\n" % doc["assemble_swap_gib"])
+            fh.write("host_swap_gib=%d\n" % doc["host_swap_gib"])
+    print(f"layout {doc['layout']}, modes {' '.join(doc['modes']) or 'build_sets.sh default'}, "
+          f"{doc['builds']} compiles per set")
+    for row in doc["matrix"]["include"]:
+        print(f"{row['vendor']}-{row['arch']} shard {row['shard']} [{row['unit']}]: {row['n']} builds, "
+              f"weight {row['weight']}, planning peak {row['peak_gib']} GiB, swap {row['swap_gib']} GiB")
+    if doc["host"]:
+        print("host producer: tools/release_host_build.py build, donor "
+              + ("host_donor_url" if a.host_donor else f"this run's {doc['sets'][0]} set"))
+    est = doc["estimate"]
+    for k, v in est["per_set"].items():
+        print(f"estimate {k}: {v['jobs']} jobs, wall >= {v['wall_s'] // 60} min, "
+              f"{v['runner_s'] // 60} runner-min, swap {v['swap_gib']} GiB")
+    t = est["total"]
+    print(f"estimate run: {t['jobs']} jobs (free runners run 20 at once), wall >= {t['wall_s'] // 60} min, "
+          f"{t['runner_s'] // 60} runner-min (cpu-box seconds scaled to 4 vCPU; swap paging not modelled)")
+    return 0
+
+
+def cmd_estimate(a):
+    """The plan of a source (default this checkout) without a runner: jobs, swap and wall time."""
+    import release_modes
+    modes = release_modes.parse_modes(a.modes) if a.modes else None
+    doc = build_plan(a.src, a.sets.split(), a.shards, modes, True)
+    print(json.dumps(dict(layout=doc["layout"], modes=doc["modes"], jobs_per_set=doc["jobs_per_set"],
+                          shards=[dict((k, r[k]) for k in ("arch", "unit", "only", "peak_gib", "swap_gib"))
+                                  for r in doc["matrix"]["include"]],
+                          estimate=doc["estimate"]), indent=1))
     return 0
 
 
@@ -372,8 +572,50 @@ def cmd_job_map(a):
     fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(body)
-    print(f"map: {'R2' if url else 'none (no R2: every build compiles here, nothing uploads)'}, "
+    print(f"map: {'R2' if url else 'none (no R2: the hot directory and actions/cache only, nothing uploads)'}, "
           f"{gets} gets, {puts} upload slots for this job")
+    if a.github_output:
+        # whether R2 is the cache: without it the job reads and writes actions/cache
+        with open(a.github_output, "a") as fh:
+            fh.write("r2=%s\n" % ("true" if url else "false"))
+    return 0
+
+
+def cmd_donor(a):
+    """The host job's donor build from the event's presigned host_donor_url:
+    fetched (the URL masked, never printed), its sha256 checked against the
+    event's host_donor_sha256, extracted under DEST (DEST/build)."""
+    import tarfile
+    inputs = (json.loads(Path(a.event).read_text()).get("inputs") or {}) if a.event else {}
+    url = (inputs.get("host_donor_url") or "").strip()
+    want = (inputs.get("host_donor_sha256") or "").strip()
+    if not url:
+        raise SystemExit("donor: the dispatch carries no host_donor_url")
+    if not re.fullmatch(r"[0-9a-f]{64}", want):
+        raise SystemExit("donor: host_donor_sha256 must be 64 hex")
+    print("::add-mask::" + url, flush=True)
+    dest = Path(a.dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    arc = dest / "donor.tar.gz"
+    with urllib.request.urlopen(url, timeout=600) as r, open(arc, "wb") as fh:
+        shutil.copyfileobj(r, fh, 1 << 20)
+    got = sha256(arc)
+    if got != want:
+        raise SystemExit(f"donor: the fetched archive is {got}, the dispatch named {want}")
+    with tarfile.open(arc) as tf:
+        names = tf.getnames()
+        if not names or any(n != "build" and not n.startswith("build/") for n in names):
+            raise SystemExit("donor: the archive holds more than build/")
+        tf.extractall(dest, filter="data")
+    arc.unlink()
+    proof = json.loads((dest / "build" / "build-provenance.json").read_text())
+    rev = proof.get("source_commit", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", rev):
+        raise SystemExit("donor: the donor proof names no source commit")
+    print(f"donor: build of {rev[:12]}, sha256 {got[:16]}.. verified")
+    if a.github_output:
+        with open(a.github_output, "a") as fh:
+            fh.write("revision=%s\n" % rev)
     return 0
 
 
@@ -557,15 +799,94 @@ def promote(out, creds):
     return (r.stdout.strip().splitlines() or ["?"])[-1] + (f"; {len(refused)} refused (bytes not the job's)" if refused else "")
 
 
+def verify_host(out, commit):
+    """The host producer's output (tools/release_host_build.py build), read-only:
+    a complete proof of COMMIT whose staged host bytes are on disk as proved."""
+    try:
+        proof = json.loads((Path(out) / "host-build-proof.json").read_text())
+    except (OSError, ValueError):
+        return False, f"no host-build-proof.json under {out}"
+    if (proof.get("schema") != "mojolearn.linux.host-build.v1" or proof.get("complete") is not True
+            or proof.get("build_exit") != 0 or proof.get("source_commit") != commit):
+        return False, "the host proof is not complete, not exit 0 or not of " + commit[:12]
+    ext = proof.get("host_extension") or {}
+    if not ext:
+        return False, "the host proof names no binary"
+    for name, digest in ext.items():
+        if not name.startswith("mojolearn/cpu/"):
+            return False, f"the host proof names {name}, outside mojolearn/cpu/"
+        p = Path(out) / "set" / name[len("mojolearn/cpu/"):]
+        if not p.is_file() or sha256(p) != digest:
+            return False, f"{name} is missing or not the proof's bytes"
+    return True, f"host {', '.join(sorted(ext))} as proved"
+
+
+def upload_donor(creds, donor, tag):
+    """Pack a retained donor build (<leg>/release-build/build) into R2 for the
+    host job: (presigned GET, sha256, object key). The URL is passed once as a
+    workflow input, read from the event file by the job and masked there."""
+    import bincache
+    import tarfile
+    donor = Path(donor).resolve()
+    if not (donor / "build-provenance.json").is_file() or not (donor / "compile-inputs.json").is_file():
+        raise SystemExit(f"--host-donor {donor} is not a release build directory (build-provenance.json, "
+                         "compile-inputs.json)")
+    key = f"{DONOR_PREFIX}/{tag}.tar.gz"
+    with tempfile.TemporaryDirectory() as td:
+        arc = Path(td) / "donor.tar.gz"
+        # the leg's pinned CUDA tools archive (cuda-tools-*) is not part of the donor contract
+        # (release_host_composition.inspect_build): left out, it would be most of the upload
+        skip = lambda ti: None if re.fullmatch(r"build/cuda-tools-[^/]*", ti.name) else ti
+        with tarfile.open(arc, "w:gz", compresslevel=1) as tf:
+            tf.add(str(donor), arcname="build", filter=skip)
+        digest = sha256(arc)
+        code = bincache.http_put(bincache.presign("PUT", key, 3600, creds), str(arc))
+        if code != 200:
+            raise SystemExit(f"could not store the donor build in R2 (HTTP {code})")
+    return bincache.presign("GET", key, MAP_HOURS * 3600, creds), digest, key
+
+
+def download(run_id, name, out, failed):
+    """Artifact NAME of the run, moved into OUT (merged into what is there)."""
+    with tempfile.TemporaryDirectory() as td:
+        r = subprocess.run([GH, "run", "download", str(run_id), "-n", name, "-D", td], capture_output=True, text=True)
+        if r.returncode != 0:
+            names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
+            raise SystemExit(f"no artifact {name} from run {run_id} ({r.stderr.strip()[-200:]}); failed jobs: {names}")
+        src = Path(td) / ("leg" if (Path(td) / "leg").is_dir() else "")
+        Path(out).mkdir(parents=True, exist_ok=True)
+        for p in sorted(src.iterdir()):
+            dest = Path(out) / p.name
+            if dest.exists():
+                if p.is_dir():
+                    shutil.copytree(p, dest, dirs_exist_ok=True, symlinks=True)
+                    continue
+                dest.unlink()
+            shutil.move(str(p), str(dest))
+
+
+def run_modes(text):
+    """The release modes the box builds: --modes, else MOJOLEARN_RELEASE_MODES
+    (release.py sets it for every leg), else the release's default, identical."""
+    import release_modes
+    try:
+        return release_modes.parse_modes(text or os.environ.get(release_modes.ENV) or "identical")
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+
+
 def cmd_run(a):
     if not re.fullmatch(r"[0-9a-f]{40}", a.commit):
         raise SystemExit("--commit must be a full 40-hex SHA")
-    if a.arch not in ARCHS:
+    if not a.arch and not a.host:
+        raise SystemExit("--arch and/or --host is required")
+    if a.arch and a.arch not in ARCHS:
         raise SystemExit(f"--arch must be one of {' '.join(ARCHS)}")
-    vendor, name = ARCHS[a.arch], f"{ARCHS[a.arch]}-{a.arch}"
-    if not a.run_id and commit_merged(a.commit) and a.runner_mem_gib < max(NEEDED_GIB.values()):
-        # the workflow's plan job would refuse it; refuse before dispatching
-        raise SystemExit(merged_refusal(max(NEEDED_GIB.values())))
+    if a.host and not a.arch and not a.host_donor and not a.run_id:
+        raise SystemExit("--host without --arch needs --host-donor DIR (a retained <leg>/release-build/build)")
+    modes = run_modes(a.modes)
+    vendor = ARCHS.get(a.arch)
+    name = f"{vendor}-{a.arch}" if a.arch else None
     out = Path(a.out).resolve()
     if out.exists() and any(out.iterdir()) and not a.run_id:
         raise SystemExit(f"{out} exists and is not empty")
@@ -573,33 +894,45 @@ def cmd_run(a):
     gha.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     creds = None
-    if not a.no_bincache:
+    if not a.no_bincache or a.host_donor:
         try:
             creds = read_creds()
         except (OSError, SystemExit) as exc:
+            if a.host_donor:
+                raise SystemExit(f"--host-donor goes to the run through R2 and needs credentials ({exc})")
             raise SystemExit(f"no R2 credentials for the binding cache ({exc}); --no-bincache builds without it")
-    elif a.arch == "gfx942" and not a.allow_cold_amd:
+    if a.no_bincache and a.arch == "gfx942" and not a.allow_cold_amd:
         raise SystemExit("gfx942 without the binding cache would ship bytes no later build reproduces "
                          "(gfx942 codegen varies run to run); pass --allow-cold-amd to build it anyway")
-    map_key = None
+    cleanup = []
     if a.run_id:
         run = json.loads(gh("run", "view", str(a.run_id), "--json", "databaseId,displayTitle,headSha,url"))
         say(f"attached to run {a.run_id} ({run.get('url')})")
     else:
         branch, head = tooling_ref(a.ref)
         tag = f"gha-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.urandom(3).hex()}"
-        map_url = ""
-        if creds:
-            map_url, map_key, n_get = mint_map(creds, a.shards + 1, 1, tag)
+        map_url = donor_url = donor_sha = ""
+        jobs_per_set = max(a.shards + 1, MERGED_JOBS_PER_SET)
+        if creds and not a.no_bincache and a.arch:
+            map_url, map_key, n_get = mint_map(creds, jobs_per_set, 1, tag)
+            cleanup.append(map_key)
             say(f"binding cache map: partition {partition()}, {n_get} objects, "
-                f"{(a.shards + 1) * SLOTS_PER_JOB} upload slots, valid {MAP_HOURS} h")
+                f"{jobs_per_set * SLOTS_PER_JOB} upload slots, valid {MAP_HOURS} h")
+        if a.host_donor:
+            donor_url, donor_sha, donor_key = upload_donor(creds, a.host_donor, tag)
+            cleanup.append(donor_key)
+            say(f"host donor {a.host_donor}: sha256 {donor_sha[:16]}.., valid {MAP_HOURS} h")
+        sets = " ".join(x for x in (a.arch, "host" if a.host else "") if x)
         wid = workflow_id()
-        gh("workflow", "run", wid, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={a.arch}",
-           "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}")
+        gh("workflow", "run", wid, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={sets}",
+           "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}",
+           "-f", f"modes={' '.join(modes)}", "-f", f"host_donor_url={donor_url}",
+           "-f", f"host_donor_sha256={donor_sha}")
         (gha / "dispatch.json").write_text(json.dumps(dict(
-            tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, shards=a.shards,
-            jobs=a.jobs, bincache=bool(creds), map_object=map_key, dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()),
-            indent=1) + "\n")
+            tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, host=a.host,
+            modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
+            host_donor_sha256=donor_sha or None, r2_objects=cleanup,
+            dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
         if run.get("headSha") != head:
@@ -608,12 +941,13 @@ def cmd_run(a):
     try:
         view = wait_run(a.run_id, a.timeout_min, a.poll)
     finally:
-        if map_key and creds:
+        if cleanup and creds:
             import bincache
-            try:
-                bincache.r2_request(creds, "DELETE", map_key)
-            except Exception:
-                pass
+            for key in cleanup:
+                try:
+                    bincache.r2_request(creds, "DELETE", key)
+                except Exception:
+                    pass
     rows = []
     for j in view.get("jobs") or []:
         rows.append((j.get("name", ""), j.get("conclusion") or j.get("status"), j.get("startedAt"),
@@ -621,30 +955,27 @@ def cmd_run(a):
     (gha / "jobs.tsv").write_text("".join("\t".join(str(x) for x in r) + "\n" for r in rows))
     (gha / "run.json").write_text(json.dumps(view, indent=1) + "\n")
     failed = [r for r in rows if r[1] not in ("success", "skipped")]
-    art = f"release-{name}"
-    with tempfile.TemporaryDirectory() as td:
-        r = subprocess.run([GH, "run", "download", str(a.run_id), "-n", art, "-D", td], capture_output=True, text=True)
-        if r.returncode != 0:
-            names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
-            raise SystemExit(f"no artifact {art} from run {a.run_id} ({r.stderr.strip()[-200:]}); failed jobs: {names}")
-        src = Path(td) / "leg"
-        for p in sorted(src.iterdir()):
-            dest = out / p.name
-            if dest.exists():
-                if p.is_dir():
-                    shutil.copytree(p, dest, dirs_exist_ok=True, symlinks=True)
-                    continue
-                dest.unlink()
-            shutil.move(str(p), str(dest))
-    ok, why = verify_tree(out / name / "release-build", vendor, a.arch, a.commit)
+    lines = [f"run {view.get('url')} {view.get('conclusion')}"]
+    ok = True
+    if a.arch:
+        download(a.run_id, f"release-{name}", out, failed)
+        good, why = verify_tree(out / name / "release-build", vendor, a.arch, a.commit)
+        ok &= good
+        lines.append(("TREE OK: " if good else "TREE REFUSED: ") + why)
+    if a.host:
+        download(a.run_id, "host-build", out / "host-build", failed)
+        good, why = verify_host(out / "host-build", a.commit)
+        ok &= good
+        lines.append(("HOST OK: " if good else "HOST REFUSED: ") + why)
     wall = int(time.time() - t0)
-    lines = [f"run {view.get('url')} {view.get('conclusion')} wall_seconds={wall}"]
-    lines += [f"  {r[0]}: {r[1]} {r[4]}s" for r in rows]
+    lines[0] += f" wall_seconds={wall}"
+    lines[1:1] = [f"  {r[0]}: {r[1]} {r[4]}s" for r in rows]
     if failed:
         lines.append("FAILED JOBS: " + "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed))
-    lines.append(("TREE OK: " if ok else "TREE REFUSED: ") + why)
-    if ok and creds:
+    if ok and creds and a.arch and not a.no_bincache:
         lines.append("binding cache: " + promote(out, creds))
+    if ok:
+        lines += next_steps(out, name, a)
     (out / "wall.txt").write_text(f"wall_seconds={wall} run={a.run_id} conclusion={view.get('conclusion')}\n")
     (gha / "summary.txt").write_text("\n".join(lines) + "\n")
     for line in lines:
@@ -652,19 +983,41 @@ def cmd_run(a):
     return 0 if ok else 1
 
 
+def next_steps(out, name, a):
+    """The verified artifacts' hand-off: the Linux packer for a fresh set, the
+    retained composition for a host built against a donor."""
+    rows = ["NEXT (docs/RELEASE_CHECKLIST.md section 3):"]
+    if name:
+        b = out / name / "release-build" / "build"
+        rows.append(f"  pack: --set {b / 'sets' / ARCHS[a.arch]} --build-proof {b / 'build-provenance.json'}")
+    if a.host:
+        donor = a.host_donor or (str(out / name / "release-build" / "build") if name else "<donor build>")
+        rows.append(f"  compose: python3 tools/retained_release_composition.py --device-build <retained leg>/release-build/build"
+                    f" --host-build {out / 'host-build'} --source-root <frozen checkout> --compiler-sha256 "
+                    f"<compile-inputs.json compiler_sha256> --out <assembled leg>   (host donor: {donor})")
+    return rows
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--src", required=True)
-    p.add_argument("--sets", required=True)
-    p.add_argument("--shards", type=int, default=6)
+    p.add_argument("--sets", required=True, help="device sets (sm_89 sm_80 gfx942) and/or host")
+    p.add_argument("--shards", type=int, default=6, help="per-binding layout: shard jobs per set "
+                   "(merged: one shard per merged compile, whatever this says)")
+    p.add_argument("--modes", default="", help="the release modes (MOJOLEARN_RELEASE_MODES); empty: "
+                   "build_sets.sh's default tiers")
+    p.add_argument("--host-donor", action="store_true", help="the dispatch carries host_donor_url")
     p.add_argument("--json")
     p.add_argument("--github-output")
-    p.add_argument("--runner-mem-gib", type=int, default=0,
-                   help="the runners' memory; the merged layout plans only when it covers NEEDED_GIB "
-                        "(the workflow passes none: free runners)")
     p.set_defaults(fn=cmd_plan)
+    p = sub.add_parser("estimate")
+    p.add_argument("--src", default=str(ROOT))
+    p.add_argument("--sets", default="sm_89 sm_80 gfx942 host")
+    p.add_argument("--shards", type=int, default=6)
+    p.add_argument("--modes", default="identical")
+    p.set_defaults(fn=cmd_estimate)
     p = sub.add_parser("layout")
     p.add_argument("--commit", required=True)
     p.add_argument("--planner", action="store_true")
@@ -673,22 +1026,31 @@ def main(argv=None):
     p.add_argument("--event")
     p.add_argument("--dest", required=True)
     p.add_argument("--set-index", type=int, required=True)
-    p.add_argument("--job", type=int, required=True, help="the shard index, or SHARDS for the assemble job")
+    p.add_argument("--job", type=int, required=True, help="the shard index, or JOBS_PER_SET - 1 for the assemble job")
     p.add_argument("--jobs-per-set", type=int, required=True)
     p.add_argument("--leg", default="")
+    p.add_argument("--github-output")
     p.set_defaults(fn=cmd_job_map)
+    p = sub.add_parser("donor")
+    p.add_argument("--event", required=True)
+    p.add_argument("--dest", required=True)
+    p.add_argument("--github-output")
+    p.set_defaults(fn=cmd_donor)
     p = sub.add_parser("run")
     p.add_argument("--commit", required=True)
-    p.add_argument("--arch", required=True)
+    p.add_argument("--arch", default="", help="one device set: " + " ".join(ARCHS))
+    p.add_argument("--host", action="store_true", help="also run the host producer (tools/release_host_build.py)")
+    p.add_argument("--host-donor", default="", help="a retained <leg>/release-build/build as the host's runtime "
+                   "donor (default: this run's --arch set)")
+    p.add_argument("--modes", default="", help="release modes (default: MOJOLEARN_RELEASE_MODES, else identical)")
     p.add_argument("--out", required=True)
     p.add_argument("--ref", default="", help="the pushed branch holding this checkout's HEAD (default: the current branch)")
     p.add_argument("--shards", type=int, default=6)
     p.add_argument("--jobs", type=int, default=2, help="builds at once per runner (MOJOLEARN_BUILD_JOBS)")
-    p.add_argument("--no-bincache", action="store_true")
+    p.add_argument("--no-bincache", action="store_true",
+                   help="no R2: the runners reuse their actions/cache hot archives instead")
     p.add_argument("--allow-cold-amd", action="store_true")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
-    p.add_argument("--runner-mem-gib", type=int, default=0,
-                   help="the runners' memory; a merged-layout commit dispatches only when it covers NEEDED_GIB")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)
     p.set_defaults(fn=cmd_run)

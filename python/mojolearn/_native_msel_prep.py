@@ -183,10 +183,8 @@ def connect(context, register, registry):
     for cls in context['family_msel_splitter_layouts']:  # glue: native CV configurations for composite cloning
         if cls.__name__ in splitter_fields:
             add(cls, ms._NATIVE, context, {}, parameters=splitter_fields[cls.__name__])
-    trees._TREES_CONTEXT['native_estimator_defaults'] = {
-        'Ridge': linear_model.Ridge(), 'LogisticRegression': linear_model.LogisticRegression(),
-        'LinearSVC': linear_svm.LinearSVC(),
-    }
+    # The default meta-estimator members are built by connect_estimator_defaults
+    # once every public constructor is connected (their __init__ is native).
 
     # Existing plans used to discard these fit parameters unconditionally.
     # Match each public fit's ABI, including forest importances and boost eval.
@@ -226,3 +224,14 @@ def connect(context, register, registry):
     context['family_msel_bindings'] = modules
     trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE, metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
     linear._XL_CONTEXT.update(native_estimator_entry=ms._NATIVE, native_estimator_context=context)
+
+
+def connect_estimator_defaults():
+    # glue: the trees' default member estimators, constructed after the native
+    # full-reset, linear and declared constructors are connected: an instance
+    # built earlier would reach a constructor that is not ready yet.
+    from . import svm as linear_svm, linear_model, _expansion_trees as trees
+    trees._TREES_CONTEXT['native_estimator_defaults'] = {
+        'Ridge': linear_model.Ridge(), 'LogisticRegression': linear_model.LogisticRegression(),
+        'LinearSVC': linear_svm.LinearSVC(),
+    }

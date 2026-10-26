@@ -7,10 +7,8 @@ from . import _expansion_neighbors as _m1
 from . import _expansion_cluster as _m2
 from . import _hierarchy_impl as _m3
 from . import _expansion_ann as _m4
-from . import _x_sequence_croston as _m5
 from . import density as _m6
 from . import _solver_impl as _m7
-from . import _x_sequence_rnn as _m8
 from . import mixture as _m9
 from . import _gpc_impl as _m10
 from . import _gp_impl as _m11
@@ -22,7 +20,6 @@ from . import cluster as _m16
 from . import neighbors as _m17
 from . import kernel_methods as _m18
 from . import svm as _m19
-from . import _x_sequence_mlp as _m20
 from . import decomposition as _m21
 from . import _svm_impl as _m22
 from . import _spectral_impl as _m23
@@ -30,7 +27,15 @@ from . import _spectral_impl as _m23
 _ENTRY = _binding()._module.full_reset_params_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset parameter setters require a compiled native entry')
-_CONTEXT = dict(plans={}, missing=object(), ready=False)
+# The same event schemas are the whole original constructors: the public
+# __init__ of every class below is one call to this entry
+# (bindings/full_reset_constructor_native.mojo).
+_INIT_ENTRY = _binding()._module.full_reset_constructor_native_call
+if type(_INIT_ENTRY) is not BuiltinFunctionType:
+    raise TypeError('full-reset constructors require a compiled native entry')
+_CONTEXT = dict(plans={}, missing=object(), ready=False, originals={})
+# Instance lookup/assignment protocols a native constructor write must not bypass.
+_CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 _CLASSES = (
     _m0.AdaBoostClassifier,
     _m0.AdaBoostRegressor,
@@ -43,13 +48,8 @@ _CLASSES = (
     _m2.BisectingKMeans,
     _m4.CagraIndex,
     _m0.CalibratedClassifierCV,
-    _m5.CrostonClassic,
-    _m5.CrostonOptimized,
-    _m5.CrostonSBA,
     _m6.DBSCAN,
     _m7.ElasticNet,
-    _m8.GRUClassifier,
-    _m8.GRURegressor,
     _m9.GaussianMixture,
     _m10.GaussianProcessClassifier,
     _m11.GaussianProcessRegressor,
@@ -67,8 +67,6 @@ _CLASSES = (
     _m6.KernelDensity,
     _m1.KernelPCA,
     _m18.KernelRidge,
-    _m8.LSTMClassifier,
-    _m8.LSTMRegressor,
     _m1.LabelPropagation,
     _m1.LabelSpreading,
     _m7.Lasso,
@@ -76,8 +74,6 @@ _CLASSES = (
     _m19.LinearSVR,
     _m1.LocalOutlierFactor,
     _m1.Louvain,
-    _m20.MLPClassifier,
-    _m20.MLPRegressor,
     _m2.MeanShift,
     _m2.MiniBatchKMeans,
     _m0.MultiOutputClassifier,
@@ -92,8 +88,6 @@ _CLASSES = (
     _m1.PageRank,
     _m1.PolynomialCountSketch,
     _m18.RBFSampler,
-    _m8.RNNClassifier,
-    _m8.RNNRegressor,
     _m17.RadiusNeighbors,
     _m0.RandomTreesEmbedding,
     _m15.SGDOneClassSVM,
@@ -110,6 +104,15 @@ _CLASSES = (
     _m0.VotingClassifier,
     _m0.VotingRegressor,
 )
+# Modules that need NumPy at import stay lazy: `import mojolearn` never imports
+# NumPy. Each one calls connect_module(globals()) as its last statement, which
+# connects these classes with the same schemas, order and native context.
+_DEFERRED_MODULES = {
+    '_x_sequence_croston': ('CrostonClassic', 'CrostonOptimized', 'CrostonSBA'),
+    '_x_sequence_rnn': ('GRUClassifier', 'GRURegressor', 'LSTMClassifier', 'LSTMRegressor',
+                        'RNNClassifier', 'RNNRegressor'),
+    '_x_sequence_mlp': ('MLPClassifier', 'MLPRegressor'),
+}
 # Constructor write events: field, parameter/constant, borrowed value/name,
 # NumericModeMixin post-constructor rule. Repeated events preserve insertion
 # order; fixed nonparameter fields are part of the original constructor state.
@@ -194,6 +197,12 @@ _EVENTS = {
 }
 
 
+def _initializer(owner):
+    def __init__(self, *args, **kwargs):
+        return _INIT_ENTRY(self, args, kwargs, _CONTEXT, owner)
+    return __init__
+
+
 class NativeFullResetParams:
     def set_params(self, **params):
         """Set constructor parameters and clear fitted state.
@@ -211,13 +220,13 @@ class NativeFullResetParams:
         return _ENTRY(self, params, _CONTEXT)
 
 
-def install():
+def _install(classes):
     # glue: install only source-vetted classes before class-layout snapshots
     import inspect
     from ._mode import ParamsMixin
     from . import _classical_host
     from ._native_public_attributes import _resolved
-    for cls in _CLASSES:  # glue: exact77 source-vetted full-reset constructor contracts
+    for cls in classes:  # glue: exact source-vetted full-reset constructor contracts
         if _resolved(cls, 'set_params', _CONTEXT['missing']) is not ParamsMixin.set_params:
             raise TypeError('full-reset setter must preserve its original ParamsMixin contract')
         signature = inspect.signature(cls.__init__)
@@ -228,33 +237,67 @@ def install():
         events = _EVENTS[cls.__name__]
         if any(kind == 'parameter' and value not in names for _, kind, value, _ in events):  # glue: refuse stale constructor schemas
             raise TypeError('field-only setter schema differs from its constructor signature')
+        # The original initializer that raises the argument errors: the
+        # NumericModeMixin wrapper forwards to it without numeric_mode.
+        original = _resolved(cls, '__init__', _CONTEXT['missing'])
+        inner = getattr(original, '__wrapped__', original)
+        wrapped = inner is not original
+        if wrapped and 'numeric_mode' in inspect.signature(inner).parameters:
+            # A positional numeric_mode would reach the inner initializer
+            # while the wrapper's keyword stays None: not this schema.
+            raise TypeError('native constructor requires the injected keyword-only numeric_mode')
+        kwonly = tuple(p.name for p in inspect.signature(inner).parameters.values()  # glue: import-time constructor metadata
+                       if p.kind is p.KEYWORD_ONLY and not (wrapped and p.name == 'numeric_mode'))
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
-            class_name=cls.__name__)
+            class_name=cls.__name__,
+            positional=tuple(p.name for p in parameters if p.kind is p.POSITIONAL_OR_KEYWORD),  # glue: native argument schema
+            kwonly=kwonly,
+            required_positional=tuple(p.name for p in parameters  # glue: native argument schema
+                                      if p.kind is p.POSITIONAL_OR_KEYWORD and p.default is p.empty),
+            required_kwonly=tuple(p.name for p in parameters  # glue: native argument schema
+                                  if p.kind is p.KEYWORD_ONLY and p.default is p.empty),
+            rule_fields=tuple(dict.fromkeys(event[0] for event in events if event[3])),  # glue: numeric_mode rule destination fields
+            label=getattr(inner.__code__, 'co_qualname', inner.__qualname__))
+        _CONTEXT['originals'][cls] = original
     # The explicit host inference subclasses have their own constructor and
     # storage contracts. Keep their existing setter debt visible: changing a
     # selected base must not silently replace a host setter with a refusal.
+    previous = _CONTEXT.get('deferred_host_classes', ())
     deferred = tuple(cls for cls in vars(_classical_host).values()  # glue: fixed built-in descendants outside this migration
-                     if type(cls) is type and cls not in _CLASSES
+                     if type(cls) is type and cls not in _CONTEXT['plans'] and cls not in previous
                      and cls.__module__ == _classical_host.__name__
-                     and any(base in _CLASSES for base in cls.__mro__[1:])  # glue: fixed host ancestry during import
+                     and any(base in classes for base in cls.__mro__[1:])  # glue: fixed host ancestry during import
                      and _resolved(cls, 'set_params', _CONTEXT['missing']) is ParamsMixin.set_params)
     for cls in deferred:  # glue: preserve the original unconverted host contract before changing bases
         cls.set_params = ParamsMixin.set_params
-    _CONTEXT['deferred_host_classes'] = deferred
+    _CONTEXT['deferred_host_classes'] = previous + deferred
     # Validate the complete set before replacing any public setter.
-    for cls in _CLASSES:  # glue: one direct native-call wrapper; constructors remain unchanged
+    for cls in classes:  # glue: one direct native-call wrapper for the setter and the constructor
         cls.set_params = NativeFullResetParams.set_params
+        original = _CONTEXT['originals'][cls]
+        function = _initializer(cls)
+        function.__name__ = '__init__'
+        function.__qualname__ = cls.__qualname__ + '.__init__'
+        function.__module__ = cls.__module__
+        function.__doc__ = original.__doc__
+        function.__signature__ = _CONTEXT['plans'][cls]['signature']
+        cls.__init__ = function
 
 
-def connect(parameter_metadata, linear, declared, estimator_context):
-    # glue: final method/storage identities and already-supported native setters
+def install():
+    # glue: the NumPy-free classes; _DEFERRED_MODULES connect when they load
+    _install(_CLASSES)
+
+
+def _connect(classes, parameter_metadata):
+    # glue: final method/storage identities after native attribute installation
     import sys
     from ._native_public_attributes import _resolved, _archive_finalizers, _archive_finalizer_binding, _CONTEXT as attributes
     archives = _archive_finalizers(sys.modules[__package__])
     protected = ('__new__', '__init__', 'set_params', 'get_params', '_get_param_names',
                  '__getattribute__', '__getattr__', '__setattr__', '__delattr__', '__del__', '__dict__', '__slots__')
-    for cls in _CLASSES:  # glue: final snapshots after native attribute installation
+    for cls in classes:  # glue: final snapshots after native attribute installation
         plan = _CONTEXT['plans'][cls]
         mro = type.__dict__['__mro__'].__get__(cls)
         fields = tuple(dict.fromkeys(event[0] for event in plan['events']))  # glue: constructor destinations in first-insertion order
@@ -273,6 +316,14 @@ def connect(parameter_metadata, linear, declared, estimator_context):
         metadata = parameter_metadata['plans'][cls]
         if set(metadata['names']) != set(plan['names']):
             raise TypeError('full-reset native constructor and getter schemas differ')
+        plan['constructor_hooks'] = tuple((name, _resolved(cls, name, _CONTEXT['missing']))  # glue: final lookup/assignment slots
+                                          for name in _CONSTRUCTOR_HOOKS)  # glue: three fixed slot names
+
+
+def connect(parameter_metadata, linear, declared, estimator_context):
+    # glue: final method/storage identities and already-supported native setters
+    from ._native_public_attributes import _CONTEXT as attributes
+    _connect(_CLASSES, parameter_metadata)
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before
@@ -283,5 +334,39 @@ def connect(parameter_metadata, linear, declared, estimator_context):
             if recipe[1] != (('arg', 0),):
                 raise TypeError('nested setter requires the connected ordinary parameter-dictionary ABI')
             native_setters[cls] = dict(layout=plan, entry=plan['entry'], operation=recipe[0], context=plan['context'])
+    # Native slot types a passive or host subclass may carry instead of the
+    # owner's exact slot: object's own slots and the native attribute
+    # descriptors. A Python function hook is never admitted.
+    hook_types = [type(vars(object)['__getattribute__']), type(vars(object)['__setattr__'])]
+    if 'descriptor' in attributes:
+        hook_types.append(type(attributes['descriptor']))
+    # A deferred module imported while the package was still importing was
+    # installed then (setter and constructor) and seen by every package-level
+    # snapshot; finish it here, before the constructors admit calls.
+    for classes in _CONTEXT.pop('pending_classes', ()):  # glue: deferred modules loaded during package import
+        _connect(classes, parameter_metadata)
     _CONTEXT.update(parameter_metadata=parameter_metadata, linear=linear, declared=declared,
-                    native_setters=native_setters, ready=True)
+                    native_setters=native_setters, constructor_hook_types=tuple(hook_types), ready=True)
+
+
+def connect_module(namespace):
+    # glue: called once by each _DEFERRED_MODULES module as its last statement,
+    # so its classes connect in the package order: native setter and
+    # constructor, attribute slots, getter schemas, then the final full-reset
+    # snapshot (which records the native __init__ and the constructor hooks).
+    # The package's lazy name hook repeats the attribute and getter
+    # connections as no-ops.
+    import sys
+    from . import _mode
+    from ._native_public_attributes import connect_classes as connect_attributes
+    from ._native_params_metadata import connect_classes as connect_parameters
+    names = _DEFERRED_MODULES[namespace['__name__'].rpartition('.')[2]]
+    classes = tuple(namespace[name] for name in names)  # glue: fixed class declarations of this module
+    _install(classes)
+    if not _CONTEXT['ready']:
+        _CONTEXT.setdefault('pending_classes', []).append(classes)
+        return
+    package = sys.modules[__package__]
+    connect_attributes(package)
+    connect_parameters(_mode._PARAMS_METADATA_CONTEXT, package)
+    _connect(classes, _CONTEXT['parameter_metadata'])

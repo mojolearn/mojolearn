@@ -12,7 +12,9 @@ from ._array import Array
 ARRAY_LENGTH_METADATA = {
     'id': 'array-length-metadata',
     'authorization': 'Andrew, 2026-10-25: documented Python fallbacks authorized',
-    'reason': 'Retained first-axis length metadata after a Codex Daybreak interruption; native migration remains incomplete.',
+    'reason': ('len(Array) from these native owners enters Array.__len__, a one-call wrapper into the native '
+               'array_native_call; the owners do not yet read the first-axis length natively, so the '
+               'wrapper frame remains an incomplete native migration.'),
     'callee': 'mojolearn._array.Array.__len__',
     'upstream_context': 'https://github.com/modular/modular/issues/7399',
 }

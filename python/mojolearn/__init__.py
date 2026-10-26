@@ -615,6 +615,12 @@ from ._native_trees_bridge import connect_cpu_prediction as _connect_cpu_tree_pr
 _connect_cpu_tree_prediction()
 del _connect_cpu_tree_prediction
 
+# The native Array operations share the base binding's core helpers.
+from ._array import connect_helpers as _connect_array_helpers
+from ._buffer import _native_optional as _array_helper
+_connect_array_helpers(_array_helper)
+del _connect_array_helpers, _array_helper
+
 # Field-only constructors must precede every method/storage identity snapshot.
 from ._native_linear_constructors import install as _install_linear_constructors
 _install_linear_constructors()
@@ -624,6 +630,17 @@ del _install_linear_constructors
 from ._native_full_reset_params import install as _install_full_reset_params
 _install_full_reset_params()
 del _install_full_reset_params
+
+# Field-only declared prep/decomp constructors precede every class-layout snapshot too.
+from ._native_declared_constructors import install as _install_declared_constructors
+_install_declared_constructors()
+del _install_declared_constructors
+
+# Layouts connected at module import (neighbor queries, host inference, ...)
+# predate the installers above: rebind their replaced __init__/set_params.
+from ._native_classical_bridge import refresh_installed_members as _refresh_installed_members
+_refresh_installed_members()
+del _refresh_installed_members
 
 # Connect CV's fixed native estimator ABIs after every public class exists.
 from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
@@ -685,6 +702,17 @@ from . import _mode as _full_reset_mode
 _connect_full_reset_params(_full_reset_mode._PARAMS_METADATA_CONTEXT, _full_reset_linear,
                            _full_reset_declared, model_selection._NATIVE_CONTEXT)
 del _connect_full_reset_params, _full_reset_linear, _full_reset_declared, _full_reset_mode
+
+# Declared-family constructors release overwritten values under the declared setter's admission.
+from ._native_declared_constructors import connect as _connect_declared_constructors
+from ._native_declared_params import CONTEXT as _declared_constructor_setters
+_connect_declared_constructors(_declared_constructor_setters)
+del _connect_declared_constructors, _declared_constructor_setters
+
+# Default member estimators are constructed only after every constructor above is connected.
+from ._native_msel_prep import connect_estimator_defaults as _connect_estimator_defaults
+_connect_estimator_defaults()
+del _connect_estimator_defaults
 
 # The public parallel drivers' class/storage snapshots are taken last: every
 # import-time class connection above (native attribute slots, constructors)

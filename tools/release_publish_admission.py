@@ -96,10 +96,17 @@ def wheel_identity(path, version, source, configuration):
             if any(member not in allowed and not member.startswith(prefix + "/licenses/") for member in names):
                 raise ValueError("file-free metadata wheel contains undeclared entry points or payload")
             expected = {"mojolearn-core==" + version, "mojolearn-nvidia==" + version, "mojolearn-amd==" + version}
-            actual = {re.sub(r"\s+", "", value).replace("(", "").replace(")", "")
-                      for value in metadata.get_all("Requires-Dist", [])}
+            requires = [re.sub(r"\s+", "", value).replace("(", "").replace(")", "")
+                        for value in metadata.get_all("Requires-Dist", [])]
+            actual = {r for r in requires if "extra==" not in r}
             if actual != expected:
                 raise ValueError("file-free mojolearn must pin exactly the qualified core and both vendors")
+            # Extras only forward to the core (packaging/linux/pack_wheel.py meta_project).
+            extras = set(metadata.get_all("Provides-Extra", []))
+            forwarded = {r for r in requires if "extra==" in r}
+            if (extras - {"numpy", "verify", "torch", "max"}
+                    or forwarded != {f'mojolearn-core[{x}]=={version};extra=="{x}"' for x in extras}):
+                raise ValueError("file-free mojolearn extras must forward exactly to mojolearn-core at this version")
     found = sha256(path)
     qualified = [mapping for key, mapping in configuration.items()
                  if key.startswith("artifacts:") and isinstance(mapping, dict)

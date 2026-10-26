@@ -327,9 +327,37 @@ def _layout(cls, attribute_descriptor):
             bindings[name] = (value, value.__get__)
         elif type(value) in (classmethod, staticmethod) and type(value.__func__) is FunctionType:
             bindings[name] = (value, value.__get__)
-    return {"mro": mro, "fields_descriptor": fields_descriptor,
-            "fields_get": fields_descriptor.__get__, "bindings": bindings,
-            "attribute_error": AttributeError}
+    layout = {"mro": mro, "fields_descriptor": fields_descriptor,
+              "fields_get": fields_descriptor.__get__, "bindings": bindings,
+              "attribute_error": AttributeError}
+    if _IMPORT_LAYOUTS is not None:
+        _IMPORT_LAYOUTS.append(layout)
+    return layout
+
+
+# Layouts taken while the package imports, before the native constructor and
+# setter installers replace __init__/set_params on their classes (the neighbor
+# query, host inference and other module-level connections run first).
+# refresh_installed_members rebinds those members once, then stops recording.
+_IMPORT_LAYOUTS = []
+
+
+def refresh_installed_members(names=("__init__", "set_params")):
+    # glue: called once by the package after every constructor/setter installer
+    # and before any later snapshot; a stale binding would refuse the native
+    # constructor as an unconnected descriptor.
+    from types import FunctionType
+    global _IMPORT_LAYOUTS
+    layouts, _IMPORT_LAYOUTS = _IMPORT_LAYOUTS, None
+    for layout in layouts or ():  # glue: import-time class layouts, once
+        bindings = layout["bindings"]
+        dictionaries = tuple(type.__dict__["__dict__"].__get__(base) for base in layout["mro"])  # glue: read class metadata once
+        for name in names:  # glue: the fixed installer-replaced member names
+            if name not in bindings:
+                continue
+            value = next((fields[name] for fields in dictionaries if name in fields), None)  # glue: class lookup precedence
+            if type(value) is FunctionType and value is not bindings[name][0]:
+                bindings[name] = (value, value.__get__)
 
 
 def _unavailable(error):

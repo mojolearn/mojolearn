@@ -169,7 +169,7 @@ import sys
 import threading
 
 from . import _merged
-from . import gpu_plugins, host_surface
+from . import _rocm_runtime, gpu_plugins, host_surface
 from ._version import __version__ as _CORE_VERSION
 
 
@@ -526,6 +526,13 @@ def _probe_box():
         paths = {p: os.path.exists(p) for p in spec["paths"]}
         libs = {}
         for lib in spec["libs"]:
+            if v == "hip":
+                # LOOK, NEVER LOAD (2026-10-26, amd-torch-interop): dlopening every
+                # candidate mapped ROCm 7 and ROCm 6 HIP copies (and torch's) into one
+                # process, and two HIP runtimes cannot share one (a HIP fat-binary
+                # registration then aborts in hip.cpp). _rocm_runtime.locate opens nothing.
+                libs[lib] = _rocm_runtime.locate(lib) is not None
+                continue
             try:
                 ctypes.CDLL(lib)
                 libs[lib] = True
@@ -536,6 +543,19 @@ def _probe_box():
             "found": any(paths.values()) or any(libs.values()),
         }
     return out
+
+
+def _rocm_prepare(vendor):
+    """One HIP and one HSA runtime per process (see _rocm_runtime): when the hip
+    set is selected, before any hip binding loads. Raises GpuPluginError (so
+    `select()` never turns it into the CPU-only set) when torch or another
+    library already loaded a runtime copy the MAX runtime would not reuse. A module-level hook so the
+    selector tests can replace it."""
+    if vendor == "hip":
+        try:
+            _rocm_runtime.prepare()
+        except _rocm_runtime.RocmRuntimeConflict as exc:
+            raise GpuPluginError(str(exc)) from None
 
 
 def _force_requested():
@@ -557,7 +577,10 @@ def _probe_lines(probe, only=None):
         for p, ok in r["paths"].items():
             lines.append(f"    {p:<28} {'FOUND' if ok else 'absent'}")
         for lib, ok in r["libs"].items():
-            lines.append(f"    {lib:<28} {'loads' if ok else 'not loadable'}")
+            if v == "hip":  # looked up on the library path, never loaded (_probe_box)
+                lines.append(f"    {lib:<28} {'found' if ok else 'not found'}")
+            else:
+                lines.append(f"    {lib:<28} {'loads' if ok else 'not loadable'}")
     return lines
 
 
@@ -1234,6 +1257,7 @@ def _layout():
         base = _vendor_base(pkg, forced)
         _VENDOR_SELECTED = forced
         _VENDOR_HOW = "MOJOLEARN_VENDOR in the environment"
+        _rocm_prepare(forced)
         _LAYOUT = ("vendor", base)
         return _LAYOUT
     probe = probe or _probe_box()
@@ -1242,6 +1266,7 @@ def _layout():
         base = _vendor_base(pkg, hits[0])
         _VENDOR_SELECTED = hits[0]
         _VENDOR_HOW = "the box probe (device nodes and driver libraries)"
+        _rocm_prepare(hits[0])
         _LAYOUT = ("vendor", base)
         return _LAYOUT
     if len(hits) > 1:
@@ -1872,6 +1897,27 @@ class _HostBinding(type(sys)):
         return fn
 
 
+def _refuse_cpu_on_gpu_box(reason):
+    """NEVER THE CPU-ONLY SET ON A GPU BOX UNASKED (2026-10-26, amd-torch-interop):
+    a GPU device node in the box probe and no MOJOLEARN_VENDOR=cpu refuses
+    instead. The AMD box ran both torch smokes on the CPU when a loader overlay
+    hid the plugin's .dist-info; a GPU box runs the CPU only on request. Called
+    before each `_select_cpu_only` (whose body tools/release_requirement_routes.py
+    pins)."""
+    if not sys.platform.startswith("linux"):
+        return
+    if os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu":
+        return
+    probe = _probe_box()
+    nodes = [p for v in _LINUX_VENDORS for p, ok in probe[v]["paths"].items() if ok]  # glue: four device node names
+    if nodes:
+        raise GpuPluginError(
+            f"mojolearn: this box has a GPU ({', '.join(nodes)}) but no GPU set could be "
+            f"selected, and the CPU is used only on request:\n  {reason}\n"
+            "Install the GPU package for this device (mojolearn-nvidia or mojolearn-amd) "
+            "beside mojolearn, or set MOJOLEARN_VENDOR=cpu to run on the CPU on purpose.")
+
+
 def _select_cpu_only(pkg, mode, reason):
     """Install the CPU-only set under the canonical names: a `_HostBinding`
     for every family whose host binding is listed in `_HOST_MODULES` and
@@ -1967,6 +2013,7 @@ def select():
     except (ImportError, AttributeError) as exc:
         if not host_binding_built():
             raise
+        _refuse_cpu_on_gpu_box(str(exc))
         return _select_cpu_only(pkg, mode, str(exc))
     if mode == "fast" and ident_dir == pkg_dir:
         # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
@@ -2075,6 +2122,7 @@ def select():
         if _BASELINE_SELECTION is not None:
             raise GpuPluginError(refusal + "; the PTX set never falls back to the CPU")
         if host_binding_built():
+            _refuse_cpu_on_gpu_box(refusal)
             return _select_cpu_only(pkg, mode, refusal)
         raise ImportError(refusal)
     _SELECTED = mode

@@ -31,15 +31,14 @@ class CpuBox(unittest.TestCase):
     def setUp(self):
         self.ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
 
-    def test_default_backend_follows_the_layout(self):
+    def test_default_backend_is_github_for_either_layout(self):
+        # Andrew 2026-10-26: compiling never uses paid rentals; cpu-box stays selectable by name
         self.assertIs(rel.BUILD_BACKENDS["cpu-box"], rel.cpu_legs)
         self.assertIs(rel.BUILD_BACKENDS["gpu-legs"], rel.gpu_legs)
         src = (Path(__file__).resolve().parent / "release.py").read_text()
         self.assertIn('ap.add_argument("--build-backend", default=None', src)
-        head = rel.git("rev-parse", "HEAD")
-        merged = rel.release_github_build.commit_merged(head)
-        self.assertEqual(rel.default_build_backend(head), "cpu-box" if merged else "github")
-        # a commit without packaging/linux/merged_layout.py is per-binding: GitHub
+        self.assertEqual(rel.default_build_backend(rel.git("rev-parse", "HEAD")), "github")
+        # a commit without packaging/linux/merged_layout.py is per-binding: GitHub too
         self.assertEqual(rel.default_build_backend(C), "github")
 
     def test_merged_pod_and_per_binding_pod(self):

@@ -695,7 +695,50 @@ def _seed_names(fn, module_globals):
         fo, ot = _attribute_roots(f, module_globals)
         foreign |= fo
         other |= ot
-    return names - (foreign - other)
+    return names - (foreign - other) - _builtin_only_names(names, funcs, module_globals)
+
+
+def _builtin_only_names(names, funcs, module_globals):
+    """The names of `names` that can only be Python builtins.
+
+    A BUILTIN IS NOT A PACKAGE NAME (2026-10-26). The kmeans spec calls
+    `max(...)`, and once python/mojolearn/adapters/max.py existed its module
+    stem indexed `max` (`_python_symbols`), so every lane whose spec or
+    helpers call the builtin `max` seeded the MAX adapter and through it the
+    neural, forest and mamba trees: neural_inference.py selected 542 of 571
+    lanes and core/forest_inference.mojo 487. A name is dropped only when it is
+    a builtin the harness module does not rebind, no visited function uses it
+    as an attribute (`ml.adapters.max` keeps it), and every visited function's
+    source was read (an unreadable one keeps every name)."""
+    import builtins
+    candidates = {n for n in names if hasattr(builtins, n) and n not in module_globals}
+    if not candidates:
+        return set()
+    for f in funcs:
+        attrs = _attribute_names(f)
+        if attrs is None:
+            return set()
+        candidates -= attrs
+    return candidates
+
+
+_ATTR_CACHE = {}
+
+
+def _attribute_names(fn):
+    """Every attribute name one function's source uses, or None when the
+    source cannot be read."""
+    key = id(fn.__code__)
+    if key not in _ATTR_CACHE:
+        import inspect
+        import textwrap
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        except (OSError, TypeError, SyntaxError, IndentationError):
+            _ATTR_CACHE[key] = None
+        else:
+            _ATTR_CACHE[key] = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    return _ATTR_CACHE[key]
 
 
 _PYTHON_FILES = None
@@ -973,7 +1016,7 @@ def _module_region_members(local, nodes, wanted):
     return members
 
 
-def _region_import_edges(rel, wanted):
+def _region_import_edges(rel, wanted, narrow_unused=True):
     """`_import_edges` over the REGION of `rel` a lane runs (`_region_nodes`):
     the module-level imports always, a function-local import only when its
     def or class is in the region.
@@ -988,7 +1031,7 @@ def _region_import_edges(rel, wanted):
     narrow answers (glm/host/qn_oracle.mojo, core/forest_host_predict.mojo)
     selected nearly every lane. A def outside the region does not run for the
     lane, so neither does the import inside it."""
-    key = (rel, None if wanted is None else frozenset(wanted))
+    key = (rel, None if wanted is None else frozenset(wanted), narrow_unused)
     if key in _REGION_EDGES:
         return _REGION_EDGES[key]
     out = _REGION_EDGES[key] = {}
@@ -1021,7 +1064,7 @@ def _region_import_edges(rel, wanted):
     # (a Name, an attribute, an identifier-shaped string) outside the import
     # statements, or when the lane asked this file for it (a re-export).
     used = None
-    if wanted is not None:
+    if wanted is not None and narrow_unused:
         used = set(wanted)
         for top in region:
             if isinstance(top, (ast.Import, ast.ImportFrom)):
@@ -1917,10 +1960,17 @@ def _extending_files(closure):
     return out
 
 
-def _python_closure(seeds, sinks=()):
+def _python_closure(seeds, sinks=(), regions=False):
     """The package's own import closure of `seeds`. A sink is included but not
     followed: the walk stops at a registry rather than stepping through it into
-    every other family."""
+    every other family.
+
+    `regions` True reads each file only in the REGION its importers ask for
+    (`_region_closure`): a lane's map, where a function the lane never runs
+    imports nothing for it. False is the whole-file walk (what `import
+    mojolearn` can load at all, `_package_import_closure`)."""
+    if regions:
+        return _region_closure(seeds, sinks)
     out, stack = set(), list(seeds)
     while True:
         while stack:
@@ -1946,6 +1996,50 @@ def _python_closure(seeds, sinks=()):
         if not fresh:
             return out
         stack.extend(fresh)
+
+
+def _region_closure(seeds, sinks=()):
+    """`_python_closure` symbol by symbol: each file is followed only through
+    the imports of the REGION its importers ask for (`_region_import_edges`),
+    so a function-local import counts when its function can run for the lane,
+    the rule `_own_walk` has kept since 2026-10-15. Seeds, modules imported
+    whole and extenders run whole. Unlike `_own_walk`, a module-level import
+    whose name the region never uses is still followed for that name (the
+    statement runs and binds it), and nothing every lane reaches is a stop.
+
+    THE CONNECTORS THAT HANDED EVERY LANE THE WHOLE PACKAGE (2026-10-26). The
+    0.8.59 native-owner work gave `_mode.py`, which nearly every estimator
+    imports, two module-level imports of `connect` from
+    `_native_params_metadata.py` and `_native_mode_metadata.py`. Each file's
+    OTHER function, `connect_classes`, is package connection glue that
+    `__init__.py` calls (a registry, so a sink), and it imports the forest,
+    boosting, linear, model-selection, training and time-series modules
+    locally. Read whole, those local imports put `neural_inference.py` in 542
+    of 571 lanes and connected the rf, gbdt and trees bindings to every
+    lane, whose native owners then made `core/forest_inference.mojo` select
+    487 lanes (54 reviewed). `connect` imports none of them."""
+    wanted, walked, stack = {}, {}, [(s, None) for s in seeds]
+    while True:
+        while stack:
+            rel, names = stack.pop()
+            first = rel not in wanted
+            if first:
+                wanted[rel] = None if names is None else set(names)
+            elif wanted[rel] is not None:
+                wanted[rel] = None if names is None else wanted[rel] | names
+            if rel in sinks:
+                continue
+            region = None if wanted[rel] is None else frozenset(wanted[rel])
+            if not first and walked.get(rel, ()) == region:
+                continue
+            walked[rel] = region
+            for f, n in _region_import_edges(rel, region, narrow_unused=False).items():
+                stack.append((f, n))
+        # THE BACKWARD EDGE, as in `_python_closure`: an extender runs whole.
+        fresh = _extending_files(set(wanted)) - set(wanted)
+        if not fresh:
+            return set(wanted)
+        stack.extend((f, None) for f in fresh)
 
 
 _INCLUDE_ROOTS = None
@@ -3693,7 +3787,7 @@ def lane_sources():
                     members[rel] = None  # the lane reaches the module object
                 elif rel not in members or members[rel] is not None:
                     members.setdefault(rel, set()).add(name)
-        files = _python_closure(seeds, sinks)
+        files = _python_closure(seeds, sinks, regions=True)
         doors = files - set(sinks)
         bindings = door_bindings(doors)
         reach[lane] = (matched, files, doors, bindings)

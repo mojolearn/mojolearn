@@ -1,13 +1,19 @@
 """Actual public setter probes; run only against the integrated native build."""
 import array
+import importlib
 import inspect
 import weakref
 
 import pytest
 
 import mojolearn as ml
-from mojolearn._native_full_reset_params import _CLASSES, _CONTEXT, NativeFullResetParams
+from mojolearn._native_full_reset_params import _CLASSES as _EAGER, _CONTEXT, _DEFERRED_MODULES, NativeFullResetParams
 from mojolearn._verify_native_runtime import audit_native_call
+
+# The NumPy-backed sequence modules connect their classes when they load; this
+# module runs with NumPy, so loading them here covers every full-reset class.
+_CLASSES = _EAGER + tuple(getattr(importlib.import_module('mojolearn.' + module), name)
+                          for module, names in _DEFERRED_MODULES.items() for name in names)
 
 
 def clean(operation, *args, error=None, **kwargs):
@@ -46,8 +52,9 @@ def test_kernel_ridge_pilot_full_reset_preserves_dictionary_and_borrowed_paramet
 
 @pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
 def test_every_public_full_reset_matches_original_constructor_order_and_reference_identity(cls):
-    # The unchanged constructor is an independent test oracle outside the
-    # native operation audit; it is never called by set_params itself.
+    # The public constructor (itself native since the full-reset constructor
+    # lane; its own oracle tests are test_native_field_constructors.py)
+    # is outside the native operation audit; set_params never calls it.
     values = {name: object() for name in inspect.signature(cls).parameters}
     model = cls(**values)
     key = next(iter(values))

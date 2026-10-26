@@ -50,11 +50,17 @@ def fixture():
     source = ast.parse(CONNECTOR.read_text())
     events = next(ast.literal_eval(n.value) for n in source.body
                   if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_EVENTS')
+    deferred = next(ast.literal_eval(n.value) for n in source.body
+                    if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_DEFERRED_MODULES')
     body = [n for n in source.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))]
     calls = []
+    hooks = next(ast.literal_eval(n.value) for n in source.body
+                 if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CONSTRUCTOR_HOOKS')
     ns = {'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
+          '_DEFERRED_MODULES': deferred,
           'BuiltinFunctionType': BuiltinFunctionType, '_ENTRY': lambda *args: calls.append(args),
-          '_CONTEXT': dict(plans={}, missing=object(), ready=False)}
+          '_INIT_ENTRY': lambda *args: calls.append(('init',) + args), '_CONSTRUCTOR_HOOKS': hooks,
+          '_CONTEXT': dict(plans={}, missing=object(), ready=False, originals={})}
     exec(compile(ast.Module(body=body, type_ignores=[]), str(CONNECTOR), 'exec'), ns)
     modules = {module.__name__: module for module in (mode, attributes, package, host)}
     return ns, modules, calls
@@ -77,7 +83,11 @@ def test_install_preserves_77_signatures_defaults_and_one_call_boundary():
         ns['install']()
     assert len(ns['_CONTEXT']['plans']) == 77
     for cls, (constructor, signature) in originals.items():
-        assert cls.__init__ is constructor
+        # The public constructor is now one native call; the original body
+        # is retained only as the test oracle, never called by the product.
+        assert cls.__init__ is not constructor and ns['_CONTEXT']['originals'][cls] is constructor
+        assert not hasattr(cls.__init__, '__wrapped__')
+        assert cls.__init__.__qualname__ == cls.__qualname__ + '.__init__'
         current = inspect.signature(cls.__init__)
         assert tuple(current.parameters) == tuple(signature.parameters)
         for name, parameter in signature.parameters.items():
@@ -92,7 +102,17 @@ def test_install_preserves_77_signatures_defaults_and_one_call_boundary():
         obj.set_params(z=marker, a=marker)
         assert calls[-1][0] is obj and calls[-1][2] is ns['_CONTEXT']
         assert list(calls[-1][1]) == ['z', 'a'] and calls[-1][1]['z'] is marker
-    assert len(calls) == 77
+        made = cls(marker, z=marker)
+        assert calls[-1][0] == 'init' and calls[-1][1] is made and calls[-1][2] == (marker,)
+        assert calls[-1][3] == {'z': marker} and calls[-1][4] is ns['_CONTEXT'] and calls[-1][5] is cls
+        names = tuple(signature.parameters)[1:]
+        assert plan['positional'] == tuple(n for n in names
+            if signature.parameters[n].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        assert set(plan['required_positional'] + plan['required_kwonly']) == {
+            n for n in names if signature.parameters[n].default is inspect.Parameter.empty}
+        assert plan['rule_fields'] == tuple(dict.fromkeys(e[0] for e in plan['events'] if e[3]))
+        assert plan['label'] == constructor.__qualname__
+    assert len(calls) == 2 * 77
 
 
 def test_host_inheritance_stays_on_original_pending_contract():
@@ -126,8 +146,13 @@ def test_stale_or_non_field_only_contract_fails_before_installing_any_setter(kin
 def test_connection_pins_final_storage_hooks_without_constructing():
     ns, modules, calls = connected()
     assert ns['_CONTEXT']['ready'] and not calls
+    assert ns['_CONTEXT']['constructor_hook_types'] == (type(vars(object)['__getattribute__']),
+                                                         type(vars(object)['__setattr__']))
     for cls, plan in ns['_CONTEXT']['plans'].items():
         assert plan['mro'] == cls.__mro__
+        assert tuple(name for name, _ in plan['constructor_hooks']) == ('__getattribute__', '__getattr__', '__setattr__')
+        assert plan['constructor_hooks'][0][1] is object.__getattribute__
+        assert plan['constructor_hooks'][1][1] is ns['_CONTEXT']['missing']
         assert all(value is vars(base).get(name) for base, name, value in plan['layout_hooks'])
         assert plan['release_allowed']
         assert plan['field_names'] == tuple(dict.fromkeys(event[0] for event in plan['events']))
@@ -210,6 +235,149 @@ def test_constructor_resolution_and_mode_wrapper_still_match_the_audited_source(
     assert hashlib.sha256(ast.dump(method, include_attributes=False).encode()).hexdigest() == wrapper['ast_sha256']
 
 
+def deferred_fixture():
+    """Eager classes in _CLASSES; the NumPy-backed modules' classes stay unconnected."""
+    ns, modules, calls = fixture()
+    lazy = {name: module for module, names in ns['_DEFERRED_MODULES'].items() for name in names}
+    every = ns['_CLASSES']
+    ns['_CLASSES'] = tuple(cls for cls in every if cls.__name__ not in lazy)
+    namespaces = {}
+    for cls in every:
+        if cls.__name__ in lazy:
+            module = lazy[cls.__name__]
+            namespaces.setdefault(module, {'__name__': 'full_reset_fixture.' + module})[cls.__name__] = cls
+    metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]} for cls in every}}
+    order = []
+    mode = modules['full_reset_fixture._mode']
+    mode._PARAMS_METADATA_CONTEXT = metadata
+    modules['full_reset_fixture._native_public_attributes'].connect_classes = (
+        lambda package: order.append(('attributes', package.__name__)))
+    getters = ModuleType('full_reset_fixture._native_params_metadata')
+    getters.connect_classes = lambda context, package: order.append(('getters', context is metadata))
+    modules[getters.__name__] = getters
+    return ns, modules, calls, namespaces, metadata, order
+
+
+def test_deferred_modules_are_exactly_the_numpy_backed_rows():
+    ns, _, _ = fixture()
+    deferred = ns['_DEFERRED_MODULES']
+    assert set(deferred) == {'_x_sequence_croston', '_x_sequence_rnn', '_x_sequence_mlp'}
+    lazy = [name for names in deferred.values() for name in names]
+    assert len(lazy) == len(set(lazy)) == 11
+    rows = {row['declared_class']: row['module'] for row in ROWS}
+    for module, names in deferred.items():
+        for name in names:
+            assert rows[name] == 'mojolearn.' + module, (name, rows[name])
+    source = ast.parse(CONNECTOR.read_text())
+    eager = next(n.value for n in source.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CLASSES')
+    eager_names = [element.attr for element in eager.elts]
+    assert not set(eager_names) & set(lazy)
+    assert sorted(eager_names + lazy) == sorted(rows)
+
+
+def test_connector_imports_no_numpy_module_at_import():
+    source = ast.parse(CONNECTOR.read_text())
+    for node in source.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 1:
+            for alias in node.names:
+                name = node.module or alias.name
+                assert name not in ns_deferred(), name
+                path = ROOT / 'python/mojolearn' / (name + '.py')
+                if path.exists():
+                    module = ast.parse(path.read_text())
+                    assert not any(isinstance(n, (ast.Assign, ast.Expr)) and isinstance(n.value, ast.Call)
+                                   and ast.unparse(n.value.func) == 'require_numpy' for n in module.body), name
+
+
+def ns_deferred():
+    source = ast.parse(CONNECTOR.read_text())
+    return next(ast.literal_eval(n.value) for n in source.body
+                if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_DEFERRED_MODULES')
+
+
+@pytest.mark.parametrize('module', sorted(ns_deferred()))
+def test_each_deferred_module_connects_itself_as_its_last_statement(module):
+    tree = ast.parse((ROOT / 'python/mojolearn' / (module + '.py')).read_text())
+    tail = [ast.unparse(node) for node in tree.body[-3:]]
+    assert tail == ['from ._native_full_reset_params import connect_module as _connect_full_reset',
+                    '_connect_full_reset(globals())', 'del _connect_full_reset']
+
+
+def test_deferred_module_connects_after_package_in_package_order():
+    ns, modules, calls, namespaces, metadata, order = deferred_fixture()
+    lazy = [cls for namespace in namespaces.values() for cls in namespace.values() if type(cls) is type]
+    originals = {cls: cls.set_params for cls in lazy}
+    initializers = {cls: vars(cls)['__init__'] for cls in lazy}
+    with patch.dict('sys.modules', modules):
+        ns['install']()
+        ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
+        assert ns['_CONTEXT']['ready'] and len(ns['_CONTEXT']['plans']) == 66
+        assert all(cls not in ns['_CONTEXT']['plans'] and cls.set_params is originals[cls] for cls in lazy)
+        assert all(vars(cls)['__init__'] is initializers[cls] for cls in lazy)
+        native_init = ns['_initializer'](object).__code__
+        for module, namespace in namespaces.items():
+            classes = [cls for cls in namespace.values() if type(cls) is type]
+            seen = []
+            modules['full_reset_fixture._native_public_attributes'].connect_classes = (
+                lambda package, classes=classes, seen=seen: seen.append(
+                    ('attributes', all(c.set_params is ns['NativeFullResetParams'].set_params
+                                       and vars(c)['__init__'].__code__ is native_init for c in classes))))
+            modules['full_reset_fixture._native_params_metadata'].connect_classes = (
+                lambda context, package, seen=seen: seen.append(('getters', context is metadata)))
+            ns['connect_module'](namespace)
+            assert seen == [('attributes', True), ('getters', True)], module
+            for cls in classes:
+                plan = ns['_CONTEXT']['plans'][cls]
+                assert plan['mro'] == cls.__mro__ and plan['release_allowed']
+                # The final snapshot pins the native constructor and its hooks.
+                assert dict(plan['inherited_hooks'])['__init__'] is vars(cls)['__init__']
+                assert dict(plan['constructor_hooks'])['__setattr__'] is object.__setattr__
+                assert ns['_CONTEXT']['originals'][cls] is initializers[cls]
+                obj = cls()
+                assert calls[-1][:2] == ('init', obj) and calls[-1][4] is ns['_CONTEXT'] and calls[-1][5] is cls
+                obj.set_params(alpha=1)
+                assert calls[-1][0] is obj and calls[-1][2] is ns['_CONTEXT']
+    assert len(ns['_CONTEXT']['plans']) == 77
+    assert 'pending_classes' not in ns['_CONTEXT']
+
+
+def test_deferred_module_loaded_during_package_import_finishes_at_connect():
+    ns, modules, calls, namespaces, metadata, order = deferred_fixture()
+    namespace = namespaces['_x_sequence_croston']
+    classes = [cls for cls in namespace.values() if type(cls) is type]
+    with patch.dict('sys.modules', modules):
+        ns['install']()
+        ns['connect_module'](namespace)
+        assert not order
+        assert all(cls.set_params is ns['NativeFullResetParams'].set_params for cls in classes)
+        native_init = ns['_initializer'](object).__code__
+        assert all(vars(cls)['__init__'].__code__ is native_init for cls in classes)
+        assert all('mro' not in ns['_CONTEXT']['plans'][cls] for cls in classes)
+        ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
+    assert not order and 'pending_classes' not in ns['_CONTEXT']
+    assert all(ns['_CONTEXT']['plans'][cls]['mro'] == cls.__mro__ for cls in classes)
+    assert all('constructor_hooks' in ns['_CONTEXT']['plans'][cls] for cls in classes)
+    assert ns['_CONTEXT']['constructor_hook_types']
+    assert not calls
+
+
+def test_deferred_module_schema_mismatch_refuses_before_any_setter():
+    ns, modules, calls, namespaces, metadata, order = deferred_fixture()
+    namespace = namespaces['_x_sequence_rnn']
+    classes = [cls for cls in namespace.values() if type(cls) is type]
+    originals = {cls: cls.set_params for cls in classes}
+    classes[-1].__init__ = lambda self, **params: None
+    initializers = {cls: vars(cls)['__init__'] for cls in classes}
+    with patch.dict('sys.modules', modules):
+        ns['install']()
+        ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
+        with pytest.raises(TypeError):
+            ns['connect_module'](namespace)
+    assert all(cls.set_params is originals[cls] and cls not in ns['_CONTEXT']['plans'] for cls in classes[-1:])
+    assert all(cls.set_params is originals[cls] for cls in classes) and not calls
+    assert all(vars(cls)['__init__'] is initializers[cls] for cls in classes)
+
+
 def test_full_reset_is_separate_from_existing19_and_all_layout_snapshots_follow_install():
     source = (ROOT / 'python/mojolearn/__init__.py').read_text()
     ordered = ['_install_full_reset_params()', '_connect_mode_metadata_classes(', '_connect_public_attributes(',
@@ -246,5 +414,40 @@ def test_compile_invalidation_is_only_host_tokenizer():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
             if 'bindings/full_reset_params_native.mojo' in closure['files']:
+                owners.add((mode, name))
+    assert owners == {('host', 'tokenizer')}
+
+
+def test_native_constructor_is_one_call_and_never_runs_python_initializers():
+    tree = ast.parse(CONNECTOR.read_text())
+    factory = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_initializer')
+    wrapper = factory.body[0]
+    assert isinstance(wrapper, ast.FunctionDef) and len(wrapper.body) == 1
+    assert ast.unparse(wrapper.body[0]) == 'return _INIT_ENTRY(self, args, kwargs, _CONTEXT, owner)'
+    source = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    for forbidden in ('Python.import_module', '.__init__(', '.__setattr__(', 'fields[', 'fields.clear',
+                      'native_storage_allocate', 'py_setattr(', 'b.hasattr', 'Python.evaluate'):
+        assert forbidden not in source, forbidden
+    # Every dropped owner is admitted before the first write.
+    assert source.index('_release_owned(previous, retained, context)') < source.index(
+        'py_setitem(fields, targets[i], sources[i])')
+    # Argument errors precede any admission or state access.
+    body = source[source.index('def _construct('):]
+    assert body.index('_bind(positional, keywords, plan)') < body.index('_admit(model, owner, plan, context)') < body.index('_fields(model)')
+    registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+    assert 'from bindings.full_reset_constructor_native import full_reset_constructor_c\n' in registration
+    assert '\n        module.def_py_c_function(full_reset_constructor_c, "full_reset_constructor_native_call")\n' in registration
+
+
+def test_constructor_compile_invalidation_is_only_host_tokenizer():
+    from development_build import SourceGraph
+    groups = json.loads((ROOT / 'bindings/development_groups.json').read_text())['groups']
+    graph = SourceGraph(ROOT)
+    owners = set()
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            if 'bindings/full_reset_constructor_native.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}

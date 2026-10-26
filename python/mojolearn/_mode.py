@@ -538,6 +538,10 @@ class ParamsMixin(SklearnTagsMixin):
     keeps it: those come earlier in the MRO.
     """
 
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        _connect_application_params(cls)
+
     @classmethod
     def _get_param_names(cls):
         init = cls.__init__
@@ -582,6 +586,55 @@ class ParamsMixin(SklearnTagsMixin):
         return self
 
 
+def _connect_application_params(cls):
+    # glue: an application subclass's parameter schema, built once when its
+    # class statement runs (see _native_params_metadata.connect_subclass)
+    context = globals().get("_PARAMS_METADATA_CONTEXT")
+    if context is not None and _application_subclass(cls):
+        from ._native_params_metadata import connect_subclass
+        connect_subclass(context, cls)
+
+
+def _install_numeric_mode(cls):
+    # glue: NumericModeMixin.__init_subclass__'s class-definition wrapper
+    if getattr(cls, "_mojolearn_native_public", False):
+        return  # the constructor takes numeric_mode itself
+    # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
+    # fit methods retain their guard, including explicit host subclasses
+    # used on a machine that also has a GPU. `_fit_with_tree_start` is
+    # the forests' shard fit, which `parallel_ensemble.fit_forest`'s
+    # worker calls without `fit`; since the rf and trees host bindings
+    # serve it (lane/cpu-training-par-wave2, 2026-09-15) it is guarded
+    # like `fit`, so a CPU-only install trains a shard only inside
+    # `reference_training()`.
+    for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):  # glue: wraps five estimator method names
+        method = cls.__dict__.get(method_name)
+        if isinstance(method, available_if):
+            setattr(cls, method_name, available_if(method.check)(_guard_cpu_training(method.fn)))
+        elif method is not None:
+            setattr(cls, method_name, _guard_cpu_training(method))
+    orig = cls.__dict__.get("__init__")
+    if orig is None:
+        return
+
+    @functools.wraps(orig)
+    def __init__(self, *args, numeric_mode=None, **kwargs):
+        orig(self, *args, **kwargs)
+        if numeric_mode is not None or not hasattr(self, "numeric_mode"):
+            self.numeric_mode = numeric_mode
+
+    # The signature scikit-learn reads (`_get_param_names`, its
+    # `check_no_attributes_set_in_init`) names `numeric_mode` too.
+    sig = inspect.signature(orig)
+    if "numeric_mode" not in sig.parameters:
+        params = list(sig.parameters.values())
+        at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
+        params.insert(at, inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY, default=None))
+        sig = sig.replace(parameters=params)
+    __init__.__signature__ = sig
+    cls.__init__ = __init__
+
+
 class NumericModeMixin(ParamsMixin):
     """Gives an estimator `self._bind(name)`.
 
@@ -611,42 +664,8 @@ class NumericModeMixin(ParamsMixin):
         `None` over the subclass's real answer.
         """
         super().__init_subclass__(**kw)
-        if getattr(cls, "_mojolearn_native_public", False):
-            return  # the constructor takes numeric_mode itself
-        # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
-        # fit methods retain their guard, including explicit host subclasses
-        # used on a machine that also has a GPU. `_fit_with_tree_start` is
-        # the forests' shard fit, which `parallel_ensemble.fit_forest`'s
-        # worker calls without `fit`; since the rf and trees host bindings
-        # serve it (lane/cpu-training-par-wave2, 2026-09-15) it is guarded
-        # like `fit`, so a CPU-only install trains a shard only inside
-        # `reference_training()`.
-        for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):  # glue: wraps five estimator method names
-            method = cls.__dict__.get(method_name)
-            if isinstance(method, available_if):
-                setattr(cls, method_name, available_if(method.check)(_guard_cpu_training(method.fn)))
-            elif method is not None:
-                setattr(cls, method_name, _guard_cpu_training(method))
-        orig = cls.__dict__.get("__init__")
-        if orig is None:
-            return
-
-        @functools.wraps(orig)
-        def __init__(self, *args, numeric_mode=None, **kwargs):
-            orig(self, *args, **kwargs)
-            if numeric_mode is not None or not hasattr(self, "numeric_mode"):
-                self.numeric_mode = numeric_mode
-
-        # The signature scikit-learn reads (`_get_param_names`, its
-        # `check_no_attributes_set_in_init`) names `numeric_mode` too.
-        sig = inspect.signature(orig)
-        if "numeric_mode" not in sig.parameters:
-            params = list(sig.parameters.values())
-            at = next((i for i, p in enumerate(params) if p.kind is p.VAR_KEYWORD), len(params))  # glue: signature parameter position
-            params.insert(at, inspect.Parameter("numeric_mode", inspect.Parameter.KEYWORD_ONLY, default=None))
-            sig = sig.replace(parameters=params)
-        __init__.__signature__ = sig
-        cls.__init__ = __init__
+        _install_numeric_mode(cls)
+        _connect_application_params(cls)
 
     #: The binding this estimator family talks to. Subclasses that use more
     #: than one pass the name explicitly.
