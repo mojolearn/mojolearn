@@ -172,9 +172,9 @@ PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR
 # MERGED BINDINGS (lane merged-bindings, 2026-10-20). MOJOLEARN_MERGED_BINDINGS=1
-# (the default) builds each tier, and the host set, as ONE merged native file
+# (the default) builds each tier, and the host set, as one merged native file
 # per group of bindings/merged_groups.json (bindings/merged_build.sh), so the
-# code the bindings share is compiled and shipped once: <dir>/_mojolearn_native.so
+# code a group's bindings share is compiled and shipped once: <dir>/<stem>.so
 # exports every member's PyInit and <dir>/_mojolearn_merged.json names the
 # members python/mojolearn/_merged.py loads from it. MOJOLEARN_MERGED_BINDINGS=0
 # is the per-binding layout exactly as before (one script, one .so per binding),
@@ -247,7 +247,7 @@ say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $G
 say "pixi env: $PIXI_ENV"
 if [[ "$MERGED" = 1 ]]; then
   BINDING_TIMEOUT_MERGED=$(merged_timeout_seconds) || exit 2
-  say "binding layout: merged (one compile per directory set, bound ${BINDING_TIMEOUT_MERGED}s)"
+  say "binding layout: merged (one compile per merged group, bound ${BINDING_TIMEOUT_MERGED}s)"
   # THE MANIFEST MUST BE THE PACKER'S LIST. bindings/merged_groups.json decides
   # what the merged files hold; tier_names / HOST_NAMES decide what the wheel
   # must serve. A binding in one and not the other would build a set that
@@ -340,13 +340,16 @@ BINCACHE_MAP=${MOJOLEARN_BINCACHE_MAP:-/root/.mojolearn_bincache/urls.tsv}
 USE_BINCACHE=0
 if [[ "${MOJOLEARN_BINCACHE:-}" != 0 && -f "$BINCACHE_MAP" ]]; then USE_BINCACHE=1; fi
 say "binding cache: $([[ $USE_BINCACHE = 1 ]] && echo "ON ($BINCACHE_MAP)" || echo off)"
-declared_output() {   # tier script -> the .so it writes, repo-relative (merged: the files + index)
-  local tier="$1" s="$2" name dir
+declared_output() {   # tier script [group] -> the .so it writes, repo-relative (merged: the group's file)
+  local tier="$1" s="$2" group="${3:-}" name dir
   if [[ "$s" = merged_build.sh ]]; then
-    local key=$tier; dir=$(tier_dir "$tier")
+    # ONE merged file per build: several groups of one directory build at once
+    # (each its own pool job, its own GitHub shard), so the shared index is NOT
+    # a declared output: an archived index would hold only the groups that had
+    # finished when it was taken. reindex_merged() writes it after the pool.
+    dir=$(tier_dir "$tier")
     [[ "$tier" = host ]] && dir=python/mojolearn/host
-    python3 tools/merged_bindings.py plan --dir "$key" --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
-      | awk -v d="$dir" '{printf "%s%s/%s.so", (NR>1?" ":""), d, $1} END{printf " %s/_mojolearn_merged.json", d}'
+    printf '%s/%s.so' "$dir" "$group"
     return
   fi
   if [[ "$s" = build_*_host.sh ]]; then
@@ -357,12 +360,13 @@ declared_output() {   # tier script -> the .so it writes, repo-relative (merged:
   case "$tier" in fast) dir=python/mojolearn ;; *) dir=python/mojolearn/$tier ;; esac
   printf '%s/%s.so' "$dir" "$name"
 }
-run_binding() {   # tier script env-prefix...: the build, through the cache when it is on
-  local tier="$1" s="$2" outputs args=""
+run_binding() {   # tier script[:group] env-prefix...: the build, through the cache when it is on
+  local tier="$1" s="$2" outputs args="" group=""
   shift 2
-  outputs=$(declared_output "$tier" "$s")
+  if [[ "$s" = merged_build.sh:* ]]; then group=${s#merged_build.sh:}; s=merged_build.sh; fi
+  outputs=$(declared_output "$tier" "$s" "$group")
   case "$s" in
-    merged_build.sh) args=$([[ "$tier" = host ]] && echo host || echo gpu) ;;
+    merged_build.sh) args="$([[ "$tier" = host ]] && echo host || echo gpu) --group $group" ;;
   esac
   if [[ "$USE_BINCACHE" = 1 ]]; then
     # shellcheck disable=SC2086  # $args is one word or empty
@@ -378,9 +382,11 @@ run_binding() {   # tier script env-prefix...: the build, through the cache when
 
 # ---------------------------------------------------------------- builds
 build_one() {
-  local tier="$1" s="$2"
+  local tier="$1" s="$2" job="$2" group=""
+  # a merged pool job is "merged_build.sh:<stem>": one group of the directory
+  if [[ "$s" = merged_build.sh:* ]]; then group=${s#merged_build.sh:}; s=merged_build.sh; fi
   local log="$DEST/build_logs/${tier}_${s%.sh}.log"
-  [[ "$s" = merged_build.sh ]] && log="$DEST/build_logs/${tier}_merged.log"
+  [[ "$s" = merged_build.sh ]] && log="$DEST/build_logs/${tier}_merged_${group}.log"
   [[ "$s" = adapters ]] && log="$DEST/build_logs/adapters.log"
   local bound="$BINDING_TIMEOUT"
   [[ "$s" = merged_build.sh ]] && bound="$BINDING_TIMEOUT_MERGED"
@@ -396,13 +402,12 @@ build_one() {
       || rc=$?
   elif [[ "$s" = merged_build.sh ]]; then
     # What this compile is expected to need, so a box log says what it tried:
-    # peaks measured on the DO MI325X 2026-10-20 at two compiler workers
-    # (tools/release_github_build.py NEEDED_GIB has the same numbers).
-    local peak="46.4 GB (identical + byte LM)" cj=$GPU_COMPILE_JOBS
-    if [[ "$tier" = fast ]]; then peak="36.6 GB"; fi
-    if [[ "$tier" = host ]]; then peak="6.9 GB"; cj=2; fi
-    say "merged $tier build: expected peak RSS ~$peak, MOJOLEARN_COMPILE_JOBS=$cj, bound ${bound}s"
-    # ONE MERGED COMPILE PER DIRECTORY SET, under its own larger bound. Same
+    # the planning peak of this group (tools/release_github_build.py
+    # UNIT_PEAK_GIB, per group since the 0.8.59 split).
+    local cj=$GPU_COMPILE_JOBS
+    if [[ "$tier" = host ]]; then cj=2; fi
+    say "merged $tier build of $group: MOJOLEARN_COMPILE_JOBS=$cj, bound ${bound}s"
+    # ONE MERGED COMPILE PER GROUP, under its own larger bound. Same
     # environment as the per-binding builds of that set: GPU tiers keep the
     # vendor's GPU_COMPILE_JOBS (AMD: MOJOLEARN_AMD_COMPILE_JOBS, see the top), the host set
     # two workers, the CPU column and no accelerator target, exactly as the
@@ -411,11 +416,11 @@ build_one() {
       MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=2 \
         MOJOLEARN_PACKAGE_BYTE_LM="$PACKAGE_BYTE_LM" MOJOLEARN_MERGED_KEY="$MERGED_KEY" \
         with_binding_timeout "$BINDING_TIMEOUT_MERGED" "$log" \
-        run_binding host "$s" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR || rc=$?
+        run_binding host "$job" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR || rc=$?
     else
       MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$GPU_COMPILE_JOBS \
         MOJOLEARN_PACKAGE_BYTE_LM="$PACKAGE_BYTE_LM" MOJOLEARN_MERGED_KEY="$MERGED_KEY" \
-        with_binding_timeout "$BINDING_TIMEOUT_MERGED" "$log" run_binding "$tier" "$s" env || rc=$?
+        with_binding_timeout "$BINDING_TIMEOUT_MERGED" "$log" run_binding "$tier" "$job" env || rc=$?
     fi
   elif [[ "$s" = build_*_host.sh ]]; then
     # A HOST BUILD MUST NOT SEE AN ACCELERATOR TARGET. Every release leg
@@ -442,14 +447,14 @@ build_one() {
   fi
   if [[ "$rc" = 0 ]]; then
     echo "end $(date -u +%FT%TZ) OK" >> "$log"
-    say "built $tier bindings/$s"
+    say "built $tier bindings/$s${group:+ $group}"
   else
     echo "end $(date -u +%FT%TZ) FAILED" >> "$log"
     if [[ "$rc" = 124 ]]; then
-      say "FINDING: $tier bindings/$s TIMED OUT after ${bound}s (RELEASE_BINDING_TIMEOUT_SECONDS, merged: RELEASE_MERGED_TIMEOUT_SECONDS); log $log"
+      say "FINDING: $tier bindings/$s${group:+ $group} TIMED OUT after ${bound}s (RELEASE_BINDING_TIMEOUT_SECONDS, merged: RELEASE_MERGED_TIMEOUT_SECONDS); log $log"
       return 1
     fi
-    say "FINDING: $tier bindings/$s did not build; first error:"
+    say "FINDING: $tier bindings/$s${group:+ $group} did not build; first error:"
     grep -m2 -E 'error:|constraint failed|REFUSED' "$log" | cut -c1-200 | sed 's/^/      /'
     return 1
   fi
@@ -466,10 +471,18 @@ ordered_tiers=""
 for tier in $TIERS; do [[ "$tier" = identical ]] && ordered_tiers="identical"; done
 for tier in $TIERS; do [[ "$tier" = identical ]] || ordered_tiers="$ordered_tiers $tier"; done
 running=0
-pool_jobs() {   # tier -> "tier:script" per build of that tier
+pool_jobs() {   # tier -> "tier:script" per build of that tier (merged: "tier:merged_build.sh:<group>")
   if [[ "$MERGED" = 1 ]]; then
-    printf '%s:merged_build.sh\n' "$1"
-    if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf 'host:merged_build.sh\n'; fi
+    # ONE JOB PER MERGED GROUP (0.8.59): each group of bindings/merged_groups.json
+    # is one compile, so the groups of a directory build side by side here and
+    # as separate GitHub shards (tools/release_github_build.py plan); the host
+    # groups ride the identical pass. Evaluated by that planner too, so it
+    # reads the plan itself.
+    local d
+    for d in "$1" $([[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]] && echo host); do
+      python3 tools/merged_bindings.py plan --dir "$d" --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
+        | awk -v d="$d" '{printf "%s:merged_build.sh:%s\n", d, $1}'
+    done
   else
     for s in $(tier_scripts "$1"); do printf '%s:%s\n' "$1" "$s"; done
   fi
@@ -490,6 +503,22 @@ while (( running > 0 )); do
   running=$((running - 1))
 done
 say "builds finished in $(( $(date +%s) - T0 ))s (rc=$BUILD_RC, jobs=$JOBS, cpus=$BUILD_CPUS)"
+# THE MERGED INDEX, WRITTEN ONCE FROM THE PLAN. Each group's build indexes its
+# own file, but a cache hit places only the file (declared_output), so the
+# index of every merged directory is rebuilt here from the plan's files that
+# exist. A group that failed is left out and the layout check below names it.
+reindex_merged() {   # dir-key outdir
+  local stem _cls members
+  rm -f "$2/_mojolearn_merged.json"
+  while read -r stem _cls members; do
+    [[ -f "$2/$stem.so" ]] || continue
+    python3 tools/merged_bindings.py index --outdir "$2" --stem "$stem" --members "$members" > /dev/null || return 1
+  done < <(python3 tools/merged_bindings.py plan --dir "$1" --platform linux --byte-lm "$PACKAGE_BYTE_LM")
+}
+if [[ "$MERGED" = 1 ]]; then
+  for t in $TIERS; do reindex_merged "$t" "$(tier_dir "$t")" || BUILD_RC=1; done
+  if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then reindex_merged host python/mojolearn/host || BUILD_RC=1; fi
+fi
 
 # ---------------------------------------------------------------- read-back
 # THE VENDOR COMES OUT OF THE BINARY. A bare ExtensionFileLoader import, no
