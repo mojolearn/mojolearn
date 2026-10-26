@@ -134,13 +134,8 @@ The adapters ship in the mojolearn GPU wheels. Each needs its framework, at the 
 built for; the `torch` and `max` extras install it:
 
 ```sh
-# macOS
 pip install "mojolearn[torch]"
 pip install "mojolearn[max]"
-
-# Linux (the extras live on mojolearn-core, which every Linux install includes)
-pip install mojolearn "mojolearn-core[torch]"
-pip install mojolearn "mojolearn-core[max]"
 ```
 
 On AMD GPUs, install PyTorch's ROCm build before mojolearn:

@@ -38,11 +38,10 @@ pip install "mojolearn[numpy]"    # NumPy-backed conveniences (ANN filtering, TS
 A plain `pip install mojolearn` is NumPy-free; APIs that need NumPy say so and name the install command.
 
 The `torch` and `max` extras install the framework for the optional
-[PyTorch and MAX adapters](user_guide/framework_adapters.md) (on Linux, on `mojolearn-core`):
+[PyTorch and MAX adapters](user_guide/framework_adapters.md):
 
 ```sh
-pip install "mojolearn[torch]"                  # macOS
-pip install mojolearn "mojolearn-core[torch]"   # Linux
+pip install "mojolearn[torch]"
 ```
 
 ## GPU architectures in this release
@@ -57,7 +56,8 @@ build; mojolearn never substitutes the CPU for a GPU it cannot serve.
 | AMD | `mojolearn-amd` | {{amd_arches}} (exact match required) | {{amd_examples}} |
 
 NVIDIA needs only the driver (`libcuda`); no CUDA toolkit is required. AMD needs the `amdgpu` driver
-and the ROCm HIP runtime (`libamdhip64`, ROCm 6 or 7).
+and the ROCm HIP runtime (`libamdhip64`, ROCm 6 or 7). The `torch` extra on AMD installs PyTorch's ROCm
+build, which needs ROCm 7.
 
 ## Check your machine
 
