@@ -2618,6 +2618,19 @@ def render_markdown(audit, path):
         w(f"| {st} | {count.get(st, 0)} |")
     w(f"| total | {len(nat)} |")
     w("")
+    states = defaultdict(int)
+    for r in nat:
+        states[reach_state(r)] += 1
+    w("How each row is reached (precise = a lane provably calls the export; `declared` rows are "
+      "`tools/identity_lanes/coverage_declared.tsv` and the hand annotations, each followed in the source; "
+      "`wide only` = a lane runs the binding whole and nothing decided the row):")
+    w("")
+    w("| reach | rows |")
+    w("|---|---|")
+    for st, label_ in (("static", "precise, static reach"), ("declared", "precise, declared"),
+                       ("decided", "decided n/a or dead"), ("wide", "wide only"), ("none", "none")):
+        w(f"| {label_} | {states.get(st, 0)} |")
+    w("")
     w("Fault-injection arms, over the rows that are not n/a:")
     w("")
     w("| arm | rows |")
@@ -2788,6 +2801,22 @@ def render_markdown(audit, path):
             names = sorted(sab_owed[why])
             w(f"- " + ", ".join(f"`{n}`" for n in names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else "")
               + f": {why}")
+    dead_rows = sorted((r["entry"], r["src"], t[2][len(DEAD_PREFIX):]) for r, t, _ in tri
+                       if t[0] == "n/a" and t[2].startswith(DEAD_PREFIX))
+    w("")
+    w("## Dead entries (listed for deletion)")
+    w("")
+    if not dead_rows:
+        w("None.")
+    else:
+        w(f"{len(dead_rows)} registrations with no public path (no package code, native owner or lane calls "
+          f"them; `dead` in `tools/identity_lanes/coverage_declared.tsv`). Each is a deletion candidate: the "
+          f"export, and its definitions when nothing else reaches them.")
+        w("")
+        w("| entry | binding | who names it |")
+        w("|---|---|---|")
+        for entry, src, why in dead_rows:
+            w(f"| `{entry}` | `{os.path.basename(src)}` | {why} |")
     w("")
     w("## Method and limits")
     w("")
