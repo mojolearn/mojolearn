@@ -80,6 +80,32 @@ class WheelPayloadTests(unittest.TestCase):
         result = audit.payload_gaps(self.wheel(omit=[fragment]), self.root)
         self.assertEqual(result['missing_python_payload'], [fragment])
 
+    def test_explicit_source_root_qualifies_frozen_payload_not_newer_tooling(self):
+        import shutil
+        tooling = self.root / 'newer-tooling'
+        shutil.copytree(self.root / 'python', tooling / 'python')
+        shutil.copytree(self.root / 'tools', tooling / 'tools')
+        (tooling / 'tools/identity_break.py').write_text('NEWER_HARNESS = True\n')
+        (tooling / 'python/mojolearn/verify_reference/table.json').write_text('{"newer": true}')
+        wheel = self.wheel()
+        with patch.object(audit.matrix, 'ROOT', str(tooling)):
+            old_default = audit.audit([wheel])['wheels'][0]
+            self.assertFalse(old_default['source_payload_complete'])
+            self.assertEqual(old_default['changed_python_payload'], ['mojolearn/_identity_break.py'])
+            self.assertEqual(old_default['changed_reference_payload'], ['mojolearn/verify_reference/table.json'])
+            frozen = audit.audit([wheel], source_root=self.root)['wheels'][0]
+            self.assertTrue(frozen['source_payload_complete'])
+            self.assertEqual(audit.matrix.ROOT, str(tooling))
+            # Explicit staging must still reject a stale candidate table.
+            stale = self.wheel(replace={'mojolearn/verify_reference/table.json': b'{}'})
+            self.assertFalse(audit.audit([stale], source_root=self.root)['wheels'][0]['source_payload_complete'])
+
+    def test_explicit_source_root_restores_default_after_error(self):
+        before = audit.matrix.ROOT
+        with self.assertRaises(FileNotFoundError):
+            audit.audit([self.root / 'missing.whl'], source_root=self.root)
+        self.assertEqual(audit.matrix.ROOT, before)
+
     def test_strict_cli_rejects_bad_candidate(self):
         for complete, expected in [(False, 1), (True, 0)]:
             with self.subTest(complete=complete), patch('sys.argv', ['audit', 'candidate.whl', '--require-complete']), \

@@ -1760,7 +1760,7 @@ def main(argv=None, _gates=True):
             from wheel_api_audit import audit
             core_wheels = [w for w, vendor in built if vendor is None]
             if core_wheels:
-                surface = audit(core_wheels)
+                surface = audit(core_wheels, source_root=source_root)
                 (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
                 if not surface['wheels'][0]['source_payload_complete']:
                     raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
