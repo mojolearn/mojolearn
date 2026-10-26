@@ -11,19 +11,19 @@ def connect():
     return entry, dict(plans={}, missing=object(), pending={}, ready=False)
 
 
-def connect_classes(context, package):
-    # glue: fixed schemas are connected after all built-in class installers
-    import inspect
-    import sys
-    from . import _mode, _expansion_decomp, _expansion_prep, preprocessing
-    from . import _gbdt_adapters, _forest_protocol, linear_model, model_selection, _training_impl
-
+def _resolver(context):
     def resolved(cls, name):
         # glue: inspect native class namespaces without descriptor invocation
         return next((vars(base)[name] for base in type.__dict__['__mro__'].__get__(cls)  # glue: import-time namespace metadata, no runtime descriptor call
                      if name in vars(base)), context['missing'])
+    return resolved
 
-    schemas = {
+
+def _schemas():
+    # glue: the fixed built-in getter identities and their schema kinds
+    from . import _mode, _expansion_decomp, _expansion_prep, preprocessing
+    from . import _gbdt_adapters, _forest_protocol, linear_model, model_selection, _training_impl
+    return {
         _mode.ParamsMixin.get_params: ('signature', True),
         _expansion_decomp._Base.get_params: ('declared', False),
         _expansion_prep._PrepBase.get_params: ('declared', False),
@@ -43,6 +43,14 @@ def connect_classes(context, package):
         model_selection._BaseSearch.get_params: ('search', False),
         _training_impl._Optimizer.get_params: ('optimizer', False),
     }
+
+
+def connect_classes(context, package):
+    # glue: fixed schemas are connected after all built-in class installers
+    import sys
+    schemas = context.get('schemas')
+    if schemas is None:
+        schemas = context['schemas'] = _schemas()
     classes = set()
     for name, module in tuple(sys.modules.items()):  # glue: loaded built-in class identities only
         if (name == package.__name__ or name.startswith(package.__name__ + '.')) and not name.startswith(package.__name__ + '.tests'):
@@ -57,50 +65,88 @@ def connect_classes(context, package):
     for cls in classes:  # glue: native parameter schemas, never product-time introspection
         if cls in context['plans'] or cls in context['pending']:
             continue  # Never bless changes to a previously pinned class.
-        getter = resolved(cls, 'get_params')
+        getter = _resolver(context)(cls, 'get_params')
         if getter is context['missing']:
             continue
         if getter not in schemas:
             context['pending'][cls] = 'unconnected built-in parameter getter'
             continue
-        kind, recurse = schemas[getter]
         try:
-            initializer = resolved(cls, '__init__')
-            if recurse and resolved(cls, '_get_param_names') is not resolved(_mode.ParamsMixin, '_get_param_names'):
-                raise TypeError('custom Python parameter-name callbacks are not supported by the native schema')
-            if kind in ('declared', 'native_declared'):
-                names = tuple(resolved(cls, '_parameters'))
-            elif kind == 'forest':
-                names = tuple(resolved(cls, '_parameter_names'))
-            elif kind == 'search':
-                names = model_selection._NATIVE_CONTEXT['family_msel_search_layouts'][cls]['parameters']
-            elif kind in ('splitter', 'repeated'):
-                names = ()
-            elif kind == 'optimizer':
-                names = (('accumulation_steps', 'dampening', 'lr', 'lr_schedule', 'maximize', 'momentum',
-                          'nesterov', 'numeric_mode', 'params', 'resident', 'weight_decay')
-                         if issubclass(cls, _training_impl.SGD) else
-                         ('accumulation_steps', 'betas', 'eps', 'lr', 'lr_schedule', 'maximize',
-                          'numeric_mode', 'params', 'resident', 'weight_decay'))
-            else:
-                parameters = inspect.signature(initializer).parameters.values()
-                names = tuple(p.name for p in parameters if p.name != 'self'  # glue: constructor signature metadata
-                              and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD))
-                if kind == 'signature':
-                    if initializer is not object.__init__ and issubclass(cls, _mode.NumericModeMixin) and 'numeric_mode' not in names:
-                        names += ('numeric_mode',)
-                    names = tuple(sorted(names))  # glue: fixed import-time constructor-name order, never a product-time reduction
-            if any(type(name) is not str for name in names):  # glue: native schema field identities
-                raise TypeError('parameter names must be exact strings')
-            protected = ('__init__', '_get_param_names', 'get_params', '__getattribute__', '__getattr__',
-                         '_parameters', '_parameter_names')
-            pinned = tuple((name, resolved(cls, name)) for name in protected + names)  # glue: freeze parameter descriptors and method identities
-            context['plans'][cls] = dict(kind=kind, recurse=recurse, names=names, pinned=pinned,
-                                        class_name=cls.__name__,
-                                        fields_only=kind in ('native_declared', 'forest', 'search', 'optimizer') or (kind == 'signature' and not recurse),
-                                        missing_error=('KeyError' if kind in ('native_declared', 'search', 'optimizer') else
-                                                       'TypeError' if kind == 'signature' else 'AttributeError'),
-                                        gbdt_init=_gbdt_adapters._GBDTAdapter.__init__ if kind == 'gbdt' else None)
+            context['plans'][cls] = _schema_plan(context, cls, *schemas[getter])
         except (TypeError, ValueError, KeyError) as error:
             context['pending'][cls] = 'native parameter schema is incomplete: ' + str(error)
     context['ready'] = True
+
+
+def _schema_plan(context, cls, kind, recurse):
+    # glue: one class's fixed parameter schema, built when the class is connected
+    import inspect
+    from . import _mode, _gbdt_adapters, model_selection, _training_impl
+    resolved = _resolver(context)
+    initializer = resolved(cls, '__init__')
+    if recurse and resolved(cls, '_get_param_names') is not resolved(_mode.ParamsMixin, '_get_param_names'):
+        raise TypeError('custom Python parameter-name callbacks are not supported by the native schema')
+    if kind in ('declared', 'native_declared'):
+        names = tuple(resolved(cls, '_parameters'))
+    elif kind == 'forest':
+        names = tuple(resolved(cls, '_parameter_names'))
+    elif kind == 'search':
+        names = model_selection._NATIVE_CONTEXT['family_msel_search_layouts'][cls]['parameters']
+    elif kind in ('splitter', 'repeated'):
+        names = ()
+    elif kind == 'optimizer':
+        names = (('accumulation_steps', 'dampening', 'lr', 'lr_schedule', 'maximize', 'momentum',
+                  'nesterov', 'numeric_mode', 'params', 'resident', 'weight_decay')
+                 if issubclass(cls, _training_impl.SGD) else
+                 ('accumulation_steps', 'betas', 'eps', 'lr', 'lr_schedule', 'maximize',
+                  'numeric_mode', 'params', 'resident', 'weight_decay'))
+    else:
+        parameters = inspect.signature(initializer).parameters.values()
+        names = tuple(p.name for p in parameters if p.name != 'self'  # glue: constructor signature metadata
+                      and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD))
+        if kind == 'signature':
+            if initializer is not object.__init__ and issubclass(cls, _mode.NumericModeMixin) and 'numeric_mode' not in names:
+                names += ('numeric_mode',)
+            names = tuple(sorted(names))  # glue: fixed import-time constructor-name order, never a product-time reduction
+    if any(type(name) is not str for name in names):  # glue: native schema field identities
+        raise TypeError('parameter names must be exact strings')
+    protected = ('__init__', '_get_param_names', 'get_params', '__getattribute__', '__getattr__',
+                 '_parameters', '_parameter_names')
+    pinned = tuple((name, resolved(cls, name)) for name in protected + names)  # glue: freeze parameter descriptors and method identities
+    return dict(kind=kind, recurse=recurse, names=names, pinned=pinned,
+                class_name=cls.__name__,
+                fields_only=kind in ('native_declared', 'forest', 'search', 'optimizer') or (kind == 'signature' and not recurse),
+                missing_error=('KeyError' if kind in ('native_declared', 'search', 'optimizer') else
+                               'TypeError' if kind == 'signature' else 'AttributeError'),
+                gbdt_init=_gbdt_adapters._GBDTAdapter.__init__ if kind == 'gbdt' else None)
+
+
+def connect_subclass(context, cls):
+    # glue: an application subclass of a connected estimator gets its own
+    # schema when its class statement runs, from its own constructor
+    # signature (scikit-learn's get_params contract). The inherited plan pins
+    # the base's __init__ and class fields, so a subclass with its own
+    # __init__ or a class-level default (numeric_mode = 'identical') was
+    # refused as "changed after connection". Every other protected hook must
+    # still be the connected base's; otherwise the inherited plan stays and
+    # keeps refusing.
+    if not context['ready'] or type(cls) is not type:
+        return
+    base = next((context['plans'][ancestor] for ancestor in type.__dict__['__mro__'].__get__(cls)[1:]  # glue: class-definition-time ancestry
+                 if ancestor in context['plans']), None)
+    if base is None:
+        return
+    resolved = _resolver(context)
+    getter = resolved(cls, 'get_params')
+    kind_recurse = context['schemas'].get(getter)
+    if kind_recurse is None or kind_recurse[0] != base['kind']:
+        return
+    pinned = dict(base['pinned'])  # glue: the base's frozen hook identities
+    for name in ('_get_param_names', 'get_params', '__getattribute__', '__getattr__', '_parameters', '_parameter_names'):  # glue: fixed hook names
+        if resolved(cls, name) is not pinned[name]:
+            return
+    try:
+        plan = _schema_plan(context, cls, *kind_recurse)
+    except (TypeError, ValueError, KeyError):
+        return
+    context['plans'][cls] = plan
