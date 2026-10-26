@@ -95,8 +95,10 @@ def test_metadata_and_conversions_match_the_definitions(index):
     if sys.version_info >= (3, 12):
         same(lambda: memoryview(a), lambda: R.__buffer__(a, 0))
     for other in (a, a.copy(), 0, 1.5, True, "x", a.ravel()):
-        same(lambda: a == other, lambda: R.__eq__(a, other))
-        same(lambda: a != other, lambda: R.__ne__(a, other))
+        # The methods themselves: the operator turns NotImplemented into an
+        # identity comparison on both sides.
+        same(lambda: a.__eq__(other), lambda: R.__eq__(a, other))
+        same(lambda: a.__ne__(other), lambda: R.__ne__(a, other))
 
 
 def test_indexing_matches_the_definition():
@@ -161,7 +163,7 @@ def test_length_exception_is_only_the_wrapper_frame():
 
 def test_helpers_are_connected_once():
     helpers = _array._ARRAY_CONTEXT['helpers']
-    assert set(helpers) == {'cast_elements', 'reduce_stat', 'strided_copy_bytes'}
+    assert set(helpers) == {'cast_elements', 'reduce_stat', 'strided_copy_bytes', 'equal_elements'}
     assert _array._ARRAY_CONTEXT['entry'] is _array._ARRAY_NATIVE
     assert isinstance(array.array('B'), _array._ARRAY_CONTEXT['array_type'])
 

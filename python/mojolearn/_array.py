@@ -895,7 +895,9 @@ class _ArrayReference:
                 "numpy.asarray (zero-copy) or tolist()"
             )
         if self.ndim == 0:
-            return self._mv
+            # A 0-d view (shape ()): NumPy reads the buffer before
+            # __array_interface__, and the flat store made a 0-d Array 1-D.
+            return self._mv.cast("B").cast(_CODE[self.dtype], ())
         if self.order != "C" and self.ndim > 1:
             raise BufferError(
                 "mojolearn: an F-order Array cannot be exported as a "
@@ -1409,5 +1411,6 @@ def connect_helpers(resolve):
     an absent helper (None) is refused by name by the operation that needs it.
     The names are literal so the lane selector sees exactly these exports."""
     found = (("cast_elements", resolve("cast_elements")), ("reduce_stat", resolve("reduce_stat")),
-             ("strided_copy_bytes", resolve("strided_copy_bytes")))
-    _ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None)  # glue: three fixed helper names
+             ("strided_copy_bytes", resolve("strided_copy_bytes")),
+             ("equal_elements", resolve("equal_elements")))
+    _ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None)  # glue: four fixed helper names

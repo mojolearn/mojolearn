@@ -588,6 +588,9 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
                 if cast is not None:
                     var at = _call(store.buffer_info)[0]
                     _ = _call(cast, at, PythonObject(0), at, PythonObject(0), PythonObject(total))
+    # The strided copy read c's raw address: a C-order copy made by _as_c
+    # must outlive it (Mojo ends a local at its last named use).
+    _ = c^
     return _owned(store, _tuple(out_shape), dtype, "C", context)
 
 
@@ -869,6 +872,10 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
             var y = _as_c(other, context)
             var store = _zero_flags(size, context)
             _ = _call(equal, x._addr, y._addr, code, PythonObject(size), _call(store.buffer_info)[0])
+            # The helper reads raw addresses: a C-order copy made by _as_c
+            # must outlive the call (Mojo ends a local at its last named use).
+            _ = x^
+            _ = y^
             return _owned(store, a.shape, "<u1", "C", context)
     elif scalar:
         if size == 0:
@@ -882,6 +889,9 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
                                  PythonObject(size))
                 _ = _call(equal, x._addr, _call(fill.buffer_info)[0], code, PythonObject(size),
                           _call(store.buffer_info)[0])
+                # Keep the copy and the repeated scalar alive through the call.
+                _ = x^
+                _ = fill^
             return _owned(store, a.shape, "<u1", "C", context)
         raise _rebuild("equal_elements")
     if same_shape:
@@ -911,6 +921,9 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
             fa = _as_c(_astype(floats, PythonObject("<f8"), context), context)
         var store = _zero_flags(size, context)
         _ = _call(equal, ia._addr, fa._addr, context["eq_i64_f64"], PythonObject(size), _call(store.buffer_info)[0])
+        # The widened copies stay alive through the raw-address call.
+        _ = ia^
+        _ = fa^
         return _owned(store, a.shape, "<u1", "C", context)
     if is_array:
         raise Error("ValueError: mojolearn: shapes " + _text(a.shape) + " and " + _text(other.shape) + " differ")
@@ -957,7 +970,10 @@ def _buffer(a: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("BufferError: mojolearn: a float16 Array has no memoryview format; use "
                     + "numpy.asarray (zero-copy) or tolist()")
     if ndim == 0:
-        return a._mv
+        # A 0-d view (shape ()), not the flat one-element store: NumPy reads
+        # the buffer before __array_interface__, so the flat view made
+        # numpy.asarray of a 0-d Array 1-D.
+        return _call(_call(a._mv.cast, PythonObject("B")).cast, _code(dtype, context), a.shape)
     if String(a.order) != "C" and ndim > 1:
         raise Error("BufferError: mojolearn: an F-order Array cannot be exported as a memoryview; "
                     + "use numpy.asarray (zero-copy), tobytes() or reshape() for a C-order copy")
