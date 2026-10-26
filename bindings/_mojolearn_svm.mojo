@@ -78,7 +78,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from svm.impl.svc_epilogue_pyapi import (
     svc_pair_epilogue_device_binding,
     svc_platt_train_device_binding,
-    svc_portable_math_device_binding,
     svc_splitmix_perm_device_binding,
 )
 from svm.estimator import (
@@ -740,7 +739,8 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svc_pair_epilogue_device_binding]("svc_pair_epilogue")
         m.def_function[svc_platt_train_device_binding]("svc_platt_train")
         m.def_function[svc_splitmix_perm_device_binding]("svc_splitmix_perm")
-        m.def_function[svc_portable_math_device_binding]("svc_portable_math")
+        # TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_svm.patch
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")

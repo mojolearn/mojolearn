@@ -2260,7 +2260,7 @@ FAMILIES = (
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
-            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm", "svc_portable_math",
+            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
             "svc_dual_gemv",

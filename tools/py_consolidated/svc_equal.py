@@ -1,6 +1,6 @@
 """svc_equal.py: the Mojo twins in svm/host/svc_proba.mojo against the Python
-reference in _svm_impl.py (and _portable_math's C library), bit for bit, on
-random and edge inputs. Run with PYTHONPATH=<tree>/python; MOJOLEARN_VENDOR=cpu
+reference in _svm_impl.py, bit for bit, on random and edge inputs (the exp/log
+twin check left with the svc_portable_math export, lane dead-entries-2-0859). Run with PYTHONPATH=<tree>/python; MOJOLEARN_VENDOR=cpu
 for the host binding. Prints one line per check and EQUAL RESULT PASS|FAIL."""
 import array, os, random, struct, sys
 from mojolearn import _svm_impl as S, _portable_math as pm
@@ -15,31 +15,6 @@ def check(name, ok, detail=""):
     global bad
     bad += 0 if ok else 1
     print(("OK   " if ok else "FAIL ") + name + (" " + detail if detail else ""), flush=True)
-
-# 1. exp / log twins
-xs = [0.0, -0.0, 1.0, -1.0, 709.782712893384, 709.78, -708.3964185322641, -708.39, 745.0, -745.0,
-      float("inf"), float("-inf"), float("nan"), 5e-324, 2.2250738585072014e-308, 1e-310, 0.5, 2.0, 4.0, 0.25, 8.0,
-      0.7071067811865476, 0.7071067811865475, 1e300, 1.7976931348623157e308]
-for _ in range(1000000):
-    k = rng.random()
-    if k < 0.3:
-        xs.append(rng.uniform(-750, 750))
-    elif k < 0.5:
-        xs.append(rng.uniform(-3, 3))
-    elif k < 0.8:
-        xs.append(struct.unpack("<d", struct.pack("<Q", rng.getrandbits(63)))[0])
-    else:   # near the k reduction boundary (x * log2 e + 0.5 near an integer)
-        xs.append((rng.randint(-1000, 1000) - 0.5 + rng.uniform(-1e-12, 1e-12)) / 1.4426950408889634)
-xs = [x for x in xs]
-inp = array.array("d", xs); out = array.array("d", bytes(8 * len(xs)))
-for which, ref, nm in ((0, "exp", "pm_exp"), (1, "log", "pm_log")):
-    b.svc_portable_math(inp.buffer_info()[0], out.buffer_info()[0], len(xs), which)
-    miss = 0; first = None
-    for x, y in zip(xs, out):
-        r = pm._native(ref, x)
-        if bits(r) != bits(y) and not (r != r and y != y):
-            miss += 1; first = first or (x, r, y)
-    check(f"{nm} == portable_math.c over {len(xs)}", miss == 0, f"{miss} differ, first {first}")
 
 # 2. SplitMix perm
 for n, seed in ((1, 0), (2, 5), (50, 3), (1000, 2**64 - 1), (4097, 0x9E3779B97F4A7C15 * 3 % 2**64), (100000, 12345)):
