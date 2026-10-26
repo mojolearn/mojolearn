@@ -42,8 +42,13 @@ def wheel_delta(before, after):
     return sorted(changed)
 
 
-def checked_ref(record):
+def checked_ref(record, relocations=None):
     p = Path(record['path'])
+    if not p.is_file():
+        for old, new in (relocations or {}).items():
+            if p.is_relative_to(old):
+                p = Path(new) / p.relative_to(old)
+                break
     if hc.file_sha(p) != record['sha256']:
         raise ValueError('evidence bytes changed: ' + str(p))
     return p
@@ -98,7 +103,7 @@ def validate(document, identity):
             'missing changed-boundary checks')
     for name, check in boundary['checks'].items():
         require(check['exit_code'] == 0 and not check['timed_out'], 'failed changed boundary: ' + name)
-        checked_ref(check['log'])
+        checked_ref(check['log'], document.get('relocations'))
     adapters = read(document['adapter_report'])
     status, passed, reason = adapter_gate.judge(adapters)
     require(passed, reason)
