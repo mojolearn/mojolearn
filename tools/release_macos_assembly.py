@@ -138,6 +138,7 @@ import hashlib, json, os, pathlib, shutil, subprocess, sys
 snapshot, original, cache, assembly, admission, output = (pathlib.Path(p).resolve() for p in sys.argv[1:])
 sys.path.insert(0, str(snapshot/'tools'))
 import development_build as dev
+import bincache
 document = json.loads(assembly.read_text())
 current = json.loads(admission.read_text())
 generated = {}
@@ -167,6 +168,11 @@ for mode in ('host', 'identical'):
     originals = [row for row in document['groups'] if row['mode'] == mode]
     by_stem = {pathlib.Path(row['staged']).stem: row for row in originals}
     first = json.loads(pathlib.Path(originals[0]['receipt']['path']).read_text())['fields']
+    if bincache.toolchain(snapshot) != first['toolchain']['locked']:
+        raise ValueError('frozen compiler/dependency lock changed')
+    configuration = hashlib.sha256(bincache.pixi_toml_build_part((snapshot/'pixi.toml').read_text()).encode()).hexdigest()
+    if configuration != first['toolchain']['pixi_configuration']:
+        raise ValueError('frozen compiler/dependency configuration changed')
     env = {'PATH': os.environ.get('PATH', ''), **first['environment'], **first['link_environment']}
     plan = dev.make_plan(snapshot, cache, [mode], env, facts=first['toolchain'],
                          c_facts=support_receipt['fields']['c_toolchain'], plat='darwin')
