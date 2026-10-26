@@ -695,7 +695,50 @@ def _seed_names(fn, module_globals):
         fo, ot = _attribute_roots(f, module_globals)
         foreign |= fo
         other |= ot
-    return names - (foreign - other)
+    return names - (foreign - other) - _builtin_only_names(names, funcs, module_globals)
+
+
+def _builtin_only_names(names, funcs, module_globals):
+    """The names of `names` that can only be Python builtins.
+
+    A BUILTIN IS NOT A PACKAGE NAME (2026-10-26). The kmeans spec calls
+    `max(...)`, and once python/mojolearn/adapters/max.py existed its module
+    stem indexed `max` (`_python_symbols`), so every lane whose spec or
+    helpers call the builtin `max` seeded the MAX adapter and through it the
+    neural, forest and mamba trees: neural_inference.py selected 542 of 571
+    lanes and core/forest_inference.mojo 487. A name is dropped only when it is
+    a builtin the harness module does not rebind, no visited function uses it
+    as an attribute (`ml.adapters.max` keeps it), and every visited function's
+    source was read (an unreadable one keeps every name)."""
+    import builtins
+    candidates = {n for n in names if hasattr(builtins, n) and n not in module_globals}
+    if not candidates:
+        return set()
+    for f in funcs:
+        attrs = _attribute_names(f)
+        if attrs is None:
+            return set()
+        candidates -= attrs
+    return candidates
+
+
+_ATTR_CACHE = {}
+
+
+def _attribute_names(fn):
+    """Every attribute name one function's source uses, or None when the
+    source cannot be read."""
+    key = id(fn.__code__)
+    if key not in _ATTR_CACHE:
+        import inspect
+        import textwrap
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        except (OSError, TypeError, SyntaxError, IndentationError):
+            _ATTR_CACHE[key] = None
+        else:
+            _ATTR_CACHE[key] = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    return _ATTR_CACHE[key]
 
 
 _PYTHON_FILES = None
