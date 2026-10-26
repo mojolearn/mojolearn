@@ -1363,7 +1363,7 @@ def _empty_nest(shape):
 # strided_copy_bytes) are connected by `_buffer` once it is defined.
 def _array_binding():
     from . import _backend
-    return _backend.load_host_module("_mojolearn_tokenizer_host")
+    return _backend.load_host_module("_mojolearn_tokenizer_host")  # cpu-route: host-memory Array container operations, binding loaded once
 
 
 _ARRAY_NATIVE = _array_binding().array_native_call
