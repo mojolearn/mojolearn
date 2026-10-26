@@ -2192,7 +2192,7 @@ FAMILIES = (
                       "bindings/kpss_host_test.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
-            "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
+            "tsa_host_sabotage", "holtwinters_fit",
             "holtwinters_forecast", "holtwinters_predict", "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
@@ -2587,7 +2587,7 @@ FAMILIES = (
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
             "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
-            "hdbscan_host_predict_sabotage", "hdbscan_membership_vector",
+            "hdbscan_membership_vector",
             "hdbscan_all_points_membership_vectors",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -3212,7 +3212,7 @@ FAMILIES = (
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_predict", "arima_forecast", "tsa_vendor", "holtwinters_forecast",
+            "arima_predict", "arima_forecast", "holtwinters_forecast",
             "holtwinters_predict", "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
