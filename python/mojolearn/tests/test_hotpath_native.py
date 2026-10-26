@@ -392,7 +392,8 @@ def test_list_input_matches_the_recursive_flatten(index):
     for convert in (_buffer.as_f32_c, _buffer.as_i64_c, _buffer.as_f64_c):
         for ndim in (1, 2, None):
             _same(lambda: convert(value, ndim=ndim, name="X"), (), group="lists")
-    _same(lambda: Array.from_list(value, "<f8"), (), group="lists")
+    _same(lambda: Array.from_list(value, "<f8"), (), group="lists",
+          ref_fn=lambda: _array._ArrayReference.from_list(Array, value, "<f8"))
 
 
 def test_big_list_input():

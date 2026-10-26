@@ -164,3 +164,21 @@ def test_helpers_are_connected_once():
     assert set(helpers) == {'cast_elements', 'reduce_stat', 'strided_copy_bytes'}
     assert _array._ARRAY_CONTEXT['entry'] is _array._ARRAY_NATIVE
     assert isinstance(array.array('B'), _array._ARRAY_CONTEXT['array_type'])
+
+
+_LISTS = [
+    [1, 2, 3], [1.5, 2, True], [True, False], [[1, 2], [3, 4]], [[1.0, 2], [3, 4]],
+    ((1, 2), (3, 4)), [(1, 2), [3, 4]], [[], []], [[1, 2], [3]], [[1, 2], 3], [1, [2, 3]],
+    [[[1, 2]], [[3, 4]]], [1, "a"], [[1, None]], [None], [2**70, 1], [[2**63], [1]],
+    [np.float32(1.5), 2.0], [np.int64(3), 4], [1.0, float("nan"), -0.0], [], [[]], "abc",
+    [b"x"], [[1.0, 2.0], (3.0, 4.0)], [[1, 2.5], [True, 4]], 3.5, [70000.0, 1.0],
+]
+
+
+@pytest.mark.parametrize("index", range(len(_LISTS)))
+def test_from_list_matches_the_definition(index):
+    value = _LISTS[index]
+    for dtype in ("<f8", "<f4", "<f2", "<i4", "<i8", "<u1", "<i1", "bad"):
+        same(lambda: Array.from_list(value, dtype), lambda: R.from_list(Array, value, dtype))
+    nested = Array.from_list([[1.0, 2.0], [3.0, 4.0]], "<f4")
+    same(lambda: Array.from_list(nested, "<f8"), lambda: R.from_list(Array, nested, "<f8"))

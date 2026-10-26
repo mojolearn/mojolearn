@@ -483,9 +483,7 @@ class Array:
         -------
         Array
         """
-        dtype = normalize_dtype(dtype)
-        shape, flat = _flatten(nested)
-        return cls._from_flat(flat, shape, dtype)
+        return _ARRAY_NATIVE("from_list", cls, _ARRAY_CONTEXT, nested, dtype)
 
     @classmethod
     def _from_flat(cls, flat, shape, dtype):
@@ -1233,6 +1231,29 @@ class _ArrayReference:
             array.array("B", eq._mv.tobytes().translate(_NOT)), self.shape, "<u1", "C"
         )
 
+    def from_list(cls, nested, dtype="<f8"):
+        """A new C-order Array from a (nested) list of Python numbers.
+
+        The shape is inferred and must be rectangular. Floats converted to
+        ``"<f4"`` round to nearest even. Floats are not converted to integer dtypes
+        (an error is raised instead of truncating), and integers too large for
+        the dtype raise an error rather than wrap.
+
+        Parameters
+        ----------
+        nested : list
+            Nested lists of numbers.
+        dtype : str, default "<f8"
+            Element type.
+
+        Returns
+        -------
+        Array
+        """
+        dtype = normalize_dtype(dtype)
+        shape, flat = _flatten(nested)
+        return cls._from_flat(flat, shape, dtype)
+
 
 class _RowIter:
     """Iteration over the rows of a C-order Array of rank >= 2: each step
@@ -1378,7 +1399,9 @@ _ARRAY_CONTEXT = dict(
     partial=functools.partial, sys_modules=sys.modules, restore=_restore_array,
     entry=_ARRAY_NATIVE, helpers={}, int_bounds=dict(_INT_BOUNDS), infinity=float("inf"),
     minus_infinity=float("-inf"), scalar_types=(int, float, bool), eq_i64_f64=_EQ_I64_F64,
-    not_implemented=NotImplemented, not_table=_NOT)
+    not_implemented=NotImplemented, not_table=_NOT, scalar_type_set=_SCALAR_TYPES,
+    row_type_set=_ROW_TYPES, chain_from_iterable=chain.from_iterable,
+    user_objects=_array_binding().user_objects_native_call)
 
 
 def connect_helpers(resolve):

@@ -187,6 +187,12 @@ def _owned(store: PythonObject, shape: PythonObject, dtype: String, order: Strin
     return _init_owned(native_storage_allocate(context["array_class"]), store, shape, dtype, order, context)
 
 
+def _owned_as(cls: PythonObject, store: PythonObject, shape: PythonObject, dtype: String, order: String,
+              context: PythonObject) raises -> PythonObject:
+    """`cls._owned(...)` for the class a classmethod constructor was called on."""
+    return _init_owned(native_storage_allocate(cls), store, shape, dtype, order, context)
+
+
 def _view_of(other: PythonObject, shape: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
     """`Array._view_of`: another shape over the same memory, `other` kept alive."""
     var view = native_storage_allocate(context["array_class"])
@@ -575,6 +581,11 @@ def _normalize(dtype: PythonObject, context: PythonObject) raises -> String:
 
 
 def _from_flat(flat: PythonObject, shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    return _from_flat_as(context["array_class"], flat, shape, dtype, context)
+
+
+def _from_flat_as(cls: PythonObject, flat: PythonObject, shape: PythonObject, dtype: String,
+                  context: PythonObject) raises -> PythonObject:
     """`Array._from_flat`: a C-order Array of Python values."""
     var b = native_loaded_module("builtins")
     var code = _code(dtype, context)
@@ -595,7 +606,54 @@ def _from_flat(flat: PythonObject, shape: PythonObject, dtype: String, context: 
                 raise Error("TypeError: mojolearn: cannot build a " + dtype + " Array from these values: "
                             + String(detail))
             raise error^
-    return _owned(store, shape, dtype, "C", context)
+    return _owned_as(cls, store, shape, dtype, "C", context)
+
+
+def _flatten_fast(nested: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_flatten_fast`: `(shape, flat)` for a flat list of Python scalars or
+    a list of equal-length rows of them, by C builtins; None otherwise."""
+    var b = native_loaded_module("builtins")
+    var kind = py_type(nested)
+    if (kind is not b.list and kind is not b.tuple) or len(nested) == 0:
+        return PythonObject(None)
+    var kinds = _call(b.set, _call(b.map, b.type, nested))
+    if _truth(_call(kinds.issubset, context["scalar_type_set"])):
+        return Python.tuple(Python.tuple(PythonObject(len(nested))), _call(b.list, nested))
+    if not _truth(_call(kinds.issubset, context["row_type_set"])):
+        return PythonObject(None)
+    var widths = _call(b.set, _call(b.map, b.len, nested))
+    if len(widths) != 1:
+        return PythonObject(None)
+    var flat = _call(b.list, _call(context["chain_from_iterable"], nested))
+    if not _truth(_call(_call(b.set, _call(b.map, b.type, flat)).issubset, context["scalar_type_set"])):
+        return PythonObject(None)
+    return Python.tuple(Python.tuple(PythonObject(len(nested)), _call(widths.pop)), flat)
+
+
+def _from_list(cls: PythonObject, nested: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`Array.from_list`: a new C-order Array from a (nested) list of numbers."""
+    var b = native_loaded_module("builtins")
+    var dtype = _normalize(requested, context)
+    var shape = PythonObject(None)
+    var flat = PythonObject(None)
+    if _truth(_call(b.isinstance, nested, context["array_class"])):
+        var c = _as_c(nested, context)
+        shape = nested.shape
+        flat = _values(c._mv, String(c.dtype), context)
+    else:
+        var fast = _flatten_fast(nested, context)
+        if fast is not None:
+            shape = fast[0]
+            flat = fast[1]
+        else:
+            # The general walk (a ragged or mixed nested list, Arrays inside
+            # it) is the user-object reader's native "nested" read.
+            var got = _call(context["user_objects"], PythonObject("nested"), nested, context["array_class"])
+            if py_type(got) is b.tuple and len(got) == 3 and _truth(_call(context["operator"].eq, got[0], PythonObject("__refuse__"))):
+                raise Error(String(got[1]) + ": " + String(got[2]))
+            shape = _call(b.tuple, got[0])
+            flat = got[1]
+    return _from_flat_as(cls, flat, shape, dtype, context)
 
 
 def _astype_reference(a: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -901,6 +959,12 @@ def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, c
 def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonObject) raises -> PythonObject:
     if op == "init":
         return _initialize(a, args[0], args[1], context)
+    if op == "from_list":
+        # `a` is the class the classmethod was called on.
+        var b = native_loaded_module("builtins")
+        if py_type(a) is not b.type or not _truth(_call(b.issubclass, a, context["array_class"])):
+            raise Error("TypeError: Array.from_list builds a mojolearn Array class")
+        return _from_list(a, args[0], args[1], context)
     _admit(a, context)
     if op == "len":
         return _length(a)
