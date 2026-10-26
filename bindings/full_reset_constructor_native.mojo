@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public constructors for the 77 source-vetted full-reset owners
 # (python/mojolearn/_native_full_reset_params.py, proof
-# tools/native_full_reset_constructor_schemas.json). The constructor event
+# tools/native_full_reset_constructor_schemas.json) and the 45 field-only
+# declared prep/decomp owners (python/mojolearn/_native_declared_constructors.py,
+# schemas derived by tools/declared_constructor_schemas.py). The constructor event
 # schema the full-reset setter already replays is the whole original
 # constructor: field writes in source order, repeated writes, fixed constants
 # and the NumericModeMixin post-constructor numeric_mode rule. Here the public
@@ -26,6 +28,7 @@ from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.params_metadata_native import _resolved
 from bindings.full_reset_params_native import _release_owned
+from bindings.declared_params_native import _release as _declared_release
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
@@ -217,7 +220,13 @@ def _construct(model: PythonObject, positional: PythonObject, keywords: PythonOb
         else:
             _ = py_call(retained.append, old)
     if len(previous) > 0:
-        _release_owned(previous, retained, context)
+        if py_contains(context, "release_declared"):
+            # The declared families (_native_declared_constructors.py) release
+            # an overwritten value under their shallow setter's admission.
+            for i in range(len(previous)):  # driver-loop: each overwritten constructor field
+                _declared_release(previous[i], context["declared"])
+        else:
+            _release_owned(previous, retained, context)
     for i in range(len(targets)):  # driver-loop: original field assignment order into the same dictionary
         py_setitem(fields, targets[i], sources[i])
     return PythonObject(None)

@@ -1,5 +1,6 @@
-"""Public constructor probes for the 77 full-reset owners; run only against the
-integrated native build (bindings/full_reset_constructor_native.mojo).
+"""Public constructor probes for the 77 full-reset owners and the 45 declared
+prep/decomp owners; run only against the integrated native build
+(bindings/full_reset_constructor_native.mojo).
 
 The oracle is the original constructor body retained at install
 (`_CONTEXT['originals']`), executed here by the test on a fresh object. It is
@@ -17,9 +18,12 @@ import pytest
 
 import mojolearn as ml
 from mojolearn._native_full_reset_params import _CLASSES, _CONTEXT
+from mojolearn import _native_declared_constructors as _declared
 from mojolearn._verify_native_runtime import audit_native_call
 
 PROOF = Path(__file__).resolve().parents[3] / 'tools/native_full_reset_constructor_schemas.json'
+CONTEXTS = {cls: _CONTEXT for cls in _CLASSES} | {cls: _declared._CONTEXT for cls in _declared._CLASSES}
+OWNERS = tuple(CONTEXTS)
 
 
 def clean(operation, *args, error=None, **kwargs):
@@ -41,7 +45,7 @@ def construct(cls, *args, **kwargs):
 
 def oracle(cls, *args, owner=None, **kwargs):
     model = object.__new__(cls)
-    _CONTEXT['originals'][owner or cls](model, *args, **kwargs)
+    CONTEXTS[owner or cls]['originals'][owner or cls](model, *args, **kwargs)
     return model
 
 
@@ -69,15 +73,16 @@ def required(cls):
     return {name: object() for name, p in inspect.signature(cls).parameters.items() if p.default is p.empty}
 
 
-@pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize('cls', OWNERS, ids=lambda cls: cls.__name__)
 def test_installed_constructor_is_the_native_call_with_the_public_signature(cls):
-    original = _CONTEXT['originals'][cls]
+    context = CONTEXTS[cls]
+    original = context['originals'][cls]
     assert cls.__init__ is not original
-    assert inspect.signature(cls.__init__) == _CONTEXT['plans'][cls]['signature']
-    assert tuple(inspect.signature(cls).parameters) == _CONTEXT['plans'][cls]['names']
+    assert inspect.signature(cls.__init__) is context['plans'][cls]['signature']
+    assert tuple(inspect.signature(cls).parameters) == context['plans'][cls]['names']
 
 
-@pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize('cls', OWNERS, ids=lambda cls: cls.__name__)
 def test_every_keyword_matches_the_original_order_and_reference_identity(cls):
     values = sentinels(cls)
     assert_same(construct(cls, **values), oracle(cls, **values))
@@ -97,9 +102,9 @@ def test_schema_proof_final_fields_and_order(cls):
             assert vars(model)[name] == source['literal']
 
 
-@pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize('cls', OWNERS, ids=lambda cls: cls.__name__)
 def test_positional_binding_and_defaults_match_the_original(cls):
-    plan = _CONTEXT['plans'][cls]
+    plan = CONTEXTS[cls]['plans'][cls]
     values = sentinels(cls)
     args = tuple(values[name] for name in plan['positional'])
     assert_same(construct(cls, *args), oracle(cls, *args))
@@ -107,9 +112,9 @@ def test_positional_binding_and_defaults_match_the_original(cls):
     assert_same(construct(cls, **needed), oracle(cls, **needed))
 
 
-@pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize('cls', OWNERS, ids=lambda cls: cls.__name__)
 def test_argument_errors_are_the_original_words_without_mutation(cls):
-    plan = _CONTEXT['plans'][cls]
+    plan = CONTEXTS[cls]['plans'][cls]
     needed = required(cls)
     first = plan['names'][0]
     cases = [((), dict(needed, not_a_parameter=1)),
@@ -125,7 +130,7 @@ def test_argument_errors_are_the_original_words_without_mutation(cls):
         assert vars(model) == {}
 
 
-@pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize('cls', OWNERS, ids=lambda cls: cls.__name__)
 def test_reinitialization_keeps_unrelated_fields_in_place(cls):
     values = sentinels(cls)
     model = construct(cls, **values)
@@ -135,7 +140,7 @@ def test_reinitialization_keeps_unrelated_fields_in_place(cls):
     clean(model.__init__, **replacement)
     expected = oracle(cls, **values)
     vars(expected)['fitted_'] = marker
-    _CONTEXT['originals'][cls](expected, **replacement)
+    CONTEXTS[cls]['originals'][cls](expected, **replacement)
     assert_same(model, expected)
 
 
@@ -215,3 +220,21 @@ def test_reinitialization_refuses_an_old_python_finalizer_before_writing():
 
 def test_foreign_instance_is_refused():
     clean(ml.KMeans.__init__, ml.KernelRidge(), error=TypeError)
+
+
+def test_declared_reinitialization_uses_the_declared_release_admission():
+    calls = []
+    class Owner:
+        def __del__(self):
+            calls.append('del')
+    model = ml.SimpleImputer(fill_value=Owner())
+    before = dict(vars(model))
+    clean(model.__init__, fill_value=0.0, error=TypeError)
+    assert vars(model) == before and calls == []
+    vars(model)['fill_value'] = 0.0
+
+
+def test_declared_super_chain_matches_the_original():
+    for cls, kwargs in ((ml.EllipticEnvelope, dict(contamination=0.2, random_state=3)),
+                        (ml.PLSCanonical, dict(algorithm='svd', n_components=1))):
+        assert_same(construct(cls, **kwargs), oracle(cls, **kwargs))

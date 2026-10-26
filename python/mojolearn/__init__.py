@@ -625,6 +625,11 @@ from ._native_full_reset_params import install as _install_full_reset_params
 _install_full_reset_params()
 del _install_full_reset_params
 
+# Field-only declared prep/decomp constructors precede every class-layout snapshot too.
+from ._native_declared_constructors import install as _install_declared_constructors
+_install_declared_constructors()
+del _install_declared_constructors
+
 # Connect CV's fixed native estimator ABIs after every public class exists.
 from ._native_mode_metadata import connect_classes as _connect_mode_metadata_classes
 from . import _mode as _mode_metadata_owner
@@ -685,6 +690,12 @@ from . import _mode as _full_reset_mode
 _connect_full_reset_params(_full_reset_mode._PARAMS_METADATA_CONTEXT, _full_reset_linear,
                            _full_reset_declared, model_selection._NATIVE_CONTEXT)
 del _connect_full_reset_params, _full_reset_linear, _full_reset_declared, _full_reset_mode
+
+# Declared-family constructors release overwritten values under the declared setter's admission.
+from ._native_declared_constructors import connect as _connect_declared_constructors
+from ._native_declared_params import CONTEXT as _declared_constructor_setters
+_connect_declared_constructors(_declared_constructor_setters)
+del _connect_declared_constructors, _declared_constructor_setters
 
 # The public parallel drivers' class/storage snapshots are taken last: every
 # import-time class connection above (native attribute slots, constructors)
