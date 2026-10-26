@@ -122,6 +122,7 @@ from bindings.params_metadata_native import params_metadata_c
 from bindings.public_attributes_native import public_attribute_c
 from bindings.linear_constructor_native import linear_constructor_c
 from bindings.full_reset_params_native import full_reset_params_c
+from bindings.full_reset_constructor_native import full_reset_constructor_c
 from bindings.params_setter_native import params_setter_c
 from bindings.declared_params_native import declared_params_c
 from bindings.arena_rows_native import arena_rows_c
@@ -1347,6 +1348,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(public_attribute_c, "public_attribute_native_call")
         module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")
         module.def_py_c_function(full_reset_params_c, "full_reset_params_native_call")
+        module.def_py_c_function(full_reset_constructor_c, "full_reset_constructor_native_call")
         module.def_py_c_function(params_setter_c, "params_setter_native_call")
         module.def_py_c_function(declared_params_c, "declared_params_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "host_archive_finalize_call")

@@ -46,8 +46,9 @@ def test_kernel_ridge_pilot_full_reset_preserves_dictionary_and_borrowed_paramet
 
 @pytest.mark.parametrize('cls', _CLASSES, ids=lambda cls: cls.__name__)
 def test_every_public_full_reset_matches_original_constructor_order_and_reference_identity(cls):
-    # The unchanged constructor is an independent test oracle outside the
-    # native operation audit; it is never called by set_params itself.
+    # The public constructor (itself native since the full-reset constructor
+    # lane; its own oracle tests are test_native_full_reset_constructors.py)
+    # is outside the native operation audit; set_params never calls it.
     values = {name: object() for name in inspect.signature(cls).parameters}
     model = cls(**values)
     key = next(iter(values))

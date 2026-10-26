@@ -30,7 +30,15 @@ from . import _spectral_impl as _m23
 _ENTRY = _binding()._module.full_reset_params_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset parameter setters require a compiled native entry')
-_CONTEXT = dict(plans={}, missing=object(), ready=False)
+# The same event schemas are the whole original constructors: the public
+# __init__ of every class below is one call to this entry
+# (bindings/full_reset_constructor_native.mojo).
+_INIT_ENTRY = _binding()._module.full_reset_constructor_native_call
+if type(_INIT_ENTRY) is not BuiltinFunctionType:
+    raise TypeError('full-reset constructors require a compiled native entry')
+_CONTEXT = dict(plans={}, missing=object(), ready=False, originals={})
+# Instance lookup/assignment protocols a native constructor write must not bypass.
+_CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 _CLASSES = (
     _m0.AdaBoostClassifier,
     _m0.AdaBoostRegressor,
@@ -194,6 +202,12 @@ _EVENTS = {
 }
 
 
+def _initializer(owner):
+    def __init__(self, *args, **kwargs):
+        return _INIT_ENTRY(self, args, kwargs, _CONTEXT, owner)
+    return __init__
+
+
 class NativeFullResetParams:
     def set_params(self, **params):
         """Set constructor parameters and clear fitted state.
@@ -228,9 +242,29 @@ def install():
         events = _EVENTS[cls.__name__]
         if any(kind == 'parameter' and value not in names for _, kind, value, _ in events):  # glue: refuse stale constructor schemas
             raise TypeError('field-only setter schema differs from its constructor signature')
+        # The original initializer that raises the argument errors: the
+        # NumericModeMixin wrapper forwards to it without numeric_mode.
+        original = _resolved(cls, '__init__', _CONTEXT['missing'])
+        inner = getattr(original, '__wrapped__', original)
+        wrapped = inner is not original
+        if wrapped and 'numeric_mode' in inspect.signature(inner).parameters:
+            # A positional numeric_mode would reach the inner initializer
+            # while the wrapper's keyword stays None: not this schema.
+            raise TypeError('native constructor requires the injected keyword-only numeric_mode')
+        kwonly = tuple(p.name for p in inspect.signature(inner).parameters.values()  # glue: import-time constructor metadata
+                       if p.kind is p.KEYWORD_ONLY and not (wrapped and p.name == 'numeric_mode'))
         _CONTEXT['plans'][cls] = dict(names=names, events=events, signature=signature,
             defaults={p.name: p.default for p in parameters if p.default is not p.empty},  # glue: exact default reference identities
-            class_name=cls.__name__)
+            class_name=cls.__name__,
+            positional=tuple(p.name for p in parameters if p.kind is p.POSITIONAL_OR_KEYWORD),  # glue: native argument schema
+            kwonly=kwonly,
+            required_positional=tuple(p.name for p in parameters  # glue: native argument schema
+                                      if p.kind is p.POSITIONAL_OR_KEYWORD and p.default is p.empty),
+            required_kwonly=tuple(p.name for p in parameters  # glue: native argument schema
+                                  if p.kind is p.KEYWORD_ONLY and p.default is p.empty),
+            rule_fields=tuple(dict.fromkeys(event[0] for event in events if event[3])),  # glue: mode-rule destinations
+            label=getattr(inner.__code__, 'co_qualname', inner.__qualname__))
+        _CONTEXT['originals'][cls] = original
     # The explicit host inference subclasses have their own constructor and
     # storage contracts. Keep their existing setter debt visible: changing a
     # selected base must not silently replace a host setter with a refusal.
@@ -243,8 +277,16 @@ def install():
         cls.set_params = ParamsMixin.set_params
     _CONTEXT['deferred_host_classes'] = deferred
     # Validate the complete set before replacing any public setter.
-    for cls in _CLASSES:  # glue: one direct native-call wrapper; constructors remain unchanged
+    for cls in _CLASSES:  # glue: one direct native-call wrapper for the setter and the constructor
         cls.set_params = NativeFullResetParams.set_params
+        original = _CONTEXT['originals'][cls]
+        function = _initializer(cls)
+        function.__name__ = '__init__'
+        function.__qualname__ = cls.__qualname__ + '.__init__'
+        function.__module__ = cls.__module__
+        function.__doc__ = original.__doc__
+        function.__signature__ = _CONTEXT['plans'][cls]['signature']
+        cls.__init__ = function
 
 
 def connect(parameter_metadata, linear, declared, estimator_context):
@@ -273,6 +315,8 @@ def connect(parameter_metadata, linear, declared, estimator_context):
         metadata = parameter_metadata['plans'][cls]
         if set(metadata['names']) != set(plan['names']):
             raise TypeError('full-reset native constructor and getter schemas differ')
+        plan['constructor_hooks'] = tuple((name, _resolved(cls, name, _CONTEXT['missing']))  # glue: final lookup/assignment slots
+                                          for name in _CONSTRUCTOR_HOOKS)
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before
@@ -283,5 +327,11 @@ def connect(parameter_metadata, linear, declared, estimator_context):
             if recipe[1] != (('arg', 0),):
                 raise TypeError('nested setter requires the connected ordinary parameter-dictionary ABI')
             native_setters[cls] = dict(layout=plan, entry=plan['entry'], operation=recipe[0], context=plan['context'])
+    # Native slot types a passive or host subclass may carry instead of the
+    # owner's exact slot: object's own slots and the native attribute
+    # descriptors. A Python function hook is never admitted.
+    hook_types = [type(vars(object)['__getattribute__']), type(vars(object)['__setattr__'])]
+    if 'descriptor' in attributes:
+        hook_types.append(type(attributes['descriptor']))
     _CONTEXT.update(parameter_metadata=parameter_metadata, linear=linear, declared=declared,
-                    native_setters=native_setters, ready=True)
+                    native_setters=native_setters, constructor_hook_types=tuple(hook_types), ready=True)
