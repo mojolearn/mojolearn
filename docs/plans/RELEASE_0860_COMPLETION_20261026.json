@@ -226,5 +226,43 @@
       ]
     }
   ],
-  "remaining_declared_fault_arms": 31
+  "remaining_declared_fault_arms": 31,
+  "verifier_findings": [
+    {
+      "id": "reviewed-independent-oracles",
+      "status": "proved-without-rerun",
+      "scope": [
+        "core-3",
+        "mamba-1",
+        "mamba-2",
+        "mamba-3"
+      ],
+      "reason": "Faults reached existing byte-comparison checks; admitted with reviews bound to exact clean, fault, restored and patch hashes."
+    },
+    {
+      "id": "bounded-apple-lane-guard",
+      "status": "retry-missing-device-record-only",
+      "scope": [
+        "core-4",
+        "estimators-1",
+        "mamba-4"
+      ],
+      "reason": "The tool refused multi-lane launch before execution. Explicit bounded fault investigations now enable the diagnostic lane-list opt-in; clean CPU evidence is reused where available."
+    },
+    {
+      "id": "parallel-forest-first-native-numpy-call",
+      "status": "cpu-and-apple-repair-proven-linux-pending",
+      "scope": [
+        "core-1",
+        "rf-2"
+      ],
+      "reason": "Clean public fit_forest refuses ndarray input in a fresh process; reproduced on the installed 0.8.59 wheel. Add the existing native NumPy metadata connection before admission.",
+      "sources": [
+        "bindings/parallel_shard_native.mojo",
+        "python/mojolearn/tests/test_parallel_forest_first_call.py"
+      ],
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/forest-first-call-baseline-r2.log",
+      "proof": "bench/results/verification_faults/2026-10-26-0860/forest-first-call/proof.json"
+    }
+  ]
 }

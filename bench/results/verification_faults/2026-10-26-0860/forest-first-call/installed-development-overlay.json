@@ -1,0 +1,6 @@
+{
+  "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/forest-test-venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_tokenizer_host.so",
+  "original_sha256": "d846a4f30be812da796d028b82f83f61de718b49ce425545d14602bd9e60c2d8",
+  "replacement_sha256": "07cebf244ec1ab91d961787d53c194d97a49a424b696e5664bc024c2e4e95d9a",
+  "scope": "Development group runtime test in isolated copy of installed wheel; not a final wheel RECORD qualification."
+}

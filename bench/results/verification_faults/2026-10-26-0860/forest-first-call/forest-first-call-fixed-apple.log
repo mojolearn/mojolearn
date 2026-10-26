@@ -1,0 +1,5 @@
+mac_slot: waiting 0.0s for metal capacity
+mac_slot: admitted after 7.579s
+....                                                                     [100%]
+4 passed in 15.28s
+mac_slot: {"wait_seconds": 7.579407625016756, "run_seconds": 15.438079542014748, "exit_code": 0}

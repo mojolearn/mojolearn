@@ -464,6 +464,11 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     offsets rebased natively."""
     var b = shard_b()
     var context = _ctx()
+    # A fresh caller may reach this driver before another operation has
+    # connected NumPy's native array/scalar types in the shared context.
+    # Admit ordinary ndarray inputs on first use through the same native
+    # metadata connection as the other public estimator owners.
+    classical_connect_numpy(context)
     var estimator = args[0]
     var cls = py_type(estimator)
     var classes = _t("forest_classes")

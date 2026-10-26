@@ -1,0 +1,24 @@
+{
+  "schema": "mojolearn.targeted-runtime-repair.v1",
+  "problem": "Fresh fit_forest calls refused ordinary NumPy inputs before another operation connected native NumPy metadata.",
+  "repair": "Connect NumPy metadata in the native forest driver before input admission.",
+  "baseline": {
+    "installed_release": "0.8.59",
+    "vendor": "cpu",
+    "failed": 4
+  },
+  "validation": {
+    "cpu_passed": 4,
+    "apple_passed": 4,
+    "scope": "Classifier/regressor, NumPy loaded before/after package import, fresh process per case, sharded/plain prediction bytes equal."
+  },
+  "native_build": {
+    "exit_code": 0,
+    "seconds": 1294.0366730690002,
+    "binary_sha256": "07cebf244ec1ab91d961787d53c194d97a49a424b696e5664bc024c2e4e95d9a"
+  },
+  "source_sha256": "5772eeb194c4381ffa9a14a19610bc3431684b174a7ea762b0057fc116a71d5f",
+  "test_sha256": "26b64cfc440b8c3294fceee94b6c81e07b21f56b0eb37fa4ec40a503feb47b44",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/forest-fix-build",
+  "release_status": "Linux build and affected Linux public calls pending; unchanged arithmetic evidence remains reusable."
+}
