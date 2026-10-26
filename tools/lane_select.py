@@ -8027,6 +8027,71 @@ def selection_precision_limitations(lanes, by_path, sources, generated_outputs=N
     return records
 
 
+def merged_group_lanes(ref, path, rev):
+    """Place a group-layout edit by the members of the changed link units.
+
+    A renamed/split unit changes loading/linking for its members. It does
+    not name unrelated bindings, and comments do not change a unit. Unknown
+    schema/target policy changes still refuse rather than guessing a scope.
+    """
+    try:
+        old = json.loads(_git_show(ref, path))
+        new = json.loads(_read(path))
+        allowed = {"_doc", "index_file", "dirs", "darwin_metal1", "darwin_metal1_suffix"}
+        if set(old) - allowed or set(new) - allowed:
+            return None
+        if any(old.get(k) != new.get(k) for k in allowed - {"_doc", "dirs"}):
+            return None
+        if set(old["dirs"]) != set(new["dirs"]):
+            return None
+        affected = set()
+        for mode in old["dirs"]:
+            before, after = old["dirs"][mode], new["dirs"][mode]
+            if set(before) - {"path", "groups", "optional"} or set(after) - {"path", "groups", "optional"}:
+                return None
+            if before.get("path") != after.get("path"):
+                return None
+            groups = []
+            for entry in (before, after):
+                units = {name: list(members) for name, members in entry["groups"].items()}
+                if any(not isinstance(members, list) or not all(isinstance(m, str) for m in members)
+                       for members in entry["groups"].values()):
+                    return None
+                for member, optional in entry.get("optional", {}).items():
+                    # The previous single-unit schema used a platform list;
+                    # its owner is unambiguous only when exactly one group exists.
+                    if isinstance(optional, list) and len(units) == 1:
+                        owner = next(iter(units))
+                    elif (isinstance(optional, dict) and set(optional) == {"group", "platforms"}
+                          and optional["group"] in units and isinstance(optional["platforms"], list)):
+                        owner = optional["group"]
+                    else:
+                        return None
+                    units[owner].append(member)
+                groups.append(units)
+            for unit in groups[0].keys() | groups[1].keys():
+                if groups[0].get(unit) != groups[1].get(unit):
+                    affected.update(groups[0].get(unit, ()))
+                    affected.update(groups[1].get(unit, ()))
+            for member in before.get("optional", {}).keys() | after.get("optional", {}).keys():
+                if before.get("optional", {}).get(member) != after.get("optional", {}).get(member):
+                    # Platform admission changes the bytes linked alongside
+                    # every member of the optional binding's old/new unit.
+                    for units in groups:
+                        for members in units.values():
+                            if member in members:
+                                affected.update(members)
+        # Every changed member needs a known reverse-map scope. An unknown
+        # binding is not evidence of zero callers.
+        paths = {"bindings/" + name + ".mojo" for name in affected}
+        if paths - rev.keys():
+            return None
+        users = set().union(*(rev[name] for name in paths))
+        return users, affected
+    except (TypeError, KeyError, ValueError, AttributeError):
+        return None
+
+
 def select(paths, ref=None, sources=None, backend=None, stop_when=None):
     """The lanes `paths` can affect.
 
@@ -8144,6 +8209,16 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             reasons[path] = ("docstrings and comments only: the module's code is IDENTICAL to "
                              f"{ref} once docstrings are stripped, so it cannot move a lane body")
             continue
+        if ref and path == "bindings/merged_groups.json":
+            grouped = merged_group_lanes(ref, path, rev)
+            if grouped is not None:
+                users, members = grouped
+                lanes.update(users)
+                by_path[path] = set(users)
+                reasons[path] = (f"merged link-unit membership changed for {len(members)} binding(s): "
+                                 f"{len(users)} lane(s) reach those members; affected loader/link boundaries "
+                                 "also require artifact smokes")
+                continue
         if path == HARNESS:
             touched = harness_lanes(ref) if ref else None
             detail = HARNESS_WHY.get(f"{ref}:{HARNESS}", "") if ref else \
@@ -8285,6 +8360,21 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
             continue
         if path in GLOBAL_PATHS or path in enumerator_files():
             added = registry_lanes(ref, path, sources) if ref else None
+            # A registry may also own executable helpers. Its table-delta
+            # proof cannot place a changed function body, but the ordinary
+            # named-definition analysis can follow that body's callers.
+            # Keep MANIFEST's table policy and refuse an empty/unproved
+            # result; this is not a whole-file or all-lanes fallback.
+            if added is None and ref and path != MANIFEST and path in rev:
+                edited = python_edit_lanes(ref, path, sources, rev)
+                if edited is not None and edited[1]:
+                    names, users = edited
+                    lanes.update(users)
+                    by_path[path] = set(users)
+                    reasons[path] = ("a registry's named executable definitions changed ("
+                                     + ", ".join(names) + "): "
+                                     + str(len(users)) + " lane(s) reached through their callers")
+                    continue
             if added is not None:
                 lanes.update(added)
                 by_path[path] = set(added)
