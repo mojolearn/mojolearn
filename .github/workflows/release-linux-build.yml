@@ -261,6 +261,7 @@ jobs:
           B="$RUNNER_TEMP/w/out/release/$VENDOR-$ARCH/release-build/build"
           cp -r "$B/bincache" "$D/report/bincache" 2>/dev/null || true
           cp -r "$B/build_logs" "$D/report/build_logs" 2>/dev/null || true
+          cp "$B/compile-inputs.json" "$D/report/compile-inputs.json" 2>/dev/null || true
           { echo "### shard $VENDOR-$ARCH $SHARD"; echo '```'; cat "$D/report/shard.tsv" "$D/report/memory.txt" "$D/report/swap.txt" "$D/report/guard.jsonl" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

@@ -130,6 +130,27 @@ def test_inapplicable_cpu_lane_refuses_before_staging_or_running(monkeypatch, tm
     assert not (tmp_path / "out").exists()
 
 
+def test_cpu_staging_resolves_indexed_host_groups_without_copying_native_files(tmp_path):
+    import json
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "__init__.py").write_text("# source")
+    host = tmp_path / "host"
+    binary = host / ".development/key/group.so"
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"host")
+    index = host / "_mojolearn_merged.json"
+    index.write_text(json.dumps({"files": {".development/key/group.so": ["_mojolearn_core_host"]}}))
+    root, chosen = iterate.cpu_package(tmp_path / "out", host, source)
+    assert chosen == host and not list(root.rglob("*.so"))
+    binary.unlink()
+    with pytest.raises(ValueError, match="no CPU host bindings"):
+        iterate.cpu_package(tmp_path / "out", host, source)
+    index.write_text(json.dumps({"files": {"../escape.so": ["_mojolearn_core_host"]}}))
+    with pytest.raises(ValueError, match="invalid CPU host index"):
+        iterate.cpu_package(tmp_path / "out", host, source)
+
+
 def test_all_does_not_schedule_inapplicable_batch_job(capsys):
     import json
     name = next(n for n in ib.LANES if isinstance(ib.BATCH.get(n), str) and n not in ib.RLPAIR)

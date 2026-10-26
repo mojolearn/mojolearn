@@ -49,7 +49,22 @@ def cpu_package(out, host_dir, source=None):
     """
     source = source or ROOT / "python" / "mojolearn"
     host_dir = Path(host_dir).resolve()
-    if not host_dir.is_dir() or not list(host_dir.glob("_mojolearn_*_host.so")):
+    host_files = list(host_dir.glob("_mojolearn_*_host.so"))
+    index = host_dir / "_mojolearn_merged.json"
+    if index.is_file():
+        # The normal loader also resolves logical host members through its
+        # index. Development groups live below .development/, so a top-level
+        # glob alone wrongly rejects an already admitted active host build.
+        # This is availability, not source/binary admission (the pass performs
+        # that independently through binding_stamps before staging).
+        record = json.loads(index.read_text())
+        for relative, members in record.get("files", {}).items():
+            binary = (host_dir / relative).resolve()
+            if not binary.is_relative_to(host_dir) or binary.suffix != ".so":
+                raise ValueError(f"invalid CPU host index path: {relative}")
+            if binary.is_file() and any(name.startswith("_mojolearn_") and name.endswith("_host") for name in members):
+                host_files.append(binary)
+    if not host_dir.is_dir() or not host_files:
         raise ValueError(f"no CPU host bindings under {host_dir}; pass --host-dir")
     root = out.resolve() / "cpu-package"
     root.mkdir(parents=True, exist_ok=True)
