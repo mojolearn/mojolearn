@@ -223,7 +223,7 @@ WHOLE_DIR_PEAK_GIB = {
     ("host", "cuda"): 48, ("host", "hip"): 48,
 }
 #: THE PLANNING PEAK PER MERGED GROUP (0.8.59 split), GiB, keyed
-#: (tier, group stem, vendor). Estimated, not yet recorded on a runner: the
+#: (tier, group stem, vendor). Initial estimates came from the
 #: directory's whole-set peak above times the group's share of its members'
 #: own peaks (per-member development builds, one group per member,
 #: ~/mojolearn-evidence/dev-cache-mac/peaks 2026-10-26; the whole host set's
@@ -246,11 +246,16 @@ UNIT_PEAK_GIB = {
     ("fast", "_mojolearn_native_trees", "cuda"): 10, ("fast", "_mojolearn_native_trees", "hip"): 10,
     ("fast", "_mojolearn_native_sequence", "cuda"): 9, ("fast", "_mojolearn_native_sequence", "hip"): 9,
     ("fast", "_mojolearn_native_cluster", "cuda"): 9, ("fast", "_mojolearn_native_cluster", "hip"): 9,
-    ("host", "_mojolearn_native_host", "cuda"): 11, ("host", "_mojolearn_native_host", "hip"): 11,
-    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 9, ("host", "_mojolearn_native_tokenizer_host", "hip"): 9,
+    # Run 40340886439 at 216d04c7c (2026-10-26): cgroup peaks 13.24 GiB
+    # and 9.28 GiB respectively (process RSS 12.90 / 9.02). Rounded up;
+    # AMD run 40340885959: host / tokenizer / x_host cgroup peaks
+    # 12.88 / 9.25 / 10.37 GiB. Retained in codex-takeover-0859/
+    # gha-40340886439.log, gha-40340885959.log and their memory summaries.
+    ("host", "_mojolearn_native_host", "cuda"): 14, ("host", "_mojolearn_native_host", "hip"): 13,
+    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 10, ("host", "_mojolearn_native_tokenizer_host", "hip"): 10,
     ("host", "_mojolearn_native_neural_host", "cuda"): 10, ("host", "_mojolearn_native_neural_host", "hip"): 10,
     ("host", "_mojolearn_native_forest_host", "cuda"): 11, ("host", "_mojolearn_native_forest_host", "hip"): 11,
-    ("host", "_mojolearn_native_x_host", "cuda"): 10, ("host", "_mojolearn_native_x_host", "hip"): 10,
+    ("host", "_mojolearn_native_x_host", "cuda"): 10, ("host", "_mojolearn_native_x_host", "hip"): 11,
 }
 #: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
 PER_BINDING_PEAK_GIB = 6

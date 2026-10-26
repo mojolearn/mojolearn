@@ -53,6 +53,36 @@ def fake_tools(tmp_path, size=None):
     return str(ptxas), str(fat)
 
 
+def test_failed_assembler_retains_unmodified_input_and_full_output(tmp_path):
+    import hashlib
+    import json
+    import pytest
+    ptxas, fatbinary = fake_tools(tmp_path)
+    message = 'assembler diagnostic\n' * 100
+    Path(ptxas).write_text('#!/usr/bin/env python3\nimport sys\n'
+                          + f'sys.stderr.write({message!r})\nsys.exit(7)\n')
+    diagnostics = tmp_path / 'failures'
+    with pytest.raises(RuntimeError, match=r'ptxas -arch=sm_89 failed \(exit 7, PTX sha256'):
+        cc.compile_ptx(PTX89, 'sm_89', ptxas, fatbinary, diagnostics)
+    retained = diagnostics / ('sm_89-' + hashlib.sha256(PTX89).hexdigest())
+    assert (retained / 'm.ptx').read_bytes() == PTX89
+    assert (retained / 'stderr.log').read_text() == message
+    report = json.loads((retained / 'failure.json').read_text())
+    assert report['returncode'] == 7
+    assert report['command'] == [ptxas, '-arch=sm_89', *cc.PTXAS_FLAGS, 'm.ptx', '-o', 'm.cubin']
+
+
+def test_failed_fatbinary_retains_the_assembler_output(tmp_path):
+    import pytest
+    ptxas, fatbinary = fake_tools(tmp_path)
+    Path(fatbinary).write_text('#!/usr/bin/env python3\nimport sys\nsys.exit(9)\n')
+    diagnostics = tmp_path / 'failures'
+    with pytest.raises(RuntimeError, match=r'fatbinary failed \(exit 9\)'):
+        cc.compile_ptx(PTX89, 'sm_89', ptxas, fatbinary, diagnostics)
+    retained, = diagnostics.iterdir()
+    assert (retained / 'm.cubin').read_bytes() == b'CUBIN-arch=sm_89'
+
+
 def test_fatbin_header_arches():
     assert cc.fatbin_images(fake_fatbin(89), 0) == [(2, "sm_89")]
     assert cc.fatbin_images(fake_fatbin(90, accel=True), 0) == [(2, "sm_90a")]

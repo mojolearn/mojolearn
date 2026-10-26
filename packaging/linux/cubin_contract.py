@@ -189,7 +189,7 @@ def tool_version(tool):
     return r.stdout.strip().splitlines()[-1]
 
 
-def compile_ptx(text, arch, ptxas, fatbinary):
+def compile_ptx(text, arch, ptxas, fatbinary, diagnostics_dir=None):
     """PTX bytes -> compressed fatbin bytes holding the fmad=false cubin.
 
     ptxas and fatbinary run in a scratch directory on FIXED relative names, so
@@ -198,16 +198,38 @@ def compile_ptx(text, arch, ptxas, fatbinary):
     with tempfile.TemporaryDirectory() as d:
         with open(os.path.join(d, "m.ptx"), "wb") as f:
             f.write(text)
-        r = subprocess.run([ptxas, f"-arch={arch}", *PTXAS_FLAGS, "m.ptx", "-o", "m.cubin"],
+        command = [ptxas, f"-arch={arch}", *PTXAS_FLAGS, "m.ptx", "-o", "m.cubin"]
+        r = subprocess.run(command,
                            capture_output=True, text=True, cwd=d)
         if r.returncode:
-            raise RuntimeError(f"ptxas -arch={arch} failed: {r.stderr[-800:]}")
-        r = subprocess.run([fatbinary, "--create=m.fatbin", f"--image3=kind=elf,sm={arch[3:]},file=m.cubin",
-                            *FATBIN_FLAGS], capture_output=True, text=True, cwd=d)
+            _retain_tool_failure(diagnostics_dir, text, arch, command, r, d)
+            raise RuntimeError(f"ptxas -arch={arch} failed (exit {r.returncode}, "
+                               f"PTX sha256 {hashlib.sha256(text).hexdigest()}): {r.stderr[-800:]}")
+        command = [fatbinary, "--create=m.fatbin", f"--image3=kind=elf,sm={arch[3:]},file=m.cubin",
+                   *FATBIN_FLAGS]
+        r = subprocess.run(command, capture_output=True, text=True, cwd=d)
         if r.returncode:
-            raise RuntimeError(f"fatbinary failed: {r.stderr[-800:]}")
+            _retain_tool_failure(diagnostics_dir, text, arch, command, r, d)
+            raise RuntimeError(f"fatbinary failed (exit {r.returncode}): {r.stderr[-800:]}")
         with open(os.path.join(d, "m.fatbin"), "rb") as f:
             return f.read()
+
+
+def _retain_tool_failure(directory, text, arch, command, result, scratch):
+    """Retain the unmodified failed input before its scratch directory goes away."""
+    if directory is None:
+        return
+    target = Path(directory) / (arch + '-' + hashlib.sha256(text).hexdigest())
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ('m.ptx', 'm.cubin', 'm.fatbin'):
+        source = Path(scratch) / name
+        if source.exists():
+            shutil.copyfile(source, target / name)
+    (target / 'stdout.log').write_text(result.stdout)
+    (target / 'stderr.log').write_text(result.stderr)
+    (target / 'failure.json').write_text(json.dumps(dict(
+        command=command, returncode=result.returncode, arch=arch,
+        ptx_sha256=hashlib.sha256(text).hexdigest()), indent=2) + '\n')
 
 
 #: The largest PTX module the audit lets stay PTX, and only when it is
@@ -290,7 +312,7 @@ def _patch_one(path, data, built, objdump):
     return bytes(buf), row
 
 
-def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None):
+def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None, diagnostics_dir=None):
     """Convert every PTX module of every file; one JSON row per file.
 
     Distinct modules are compiled once across all files. `arch`, when given,
@@ -305,7 +327,8 @@ def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None):
                 raise ValueError(f"{p}: a module targets {a}, the set is {arch}")
             todo.setdefault(hashlib.sha256(text).hexdigest(), (text, a))
     with cf.ThreadPoolExecutor(jobs or os.cpu_count() or 1) as ex:
-        futs = {k: ex.submit(compile_ptx, t, a, ptxas, fatbinary) for k, (t, a) in todo.items()}
+        futs = {k: ex.submit(compile_ptx, t, a, ptxas, fatbinary, diagnostics_dir)
+                for k, (t, a) in todo.items()}
         built = {k: f.result() for k, f in futs.items()}
     rows = []
     for p, data in datas.items():
@@ -404,6 +427,8 @@ def main():
                     help="cross-checks every repointed lea (default: objdump on PATH; required)")
     ap.add_argument("--arch", help="the set's architecture; every module must target it")
     ap.add_argument("--jobs", type=int, default=None)
+    ap.add_argument("--diagnostics-dir", type=Path,
+                    help="retain failed assembler inputs, exit codes and complete tool output")
     a = ap.parse_args()
     if a.mode == "patch":
         if not a.objdump:
@@ -411,7 +436,7 @@ def main():
             return 2
         print(json.dumps({"ptxas": tool_version(a.ptxas), "fatbinary": tool_version(a.fatbinary),
                           "ptxas_flags": PTXAS_FLAGS, "fatbinary_flags": FATBIN_FLAGS}))
-        rows = patch_files(a.paths, a.ptxas, a.fatbinary, a.jobs, a.arch, a.objdump)
+        rows = patch_files(a.paths, a.ptxas, a.fatbinary, a.jobs, a.arch, a.objdump, a.diagnostics_dir)
         for r in rows:
             print(json.dumps(r))
         return int(any(not u["jit_invariant"] for r in rows for u in r["unplaced"]))

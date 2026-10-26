@@ -891,6 +891,7 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
     say "REFUSING: $PTXAS is not ptxas V$CUDA_TOOLS_VERSION"; exit 5
   fi
   if ! python3 "$REPO/packaging/linux/cubin_contract.py" patch --arch "$ARCH" --ptxas "$PTXAS" --fatbinary "$FATBINARY" \
+      --diagnostics-dir "$DEST/cubin-failures" \
       "$SET"/identical/*.so $ADAPTER_SO > "$DEST/cubin.jsonl"; then
     say "REFUSING: an IDENTICAL module could not be given its fatbin (\"unplaced\" in $DEST/cubin.jsonl)"
     exit 5

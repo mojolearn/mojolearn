@@ -302,7 +302,14 @@ class MergedPlan(unittest.TestCase):
             for vendor in ("cuda", "hip"):
                 for stem in stems:
                     self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[(tier, stem, vendor)]), 2)
-        self.assertLessEqual(rgb.swap_gib(rgb.HOST_PRODUCER_PEAK_GIB), 0)
+        # The 216d04c7c host run peaked at 13.24 GiB. Its rounded planning
+        # peak plus headroom now reserves the same two GiB of light swap.
+        self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_host", "cuda")], 13.24)
+        self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_tokenizer_host", "cuda")], 9.28)
+        self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_host", "hip")], 12.88)
+        self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_tokenizer_host", "hip")], 9.25)
+        self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_x_host", "hip")], 10.37)
+        self.assertLessEqual(rgb.swap_gib(rgb.HOST_PRODUCER_PEAK_GIB), 2)
 
     def test_the_host_producer_needs_a_donor(self):
         with self.assertRaisesRegex(SystemExit, "donor"):
