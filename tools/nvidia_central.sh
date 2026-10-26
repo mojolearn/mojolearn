@@ -359,7 +359,8 @@ submit)
             printf 'exec bash %s %s %s -- bash %s\n' "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
             printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
         } > "$TMPD/stage.sh"
-        BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
+        staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true
+        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
         note="${note:+$note }[persist $BP_TAG: $script -> $res]"
         script=$jobsh
     else

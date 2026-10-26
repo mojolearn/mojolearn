@@ -657,7 +657,8 @@ run)
     _cmd="$*"
     if [ "$_persist" = 1 ]; then
         bp_prepare "dp-$KEY" dev_pod "$TMPD/persist.sh" --slots 4 --every-min 10 --days 3 || die "$BP_MINT_FAILED"
-        bx 120 "bash -s" < "$TMPD/persist.sh" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $KEY; nothing ran"
+        _staged=$(bx 120 "bash -s" < "$TMPD/persist.sh") || true
+        printf '%s\n' "$_staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $KEY; nothing ran"
         _cmd=$(bp_wrap "${_res:-box-out/$BP_TAG}" "$_cmd")
     else
         bp_opt_out dev_pod "run $KEY $*" || exit 1
