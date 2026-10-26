@@ -27,12 +27,14 @@ def host_only(fixture, tmp_path, generated=False):
     staged = out / 'set'
     (staged / 'host').mkdir(parents=True)
     (out / 'raw').mkdir()
-    (out / 'raw' / hc.HOST_FILE).write_bytes(b'raw-new-host')
-    (staged / hb.HOST_PATH).write_bytes(b'staged-new-host')
+    paths = hb.host_paths()
+    for f, path in paths.items():
+        (out / 'raw' / f).write_bytes(b'raw-new-host-' + f.encode())
+        (staged / path).write_bytes(b'staged-new-host-' + f.encode())
     donor, donor_set = hc.inspect_build(old[0])
     donor_contract, _ = hc._record(donor, COMPILER)
     shutil.copytree(donor_set / '.libs', staged / '.libs')
-    index = dict(format=1,files={hc.HOST_FILE:sorted(hc.expected_names())})
+    index = dict(format=1,files=hc.host_plan())
     hb.write(staged / hb.HOST_INDEX,index)
     inventory = current['source_inventory']
     closures, generated_sources = {}, {}
@@ -66,19 +68,23 @@ def host_only(fixture, tmp_path, generated=False):
         merged_build_inputs=merged_inputs,
         build_environment=hb.FLAGS,pixi_environment='gbmbench',command=hb.command('gbmbench'))
     hb.write(out / 'compile-inputs.json',capture)
-    stamp = dict(schema=2,binding=hb.HOST_PATH,script='merged_build.sh',commit=NEW,
-        members={i['name']:dict(script=i['script'],scope='closure',digest=i['closure']['digest']) for i in identities.values()})
-    if generated:
-        stamp['members'][REAL['member']] = dict(REAL['stamp_member'])
+    by_name = {i['name']: i for i in identities.values()}
     merged_hash = hc.hashlib.sha256()
     for name in binding_stamps.MERGED_INPUTS:
         merged_hash.update(name.encode()+b'\0'+merged_inputs[name].encode()+b'\n')
-    stamp['merged_inputs'] = merged_hash.hexdigest()
-    hb.write(out / 'binding-stamp.json',stamp)
+    stamps = {}
+    for f, members in index['files'].items():
+        stamps[f] = dict(schema=2,binding=paths[f],script='merged_build.sh',commit=NEW,
+            members={n:dict(script=by_name[n]['script'],scope='closure',digest=by_name[n]['closure']['digest'])
+                     for n in members}, merged_inputs=merged_hash.hexdigest())
+        if generated and REAL['member'] in members:
+            stamps[f]['members'][REAL['member']] = dict(REAL['stamp_member'])
+    hb.write(out / 'binding-stamp.json',stamps)
     stage = dict(schema='mojolearn.host-staging.v1',action='stage-host-only',
         runtime_origin_proof_sha256=donor['proof']['sha256'],runtime_libraries=donor_contract['runtime_libraries'],
-        runtime_byte_changes=[],raw_sha256=hc.file_sha(out / 'raw' / hc.HOST_FILE),
-        staged_sha256=hc.file_sha(staged / hb.HOST_PATH),runpath=hb.RUNPATH,rpath=None,needed=['libRuntime.so'])
+        runtime_byte_changes=[],raw_sha256={f: hc.file_sha(out / 'raw' / f) for f in paths},
+        staged_sha256={f: hc.file_sha(staged / p) for f, p in paths.items()},runpath={f: hb.RUNPATH for f in paths},
+        rpath={f: None for f in paths},needed={f: ['libRuntime.so'] for f in paths})
     hb.write(out / 'stage.json',stage)
     hb.write(out / 'readback.json',dict(schema='mojolearn.host-readback.v1',source_commit=NEW,
         members=[dict(name=name,vendor='cpu',column='cpu',numeric_mode=1) for name in sorted(hc.expected_names())]))
@@ -86,7 +92,7 @@ def host_only(fixture, tmp_path, generated=False):
         stage_exit=0,readback_exit=0,source_commit=NEW,compiler_sha256=COMPILER,binding_layout='merged',
         release_modes=['identical'],compile_inputs_sha256=hc.file_sha(out / 'compile-inputs.json'),
         source_inventory=inventory,source_sha256=hb.inventory_sha(inventory),command=hb.command('gbmbench'),
-        raw_host_sha256=stage['raw_sha256'],host_extension={hb.PREFIX+hb.HOST_PATH:stage['staged_sha256']},
+        raw_host_sha256=stage['raw_sha256'],host_extension={hb.PREFIX+p:stage['staged_sha256'][f] for f, p in paths.items()},
         merged_indexes={hb.PREFIX+hb.HOST_INDEX:dict(sha256=hc.file_sha(staged / hb.HOST_INDEX),files=index['files'])},
         stamp_sha256=hc.file_sha(out / 'binding-stamp.json'),stage_sha256=hc.file_sha(out / 'stage.json'),
         readback_sha256=hc.file_sha(out / 'readback.json'),runtime_identity=current['runtime_identity'])
@@ -109,7 +115,8 @@ def test_actual_host_only_proof_composes_without_gpu_host_producer(fixture, tmp_
     assert result['original_host']['kind'] == hb.KIND
     assert result['original_device']['leg'] == 'cuda/sm_89'
     assert {r['source_commit'] for r in result['artifact_origins'].values()} == {OLD,NEW}
-    assert result['host_extension']['mojolearn/cuda/sm_89/'+hb.HOST_PATH] == proof['host_extension'][hb.PREFIX+hb.HOST_PATH]
+    for p in hb.host_paths().values():
+        assert result['host_extension']['mojolearn/cuda/sm_89/'+p] == proof['host_extension'][hb.PREFIX+p]
     assert not (directory/'identical').exists()
     assert 'build_exit' not in result
 
@@ -123,7 +130,7 @@ def change_witness(source,key,operation):
 
 @pytest.mark.parametrize('changed', ['failed-build','boolean-build-exit','failed-readback','fake-gpu-output',
     'compiler','flags','gpu-command','host-closure','host-index','readback-coverage','readback-column',
-    'runtime-bytes','runtime-producer','stage-runpath'])
+    'runtime-bytes','runtime-producer','stage-runpath','stamp-file','host-index-move'])
 def test_host_only_proof_cannot_claim_missing_or_different_work(fixture,tmp_path,changed):
     host=host_only(fixture,tmp_path);source,_=hb.inspect(host)
     proof=hc.decoded(source['proof'])
@@ -140,9 +147,16 @@ def test_host_only_proof_cannot_claim_missing_or_different_work(fixture,tmp_path
             else: next(iter(d['binding_identities'].values()))['closure']['digest']='f'*64
         change_witness(source,'capture',mutate)
         proof['compile_inputs_sha256']=source['capture']['sha256']
-    elif changed=='host-index':
-        change_witness(source,'index',lambda d:d['files'][hc.HOST_FILE].pop())
+    elif changed in ('host-index','host-index-move'):
+        files=hc.host_files()
+        def mutate(d):
+            moved=d['files'][files[0]].pop()
+            if changed=='host-index-move': d['files'][files[1]].append(moved)
+        change_witness(source,'index',mutate)
         proof['merged_indexes'][hb.PREFIX+hb.HOST_INDEX]['sha256']=source['index']['sha256']
+    elif changed=='stamp-file':
+        change_witness(source,'stamp',lambda d:d.pop(hc.host_files()[-1]))
+        proof['stamp_sha256']=source['stamp']['sha256']
     elif changed.startswith('readback-'):
         def mutate(d):
             if changed=='readback-coverage': d['members'].pop()
@@ -152,7 +166,7 @@ def test_host_only_proof_cannot_claim_missing_or_different_work(fixture,tmp_path
         def mutate(d):
             if changed=='runtime-bytes': d['runtime_libraries']['libRuntime.so']='f'*64
             elif changed=='runtime-producer': d['runtime_origin_proof_sha256']='f'*64
-            else: d['runpath']='$ORIGIN/build-box-only'
+            else: d['runpath'][hc.host_files()[-1]]='$ORIGIN/build-box-only'
         change_witness(source,'stage',mutate);proof['stage_sha256']=source['stage']['sha256']
     raw=json.dumps(proof);source['proof']={'utf8':raw,'sha256':hc.hashlib.sha256(raw.encode()).hexdigest()}
     with pytest.raises(ValueError): hb.record(source,COMPILER)
@@ -160,10 +174,10 @@ def test_host_only_proof_cannot_claim_missing_or_different_work(fixture,tmp_path
 
 def test_missing_original_compiler_bytes_and_changed_staged_host_are_refused(fixture,tmp_path):
     host=host_only(fixture,tmp_path);source,staged=hb.inspect(host)
-    (staged/hb.HOST_PATH).write_bytes(b'changed')
+    (staged/hb.host_paths()[hc.host_files()[-1]]).write_bytes(b'changed')
     with pytest.raises(ValueError,match='staged host bytes'): hb.validate_bytes(source,staged,COMPILER)
-    (host/'raw'/hc.HOST_FILE).unlink()
-    with pytest.raises(FileNotFoundError): hb.inspect(host)
+    (host/'raw'/hc.host_files()[0]).unlink()
+    with pytest.raises(ValueError,match='original compiler output bytes'): hb.inspect(host)
 
 
 def test_real_0857_tokenizer_stamp_is_the_identity_plus_the_verified_generated_table():
