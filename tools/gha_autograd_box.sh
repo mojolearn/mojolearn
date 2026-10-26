@@ -7,6 +7,8 @@ set -euo pipefail
 VENDOR=${1:?nvidia or amd}
 TARGET=${2:?sm_89 or gfx942}
 JOBS=${3:?compiler workers}
+COMPONENT=${4:-autograd}
+case "$COMPONENT" in autograd|adapter-native) ;; *) echo 'unsupported component'; exit 2 ;; esac
 R=/root/mojolearn
 OUT=/root/results-autograd
 G=$OUT/GHA
@@ -92,6 +94,36 @@ find "$R/.pixi/envs/default/lib/mojo" -maxdepth 1 -type f \( -name '*.mojoc' -o 
 # one-worker compiler crash; capped runner swap supports peaks over RAM.
 # No retained-artifact substitution and no GPU execution.
 PHASE=compile
+if [[ "$COMPONENT" = adapter-native ]]; then
+    # Retain the actual transitive source bytes before compilation. Only this
+    # native library changed; the eight autograd executables remain reusable.
+    "$PYTHON" - "$OUT" <<'PY'
+import hashlib,json,pathlib,sys,tarfile
+sys.path.insert(0,'tools')
+import retained_release_composition as retained
+root=pathlib.Path.cwd(); out=pathlib.Path(sys.argv[1])
+inputs=retained.adapter_inputs(root)
+(out/'adapter-inputs.json').write_text(json.dumps(inputs,sort_keys=True,indent=2)+'\n')
+with tarfile.open(out/'adapter-source-closure.tar.gz','w:gz') as archive:
+    for name in inputs:
+        archive.add(root/name,arcname=name)
+    for name in ('pixi.toml','pixi.lock','tools/build_native_adapters.sh'):
+        archive.add(root/name,arcname=name)
+PY
+    MOJOLEARN_COMPILE_JOBS="$JOBS" "$PIXI" run -e default bash tools/build_native_adapters.sh "$OUT/artifacts" "$TARGET"
+    PHASE=validate
+    "$PYTHON" - "$OUT" "$VENDOR" "$TARGET" "$MOJOLEARN_COMMIT" <<'PY'
+import hashlib,json,pathlib,sys
+sys.path.insert(0,'tools')
+import retained_release_composition as retained
+out=pathlib.Path(sys.argv[1]); artifact=out/'artifacts/libmojolearn_adapter.so'
+assert json.loads((out/'adapter-inputs.json').read_text()) == retained.adapter_inputs(pathlib.Path.cwd())
+result=dict(component='adapter-native',source_commit=sys.argv[4],vendor=sys.argv[2],target=sys.argv[3],
+            state='built',runtime_qualified=False,sha256=hashlib.sha256(artifact.read_bytes()).hexdigest())
+(out/'summary.json').write_text(json.dumps(result,indent=2)+'\n')
+PY
+    exit 0
+fi
 # Pixi activation supplies MODULAR_HOME from the pinned package's activation
 # script. Calling its Python directly omitted that supported environment and
 # both vendors refused before compiling because Mojo could not locate std.

@@ -6,7 +6,7 @@
 from adapters.native.operation import IP
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from adapters.native.training import run_training, DP
 
@@ -47,7 +47,15 @@ def mojolearn_adapter_train(
             var host = HostExec()
             run_training(host, ins, count, outs, prog, n_program, opts, n_options, floats, n_scalars, True)
         elif device == 0:
-            var ctx = DeviceContext()
+            # Keep the adapter's queue alive across calls, as the public native
+            # entry points do. The installed CUDA adapter stalled on its second
+            # analytic training call in MAX enqueueCreateBuffer/mutex_lock when
+            # each call created/destroyed a context. The internal cause is not
+            # confirmed. Retained reproduction: bench/results/identity_break/
+            # 2026-10-26-0859-targeted/adapter-context-reproduction.json.
+            # DeviceExec(ctx) remains unpooled and drains this queue; tensor
+            # ownership and all training arithmetic are unchanged.
+            var ctx = process_ctx["MojoLearnAdapterTrainingContext"]()
             var gpu = DeviceExec(ctx)
             run_training(gpu, ins, count, outs, prog, n_program, opts, n_options, floats, n_scalars, host_buffers != 0)
         else:

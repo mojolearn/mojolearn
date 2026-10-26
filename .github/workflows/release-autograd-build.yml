@@ -15,6 +15,11 @@ on:
         options: [both, nvidia, amd]
         default: both
         required: true
+      component:
+        description: "Only the invalidated native component; neither option runs GPU tests"
+        type: choice
+        options: [autograd, adapter-native]
+        default: autograd
       tag:
         description: "Dispatcher label"
         required: false
@@ -95,6 +100,7 @@ jobs:
           VENDOR: ${{ matrix.vendor }}
           TARGET: ${{ matrix.target }}
           WORKERS: ${{ matrix.workers }}
+          COMPONENT: ${{ inputs.component }}
         run: |
           set -euo pipefail
           # Bound setup + compilation below the job deadline, leaving time to
@@ -105,7 +111,7 @@ jobs:
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$GITHUB_WORKSPACE/src:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/autograd/out:/root/results-autograd" \
-            "$IMAGE" bash /tooling/tools/gha_autograd_box.sh "$VENDOR" "$TARGET" "$WORKERS" \
+            "$IMAGE" bash /tooling/tools/gha_autograd_box.sh "$VENDOR" "$TARGET" "$WORKERS" "$COMPONENT" \
             > "$RUNNER_TEMP/autograd/out/GHA/container.log" 2>&1 || code=$?
           echo "$code" > "$RUNNER_TEMP/autograd/out/GHA/container.exit"
           # Ensure a timed-out docker client cannot leave its compile running
