@@ -133,5 +133,5 @@ PUBLIC_PENDING_LANES = {
     "x-huber-outliers": "unwatched",
     "x-sgd-clf-proba": "unwatched",
     "x-logistic-cv-proba": "unwatched",
-    "x-ridge-cv-kfold": "no reference",
+    "x-ridge-cv-kfold": "unwatched",
     }

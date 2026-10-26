@@ -149,5 +149,5 @@ TRAINING_LANE_NAMES = {
     "multioutput-ridge": "MultiOutputRegressor over Ridge",
 }
 PUBLIC_PENDING_LANES = {
-    "multioutput-ridge": "no reference",
+    "multioutput-ridge": "unwatched",
     }

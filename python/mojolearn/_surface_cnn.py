@@ -80,6 +80,6 @@ TRAINING_LANE_NAMES = {
     "public-cnn-classifier-predict": "CNNClassifier predict and predict_proba",
 }
 PUBLIC_PENDING_LANES = {
-    "public-cnn-layer-fit": "no reference",
-    "public-cnn-classifier-predict": "no reference",
+    "public-cnn-layer-fit": "unwatched",
+    "public-cnn-classifier-predict": "unwatched",
     }

@@ -5,6 +5,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
@@ -281,6 +282,11 @@ def neighbor_query_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         var args = PythonObject(from_borrowed=args_ptr)
         return neighbor_query(args[0], String(args[1]), args[2], args[3]).steal_data()
     except error:
+        # family_call stashes the native binding's Python exception. Restore
+        # its original type/message instead of exposing the sentinel (the
+        # malformed IVF-index public test exercises this boundary).
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if String(error).startswith("RuntimeError:"):
@@ -330,6 +336,8 @@ def neighbor_query_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
                 result = original
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)

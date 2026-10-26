@@ -917,6 +917,7 @@ TRAINING_LANE_NAMES = {
     "training-mlp-sessions": "the multi-session MLP inference",
     "public-residual-dropout": "residual_dropout and residual_dropout_backward",
     "public-numeric-metadata": "vendor_used, catboost_auto_learning_rate and johnson_lindenstrauss_min_dim",
+    "public-set-params": "native constructor, parameter reset and refit across estimator families",
     "neural-trainer-unfused": "the parallel neural trainer's unfused MLP gradient route",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
@@ -1639,7 +1640,7 @@ FAMILIES = (
                         # lane verify-gaps-20261022: the models reader surface
                         # (HFConfig, ModelPlan, TensorInfo, _map, _file,
                         # _read_weights) runs in this binding
-                        "hf-model-surface"),
+                        "hf-model-surface", "public-set-params"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("BpeTokenizer",),
@@ -1663,6 +1664,10 @@ FAMILIES = (
         ),
         exports=(
             # Native C-entry registrations are part of the exported ABI too.
+            "array_native_call", "declared_params_native_call", "full_reset_constructor_native_call",
+            "full_reset_params_native_call", "linear_constructor_native_call", "mode_metadata_native_call",
+            "neighbor_query_attribute_call", "neighbor_query_call", "params_metadata_native_call",
+            "params_setter_native_call", "public_attribute_native_call",
             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
             "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
@@ -3678,6 +3683,8 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    # Registered reset/refit coverage has no admitted reference cells yet.
+    "public-set-params": "no reference",
     # New owner lanes: no execution/reference admission is implied by registration.
     "native-schedule-series": "unwatched",
     "optim-owner-lifecycle": "unwatched",
@@ -3972,8 +3979,8 @@ PUBLIC_PENDING_LANES = {
     "gp-lml-theta": "unwatched",
     "cross-vendor-fold": "unwatched",
     "transformer-decode-load-state": "unwatched",
-    "transformer-forward-tape": "no reference",
-    "scaler-fit-transform": "no reference",
+    "transformer-forward-tape": "unwatched",
+    "scaler-fit-transform": "unwatched",
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",
     "ivf-short-fill": "unwatched",
@@ -3986,10 +3993,10 @@ PUBLIC_PENDING_LANES = {
     "samba-optimizer-state": "unwatched",
     # lane verify-coverage-20261024: the public-gap lanes of the training
     # family; no release record yet.
-    "public-residual-dropout": "no reference",
-    "public-numeric-metadata": "no reference",
-    "neural-trainer-unfused": "no reference",
-    "svc-gamma-scale": "no reference",
+    "public-residual-dropout": "unwatched",
+    "public-numeric-metadata": "unwatched",
+    "neural-trainer-unfused": "unwatched",
+    "svc-gamma-scale": "unwatched",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
     "saved-model-host-infer-trees": "unwatched",

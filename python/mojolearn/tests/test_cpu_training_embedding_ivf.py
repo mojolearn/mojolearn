@@ -129,6 +129,8 @@ def test_bindings_register_the_gpu_names():
             # lane gap-ivf: the resident build (taken via getattr, None on the
             # host binding) and its one-copy export of a resident index
             device_only |= {"ivf_flat_build_resident", "ivf_flat_index_export"}
+            # Device execution-plan bookkeeping has no host-buffer counterpart.
+            device_only |= {"device_plan_enter", "device_plan_exit", "device_plan_log"}
         assert device_only <= gpu and not device_only & host
         assert host == (gpu - device_only) | readbacks, (name, sorted(host ^ ((gpu - device_only) | readbacks)))
         assert host == set(host_surface.family(name)["exports"])

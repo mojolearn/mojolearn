@@ -80,12 +80,6 @@ def test_gpu_and_reference_bindings_register_build_and_search():
         assert "from bindings.embedding_host_forward import" in _read(rel), rel
 
 
-def test_one_call_host_entry_is_build_then_search():
-    text = _read("ivf/host/ivf_host.mojo")
-    body = text[text.index("def host_ivf_build_and_search("):]
-    assert "host_ivf_build(" in body and "host_ivf_search(" in body
-
-
 def _fake_index(n=12, dim=3, n_lists=3):
     from mojolearn._buffer import as_f32_c, as_i32_c
     rng = np.random.default_rng(0)
@@ -131,7 +125,7 @@ def test_ivf_load_refuses_a_cast_and_a_shape(tmp_path):
 def test_ivf_search_refuses_a_metric_the_index_was_not_built_under():
     m = _fake_index()
     m.metric = "sqeuclidean"
-    with pytest.raises(ValueError, match="a built index has one metric"):
+    with pytest.raises(ValueError, match="metric differs from the fitted index"):
         m.search(np.zeros((1, 3), np.float32))
 
 

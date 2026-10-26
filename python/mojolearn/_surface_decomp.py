@@ -72,4 +72,4 @@ TRAINING_LANE_NAMES = {"public-sparse-encode": "sparse_encode (threshold, lasso_
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
                        "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
 PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "unwatched",
-                        "public-sparse-encode": "no reference"}
+                        "public-sparse-encode": "unwatched"}

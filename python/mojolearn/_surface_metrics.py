@@ -153,7 +153,7 @@ TRAINING_LANE_NAMES = {
 PUBLIC_PENDING_LANES = {
     "x-metrics-classification-report": "unwatched",
     "x-metrics-permutation-test-score": "unwatched",
-    "public-scorer-factories": "no reference",
-    "public-validation-learning-curves": "no reference",
-    "public-randomized-search": "no reference",
+    "public-scorer-factories": "unwatched",
+    "public-validation-learning-curves": "unwatched",
+    "public-randomized-search": "unwatched",
     }
