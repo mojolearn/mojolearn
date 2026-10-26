@@ -86,6 +86,10 @@ on:
         description: "Retry assembly using this run's shard artifacts; refuse any compilation"
         required: false
         default: ""
+      compile_groups:
+        description: "Compile only: device, or exact merged shard entries; no assembly"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -116,6 +120,7 @@ jobs:
           IN_JOBS: ${{ inputs.jobs }}
           IN_MODES: ${{ inputs.modes }}
           IN_REUSE_RUN: ${{ inputs.reuse_shards_run }}
+          IN_COMPILE_GROUPS: ${{ inputs.compile_groups }}
         run: |
           set -eu
           printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
@@ -123,6 +128,7 @@ jobs:
           printf '%s' "$IN_JOBS" | grep -Eq '^[1-4]$' || { echo "jobs must be 1..4"; exit 2; }
           printf '%s' "$IN_MODES" | grep -Eq '^(identical|fast|fast identical|identical fast)$' || { echo "modes must be identical and/or fast"; exit 2; }
           [ -z "$IN_REUSE_RUN" ] || printf '%s' "$IN_REUSE_RUN" | grep -Eq '^[1-9][0-9]*$' || { echo "reuse_shards_run must be a run ID"; exit 2; }
+          [ -z "$IN_REUSE_RUN" ] || [ -z "$IN_COMPILE_GROUPS" ] || { echo "choose retained assembly or selected compilation"; exit 2; }
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: tooling
@@ -138,13 +144,14 @@ jobs:
           IN_SETS: ${{ inputs.sets }}
           IN_SHARDS: ${{ inputs.shards }}
           IN_MODES: ${{ inputs.modes }}
+          IN_COMPILE_GROUPS: ${{ inputs.compile_groups }}
         run: |
           # pipefail: without it tee hides the planner's refusal, the plan job
           # passes with no matrix and the run fails with no job named (run 39840375353)
           set -euo pipefail
           donor=$(python3 -c 'import json, os; e = json.load(open(os.environ["GITHUB_EVENT_PATH"])); print("1" if (e.get("inputs") or {}).get("host_donor_url") else "")')
           python3 tooling/tools/release_github_build.py plan --src src --sets "$IN_SETS" --shards "$IN_SHARDS" \
-            --modes "$IN_MODES" ${donor:+--host-donor} --json plan.json --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+            --modes "$IN_MODES" --compile-groups "$IN_COMPILE_GROUPS" ${donor:+--host-donor} --json plan.json --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: plan
@@ -262,7 +269,7 @@ jobs:
 
   assemble:
     needs: [plan, shard]
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.has_devices == 'true'
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.has_devices == 'true' && inputs.compile_groups == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:

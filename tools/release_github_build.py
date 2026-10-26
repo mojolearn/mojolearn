@@ -518,7 +518,7 @@ def unit_seconds(entry, vendor, merged, share=1.0):
     return int(base * share * min(workers, CPU_BOX_VCPU) / min(workers, RUNNER_VCPU))
 
 
-def estimate(include, merged, sets, host, host_donor=False, shares=None):
+def estimate(include, merged, sets, host, host_donor=False, shares=None, compile_only=False):
     """{arch: dict(jobs, wall_s, runner_s)} and the run's totals, from the plan's rows."""
     out, adapters = {}, lambda v: UNIT_SECONDS_CPU_BOX[("adapters", v)]
     shares = shares or {}
@@ -528,8 +528,8 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None):
         shard_s = [JOB_OVERHEAD_SECONDS + sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
                                               for e in r["only"].split())
                    // (1 if merged else 2) + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
-        asm = JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
-        out[arch] = dict(jobs=len(rows) + 1, wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
+        asm = 0 if compile_only else JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
+        out[arch] = dict(jobs=len(rows) + (0 if compile_only else 1), wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
                          swap_gib=max([r["swap_gib"] for r in rows] or [0]))
     if host:
         # the producer compiles the host groups one after another: the whole set's seconds
@@ -542,7 +542,7 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None):
     return out, total
 
 
-def build_plan(src, tokens, shards, modes=None, host_donor=False):
+def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups=""):
     """The run's plan document: one shard row per compile slice (merged: one
     compile per row), its swap, the device sets, the host producer, and the
     estimate. Refuses what a free runner cannot build."""
@@ -582,10 +582,21 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False):
                     raise SystemExit("plan: " + unit_refusal(sh["only"], vendor, sw + RUNNER_RAM_GIB))
                 include.append(dict(arch=arch, vendor=vendor, set_index=si, swap_gib=sw, peak_gib=peak,
                                     unit=unit_slug(sh["only"]) if merged else f"shard{sh['shard']}", **sh))
-    per_set, total = estimate(include, bool(merged), sets, host, host_donor, shares)
+    if compile_groups:
+        if not merged or host:
+            raise SystemExit("compile-groups requires a merged device set and no host producer")
+        known = {r["only"] for r in include}
+        selected = ({e for e in known if unit_tier(e) not in ("host", "adapters")}
+                    if compile_groups == "device" else set(compile_groups.split()))
+        if not selected or selected - known:
+            raise SystemExit("compile-groups contains unknown or empty selections: " + " ".join(sorted(selected - known)))
+        include = [r for r in include if r["only"] in selected]
+        nbuilds = len(selected)
+    per_set, total = estimate(include, bool(merged), sets, host, host_donor, shares, bool(compile_groups))
     return dict(matrix=dict(include=include), sets=sets, host=host, builds=nbuilds, shards=shards,
                 jobs_per_set=jobs_per_set, modes=list(modes or []),
                 layout=None if merged is None else ("merged" if merged else "per-binding"), members=members,
+                compile_groups=compile_groups, compile_only=bool(compile_groups),
                 assemble_swap_gib=max([r["swap_gib"] for r in include] or [0]),
                 host_swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB) if host else 0,
                 estimate=dict(per_set=per_set, total=total))
@@ -594,7 +605,7 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False):
 def cmd_plan(a):
     import release_modes
     modes = release_modes.parse_modes(a.modes) if a.modes else None
-    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor)
+    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor, a.compile_groups)
     text = json.dumps(doc, indent=1)
     if a.json:
         Path(a.json).write_text(text + "\n")
@@ -1001,6 +1012,8 @@ def cmd_run(a):
         raise SystemExit("--commit must be a full 40-hex SHA")
     if not a.arch and not a.host:
         raise SystemExit("--arch and/or --host is required")
+    if a.compile_groups and (not a.arch or a.host or a.host_donor):
+        raise SystemExit("--compile-groups requires one --arch and no host producer/donor")
     if a.arch and a.arch not in ARCHS:
         raise SystemExit(f"--arch must be one of {' '.join(ARCHS)}")
     if a.host and not a.arch and not a.host_donor and not a.run_id:
@@ -1048,11 +1061,11 @@ def cmd_run(a):
         gh("workflow", "run", wid, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={sets}",
            "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}",
            "-f", f"modes={' '.join(modes)}", "-f", f"host_donor_url={donor_url}",
-           "-f", f"host_donor_sha256={donor_sha}")
+           "-f", f"host_donor_sha256={donor_sha}", "-f", f"compile_groups={a.compile_groups}")
         (gha / "dispatch.json").write_text(json.dumps(dict(
             tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
-            host_donor_sha256=donor_sha or None, r2_objects=cleanup,
+            host_donor_sha256=donor_sha or None, r2_objects=cleanup, compile_groups=a.compile_groups,
             dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
@@ -1076,6 +1089,27 @@ def cmd_run(a):
     (gha / "jobs.tsv").write_text("".join("\t".join(str(x) for x in r) + "\n" for r in rows))
     (gha / "run.json").write_text(json.dumps(view, indent=1) + "\n")
     failed = [r for r in rows if r[1] not in ("success", "skipped")]
+    if a.compile_groups:
+        # These archives qualify only their actual compilation. They are not
+        # a complete set, an assembled build proof or an installed/runtime pass.
+        dest = out / "shard-artifacts"
+        dest.mkdir(exist_ok=True)
+        gh("run", "download", str(a.run_id), "--pattern", f"shard-{a.arch}-*", "--dir", str(dest))
+        download(a.run_id, "plan", gha / "plan", failed)
+        plan = json.loads((gha / "plan" / "plan.json").read_text())
+        expected = [r for r in plan["matrix"]["include"] if r["arch"] == a.arch]
+        if not plan.get("compile_only") or plan.get("compile_groups") != a.compile_groups or not expected:
+            raise SystemExit("compile-only collection does not match the dispatched plan")
+        archives = sorted(str(p.relative_to(out)) for p in dest.rglob("*.tar.gz"))
+        ok = not failed and view.get("conclusion") == "success" and len(archives) >= len(expected)
+        summary = dict(run=a.run_id, source_commit=a.commit, status="retained" if ok else "incomplete",
+                       compilation_only=True, complete_build=False, runtime_qualified=False,
+                       expected_groups=[r["only"] for r in expected], archives=archives, failed_jobs=failed)
+        (gha / "compile-only.json").write_text(json.dumps(summary, indent=2) + "\n")
+        message = f"COMPILE ONLY: {len(archives)} archives retained for {len(expected)} groups; no complete-build or runtime claim"
+        (gha / "summary.txt").write_text(message + "\n")
+        say(message)
+        return 0 if ok else 1
     lines = [f"run {view.get('url')} {view.get('conclusion')}"]
     ok = True
     if a.arch:
@@ -1130,6 +1164,7 @@ def main(argv=None):
     p.add_argument("--modes", default="", help="the release modes (MOJOLEARN_RELEASE_MODES); empty: "
                    "build_sets.sh's default tiers")
     p.add_argument("--host-donor", action="store_true", help="the dispatch carries host_donor_url")
+    p.add_argument("--compile-groups", default="", help="compile only: device, or exact merged shard entries")
     p.add_argument("--json")
     p.add_argument("--github-output")
     p.set_defaults(fn=cmd_plan)
@@ -1171,6 +1206,7 @@ def main(argv=None):
     p.add_argument("--no-bincache", action="store_true",
                    help="no R2: the runners reuse their actions/cache hot archives instead")
     p.add_argument("--allow-cold-amd", action="store_true")
+    p.add_argument("--compile-groups", default="", help="retain only selected compilation archives; no assembly")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)

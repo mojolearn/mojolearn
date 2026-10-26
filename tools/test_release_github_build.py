@@ -200,6 +200,24 @@ def merged_source(default="1"):
 
 
 class MergedPlan(unittest.TestCase):
+    def test_device_compile_only_never_schedules_host_or_assembly(self):
+        with unittest.mock.patch.object(rgb, "check_counts", lambda *a, **k: None):
+            doc = rgb.build_plan(merged_source(), ["sm_80"], 6, modes=["identical"], compile_groups="device")
+        self.assertTrue(doc["compile_only"])
+        self.assertEqual({r["only"] for r in doc["matrix"]["include"]}, set(IDENTICAL))
+        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + len(IDENTICAL))
+        self.assertFalse(doc["host"])
+        self.assertIn("inputs.compile_groups == ''", WF.read_text().split("  assemble:", 1)[1])
+
+    def test_explicit_group_selection_is_exact_and_unknown_groups_refuse(self):
+        with unittest.mock.patch.object(rgb, "check_counts", lambda *a, **k: None):
+            doc = rgb.build_plan(merged_source(), ["sm_89"], 6, compile_groups=HOST[0])
+            self.assertEqual([r["only"] for r in doc["matrix"]["include"]], [HOST[0]])
+            with self.assertRaisesRegex(SystemExit, "unknown"):
+                rgb.build_plan(merged_source(), ["sm_80"], 6, compile_groups="host:typo")
+            with self.assertRaisesRegex(SystemExit, "no host producer"):
+                rgb.build_plan(merged_source(), ["sm_80", "host"], 6, compile_groups="device")
+
     def test_the_merged_pool_is_planned_exactly(self):
         ps = rgb.plan_set(merged_source())
         self.assertTrue(ps["merged"])
@@ -551,6 +569,31 @@ class Run(unittest.TestCase):
         (Path(self.env["STUB_ART"]) / "cuda-sm_89/release-build/build/sets/cuda/sm_89/identical/_mojolearn_x.so").write_bytes(b"y")
         self.assertEqual(self.run_(), 1)
         self.assertIn("TREE REFUSED", (self.d / "out/GHA/summary.txt").read_text())
+
+    def test_compile_only_collects_archives_without_admitting_a_complete_build(self):
+        original = rgb.gh
+        def gh(*args):
+            if args[:2] == ("run", "download") and "--pattern" in args:
+                dest = Path(args[args.index("--dir") + 1]) / "shard-sm_89-0/shard/0/hot"
+                dest.mkdir(parents=True)
+                (dest / "retained.tar.gz").write_bytes(b"retained archive fixture")
+                return ""
+            return original(*args)
+        def download(run, name, out, failed):
+            self.assertEqual(name, "plan")
+            out.mkdir(parents=True)
+            (out / "plan.json").write_text(json.dumps(dict(compile_only=True, compile_groups="device",
+                matrix=dict(include=[dict(arch="sm_89", only=IDENTICAL[0])]))))
+        with unittest.mock.patch.object(rgb, "gh", gh), unittest.mock.patch.object(rgb, "download", download), \
+             unittest.mock.patch.object(rgb, "verify_tree", side_effect=AssertionError("must not admit a partial tree")):
+            rc = rgb.main(["run", "--commit", C, "--arch", "sm_89", "--out", str(self.d / "out"),
+                           "--no-bincache", "--compile-groups", "device", "--poll", "0"])
+        self.assertEqual(rc, 0)
+        report = json.loads((self.d / "out/GHA/compile-only.json").read_text())
+        self.assertFalse(report["complete_build"])
+        self.assertFalse(report["runtime_qualified"])
+        self.assertEqual(report["expected_groups"], [IDENTICAL[0]])
+        self.assertEqual(len(report["archives"]), 1)
 
     def test_a_set_without_its_runtime_closure_is_refused(self):
         (Path(self.env["STUB_ART"]) / "cuda-sm_89/release-build/build/sets/cuda/sm_89/.libs/libR.so").unlink()
