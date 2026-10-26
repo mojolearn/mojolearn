@@ -732,7 +732,9 @@ the fast tier when the release modes name it) its own shard job, which runs
 the cpu box's exact compile (image, path, flags, compiler workers, so the same
 bytes and cache keys). When the compile's planning peak
 (`release_github_build.py UNIT_PEAK_GIB`, the largest RSS recorded for it:
-identical about 48 GiB at 0.8.57 on the cpu box, host about 10) exceeds the
+identical about 48 GiB at 0.8.57 on the cpu box; the host compile was killed
+at the runner's 16 GB without swap in run 40272710760, so it is planned at 48
+too) exceeds the
 runner's 15 GiB, the job first adds a swapfile on the runner's scratch disk
 (`gha_release_box.sh swap`, recorded in `GHA/.../swap.txt`); the plan refuses
 a compile that would need more than `SWAP_MAX_GIB`. Each shard records its
@@ -749,7 +751,7 @@ patchelf 0.17.2, its runtime donor this run's first assembled set or a
 retained `<leg>/release-build/build` (`run --host-donor DIR`: the Mac uploads
 it to R2 and passes one presigned GET plus its sha256). Its artifact
 `host-build` is what `tools/retained_release_composition.py --host-build`
-takes (`docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md`).
+takes; the job adds the host compile's swap like a shard (`docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md`).
 
 **The cache without R2.** With no `map_url` (`run --no-bincache`) each shard
 restores its hot directory from `actions/cache` (key

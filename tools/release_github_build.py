@@ -201,19 +201,24 @@ PEAK_HEADROOM = 1.2
 #:                    2026-10-26 one sm_89 identical set ~17 GB
 #:   identical, hip   0.8.57 cpu box gfx942 47.87 (8 workers); 2026-10-26 ~39 GB
 #:   fast             DO MI325X 2026-10-20, 36.6 GB (2 workers)
-#:   host             DO MI325X 2026-10-20, 6.9 GB; the dev groups' largest
-#:                    host members ~10 GB on Linux (development_build.py)
+#:   host             GitHub run 40272710760 (2026-10-26, source 78af017e2, the
+#:                    host producer, 2 workers): SIGKILLed by the kernel at the
+#:                    free runner's 16.0 GB cgroup peak after 1123 s, so its peak
+#:                    is ABOVE 15 GiB (a lower bound only); planned at the
+#:                    identical tier's 48 until a run with swap records it.
+#:                    Older: DO MI325X 2026-10-20, 6.9 GB.
 #: Each shard records its own peak (GHA/memory.txt): raise a row when a run
 #: records more, never lower one below a recorded value.
 UNIT_PEAK_GIB = {
     ("identical", "cuda"): 49, ("identical", "hip"): 48,
     ("fast", "cuda"): 37, ("fast", "hip"): 37,
-    ("host", "cuda"): 10, ("host", "hip"): 10,
+    ("host", "cuda"): 48, ("host", "hip"): 48,
 }
 #: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
 PER_BINDING_PEAK_GIB = 6
-#: The host producer's one compile (tools/release_host_build.py, the merged host).
-HOST_PRODUCER_PEAK_GIB = 10
+#: The host producer's one compile (tools/release_host_build.py, the merged host):
+#: the host row of UNIT_PEAK_GIB (run 40272710760 was killed at 16 GB without swap).
+HOST_PRODUCER_PEAK_GIB = UNIT_PEAK_GIB[("host", "cuda")]
 #: Measured seconds of one merged compile on the 16-vCPU RunPod cpu box (0.8.57,
 #: c00c4d800, full46-build.log start/built lines), for `estimate` only.
 UNIT_SECONDS_CPU_BOX = {
@@ -419,7 +424,7 @@ def estimate(include, merged, sets, host, host_donor=False):
         h = JOB_OVERHEAD_SECONDS + UNIT_SECONDS_CPU_BOX[("host", "cuda")] + ASSEMBLE_ROUTE_SECONDS
         # the donor is an uploaded build, else this run's first device set (its assemble job)
         donor_wall = out[sets[0]]["wall_s"] if sets and not host_donor else 0
-        out["host"] = dict(jobs=1, wall_s=donor_wall + h if sets else h, runner_s=h, swap_gib=0)
+        out["host"] = dict(jobs=1, wall_s=donor_wall + h, runner_s=h, swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB))
     total = dict(jobs=1 + sum(v["jobs"] for v in out.values()), wall_s=max([v["wall_s"] for v in out.values()] or [0]),
                  runner_s=sum(v["runner_s"] for v in out.values()))
     return out, total
@@ -467,6 +472,7 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False):
                 jobs_per_set=jobs_per_set, modes=list(modes or []),
                 layout=None if merged is None else ("merged" if merged else "per-binding"), members=members,
                 assemble_swap_gib=max([r["swap_gib"] for r in include] or [0]),
+                host_swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB) if host else 0,
                 estimate=dict(per_set=per_set, total=total))
 
 
@@ -486,6 +492,7 @@ def cmd_plan(a):
             fh.write("host_donor=" + ("true" if doc["host"] and a.host_donor else "false") + "\n")
             fh.write("jobs_per_set=%d\n" % doc["jobs_per_set"])
             fh.write("assemble_swap_gib=%d\n" % doc["assemble_swap_gib"])
+            fh.write("host_swap_gib=%d\n" % doc["host_swap_gib"])
     print(f"layout {doc['layout']}, modes {' '.join(doc['modes']) or 'build_sets.sh default'}, "
           f"{doc['builds']} compiles per set")
     for row in doc["matrix"]["include"]:

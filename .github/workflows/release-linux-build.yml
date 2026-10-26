@@ -100,6 +100,7 @@ jobs:
       host_donor: ${{ steps.plan.outputs.host_donor }}
       jobs_per_set: ${{ steps.plan.outputs.jobs_per_set }}
       assemble_swap_gib: ${{ steps.plan.outputs.assemble_swap_gib }}
+      host_swap_gib: ${{ steps.plan.outputs.host_swap_gib }}
     steps:
       - name: Inputs
         env:
@@ -369,6 +370,11 @@ jobs:
         with:
           path: tooling
           persist-credentials: false
+      # one merged host compile: killed at the runner's 16 GB without swap (run 40272710760)
+      - name: Swap (the host compile's recorded peak over the runner's RAM)
+        env:
+          SWAP_GIB: ${{ needs.plan.outputs.host_swap_gib }}
+        run: bash tooling/tools/gha_release_box.sh swap "$SWAP_GIB" "$RUNNER_TEMP/w/swap.txt"
       # the producer reads committed source through git (HEAD, a clean tracked
       # tree and `git archive` of the donor's revision), so this job builds in a
       # git checkout, not the file-list copy the set jobs use
@@ -425,6 +431,7 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/w/out"
           mkdir -p "$RUNNER_TEMP/w/out/host-build/GHA"
           cp -r "$RUNNER_TEMP/w/out/GHA/." "$RUNNER_TEMP/w/out/host-build/GHA/" 2>/dev/null || true
+          cp "$RUNNER_TEMP/w/swap.txt" "$RUNNER_TEMP/w/out/host-build/GHA/swap.txt" 2>/dev/null || true
           { echo "### host producer"; echo '```'; cat "$RUNNER_TEMP/w/out/GHA/host.txt" "$RUNNER_TEMP/w/out/GHA/memory.txt" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()

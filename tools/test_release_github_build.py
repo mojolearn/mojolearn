@@ -61,7 +61,7 @@ class Workflow(unittest.TestCase):
 
     def test_merged_jobs_get_swap_modes_and_the_cache_only_without_r2(self):
         text = WF.read_text()
-        self.assertEqual(text.count("gha_release_box.sh swap"), 2)   # shard and assemble
+        self.assertEqual(text.count("gha_release_box.sh swap"), 3)   # shard, assemble and host
         self.assertIn("SWAP_GIB: ${{ matrix.swap_gib }}", text)
         self.assertEqual(text.count('GHA_RELEASE_MODES="$MODES"'), 2)
         self.assertEqual(text.count("steps.map.outputs.r2 == 'false'"), 3)  # restore, prune, save
@@ -234,10 +234,11 @@ class MergedPlan(unittest.TestCase):
                 self.assertEqual(r["peak_gib"], rgb.UNIT_PEAK_GIB[(tier, vendor)])
                 self.assertEqual(r["swap_gib"], rgb.swap_gib(r["peak_gib"]))
                 self.assertEqual(r["unit"], tier + "-merged_build")
-            # the identical tier pages past the runner's RAM; the host set fits it
-            ident = next(r for r in mine if r["only"] == "identical:merged_build.sh")
-            self.assertGreater(ident["swap_gib"] + rgb.RUNNER_RAM_GIB, ident["peak_gib"])
-            self.assertEqual(next(r for r in mine if r["only"] == "host:merged_build.sh")["swap_gib"], 0)
+            # both merged compiles page past the runner's RAM (the host one was killed at 16 GB
+            # without swap, run 40272710760)
+            for r in mine:
+                if r["only"] != "fast:merged_build.sh":
+                    self.assertGreater(r["swap_gib"] + rgb.RUNNER_RAM_GIB, r["peak_gib"])
         self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows))
         # the heaviest (identical) goes onto shard 0
         self.assertEqual(rows[0]["only"], "identical:merged_build.sh")
@@ -262,9 +263,10 @@ class MergedPlan(unittest.TestCase):
 
     def test_the_planning_peaks_cover_every_recorded_peak(self):
         # 0.8.57 cpu box (guard): sm_89 48.59, sm_80 48.12, gfx942 47.87 GiB; DO MI325X 2026-10-20:
-        # fast 36.6 GB, host 6.9 GB
+        # fast 36.6 GB; the host compile was killed at 16.0 GB on a free runner (run 40272710760)
         for key, peak in ((("identical", "cuda"), 48.59), (("identical", "hip"), 47.87),
-                          (("fast", "cuda"), 36.6), (("fast", "hip"), 36.6), (("host", "cuda"), 6.9)):
+                          (("fast", "cuda"), 36.6), (("fast", "hip"), 36.6), (("host", "cuda"), 16.0),
+                          (("host", "hip"), 16.0)):
             self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[key], peak)
             self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[key]), rgb.SWAP_MAX_GIB)
 
@@ -273,6 +275,8 @@ class MergedPlan(unittest.TestCase):
             rgb.build_plan(merged_source(), ["host"], 6)
         doc = rgb.build_plan(merged_source(), ["host"], 6, host_donor=True)
         self.assertEqual((doc["sets"], doc["host"], doc["matrix"]["include"]), ([], True, []))
+        self.assertEqual(doc["host_swap_gib"], rgb.swap_gib(rgb.HOST_PRODUCER_PEAK_GIB))
+        self.assertGreater(doc["host_swap_gib"], 0)
         with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
             doc = rgb.build_plan(merged_source(), ["sm_89", "host"], 6)
         self.assertEqual((doc["sets"], doc["host"]), (["sm_89"], True))
