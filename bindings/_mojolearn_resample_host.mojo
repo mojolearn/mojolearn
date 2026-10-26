@@ -93,7 +93,7 @@ def resample_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
@@ -533,7 +533,7 @@ def build__mojolearn_resample_host() -> PythonObject:
         m.def_function[resample_host_column_binding]("resample_host_column")
         m.def_function[resample_host_sabotage_binding]("resample_host_sabotage")
         m.def_function[resample_vendor_binding]("resample_vendor")
-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[bootstrap_binding]("bootstrap")

@@ -193,7 +193,7 @@ def hdbscan_generate_prediction_data_binding(
     return PythonObject(n_ex)
 
 
-# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
 
 
@@ -212,7 +212,7 @@ def build__mojolearn_hdbscan_host() -> PythonObject:
         module.def_function[hdbscan_fit_binding]("hdbscan_fit")
         module.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
         module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
-        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
         module.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
         module.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")

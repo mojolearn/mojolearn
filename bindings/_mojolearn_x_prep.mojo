@@ -146,7 +146,7 @@ def _seed(v: PythonObject) raises -> UInt64:
     return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
 
 
-# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_prep.patch
 
 
@@ -353,7 +353,7 @@ def build__mojolearn_x_prep() -> PythonObject:
         m.def_function[dev_take_rows_binding]("x_prep_dev_take_rows")
         comptime if PREP3_MAXABS:
             m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
-        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_prep.patch
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
@@ -376,7 +376,7 @@ def build__mojolearn_x_prep() -> PythonObject:
             m.def_function[pool_arena_binding]("x_prep_pool_arena")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
-        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_prep.patch
         comptime if PROBA64:
             m.def_function[proba64_binding]("x_prep_proba64")

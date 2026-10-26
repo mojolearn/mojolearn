@@ -116,14 +116,14 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[trisolve_py[DevExec]]("x_decomp_trisolve")
         # TOMBSTONE: x_decomp_knn_select (device copy) (dead native entry: no live caller; the host twin stays) deleted 2026-10-26 by 01f30742f; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_decomp_knn_select.patch
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[lle_local_py[DevExec]]("x_decomp_lle_local")
         m.def_function[lle_apply_py[DevExec]]("x_decomp_lle_apply")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[orth_py[DevExec]]("x_decomp_orth")
         m.def_function[orth_diag_py[DevExec]]("x_decomp_orth_diag")
@@ -132,13 +132,13 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[omp_rows_py[DevExec]]("x_decomp_omp_rows")
         m.def_function[lars_rows_py[DevExec]]("x_decomp_lars_rows")
         m.def_function[lu_aux_py[DevExec]]("x_decomp_lu_aux")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[barycenter_rows_py[DevExec]]("x_decomp_barycenter_rows")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[absmax_sign_py[DevExec]]("x_decomp_absmax_sign")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[geqrf_py[DevExec]]("x_decomp_geqrf")
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
@@ -172,16 +172,16 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
         m.def_function[lu_gesv_py[DevExec]]("x_decomp_lu_gesv")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # MinCovDet's fast_mcd and online LDA on the resident kit
         # (x_decomp/kit_device.mojo)
         m.def_function[mcd_dev_py]("x_decomp_mcd")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[dict_learning_dev_py]("x_decomp_dict_learning")
         m.def_function[minibatch_dev_py]("x_decomp_dict_minibatch")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[pls_fit_dev_py]("x_decomp_pls_fit")
         m.def_function[lle_iterate_dev_py]("x_decomp_lle_iterate")
@@ -192,17 +192,17 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[als_fit_dev_py]("x_decomp_als_fit")
         m.def_function[chi2_quantile_dev_py]("x_decomp_chi2_quantile")
         m.def_function[consistency_factor_dev_py]("x_decomp_consistency_factor")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[gather_py]("x_decomp_gather")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[move_py]("x_decomp_move")
         m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
         m.def_function[order_f_py]("x_decomp_order_f")
         m.def_function[select_smallest_py]("x_decomp_select_smallest")
         m.def_function[argmin_all_py]("x_decomp_argmin_all")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
         m.def_function[topn_desc_py]("x_decomp_topn_desc")
@@ -232,7 +232,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if MCD_ORDERED_COV:
             m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[dev_rand_py]("x_decomp_dev_rand")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
@@ -263,7 +263,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[dev_absmax_py]("x_decomp_dev_absmax")
         m.def_function[dev_orth_py]("x_decomp_dev_orth")
         m.def_function[dev_orth_diag_py]("x_decomp_dev_orth_diag")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_SVD_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF) (x_decomp/resident.mojo)
@@ -272,7 +272,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_LU_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_lu_py]("x_decomp_dev_lu")
             m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_CODE_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF) (x_decomp/resident.mojo)
@@ -280,7 +280,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if IDN_EIGH_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
         m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
@@ -295,11 +295,11 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # switches (x_decomp/resident.mojo GRP_CLS2_*; DEVSCAN FAST + Apple default)
         comptime if GRP_CLS2_ANY:
             m.def_function[grp_cls2_py]("x_decomp_grp_cls2")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
-        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[mcd_fast_batch_count_py]("mcd_fast_batch_count")
         m.def_function[mcd_experiment_count_py]("mcd_experiment_count")

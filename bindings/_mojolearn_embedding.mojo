@@ -284,7 +284,7 @@ def embedding_table_release_binding(token_obj: PythonObject) raises -> PythonObj
     return PythonObject(0)
 
 
-# TOMBSTONE: embedding_resident (dead native entry: a compiled-constant probe nothing reads; EMB_RESIDENT stays) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: embedding_resident (dead native entry: a compiled-constant probe nothing reads; EMB_RESIDENT stays) deleted 2026-10-26 by 9aba8da70; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_embedding.patch
 
 
@@ -1101,7 +1101,7 @@ def build__mojolearn_embedding() -> PythonObject:
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[embedding_table_release_binding]("embedding_table_release")
-        # TOMBSTONE: embedding_resident (dead native entry: a compiled-constant probe nothing reads; EMB_RESIDENT stays) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: embedding_resident (dead native entry: a compiled-constant probe nothing reads; EMB_RESIDENT stays) deleted 2026-10-26 by 9aba8da70; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_embedding.patch
         # lane gap-neural-io: resident tensors and the device-I/O entries
         m.def_function[seq_tensor_alloc_binding]("seq_tensor_alloc")

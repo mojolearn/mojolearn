@@ -149,7 +149,7 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
     out.append(PythonObject(fused_attention_arm_name(resolved)))
     return out
 
-# TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
 
 
@@ -1478,7 +1478,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
-        # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
         # DEVIATION 2514: the device-owned session entries.
         module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")
@@ -1509,7 +1509,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
-        # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
         module.def_function[byte_lm_attention_memory_profile_binding]("byte_lm_attention_memory_profile")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).

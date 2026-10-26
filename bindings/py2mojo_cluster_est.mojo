@@ -13,7 +13,7 @@ outputs), so the two columns run the same loops."""
 from core.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
 from std.python import Python, PythonObject
 
-# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_estimators.patch
 
 

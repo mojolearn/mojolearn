@@ -134,7 +134,7 @@ def transformer_vendor_binding() raises -> PythonObject:
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
-# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_transformer.patch
 
 
@@ -448,7 +448,7 @@ def build__mojolearn_transformer_host() -> PythonObject:
         module.def_function[transformer_host_sabotage_binding]("transformer_host_sabotage")
         module.def_function[transformer_vendor_binding]("transformer_vendor")
         module.def_function[transformer_numeric_mode_binding]("transformer_numeric_mode")
-        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")

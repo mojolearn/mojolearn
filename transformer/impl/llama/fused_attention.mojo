@@ -1716,7 +1716,7 @@ def attention_estash_recompute_granted() -> Bool:
         return False
 
 
-# TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
 
 

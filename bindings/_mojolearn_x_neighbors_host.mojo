@@ -44,7 +44,7 @@ def _f(v: PythonObject, k: Int) raises -> Float32:
     return Float32(Float64(py=v[k]))
 
 
-# TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by 00d4488cf; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
 
 
@@ -1095,7 +1095,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[lp_clamp_binding]("xn_lp_clamp")
     m.def_function[ls_clamp_binding]("xn_ls_clamp")
     m.def_function[ls_laplacian_binding]("xn_ls_laplacian")
-    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by 00d4488cf; code recoverable at a88745022.
     # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
     m.def_function[knn_impute_binding]("xn_knn_impute")
     m.def_function[col_degree_binding]("xn_col_degree")
@@ -1142,10 +1142,10 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[louvain_binding]("xn_louvain")
     m.def_function[pr_csr_binding]("xn_pr_csr")
     m.def_function[louvain_csr_binding]("xn_louvain_csr")
-    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by 00d4488cf; code recoverable at a88745022.
     # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
-    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by 00d4488cf; code recoverable at a88745022.
     # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
 
 

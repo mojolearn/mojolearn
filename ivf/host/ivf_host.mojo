@@ -525,7 +525,7 @@ def host_ivf_search(
     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
 
 
-# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_ivf.patch
 
 

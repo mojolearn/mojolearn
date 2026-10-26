@@ -359,7 +359,7 @@ def mlp_sum_rows_binding(
     return PythonObject(count)
 
 
-# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_training.patch
 
 
@@ -755,7 +755,7 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         module.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         module.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
-        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_training.patch
         module.def_function[accumulate_binding]("accumulate")
         module.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")

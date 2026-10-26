@@ -550,7 +550,7 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[svc_pair_epilogue_binding]("svc_pair_epilogue")
         module.def_function[svc_platt_train_binding]("svc_platt_train")
         module.def_function[svc_splitmix_perm_binding]("svc_splitmix_perm")
-        # TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_svm.patch
         module.def_function[svr_fit_binding]("svr_fit")
         module.def_function[svr_predict_binding]("svr_predict")

@@ -384,7 +384,7 @@ def bpe_encode_batch_binding(
     return PythonObject(total)
 
 
-# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
 
 
@@ -1299,7 +1299,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neighbor_query_c, "neighbor_query_call")
         module.def_py_c_function(neighbor_query_attribute_c, "neighbor_query_attribute_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
@@ -1364,7 +1364,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[bpe_max_token_bytes_binding]("bpe_max_token_bytes")
         module.def_function[bpe_encode_binding]("bpe_encode")
         module.def_function[bpe_encode_batch_binding]("bpe_encode_batch")
-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         _ = module.add_type[BpeTrainedHandle]("_BpeTrainedHandle")
         module.def_function[bpe_train_binding]("bpe_train")
@@ -1420,7 +1420,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(mamba_native_c, "mamba_native_call")
         _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
@@ -1429,7 +1429,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
-        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")

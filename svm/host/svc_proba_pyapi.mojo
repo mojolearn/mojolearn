@@ -159,6 +159,6 @@ def svc_splitmix_perm_binding(
     return PythonObject(count)
 
 
-# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: svc_portable_math (dead native entry: only the one-off py-consolidation check tools/py_consolidated/svc_equal.py called it) deleted 2026-10-26 by f6700e77c; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_svm.patch
 

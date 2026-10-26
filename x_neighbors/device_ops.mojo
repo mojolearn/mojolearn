@@ -1085,7 +1085,7 @@ def op_ls_laplacian(a: Int, res: Int, n: Int) raises:
     _ = ctx^
 
 
-# TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by 00d4488cf; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
 
 

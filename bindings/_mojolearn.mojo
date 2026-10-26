@@ -1799,7 +1799,7 @@ def argmax_last_rows_f32_binding(
     return PythonObject(0)
 
 
-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
@@ -2106,7 +2106,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
         m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
         # bindings/hotpath_helpers.mojo that stand in for per-row Python.
@@ -2123,7 +2123,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
         m.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
         m.def_function[count_mask_u8_binding]("count_mask_u8")
-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
@@ -2153,7 +2153,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[fsum_f64_binding]("fsum_f64")
         m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
@@ -2167,7 +2167,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         return m.finalize()
     except e:

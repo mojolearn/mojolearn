@@ -75,7 +75,7 @@ def proba64_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
-# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_prep.patch
 
 
@@ -149,7 +149,7 @@ def build__mojolearn_x_prep_host() -> PythonObject:
         m.def_function[run_binding]("x_prep_run")
         m.def_function[x_prep_numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[x_prep_vendor_binding]("x_prep_vendor")
-        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by bb4259d55; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_prep.patch
         # lane idn-int-prep: the host column runs the same programs as the
         # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)

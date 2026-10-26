@@ -119,7 +119,7 @@ def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Py
     return PythonObject(n)
 
 
-# TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_linear.patch
 
 
@@ -197,14 +197,14 @@ def build__mojolearn_x_linear() -> PythonObject:
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
-        # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
         m.def_function[class_prep_binding]("x_linear_class_prep")
         m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
-        # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
         m.def_function[vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_binding]("py2mojo_rows")

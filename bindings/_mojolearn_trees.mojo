@@ -93,7 +93,7 @@ comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
           "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
 
 
-# TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
@@ -566,7 +566,7 @@ def et_predict_binding(
     return PythonObject(n_rows)
 
 
-# TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
@@ -638,7 +638,7 @@ def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: Python
 def build__mojolearn_trees() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
@@ -650,31 +650,31 @@ def build__mojolearn_trees() -> PythonObject:
         m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
         m.def_function[et_classifier_fit_binding[False]]("et_classifier_fit")
         m.def_function[et_classifier_fit_binding[True]]("et_classifier_fit_export")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[et_classifier_fit_rowmajor_binding[True]]("et_classifier_fit_rowmajor_export")
         m.def_function[et_classifier_fit_weighted_binding[False]]("et_classifier_fit_weighted")
         m.def_function[et_classifier_fit_weighted_binding[True]]("et_classifier_fit_weighted_export")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[et_classifier_fit_weighted_binding[True, True]]("et_classifier_fit_weighted_rowmajor_export")
         m.def_function[et_regressor_fit_binding[False]]("et_regressor_fit")
         m.def_function[et_regressor_fit_binding[True]]("et_regressor_fit_export")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[et_regressor_fit_rowmajor_binding[True]]("et_regressor_fit_rowmajor_export")
         m.def_function[et_regressor_fit_weighted_binding[False]]("et_regressor_fit_weighted")
         m.def_function[et_regressor_fit_weighted_binding[True]]("et_regressor_fit_weighted_export")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[et_regressor_fit_weighted_binding[True, True]]("et_regressor_fit_weighted_rowmajor_export")
         m.def_function[et_predict_binding]("et_predict")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
         # T38/C50 — NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
         m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[et_forest_export_binding]("forest_export")
         m.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
@@ -683,10 +683,10 @@ def build__mojolearn_trees() -> PythonObject:
         # borrows its one I/O workspace (core/forest_inference_model.mojo,
         # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
         m.def_function[forest_prepare_gpu_binding[False]]("forest_prepare_gpu")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_release_gpu_binding[False]]("forest_release_gpu")
-        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_predict_resident_into_gpu_binding[False, True]]("forest_predict_resident_reuse_gpu")
         m.def_function[forest_predict_resident_labels_gpu_binding[False]]("forest_predict_resident_labels_gpu")

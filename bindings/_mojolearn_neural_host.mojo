@@ -547,7 +547,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
     _write(a[12], state.h, b * di * D_STATE)
 
 
-# TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_mamba.patch
 
 
@@ -922,11 +922,11 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_int15_binding]("transformer_forward_int15")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
-        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_mamba.patch
         module.def_function[mamba1_forward_binding]("mamba1_forward")
         module.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
-        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_mamba.patch
         module.def_function[mamba2_forward_binding]("mamba2_forward")
         module.def_function[mamba2_decode_step_binding]("mamba2_decode_step")

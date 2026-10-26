@@ -442,7 +442,7 @@ comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
@@ -942,7 +942,7 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
 
 
-# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 

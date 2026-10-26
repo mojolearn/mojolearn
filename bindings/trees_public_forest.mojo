@@ -543,7 +543,7 @@ def forest_fit_arrays(result: PythonObject, context: PythonObject) raises -> Pyt
 
 def _export_selection() raises -> String:
     """`MOJOLEARN_FOREST_EXPORT`: 'into' (default) or 'verify'."""
-    # TOMBSTONE: the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries (dead native entries: no release, identity or CI path set it) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # TOMBSTONE: the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries (dead native entries: no release, identity or CI path set it) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
     # Restore: git apply experiments/removed/dead_entries_trees.patch
     var selection = trees_env("MOJOLEARN_FOREST_EXPORT", "into")
     if selection != "into" and selection != "verify":

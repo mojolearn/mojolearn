@@ -424,7 +424,7 @@ def filter_topk_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
     return PythonObject(m)
 
 
-# TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_ann.patch
 
 
@@ -453,7 +453,7 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
         m.def_function[ivf_sq_search_binding]("x_ann_ivf_sq_search")
         m.def_function[refine_binding]("x_ann_refine")
-        # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_ann.patch
         m.def_function[filter_topk_binding]("x_ann_filter_topk")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")

@@ -27,7 +27,7 @@ def _f64p(addr: PythonObject) raises -> F64P:
     return F64P(unsafe_from_address=a)
 
 
-# TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_core.patch
 
 

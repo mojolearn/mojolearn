@@ -112,7 +112,7 @@ def ops_load_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     return res
 
 
-# TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
 
 

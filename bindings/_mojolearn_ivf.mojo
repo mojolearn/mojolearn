@@ -90,7 +90,7 @@ def ivf_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_ivf.patch
 
 
@@ -450,7 +450,7 @@ def build__mojolearn_ivf() -> PythonObject:
         # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
         comptime if is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
             m.def_function[ivf_fast_balanced_hits_binding]("ivf_fast_balanced_hits")
-        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_ivf.patch
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
         m.def_function[ivf_flat_search_binding]("ivf_flat_search")

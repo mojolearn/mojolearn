@@ -86,7 +86,7 @@ def x_metrics_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-# TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
 
 
@@ -105,7 +105,7 @@ def build__mojolearn_x_metrics_host() -> PythonObject:
         m.def_function[first_rows_binding]("x_metrics_first_rows")
         m.def_function[x_metrics_numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[x_metrics_vendor_binding]("x_metrics_vendor")
-        # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
         return m.finalize()
     except e:

@@ -321,7 +321,7 @@ def bpe_encode_batch_into(
     return total
 
 
-# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
 
 

@@ -61,7 +61,7 @@ comptime C1_BAYES_STATE = 16
 """State words the batched BayesianRidge loop reads (8: the iteration count)."""
 
 
-# TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_linear.patch
 
 

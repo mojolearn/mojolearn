@@ -592,7 +592,7 @@ def gpr_predict_cov_binding(
 # ===========================================================================
 
 
-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
@@ -1322,7 +1322,7 @@ def build__mojolearn_gp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
@@ -1347,7 +1347,7 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_fit_ptr_binding]("gpr_fit_ptr")
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
         # The Cholesky door (workstream D, 2026-09-14).
-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         m.def_function[cholesky_factor_binding]("cholesky_factor")

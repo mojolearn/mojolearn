@@ -1065,7 +1065,7 @@ def _transformer_run_session_backward(
         ctx.synchronize()
 
 
-# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_transformer.patch
 
 

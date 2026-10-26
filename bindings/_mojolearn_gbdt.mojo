@@ -877,7 +877,7 @@ def build__mojolearn_gbdt() -> PythonObject:
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        # TOMBSTONE: gbdt_parallel_available, pointwise_parallel_available (dead native entries: constant probes no driver reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: gbdt_parallel_available, pointwise_parallel_available (dead native entries: constant probes no driver reads) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
@@ -915,6 +915,6 @@ def build__mojolearn_gbdt() -> PythonObject:
         abort(String("failed to create _mojolearn_gbdt module: ", e))
 
 
-# TOMBSTONE: gbdt_parallel_available, pointwise_parallel_available (dead native entries: constant probes no driver reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: gbdt_parallel_available, pointwise_parallel_available (dead native entries: constant probes no driver reads) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_trees.patch
 

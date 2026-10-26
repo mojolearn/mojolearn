@@ -138,7 +138,7 @@ def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> Python
     return PythonObject(0)
 
 
-# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
@@ -231,7 +231,7 @@ def build__mojolearn_x_trees() -> PythonObject:
             m.def_function[dart_step_binding]("x_trees_dart_step")
             m.def_function[dart_add_binding]("x_trees_dart_add")
             m.def_function[dart_close_binding]("x_trees_dart_close")
-        # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         return m.finalize()
     except e:

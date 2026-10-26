@@ -127,7 +127,7 @@ def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
 
-# TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
 
 
@@ -149,7 +149,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[mbk_devscan_binding]("x_cluster_mbk_devscan")
         m.def_function[mbk_policy_binding]("x_cluster_mbk_policy")
         m.def_function[vendor_binding]("x_cluster_vendor")
-        # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cluster.patch
         return m.finalize()
     except e:

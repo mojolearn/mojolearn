@@ -1241,7 +1241,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[cast_elements_binding]("cast_elements")
         module.def_function[reduce_stat_binding]("reduce_stat")
         module.def_function[equal_elements_binding]("equal_elements")
-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane migrate-shared-labels: the shared argument-and-label entry
         module.def_function[prepare_targets_binding]("prepare_targets")
@@ -1255,7 +1255,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
         module.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
         module.def_function[count_mask_u8_binding]("count_mask_u8")
-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
@@ -1289,7 +1289,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[fsum_f64_binding]("fsum_f64")
         module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch

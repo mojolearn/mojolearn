@@ -117,7 +117,7 @@ def tsa_host_sabotage_binding() raises -> PythonObject:
 # The GPU binding's names, same contract.
 
 
-# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
 
 
@@ -190,7 +190,7 @@ def build__mojolearn_tsa_host() -> PythonObject:
         module.def_function[tsa_host_vendor_binding]("tsa_host_vendor")
         module.def_function[tsa_host_column_binding]("tsa_host_column")
         module.def_function[tsa_host_sabotage_binding]("tsa_host_sabotage")
-        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
         module.def_function[holtwinters_fit_binding]("holtwinters_fit")
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")

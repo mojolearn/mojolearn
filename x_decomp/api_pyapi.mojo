@@ -160,7 +160,7 @@ def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject,
     return PythonObject(n)
 
 
-# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 

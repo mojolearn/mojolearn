@@ -265,7 +265,7 @@ def model_import_params_binding(
     return model_import_params_py(ex, prog, ptab, recs, names, params_addr)
 
 
-# TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
 
 
@@ -731,15 +731,15 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[model_predict_labels_binding]("model_predict_labels")
         m.def_function[model_fit_labels_binding]("model_fit_labels")
         m.def_function[model_import_params_binding]("model_import_params")
-        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[DeviceExec, OPS_DEVICE]]("_OpsSessionLifetime")
         m.def_function[ops_session_create_binding]("ops_session_create")
-        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_shape_binding]("ops_shape")
-        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_py_c_function(ops_session_call_c_binding, "ops_session_call")
         m.def_py_c_function(ops_session_initialize_c_binding, "ops_session_initialize")
@@ -749,7 +749,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_py_c_function(ops_torch_program_run_c_binding, "ops_torch_program_run")
         m.def_py_c_function(ops_imported_run_device_c_binding, "ops_imported_run_device")
         m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
-        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_partitioned_open_binding]("ops_partitioned_open")
         m.def_function[ops_partitioned_load_binding]("ops_partitioned_load")
@@ -773,7 +773,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_distributed_enter_binding]("ops_distributed_enter")
         m.def_function[ops_distributed_exit_binding]("ops_distributed_exit")
         m.def_py_c_function(ops_program_fit_native_c_binding, "ops_program_fit_native")
-        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")
         m.def_function[model_checkpoint_info_binding]("model_checkpoint_info")
@@ -782,7 +782,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[verify_file_sha256_binding]("verify_file_sha256")
         m.def_function[verify_model_info_binding]("verify_model_info")
         m.def_function[verify_fill_binding]("verify_fill")
-        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         # the resident optimizer state (sequence/opt_resident.mojo)
         m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")

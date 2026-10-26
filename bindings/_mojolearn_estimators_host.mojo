@@ -508,7 +508,7 @@ def lm_intercept_binding(
     return PythonObject(lm_intercept(f32_ptr(Int(py=xmean_addr)), f32_ptr(Int(py=coef_addr)), nc, ym))
 
 
-# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_estimators.patch
 
 
@@ -1445,7 +1445,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
         module.def_function[lm_means_finish_binding]("lm_means_finish")
         module.def_function[lm_intercept_binding]("lm_intercept")
-        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         module.def_function[pca_fit_owned_binding]("pca_fit_owned")
         module.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
@@ -1457,7 +1457,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         module.def_function[dbscan_core_arrays_host_binding]("dbscan_core_arrays")
-        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")

@@ -81,7 +81,7 @@ def ivf_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_ivf.patch
 
 
@@ -117,7 +117,7 @@ def build__mojolearn_ivf_host() -> PythonObject:
         m.def_function[ivf_host_sabotage_binding]("ivf_host_sabotage")
         m.def_function[ivf_vendor_binding]("ivf_vendor")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
-        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_ivf.patch
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
         m.def_function[ivf_flat_search_binding]("ivf_flat_search")

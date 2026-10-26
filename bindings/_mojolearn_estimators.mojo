@@ -312,7 +312,7 @@ def pca_fit_binding(
     return PythonObject(noise)
 
 
-# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_estimators.patch
 
 
@@ -1480,7 +1480,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
@@ -1489,7 +1489,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
-        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[labeled_reference_prepare_binding]("labeled_reference_prepare")
@@ -1505,7 +1505,7 @@ def build__mojolearn_estimators() -> PythonObject:
             m.def_function[scoped_gemm_count_binding]("scoped_gemm_count")
             m.def_function[scoped_gemm_metadata_binding]("scoped_gemm_metadata")
         m.def_function[pca_fit_binding]("pca_fit")
-        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
@@ -1524,7 +1524,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
         m.def_function[lm_means_finish_binding]("lm_means_finish")
         m.def_function[lm_intercept_binding]("lm_intercept")
-        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[pca_fit_owned_binding]("pca_fit_owned")
         m.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
@@ -1558,10 +1558,10 @@ def build__mojolearn_estimators() -> PythonObject:
         abort(String("failed to create _mojolearn_estimators: ", e))
 
 
-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
-# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 

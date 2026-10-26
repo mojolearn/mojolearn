@@ -387,7 +387,7 @@ def transformer_flash_call_count_binding(grouped: PythonObject) raises -> Python
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
-# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_transformer.patch
 
 
@@ -1547,13 +1547,13 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_numeric_mode_binding](
             "transformer_numeric_mode"
         )
-        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_forward_binding]("transformer_forward")
         _ = m.add_type[TransformerSession]("_TransformerSession")
         m.def_function[transformer_session_create_binding]("transformer_session_create")
         m.def_function[transformer_session_close_binding]("transformer_session_close")
-        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         # lane/neural-net-experiment: the stateless prefill on a session.
@@ -1575,7 +1575,7 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
         m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
         m.def_function[transformer_close_tape_binding]("transformer_close_tape")
-        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
@@ -1587,7 +1587,7 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_decode_session_forward_binding]("transformer_decode_session_forward")
         m.def_function[transformer_decode_session_export_state_binding]("transformer_decode_session_export_state")
         m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
-        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_decode_session_close_binding]("transformer_decode_session_close")
         # lane/py-lm: the resident CausalLM decode session.
