@@ -4,7 +4,8 @@
 
 The actual harness column is retained at ``--keep`` (or a temporary path).
 ``--lanes``, ``--fixtures``, ``--repeats`` and ``--vendor`` select and label
-that execution. Train, inference and model values use the same comparator
+that execution. Defaults keep the historical record scope on this device.
+Train, inference, model and collected property values use the same comparator
 and per-part evidence as ``verify``. ``--check`` retains its historical
 file-only inspection of the harness, bundled columns and commit witness.
 
@@ -265,9 +266,20 @@ def cmd_identity(args):
         lanes, fixtures = engine.select_lanes(current, table, device_class, "full", asked)
     except ValueError as exc:
         return _finish(args, _verify.EXIT_USAGE, "USAGE", str(exc))
-    table_lanes = {key.split("/", 1)[0] for key in table["cells"]}  # glue: verification CLI table metadata
     if not asked:
-        lanes = [lane for lane in lanes if lane in table_lanes]  # glue: verification CLI lane selection
+        # Preserve the command's existing default work scope. Historical
+        # columns select names only; their old values never decide results.
+        try:
+            historical = columns()
+            record_lanes, historical_fixtures = _column_lanes_and_fixtures(
+                [path for _, path, _ in historical])  # glue: verification CLI historical scope metadata
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            return _finish(args, _verify.EXIT_NO_REFERENCE, "NO REFERENCE", str(exc))
+        default_scope = set(record_lanes)
+        if device_class == "cpu":
+            default_scope &= set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())
+        lanes = [lane for lane in lanes if lane in default_scope]  # glue: verification CLI default scope metadata
+        fixtures = [fixture for fixture in fixtures if fixture in historical_fixtures]  # glue: verification CLI default scope metadata
     record_fixtures = list(fixtures)
     if args.fixtures:
         requested = [x for x in args.fixtures.split(",") if x]  # glue: verification CLI fixture arguments
@@ -310,7 +322,7 @@ def cmd_identity(args):
     # the comparator changes: fixed historical columns describe their old
     # payloads, while the admitted table retains each current part's origins.
     run_argv = ["--lanes", ",".join(lanes), "--json", keep, "--repeats", str(args.repeats)]
-    if args.fixtures:
+    if args.fixtures or fixtures != list(current.FIXTURES):
         run_argv += ["--fixtures", ",".join(fixtures)]
     if args.vendor:
         run_argv += ["--vendor", args.vendor]
@@ -339,11 +351,20 @@ def cmd_identity(args):
     for lane in lanes:  # glue: verification CLI recorded cell comparison
         for fixture in fixtures:  # glue: verification CLI recorded cell comparison
             cell = cells[f"{lane}/{fixture}"]
-            for part in ("train", "infer", "model"):  # glue: verification CLI recorded part comparison
+            for part in vref.PARTS + vref.OPTIONAL_PARTS:  # glue: verification CLI recorded part comparison
+                # Every previously compared property remains a comparison.
+                # RLPAIR alone is lane-specific; absent undeclared pairs do
+                # not create synthetic work. Missing declared/recorded parts
+                # are refused, including not-run markers, by _part_value.
+                if (part == "rlpair" and lane not in getattr(current, "RLPAIR", {})
+                        and part not in cell and part + "_verdict" not in cell
+                        and part not in table["cells"].get(f"{lane}/{fixture}", {})):
+                    continue
                 value = vref._part_value(cell, part, min_repeats=args.repeats)
                 raw.append(dict(lane=lane, fixture=fixture, part=part, value=value,
                                 error=None if value is not None else "missing or unstable local part"))
-    rows = engine.judge_rows(raw, table, device_class=device_class)
+    rows = engine.judge_rows(raw, table, device_class=device_class,
+                             batch_revisions=getattr(current, "BATCH_REVISIONS", {}))
     bad = [f"{r['lane']}/{r['fixture']} {r['part']}: {r['state']} ({r['detail']})"
            for r in rows if r['state'] != vref.IDENTICAL  # glue: verification CLI comparison verdict reporting
            and not (r['part'] != 'train' and r['state'] == vref.NA)]
@@ -362,7 +383,7 @@ def cmd_identity(args):
     if not bad:
         return _finish(args, _verify.EXIT_VERIFIED, "IDENTICAL",
                        f"{len(cells)} cells on this box match the admitted reference table; "
-                       "train, infer and model compared with each part's original evidence", extra)
+                       "all collected parts compared with each part's original evidence", extra)
     return _finish(args, _verify.EXIT_MISMATCH, "MISMATCH",
                    f"{len(bad)} comparisons or collected properties failed; "
                    + "; ".join(bad[:5]) + f". The local column is kept at {keep}", extra)

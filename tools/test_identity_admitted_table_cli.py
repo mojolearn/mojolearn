@@ -26,6 +26,8 @@ def cli(monkeypatch, tmp_path):
     surface.comparable_lanes = lambda lanes, vendor: list(lanes)
     surface.covered_lanes = lambda: ['changed', 'new']
     surface.PUBLIC_INAPPLICABLE_PREFIXES = ('par-',)
+    surface.public_reference_lanes = lambda: ['changed']
+    surface.record_covered_lanes = lambda: ['changed']
     surface.lane_exposure = lambda lanes, vendor: {lane: {'status': 'covered'} for lane in lanes}
     monkeypatch.setitem(sys.modules, surface.__name__, surface)
     backend = ModuleType(name + '._backend')
@@ -43,7 +45,7 @@ def cli(monkeypatch, tmp_path):
 
     ref, engine, module = load('_verify_reference'), load('_verify_all'), load('_identity')
     monkeypatch.setattr(engine, 'host_surface', lambda: surface)
-    harness = SimpleNamespace(LANES={'changed': None, 'new': None}, FIXTURES=['base', 'ties'], LANE_REVISIONS={})
+    harness = SimpleNamespace(LANES={'changed': None, 'new': None}, FIXTURES=['base', 'ties'], LANE_REVISIONS={}, RLPAIR={}, BATCH_REVISIONS={})
     table = dict(format=ref.FORMAT, records=[dict(dir='current', file='nvidia.json', vendor='gpu', commit='1'*40),
         dict(dir='retained', file='amd.json', vendor='old-gpu', commit='2'*40)],
         fixtures={f: {'X': f, 'y_clf': 'c', 'y_reg': 'r'} for f in harness.FIXTURES},
@@ -52,7 +54,7 @@ def cli(monkeypatch, tmp_path):
         for fixture in harness.FIXTURES:
             table['cells'][lane + '/' + fixture] = {
                 p: dict(ref='b'*16 if p == 'train' else 'n/a:function', cols={'nvidia': 0, 'amd': 1})
-                for p in ('train', 'infer', 'model')}
+                for p in ref.PARTS + ref.OPTIONAL_PARTS if p != 'rlpair'}
     table_file = tmp_path / 'table.json'
     monkeypatch.setattr(ref, 'table_path', lambda: str(table_file))
     monkeypatch.setattr(engine, 'load_harness', lambda path: harness)
@@ -74,7 +76,8 @@ def cli(monkeypatch, tmp_path):
         for lane in lanes:
             for fixture in fixtures:
                 record['cells'][lane + '/' + fixture] = dict(verdict='STABLE', hashes=['b'*16]*repeats,
-                    infer=['n/a:function']*repeats, infer_verdict='N/A', model=['n/a:function']*repeats, model_verdict='N/A')
+                    **{part: ['n/a:function']*repeats for part in ref.PARTS + ref.OPTIONAL_PARTS if part not in ('train', 'rlpair')},
+                    **{part + '_verdict': 'N/A' for part in ref.PARTS + ref.OPTIONAL_PARTS if part not in ('train', 'rlpair')})
         state.mutate(record)
         state.local = copy.deepcopy(record)
         Path(argv[argv.index('--json')+1]).write_text(json.dumps(record))
@@ -146,3 +149,62 @@ def test_check_keeps_historical_file_inspection(cli, monkeypatch):
     monkeypatch.setattr(cli.module, 'cmd_check', lambda args: calls.append(args) or 0)
     assert cli.module.cmd_identity(cli.args) == 0
     assert calls == [cli.args] and not cli.state.calls
+
+
+@pytest.mark.parametrize('part', ['batch', 'stepfull', 'batchgrad', 'batchscale', 'ragged', 'rlpair'])
+def test_stable_train_cannot_hide_cross_device_property_divergence(cli, capsys, part):
+    cli.table['cells']['changed/base'][part] = dict(ref='c'*16, cols={'nvidia': 0, 'amd': 1})
+    def change(record):
+        record['cells']['changed/base'].update({part: ['d'*16], part + '_verdict': 'STABLE'})
+    cli.state.mutate = change
+    rc, report = cli.invoke(capsys)
+    assert rc == 1 and report['collector_exit'] == 0
+    assert any(row['part'] == part and row['state'] == 'DIVERGENT' for row in report['compared_parts'])
+    assert next(row for row in report['compared_parts'] if row['part'] == 'train')['state'] == 'IDENTICAL'
+
+
+@pytest.mark.parametrize('damage', ['absent', 'not-run', 'declared-pair', 'pair-reference', 'batch-revision'])
+def test_missing_or_not_run_properties_are_not_success(cli, capsys, damage):
+    def change(record):
+        cell = record['cells']['changed/base']
+        if damage == 'absent':
+            cell.pop('batch')
+            cell.pop('batch_verdict')
+        if damage == 'not-run':
+            cell.update(batch=['n/a:not-run'], batch_verdict='NOT-RUN')
+        if damage == 'batch-revision':
+            cell.update(batch=['c'*16], batch_verdict='STABLE')
+    cli.state.mutate = change
+    if damage == 'declared-pair': cli.harness.RLPAIR = {'changed': object()}
+    if damage == 'pair-reference':
+        cli.table['cells']['changed/base']['rlpair'] = dict(ref='c'*16, cols={'nvidia': 0})
+    if damage == 'batch-revision':
+        cli.harness.BATCH_REVISIONS = {'changed': 'new'}
+        cli.table['cells']['changed/base']['batch'] = dict(ref='c'*16, cols={'nvidia': 0})
+    rc, report = cli.invoke(capsys)
+    assert rc == 1 and report['verdict'] == 'MISMATCH'
+
+
+@pytest.mark.parametrize('vendor', ['cpu', 'cuda'])
+def test_default_scope_does_not_expand_to_all_current_table_lanes(cli, capsys, monkeypatch, vendor):
+    cli.args.lanes = ''
+    cli.args.fixtures = ''
+    monkeypatch.setattr(cli.backend, 'vendor', lambda: vendor)
+    monkeypatch.setattr(cli.module, 'columns', lambda: [('legacy', 'old.json', 'wheel copy')])
+    # Both current table lanes have valid answers, but the historical default
+    # contains only changed on GPU. CPU narrows the old record further using
+    # the existing public-reference and record-covered sets.
+    historical_lanes = ['changed', 'new'] if vendor == 'cpu' else ['changed']
+    monkeypatch.setattr(cli.module, '_column_lanes_and_fixtures', lambda paths: (historical_lanes, ['base', 'ties']))
+    rc, report = cli.invoke(capsys)
+    assert rc == 0 and report['lanes'] == ['changed'] and report['fixtures'] == ['base', 'ties']
+    assert set(cli.state.local['cells']) == {'changed/base', 'changed/ties'}
+
+
+def test_default_historical_fixture_scope_does_not_run_extra_fixtures(cli, capsys, monkeypatch):
+    cli.args.lanes = cli.args.fixtures = ''
+    monkeypatch.setattr(cli.module, 'columns', lambda: [('legacy', 'old.json', 'wheel copy')])
+    monkeypatch.setattr(cli.module, '_column_lanes_and_fixtures', lambda paths: (['changed'], ['base']))
+    rc, report = cli.invoke(capsys)
+    assert rc == 0 and report['fixtures'] == ['base']
+    assert set(cli.state.local['cells']) == {'changed/base'}
