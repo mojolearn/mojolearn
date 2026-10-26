@@ -19,18 +19,20 @@ manifest, no receipt), and the rehearsal skips python-tests and the GPU-box
 leg dry-runs. --gpu-smoke restores the GPU route the step table below
 describes (wheel smokes, light-smoke receipts, any build backend).
 
-LINUX BUILD BACKENDS (--build-backend; the default follows the source's
-binding layout, packaging/linux/merged_layout.py at the source commit, under
-this shell's MOJOLEARN_MERGED_BINDINGS for cpu-box):
+LINUX BUILD BACKENDS (--build-backend; default `github` for either binding
+layout, Andrew 2026-10-26: compiling never uses paid rentals):
   layout       default   also allowed          without --gpu-smoke
-  merged       cpu-box   gpu-legs              cpu-box (github refused)
-  per-binding  github    cpu-box, gpu-legs     github only
-  cpu-box   tools/release_linux_build.sh, one RunPod CPU pod per set, no GPU.
-            Merged: 16 vCPU cpu5m/cpu3m (>= 64 GB), one merged compile at a
-            time under a 64 GiB cap; per-binding: 32 vCPU cpu5g..cpu3m.
+  merged       github    cpu-box, gpu-legs     github, cpu-box
+  per-binding  github    cpu-box, gpu-legs     github, cpu-box
   github    tools/release_github_build.py on GitHub's free runners (4 vCPU,
-            15 GB). Refused for the merged layout: one merged compile peaked
-            at 46.4 GB (identical + byte LM, DO MI325X 2026-10-20).
+            15 GB), no rental. Merged: one shard job per merged compile (the
+            cpu box's exact compile, so its bytes and keys), with swap sized
+            from the compile's recorded peak (UNIT_PEAK_GIB); per-binding:
+            each set's builds split over shard jobs.
+  cpu-box   tools/release_linux_build.sh, one RunPod CPU pod per set, no GPU
+            (a paid rental, opt-in by name). Merged: 16 vCPU cpu5m/cpu3m
+            (>= 64 GB), one merged compile at a time under a 64 GiB cap;
+            per-binding: 32 vCPU cpu5g..cpu3m.
   gpu-legs  the RunPod NVIDIA and DigitalOcean/Hot Aisle AMD GPU boxes.
 
 SEVERABLE PIPELINES (2026-09-25). After the common steps a release is six
@@ -115,9 +117,9 @@ THE STEPS
                      launched AT ONCE, detached, unless the leg is done at this
                      freeze or a completed leg of an earlier freeze has the same
                      set identity and build tooling (taken, not launched), on
-                     the backend LINUX BUILD BACKENDS above names: `cpu-box`
-                     (RunPod CPU pods) for a merged-layout source, `github`
-                     (GitHub's free runners) for a per-binding one. The
+                     the backend LINUX BUILD BACKENDS above names: `github`
+                     (GitHub's free runners) by default, `cpu-box` (RunPod CPU
+                     pods) by name. The
                      --gpu-smoke backend `gpu-legs` builds on the GPU boxes: RunPod
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X, or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
@@ -706,9 +708,12 @@ def cpu_box_pod(ctx, amd_small=False):
 
 
 def default_build_backend(commit):
-    """`cpu-box` when the GitHub planner would refuse the commit (the merged
-    layout, release_github_build.merged_refusal), else `github`."""
-    return "cpu-box" if release_github_build.commit_merged(commit) else "github"
+    """`github` for either binding layout (Andrew 2026-10-26: compiling never
+    uses paid rentals; GitHub's free runners build programmatically). The
+    merged layout builds there one compile per shard job with swap sized from
+    its recorded peak (tools/release_github_build.py UNIT_PEAK_GIB); `cpu-box`
+    stays selectable by name. COMMIT is kept for callers and the record."""
+    return "github"
 
 
 #: The Linux build legs, one per release set (release_reuse.LINUX_SETS): native sm_89, the
@@ -719,9 +724,9 @@ RELEASE_LEG_SETS = tuple(release_reuse.LINUX_SETS)
 
 
 def cpu_legs(ctx):
-    """THE MERGED LAYOUT'S ROUTE, opt-in otherwise (--build-backend cpu-box;
-    the default when the source builds merged bindings, which GitHub's free
-    runners cannot: release_github_build.merged_refusal). The Linux sets compile on
+    """THE RENTED CPU ROUTE, opt-in by name (--build-backend cpu-box; until
+    2026-10-26 the merged layout's default, before the GitHub route built one
+    merged compile per job). The Linux sets compile on
     RunPod CPU pods, one pod per set, all three at once, with no GPU present
     (tools/release_linux_build.sh --archs <one>: Mojo compiles each set ahead
     of time from --target-accelerator alone). CPU pods do not wait on GPU
@@ -746,8 +751,8 @@ def cpu_legs(ctx):
 
 
 def github_legs(ctx):
-    """THE PER-BINDING LAYOUT'S DEFAULT ROUTE (--build-backend github, 2026-09-27;
-    refused for a merged-layout source, default_build_backend): the Linux sets
+    """THE DEFAULT ROUTE FOR EITHER LAYOUT (--build-backend github, 2026-09-27;
+    the merged layout since 2026-10-26, default_build_backend): the Linux sets
     compile on GitHub's free ubuntu-24.04 runners, no rental. Each leg is
     tools/release_github_build.py run: it mints the binding-cache URL map with
     this Mac's R2 credentials, dispatches .github/workflows/release-linux-build.yml
@@ -769,10 +774,10 @@ def github_legs(ctx):
     return legs
 
 
-#: The default follows the source's layout (default_build_backend): "cpu-box" for the
-#: merged layout (2026-10-21: one merged compile per tier needs up to 50 GiB, a free
-#: runner has 15), "github" for the per-binding one (2026-09-27: GitHub's free runners
-#: build, proven byte-identical to 0.8.24 on all three sets); "gpu-legs" is opt-in by name.
+#: The default is "github" (default_build_backend; 2026-09-27: GitHub's free runners
+#: build, proven byte-identical to 0.8.24 on all three sets; 2026-10-26: the merged
+#: layout too, one compile per shard job with swap); "cpu-box" and "gpu-legs" are
+#: opt-in by name.
 BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
 #: Routes that overlay their own box-side files and take no route overlay.
 SELF_OVERLAID = ("cpu-box", "github")
@@ -3423,7 +3428,7 @@ def main(argv=None):
     ap.add_argument("--source-checkout", default="",
                     help="an existing checkout at the frozen source commit (default: this checkout when its HEAD "
                          "is the source commit, else a worktree under the release directory)")
-    # default: the source's layout decides (default_build_backend): cpu-box when merged, else github
+    # default: github for either layout (default_build_backend); cpu-box and gpu-legs by name
     ap.add_argument("--build-backend", default=None, choices=sorted(BUILD_BACKENDS))
     # WHY NO GPU BY DEFAULT (Andrew 2026-10-13): identity and behavior are checked before merge on NVIDIA,
     # AMD, Apple and CPU; the release only builds, checks artifact integrity and publishes.
@@ -3473,19 +3478,15 @@ def main(argv=None):
         ap.error("--hopper-box and --smoke-via steer the GPU wheel smokes; they need --gpu-smoke")
     explicit = args.build_backend
     r = Release(args)  # resolves an unset --build-backend from the source's layout
-    if modes != release_reuse.TIERS and args.build_backend != "cpu-box":
-        ap.error("selected release tiers require --build-backend cpu-box; legacy remote backends "
-                 "do not forward a tier selection")
-    merged_gha = release_github_build.commit_merged(r.commit)
-    if args.build_backend == "github" and merged_gha:
-        ap.error(f"--build-backend github: {release_github_build.merged_refusal(max(release_github_build.NEEDED_GIB.values()))}")
-    # Without --gpu-smoke a release rents no GPU: the Linux sets build on GitHub's free runners,
-    # or, for the merged layout they cannot build, on RunPod CPU pods (no GPU either).
-    no_gpu_ok = ("github", "cpu-box") if merged_gha else ("github",)
+    if modes != release_reuse.TIERS and args.build_backend not in ("cpu-box", "github"):
+        ap.error("selected release tiers require --build-backend github or cpu-box; the GPU-leg backend "
+                 "does not forward a tier selection")
+    # Without --gpu-smoke a release rents no GPU: the Linux sets build on GitHub's free runners
+    # (the default for either layout) or, by name, on RunPod CPU pods (no GPU either).
+    no_gpu_ok = ("github", "cpu-box")
     if not args.gpu_smoke and args.build_backend not in no_gpu_ok:
-        ap.error(f"--build-backend {args.build_backend} uses rented boxes; without --gpu-smoke the Linux sets "
-                 + ("build on RunPod CPU pods (cpu-box, the merged layout's route) or GitHub's free runners"
-                    if merged_gha else "build on GitHub's free runners only")
+        ap.error(f"--build-backend {args.build_backend} uses rented GPU boxes; without --gpu-smoke the Linux sets "
+                 "build on GitHub's free runners (github) or RunPod CPU pods (cpu-box)"
                  + (f" (the default for this source is {default_build_backend(r.commit)})" if explicit else ""))
     return r.go()
 

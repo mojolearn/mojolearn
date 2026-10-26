@@ -714,16 +714,51 @@ key, fields and every file's sha256 verify. `build-provenance.json` records per
 binary whether it was built or taken, its key, and the commit whose build
 compiled it. `--no-bincache` builds everything from source.
 
-## 2d. The GitHub build route: the per-binding layout's default (`--build-backend github`)
+## 2d. The GitHub build route: the default for either layout (`--build-backend github`)
 
 The same CPU build route as 2c, on GitHub's free `ubuntu-24.04` runners (4
 vCPU, 15 GB) instead of a rented pod. Nothing is rented and no repository
-secret is needed. It is the per-binding layout's default since 2026-09-27;
-`--build-backend gpu-legs` rents GPU boxes to build instead. It cannot build
-the merged layout: `release_github_build.py plan` plans the merged pool (one
-`merged_build.sh` per tier, one per shard) and refuses it, and `run` refuses
-before dispatching, unless `--runner-mem-gib N` covers `NEEDED_GIB` (2c and
-the table in `tools/release.py`).
+secret is needed. It is the per-binding layout's default since 2026-09-27 and
+the merged layout's since 2026-10-26 (Andrew: compiling never uses paid
+rentals); `--build-backend cpu-box` rents a CPU pod and `gpu-legs` GPU boxes
+by name.
+
+**The merged layout: one compile per job, swap for the peak.** A merged file
+is one `mojo build` of its directory set's root: Mojo does not compile the
+members separately into objects that link into the same bytes, so a merged
+file cannot be split across jobs without becoming a different artifact. The
+plan gives each merged compile of a set (the identical tier, the host set,
+the fast tier when the release modes name it) its own shard job, which runs
+the cpu box's exact compile (image, path, flags, compiler workers, so the same
+bytes and cache keys). When the compile's planning peak
+(`release_github_build.py UNIT_PEAK_GIB`, the largest RSS recorded for it:
+identical about 48 GiB at 0.8.57 on the cpu box, host about 10) exceeds the
+runner's 15 GiB, the job first adds a swapfile on the runner's scratch disk
+(`gha_release_box.sh swap`, recorded in `GHA/.../swap.txt`); the plan refuses
+a compile that would need more than `SWAP_MAX_GIB`. Each shard records its
+peak (`memory.txt`): raise a `UNIT_PEAK_GIB` row when a run records more.
+`python3 tools/release_github_build.py estimate` prints the jobs, swap and a
+lower-bound wall time for the current tree. The workflow takes the release
+`modes` (`MOJOLEARN_RELEASE_MODES`, default `identical`), exported to the
+route as the cpu box does.
+
+**The host producer.** `host` in the workflow's `sets` (`run --host`) adds a
+job that runs the source's `tools/release_host_build.py build` in the same
+image from a git checkout of the commit, with the default pixi env and
+patchelf 0.17.2, its runtime donor this run's first assembled set or a
+retained `<leg>/release-build/build` (`run --host-donor DIR`: the Mac uploads
+it to R2 and passes one presigned GET plus its sha256). Its artifact
+`host-build` is what `tools/retained_release_composition.py --host-build`
+takes (`docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md`).
+
+**The cache without R2.** With no `map_url` (`run --no-bincache`) each shard
+restores its hot directory from `actions/cache` (key
+`rlb1-<arch>-<unit>-<commit>`, falling back to the newest of the same unit)
+and saves back only the archives its own builds used or made. An archive is
+named by its content key and placed only after it verifies, so an older
+commit's archive is reused exactly when the unit's inputs are unchanged.
+With a `map_url` R2 is the cache and `actions/cache` is not touched (gfx942
+bytes stay frozen by R2).
 
 ```sh
 pixi run release <v> --build-backend github          # the three legs, detached

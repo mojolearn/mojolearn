@@ -173,7 +173,7 @@ class Columns(unittest.TestCase):
         with mock.patch.object(release.Release, "go", lambda self: self.args):
             self.assertFalse(release.main(["0.8.14"]).cpu_column)
             self.assertTrue(release.main(["0.8.14", "--cpu-column"]).cpu_column)
-            # the default follows the source's layout (cpu-box for merged, github for per-binding)
+            # the default is github for either layout (default_build_backend, 2026-10-26)
             self.assertEqual(release.main(["0.8.14"]).build_backend,
                              release.default_build_backend(release.git("rev-parse", "HEAD")))
 
