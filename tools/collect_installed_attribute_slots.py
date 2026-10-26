@@ -13,9 +13,56 @@ import importlib
 import json
 from pathlib import Path
 import sys
-from types import BuiltinFunctionType, FunctionType, GetSetDescriptorType, MethodType
+from types import BuiltinFunctionType, FunctionType, GetSetDescriptorType, MethodType, ModuleType
 
 import installed_attribute_slots as witness
+
+
+# _native_msel_dispatch.connect calls _native_msel_extra.connect after the
+# public-attribute installer in __init__.py. These two exact classes then use
+# a different registered native attribute owner. Its runtime is not qualified
+# by this producer; retain its live identity without admitting its getter.
+LATER_INSTALLERS = {
+    "mojolearn.linear_model.LogisticRegression": (
+        "mojolearn.linear_model", "LogisticRegression", "_LR_CONTEXT",
+        "python/mojolearn/_native_logistic_bridge.py:connect_public"),
+    "mojolearn._expansion_prep.LinearDiscriminantAnalysis": (
+        "mojolearn._expansion_prep", "LinearDiscriminantAnalysis", "_CLS_CONTEXT",
+        "python/mojolearn/_native_msel_extra.py:connect"),
+}
+
+
+def later_owner(cls, entry, descriptor_type, proof):
+    """Recognize only the two committed later installers; never a generic mismatch."""
+    spec = LATER_INSTALLERS.get(cls.__module__ + "." + cls.__qualname__)
+    if spec is None:
+        return None
+    module_name, class_name, context_name, installer = spec
+    module = sys.modules.get(module_name)
+    witness.require(type(module) is ModuleType and vars(module).get(class_name) is cls,
+                    "later installed class identity changed")
+    context = vars(module).get(context_name)
+    witness.require(type(context) is dict, "later installed owner context changed")
+    getter = type.__dict__["__dict__"].__get__(cls).get("__getattribute__")
+    witness.require(getter is context.get("classical_attribute_descriptor")
+                    and type(getter) is descriptor_type, "later installed getter was replaced")
+    bound = getter.__func__
+    witness.require(type(bound) is MethodType and bound.__func__ is entry and bound.__self__ is context,
+                    "later installed entry/context was replaced")
+    layouts = context.get("classical_public_layouts")
+    witness.require(type(layouts) is dict, "later installed owner layouts changed")
+    layout = layouts.get(cls)
+    mro = type.__dict__["__mro__"].__get__(cls)
+    witness.require(type(layout) is dict and layout.get("mro") == mro
+                    and type(layout.get("bindings")) is dict
+                    and layout.get("bindings", {}).get("__getattribute__", (None,))[0] is getter,
+                    "later installed owner layout changed")
+    origin = native_origin(entry, "standard_scaler_attribute_call")
+    witness.require(origin["path"] == proof["owners"][witness.FACTORY]["binary"]["path"],
+                    "later native entry is outside the receipted factory owner")
+    return {"entry": "standard_scaler_attribute_call", "origin": origin,
+            "proof_owner": witness.FACTORY, "context": context_name,
+            "installer": installer, "runtime_qualified": False}
 
 
 def native_origin(entry, name):
@@ -141,7 +188,14 @@ def collect(root, cache, output):
         row = {"class": cls.__module__ + "." + cls.__qualname__, "exports": sorted(names),
                "method": "__getattribute__"}
         if cls in context["plans"]:
-            row.update(status="witnessed", checks=inspect_registered(cls, context, descriptor, entry, native_type))
+            alternate = None
+            if type.__dict__["__dict__"].__get__(cls).get("__getattribute__") is not descriptor:
+                alternate = later_owner(cls, vars(module).get("standard_scaler_attribute_call"), native_type, proof)
+            if alternate is not None:
+                row.update(status="unmodeled", reason="getter has a verified later owner outside this producer's scope",
+                           alternate_owner=alternate)
+            else:
+                row.update(status="witnessed", checks=inspect_registered(cls, context, descriptor, entry, native_type))
         elif cls in context["pending"]:
             row.update(status="pending", reason=str(context["pending"][cls]))
         else:
