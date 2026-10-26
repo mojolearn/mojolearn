@@ -90,6 +90,8 @@ def gate_verdict(state):
 
 #: autograd smoke entries that exercise the Torch framework interop (adapter scope)
 TORCH_INTEROP = ("import-torch-smoke", "real-model-smoke")
+#: pytest -k expression deselecting the torchvision interop tests inside native autograd entries
+TORCH_INTEROP_TESTS = "not test_guide_import_pretrained"
 
 
 def light_verdict(state):
@@ -354,6 +356,8 @@ class Gate:
         # --no-adapters: the Torch interop entries belong to the framework adapters
         # (Andrew 2026-10-25: 0.8.57 ships with adapters off); they are recorded as not run.
         excluded = [] if self.adapters_on else [e["name"] for e in AS.ENTRIES if e["name"] in TORCH_INTEROP]
+        if not self.adapters_on:
+            os.environ["MOJOLEARN_GATE_DESELECT_K"] = TORCH_INTEROP_TESTS
         report = self.root / "autograd-smoke.json"
         self.mark(phase="autograd", status="running", autograd_started=time.time(), autograd_finished=None,
                   autograd_excluded=excluded)
