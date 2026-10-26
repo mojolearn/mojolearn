@@ -113,5 +113,17 @@
       "status": "retained outside candidate",
       "reason": "Avoid introducing product changes before new-verifier evidence establishes which repairs are required."
     }
-  ]
+  ],
+  "verifier_proofs": [
+    {
+      "arm": "coverage-precise-x_linear-spearman_sign_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x-linear-spearman/proof.json",
+      "column": "cpu-apple-m4",
+      "fixtures": [
+        "base"
+      ]
+    }
+  ],
+  "remaining_declared_fault_arms": 40
 }

@@ -100,3 +100,6 @@ coverage-training-samba_accumulate_out	build_training rc 0, 112s	CAUGHT	grad-acc
 coverage-training-chunked_lm_head_v2_logit	build_training rc 0, 122s	CAUGHT	training-chunked-lm-head (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	135
 coverage-training-mlp_ops	build_training rc 0, 21s	CAUGHT	neural-trainer-unfused (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	34
 coverage-training-neural_rng	build_training rc 0, 100s	CAUGHT	samba-untied-dropout-accum (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	123
+
+# 2026-10-26: bf8ea7fcbe53 CPU Apple M4; raw records and exact build proof: bench/results/verification_faults/2026-10-26-0860/x-linear-spearman/proof.json
+coverage-precise-x_linear-spearman_sign_host	development x_linear host group rc 0; clean group reused	CAUGHT	x-isotonic/base CPU MOVED	train auto-direction digest changed	STABLE; exact original source/binaries/results restored	see proof.json

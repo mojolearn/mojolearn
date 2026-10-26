@@ -1,0 +1,44 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "arm": "coverage-precise-x_linear-spearman_sign_host",
+  "verdict": "CAUGHT",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "column": "cpu-apple-m4",
+  "lanes": [
+    "x-isotonic"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean.json": {
+      "path": "clean.json",
+      "sha256": "709095cc5cd51af2ba5b6327912447ff586869f2a7dce62ef99cbc834cfe6b78"
+    },
+    "sabotaged.json": {
+      "path": "sabotaged.json",
+      "sha256": "43bce09a291190322aa56b30807608fed029aaf248dde84beb2dd29b259eb59c"
+    },
+    "restored.json": {
+      "path": "restored.json",
+      "sha256": "f3f4ce95776f6839dfa87672489930de5cfb0d30b288c0608a2c3416ad2f24e8"
+    },
+    "check.log": {
+      "path": "check.log",
+      "sha256": "5a6f0bb6956b1cff2bd318248bb8ddccde5215ef51685542db27b9fe0771d3aa"
+    },
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "1ce4a785e24c1b818e77eb3a1e4fbed075192af570542dbb550df322f19098f8"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "1d1a2e07793111f12c131ac6c18c0974b6abe5fdddb6441ba384fc802159f852"
+    }
+  },
+  "build": "Only the deliberately faulted x_linear host group compiled; existing clean group reused.",
+  "restoration": "Exact original native bytes and source restored; original failed restoration records retained in the full archive.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_linear-1",
+  "r2_archive": "measurements/verification/0.8.60/x-linear-spearman-proof.tgz"
+}
