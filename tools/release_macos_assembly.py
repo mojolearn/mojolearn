@@ -359,6 +359,15 @@ def adapter_role_inputs(root, role):
     return {p.relative_to(root).as_posix(): sha(p) for p in sorted(seen)}
 
 
+def native_source_refresh(original, current, native_inputs, frontend_inputs):
+    """Permit a captured native repair without attributing it to retained frontends."""
+    changed = {name for name in set(original) | set(current) if original.get(name) != current.get(name)}
+    retained = set().union(*(set(values) for values in frontend_inputs.values()))
+    require(changed <= set(native_inputs) - retained,
+            "published adapter non-native sources changed: " + ", ".join(sorted(changed - (set(native_inputs) - retained))))
+    return current
+
+
 def compose_adapters(root, native_result, published_wheel, output):
     """Combine a captured current native build with unchanged published frontends."""
     import retained_release_composition as retained
@@ -394,7 +403,7 @@ def compose_adapters(root, native_result, published_wheel, output):
         for name, value in inputs[role].items():
             old = subprocess.check_output(["git", "-C", str(root), "show", origin + ":" + name])
             require(hashlib.sha256(old).hexdigest() == value, f"published {role} input changed: {name}")
-    require(original["sources"] == api.source_digests(root), "published adapter local sources changed")
+    sources = native_source_refresh(original["sources"], api.source_digests(root), before["adapter_inputs"], inputs)
     facts = before["toolchain"]
     require(original["mojo"]["version"] == facts["version"], "MAX compiler version changed")
     require(original["mojo"]["conda"] == api.conda_version(root / ".pixi/envs/default", "mojo")
@@ -416,7 +425,7 @@ def compose_adapters(root, native_result, published_wheel, output):
                              result=result_ref, before_build=before_ref, sha256=sha(native))
     doc = copy.deepcopy(original)
     doc.update(source_commit=revision(root), source_commit_scope="admitted package source; compilation origins are per artifact",
-               artifact_origins=origins, compilation_action="mixed-current-native-and-retained-frontends")
+               artifact_origins=origins, compilation_action="mixed-current-native-and-retained-frontends", sources=sources)
     doc["commands"]["native"] = before["command"]
     doc["files"] = api.file_rows(output)
     doc["unstaged"]["native"] = doc["files"]["native"]

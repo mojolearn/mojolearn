@@ -93,6 +93,19 @@ def test_prepare_copies_admitted_groups_without_mutating_or_linking_originals(tm
     assert helper.read_bytes() == b"already-compiled-helper"
 
 
+def test_native_source_refresh_retains_frontend_and_unrelated_inputs():
+    original = {"native": "old", "shared": "same", "frontend": "same", "builder": "same"}
+    current = dict(original, native="new")
+    native = {"native": "new", "shared": "same"}
+    frontends = {"torch": {"frontend": "same", "shared": "same", "builder": "same"}}
+    assert assembly.native_source_refresh(original, current, native, frontends) == current
+    for name in ("shared", "frontend", "builder", "unknown"):
+        with pytest.raises(ValueError, match="non-native sources changed"):
+            assembly.native_source_refresh(original, dict(current, **{name: "changed"}), native, frontends)
+    with pytest.raises(ValueError, match="non-native sources changed"):
+        assembly.native_source_refresh(original, {k: v for k, v in current.items() if k != "frontend"}, native, frontends)
+
+
 def wheel_fixture(tmp_path):
     pkg = tmp_path / "pkg"
     document = {"groups": [], "indexes": {}}
