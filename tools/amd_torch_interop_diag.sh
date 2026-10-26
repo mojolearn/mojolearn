@@ -20,19 +20,32 @@ SP=$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
 TORCH_LIB="$SP/torch/lib"
 MLIBS=$(ls -d "$SP/mojolearn/.libs" 2>/dev/null)
 echo "DIAG venv=$VENV site=$SP torch_lib=$TORCH_LIB rocm=$ROCM out=$OUT"
-# The branch's loader over the installed package, without touching the venv: a symlink farm of the
-# installed mojolearn/ (binaries, plugin sets, .libs) with this tree's loader files copied in.
+# The branch's loader over the installed package, without touching the venv: an overlay site
+# directory that symlinks every site-packages entry (the .dist-info records included: the loader
+# looks for the core and plugin distributions only in the directory beside mojolearn/, and without
+# them it does not see the AMD plugin), with mojolearn/ a symlink farm of the installed package
+# (binaries, plugin sets, .libs) and this tree's loader files copied in.
 # OVERLAY=0 runs the installed package as it is (the "before" arm).
+# The overlay lives OUTSIDE <out-dir> (OVERLAY_DIR, default /var/tmp/...): <out-dir> is persisted to
+# R2 and must never carry symlinks into the venv.
+SITE="${OVERLAY_DIR:-/var/tmp/mojolearn-interop-site}"
 if [ "${OVERLAY:-1}" = 1 ]; then
-  rm -rf "$OUT/overlay"; mkdir -p "$OUT/overlay"
-  cp -rs "$SP/mojolearn" "$OUT/overlay/mojolearn"
-  for f in _rocm_runtime.py _backend.py _gpu_witness.py; do
-    rm -f "$OUT/overlay/mojolearn/$f"; cp "$REPO/python/mojolearn/$f" "$OUT/overlay/mojolearn/$f"
+  rm -rf "$SITE"; mkdir -p "$SITE"
+  for e in "$SP"/* "$SP"/.[!.]*; do
+    [ -e "$e" ] || continue
+    [ "$(basename "$e")" = mojolearn ] && continue
+    ln -s "$e" "$SITE/$(basename "$e")"
   done
-  find "$OUT/overlay" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null
-  export PYTHONPATH="$OUT/overlay${PYTHONPATH:+:$PYTHONPATH}"
-  echo "DIAG overlay=$OUT/overlay commit=$(git -C "$REPO" rev-parse --short HEAD)"
+  cp -rs "$SP/mojolearn" "$SITE/mojolearn"
+  for f in _rocm_runtime.py _backend.py _gpu_witness.py; do
+    rm -f "$SITE/mojolearn/$f"; cp "$REPO/python/mojolearn/$f" "$SITE/mojolearn/$f"
+  done
+  find "$SITE/mojolearn" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null
+  export PYTHONPATH="$SITE${PYTHONPATH:+:$PYTHONPATH}"
+  echo "DIAG overlay=$SITE commit=$(git -C "$REPO" rev-parse --short HEAD)"
 fi
+# The GPU set, never a CPU fallback: the gate sets the same, and every check below requires hip.
+export MOJOLEARN_VENDOR=hip
 
 # 1. Static facts: sonames, NEEDED, RUNPATH of every library on the path.
 {
@@ -64,7 +77,9 @@ for l in open("/proc/self/maps"):
 print("COPIES " + " ".join("%s=%d:%s" % (k, len(v), ",".join(sorted(v))) for k, v in sorted(c.items())), flush=True)'
 FIT='import numpy as np, mojolearn
 X=np.random.default_rng(0).random((4096,8),dtype=np.float32)
-mojolearn.KMeans(n_clusters=4).fit(X); print("MOJOLEARN_FIT_OK", mojolearn.vendor(), mojolearn.__file__, flush=True)'
+mojolearn.KMeans(n_clusters=4).fit(X)
+assert mojolearn.vendor() == "hip", "vendor %s, not hip" % mojolearn.vendor()
+print("MOJOLEARN_FIT_OK", mojolearn.vendor(), mojolearn.gpu_arch(), mojolearn.__file__, flush=True)'
 TORCHOP='import torch
 x=torch.ones(1024, device="cuda"); print("TORCH_GPU_OK", float((x*2).sum()), flush=True)
 import torchvision; print("TORCHVISION_OK", torchvision.__version__, flush=True)'
@@ -91,7 +106,19 @@ scenario torch-first.torchlib   "$TORCH_LIB:$ROCM"      torch-first
 for probe in import-torch real-model; do
   LD_LIBRARY_PATH="$MLIBS:$ROCM" timeout 900 "$PY" "$REPO/tools/autograd_smoke.py" probe "$probe" > "$OUT/smoke-$probe.log" 2>&1
   rc=$?
-  echo "DIAG smoke=$probe rc=$rc $(grep -m1 -E '^(SMOKE_DIGEST|SMOKE_FAIL|SMOKE_REFUSED|SKIPPED)' "$OUT/smoke-$probe.log" | cut -c1-240)"
-  [ $rc -eq 0 ] || grep -m 3 -E 'Error|error|abort|hip.cpp|HSA' "$OUT/smoke-$probe.log" | cut -c1-240 | sed 's/^/DIAG   /'
+  status=FAIL
+  [ $rc -eq 0 ] && grep -q '^SMOKE_DIGEST .* vendor hip ' "$OUT/smoke-$probe.log" && status=PASS
+  echo "DIAG smoke=$probe rc=$rc status=$status $(grep -m1 -E '^(SMOKE_DIGEST|SMOKE_FAIL|SMOKE_REFUSED|SKIPPED)' "$OUT/smoke-$probe.log" | cut -c1-240)"
+  [ $status = PASS ] || grep -m 3 -E 'Error|error|abort|hip.cpp|HSA' "$OUT/smoke-$probe.log" | cut -c1-240 | sed 's/^/DIAG   /'
 done
+# 3. The loader's unit tests from this tree (pure Python; probes and ROCm loads are faked).
+#    selector_test.py is a script, not a pytest module.
+( unset PYTHONPATH MOJOLEARN_VENDOR
+  cd "$REPO" && "$PY" -m pytest -q -p no:cacheprovider packaging/linux/test_rocm_runtime.py \
+      packaging/linux/test_plugin_loader.py > "$OUT/pytest.log" 2>&1
+  echo "DIAG pytest rc=$? $(tail -n 1 "$OUT/pytest.log" | cut -c1-200)"
+  grep -m 10 -E '^(FAILED|ERROR)' "$OUT/pytest.log" | cut -c1-200 | sed 's/^/DIAG   /'
+  "$PY" packaging/linux/selector_test.py > "$OUT/selector.log" 2>&1
+  echo "DIAG selector_test rc=$? $(grep -m1 -E '[0-9]+ passed' "$OUT/selector.log")"
+  grep -E '^FAIL ' "$OUT/selector.log" | cut -c1-160 | sed 's/^/DIAG   /' )
 echo "DIAG done out=$OUT"

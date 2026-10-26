@@ -1897,6 +1897,27 @@ class _HostBinding(type(sys)):
         return fn
 
 
+def _refuse_cpu_on_gpu_box(reason):
+    """NEVER THE CPU-ONLY SET ON A GPU BOX UNASKED (2026-10-26, amd-torch-interop):
+    a GPU device node in the box probe and no MOJOLEARN_VENDOR=cpu refuses
+    instead. The AMD box ran both torch smokes on the CPU when a loader overlay
+    hid the plugin's .dist-info; a GPU box runs the CPU only on request. Called
+    before each `_select_cpu_only` (whose body tools/release_requirement_routes.py
+    pins)."""
+    if not sys.platform.startswith("linux"):
+        return
+    if os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu":
+        return
+    probe = _probe_box()
+    nodes = [p for v in _LINUX_VENDORS for p, ok in probe[v]["paths"].items() if ok]  # glue: four device node names
+    if nodes:
+        raise GpuPluginError(
+            f"mojolearn: this box has a GPU ({', '.join(nodes)}) but no GPU set could be "
+            f"selected, and the CPU is used only on request:\n  {reason}\n"
+            "Install the GPU package for this device (mojolearn-nvidia or mojolearn-amd) "
+            "beside mojolearn, or set MOJOLEARN_VENDOR=cpu to run on the CPU on purpose.")
+
+
 def _select_cpu_only(pkg, mode, reason):
     """Install the CPU-only set under the canonical names: a `_HostBinding`
     for every family whose host binding is listed in `_HOST_MODULES` and
@@ -1992,6 +2013,7 @@ def select():
     except (ImportError, AttributeError) as exc:
         if not host_binding_built():
             raise
+        _refuse_cpu_on_gpu_box(str(exc))
         return _select_cpu_only(pkg, mode, str(exc))
     if mode == "fast" and ident_dir == pkg_dir:
         # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
@@ -2100,6 +2122,7 @@ def select():
         if _BASELINE_SELECTION is not None:
             raise GpuPluginError(refusal + "; the PTX set never falls back to the CPU")
         if host_binding_built():
+            _refuse_cpu_on_gpu_box(refusal)
             return _select_cpu_only(pkg, mode, refusal)
         raise ImportError(refusal)
     _SELECTED = mode

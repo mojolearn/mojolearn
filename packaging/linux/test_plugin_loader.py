@@ -40,7 +40,9 @@ def fresh_backend():
     pkg = types.ModuleType(ALIAS)
     pkg.__path__ = [str(PKG_SRC)]
     sys.modules[ALIAS] = pkg
-    return importlib.import_module(ALIAS + "._backend")
+    B = importlib.import_module(ALIAS + "._backend")
+    B._rocm_prepare = lambda vendor: None  # fabricated installs: never load a real ROCm runtime
+    return B
 
 
 def probe(B, cuda=False, hip=False):

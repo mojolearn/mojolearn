@@ -52,9 +52,20 @@ import traceback
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
-sys.path.insert(0, os.path.join(_ROOT, "python"))
+# `_backend` under a private package whose __path__ is the real package
+# directory, so its relative imports resolve to the real gpu_plugins.py,
+# host_surface.py, _rocm_runtime.py and _version.py while mojolearn/__init__.py
+# never runs: importing the real package selects and loads binaries, which a
+# source checkout does not have (2026-10-26: `from mojolearn import _backend`
+# raised "no identical binary exists" here before any case ran).
+import importlib                              # noqa: E402
+import types                                  # noqa: E402
 
-from mojolearn import _backend as B          # noqa: E402
+_ALIAS = "mojolearn_selector_under_test"
+_pkg = types.ModuleType(_ALIAS)
+_pkg.__path__ = [os.path.join(_ROOT, "python", "mojolearn")]
+sys.modules[_ALIAS] = _pkg
+B = importlib.import_module(_ALIAS + "._backend")
 
 
 FAILURES = []
@@ -80,6 +91,7 @@ def _reset(pkg, probe_result, vendor_env=None,
     B._pkg_dir = lambda: pkg
     B._probe_box = lambda: probe_result
     B._device_arch = lambda vendor: device
+    B._rocm_prepare = lambda vendor: None    # fabricated box: never load a real ROCm runtime
     if vendor_env is None:
         os.environ.pop("MOJOLEARN_VENDOR", None)
     else:
