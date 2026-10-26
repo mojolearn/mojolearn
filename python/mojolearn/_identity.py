@@ -1,65 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`python -m mojolearn identity`: run the identity_break lanes on this box
-and diff the column they produce against the three training GPU columns
-shipped in the wheel (the packaging lane, 2026-09-14).
+"""Run local identity checks against the admitted reference table.
 
-`python -m mojolearn verify` asks one pinned k-means fit one question. This
-asks EVERY lane of the record the manifest names (python/mojolearn/
-host_surface.py, `TRAINING_GPU_COLUMNS`; 454 lanes over 9 hostile fixtures
-in the 2026-10-14 record, 4086 cells IDENTICAL x3, recorded from the
-pip-installed 0.8.44 wheel) the same question the release did: does this box,
-running the installed binaries, produce the same train, infer and model
-hashes as the Apple M4, the NVIDIA L40S and the AMD MI325X did at the
-recorded commit. It is the fourth column of `tools/identity_break.py`, run
-where the user is.
+The actual harness column is retained at ``--keep`` (or a temporary path).
+``--lanes``, ``--fixtures``, ``--repeats`` and ``--vendor`` select and label
+that execution. Train, inference and model values use the same comparator
+and per-part evidence as ``verify``. ``--check`` retains its historical
+file-only inspection of the harness, bundled columns and commit witness.
 
-WHAT SHIPS AND WHERE IT COMES FROM. The wheel carries a COPY of
-`tools/identity_break.py` as `mojolearn/_identity_break.py`, the three
-column JSONs under `mojolearn/identity_columns/<record>/`, and a COMMIT
-witness beside them, all placed by packaging/macos/build_release_wheel.sh
-or packaging/linux/pack_wheel.py from the paths the manifest names. Nothing
-here is a second implementation: the harness that runs is the harness the
-release gate ran, and the columns are the committed record, bytes for
-bytes. From a source checkout the same three are found under tools/ and
-bench/results/identity_break/ instead, so the command works before a wheel
-is built.
-
-HOW IT RUNS. The harness runs in a SUBPROCESS, twice: once to produce the
-local column (`--lanes ... --json <local>`), once to diff (`--diff <the
-three shipped columns> <local> --require-columns 4 --lanes ...`). A
-subprocess because identity_break refuses to measure unless
-MOJOLEARN_NUMERIC_MODE names the mode it loaded, wants a commit witness
-before the first fit, and fits every cell twice in one process to separate
-a mover on this box from a divergence between boxes; the parent process has
-already imported the package and must not become the fourth column by
-accident. The child is pinned to the SAME package the parent imported (its
-parent directory is put first on sys.path), so a checkout beside the
-current directory cannot shadow the installed wheel, or the reverse.
-
-WHICH LANES. Every lane the three shipped columns carry, on a GPU box. On a
-CPU-only install (`mojolearn.vendor()` is 'cpu') only the lanes the manifest
-lists for small public reference checks (`host_surface.public_reference_lanes()`):
-full training verification uses the source harness, and IDENTICAL x3 on a lane this box did not run is
-not a pass for this box. `--lanes` narrows either set; it cannot name a lane
-the record does not carry, because there would be nothing to diff against.
-
-WHAT A PASS MEANS, and what it does not. Every cell this box ran reads
-IDENTICAL x4 on the train column and IDENTICAL x4 or N/A on the infer and
-model columns, against the record, at THIS box's commit witness. It says
-this box reproduces the three recorded vendors bit for bit on those cells.
-It does not re-measure the three vendors (the record did), it does not
-cover lanes added after the record (they are not in the shipped columns and
-are not run), and it says nothing about speed.
-
-EXIT CODES, the same table as `verify` (docs/VERIFY.md):
-
-    0  IDENTICAL      every run cell IDENTICAL x4 against the record
-    1  MISMATCH       a run cell DIVERGENT, MOVED, RELOAD-MOVED or short
-    2  USAGE          bad arguments, a lane the record does not carry
-    3  REFUSED        this process loaded a tier other than identical
-    4  CANNOT RUN     no numpy, the harness raised or refused, no commit
-    5  NO REFERENCE   the harness or a shipped column is not in this install
+Exit codes remain 0 identical/ready, 1 mismatch, 2 usage, 3 wrong mode,
+4 cannot run and 5 missing reference. JSON retains the local-column and
+verdict fields; ``diff_exit`` is null because no historical-column diff
+is executed, and ``comparison_exit`` reports the admitted-table comparison.
 """
 import json
 import os
@@ -283,7 +235,7 @@ def cmd_check(args):
 def cmd_identity(args):
     if getattr(args, "check", False):
         return cmd_check(args)
-    from . import _backend
+    from . import _backend, _verify_all as engine, _verify_reference as vref
     loaded = _backend.numeric_mode()
     if loaded != "identical":
         return _finish(args, _verify.EXIT_REFUSED_FAST, "REFUSED",
@@ -296,102 +248,121 @@ def cmd_identity(args):
                        "numpy is not installed; identity_break needs it (pip install numpy)")
     try:
         harness, harness_how = harness_path()
-        cols = columns()
-    except FileNotFoundError as exc:
+        current = engine.load_harness(harness)
+        table_file = vref.table_path()
+        table = vref.load_table(table_file)
+    except (FileNotFoundError, vref.TableError) as exc:
         return _finish(args, _verify.EXIT_NO_REFERENCE, "NO REFERENCE", str(exc))
-    record = host_surface.training_gpu_column_record()
-    record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])  # glue: identity verification CLI over record files
-    cpu_only = _backend.vendor() == "cpu"
-    # Public CPU checks use only the small probes supported by inference
-    # wheel dependencies. Full source verification has its own lane list.
-    # verify --all can admit later per-lane records. This legacy command
-    # compares its fixed bundled columns, so a promoted fix-record lane must
-    # not accidentally compare against an older, pre-fix answer here.
-    cpu_record_lanes = set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())
-    lanes = [l for l in record_lanes if not cpu_only or l in cpu_record_lanes]  # glue: identity verification CLI over record files
-    if args.lanes:
-        asked = [x for x in args.lanes.split(",") if x]  # glue: identity verification CLI over record files
-        unknown = [x for x in asked if x not in record_lanes]  # glue: identity verification CLI over record files
-        if unknown:
-            return _finish(args, _verify.EXIT_USAGE, "USAGE",
-                           f"--lanes names lanes the shipped columns do not carry: {unknown}; "
-                           f"record {record} carries {record_lanes}")
-        refused = [x for x in asked if x not in lanes]  # glue: identity verification CLI over record files
-        if refused:
-            return _finish(args, _verify.EXIT_USAGE, "USAGE",
-                           f"--lanes names lanes outside the public CPU reference checks on this "
-                           f"install: {refused}; the inference wheel supports reference checks for {host_surface.public_reference_lanes()} "
-                           f"against this record")
-        lanes = [l for l in lanes if l in asked]  # glue: identity verification CLI over record files
-    fixtures = record_fixtures
-    if args.fixtures:
-        asked = [x for x in args.fixtures.split(",") if x]  # glue: identity verification CLI over record files
-        unknown = [x for x in asked if x not in record_fixtures]  # glue: identity verification CLI over record files
-        if unknown:
-            return _finish(args, _verify.EXIT_USAGE, "USAGE",
-                           f"--fixtures names fixtures the record does not carry: {unknown}")
-        fixtures = [f for f in record_fixtures if f in asked]  # glue: identity verification CLI over record files
-    if not lanes:
+    except engine.CannotRun as exc:
+        return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
+    vendor = _backend.vendor()
+    device_class = vref.VENDOR_CLASS.get(vendor)
+    if device_class is None:
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
-                       "no lane to run: this CPU-only install covers none of the record's lanes")
+                       f"unknown vendor read-back {vendor!r}")
+    asked = [x for x in args.lanes.split(",") if x]
+    try:
+        lanes, fixtures = engine.select_lanes(current, table, device_class, "full", asked)
+    except ValueError as exc:
+        return _finish(args, _verify.EXIT_USAGE, "USAGE", str(exc))
+    table_lanes = {key.split("/", 1)[0] for key in table["cells"]}
+    if not asked:
+        lanes = [lane for lane in lanes if lane in table_lanes]
+    record_fixtures = list(fixtures)
+    if args.fixtures:
+        requested = [x for x in args.fixtures.split(",") if x]
+        unknown = [x for x in requested if x not in fixtures]
+        if unknown:
+            return _finish(args, _verify.EXIT_USAGE, "USAGE",
+                           f"--fixtures names fixtures the harness does not define: {unknown}")
+        fixtures = [f for f in fixtures if f in requested]
+    if args.repeats < 1:
+        return _finish(args, _verify.EXIT_USAGE, "USAGE", "--repeats must be positive")
+    if not lanes or not fixtures:
+        return _finish(args, _verify.EXIT_NO_REFERENCE, "NO REFERENCE",
+                       "the admitted table carries no applicable selected cells")
+    stale = set(vref.stale_reference_lanes(table, current)) & set(lanes)
+    missing = []
+    for lane in lanes:
+        for fixture in fixtures:
+            entry = vref.entry(table, lane, fixture, "train", device_class=device_class)
+            if (lane in stale or not entry or entry.get("conflict")
+                    or not re.fullmatch(r"[0-9a-f]{16}", str(entry.get("ref", "")))):
+                missing.append(f"{lane}/{fixture}")
+    if missing:
+        return _finish(args, _verify.EXIT_NO_REFERENCE, "NO REFERENCE",
+                       "missing, conflicted or stale admitted train references: " + ", ".join(missing))
     commit, commit_source = commit_witness()
     env = dict(os.environ)
     env["MOJOLEARN_NUMERIC_MODE"] = "identical"
     if commit:
         env[_ENV_COMMIT] = commit
-
-    keep = args.keep
-    tmpdir = None
-    if not keep:
-        tmpdir = tempfile.mkdtemp(prefix="mojolearn-identity-")
-        keep = os.path.join(tmpdir, "local.json")
-    vendor_label = args.vendor
+    keep = args.keep or os.path.join(tempfile.mkdtemp(prefix="mojolearn-identity-"), "local.json")
     _emit([
         "# python -m mojolearn identity",
         f"# harness: {harness} ({harness_how})",
-        f"# record:  {record}; columns: " + ", ".join(f"{l} ({how})" for l, _, how in cols),  # glue: identity verification CLI over record files
-        f"# commit:  {commit or '(the checkout, read by the harness)'} ({commit_source})",
-        f"# this box: {'CPU-only install' if cpu_only else 'vendor ' + str(_backend.vendor())}; "
-        f"{len(lanes)} of {len(record_lanes)} lanes x {len(fixtures)} fixtures x {args.repeats} repeats",
+        f"# admitted reference table: {table_file}",
+        f"# commit: {commit or '(the checkout, read by the harness)'} ({commit_source})",
+        f"# this box: {vendor}; {len(lanes)} lanes x {len(fixtures)} fixtures x {args.repeats} repeats",
         f"# local column: {keep}",
     ])
+    # Keep the actual harness record, repeats and caller's label intact. Only
+    # the comparator changes: fixed historical columns describe their old
+    # payloads, while the admitted table retains each current part's origins.
     run_argv = ["--lanes", ",".join(lanes), "--json", keep, "--repeats", str(args.repeats)]
     if args.fixtures:
         run_argv += ["--fixtures", ",".join(fixtures)]
-    if vendor_label:
-        run_argv += ["--vendor", vendor_label]
+    if args.vendor:
+        run_argv += ["--vendor", args.vendor]
     rc, _ = _run(harness, run_argv, env, capture=False)
     if rc not in (0, 1) or not os.path.isfile(keep):
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
-                       f"the harness exited {rc} and wrote {'no' if not os.path.isfile(keep) else 'a'} "
-                       f"column ({keep}); its refusal is printed above")
-
-    diff_argv = ["--diff"] + [p for _, p, _ in cols] + [keep]  # glue: identity verification CLI over record files
-    full = set(fixtures) == set(record_fixtures)
-    if full:
-        # The gate's own mechanism, when every fixture ran: a cell of a run
-        # lane that rests on fewer than four real hashes fails the diff.
-        diff_argv += ["--require-columns", "4", "--lanes", ",".join(lanes)]
-    drc, text = _run(harness, diff_argv, env, capture=True)
-    sys.stdout.write(text if text.endswith("\n") else text + "\n")
-    bad, seen = _judge(text, lanes, fixtures)
-    summary = [ln for ln in text.splitlines()  # glue: identity verification CLI over record files
-               if ln.startswith("summary") or ln.startswith("REQUIRE FAIL") or ln.startswith("require-columns")]
-    with open(keep, "r", encoding="utf-8") as fh:
-        local = json.load(fh)
-    extra = dict(record=record, columns=[l for l, _, _ in cols], commit=local.get("commit"),  # glue: identity verification CLI over record files
-                 vendor=local.get("vendor"), lanes=lanes, fixtures=fixtures, repeats=args.repeats,
-                 local_json=keep, harness=harness, diff_exit=drc, cells_run=seen,
-                 summary=summary, bad=bad, full_fixture_set=full)
-    if drc == 0 and not bad:
-        return _finish(
-            args, _verify.EXIT_VERIFIED, "IDENTICAL",
-            f"{seen} cells ({len(lanes)} lanes x {len(fixtures)} fixtures) on this box "
-            f"({local.get('vendor')}, commit {local.get('commit')}) read IDENTICAL x4 against "
-            f"{', '.join(l for l, _, _ in cols)} (record {record}); infer and model columns "
-            f"IDENTICAL x4 or N/A on every run cell", extra)
-    detail = (f"{len(bad)} of {seen} run cells did not read IDENTICAL x4 against record {record}"
-              + (f" (diff exit {drc})" if drc else "") + "; first: "
-              + "; ".join(bad[:5]) + ("; ..." if len(bad) > 5 else "")
-              + f". The local column is kept at {keep}")
-    return _finish(args, _verify.EXIT_MISMATCH, "MISMATCH", detail, extra)
+                       f"the harness exited {rc}; local column: {keep}")
+    try:
+        with open(keep, encoding="utf-8") as fh:
+            local = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
+    expected = {f"{lane}/{fixture}" for lane in lanes for fixture in fixtures}
+    cells = local.get("cells", {})
+    if (local.get("complete") is not True or set(cells) != expected
+            or local.get("repeats") != args.repeats):
+        return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
+                       f"incomplete local column: expected {len(expected)} cells; "
+                       f"missing {sorted(expected - set(cells))}; unexpected {sorted(set(cells) - expected)}")
+    for fixture in fixtures:
+        if any(local.get(key, {}).get(fixture) != table.get(key, {}).get(fixture)
+               for key in ("fixtures", "heldout")):
+            return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
+                           f"local {fixture} input bytes differ from the admitted reference")
+    raw = []
+    for lane in lanes:
+        for fixture in fixtures:
+            cell = cells[f"{lane}/{fixture}"]
+            for part in ("train", "infer", "model"):
+                value = vref._part_value(cell, part, min_repeats=args.repeats)
+                raw.append(dict(lane=lane, fixture=fixture, part=part, value=value,
+                                error=None if value is not None else "missing or unstable local part"))
+    rows = engine.judge_rows(raw, table, device_class=device_class)
+    bad = [f"{r['lane']}/{r['fixture']} {r['part']}: {r['state']} ({r['detail']})"
+           for r in rows if r['state'] != vref.IDENTICAL
+           and not (r['part'] != 'train' and r['state'] == vref.NA)]
+    if rc:
+        bad.append(f"collector exited {rc}; a collected property failed")
+    evidence = engine.reference_evidence(rows)
+    comparison_exit = int(bool(bad))
+    extra = dict(record="verify_reference/table.json",
+                 columns=sorted({str(c['vendor']) for c in evidence['columns']}),
+                 commit=local.get("commit"), vendor=local.get("vendor"), lanes=lanes,
+                 fixtures=fixtures, repeats=args.repeats, local_json=keep, harness=harness,
+                 diff_exit=None, comparison_exit=comparison_exit, collector_exit=rc,
+                 cells_run=len(cells), summary=[f"summary admitted-table: {len(cells)} cells; {len(bad)} failures"],
+                 bad=bad, full_fixture_set=set(fixtures) == set(record_fixtures),
+                 reference_table=table_file, reference_evidence=evidence, compared_parts=rows)
+    if not bad:
+        return _finish(args, _verify.EXIT_VERIFIED, "IDENTICAL",
+                       f"{len(cells)} cells on this box match the admitted reference table; "
+                       "train, infer and model compared with each part's original evidence", extra)
+    return _finish(args, _verify.EXIT_MISMATCH, "MISMATCH",
+                   f"{len(bad)} comparisons or collected properties failed; "
+                   + "; ".join(bad[:5]) + f". The local column is kept at {keep}", extra)
