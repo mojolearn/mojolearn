@@ -1,0 +1,34 @@
+{
+  "vendor": "nvidia",
+  "devices": [
+    0,
+    1
+  ],
+  "wheels": {
+    "mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "8c71f10bc863e4b983d71b7d6c5f32aeff72efd64628b989f26a61e0a0190cf0",
+    "mojolearn_nvidia-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "c9ce775a0f4c2d367bde629edac19527c2e0a59a45c530f6567ce1bcb9573ddc",
+    "mojolearn_nvidia_ptx-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "cb01e561bf345b060c0608c1a79f3004166e91b0a1a3757b935f7e1fbe70b418"
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "controller_sha256": "765f618d4b06bdfa0de5faebd31e1906efea33f73dfd93d1fd6f92104d529709",
+  "capture_exit": 0,
+  "probe_exit": 0,
+  "hidden_exit": 1,
+  "verifier_repair": {
+    "base_request_sha256": "791878c25824425837e546aaba2bdd04e387057697667203e088909b1421c44a",
+    "reason": "Only the missing capture is rerun after repairing split-wheel ownership. Existing probe and hidden-device records are unchanged and reused; native bytes are unchanged.",
+    "repair_controller_sha256": "cb7706c5507ae71e6ce7ee68a828113e7f954d5161dca0b670b0cc16a9a272ab",
+    "composition": {
+      "wheel": "mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "8c71f10bc863e4b983d71b7d6c5f32aeff72efd64628b989f26a61e0a0190cf0",
+      "base_sha256": "534d8f4ffe07044a0133f5adf5b2dcbced389ca6e3019492225f95981083d92b",
+      "changed_members": [
+        "mojolearn/_verify_distributed.py",
+        "mojolearn_core-0.8.59.dist-info/RECORD"
+      ],
+      "native_bytes": "all retained unchanged",
+      "verifier_sha256": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c",
+      "scope": "Unpublished development candidate for new-verifier qualification; version metadata and compiled-source COMMIT remain the retained base version. Actual changed verifier bytes are separately bound above."
+    }
+  }
+}

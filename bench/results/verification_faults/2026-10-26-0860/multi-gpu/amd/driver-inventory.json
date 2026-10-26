@@ -1,0 +1,22 @@
+{
+  "command": [
+    "amd-smi",
+    "list",
+    "--json"
+  ],
+  "raw": "[\n    {\n        \"gpu\": 0,\n        \"bdf\": \"0000:fd:00.0\",\n        \"uuid\": \"59ff74b5-0000-1000-804a-fe08e1ab3ae6\",\n        \"kfd_id\": 54554,\n        \"node_id\": 2,\n        \"partition_id\": 0\n    },\n    {\n        \"gpu\": 1,\n        \"bdf\": \"0000:ff:00.0\",\n        \"uuid\": \"25ff74b5-0000-1000-80a5-94c05f2eb594\",\n        \"kfd_id\": 46235,\n        \"node_id\": 3,\n        \"partition_id\": 0\n    }\n]\n",
+  "parsed": [
+    {
+      "index": 0,
+      "uuid": "59ff74b5-0000-1000-804a-fe08e1ab3ae6",
+      "pci_bus_id": "0:fd:00.0",
+      "name": ""
+    },
+    {
+      "index": 1,
+      "uuid": "25ff74b5-0000-1000-80a5-94c05f2eb594",
+      "pci_bus_id": "0:ff:00.0",
+      "name": ""
+    }
+  ]
+}

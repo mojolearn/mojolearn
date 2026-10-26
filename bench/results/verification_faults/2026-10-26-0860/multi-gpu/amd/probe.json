@@ -1,0 +1,268 @@
+{
+  "mode": "probe",
+  "checks": [
+    {
+      "name": "parallel-equals-serial",
+      "passed": true,
+      "parallel": "000000005724e73f00000040312ae13f0000008080d2e33f00000000decee63f000000004794e23f",
+      "serial": "000000005724e73f00000040312ae13f0000008080d2e33f00000000decee63f000000004794e23f"
+    },
+    {
+      "name": "assignments",
+      "passed": true,
+      "record": {
+        "stages": [
+          "validate",
+          "validated",
+          "start",
+          "identity",
+          "wave",
+          "wave",
+          "wave",
+          "close"
+        ],
+        "workers": [
+          5159,
+          5191
+        ],
+        "waves": [
+          2,
+          2,
+          1
+        ],
+        "assignments": [
+          [
+            0,
+            0,
+            5159
+          ],
+          [
+            1,
+            1,
+            5191
+          ],
+          [
+            2,
+            0,
+            5159
+          ],
+          [
+            3,
+            1,
+            5191
+          ],
+          [
+            4,
+            0,
+            5159
+          ]
+        ],
+        "status": "COMPLETE",
+        "closed": true,
+        "identities": [
+          {
+            "vendor": "hip",
+            "pid": 5159,
+            "ppid": 5088,
+            "kind": "visible-device-inventory",
+            "driver_library": "libamdhip64.so.7",
+            "devices": [
+              {
+                "ordinal": 0,
+                "uuid": "35393461666530386531616233616536",
+                "pci_bus_id": "0000:fd:00.0",
+                "name": "AMD Instinct MI300X VF"
+              }
+            ],
+            "visibility": {
+              "HIP_VISIBLE_DEVICES": "0"
+            }
+          },
+          {
+            "vendor": "hip",
+            "pid": 5191,
+            "ppid": 5088,
+            "kind": "visible-device-inventory",
+            "driver_library": "libamdhip64.so.7",
+            "devices": [
+              {
+                "ordinal": 0,
+                "uuid": "32356135393463303566326562353934",
+                "pci_bus_id": "0000:ff:00.0",
+                "name": "AMD Instinct MI300X VF"
+              }
+            ],
+            "visibility": {
+              "HIP_VISIBLE_DEVICES": "1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "callback:estimator",
+      "passed": true,
+      "error": "Python estimator callbacks are not accepted; use a connected native estimator",
+      "calls": []
+    },
+    {
+      "name": "callback:scorer",
+      "passed": true,
+      "error": "Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric",
+      "calls": []
+    },
+    {
+      "name": "callback:splitter",
+      "passed": true,
+      "error": "Python fold iterator callbacks are not accepted; provide native splitters or explicit list/tuple index pairs",
+      "calls": []
+    },
+    {
+      "name": "callback:protocol",
+      "passed": true,
+      "error": "Sequential requires native input types; Python-defined protocols and subclasses are not supported",
+      "calls": []
+    },
+    {
+      "name": "callback:devices",
+      "passed": true,
+      "error": "devices must be an explicit list or tuple of distinct nonnegative integers",
+      "calls": []
+    },
+    {
+      "name": "wrong-device:repeated",
+      "passed": true,
+      "devices": [
+        0,
+        0
+      ],
+      "error": "ValueError: devices must not repeat a worker index"
+    },
+    {
+      "name": "wrong-device:nonexistent",
+      "passed": true,
+      "devices": [
+        0,
+        2
+      ],
+      "error": "RuntimeError: native model worker failed: worker inventory: hipInit failed with driver status 100"
+    },
+    {
+      "name": "native-fold-fault",
+      "passed": true,
+      "error": "native model worker failed: ValueError: mojolearn: max_depth must be in 0..16 (CatBoost's maximum tree depth), got -1",
+      "record": {
+        "stages": [
+          "validate",
+          "validated",
+          "start",
+          "identity",
+          "wave",
+          "close"
+        ],
+        "workers": [
+          5326,
+          5358
+        ],
+        "waves": [
+          2
+        ],
+        "assignments": [
+          [
+            0,
+            0,
+            5326
+          ],
+          [
+            1,
+            1,
+            5358
+          ]
+        ],
+        "status": "FAILED",
+        "closed": true,
+        "identities": [
+          {
+            "vendor": "hip",
+            "pid": 5326,
+            "ppid": 5088,
+            "kind": "visible-device-inventory",
+            "driver_library": "libamdhip64.so.7",
+            "devices": [
+              {
+                "ordinal": 0,
+                "uuid": "35393461666530386531616233616536",
+                "pci_bus_id": "0000:fd:00.0",
+                "name": "AMD Instinct MI300X VF"
+              }
+            ],
+            "visibility": {
+              "HIP_VISIBLE_DEVICES": "0"
+            }
+          },
+          {
+            "vendor": "hip",
+            "pid": 5358,
+            "ppid": 5088,
+            "kind": "visible-device-inventory",
+            "driver_library": "libamdhip64.so.7",
+            "devices": [
+              {
+                "ordinal": 0,
+                "uuid": "32356135393463303566326562353934",
+                "pci_bus_id": "0000:ff:00.0",
+                "name": "AMD Instinct MI300X VF"
+              }
+            ],
+            "visibility": {
+              "HIP_VISIBLE_DEVICES": "1"
+            }
+          }
+        ],
+        "error": "RuntimeError: native model worker failed: ValueError: mojolearn: max_depth must be in 0..16 (CatBoost's maximum tree depth), got -1"
+      }
+    },
+    {
+      "name": "recovery-equals-serial",
+      "passed": true
+    }
+  ],
+  "workers": [
+    5159,
+    5191,
+    5326,
+    5358,
+    5403,
+    5434
+  ],
+  "package": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+  "vendor": "hip",
+  "numeric_mode": "identical",
+  "assignments": [
+    [
+      0,
+      0,
+      5159
+    ],
+    [
+      1,
+      1,
+      5191
+    ],
+    [
+      2,
+      0,
+      5159
+    ],
+    [
+      3,
+      1,
+      5191
+    ],
+    [
+      4,
+      0,
+      5159
+    ]
+  ]
+}

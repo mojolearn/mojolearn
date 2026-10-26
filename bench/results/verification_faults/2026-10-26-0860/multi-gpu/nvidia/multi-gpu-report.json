@@ -1,0 +1,598 @@
+{
+  "schema": "mojolearn.release-multi-gpu.v1",
+  "tool": "tools/release_multi_gpu_parallel.py",
+  "vendor": "nvidia",
+  "backend": "cuda",
+  "numeric_mode": "identical",
+  "devices": [
+    0,
+    1
+  ],
+  "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "wheels": {
+    "mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "8c71f10bc863e4b983d71b7d6c5f32aeff72efd64628b989f26a61e0a0190cf0",
+    "mojolearn_nvidia-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "c9ce775a0f4c2d367bde629edac19527c2e0a59a45c530f6567ce1bcb9573ddc",
+    "mojolearn_nvidia_ptx-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "cb01e561bf345b060c0608c1a79f3004166e91b0a1a3757b935f7e1fbe70b418"
+  },
+  "coverage": [
+    {
+      "id": "native device placement",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 44,
+      "completed": 44,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "consumed outputs",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 8,
+      "completed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "wrong-device and callback negative controls",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 17,
+      "completed": 17,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "checks": {
+    "native device placement": [
+      {
+        "name": "capture:regressor:0:0e1dfa29aedb",
+        "passed": true,
+        "pid": 2080,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0:2d26db927a16",
+        "passed": true,
+        "pid": 2080,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0:36fd39995fc3",
+        "passed": true,
+        "pid": 2080,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0:59afe505b29b",
+        "passed": true,
+        "pid": 2080,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0:cdc3e90a4574",
+        "passed": true,
+        "pid": 2080,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture-schedule:regressor:0",
+        "passed": true,
+        "used": [
+          "0:3b:00.0"
+        ],
+        "wanted": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0-1:0e1dfa29aedb",
+        "passed": true,
+        "pid": 2218,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0-1:2d26db927a16",
+        "passed": true,
+        "pid": 2218,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0-1:36fd39995fc3",
+        "passed": true,
+        "pid": 2302,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0-1:59afe505b29b",
+        "passed": true,
+        "pid": 2302,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:0-1:cdc3e90a4574",
+        "passed": true,
+        "pid": 2218,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture-schedule:regressor:0-1",
+        "passed": true,
+        "used": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ],
+        "wanted": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:1-0:0e1dfa29aedb",
+        "passed": true,
+        "pid": 2443,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:1-0:2d26db927a16",
+        "passed": true,
+        "pid": 2443,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:1-0:36fd39995fc3",
+        "passed": true,
+        "pid": 2530,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:1-0:59afe505b29b",
+        "passed": true,
+        "pid": 2530,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:regressor:1-0:cdc3e90a4574",
+        "passed": true,
+        "pid": 2443,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture-schedule:regressor:1-0",
+        "passed": true,
+        "used": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ],
+        "wanted": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0:0a231b4bd461",
+        "passed": true,
+        "pid": 2673,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0:5312d166c91c",
+        "passed": true,
+        "pid": 2673,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0:5b5dcf4bccf1",
+        "passed": true,
+        "pid": 2673,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0:80da6b14b2c9",
+        "passed": true,
+        "pid": 2673,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0:ced40ec4938a",
+        "passed": true,
+        "pid": 2673,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture-schedule:classifier:0",
+        "passed": true,
+        "used": [
+          "0:3b:00.0"
+        ],
+        "wanted": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0-1:0a231b4bd461",
+        "passed": true,
+        "pid": 2820,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0-1:5312d166c91c",
+        "passed": true,
+        "pid": 2903,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0-1:5b5dcf4bccf1",
+        "passed": true,
+        "pid": 2903,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0-1:80da6b14b2c9",
+        "passed": true,
+        "pid": 2820,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:0-1:ced40ec4938a",
+        "passed": true,
+        "pid": 2820,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture-schedule:classifier:0-1",
+        "passed": true,
+        "used": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ],
+        "wanted": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:1-0:0a231b4bd461",
+        "passed": true,
+        "pid": 3046,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:1-0:5312d166c91c",
+        "passed": true,
+        "pid": 3131,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:1-0:5b5dcf4bccf1",
+        "passed": true,
+        "pid": 3131,
+        "gpu": [
+          "0:3b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:1-0:80da6b14b2c9",
+        "passed": true,
+        "pid": 3046,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture:classifier:1-0:ced40ec4938a",
+        "passed": true,
+        "pid": 3046,
+        "gpu": [
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "capture-schedule:classifier:1-0",
+        "passed": true,
+        "used": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ],
+        "wanted": [
+          "0:3b:00.0",
+          "0:9b:00.0"
+        ]
+      },
+      {
+        "name": "probe-fold:0",
+        "passed": true,
+        "device": 0
+      },
+      {
+        "name": "probe-fold:1",
+        "passed": true,
+        "device": 1
+      },
+      {
+        "name": "probe-fold:2",
+        "passed": true,
+        "device": 0
+      },
+      {
+        "name": "probe-fold:3",
+        "passed": true,
+        "device": 1
+      },
+      {
+        "name": "probe-fold:4",
+        "passed": true,
+        "device": 0
+      },
+      {
+        "name": "probe-assignments",
+        "passed": true
+      },
+      {
+        "name": "driver-table:0",
+        "passed": true,
+        "gpu": "0:3b:00.0",
+        "pids": [
+          1032,
+          1552,
+          2080,
+          2218,
+          2530,
+          2673,
+          2820,
+          3131
+        ]
+      },
+      {
+        "name": "driver-table:1",
+        "passed": true,
+        "gpu": "0:9b:00.0",
+        "pids": [
+          1115,
+          1637,
+          2302,
+          2443,
+          2903,
+          3046
+        ]
+      }
+    ],
+    "consumed outputs": [
+      {
+        "name": "capture-run:regressor:0",
+        "passed": true
+      },
+      {
+        "name": "capture-run:regressor:0-1",
+        "passed": true
+      },
+      {
+        "name": "capture-run:regressor:1-0",
+        "passed": true
+      },
+      {
+        "name": "capture-run:classifier:0",
+        "passed": true
+      },
+      {
+        "name": "capture-run:classifier:0-1",
+        "passed": true
+      },
+      {
+        "name": "capture-run:classifier:1-0",
+        "passed": true
+      },
+      {
+        "name": "parallel-equals-serial",
+        "passed": true
+      },
+      {
+        "name": "recovery-equals-serial",
+        "passed": true
+      }
+    ],
+    "wrong-device and callback negative controls": [
+      {
+        "name": "comparator:classifier:aliased-device",
+        "passed": true
+      },
+      {
+        "name": "comparator:classifier:changed-model",
+        "passed": true
+      },
+      {
+        "name": "comparator:classifier:changed-prediction",
+        "passed": true
+      },
+      {
+        "name": "comparator:classifier:dropped-fold",
+        "passed": true
+      },
+      {
+        "name": "comparator:regressor:aliased-device",
+        "passed": true
+      },
+      {
+        "name": "comparator:regressor:changed-model",
+        "passed": true
+      },
+      {
+        "name": "comparator:regressor:changed-prediction",
+        "passed": true
+      },
+      {
+        "name": "comparator:regressor:dropped-fold",
+        "passed": true
+      },
+      {
+        "name": "callback:estimator",
+        "passed": true
+      },
+      {
+        "name": "callback:scorer",
+        "passed": true
+      },
+      {
+        "name": "callback:splitter",
+        "passed": true
+      },
+      {
+        "name": "callback:protocol",
+        "passed": true
+      },
+      {
+        "name": "callback:devices",
+        "passed": true
+      },
+      {
+        "name": "wrong-device:repeated",
+        "passed": true
+      },
+      {
+        "name": "wrong-device:nonexistent",
+        "passed": true
+      },
+      {
+        "name": "native-fold-fault",
+        "passed": true
+      },
+      {
+        "name": "hidden-device",
+        "passed": true
+      }
+    ]
+  },
+  "physical_execution_trace": {
+    "source": "driver process table x worker driver inventory",
+    "samples": 608,
+    "sample_errors": 0,
+    "requested": {
+      "0": "0:3b:00.0",
+      "1": "0:9b:00.0"
+    },
+    "worker_gpu": {
+      "2080": "0:3b:00.0",
+      "2218": "0:3b:00.0",
+      "2302": "0:9b:00.0",
+      "2443": "0:9b:00.0",
+      "2530": "0:3b:00.0",
+      "2673": "0:3b:00.0",
+      "2820": "0:3b:00.0",
+      "2903": "0:9b:00.0",
+      "3046": "0:9b:00.0",
+      "3131": "0:3b:00.0"
+    },
+    "sighted": {
+      "0:3b:00.0": [
+        1032,
+        1552,
+        2080,
+        2218,
+        2530,
+        2673,
+        2820,
+        3131
+      ],
+      "0:9b:00.0": [
+        1115,
+        1637,
+        2302,
+        2443,
+        2903,
+        3046
+      ]
+    },
+    "stray": []
+  },
+  "native_fault_controls": {
+    "fold_fault": true,
+    "hidden_device": true,
+    "arithmetic": "not injected: perturbing a fold's native arithmetic needs a product test hook (a native fault-injection switch in the parallel CV worker); the native fold fault control here is a real native fit failure"
+  },
+  "status": "passed",
+  "exit_code": 0,
+  "evidence": [
+    {
+      "path": "request.json",
+      "sha256": "7660c9a90e3e2066ab17201a65e82604e5aaca7048812ebb89097f47517db2b3"
+    },
+    {
+      "path": "driver-inventory.json",
+      "sha256": "982503894e934fb80f99a6ab5b89b777b254f13390b2fcd2bd870a9798585491"
+    },
+    {
+      "path": "driver-processes.jsonl",
+      "sha256": "6a879d804dd268ec857ed1923881f00318fe9f0ee19edac88a573a4494b113da"
+    },
+    {
+      "path": "capture/report.json",
+      "sha256": "7c548b5510b7a680f64f72c39b9cc7c07e04744bf8ed679e6c967bfb867682c2"
+    },
+    {
+      "path": "probe.json",
+      "sha256": "3de7b2a71966eb041ff2d7c1d95a2aad19a7f438a39f67fea39b4dbcec0d1ca2"
+    },
+    {
+      "path": "hidden.json",
+      "sha256": "6a37d50fa3c26037418b48a3ed7e0d5cdd2255e5156480721999e399f63b1922"
+    },
+    {
+      "path": "install.log",
+      "sha256": "23a8fbfea95acf191389066e07c0cfa10bc17a964748a004c77aad7309ebd4c6"
+    }
+  ]
+}

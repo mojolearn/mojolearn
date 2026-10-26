@@ -1,0 +1,16 @@
+{
+  "vendor": "amd",
+  "devices": [
+    0,
+    1
+  ],
+  "wheels": {
+    "mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "8c71f10bc863e4b983d71b7d6c5f32aeff72efd64628b989f26a61e0a0190cf0",
+    "mojolearn_amd-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "53417b1f867e53808200c74e4dcb97971b5b7eb10c3c942f2dd2366fd724a638"
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "controller_sha256": "765f618d4b06bdfa0de5faebd31e1906efea33f73dfd93d1fd6f92104d529709",
+  "capture_exit": 0,
+  "probe_exit": 0,
+  "hidden_exit": 1
+}

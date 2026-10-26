@@ -1,0 +1,221 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-core-scaler_fit_impl": [
+        "classical-float16-sequences"
+      ]
+    },
+    "arms": [
+      "coverage-core-scaler_fit_impl"
+    ],
+    "builds": [
+      "build_runtime_classical_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "runtime_classical",
+    "id": "runtime_classical-1",
+    "lanes": [
+      "classical-float16-sequences"
+    ],
+    "patches": [
+      "core/sabotage/coverage_scaler_fit_impl.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "classical-float16-sequences",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.916926666977815
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "core/sabotage/coverage_scaler_fit_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.013663167017512023
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "core/sabotage/coverage_scaler_fit_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01364933408331126
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_runtime_classical_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_runtime_classical_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/build/host/_mojolearn_dev_runtime_classical_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/build/host/_mojolearn_dev_runtime_classical_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 1554.3495319589274
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "classical-float16-sequences",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 8.340330000035465
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "core/sabotage/coverage_scaler_fit_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.023395208059810102
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "classical-float16-sequences",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 8.188758790958673
+    },
+    {
+      "name": "check-coverage-core-scaler_fit_impl-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-core-scaler_fit_impl",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_runtime_classical_host"
+      ],
+      "exit_code": 1,
+      "seconds": 0.10202429199125618
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_runtime_classical_host",
+      "members": [
+        "_mojolearn_runtime_classical_host"
+      ],
+      "sha256": "f79af4f3d834971d67de548e26d4b597b4ce13f47e330bbb94b828780f9da2aa",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/build/host/_mojolearn_dev_runtime_classical_host/_mojolearn_dev_runtime_classical_host.so",
+      "original_path": ".development/ab1935c48c30d6939c32ce2c019decc2c794d4dcbf2e797248f372ffc25073c6/_mojolearn_dev_runtime_classical_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/f79af4f3d834971d67de548e26d4b597b4ce13f47e330bbb94b828780f9da2aa/_mojolearn_dev_runtime_classical_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-core-scaler_fit_impl",
+      "column": "cpu",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/oracle-review.json"
+    }
+  ],
+  "passed": true,
+  "original_checks": [
+    {
+      "arm": "coverage-core-scaler_fit_impl",
+      "column": "cpu",
+      "exit_code": 1
+    }
+  ],
+  "review_command": [
+    "python3",
+    "tools/coverage_sabotage.py",
+    "check",
+    "--arm",
+    "coverage-core-scaler_fit_impl",
+    "--clean",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/clean_cpu.json",
+    "--sabotaged",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/sab_cpu.json",
+    "--restored",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/restored_cpu.json",
+    "--evidence",
+    "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/oracle-review.json",
+    "--batch-bindings",
+    "build_runtime_classical_host"
+  ]
+}

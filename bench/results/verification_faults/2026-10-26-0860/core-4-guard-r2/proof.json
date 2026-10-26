@@ -1,0 +1,82 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "core-4-guard-r2",
+  "arms": [
+    {
+      "arm": "coverage-training-optimizer_public_common",
+      "checks": [
+        {
+          "arm": "coverage-training-optimizer_public_common",
+          "column": "cpu",
+          "exit_code": 0
+        },
+        {
+          "arm": "coverage-training-optimizer_public_common",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "optim-sgd",
+    "optim-adam-clip",
+    "optim-maximize"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "f781df5cad39b83259188a1b4fe1ba717808fc4dc5950eb67b4c08a9840f5753"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "40d92404c97b45106c7a3c3b4652b2ad322db3b5853b39175b02654e36b23e8a"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "80a91187cea84b1b434a3b470fff6669689c47d2ff924c420002743265598c55"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "aa02b6f3e94fdc1ab6c37b918d568b0994fd175e7021bde7a13c4c623076c447"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "7cfc7cf4b66b0f793e3e3f41e982bf4d8919b0b7fa618753d9ff4975bee59e54"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "720afb65d2032d05c7c51f0187458996d73557599c4a7350d93e0b2be6efbc29"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "5adaa81b35cb3a59aaa851d410b947e6378f164d8a05c2cc4bf4e971b24b9eb7"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "a3372f55476eb8a4d77cf7c729cb780ff1389dc96c2827bc47fa09450db5340e"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "ea58fed12e5f2e0133b9561e142b357ade2789e7b900e29643ce918d1e71065f"
+    },
+    "check-coverage-training-optimizer_public_common-cpu.log": {
+      "path": "check-coverage-training-optimizer_public_common-cpu.log",
+      "sha256": "9b5da67973e249f9d9ea33e8a5f142cfcb72bed6a204a0889146476c79c4d874"
+    },
+    "check-coverage-training-optimizer_public_common-device.log": {
+      "path": "check-coverage-training-optimizer_public_common-device.log",
+      "sha256": "9b5da67973e249f9d9ea33e8a5f142cfcb72bed6a204a0889146476c79c4d874"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/core-4-guard-r2",
+  "r2_archive": "measurements/verification/0.8.60/core-4-guard-r2-proof.tgz"
+}

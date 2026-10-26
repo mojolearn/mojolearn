@@ -1,0 +1,22 @@
+{
+  "command": [
+    "nvidia-smi",
+    "--query-gpu=index,uuid,pci.bus_id,name",
+    "--format=csv,noheader"
+  ],
+  "raw": "0, GPU-358bba9f-7ca4-cb8d-907e-7764796be20c, 00000000:3B:00.0, NVIDIA H100 80GB HBM3\n1, GPU-6bf18668-28ee-ff31-e58c-aa9b685ff213, 00000000:9B:00.0, NVIDIA H100 80GB HBM3\n",
+  "parsed": [
+    {
+      "index": 0,
+      "uuid": "GPU-358bba9f-7ca4-cb8d-907e-7764796be20c",
+      "pci_bus_id": "0:3b:00.0",
+      "name": "NVIDIA H100 80GB HBM3"
+    },
+    {
+      "index": 1,
+      "uuid": "GPU-6bf18668-28ee-ff31-e58c-aa9b685ff213",
+      "pci_bus_id": "0:9b:00.0",
+      "name": "NVIDIA H100 80GB HBM3"
+    }
+  ]
+}

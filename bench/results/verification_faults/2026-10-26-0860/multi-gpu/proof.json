@@ -1,0 +1,184 @@
+{
+  "schema": "mojolearn.installed-verifier-qualification.v1",
+  "status": "passed",
+  "scope": "Bounded installed parallel-CV verifier on two NVIDIA and two AMD GPUs, with one/two/reversed schedules and native negative controls. No broad product or performance sweep.",
+  "vendors": {
+    "nvidia": {
+      "status": "passed",
+      "coverage": [
+        {
+          "id": "native device placement",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 44,
+          "completed": 44,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "id": "consumed outputs",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 8,
+          "completed": 8,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "id": "wrong-device and callback negative controls",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 17,
+          "completed": 17,
+          "failed": 0,
+          "skipped": 0
+        }
+      ],
+      "negative_control_scope": {
+        "fold_fault": true,
+        "hidden_device": true,
+        "arithmetic": "not injected: perturbing a fold's native arithmetic needs a product test hook (a native fault-injection switch in the parallel CV worker); the native fold fault control here is a real native fit failure"
+      },
+      "source_profile": {
+        "commit": null,
+        "guarded_source_commit": null,
+        "kind": "installed-package",
+        "source_sha256": {
+          "__init__.py": "6fb2d90533c0d41dffc2a30c6f7c48b8a09367a62981ce44ea3739452f2de021",
+          "_gpu_witness.py": "a38323dda2a9ff4ba169a0da51f824307a312ade846e96b5521c0214b47dac39",
+          "_native_msel_dispatch.py": "c105393bc6ba83591eef29300ff59496f4ba54023cccc54e1ef06fde5e20272b",
+          "_native_msel_more.py": "421014a43d4d26395f4e25ab970516fb0661c993201a9f495012368e3ed1b82b",
+          "_native_parallel_cv.py": "632b11f5e85dc4f42aa27966709dfde956acf166822ac5eb2c7218e763b68495",
+          "_native_parallel_cv_worker.py": "7b311320af0c2de3641de4ad94663671658315a25b871064d4dd5ec31f7b6d1f",
+          "_parallel_cv_witness.py": "c0f7d90194426e947c4c15853e89cee975aea7f6ce7cb73e2b8ecb29dfebf43d",
+          "_parallel_pool.py": "68f30f59acb13c5a89f99c7479fe4ee3a11d5a2750bae808480e94a5ffc9c2a1",
+          "_verify_distributed.py": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c",
+          "_verify_parallel_cv.py": "2024a7f3a57d0ba32e06489893aba203ded6f101a7fb79d7b0695140fc70430a",
+          "model_selection.py": "e32f78aa6d50a899c3ed6f4e2f10b590ea635bd8f4620289ad599ae1278b48d1",
+          "parallel_model_selection.py": "d9e5b5fdd0b361226463ff23dd508908370cdacf8715d8a6c92c77877e68323e"
+        }
+      },
+      "bindings": {
+        "_mojolearn_gbdt": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/cuda_ptx/sm_80/identical/_mojolearn_native_trees.so",
+        "_native_archive": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/host/_mojolearn_native_host.so",
+        "_native_cv": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/host/_mojolearn_native_x_host.so",
+        "_native_gbdt": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/cuda_ptx/sm_80/identical/_mojolearn_native_trees.so",
+        "_native_trees": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/host/_mojolearn_native_host.so"
+      },
+      "records_sha256": {
+        "multi-gpu-report.json": "53ac0b1bbd1472c26a3056c02e13cf744faf54be20436e9883b91e46d96ec3eb",
+        "request.json": "7660c9a90e3e2066ab17201a65e82604e5aaca7048812ebb89097f47517db2b3",
+        "driver-inventory.json": "982503894e934fb80f99a6ab5b89b777b254f13390b2fcd2bd870a9798585491",
+        "probe.json": "3de7b2a71966eb041ff2d7c1d95a2aad19a7f438a39f67fea39b4dbcec0d1ca2",
+        "hidden.json": "6a37d50fa3c26037418b48a3ed7e0d5cdd2255e5156480721999e399f63b1922",
+        "capture/report.json": "7c548b5510b7a680f64f72c39b9cc7c07e04744bf8ed679e6c967bfb867682c2"
+      },
+      "full_archive": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/nvidia-pair-r2-results.tgz",
+        "sha256": "916867aa3ed4d9cabd643444452b02793a8e926d6c963d500ac593cb3b6131fd",
+        "r2": "measurements/verification/0.8.60/nvidia-pair-r2-results.tgz"
+      },
+      "retention": "Actual model/capture bytes, source repair wheel and full logs retained; see archive. Original failed attempt preserved.",
+      "hardware": {
+        "gpu": "2 x H100 80GB HBM3",
+        "driver": "595.91.07",
+        "cuda_driver_api": "13.2",
+        "route": "cuda_ptx/sm_80; no native Hopper image claim"
+      }
+    },
+    "amd": {
+      "status": "passed",
+      "coverage": [
+        {
+          "id": "native device placement",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 44,
+          "completed": 44,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "id": "consumed outputs",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 8,
+          "completed": 8,
+          "failed": 0,
+          "skipped": 0
+        },
+        {
+          "id": "wrong-device and callback negative controls",
+          "status": "passed",
+          "exit_code": 0,
+          "expected": 17,
+          "completed": 17,
+          "failed": 0,
+          "skipped": 0
+        }
+      ],
+      "negative_control_scope": {
+        "fold_fault": true,
+        "hidden_device": true,
+        "arithmetic": "not injected: perturbing a fold's native arithmetic needs a product test hook (a native fault-injection switch in the parallel CV worker); the native fold fault control here is a real native fit failure"
+      },
+      "source_profile": {
+        "commit": null,
+        "guarded_source_commit": null,
+        "kind": "installed-package",
+        "source_sha256": {
+          "__init__.py": "6fb2d90533c0d41dffc2a30c6f7c48b8a09367a62981ce44ea3739452f2de021",
+          "_gpu_witness.py": "a38323dda2a9ff4ba169a0da51f824307a312ade846e96b5521c0214b47dac39",
+          "_native_msel_dispatch.py": "c105393bc6ba83591eef29300ff59496f4ba54023cccc54e1ef06fde5e20272b",
+          "_native_msel_more.py": "421014a43d4d26395f4e25ab970516fb0661c993201a9f495012368e3ed1b82b",
+          "_native_parallel_cv.py": "632b11f5e85dc4f42aa27966709dfde956acf166822ac5eb2c7218e763b68495",
+          "_native_parallel_cv_worker.py": "7b311320af0c2de3641de4ad94663671658315a25b871064d4dd5ec31f7b6d1f",
+          "_parallel_cv_witness.py": "c0f7d90194426e947c4c15853e89cee975aea7f6ce7cb73e2b8ecb29dfebf43d",
+          "_parallel_pool.py": "68f30f59acb13c5a89f99c7479fe4ee3a11d5a2750bae808480e94a5ffc9c2a1",
+          "_verify_distributed.py": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c",
+          "_verify_parallel_cv.py": "2024a7f3a57d0ba32e06489893aba203ded6f101a7fb79d7b0695140fc70430a",
+          "model_selection.py": "e32f78aa6d50a899c3ed6f4e2f10b590ea635bd8f4620289ad599ae1278b48d1",
+          "parallel_model_selection.py": "d9e5b5fdd0b361226463ff23dd508908370cdacf8715d8a6c92c77877e68323e"
+        }
+      },
+      "bindings": {
+        "_mojolearn_gbdt": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/hip_native/gfx942/identical/_mojolearn_native_trees.so",
+        "_native_archive": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_native_host.so",
+        "_native_cv": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_native_x_host.so",
+        "_native_gbdt": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/hip_native/gfx942/identical/_mojolearn_native_trees.so",
+        "_native_trees": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_native_host.so"
+      },
+      "records_sha256": {
+        "multi-gpu-report.json": "161f3f298f3196c004384acc8addd3b060da9467ea5a63b7bc402b4b30d646bb",
+        "request.json": "cc58c9cb432fc8eaa3985b6d484394e6898a033772a27fb3494eab1014ae48cd",
+        "driver-inventory.json": "931dc215330ef376d2912d1957bd604dea46a26aad8132f3f7e4771aa1a1a585",
+        "probe.json": "69f407b9c233a94fc50979bb7b92a03be77842e338fd8124cac84a3e58e81bc1",
+        "hidden.json": "01d0dbd9c506a6a8023a9e0ef69aead42ca4412d6dc4810fc44d4b1a4bbbcf68",
+        "capture/report.json": "a50016087956d5fbfc219dcbf31b0cce4dae3f33b08f568d73a36be5d0097f9f"
+      },
+      "full_archive": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/amd-pair-r2-results.tgz",
+        "sha256": "3535f36edcd2f6133b6078a7ee1666b970dd800c4526941b24decb5fa2831997",
+        "r2": "measurements/verification/0.8.60/amd-pair-r2-results.tgz"
+      },
+      "retention": "Actual model/capture bytes, source repair wheel and full logs retained; see archive. Original failed attempt preserved.",
+      "hardware": {
+        "gpu": "2 x MI300X VF",
+        "target": "gfx942",
+        "driver": "6.16.13"
+      }
+    }
+  },
+  "cross_vendor": {
+    "exit_code": 0,
+    "comparison": "All recorded classifier/regressor scores, model/output/replay parts match across NVIDIA and AMD.",
+    "physical_trace": "The standalone comparator prints MATCH_EXECUTION_TRACE_OWED; both paired producer reports separately validate the retained driver process traces (44/44 placement checks per vendor)."
+  },
+  "repairs": {
+    "verifier": "Registered split-wheel ownership lookup; ten focused tests including missing/tampered/version/location failures passed.",
+    "amd_environment": "Installed missing python3-venv before the first completed run; original pre-execution failure retained."
+  },
+  "native_reuse": "All native wheel bytes are the retained 0.8.59 compiled artifacts. Only the verifier source and wheel RECORD were repacked for this unpublished development candidate. Actual source profiles and repack hashes are retained; never publish these replacement 0.8.59 wheels.",
+  "remaining": "Final 0.8.60 package assembly and affected Linux forest-binding check are separate.",
+  "retention_manifest_sha256": "36997b26fa86fdf706f73fbbac3ccb17fd4e5648f19579d1e24356f697135c85"
+}

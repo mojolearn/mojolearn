@@ -1,0 +1,4 @@
+optim-sgd/base: MOVED; restored result matches
+optim-adam-clip/base: MOVED; restored result matches
+optim-maximize/base: MOVED; restored result matches
+ARM coverage-training-optimizer_public_common CAUGHT

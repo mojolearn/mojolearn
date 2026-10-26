@@ -1,0 +1,1252 @@
+{
+  "bindings": {
+    "_mojolearn_gbdt": {
+      "path": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/cuda_ptx/sm_80/identical/_mojolearn_native_trees.so",
+      "sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+      "vendor": "cuda"
+    },
+    "_native_archive": {
+      "path": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/host/_mojolearn_native_host.so",
+      "sha256": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+    },
+    "_native_cv": {
+      "path": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/host/_mojolearn_native_x_host.so",
+      "sha256": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b"
+    },
+    "_native_gbdt": {
+      "path": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/cuda_ptx/sm_80/identical/_mojolearn_native_trees.so",
+      "sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648"
+    },
+    "_native_trees": {
+      "path": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/host/_mojolearn_native_host.so",
+      "sha256": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+    }
+  },
+  "controls": [
+    "regressor:dropped-fold",
+    "regressor:changed-model",
+    "regressor:changed-prediction",
+    "regressor:aliased-device",
+    "classifier:dropped-fold",
+    "classifier:changed-model",
+    "classifier:changed-prediction",
+    "classifier:aliased-device"
+  ],
+  "devices": [
+    0,
+    1
+  ],
+  "distribution": {
+    "editable": false,
+    "import_matches_distribution": true,
+    "native_record_hashes_match": true,
+    "root": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages",
+    "source_record_hashes_match": true,
+    "version": "0.8.59"
+  },
+  "environment": {
+    "commit": "unknown (no checkout beside this package)",
+    "device": "NVIDIA NVIDIA H100 80GB HBM3, 595.91.07",
+    "mode": {
+      "binary": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/cuda_ptx/sm_80/identical/_mojolearn_native.so",
+      "compiled": "identical",
+      "ident_dir": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/identical",
+      "loaded": "identical",
+      "problem": "the selector reports identical but the extension running this fixture is /root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/cuda_ptx/sm_80/identical/_mojolearn_native.so, which is NOT under /root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/identical. A binary is in the wrong directory; nothing here can be labelled.",
+      "requested": "identical",
+      "under_identical": false
+    },
+    "mojolearn_version": "0.8.59",
+    "numpy_version": "2.4.6",
+    "platform": "Linux 6.8.0-147-generic x86_64",
+    "profile": "mojolearn.identical.verify.kmeans.fp32.v1",
+    "python": "3.11.10 CPython",
+    "vendor": "cuda (the box probe (device nodes and driver libraries))"
+  },
+  "folds": 5,
+  "inputs": {
+    "X": "03b7ca5d63f7a0b88e03bdde9f3a02c3bb994fe820144a65ea2880a43d919e62",
+    "classifier": "b156b42e7575ae672e462923bdc6240ca0dbcefaf2f856c672ab77cb75bb1c7f",
+    "regressor": "0e8e6967443a65b722fdb56aee554fe48437918b7daf62c816bbdfb672c4d22d"
+  },
+  "native_fault_controls": "OWED",
+  "package_origin": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+  "physical_execution_trace": "OWED",
+  "protocol": "parallel-cv-v3",
+  "repeats": 1,
+  "runs": [
+    {
+      "devices": [
+        0
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2080,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "960e554e9c90c823906f9dd7e921f4daad46a12307851e6123a5f2765779de58",
+          "model": "c5d3d5db5f0507560bfc4df25f3815be5c108b6ac3c3c84d2f5436a79b759f9d",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "raw_predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "reload_predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "score": "00000080c61eed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2080,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "b08407821cdf2a0ab0a64f2dd24f970574dd2af4d03e40624304bbb9e55b681b",
+          "model": "c2eefbbe5a4946d5d69c460fb96f80f8d4318f510821ce4d940c0cc31f0ebd80",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "raw_predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "reload_predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "score": "00000080bc0eec3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2080,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "7e8eb94cc9ebe888ee879e3e463a557cffd71b7459bc8dde983466e694b5ca5a",
+          "model": "7c347027c31a31395726e3d7eac04e018fa4ea59333e7055977bfb0e4ffa5d3d",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "raw_predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "reload_predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "score": "00000020cad9ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2080,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "fe975c4dbb016c0790d2a884e2f0c40dd111e13be917aa416906a3aff400db27",
+          "model": "2007d9d7a771d3b5318071cc8e5936c5319a860d359fe5a0000ed3e28b7569d0",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "raw_predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "reload_predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "score": "000000c02fb0ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2080,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "d5d521c9621ebeeb90f64f260b14bcb5aae93e4f5c56fd2e1290f70681967e35",
+          "model": "297b3d5ae0559a727ae414f430cd366de07ddaead80536768aaa528631d802b1",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "raw_predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "reload_predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "score": "000000800149ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        }
+      },
+      "model": "regressor",
+      "repeat": 0,
+      "scores_hex": "000000800149ed3f000000c02fb0ed3f00000080c61eed3f00000020cad9ed3f00000080bc0eec3f",
+      "total_seconds_including_witnesses": 5.966337856953032
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2218,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "960e554e9c90c823906f9dd7e921f4daad46a12307851e6123a5f2765779de58",
+          "model": "c5d3d5db5f0507560bfc4df25f3815be5c108b6ac3c3c84d2f5436a79b759f9d",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "raw_predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "reload_predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "score": "00000080c61eed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2218,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "b08407821cdf2a0ab0a64f2dd24f970574dd2af4d03e40624304bbb9e55b681b",
+          "model": "c2eefbbe5a4946d5d69c460fb96f80f8d4318f510821ce4d940c0cc31f0ebd80",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "raw_predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "reload_predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "score": "00000080bc0eec3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2302,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "7e8eb94cc9ebe888ee879e3e463a557cffd71b7459bc8dde983466e694b5ca5a",
+          "model": "7c347027c31a31395726e3d7eac04e018fa4ea59333e7055977bfb0e4ffa5d3d",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "raw_predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "reload_predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "score": "00000020cad9ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2302,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "fe975c4dbb016c0790d2a884e2f0c40dd111e13be917aa416906a3aff400db27",
+          "model": "2007d9d7a771d3b5318071cc8e5936c5319a860d359fe5a0000ed3e28b7569d0",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "raw_predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "reload_predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "score": "000000c02fb0ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2218,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "d5d521c9621ebeeb90f64f260b14bcb5aae93e4f5c56fd2e1290f70681967e35",
+          "model": "297b3d5ae0559a727ae414f430cd366de07ddaead80536768aaa528631d802b1",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "raw_predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "reload_predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "score": "000000800149ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        }
+      },
+      "model": "regressor",
+      "repeat": 0,
+      "scores_hex": "000000800149ed3f000000c02fb0ed3f00000080c61eed3f00000020cad9ed3f00000080bc0eec3f",
+      "total_seconds_including_witnesses": 7.329212705953978
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2443,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "960e554e9c90c823906f9dd7e921f4daad46a12307851e6123a5f2765779de58",
+          "model": "c5d3d5db5f0507560bfc4df25f3815be5c108b6ac3c3c84d2f5436a79b759f9d",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "raw_predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "reload_predict": "cb9c1200d38b9251fa297dc22badb7a3bc4369be2fa5e0e733884e1c3705c569",
+          "score": "00000080c61eed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2443,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "b08407821cdf2a0ab0a64f2dd24f970574dd2af4d03e40624304bbb9e55b681b",
+          "model": "c2eefbbe5a4946d5d69c460fb96f80f8d4318f510821ce4d940c0cc31f0ebd80",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "raw_predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "reload_predict": "ecde81922a7b059c9a6bf1b16cb9000a09053ef40f899d8530afc82e14befdc6",
+          "score": "00000080bc0eec3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2530,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "7e8eb94cc9ebe888ee879e3e463a557cffd71b7459bc8dde983466e694b5ca5a",
+          "model": "7c347027c31a31395726e3d7eac04e018fa4ea59333e7055977bfb0e4ffa5d3d",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "raw_predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "reload_predict": "94e5e198d0ffc3324df5380e3b007bcee9c8bc60f7fb0ae33dd6934271eafca1",
+          "score": "00000020cad9ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2530,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "fe975c4dbb016c0790d2a884e2f0c40dd111e13be917aa416906a3aff400db27",
+          "model": "2007d9d7a771d3b5318071cc8e5936c5319a860d359fe5a0000ed3e28b7569d0",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "raw_predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "reload_predict": "ac9ed4bfa6180a744816f7d80644ff9eda146d61fe4dd76901042880af1d0937",
+          "score": "000000c02fb0ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2443,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "d5d521c9621ebeeb90f64f260b14bcb5aae93e4f5c56fd2e1290f70681967e35",
+          "model": "297b3d5ae0559a727ae414f430cd366de07ddaead80536768aaa528631d802b1",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "raw_predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "reload_predict": "c98c097b2a064b43918985a266f41c0690b44a3dadbb82008b90e0021fdbe692",
+          "score": "000000800149ed3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        }
+      },
+      "model": "regressor",
+      "repeat": 0,
+      "scores_hex": "000000800149ed3f000000c02fb0ed3f00000080c61eed3f00000020cad9ed3f00000080bc0eec3f",
+      "total_seconds_including_witnesses": 7.470323099987581
+    },
+    {
+      "devices": [
+        0
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2673,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "6178054a7ac1db15c54447caad1bbfe8d136ebe8ecab0254f2ada798ed3e3e3e",
+          "model": "1386efcafe8be4118d90dc8516eb7b9eb7db6d6a66026d714cdb90ac6c318295",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "66fc190216f96e74af0ce7460c7ab93db697180f06cf29f80523cfd3d627c3c8",
+          "raw_predict": "e6f65bfc4820526bbce1887790ce5d7f811e43743a3718fa783553f04649f7d1",
+          "reload_predict": "e6f65bfc4820526bbce1887790ce5d7f811e43743a3718fa783553f04649f7d1",
+          "score": "000000807d7ded3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2673,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "6c7db106df6785ab9d3f4020f4e891f997f352426c66c836268868d41be1977d",
+          "model": "2ccb31faa2d725a128ffb309784bfe5771d919dbcd223d14dfeaedee15fed2f1",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "4b3771485fd35dfa8db0e7bbdf77c2826702bbe72b7561faedae47ce971159c9",
+          "raw_predict": "79701496b7c3c4ff64e624d35f12e9fcf4192d8d23fe0d39cc1a59effcc00192",
+          "reload_predict": "79701496b7c3c4ff64e624d35f12e9fcf4192d8d23fe0d39cc1a59effcc00192",
+          "score": "000000605f5fef3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2673,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "a91c5cdc595d0ca6528b5407b2a7219f380673a9c3cbbf87bffe46e545dbc4dd",
+          "model": "64b741c68b24abd46c0c611061c4cbf75234d27e94e1d1a842de033750108cf5",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "e5002828dc87e203c0c969b2ce38cf715828034ed47e3c6f6fa11698327f1d78",
+          "raw_predict": "af9e12d49fb594f132865ef59a5bcc582589cb930ff5edb41bfadcb796a9cac4",
+          "reload_predict": "af9e12d49fb594f132865ef59a5bcc582589cb930ff5edb41bfadcb796a9cac4",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2673,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "98b191d4d5711981832dd1ac09026f295a3e72a0f5c9c5fd50d2c0f377daa4cd",
+          "model": "0aa4d16d55d33312ca45356baa25f0ea60c618d34ee5db5f65f75f020cd9eff4",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "3dbe7727b4caf39accb4aa58fe4a37c41d01c6312b2adb58c27ead0c9c5eedf0",
+          "raw_predict": "fd2e52565c007a63a15367d7c83cf27935527d74bbde285986540c53b01f9d97",
+          "reload_predict": "fd2e52565c007a63a15367d7c83cf27935527d74bbde285986540c53b01f9d97",
+          "score": "000000c0bebeee3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2673,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "32bcbf486439420df975dd4a78ff365392824dbfa4eb666da0d42481c4469ae4",
+          "model": "9521a4ccf84ba0578669ffe515e6dd1f83df73bc6974e33a60765a555873f1b9",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "8877d8a0b2823ec3d077bac1c9e5d9393fbab854d1d7a5f3ab7ea761a7fd09b4",
+          "raw_predict": "060bdab433c23e79e5c6e47d9300c6ebf1829c064339530482c8e2875895ad16",
+          "reload_predict": "060bdab433c23e79e5c6e47d9300c6ebf1829c064339530482c8e2875895ad16",
+          "score": "000000806227ee3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        }
+      },
+      "model": "classifier",
+      "repeat": 0,
+      "scores_hex": "000000806227ee3f000000e0c44eec3f000000c0bebeee3f000000605f5fef3f000000807d7ded3f",
+      "total_seconds_including_witnesses": 5.790837275097147
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2820,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "6178054a7ac1db15c54447caad1bbfe8d136ebe8ecab0254f2ada798ed3e3e3e",
+          "model": "1386efcafe8be4118d90dc8516eb7b9eb7db6d6a66026d714cdb90ac6c318295",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "66fc190216f96e74af0ce7460c7ab93db697180f06cf29f80523cfd3d627c3c8",
+          "raw_predict": "e6f65bfc4820526bbce1887790ce5d7f811e43743a3718fa783553f04649f7d1",
+          "reload_predict": "e6f65bfc4820526bbce1887790ce5d7f811e43743a3718fa783553f04649f7d1",
+          "score": "000000807d7ded3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2903,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "6c7db106df6785ab9d3f4020f4e891f997f352426c66c836268868d41be1977d",
+          "model": "2ccb31faa2d725a128ffb309784bfe5771d919dbcd223d14dfeaedee15fed2f1",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "4b3771485fd35dfa8db0e7bbdf77c2826702bbe72b7561faedae47ce971159c9",
+          "raw_predict": "79701496b7c3c4ff64e624d35f12e9fcf4192d8d23fe0d39cc1a59effcc00192",
+          "reload_predict": "79701496b7c3c4ff64e624d35f12e9fcf4192d8d23fe0d39cc1a59effcc00192",
+          "score": "000000605f5fef3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2903,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "a91c5cdc595d0ca6528b5407b2a7219f380673a9c3cbbf87bffe46e545dbc4dd",
+          "model": "64b741c68b24abd46c0c611061c4cbf75234d27e94e1d1a842de033750108cf5",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "e5002828dc87e203c0c969b2ce38cf715828034ed47e3c6f6fa11698327f1d78",
+          "raw_predict": "af9e12d49fb594f132865ef59a5bcc582589cb930ff5edb41bfadcb796a9cac4",
+          "reload_predict": "af9e12d49fb594f132865ef59a5bcc582589cb930ff5edb41bfadcb796a9cac4",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2820,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "98b191d4d5711981832dd1ac09026f295a3e72a0f5c9c5fd50d2c0f377daa4cd",
+          "model": "0aa4d16d55d33312ca45356baa25f0ea60c618d34ee5db5f65f75f020cd9eff4",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "3dbe7727b4caf39accb4aa58fe4a37c41d01c6312b2adb58c27ead0c9c5eedf0",
+          "raw_predict": "fd2e52565c007a63a15367d7c83cf27935527d74bbde285986540c53b01f9d97",
+          "reload_predict": "fd2e52565c007a63a15367d7c83cf27935527d74bbde285986540c53b01f9d97",
+          "score": "000000c0bebeee3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 2820,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "32bcbf486439420df975dd4a78ff365392824dbfa4eb666da0d42481c4469ae4",
+          "model": "9521a4ccf84ba0578669ffe515e6dd1f83df73bc6974e33a60765a555873f1b9",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "8877d8a0b2823ec3d077bac1c9e5d9393fbab854d1d7a5f3ab7ea761a7fd09b4",
+          "raw_predict": "060bdab433c23e79e5c6e47d9300c6ebf1829c064339530482c8e2875895ad16",
+          "reload_predict": "060bdab433c23e79e5c6e47d9300c6ebf1829c064339530482c8e2875895ad16",
+          "score": "000000806227ee3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        }
+      },
+      "model": "classifier",
+      "repeat": 0,
+      "scores_hex": "000000806227ee3f000000e0c44eec3f000000c0bebeee3f000000605f5fef3f000000807d7ded3f",
+      "total_seconds_including_witnesses": 7.456334839924239
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 3046,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "6178054a7ac1db15c54447caad1bbfe8d136ebe8ecab0254f2ada798ed3e3e3e",
+          "model": "1386efcafe8be4118d90dc8516eb7b9eb7db6d6a66026d714cdb90ac6c318295",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "66fc190216f96e74af0ce7460c7ab93db697180f06cf29f80523cfd3d627c3c8",
+          "raw_predict": "e6f65bfc4820526bbce1887790ce5d7f811e43743a3718fa783553f04649f7d1",
+          "reload_predict": "e6f65bfc4820526bbce1887790ce5d7f811e43743a3718fa783553f04649f7d1",
+          "score": "000000807d7ded3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 3131,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "6c7db106df6785ab9d3f4020f4e891f997f352426c66c836268868d41be1977d",
+          "model": "2ccb31faa2d725a128ffb309784bfe5771d919dbcd223d14dfeaedee15fed2f1",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "4b3771485fd35dfa8db0e7bbdf77c2826702bbe72b7561faedae47ce971159c9",
+          "raw_predict": "79701496b7c3c4ff64e624d35f12e9fcf4192d8d23fe0d39cc1a59effcc00192",
+          "reload_predict": "79701496b7c3c4ff64e624d35f12e9fcf4192d8d23fe0d39cc1a59effcc00192",
+          "score": "000000605f5fef3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:3b:00.0",
+                "uuid": "358bba9f7ca4cb8d907e7764796be20c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 3131,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "a91c5cdc595d0ca6528b5407b2a7219f380673a9c3cbbf87bffe46e545dbc4dd",
+          "model": "64b741c68b24abd46c0c611061c4cbf75234d27e94e1d1a842de033750108cf5",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "e5002828dc87e203c0c969b2ce38cf715828034ed47e3c6f6fa11698327f1d78",
+          "raw_predict": "af9e12d49fb594f132865ef59a5bcc582589cb930ff5edb41bfadcb796a9cac4",
+          "reload_predict": "af9e12d49fb594f132865ef59a5bcc582589cb930ff5edb41bfadcb796a9cac4",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 3046,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "98b191d4d5711981832dd1ac09026f295a3e72a0f5c9c5fd50d2c0f377daa4cd",
+          "model": "0aa4d16d55d33312ca45356baa25f0ea60c618d34ee5db5f65f75f020cd9eff4",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "3dbe7727b4caf39accb4aa58fe4a37c41d01c6312b2adb58c27ead0c9c5eedf0",
+          "raw_predict": "fd2e52565c007a63a15367d7c83cf27935527d74bbde285986540c53b01f9d97",
+          "reload_predict": "fd2e52565c007a63a15367d7c83cf27935527d74bbde285986540c53b01f9d97",
+          "score": "000000c0bebeee3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA H100 80GB HBM3",
+                "ordinal": 0,
+                "pci_bus_id": "0000:9b:00.0",
+                "uuid": "6bf1866828eeff31e58caa9b685ff213"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 3046,
+            "ppid": 1975,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "32bcbf486439420df975dd4a78ff365392824dbfa4eb666da0d42481c4469ae4",
+          "model": "9521a4ccf84ba0578669ffe515e6dd1f83df73bc6974e33a60765a555873f1b9",
+          "native_artifacts": {
+            "archive": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218",
+            "cv": "67fd0b6519f4a847582f2bb0da2ef6c9f902393919889945099a6001f1b2316b",
+            "gbdt": "80d968f0ce719ff5820f3b64e2d3b7af05fa643080ab0fd3256650e64b0fd648",
+            "trees": "e3623a37ca4c8eae9201f3656c57491954b4d994c6173c69e05d550de33ed218"
+          },
+          "predict": "8877d8a0b2823ec3d077bac1c9e5d9393fbab854d1d7a5f3ab7ea761a7fd09b4",
+          "raw_predict": "060bdab433c23e79e5c6e47d9300c6ebf1829c064339530482c8e2875895ad16",
+          "reload_predict": "060bdab433c23e79e5c6e47d9300c6ebf1829c064339530482c8e2875895ad16",
+          "score": "000000806227ee3f",
+          "selected_arch": "sm_80",
+          "selected_arch_how": "no native set for this sm_90 device (compute capability from the CUDA driver); the PTX set, compiled by the driver"
+        }
+      },
+      "model": "classifier",
+      "repeat": 0,
+      "scores_hex": "000000806227ee3f000000e0c44eec3f000000c0bebeee3f000000605f5fef3f000000807d7ded3f",
+      "total_seconds_including_witnesses": 7.520505778025836
+    }
+  ],
+  "scope": "CV numerical, save/reload and placement checks; no capacity, throughput or complete physical execution qualification",
+  "source": {
+    "commit": null,
+    "guarded_source_commit": null,
+    "kind": "installed-package",
+    "source_sha256": {
+      "__init__.py": "6fb2d90533c0d41dffc2a30c6f7c48b8a09367a62981ce44ea3739452f2de021",
+      "_gpu_witness.py": "a38323dda2a9ff4ba169a0da51f824307a312ade846e96b5521c0214b47dac39",
+      "_native_msel_dispatch.py": "c105393bc6ba83591eef29300ff59496f4ba54023cccc54e1ef06fde5e20272b",
+      "_native_msel_more.py": "421014a43d4d26395f4e25ab970516fb0661c993201a9f495012368e3ed1b82b",
+      "_native_parallel_cv.py": "632b11f5e85dc4f42aa27966709dfde956acf166822ac5eb2c7218e763b68495",
+      "_native_parallel_cv_worker.py": "7b311320af0c2de3641de4ad94663671658315a25b871064d4dd5ec31f7b6d1f",
+      "_parallel_cv_witness.py": "c0f7d90194426e947c4c15853e89cee975aea7f6ce7cb73e2b8ecb29dfebf43d",
+      "_parallel_pool.py": "68f30f59acb13c5a89f99c7479fe4ee3a11d5a2750bae808480e94a5ffc9c2a1",
+      "_verify_distributed.py": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c",
+      "_verify_parallel_cv.py": "2024a7f3a57d0ba32e06489893aba203ded6f101a7fb79d7b0695140fc70430a",
+      "model_selection.py": "e32f78aa6d50a899c3ed6f4e2f10b590ea635bd8f4620289ad599ae1278b48d1",
+      "parallel_model_selection.py": "d9e5b5fdd0b361226463ff23dd508908370cdacf8715d8a6c92c77877e68323e"
+    }
+  },
+  "source_commit": null,
+  "status": "NUMERICS_AND_PLACEMENT_PASS",
+  "vendor": "cuda"
+}

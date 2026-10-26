@@ -66,20 +66,24 @@
     {
       "id": "multi-gpu-nvidia",
       "task": "Complete the installed two-physical-GPU producer including placement, consumed output and negative controls.",
-      "status": "pending",
-      "evidence": null
+      "status": "qualified-retained-native-bytes",
+      "evidence": null,
+      "proof": "bench/results/verification_faults/2026-10-26-0860/multi-gpu/proof.json"
     },
     {
       "id": "multi-gpu-amd",
       "task": "Complete the installed two-physical-GPU producer including placement, consumed output and negative controls.",
-      "status": "pending",
-      "evidence": null
+      "status": "qualified-retained-native-bytes",
+      "evidence": null,
+      "proof": "bench/results/verification_faults/2026-10-26-0860/multi-gpu/proof.json"
     },
     {
       "id": "hopper",
       "task": "Complete the outstanding Hopper correctness/loading qualification and retain the actual route.",
-      "status": "pending",
-      "evidence": null
+      "status": "qualified-hopper-via-shipped-ptx-route",
+      "evidence": null,
+      "proof": "bench/results/verification_faults/2026-10-26-0860/multi-gpu/proof.json",
+      "scope": "H100 executes the shipped sm_80 PTX route; native sm_90/sm_90a is not shipped or claimed."
     },
     {
       "id": "identity",
@@ -224,9 +228,54 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-training-optimizer_public_common",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/core-4-guard-r2/proof.json",
+      "columns": [
+        "cpu",
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-decomposition-pca_fit_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/estimators-1-guard-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-mamba-rms_out",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/mamba-4-guard-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-core-scaler_fit_impl",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/runtime_classical-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 31,
+  "remaining_declared_fault_arms": 27,
   "verifier_findings": [
     {
       "id": "reviewed-independent-oracles",
@@ -263,6 +312,11 @@
       ],
       "evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/forest-first-call-baseline-r2.log",
       "proof": "bench/results/verification_faults/2026-10-26-0860/forest-first-call/proof.json"
+    },
+    {
+      "id": "split-wheel-verifier-record-ownership",
+      "status": "fixed-and-qualified-on-nvidia-and-amd",
+      "proof": "bench/results/verification_faults/2026-10-26-0860/multi-gpu/proof.json"
     }
   ]
 }

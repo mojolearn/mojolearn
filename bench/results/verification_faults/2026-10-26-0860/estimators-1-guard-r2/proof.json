@@ -1,0 +1,60 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "estimators-1-guard-r2",
+  "arms": [
+    {
+      "arm": "coverage-precise-decomposition-pca_fit_host",
+      "checks": [
+        {
+          "arm": "coverage-precise-decomposition-pca_fit_host",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "pca",
+    "pca-whiten"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "1fcd9d992b9056e97374293ae2442688cddce7c87d851166fe1301d6284dddb3"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "0e59de217972b5d63f22a6384470c9843cb1ec1a25e2c5063263a5a70cdbe490"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "ce9f890d1c21ea4c514453fe905877f39380335c347b192837d93292fdb6457c"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "1d3f3ed2c8470b3d3d6fcb332bc1ef37153907416f5828f8421c8f07cef8425a"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "cf03e4efcc3b84c536595368d2647829641c92c4957fb2b45c14a1a7ec940d94"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "8629ccb8f5c9ed653e674dd8e1b10bf90441139f3b99e604768310a5093236ce"
+    },
+    "check-coverage-precise-decomposition-pca_fit_host-device.log": {
+      "path": "check-coverage-precise-decomposition-pca_fit_host-device.log",
+      "sha256": "edf93b35c2daf0096401aa14eb2e6a20fb234d3f1836b279c7beff9c0ffcb5b1"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/estimators-1-guard-r2",
+  "r2_archive": "measurements/verification/0.8.60/estimators-1-guard-r2-proof.tgz"
+}

@@ -1,0 +1,14 @@
+{
+  "mode": "hidden",
+  "checks": [
+    {
+      "name": "hidden-device",
+      "passed": true,
+      "error": "ValueError: process: device index outside visibility mask"
+    }
+  ],
+  "workers": [],
+  "package": "/root/results-0860-multigpu-nvidia/run/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+  "vendor": "cuda",
+  "numeric_mode": "identical"
+}

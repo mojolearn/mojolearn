@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-core-scaler_fit_impl",
+  "records": {
+    "clean": "7bdd16217e832e95ad8e6017e9ef3a8200c6c466b7e7af8dee1e9f04ee01082c",
+    "sabotaged": "d2af493949cbda34ec1c8546b3e01062b349f6b9a10c98197069b29f5ee8fcd4",
+    "restored": "4b3b239313f743e9560837672ed8e608fa6980b576469240490bb37d99a93e7f"
+  },
+  "patch_sha256": "8811346a2f9948a8f9508eb435b843fa9ddca236676f7c21831a5b4a49710049",
+  "refusals": {
+    "classical-float16-sequences/base": {
+      "error": "ValueError: standard scaler statistics from a list of float16 rows and standard scaler statistics from the float32 ndarray differ: 7 bytes of 192\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 1239, in _\n    _same_bytes(f\"{tag} scaler statistics from a list of float16 rows\", stats,\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                f\"{tag} scaler statistics from the float32 ndarray\",\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                np.concatenate([np.asarray(getattr(whole, a), dtype=np.float64).reshape(-1) for a in attrs]))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 2198, in _same_bytes\n    raise ValueError(message)\nValueError: standard scaler statistics from a list of float16 rows and standard scaler statistics from the float32 ndarray differ: 7 bytes of 192",
+      "product_check": "_same_bytes: scaler statistics from float16 row lists versus equivalent float32 ndarray.",
+      "why_fault_reaches_check": "The patch adds one to the first value emitted by scaler_cast. The list-of-half-rows conversion reaches this cast, while the already float32 ndarray provides the independent unchanged input route. StandardScaler statistics differ by seven bytes. Clean and exact restoration both pass."
+    }
+  }
+}

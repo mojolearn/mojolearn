@@ -1,0 +1,14 @@
+{
+  "mode": "hidden",
+  "checks": [
+    {
+      "name": "hidden-device",
+      "passed": true,
+      "error": "ValueError: process: device index outside visibility mask"
+    }
+  ],
+  "workers": [],
+  "package": "/root/results-0860-multigpu-amd/run-r2/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+  "vendor": "hip",
+  "numeric_mode": "identical"
+}

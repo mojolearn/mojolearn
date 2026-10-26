@@ -1,0 +1,61 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "mamba-4-guard-r2",
+  "arms": [
+    {
+      "arm": "coverage-precise-mamba-rms_out",
+      "checks": [
+        {
+          "arm": "coverage-precise-mamba-rms_out",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "mamba1-decode-session",
+    "mamba2-decode-session",
+    "mamba3-decode-session"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "66de5dbdee145351b6c2dc911619bd7a1f85a21ec85fa9f109f39156b1cdc9cc"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "543b2f4380cc85143b47324bd395248792990d7ccf6292d5664ba3cf95c3a141"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "8873d4760bd9347f439a91be71ecb9a606559b748bf978ec21406dd045e85396"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "91157fa44bfc2890d8a31fde26b99ecaa41c20c2038b8909d53ad18c8deced3f"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "c3fdf8cb9046ccac1ff4d61afa76d9d8b5e566233eda3aeb270f9ad976828975"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "8f1abddc365cfd080f10ae375c11f5f52874d737bb41987ba0ffa1e460fd2ac5"
+    },
+    "check-coverage-precise-mamba-rms_out-device.log": {
+      "path": "check-coverage-precise-mamba-rms_out-device.log",
+      "sha256": "070e08f6d21553869e07da4ec911d8d807e4dd709d39b1458ed2b07f0b6bea59"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mamba-4-guard-r2",
+  "r2_archive": "measurements/verification/0.8.60/mamba-4-guard-r2-proof.tgz"
+}

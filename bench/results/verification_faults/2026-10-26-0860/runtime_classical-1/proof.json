@@ -1,0 +1,64 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "runtime_classical-1",
+  "arms": [
+    {
+      "arm": "coverage-core-scaler_fit_impl",
+      "checks": [
+        {
+          "arm": "coverage-core-scaler_fit_impl",
+          "column": "cpu",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1/oracle-review.json"
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "classical-float16-sequences"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "cb816535cb1547ce09c5eb4ed1541822c8b735cb5384ec0f0d73faf5bc0d4ac9"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "7bdd16217e832e95ad8e6017e9ef3a8200c6c466b7e7af8dee1e9f04ee01082c"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "051481d3175964befa7f81a8e524d2b312348e4f5ca17a66afb281e17f3ac2be"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "ec699e5f9e82243b9b238927d941f5e83b7ee8fe986b157f4576dc954d905933"
+    },
+    "oracle-review.json": {
+      "path": "oracle-review.json",
+      "sha256": "01aa9cd6bd4d84c3a99c2f2460b63799e796cbba4b84bb3c214e3f8fd050d311"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "4b3b239313f743e9560837672ed8e608fa6980b576469240490bb37d99a93e7f"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "d2af493949cbda34ec1c8546b3e01062b349f6b9a10c98197069b29f5ee8fcd4"
+    },
+    "check-coverage-core-scaler_fit_impl-cpu.log": {
+      "path": "check-coverage-core-scaler_fit_impl-cpu.log",
+      "sha256": "f58ec60b749db009431b6e3e8db2d08d3337bfa4ea85de12ae60f116f9d3d3ae"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/runtime_classical-1",
+  "r2_archive": "measurements/verification/0.8.60/runtime_classical-1-proof.tgz"
+}
