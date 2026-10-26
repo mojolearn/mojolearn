@@ -427,17 +427,17 @@ def run_all(root):
     @case("arch layout: the device's exact architecture picks its directory")
     def _():
         pkg = _mkinstall(os.path.join(root, "n"),
-                         vendor_archs={"cuda": ("sm_80", "sm_86")})
-        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+                         vendor_archs={"cuda": ("sm_86", "sm_89")})
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
         kind, base = B._layout()
-        assert kind == "vendor" and base == os.path.join(pkg, "cuda", "sm_80"), base
-        assert B.gpu_arch() == "sm_80", B.gpu_arch()
+        assert kind == "vendor" and base == os.path.join(pkg, "cuda", "sm_86"), base
+        assert B.gpu_arch() == "sm_86", B.gpu_arch()
         assert "exact match" in B.gpu_arch_how(), B.gpu_arch_how()
 
         # SABOTAGE: a different device must move the answer.
-        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        _reset(pkg, _probe(cuda=True), device=("sm_89", "test probe"))
         _, base2 = B._layout()
-        assert base2.endswith("sm_86"), (
+        assert base2.endswith("sm_89"), (
             "the arch did not follow the device, so the first assertion "
             "proved nothing: %r" % base2)
 
@@ -450,18 +450,18 @@ def run_all(root):
         assert base.endswith("sm_90a"), base
         assert "architecture-specific" in B.gpu_arch_how(), B.gpu_arch_how()
 
-    @case("cuda family fallback: an sm_86 device runs the carried sm_80 set")
+    @case("cuda family fallback: an sm_89 device runs the carried sm_86 set")
     def _():
         pkg = _mkinstall(os.path.join(root, "p"),
-                         vendor_archs={"cuda": ("sm_80",)})
-        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+                         vendor_archs={"cuda": ("sm_86",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_89", "test probe"))
         _, base = B._layout()
-        assert base.endswith("sm_80"), base
+        assert base.endswith("sm_86"), base
         assert "same-family" in B.gpu_arch_how(), B.gpu_arch_how()
 
         # SABOTAGE: a device of ANOTHER family must refuse, not inherit.
         _reset(pkg, _probe(cuda=True), device=("sm_75", "test probe"))
-        expect_import_error(B._layout, ["sm_75", "sm_80", "MOJOLEARN_GPU_ARCH"])
+        expect_import_error(B._layout, ["sm_75", "sm_86", "MOJOLEARN_GPU_ARCH"])
 
     @case("cuda family fallback never goes DOWN: sm_80 device, sm_86-only install")
     def _():
@@ -503,53 +503,72 @@ def run_all(root):
     @case("device arch unreadable: one carried arch is used, two refuse")
     def _():
         pkg = _mkinstall(os.path.join(root, "t"),
-                         vendor_archs={"cuda": ("sm_80",)})
+                         vendor_archs={"cuda": ("sm_86",)})
         _reset(pkg, _probe(cuda=True), device=(None, "no libcuda in this test"))
         _, base = B._layout()
-        assert base.endswith("sm_80"), base
+        assert base.endswith("sm_86"), base
         assert "only architecture carried" in B.gpu_arch_how(), B.gpu_arch_how()
 
         pkg2 = _mkinstall(os.path.join(root, "t2"),
-                          vendor_archs={"cuda": ("sm_80", "sm_90a")})
+                          vendor_archs={"cuda": ("sm_86", "sm_90a")})
         _reset(pkg2, _probe(cuda=True), device=(None, "no libcuda in this test"))
         expect_import_error(
-            B._layout, ["sm_80", "sm_90a", "MOJOLEARN_GPU_ARCH",
+            B._layout, ["sm_86", "sm_90a", "MOJOLEARN_GPU_ARCH",
                         "no libcuda in this test"])
 
     @case("MOJOLEARN_GPU_ARCH outranks the device")
     def _():
         pkg = _mkinstall(os.path.join(root, "u"),
-                         vendor_archs={"cuda": ("sm_80", "sm_86")})
-        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"),
-               arch_env="sm_86")
+                         vendor_archs={"cuda": ("sm_86", "sm_89")})
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"),
+               arch_env="sm_89")
         _, base = B._layout()
-        assert base.endswith("sm_86"), (
-            "MOJOLEARN_GPU_ARCH=sm_86 did not beat an sm_80 device: %r" % base)
+        assert base.endswith("sm_89"), (
+            "MOJOLEARN_GPU_ARCH=sm_89 did not beat an sm_86 device: %r" % base)
         assert "MOJOLEARN_GPU_ARCH" in B.gpu_arch_how(), B.gpu_arch_how()
 
         # SABOTAGE: clear it and the device must decide again.
-        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
         _, base2 = B._layout()
-        assert base2.endswith("sm_80"), (
+        assert base2.endswith("sm_86"), (
             "clearing MOJOLEARN_GPU_ARCH did not change the answer, so the "
             "override was not what decided the first one")
 
     @case("MOJOLEARN_GPU_ARCH naming an absent arch refuses by name")
     def _():
         pkg = _mkinstall(os.path.join(root, "v"),
-                         vendor_archs={"cuda": ("sm_80",)})
-        _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"),
+                         vendor_archs={"cuda": ("sm_86",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"),
                arch_env="sm_75")
-        expect_import_error(B._layout, ["sm_75", "sm_80"])
+        expect_import_error(B._layout, ["sm_75", "sm_86"])
 
     @case("tier_dir puts the tier under vendor AND arch")
     def _():
         pkg = _mkinstall(os.path.join(root, "w"),
+                         vendor_archs={"cuda": ("sm_86",)})
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        ident = B.tier_dir("identical")
+        assert ident == os.path.join(pkg, "cuda", "sm_86", "identical"), ident
+        assert B.tier_dir("fast") == os.path.join(pkg, "cuda", "sm_86")
+
+    @case("cuda/sm_80 is the PTX slot, never a native set")
+    def _():
+        # Since the PTX slot (gpu_plugins.PTX_ARCH, 2026-10-10) cuda/sm_80 in the
+        # combined and source layouts holds the PTX set: an install whose only
+        # cuda directory is sm_80 carries no native set, and without a valid PTX
+        # manifest the PTX set refuses by name.
+        pkg = _mkinstall(os.path.join(root, "z"),
                          vendor_archs={"cuda": ("sm_80",)})
         _reset(pkg, _probe(cuda=True), device=("sm_80", "test probe"))
-        ident = B.tier_dir("identical")
-        assert ident == os.path.join(pkg, "cuda", "sm_80", "identical"), ident
-        assert B.tier_dir("fast") == os.path.join(pkg, "cuda", "sm_80")
+        expect_import_error(B._layout, ["only the PTX set", "PTX set refused"])
+
+        # SABOTAGE: a native set beside the slot loads natively, so the refusal
+        # above was about sm_80 being the PTX slot.
+        pkg2 = _mkinstall(os.path.join(root, "z2"),
+                          vendor_archs={"cuda": ("sm_80", "sm_86")})
+        _reset(pkg2, _probe(cuda=True), device=("sm_86", "test probe"))
+        _, base = B._layout()
+        assert base == os.path.join(pkg2, "cuda", "sm_86"), base
 
     @case("an arch-less vendor set keeps working beside the new layout")
     def _():
@@ -570,21 +589,24 @@ def run_all(root):
         # per binding. The selector must see that directory as a set exactly
         # as it sees a per-binding one.
         pkg = _mkinstall(os.path.join(root, "y"),
-                         vendor_archs={"cuda": ("sm_80", "sm_86")}, merged=True)
-        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+                         vendor_archs={"cuda": ("sm_86", "sm_89")}, merged=True)
+        _reset(pkg, _probe(cuda=True), device=("sm_89", "test probe"))
         kind, base = B._layout()
-        assert kind == "vendor" and base == os.path.join(pkg, "cuda", "sm_86"), (kind, base)
-        assert B.tier_dir("identical") == os.path.join(pkg, "cuda", "sm_86", "identical")
+        assert kind == "vendor" and base == os.path.join(pkg, "cuda", "sm_89"), (kind, base)
+        assert B.tier_dir("identical") == os.path.join(pkg, "cuda", "sm_89", "identical")
 
         # SABOTAGE: an index with no merged file beside it is not a set, so
-        # the device's architecture is no longer carried and must refuse.
-        os.remove(os.path.join(pkg, "cuda", "sm_86", "_mojolearn_native.so"))
-        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        # the device's architecture is no longer carried and must not be chosen.
+        # Both levels: since 0.8.56 a native file in the identical/ tier alone
+        # makes a set (an identical-only release), so the tier copy goes too.
+        os.remove(os.path.join(pkg, "cuda", "sm_89", "_mojolearn_native.so"))
+        os.remove(os.path.join(pkg, "cuda", "sm_89", "identical", "_mojolearn_native.so"))
+        _reset(pkg, _probe(cuda=True), device=("sm_89", "test probe"))
         try:
             _, base2 = B._layout()
         except ImportError:
             base2 = None
-        assert base2 != os.path.join(pkg, "cuda", "sm_86"), (
+        assert base2 != os.path.join(pkg, "cuda", "sm_89"), (
             "a directory holding only the index was taken as a set, so the "
             "first assertion proved nothing")
 
