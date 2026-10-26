@@ -118,7 +118,18 @@ def host_bindings(wheel, host_binaries):
     return dict(sorted(served.items()))
 
 
-def audit(wheels):
+def audit(wheels, source_root=None):
+    """Audit against explicit package sources, independently of newer tooling."""
+    original_root = matrix.ROOT
+    if source_root is not None:
+        matrix.ROOT = str(Path(source_root).resolve())
+    try:
+        return _audit(wheels)
+    finally:
+        matrix.ROOT = original_root
+
+
+def _audit(wheels):
     surface, modules = matrix.public_surface()
     results = []
     for wheel in wheels:
