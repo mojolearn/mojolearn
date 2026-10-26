@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "tests": 16,
+  "scope": "Packing provenance may change; native bytes, portable-math policy and import coverage must still match.",
+  "log": {
+    "path": "incremental-portable-metadata-tests.log",
+    "sha256": "9ba1b4c375fc00fd4b86cf82b9cb10a5299662822a879f080ca578be3ddf7348"
+  }
+}

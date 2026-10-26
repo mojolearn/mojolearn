@@ -1,0 +1,36 @@
+{
+  "schema": "mojolearn.release.apple-host-boundary.v1",
+  "passed": true,
+  "wheel_sha256": "e5eab5693d610533693e787e50f5245ceff336f913edfdf4edae82f9ec065b79",
+  "source_commit": "0cd9de91ca915563a7b86b4bd03712cd359b6de5",
+  "checks": [
+    {
+      "vendor": "cpu",
+      "exit_code": 0,
+      "cases": 4,
+      "log": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/forest-boundary-macos/cpu.log",
+        "sha256": "7203bde8ad82a84c50a858ff7539ee681d2653dcc462f8a76b595aba6bd16521"
+      },
+      "junit": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/forest-boundary-macos/cpu.xml",
+        "sha256": "d104ad9c5685922d9323111c0201e6e3419d12170ee73fbac931795b61d3dc5d"
+      }
+    },
+    {
+      "vendor": "apple",
+      "exit_code": 0,
+      "cases": 4,
+      "log": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/forest-boundary-macos/apple.log",
+        "sha256": "b445a18517e157572cca9c11d8e093295847dcd7fccf86f22141c1271054f47e"
+      },
+      "junit": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/forest-boundary-macos/apple.xml",
+        "sha256": "ff67728b418232d583e7e98d43b60c28f2e9b100bc62d2a336087e1f6696f1f5"
+      }
+    }
+  ],
+  "host_native_sha256": "33d10b710e100050751f770a5808da47bb31f7ed6e3eaa11729109a3780cdb10",
+  "verifier_sha256": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c"
+}

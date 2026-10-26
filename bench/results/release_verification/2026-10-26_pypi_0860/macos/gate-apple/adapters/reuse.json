@@ -1,0 +1,37 @@
+{
+  "schema": "mojolearn.release.apple-adapter-reuse.v1",
+  "before": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/macos/mojolearn-0.8.59-py3-none-macosx_26_0_arm64.whl",
+    "sha256": "3a4647a3076c9c154101972002226ff1bcbe518819ae70a47b5f6ef0634ba2da"
+  },
+  "after": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/macos/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+    "sha256": "e5eab5693d610533693e787e50f5245ceff336f913edfdf4edae82f9ec065b79"
+  },
+  "old_version": "0.8.59",
+  "version": "0.8.60",
+  "source_commit": "0cd9de91ca915563a7b86b4bd03712cd359b6de5",
+  "original_wheel_stamp": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/gate-apple/adapters/wheel.json",
+    "sha256": "bc592a8f461730503e41d9083745ec1efe3c53d1b750567eb0ee58316cd9d155"
+  },
+  "original_adapter_report": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/gate-apple/adapters/adapter-smoke.json",
+    "sha256": "5d67fba5c9b28e245eb587489ae949c7d3ab83fff802e4984e1198292b15900b"
+  },
+  "boundary": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/forest-boundary-macos/result.json",
+    "sha256": "e406010ffaef0b25ae1a58f32fe0ae8bcc839f2bbe47bfa49ac872ca4620a7dd"
+  },
+  "scope": "Reuse the original installed Torch/MAX phases: native adapters, frontends, kernels and dependencies are byte-identical. The one changed host group has four CPU and four Apple installed-wheel cases; new verifier bytes have two-GPU NVIDIA/AMD qualification.",
+  "changed": [
+    "mojolearn-VERSION.dist-info/METADATA",
+    "mojolearn-VERSION.dist-info/RECORD",
+    "mojolearn-VERSION.dist-info/portable-math.json",
+    "mojolearn/CITATION.cff",
+    "mojolearn/_verify_distributed.py",
+    "mojolearn/_version.py",
+    "mojolearn/host/_mojolearn_dev_tokenizer_host.so",
+    "mojolearn/identity_columns/COMMIT"
+  ]
+}

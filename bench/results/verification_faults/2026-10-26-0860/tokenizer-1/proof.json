@@ -1,0 +1,126 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "tokenizer-1",
+  "arms": [
+    {
+      "arm": "coverage-bindings-native_params",
+      "checks": [
+        {
+          "arm": "coverage-bindings-native_params",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "arm": "coverage-core-causal_checkpoint_impl",
+      "checks": [
+        {
+          "arm": "coverage-core-causal_checkpoint_impl",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-bindings-cross_vendor_fold",
+      "checks": [
+        {
+          "arm": "coverage-precise-bindings-cross_vendor_fold",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-bindings-parallel_mlp_apply",
+      "checks": [
+        {
+          "arm": "coverage-precise-bindings-parallel_mlp_apply",
+          "column": "cpu",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/oracle-review-coverage-precise-bindings-parallel_mlp_apply-cpu.json"
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-tokenizer-ranks_text",
+      "checks": [
+        {
+          "arm": "coverage-precise-tokenizer-ranks_text",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "public-set-params",
+    "x-huber-outliers",
+    "hf-checkpoint",
+    "hf-model-surface",
+    "cross-vendor-fold",
+    "par-mlp",
+    "bpe-vocabulary"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "9bd0c6dbdd27127ba34749d538b7d71fedb59f494b608eab987982a1e97eacff"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "a5556d10e65734a18728492066964d179ced3e16d99621a7d5c497acde5eee39"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "a3578508ff7a8cb5f40be4953d57dcc5c62c4b724782a4972bebfa03de684194"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "a15341ad0b0896ecb53916ff9c74eb3ec8ca98540f1cc186732662cc1303d419"
+    },
+    "oracle-review-coverage-precise-bindings-parallel_mlp_apply-cpu.json": {
+      "path": "oracle-review-coverage-precise-bindings-parallel_mlp_apply-cpu.json",
+      "sha256": "67e1e28070d7ead4da43e5a7d653633084aec5fedd1444c9f7fd6c125ec6e6d8"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "faa89319bdd68b16fd310d50a1c3f3db5450a95c5b170a03301f4a62b5f1682e"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "bc6873fb4bbeb1d6c36e55e37dae51ed2d02e33c63ed04c1edb09351625dc6cd"
+    },
+    "check-coverage-bindings-native_params-cpu.log": {
+      "path": "check-coverage-bindings-native_params-cpu.log",
+      "sha256": "50d6568227f78b8e3484a858276224bc9d513469242694ca3513d650402c67dc"
+    },
+    "check-coverage-core-causal_checkpoint_impl-cpu.log": {
+      "path": "check-coverage-core-causal_checkpoint_impl-cpu.log",
+      "sha256": "689c9af68379fa3ab04e8b92e08ca03087c5140bccdb847a44242bb7887d1366"
+    },
+    "check-coverage-precise-bindings-cross_vendor_fold-cpu.log": {
+      "path": "check-coverage-precise-bindings-cross_vendor_fold-cpu.log",
+      "sha256": "ebd1285d2f0afa9bdc0bfe9cf85c1e707d7340a987d2470cd7688becf842fe28"
+    },
+    "check-coverage-precise-bindings-parallel_mlp_apply-cpu.log": {
+      "path": "check-coverage-precise-bindings-parallel_mlp_apply-cpu.log",
+      "sha256": "97be21a338565dd304fffc833b68312d01ce2326cd29c966fbe795936b3d6dfd"
+    },
+    "check-coverage-precise-tokenizer-ranks_text-cpu.log": {
+      "path": "check-coverage-precise-tokenizer-ranks_text-cpu.log",
+      "sha256": "9828fbf899fc2935656def1ccf09a8f197b57ad5cf33fd820841d28786751f66"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1",
+  "r2_archive": "measurements/verification/0.8.60/tokenizer-1-proof.tgz"
+}

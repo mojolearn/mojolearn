@@ -47,6 +47,15 @@ def delta(before, after, old_version, new_version, qualified):
             continue
         elif name == 'mojolearn/identity_columns/COMMIT':
             continue
+        elif name.endswith('.dist-info/portable-math.json'):
+            # This audit is written before stripping/signing. Its provenance
+            # hashes change on repack; the native members are compared above.
+            a, b = json.loads(left[name]), json.loads(right[name])
+            policy = lambda d: {k: v for k, v in d.items() if k not in ('binaries', 'runtime_changes')}
+            imports = lambda d: {r['file']: {k: v for k, v in r.items() if k != 'sha256'}
+                                 for r in d['binaries']}
+            require(policy(a) == policy(b) and imports(a) == imports(b),
+                    'portable-math policy or import coverage changed')
         elif name.endswith('.dist-info/METADATA') or name in (
                 'mojolearn/_version.py', 'mojolearn/CITATION.cff'):
             require(left[name].replace(old_version.encode(), new_version.encode()) == right[name],

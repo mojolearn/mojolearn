@@ -1,0 +1,38 @@
+Processing /Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/macos/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl (from mojolearn==0.8.60)
+Collecting numpy>=1.26.4 (from mojolearn==0.8.60->mojolearn==0.8.60)
+  Downloading numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl.metadata (6.6 kB)
+Downloading numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl (5.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.5/5.5 MB 3.9 MB/s eta 0:00:00
+Installing collected packages: numpy, mojolearn
+
+Successfully installed mojolearn-0.8.60 numpy-2.5.4
+
+[notice] A new release of pip is available: 25.1.1 -> 26.2.2
+[notice] To update, run: /Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/self-test-macos/venv/bin/python -m pip install --upgrade pip
+# verifier CPU thread budget: 3; one algorithm at a time. This is not a memory limit.
+  clean      ols/base train -> 122c819cae30ae06
+  perturbed  ols/base train -> 37d4bc0f7cbe833b
+{
+ "clean": {
+  "reference": "122c819cae30ae06",
+  "state": "IDENTICAL",
+  "value": "122c819cae30ae06"
+ },
+ "fixture": "base",
+ "format": "mojolearn.verify-self-test.v1",
+ "lane": "ols",
+ "passed": true,
+ "perturbation": {
+  "after": 0.1257302314043045,
+  "before": 0.1257302165031433,
+  "cell": "X[:, 0]",
+  "kind": "one ULP up, every value of column 0",
+  "values_changed": 20000
+ },
+ "perturbed": {
+  "reference": "122c819cae30ae06",
+  "state": "DIVERGENT",
+  "value": "37d4bc0f7cbe833b"
+ },
+ "problems": []
+}

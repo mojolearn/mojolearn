@@ -1,0 +1,26 @@
+{
+  "arm": "coverage-core-native_json_impl",
+  "records": {
+    "clean": "945f4fa0d3f148be80393eaa648a367dd20848a23cb0b54e16303c3c0891cf04",
+    "sabotaged": "2a1f3e14803e11e02160d52843587ddcf2efacdba1b36d3d1e8636679dceb201",
+    "restored": "15d346d2205fecd1b4bd9aa0d7362531fd6802f8f245fd26146e76c6bd926148"
+  },
+  "patch_sha256": "8b52e9896a78578cd10d1b2e49e588c911afaab732685d9a3d6fdc694e4d9aab",
+  "refusals": {
+    "hf-checkpoint/base": {
+      "product_check": "Native JSON parsing consumes the entire numeric token before accepting the following delimiter",
+      "why_fault_reaches_check": "The patch returns one digit early for numbers with at least three digits. The native parser consequently sees a remaining digit where a comma (byte 44) is required and refuses the otherwise valid checkpoint/configuration. Each retained traceback reaches the public safetensors/configuration/model load path and reports the exact JSON delimiter error. All clean and restored fixtures parse successfully.",
+      "error": "ValueError: JSON: expected byte 44 at 62\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 5599, in _\n    sf = S(os.path.join(one, \"model.safetensors\"))\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/models/safetensors.py\", line 96, in __init__\n    return _NATIVE.safetensors_init(self, path, _NATIVE_CONTEXT)\n           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: JSON: expected byte 44 at 62"
+    },
+    "hf-causal-lm/base": {
+      "product_check": "Native JSON parsing consumes the entire numeric token before accepting the following delimiter",
+      "why_fault_reaches_check": "The patch returns one digit early for numbers with at least three digits. The native parser consequently sees a remaining digit where a comma (byte 44) is required and refuses the otherwise valid checkpoint/configuration. Each retained traceback reaches the public safetensors/configuration/model load path and reports the exact JSON delimiter error. All clean and restored fixtures parse successfully.",
+      "error": "ValueError: JSON: expected byte 44 at 242\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 5964, in _\n    models.append(ml.models.causal_lm.CausalLM.load(root, numeric_profile=\"fp32_v1\"))\n                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/models/causal_lm.py\", line 253, in load\n    return _NATIVE.causal_model_load(cls, path,\n           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^\n                                    (weight_format, max_positions, device, numeric_profile),\n                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                                    _NATIVE_CONTEXT)\n                                    ^^^^^^^^^^^^^^^^\nValueError: JSON: expected byte 44 at 242"
+    },
+    "hf-model-surface/base": {
+      "product_check": "Native JSON parsing consumes the entire numeric token before accepting the following delimiter",
+      "why_fault_reaches_check": "The patch returns one digit early for numbers with at least three digits. The native parser consequently sees a remaining digit where a comma (byte 44) is required and refuses the otherwise valid checkpoint/configuration. Each retained traceback reaches the public safetensors/configuration/model load path and reports the exact JSON delimiter error. All clean and restored fixtures parse successfully.",
+      "error": "ValueError: JSON: expected byte 44 at 242\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/tools/identity_lanes/coverage.py\", line 1019, in _\n    loaded = M.HFConfig.from_json(one)\n  File \"/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/models/config.py\", line 93, in from_json\n    return _NATIVE.model_config_load(cls, path)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^\nValueError: JSON: expected byte 44 at 242"
+    }
+  }
+}

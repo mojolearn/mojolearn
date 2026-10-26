@@ -1,0 +1,18 @@
+{
+  "arm": "coverage-precise-bindings-parallel_mlp_apply",
+  "records": {
+    "clean": "a5556d10e65734a18728492066964d179ced3e16d99621a7d5c497acde5eee39",
+    "sabotaged": "bc6873fb4bbeb1d6c36e55e37dae51ed2d02e33c63ed04c1edb09351625dc6cd",
+    "restored": "faa89319bdd68b16fd310d50a1c3f3db5450a95c5b170a03301f4a62b5f1682e"
+  },
+  "patch_sha256": "65e14518502b9095ae08ac3bed0f80c0e1605109676e8760e770b56745a5db24",
+  "oracles": {
+    "par-mlp/base": {
+      "product_check": "Published ParallelNeuralTrainer parameters and consumed logits compared against ordered single-device replay",
+      "why_fault_reaches_check": "The patch preserves the publication memcpy and flips the low bit of the first word of each parameter tensor afterward. The independent replay does not use this publication copy. The retained comparator reports differing bias1, bias2, weight1, weight2 and consumed predict_logits; clean and restored executions agree.",
+      "errors": [
+        "ParallelNeuralTrainer weights_[bias1] and ordered single-device replay differ: 1 bytes of 64; ParallelNeuralTrainer weights_[bias2] and ordered single-device replay differ: 1 bytes of 12; ParallelNeuralTrainer weights_[weight1] and ordered single-device replay differ: 7 bytes of 512; ParallelNeuralTrainer weights_[weight2] and ordered single-device replay differ: 1 bytes of 192; ParallelNeuralTrainer predict_logits and ordered single-device replay predict_logits differ: 251 bytes of 3072"
+      ]
+    }
+  }
+}

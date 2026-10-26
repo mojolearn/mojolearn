@@ -372,9 +372,75 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-bindings-native_params",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-core-causal_checkpoint_impl",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-bindings-cross_vendor_fold",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-bindings-parallel_mlp_apply",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-tokenizer-ranks_text",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-core-native_json_impl",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-2/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 18,
+  "remaining_declared_fault_arms": 12,
   "verifier_findings": [
     {
       "id": "reviewed-independent-oracles",

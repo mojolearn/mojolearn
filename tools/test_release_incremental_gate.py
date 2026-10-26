@@ -58,6 +58,18 @@ def test_removed_member_is_refused(tmp_path):
         gate.delta(before, after, '1', '2', {})
 
 
+def test_portable_math_report_only_reuses_unchanged_policy(tmp_path):
+    old = dict(platform_math_free=True, binaries=[dict(file='mojolearn/a.so', sha256='before', math_imports=[])])
+    new = dict(platform_math_free=True, binaries=[dict(file='mojolearn/a.so', sha256='after', math_imports=[])])
+    before = wheel(tmp_path / 'old.whl', {'pkg-1.dist-info/portable-math.json': json.dumps(old)})
+    after = wheel(tmp_path / 'new.whl', {'pkg-2.dist-info/portable-math.json': json.dumps(new)})
+    assert gate.delta(before, after, '1', '2', {})
+    new['platform_math_free'] = False
+    after = wheel(tmp_path / 'bad.whl', {'pkg-2.dist-info/portable-math.json': json.dumps(new)})
+    with pytest.raises(ValueError, match='portable-math policy'):
+        gate.delta(before, after, '1', '2', {})
+
+
 @pytest.fixture
 def boundary(tmp_path):
     identity = dict(version='2', source_commit='freeze', wheels={'mojolearn-core': 'wheelhash'})

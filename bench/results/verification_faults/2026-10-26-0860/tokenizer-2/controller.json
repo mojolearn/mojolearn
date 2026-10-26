@@ -1,0 +1,235 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-core-native_json_impl": [
+        "hf-checkpoint",
+        "hf-model-surface",
+        "hf-causal-lm"
+      ]
+    },
+    "arms": [
+      "coverage-core-native_json_impl"
+    ],
+    "builds": [
+      "build_tokenizer_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "tokenizer",
+    "id": "tokenizer-2",
+    "lanes": [
+      "hf-checkpoint",
+      "hf-model-surface",
+      "hf-causal-lm"
+    ],
+    "patches": [
+      "core/sabotage/coverage_native_json_impl.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "hf-checkpoint,hf-model-surface,hf-causal-lm",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.824986250023358
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "core/sabotage/coverage_native_json_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.017963250051252544
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "core/sabotage/coverage_native_json_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.017085791914723814
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_tokenizer_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tokenizer_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/tokenizer-2/build/host/_mojolearn_dev_tokenizer_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/tokenizer-2/build/host/_mojolearn_dev_tokenizer_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 0.03365441702771932,
+      "reused": true
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "hf-checkpoint,hf-model-surface,hf-causal-lm",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.962371040950529
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "core/sabotage/coverage_native_json_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.023068750044330955
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "hf-checkpoint,hf-model-surface,hf-causal-lm",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.721740957931615
+    },
+    {
+      "name": "check-coverage-core-native_json_impl-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-core-native_json_impl",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 1,
+      "seconds": 0.07586362503934652
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_tokenizer_host",
+      "members": [
+        "_mojolearn_tokenizer_host"
+      ],
+      "sha256": "1a5fe3565424fc6c7d0eca332cec4db92f0d221782a39b8b9c19bd9be3ea0c6a",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/build/host/_mojolearn_dev_tokenizer_host/_mojolearn_dev_tokenizer_host.so",
+      "original_path": ".development/68a22a6352b3a5205d25d890c975789f9e6b0de80ce85b7ff60706ae134d64d9/_mojolearn_dev_tokenizer_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/1a5fe3565424fc6c7d0eca332cec4db92f0d221782a39b8b9c19bd9be3ea0c6a/_mojolearn_dev_tokenizer_host.so",
+      "created": true
+    }
+  ],
+  "reused_fault_compilation": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/tokenizer-2",
+      "receipt_sha256": "7d24a0e3fbaa239a442f008c3a6ba57d98ba10af342fe2afccc9c36e1c69f27c",
+      "source_sha256": "e6dfe5e4371912e67e479c41c4adbbbf47db58a1931523b707055efa89041a34"
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-core-native_json_impl",
+      "column": "cpu",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/oracle-review.json"
+    }
+  ],
+  "passed": true,
+  "original_checks": [
+    {
+      "arm": "coverage-core-native_json_impl",
+      "column": "cpu",
+      "exit_code": 1
+    }
+  ],
+  "review_commands": [
+    [
+      "python3",
+      "tools/coverage_sabotage.py",
+      "check",
+      "--arm",
+      "coverage-core-native_json_impl",
+      "--clean",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/clean_cpu.json",
+      "--sabotaged",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/sab_cpu.json",
+      "--restored",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/restored_cpu.json",
+      "--evidence",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/oracle-review.json",
+      "--batch-bindings",
+      "build_tokenizer_host"
+    ]
+  ]
+}

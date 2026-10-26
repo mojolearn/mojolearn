@@ -1,0 +1,384 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-bindings-native_params": [
+        "public-set-params",
+        "x-huber-outliers"
+      ],
+      "coverage-core-causal_checkpoint_impl": [
+        "hf-checkpoint",
+        "hf-model-surface"
+      ],
+      "coverage-precise-bindings-cross_vendor_fold": [
+        "cross-vendor-fold"
+      ],
+      "coverage-precise-bindings-parallel_mlp_apply": [
+        "par-mlp"
+      ],
+      "coverage-precise-tokenizer-ranks_text": [
+        "bpe-vocabulary"
+      ]
+    },
+    "arms": [
+      "coverage-bindings-native_params",
+      "coverage-core-causal_checkpoint_impl",
+      "coverage-precise-bindings-cross_vendor_fold",
+      "coverage-precise-bindings-parallel_mlp_apply",
+      "coverage-precise-tokenizer-ranks_text"
+    ],
+    "builds": [
+      "build_tokenizer_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "tokenizer",
+    "id": "tokenizer-1",
+    "lanes": [
+      "public-set-params",
+      "x-huber-outliers",
+      "hf-checkpoint",
+      "hf-model-surface",
+      "cross-vendor-fold",
+      "par-mlp",
+      "bpe-vocabulary"
+    ],
+    "patches": [
+      "bindings/sabotage/coverage_native_params.patch",
+      "core/sabotage/coverage_causal_checkpoint_impl.patch",
+      "bindings/sabotage/coverage_precise_cross_vendor_fold.patch",
+      "bindings/sabotage/coverage_precise_parallel_mlp_apply.patch",
+      "tokenizer/sabotage/coverage_precise_ranks_text.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "public-set-params,x-huber-outliers,hf-checkpoint,hf-model-surface,cross-vendor-fold,par-mlp,bpe-vocabulary",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 10.092438583029434
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "bindings/sabotage/coverage_native_params.patch",
+        "core/sabotage/coverage_causal_checkpoint_impl.patch",
+        "bindings/sabotage/coverage_precise_cross_vendor_fold.patch",
+        "bindings/sabotage/coverage_precise_parallel_mlp_apply.patch",
+        "tokenizer/sabotage/coverage_precise_ranks_text.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.030969500076025724
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "bindings/sabotage/coverage_native_params.patch",
+        "core/sabotage/coverage_causal_checkpoint_impl.patch",
+        "bindings/sabotage/coverage_precise_cross_vendor_fold.patch",
+        "bindings/sabotage/coverage_precise_parallel_mlp_apply.patch",
+        "tokenizer/sabotage/coverage_precise_ranks_text.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.03446374996565282
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_tokenizer_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tokenizer_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/build/host/_mojolearn_dev_tokenizer_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/build/host/_mojolearn_dev_tokenizer_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 1325.660939124995,
+      "reused": false
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "public-set-params,x-huber-outliers,hf-checkpoint,hf-model-surface,cross-vendor-fold,par-mlp,bpe-vocabulary",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json"
+      ],
+      "exit_code": 1,
+      "seconds": 9.454515249934047
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "tokenizer/sabotage/coverage_precise_ranks_text.patch",
+        "bindings/sabotage/coverage_precise_parallel_mlp_apply.patch",
+        "bindings/sabotage/coverage_precise_cross_vendor_fold.patch",
+        "core/sabotage/coverage_causal_checkpoint_impl.patch",
+        "bindings/sabotage/coverage_native_params.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.024459625012241304
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "public-set-params,x-huber-outliers,hf-checkpoint,hf-model-surface,cross-vendor-fold,par-mlp,bpe-vocabulary",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 7.257962000090629
+    },
+    {
+      "name": "check-coverage-bindings-native_params-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-bindings-native_params",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.07656025001779199
+    },
+    {
+      "name": "check-coverage-core-causal_checkpoint_impl-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-core-causal_checkpoint_impl",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.0732511670794338
+    },
+    {
+      "name": "check-coverage-precise-bindings-cross_vendor_fold-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-bindings-cross_vendor_fold",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.07319879101123661
+    },
+    {
+      "name": "check-coverage-precise-bindings-parallel_mlp_apply-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-bindings-parallel_mlp_apply",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 1,
+      "seconds": 0.07201412506401539
+    },
+    {
+      "name": "check-coverage-precise-tokenizer-ranks_text-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-tokenizer-ranks_text",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.07315704191569239
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_tokenizer_host",
+      "members": [
+        "_mojolearn_tokenizer_host"
+      ],
+      "sha256": "c52f38b22728dff2bdfe344e0c487d29e23aebfebb8750881b87a5a9cf52b9bf",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/build/host/_mojolearn_dev_tokenizer_host/_mojolearn_dev_tokenizer_host.so",
+      "original_path": ".development/68a22a6352b3a5205d25d890c975789f9e6b0de80ce85b7ff60706ae134d64d9/_mojolearn_dev_tokenizer_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/c52f38b22728dff2bdfe344e0c487d29e23aebfebb8750881b87a5a9cf52b9bf/_mojolearn_dev_tokenizer_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-bindings-native_params",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-core-causal_checkpoint_impl",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-bindings-cross_vendor_fold",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-bindings-parallel_mlp_apply",
+      "column": "cpu",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/oracle-review-coverage-precise-bindings-parallel_mlp_apply-cpu.json"
+    },
+    {
+      "arm": "coverage-precise-tokenizer-ranks_text",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true,
+  "original_checks": [
+    {
+      "arm": "coverage-bindings-native_params",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-core-causal_checkpoint_impl",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-bindings-cross_vendor_fold",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-bindings-parallel_mlp_apply",
+      "column": "cpu",
+      "exit_code": 1
+    },
+    {
+      "arm": "coverage-precise-tokenizer-ranks_text",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "review_commands": [
+    [
+      "python3",
+      "tools/coverage_sabotage.py",
+      "check",
+      "--arm",
+      "coverage-precise-bindings-parallel_mlp_apply",
+      "--clean",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/clean_cpu.json",
+      "--sabotaged",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/sab_cpu.json",
+      "--restored",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/restored_cpu.json",
+      "--evidence",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-1/oracle-review-coverage-precise-bindings-parallel_mlp_apply-cpu.json",
+      "--batch-bindings",
+      "build_tokenizer_host"
+    ]
+  ]
+}

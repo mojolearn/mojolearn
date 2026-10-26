@@ -1,0 +1,66 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "tokenizer-2",
+  "arms": [
+    {
+      "arm": "coverage-core-native_json_impl",
+      "checks": [
+        {
+          "arm": "coverage-core-native_json_impl",
+          "column": "cpu",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2/oracle-review.json"
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "hf-checkpoint",
+    "hf-model-surface",
+    "hf-causal-lm"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "9bd0c6dbdd27127ba34749d538b7d71fedb59f494b608eab987982a1e97eacff"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "945f4fa0d3f148be80393eaa648a367dd20848a23cb0b54e16303c3c0891cf04"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "b50570bfeb50369874b2066152aed2130f59c4afd88ef48c03f987f8620b3529"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "e6dfe5e4371912e67e479c41c4adbbbf47db58a1931523b707055efa89041a34"
+    },
+    "oracle-review.json": {
+      "path": "oracle-review.json",
+      "sha256": "3d7a5d4eedb5f4ba98af82609260780fa62ec08756a8dc6c0d00016b4d1689c8"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "15d346d2205fecd1b4bd9aa0d7362531fd6802f8f245fd26146e76c6bd926148"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "2a1f3e14803e11e02160d52843587ddcf2efacdba1b36d3d1e8636679dceb201"
+    },
+    "check-coverage-core-native_json_impl-cpu.log": {
+      "path": "check-coverage-core-native_json_impl-cpu.log",
+      "sha256": "b37260dc447ac91392acd70df3d01e3cc8526f7acc18060bc371cf4b5a90aa40"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-2",
+  "r2_archive": "measurements/verification/0.8.60/tokenizer-2-proof.tgz"
+}

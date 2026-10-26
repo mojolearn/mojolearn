@@ -1,0 +1,19 @@
+{
+  "schema": "mojolearn.release.macos-final.v1",
+  "source_commit": "0cd9de91ca915563a7b86b4bd03712cd359b6de5",
+  "wheel": {
+    "bytes": 80662655,
+    "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mac-component-assembly/source/python/dist/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+    "sha256": "e5eab5693d610533693e787e50f5245ceff336f913edfdf4edae82f9ec065b79"
+  },
+  "native_reused": 86,
+  "changed_group": "host/_mojolearn_dev_tokenizer_host.so",
+  "assembly": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/mac-component-assembly/assembly.json",
+    "sha256": "9ab380fd4bcb48905debcc48100e4146469de67732cc1f05d5876d8a0277b711"
+  },
+  "self_test": "self-test-macos/results.json",
+  "host_boundary": "forest-boundary-macos/result.json",
+  "adapter_reuse": "gate-apple/adapters/reuse.json",
+  "r2": "measurements/verification/0.8.60/mac-final-evidence.tgz"
+}
