@@ -195,8 +195,6 @@ from autograd.kernels.transformer import (
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 from autograd.rules_transformer import llama_decoder_layer_backward, llama_decoder_layer_backward_autograd
-# lane ag-tm-timing: the launch profile the backward timing entries read.
-from sequence.launch_profile import launch_profile_level, launch_profile_reset, launch_profile_snapshot
 # lane/block-options (2026-09-17): the block options record and the two
 # tails. `transformer/block_options.mojo` is the order's authority; the
 # docstrings below repeat it word for word because a binding docstring is
@@ -259,9 +257,6 @@ from transformer.transformer_binding_impl import (
     TransformerForwardTape,
     _transformer_saved_backward,
     _transformer_run_session_backward,
-    _tm_profile_launches,
-    _transformer_session_backward_time,
-    _transformer_saved_backward_timed,
     INT15_ENTRY_ADDRS,
     INT15_ENTRY_PARAMS,
     _upload_i8,
@@ -392,9 +387,8 @@ def transformer_flash_call_count_binding(grouped: PythonObject) raises -> Python
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 
 
-def transformer_attention_profile_binding() raises -> PythonObject:
-    """Exact attention graph for this native binary's ordinary fp32 model path."""
-    return PythonObject(String("attention-eager.fp32.v1"))
+# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_transformer.patch
 
 
 def transformer_numeric_mode_binding() raises -> PythonObject:
@@ -575,103 +569,6 @@ def transformer_session_backward_binding(
     return PythonObject(0)
 
 
-def transformer_session_backward_time_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`transformer_session_backward`'s 21 addresses; its 8 scalars plus the
-    number of timed calls N. Returns [autograd, launches, then forward and
-    backward nanoseconds for N + 1 calls, the first a warm-up]."""
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer: session is busy or closed")
-    if len(addrs) != 21 or len(params) != 9:
-        raise Error("transformer backward time: expected 21 addresses and 9 scalars")
-    var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer backward time: null buffer address at slot " + String(i))
-        a.append(address)
-    var p = List[Int]()
-    for i in range(9):  # small-loop(params: fixed scalar list of this entry): argument words, not data
-        p.append(Int(py=params[i]))
-    owner[].busy = True
-    var stamps = List[Int]()
-    try:
-        with GILReleased(Python()):
-            try:
-                stamps = _transformer_session_backward_time(owner[], a,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8])
-            except error:
-                owner[].clear()
-                raise error
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    var out = Python.list()
-    for i in range(len(stamps)):  # small-loop(stamps: one clock reading per timed call): measurement timestamps, not model data
-        out.append(PythonObject(stamps[i]))
-    return out
-
-
-def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """22 addresses: `transformer_forward_tape`'s 11 (x, nine weights, y),
-    then `transformer_backward_tape`'s 11 (dy, ten gradients); its 8 shape
-    scalars plus N. Runs N + 1 saved forwards (untimed) each followed by a
-    timed saved backward. Returns [autograd, launches, N + 1 backward
-    nanoseconds, the first a warm-up]."""
-    comptime if not IDN_SAMBA_FORWARD_TAPE:
-        raise Error("transformer backward tape time: IDENTICAL opt-in is disabled")
-    if len(addrs) != 22 or len(params) != 9:
-        raise Error("transformer backward tape time: expected 22 addresses and 9 scalars")
-    var fa = List[Int]()
-    var ba = List[Int]()
-    for i in range(22):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer backward tape time: null address at slot " + String(i))
-        if i < 10:
-            fa.append(address)
-        elif i == 10:
-            fa.append(0)
-            fa.append(0)
-            fa.append(address)
-        else:
-            ba.append(address)
-    var p = List[Int]()
-    for i in range(8):  # small-loop(params: fixed scalar list of this entry): argument words, not data
-        p.append(Int(py=params[i]))
-    var calls = Int(py=params[8])
-    if calls < 1:
-        raise Error("transformer backward tape time: the call count must be >= 1")
-    var out = Python.list()
-    # Slot 0 is always 1 (tape); see _transformer_session_backward_time.
-    out.append(PythonObject(1))
-    var stamps = List[Int]()
-    var launches = -1
-    with GILReleased(Python()):
-        var prof = launch_profile_level() > 0
-        for k in range(calls + 1):  # driver-loop: over timed calls
-            var tape = TransformerForwardTape(p)
-            try:
-                _ = _transformer_run_session[True, True](tape.session, fa,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
-                if prof and k == calls:
-                    launch_profile_reset()
-                stamps.append(_transformer_saved_backward_timed(tape, ba))
-                if prof and k == calls:
-                    launches = _tm_profile_launches()
-            except error:
-                tape.close()
-                raise error
-            tape.close()
-    out.append(PythonObject(launches))
-    for i in range(len(stamps)):  # small-loop(stamps: one clock reading per timed call): measurement timestamps, not model data
-        out.append(PythonObject(stamps[i]))
-    return out
-
-
 def transformer_session_create_binding() raises -> PythonObject:
     return PythonObject(alloc=TransformerSession())
 
@@ -684,21 +581,6 @@ def transformer_session_close_binding(session: PythonObject) raises -> PythonObj
     owner[].clear()
     owner[].ctx = None
     return PythonObject(0)
-
-
-def transformer_session_info_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy:
-        raise Error("transformer: session is busy")
-    var out = Python.list()
-    out.append(PythonObject(owner[].contexts))
-    out.append(PythonObject(owner[].workspaces))
-    out.append(PythonObject(owner[].closed))
-    var retained_bytes = 0
-    if owner[].workspace:
-        retained_bytes = owner[].workspace.value().retained_bytes()
-    out.append(PythonObject(retained_bytes))
-    return out
 
 
 def transformer_session_forward_binding(
@@ -1225,23 +1107,6 @@ def transformer_decode_session_load_state_binding(
     return PythonObject(out_len)
 
 
-def transformer_decode_session_info_binding(session: PythonObject) raises -> PythonObject:
-    """[open, usable, cached_tokens, B, max_tokens, window] as ints."""
-    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
-    var out = Python.list()
-    var is_open = owner[].is_open()
-    var held = 0
-    if is_open:
-        held = owner[].kv.value().s
-    out.append(PythonObject(1 if is_open else 0))
-    out.append(PythonObject(1 if owner[].usable else 0))
-    out.append(PythonObject(held))
-    out.append(PythonObject(owner[].b))
-    out.append(PythonObject(owner[].smax))
-    out.append(PythonObject(owner[].window))
-    return out
-
-
 def transformer_decode_session_close_binding(session: PythonObject) raises -> PythonObject:
     """Release every device buffer and the context. The caller's cache
     buffers are NOT written here; export_state first if the bytes matter."""
@@ -1520,7 +1385,6 @@ def transformer_backward_binding(
     return PythonObject(0)
 
 
-
 def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[TransformerSession]()
     if owner[].busy:
@@ -1682,12 +1546,14 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_numeric_mode_binding](
             "transformer_numeric_mode"
         )
-        m.def_function[transformer_attention_profile_binding]("transformer_attention_profile")
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_forward_binding]("transformer_forward")
         _ = m.add_type[TransformerSession]("_TransformerSession")
         m.def_function[transformer_session_create_binding]("transformer_session_create")
         m.def_function[transformer_session_close_binding]("transformer_session_close")
-        m.def_function[transformer_session_info_binding]("transformer_session_info")
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
@@ -1708,9 +1574,8 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
         m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
         m.def_function[transformer_close_tape_binding]("transformer_close_tape")
-        # lane ag-tm-timing: the backward timing entries (measurement only).
-        m.def_function[transformer_session_backward_time_binding]("transformer_session_backward_time")
-        m.def_function[transformer_backward_tape_time_binding]("transformer_backward_tape_time")
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_transformer.patch
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
@@ -1721,7 +1586,8 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_decode_session_forward_binding]("transformer_decode_session_forward")
         m.def_function[transformer_decode_session_export_state_binding]("transformer_decode_session_export_state")
         m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
-        m.def_function[transformer_decode_session_info_binding]("transformer_decode_session_info")
+        # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_decode_session_close_binding]("transformer_decode_session_close")
         # lane/py-lm: the resident CausalLM decode session.
         _ = m.add_type[CausalLMSession]("_CausalLMSession")

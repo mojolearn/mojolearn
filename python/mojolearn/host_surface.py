@@ -3273,7 +3273,7 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
             "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
-            "transformer_session_forward_tape", "transformer_session_backward_tape", "transformer_attention_profile",
+            "transformer_session_forward_tape", "transformer_session_backward_tape",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise

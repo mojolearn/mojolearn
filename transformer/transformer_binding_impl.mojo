@@ -82,8 +82,6 @@ from autograd.kernels.transformer import (
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 from autograd.rules_transformer import llama_decoder_layer_backward, llama_decoder_layer_backward_autograd
-# lane ag-tm-timing: the launch profile the backward timing entries read.
-from sequence.launch_profile import launch_profile_level, launch_profile_reset, launch_profile_snapshot
 # lane/block-options (2026-09-17): the block options record and the two
 # tails. `transformer/block_options.mojo` is the order's authority; the
 # docstrings below repeat it word for word because a binding docstring is
@@ -111,7 +109,6 @@ from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
 
 
-
 def _optional_upload(
     ctx: DeviceContext, addr: Int, n: Int, on: Bool, name: String, what: String,
 ) raises -> DeviceBuffer[DType.float32]:
@@ -133,20 +130,16 @@ def _optional_upload(
     return _llama_zeros[False](ctx, 1)
 
 
-
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
-
 
 
 def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
     return read_f32(addr, n)
 
 
-
 def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
-
 
 
 def _upload_addr[wait: Bool = True](
@@ -180,7 +173,6 @@ def _upload_addr[wait: Bool = True](
     ctx.synchronize()
     _ = host^
     return dev^
-
 
 
 def _download_addr[wait: Bool = True](
@@ -218,7 +210,6 @@ def _download_addr[wait: Bool = True](
     _ = host^
 
 
-
 def _btick(on: Bool, mut t: Int, name: String):
     if not on:
         return
@@ -227,7 +218,6 @@ def _btick(on: Bool, mut t: Int, name: String):
         "timing " + name + " " + String(Float64(now - t) / 1000000.0) + " ms"
     )
     t = now
-
 
 
 # ===========================================================================
@@ -243,7 +233,6 @@ def transformer_lean_stages(hd: Int) -> Bool:
     if not fused_forward_supported_head_dim(hd):
         return False
     return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
-
 
 
 def _load_transformer_weights[wait: Bool = True](
@@ -341,7 +330,6 @@ def _load_transformer_weights[wait: Bool = True](
     )
 
 
-
 def _tail_of(a: List[Int], base: Int) -> List[Int]:
     """The eleven optional addresses out of a base + tail list (zeros when
     the list is the base alone)."""
@@ -354,14 +342,12 @@ def _tail_of(a: List[Int], base: Int) -> List[Int]:
     return t^
 
 
-
 def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
     """Null refusals for the base slots a caller must fill (the gate slot is
     checked by `_load_transformer_weights` against the MLP form)."""
     for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
         if a[slots[i]] == 0:
             raise Error(what + ": null buffer address at slot " + String(slots[i]))
-
 
 
 def _lean_for(hd: Int, opts: BlockOptions) -> Bool:
@@ -374,7 +360,6 @@ def _lean_for(hd: Int, opts: BlockOptions) -> Bool:
     return transformer_lean_stages(hd)
 
 
-
 def _lean_for_w(hd: Int, w: LlamaDeviceWeights) -> Bool:
     """`_lean_for` for weights that may carry the profile's planes: never
     lean under `fixed15_v1`, as `_transformer_run_session_int15` builds its
@@ -382,7 +367,6 @@ def _lean_for_w(hd: Int, w: LlamaDeviceWeights) -> Bool:
     if w.int15:
         return False
     return _lean_for(hd, w.opts)
-
 
 
 def _workspace_key(
@@ -397,7 +381,6 @@ def _workspace_key(
     for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
         key.append(tail[i])
     return key^
-
 
 
 struct TransformerWorkspace(Movable):
@@ -486,7 +469,6 @@ struct TransformerWorkspace(Movable):
         return True
 
 
-
 struct TransformerBackwardWorkspace(Movable):
     """The retained half of `transformer_session_backward`: the backward
     stages for one shape and the device copy of grad_output. The forward
@@ -514,7 +496,6 @@ struct TransformerBackwardWorkspace(Movable):
 
 from training.neural_attention_owner import BorrowedAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
-
 
 
 struct TransformerSession(Movable, Writable):
@@ -624,7 +605,6 @@ struct TransformerSession(Movable, Writable):
             self.ctx.value().synchronize()
 
 
-
 def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
     """The retained weights' identity: the shape and the options record."""
     var key: List[Int] = [dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
@@ -633,7 +613,6 @@ def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
     for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
         key.append(tail[i])
     return key^
-
 
 
 def _base_weight_lens(dims: LlamaDims) -> List[Int]:
@@ -645,7 +624,6 @@ def _base_weight_lens(dims: LlamaDims) -> List[Int]:
     var lens: List[Int] = [dm, dm, qw * dm, kw * dm, kw * dm, dm * qw,
                            it * dm, it * dm, dm * it]
     return lens^
-
 
 
 def _weights_same_bits(a: List[Int], host: List[Float32], lens: List[Int]) raises -> Bool:
@@ -675,7 +653,6 @@ def _weights_same_bits(a: List[Int], host: List[Float32], lens: List[Int]) raise
     return True
 
 
-
 def _weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]:
     """The nine base arrays' bytes, concatenated in slot order."""
     var total = 0
@@ -689,7 +666,6 @@ def _weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]:
             memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
         off += n
     return out^
-
 
 
 def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int], lens: List[Int]) raises:
@@ -710,13 +686,11 @@ def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int],
     w._validate_finite(ctx)
 
 
-
 def _stage_reset_on() -> Bool:
     """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
     reused workspace gets before each call. Bit-safe only if every cell a
     call reads it also wrote this call; the identity gate decides."""
     return String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
-
 
 
 def _session_retain_cap_bytes() -> Int:
@@ -734,7 +708,6 @@ def _session_retain_cap_bytes() -> Int:
     if cap_mb < 0:
         cap_mb = 0
     return cap_mb * 1024 * 1024
-
 
 
 def _session_weights(
@@ -799,7 +772,6 @@ def _session_weights(
     session.weights_key = key^
     session.weights_host = host^
     session.weight_uploads += 1
-
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
@@ -898,8 +870,6 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
     return result
 
 
-
-
 struct TransformerForwardTape(Movable, Writable):
     """NI36/48 single-use owner of input, weight snapshots and saved stages.
 
@@ -929,7 +899,6 @@ struct TransformerForwardTape(Movable, Writable):
         self.consumed = True
         self.session.clear()
         self.session.ctx = None
-
 
 
 def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) raises:
@@ -966,7 +935,6 @@ def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) 
     _download_addr[False](ctx, bw.bst.dw_up, p[6] * dm, a[9])
     _download_addr[False](ctx, bw.bst.dw_down, dm * p[6], a[10])
     ctx.synchronize()
-
 
 
 def _transformer_run_session_backward(
@@ -1067,157 +1035,8 @@ def _transformer_run_session_backward(
         ctx.synchronize()
 
 
-
-# ===========================================================================
-# BACKWARD TIMING ENTRIES (lane ag-tm-timing, 2026-10-19). Measurement only:
-# tools/transformer_tape_arm_check.py --time N calls these to time the tape
-# backward (the hand arm, -D MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF, is deleted). The
-# inputs and weights are uploaded once before the first clock; each timed
-# call brackets only the launches (device sync before and after), so the
-# clock is kernel-only. Call 0 is the warm-up and
-# is returned like the rest; the caller drops it. Same kernels, same
-# launches, same order as `_transformer_run_session_backward` and
-# `_transformer_saved_backward`; no bits move.
-#
-# Return list: [autograd (always 1, tape), launches, t...]. `launches` is
-# the process-wide launch profile's total over the LAST timed call when
-# MOJOLEARN_AG_PROFILE is set (-1 otherwise); it counts the launches that go
-# through DeviceExec only (kernels enqueued on the context directly are not
-# counted).
-
-
-def _tm_profile_launches() raises -> Int:
-    var p = launch_profile_snapshot()
-    var total = 0
-    for i in range(len(p.ops)):  # driver-loop: over profiled operation codes
-        total += p.op_launches[i]
-    return total
-
-
-
-def _transformer_session_backward_time(
-    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
-    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int, calls: Int,
-) raises -> List[Int]:
-    """[autograd, launches, fwd_ns_0, bwd_ns_0, ..., fwd_ns_n, bwd_ns_n]:
-    calls + 1 forward-from-zero-cache + backward calls on device-resident
-    inputs; the last call's ten gradients go to a[11..20]."""
-    var dims = LlamaDims(dm, nh, nkv, hd, it)
-    dims.validate()
-    if window < 0:
-        raise Error("transformer backward time: window must be >= 0")
-    if calls < 1:
-        raise Error("transformer backward time: the call count must be >= 1")
-    var opts = BlockOptions()
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var m = b * l
-    if not session.ctx:
-        session.ctx = neural_ctx[_NEURAL_CTX]()
-        session.contexts += 1
-    var lean = transformer_lean_stages(hd)
-    _session_weights(session, dims, a, opts, List[Int]())
-    ref ctx = session.ctx.value()
-    ref w = session.weights.value()
-    var ws = TransformerWorkspace(ctx, dims, b, l, l, window, lean, opts)
-    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, window, lean)
-    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
-    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
-    ctx.synchronize()
-    var out = List[Int]()
-    # Slot 0 is always 1 (tape): the hand arm is deleted; the slot keeps the
-    # return shape tools/transformer_tape_arm_check.py reads.
-    out.append(1)
-    out.append(-1)
-    var prof = launch_profile_level() > 0
-    for k in range(calls + 1):  # driver-loop: over timed calls
-        # The per-call resets `_transformer_run_session_backward` does on a
-        # reused workspace, outside the clock.
-        ws.kv.k.enqueue_fill(Float32(0.0))
-        ws.kv.v.enqueue_fill(Float32(0.0))
-        ws.kv.s = 0
-        if k > 0 and _stage_reset_on():
-            ws.stages.reset(ctx)
-        ctx.synchronize()
-        if prof and k == calls:
-            launch_profile_reset()
-        var t0 = Int(perf_counter_ns())
-        var off = IdentityTrace.disabled()
-        llama_decoder_layer_forward(
-            ctx, ws.stages, ws.kv, ws.rope, w, ws.x, b, l, 0, off, String("pyf")
-        )
-        ctx.synchronize()
-        var t1 = Int(perf_counter_ns())
-        var offb = IdentityTrace.disabled()
-        # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
-        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-        llama_decoder_layer_backward_autograd(
-            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-            b, l, 0, offb, String("pyb"),
-        )
-        ctx.synchronize()
-        var t2 = Int(perf_counter_ns())
-        out.append(t1 - t0)
-        out.append(t2 - t1)
-        if prof and k == calls:
-            out[1] = _tm_profile_launches()
-    _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
-    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
-    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[13])
-    _download_addr[False](ctx, bw.bst.dw_q, qw * dm, a[14])
-    _download_addr[False](ctx, bw.bst.dw_k, kw * dm, a[15])
-    _download_addr[False](ctx, bw.bst.dw_v, kw * dm, a[16])
-    _download_addr[False](ctx, bw.bst.dw_o, dm * qw, a[17])
-    _download_addr[False](ctx, bw.bst.dw_gate, it * dm, a[18])
-    _download_addr[False](ctx, bw.bst.dw_up, it * dm, a[19])
-    _download_addr[False](ctx, bw.bst.dw_down, dm * it, a[20])
-    ctx.synchronize()
-    _ = ws^
-    _ = bw^
-    return out^
-
-
-
-def _transformer_saved_backward_timed(mut tape: TransformerForwardTape, a: List[Int]) raises -> Int:
-    """`_transformer_saved_backward` with dy uploaded and the backward
-    workspace built before the clock; returns the backward's nanoseconds
-    (device sync before and after)."""
-    ref p = tape.shape
-    var b = p[0]
-    var l = p[1]
-    var dm = p[2]
-    var dims = LlamaDims(dm, p[3], p[4], p[5], p[6])
-    ref session = tape.session
-    if not session.ctx or not session.workspace or not session.weights:
-        raise Error("transformer forward tape: saved owner is unavailable")
-    ref ctx = session.ctx.value()
-    ref ws = session.workspace.value()
-    ref w = session.weights.value()
-    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, p[7], transformer_lean_stages(p[5]))
-    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
-    var off = IdentityTrace.disabled()
-    var t0 = Int(perf_counter_ns())
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
-        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
-    ctx.synchronize()
-    var ns = Int(perf_counter_ns()) - t0
-    _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
-    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
-    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
-    _download_addr[False](ctx, bw.bst.dw_q, dims.q_width() * dm, a[4])
-    _download_addr[False](ctx, bw.bst.dw_k, dims.kv_width() * dm, a[5])
-    _download_addr[False](ctx, bw.bst.dw_v, dims.kv_width() * dm, a[6])
-    _download_addr[False](ctx, bw.bst.dw_o, dm * dims.q_width(), a[7])
-    _download_addr[False](ctx, bw.bst.dw_gate, p[6] * dm, a[8])
-    _download_addr[False](ctx, bw.bst.dw_up, p[6] * dm, a[9])
-    _download_addr[False](ctx, bw.bst.dw_down, dm * p[6], a[10])
-    ctx.synchronize()
-    _ = bw^
-    return ns
-
+# TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_transformer.patch
 
 
 # ===========================================================================
@@ -1243,19 +1062,16 @@ comptime INT15_ENTRY_ADDRS = 13 + BLOCK_OPTION_ADDRS + 21
 comptime INT15_ENTRY_PARAMS = 10 + BLOCK_OPTION_PARAMS
 
 
-
 def _upload_i8(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
     var dev = ctx.enqueue_create_buffer[DType.int8](n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=i8_ptr(addr))
     return dev^
 
 
-
 def _upload_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
     var dev = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=i32_ptr(addr))
     return dev^
-
 
 
 def _upload_planes_one(
@@ -1267,7 +1083,6 @@ def _upload_planes_one(
         _upload_i8(ctx, a[at], rows * cols), _upload_i8(ctx, a[at + 1], rows * cols),
         _upload_i32(ctx, a[at + 2], rows), rows, cols,
     )
-
 
 
 def _upload_planes(
@@ -1301,7 +1116,6 @@ def _upload_planes(
     ctx.synchronize()
     out.check_shapes(dm, qw, kw, it)
     return out^
-
 
 
 def _transformer_run_session_int15(
@@ -1399,7 +1213,6 @@ def _transformer_run_session_int15(
         session.workspace = None
         ctx.synchronize()
     return result
-
 
 
 def _transformer_run[discard_cache: Bool = False](
@@ -1529,7 +1342,6 @@ def _transformer_run[discard_cache: Bool = False](
     return out_len
 
 
-
 # ===========================================================================
 # The resident decode session (DEVIATION 2940, lane/infer-speed-neural,
 # 2026-09-17): device-owned weights, KV cache, rotary table and L = 1 stages
@@ -1638,7 +1450,6 @@ struct TransformerDecodeSession(Movable, Writable):
         self.release()
 
 
-
 def _require_session_open(s: TransformerDecodeSession) raises:
     if s.busy:
         raise Error("transformer decode session: busy")
@@ -1646,7 +1457,6 @@ def _require_session_open(s: TransformerDecodeSession) raises:
         raise Error("transformer decode session: not open (transformer_decode_session_open first)")
     if not s.usable:
         raise Error("transformer decode session: lost after a failed call; close it and open a new one")
-
 
 
 def _session_open_run(
@@ -1690,7 +1500,6 @@ def _session_open_run(
     s.smax = smax
     s.window = window
     return s0
-
 
 
 def _session_open_run_int15(
@@ -1766,7 +1575,6 @@ def _session_open_run_int15(
     return s0
 
 
-
 def _session_step_run(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
     """One decode token on the resident structs: x in, the block output
     out, the cache advanced on the device. ONE completion wait, after the
@@ -1784,7 +1592,6 @@ def _session_step_run(mut s: TransformerDecodeSession, px: Int, py: Int) raises 
     ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=s.stages.value().residual2)
     ctx.synchronize()
     return s.kv.value().s
-
 
 
 def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: Int) raises -> Int:
@@ -1807,7 +1614,6 @@ def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: I
     return s.kv.value().s
 
 
-
 def _session_export_run(mut s: TransformerDecodeSession, pk: Int, pv: Int) raises -> Int:
     ref ctx = s.ctx.value()
     var cap = s.smax
@@ -1817,7 +1623,6 @@ def _session_export_run(mut s: TransformerDecodeSession, pk: Int, pv: Int) raise
     _download_addr(ctx, s.kv.value().k, cache_n, pk)
     _download_addr(ctx, s.kv.value().v, cache_n, pv)
     return s.kv.value().s
-
 
 
 def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int) raises -> Int:
@@ -1834,7 +1639,6 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
     s.kv.value().v = _upload_addr(ctx, pv, cache_n)
     s.kv.value().s = s0
     return s0
-
 
 
 # ===========================================================================
@@ -1929,7 +1733,6 @@ struct CausalLMSession(Movable, Writable):
         self.release()
 
 
-
 def _lm_refuse_nonfinite_device(
     ctx: DeviceContext, name: String, mut buf: DeviceBuffer[DType.float32], n: Int,
 ) raises:
@@ -1940,12 +1743,10 @@ def _lm_refuse_nonfinite_device(
         raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(bad))
 
 
-
 comptime _LM_ARGMAX_TPB = 256
 """Threads per row of the greedy pick: one block per batch row."""
 
 comptime _LM_ARGMAX_NONE: Int32 = 2147483647
-
 
 
 @always_inline
@@ -1960,7 +1761,6 @@ def _lm_order_key(value: Float32) -> UInt32:
     if (bits & UInt32(0x80000000)) != UInt32(0):
         return ~bits
     return bits | UInt32(0x80000000)
-
 
 
 def _lm_last_argmax_kernel(
@@ -2020,7 +1820,6 @@ def _lm_last_argmax_kernel(
         out_ids.unsafe_store(r * Int(n_steps_in) + Int(step_in), best)
 
 
-
 def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
     if b < 1 or v < 1 or d < 1:
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
@@ -2044,7 +1843,6 @@ def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: I
     s.v = v
     s.d = d
     s.eps = eps
-
 
 
 def _lm_open_run_int15(
@@ -2079,7 +1877,6 @@ def _lm_open_run_int15(
     s.eps = eps
 
 
-
 def _lm_layers_run(
     ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
 ) raises:
@@ -2110,7 +1907,6 @@ def _lm_layers_run(
             ctx.synchronize()
             _ = stages^
             _ = dx^
-
 
 
 def _lm_run(
@@ -2188,7 +1984,6 @@ def _lm_run(
     _ = ids0^
     _ = next_ids^
     _ = out_dev^
-
 
 
 def _lm_forward_run(
