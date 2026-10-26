@@ -415,7 +415,8 @@ def _candidate_payload(requirement_id, wanted, report_path, identity, provenance
                    measured_pairs=None if selected_profile == gate_profiles.LIGHT else gate["measure"]["pairs"]["matched"],
                    autograd_artifacts=len(gate["autograd_artifacts"]["files"]))
     if gate.get("schema") == "mojolearn.release.component-gate.v1":
-        receipt["producer"] = dict(tool="tools/release_gate_reuse.py", report_type="retained-and-executed-components")
+        receipt["producer"] = dict(tool="tools/release_gate_reuse.py", report_type="execution",
+                                   execution_scope="retained-and-executed-components")
     return receipt
 
 
