@@ -18,8 +18,10 @@ name: Release Linux build
 #   plan      reads the SOURCE's own build lists (build_sets.sh) under the
 #             release `modes`: per-binding, each set's builds split into
 #             `shards` jobs by measured compile time; merged, ONE shard per
-#             merged compile (a merged file is one `mojo build`), each with
-#             the swap its recorded peak needs over the runner's 15 GiB
+#             merged compile (a merged file is one `mojo build`; each
+#             directory set holds several groups, bindings/merged_groups.json,
+#             sized to fit a runner), each with the swap its planning peak
+#             needs over the runner's 15 GiB
 #   shard     one slice of one set per ubuntu-24.04 runner (4 vCPU, 16 GB),
 #             `jobs` builds at a time; its compiled archives are its artifact
 #   assemble  one per set: every shard's archives in the hot directory, then
@@ -370,7 +372,8 @@ jobs:
         with:
           path: tooling
           persist-credentials: false
-      # one merged host compile: killed at the runner's 16 GB without swap (run 40272710760)
+      # the host groups compile one after another; the largest group's peak plans the swap
+      # (the single whole-set host compile was killed at 16 GB without swap, run 40272710760)
       - name: Swap (the host compile's recorded peak over the runner's RAM)
         env:
           SWAP_GIB: ${{ needs.plan.outputs.host_swap_gib }}

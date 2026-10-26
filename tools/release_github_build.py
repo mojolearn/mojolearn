@@ -34,8 +34,10 @@ and exit 0 only for a verified tree. A failure names the job.
 THE MERGED LAYOUT, ONE COMPILE PER JOB (2026-10-26; Andrew: compiling never
 uses paid rentals, GitHub's free runners build programmatically). A source
 whose packaging/linux/merged_layout.py says merged builds ONE compile per
-directory set (the identical tier, the host set; the fast tier when the
-release modes name it). A merged compile is one `mojo build` of one root:
+merged group of bindings/merged_groups.json (each directory set -- the
+identical tier, the host set, the fast tier when the release modes name it --
+holds several groups since 0.8.59, so each compile fits a free runner). A
+merged compile is one `mojo build` of one root:
 Mojo has no separate compilation of the members into objects that link into
 the same bytes, so a merged file cannot be split across jobs without becoming
 a different artifact. `plan` therefore gives every merged compile of a set its
@@ -196,6 +198,8 @@ PEAK_HEADROOM = 1.2
 #: THE PLANNING PEAK OF ONE MERGED COMPILE, GiB: the LARGEST RSS recorded for
 #: it on any box, so swap is never sized from the smallest. Unused swap costs
 #: nothing; a compile killed for memory costs the run.
+#: WHOLE_DIR_PEAK_GIB below is what ONE compile of a whole directory set
+#: recorded before the 0.8.59 split (one group per directory):
 #:   identical, cuda  0.8.57 cpu box (c00c4d800, 2 compiler workers): sm_89
 #:                    48.59, sm_80 48.12 (the set's build-group peak, guard);
 #:                    2026-10-26 one sm_89 identical set ~17 GB
@@ -211,18 +215,50 @@ PEAK_HEADROOM = 1.2
 #:                    the whole time (the swap use was not sampled then; the
 #:                    sampler records memory.swap.current since).
 #:                    Older: DO MI325X 2026-10-20, 6.9 GB.
-#: Each shard records its own peak (GHA/memory.txt): raise a row when a run
-#: records more, never lower one below a recorded value.
-UNIT_PEAK_GIB = {
+#:                    The 46-member host compile then passed 40 GB (0.8.59
+#:                    run 40319501896, sm_89 host shard, > 5700 s on swap).
+WHOLE_DIR_PEAK_GIB = {
     ("identical", "cuda"): 49, ("identical", "hip"): 48,
     ("fast", "cuda"): 37, ("fast", "hip"): 37,
     ("host", "cuda"): 48, ("host", "hip"): 48,
 }
+#: THE PLANNING PEAK PER MERGED GROUP (0.8.59 split), GiB, keyed
+#: (tier, group stem, vendor). Estimated, not yet recorded on a runner: the
+#: directory's whole-set peak above times the group's share of its members'
+#: own peaks (per-member development builds, one group per member,
+#: ~/mojolearn-evidence/dev-cache-mac/peaks 2026-10-26; the whole host set's
+#: members sum to 40.5 GB there, matching the >40 GB merged host compile),
+#: rounded up:
+#:   device  _mojolearn_native 15.27 of 58.45 GB (identical; fast 56.02, no
+#:           byte LM), _trees 14.52, _sequence 15.20 with the byte LM (12.77
+#:           without), _cluster 13.46
+#:   host    _mojolearn_native_host 8.77 of 40.51, _tokenizer_host 7.06,
+#:           _neural_host 7.95, _forest_host 8.66, _x_host 8.07
+#: Each shard records its own peak (GHA/memory.txt): raise a row when a run
+#: records more, never lower one below a recorded value. A group not named
+#: here plans at its directory's whole-set peak.
+UNIT_PEAK_GIB = {
+    ("identical", "_mojolearn_native", "cuda"): 13, ("identical", "_mojolearn_native", "hip"): 13,
+    ("identical", "_mojolearn_native_trees", "cuda"): 13, ("identical", "_mojolearn_native_trees", "hip"): 12,
+    ("identical", "_mojolearn_native_sequence", "cuda"): 13, ("identical", "_mojolearn_native_sequence", "hip"): 13,
+    ("identical", "_mojolearn_native_cluster", "cuda"): 12, ("identical", "_mojolearn_native_cluster", "hip"): 12,
+    ("fast", "_mojolearn_native", "cuda"): 11, ("fast", "_mojolearn_native", "hip"): 11,
+    ("fast", "_mojolearn_native_trees", "cuda"): 10, ("fast", "_mojolearn_native_trees", "hip"): 10,
+    ("fast", "_mojolearn_native_sequence", "cuda"): 9, ("fast", "_mojolearn_native_sequence", "hip"): 9,
+    ("fast", "_mojolearn_native_cluster", "cuda"): 9, ("fast", "_mojolearn_native_cluster", "hip"): 9,
+    ("host", "_mojolearn_native_host", "cuda"): 11, ("host", "_mojolearn_native_host", "hip"): 11,
+    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 9, ("host", "_mojolearn_native_tokenizer_host", "hip"): 9,
+    ("host", "_mojolearn_native_neural_host", "cuda"): 10, ("host", "_mojolearn_native_neural_host", "hip"): 10,
+    ("host", "_mojolearn_native_forest_host", "cuda"): 11, ("host", "_mojolearn_native_forest_host", "hip"): 11,
+    ("host", "_mojolearn_native_x_host", "cuda"): 10, ("host", "_mojolearn_native_x_host", "hip"): 10,
+}
 #: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
 PER_BINDING_PEAK_GIB = 6
-#: The host producer's one compile (tools/release_host_build.py, the merged host):
-#: the host row of UNIT_PEAK_GIB (run 40272710760 was killed at 16 GB without swap).
-HOST_PRODUCER_PEAK_GIB = UNIT_PEAK_GIB[("host", "cuda")]
+#: The host producer (tools/release_host_build.py) compiles the host groups one
+#: after another (bindings/merged_build.sh host), so its peak is the largest
+#: host group's (the single whole-set compile was killed at 16 GB without swap,
+#: run 40272710760).
+HOST_PRODUCER_PEAK_GIB = max(v for (t, _g, _v), v in UNIT_PEAK_GIB.items() if t == "host")
 #: Measured seconds of one merged compile on the 16-vCPU RunPod cpu box (0.8.57,
 #: c00c4d800, full46-build.log start/built lines), for `estimate` only.
 UNIT_SECONDS_CPU_BOX = {
@@ -235,9 +271,13 @@ UNIT_SECONDS_CPU_BOX = {
 JOB_OVERHEAD_SECONDS = 260
 ASSEMBLE_ROUTE_SECONDS = 240
 CPU_BOX_VCPU, RUNNER_VCPU = 16, 4
-#: Seconds measured ON a free runner, which replace the scaled cpu-box figure:
-#: the merged host compile paging to swap (run 40275379578, 78af017e2).
-UNIT_SECONDS_RUNNER = {("host", "cuda"): 5275, ("host", "hip"): 5275}
+#: Seconds measured ON a free runner, which replace the scaled cpu-box figure
+#: for a whole-set compile; a group's figure is its directory's times its share
+#: of the directory's members (unit_seconds). Empty since the 0.8.59 split: the
+#: one row it held, the whole merged host compile paging to swap (5275 s, run
+#: 40275379578, 78af017e2), measured paging that a group that fits the runner
+#: does not do.
+UNIT_SECONDS_RUNNER = {}
 
 
 def unit_tier(entry):
@@ -245,10 +285,25 @@ def unit_tier(entry):
     return entry.split(":")[0]
 
 
+def is_merged(entry):
+    """Whether a pool entry is a merged compile: "<tier>:merged_build.sh[:<group>]"."""
+    return entry.split(":")[1:2] == ["merged_build.sh"]
+
+
+def unit_group(entry):
+    """The merged group stem a pool entry compiles, or None."""
+    parts = entry.split(":")
+    return parts[2] if is_merged(entry) and len(parts) > 2 else None
+
+
 def unit_peak_gib(entry, vendor, merged):
     if not merged:
         return PER_BINDING_PEAK_GIB
-    return UNIT_PEAK_GIB.get((unit_tier(entry), vendor), max(UNIT_PEAK_GIB.values()))
+    tier = unit_tier(entry)
+    row = UNIT_PEAK_GIB.get((tier, unit_group(entry), vendor))
+    if row is not None:
+        return row
+    return WHOLE_DIR_PEAK_GIB.get((tier, vendor), max(WHOLE_DIR_PEAK_GIB.values()))
 
 
 def swap_gib(peak_gib):
@@ -265,7 +320,8 @@ def unit_refusal(entry, vendor, need):
 
 
 def unit_slug(entry):
-    """A cache-key-safe name for a pool entry ("identical:merged_build.sh" -> "identical-merged_build")."""
+    """A cache-key-safe name for a pool entry ("identical:merged_build.sh:_mojolearn_native" ->
+    "identical-merged_build-_mojolearn_native")."""
     return re.sub(r"[^A-Za-z0-9_.-]", "-", entry.replace(".sh", ""))
 
 
@@ -312,10 +368,12 @@ def plan_set(src, modes=None):
     release's MOJOLEARN_PACKAGE_BYTE_LM=1, over its tiers (MODES, the release
     modes the box is given, else build_sets.sh's own default). Returns
     dict(builds=[(entry, is_host)], per_binding=[(entry, is_host)],
-    merged=bool, weights={entry: w}, members={entry: n}). `builds` is exactly
-    what pool_jobs() runs: the per-binding scripts, or (merged) one
-    "<tier>:merged_build.sh" per tier plus "host:merged_build.sh" riding the
-    identical pass; a merged build's weight is its members' per-binding weights."""
+    merged=bool, weights={entry: w}, members={entry: n}, shares={entry: f}).
+    `builds` is exactly what pool_jobs() runs: the per-binding scripts, or
+    (merged) one "<tier>:merged_build.sh:<group>" per group of the source's
+    bindings/merged_groups.json, the host groups riding the identical pass; a
+    merged build's weight is its members' per-binding weights and its share
+    the fraction of its directory's members it compiles."""
     text = (Path(src) / "packaging/linux/build_sets.sh").read_text()
     m = re.search(r"^SCRIPTS=.*?^host_so\(\)", text, re.M | re.S)
     if not m:
@@ -345,22 +403,56 @@ def plan_set(src, modes=None):
         if len(rows) != len(set(rows)):
             raise SystemExit("plan: a build appears twice in one set")
     is_host = lambda e: e.endswith("_host.sh") or e.startswith("host:")
-    if merged != any(e.endswith(":merged_build.sh") for e in jobs):
+    if merged != any(is_merged(e) for e in jobs):
         raise SystemExit(f"plan: merged_layout.py says {'merged' if merged else 'per-binding'} but pool_jobs() "
                          f"runs {' '.join(jobs)[:200]}")
     pw = lambda e: WEIGHTS.get(e, DEFAULT_HOST_WEIGHT if is_host(e) else DEFAULT_GPU_WEIGHT)
-    weights, members = {}, {}
+    weights, members, shares = {}, {}, {}
+    groups = {}
     for e in jobs:
-        if e.endswith(":merged_build.sh"):
-            tier = e.split(":")[0]
+        if is_merged(e):
+            tier, group = unit_tier(e), unit_group(e)
+            if group is None:
+                raise SystemExit(f"plan: the merged pool job {e} names no group (<tier>:merged_build.sh:<group>)")
+            if tier not in groups:
+                groups[tier] = source_groups(src, tier)
+            names = groups[tier].get(group)
+            if not names:
+                raise SystemExit(f"plan: the merged {tier} group {group} is not in the source's plan")
             mine = [p for p in per if (is_host(p) if tier == "host" else (not is_host(p) and p.split(":")[0] == tier))]
             if not mine:
                 raise SystemExit(f"plan: the merged {tier} build has no member in the per-binding lists")
-            weights[e], members[e] = sum(pw(p) for p in mine), len(mine)
+            scripts = {member_entry(tier, n) for n in names}
+            weights[e] = sum(pw(p) for p in mine if p in scripts) or pw(e)
+            members[e] = len(names)
+            shares[e] = len(names) / sum(len(v) for v in groups[tier].values())
         else:
-            weights[e], members[e] = pw(e), 1
+            weights[e], members[e], shares[e] = pw(e), 1, 1.0
     return dict(builds=[(e, is_host(e)) for e in jobs], per_binding=[(e, is_host(e)) for e in per],
-                merged=merged, weights=weights, members=members)
+                merged=merged, weights=weights, members=members, shares=shares)
+
+
+def source_groups(src, tier):
+    """{group stem: [members]} the SOURCE's tools/merged_bindings.py plans for
+    one directory set on Linux with the byte LM (the planner's environment)."""
+    r = subprocess.run([sys.executable, "tools/merged_bindings.py", "plan", "--dir", tier, "--platform", "linux",
+                        "--byte-lm", "1"], cwd=src, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"plan: the source's merged plan for {tier} failed: " + r.stderr.strip()[-300:])
+    out = {}
+    for line in r.stdout.splitlines():
+        cells = line.split()
+        if len(cells) == 3:
+            out[cells[0]] = [n for n in cells[2].split(",") if n]
+    return out
+
+
+def member_entry(tier, name):
+    """The per-binding pool entry of a merged member ("identical:build_gbdt.sh",
+    "identical:build_core_host.sh" for a host member: the host scripts build
+    under the identical numeric mode)."""
+    script = "build.sh" if name == "_mojolearn" else "build_" + name[len("_mojolearn_"):] + ".sh"
+    return ("identical" if tier == "host" else tier) + ":" + script
 
 
 def set_builds(src):
@@ -399,38 +491,44 @@ def split(builds, shards, weights=None):
 
 
 #: Upload-slot jobs per set the Mac mints at least (a merged set plans one
-#: shard per compile, at most identical + fast + host, plus the assemble job).
-MERGED_JOBS_PER_SET = 5
+#: shard per compile: the identical, fast and host groups, the adapters, plus
+#: the assemble job; 4 + 4 + 5 + 1 + 1 at the 0.8.59 split, with room to add
+#: a group). The plan refuses a source that needs more (build_plan).
+MERGED_JOBS_PER_SET = 18
 
 
-def unit_seconds(entry, vendor, merged):
+def unit_seconds(entry, vendor, merged, share=1.0):
     """Estimated compile seconds of one shard entry on a free runner: the cpu
-    box's measured seconds, scaled by the compiler workers the runner's 4 vCPU
+    box's measured seconds of the whole directory set, times the group's
+    `share` of its members, scaled by the compiler workers the runner's 4 vCPU
     cannot run at once (AMD GPU tiers: 8 workers; everything else 2, which a
     runner runs at full width). No swap penalty is modelled: a lower bound."""
     if not merged:
         return WEIGHTS.get(entry, DEFAULT_GPU_WEIGHT)
     tier = unit_tier(entry)
     if (tier, vendor) in UNIT_SECONDS_RUNNER:
-        return UNIT_SECONDS_RUNNER[(tier, vendor)]
+        return int(UNIT_SECONDS_RUNNER[(tier, vendor)] * share)
     base = UNIT_SECONDS_CPU_BOX.get((tier, vendor), max(UNIT_SECONDS_CPU_BOX.values()))
     workers = 8 if vendor == "hip" and tier in ("identical", "fast") else 2
-    return int(base * min(workers, CPU_BOX_VCPU) / min(workers, RUNNER_VCPU))
+    return int(base * share * min(workers, CPU_BOX_VCPU) / min(workers, RUNNER_VCPU))
 
 
-def estimate(include, merged, sets, host, host_donor=False):
+def estimate(include, merged, sets, host, host_donor=False, shares=None):
     """{arch: dict(jobs, wall_s, runner_s)} and the run's totals, from the plan's rows."""
     out, adapters = {}, lambda v: UNIT_SECONDS_CPU_BOX[("adapters", v)]
+    shares = shares or {}
     for arch in sets:
         vendor = ARCHS[arch]
         rows = [r for r in include if r["arch"] == arch]
-        shard_s = [JOB_OVERHEAD_SECONDS + sum(unit_seconds(e, vendor, merged) for e in r["only"].split())
+        shard_s = [JOB_OVERHEAD_SECONDS + sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
+                                              for e in r["only"].split())
                    // (1 if merged else 2) + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
         asm = JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
         out[arch] = dict(jobs=len(rows) + 1, wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
                          swap_gib=max([r["swap_gib"] for r in rows] or [0]))
     if host:
-        h = JOB_OVERHEAD_SECONDS + UNIT_SECONDS_RUNNER[("host", "cuda")] + ASSEMBLE_ROUTE_SECONDS
+        # the producer compiles the host groups one after another: the whole set's seconds
+        h = JOB_OVERHEAD_SECONDS + unit_seconds("host:merged_build.sh", "cuda", True) + ASSEMBLE_ROUTE_SECONDS
         # the donor is an uploaded build, else this run's first device set (its assemble job)
         donor_wall = out[sets[0]]["wall_s"] if sets and not host_donor else 0
         out["host"] = dict(jobs=1, wall_s=donor_wall + h, runner_s=h, swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB))
@@ -452,18 +550,21 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False):
     if host and not sets and not host_donor:
         raise SystemExit("plan: the host producer needs a donor runtime build: a device set in the same run "
                          "or host_donor_url (tools/release_github_build.py run --host --host-donor DIR)")
-    include, merged, nbuilds, members = [], None, 0, {}
+    include, merged, nbuilds, members, shares = [], None, 0, {}, {}
     jobs_per_set = shards + 1
     if sets:
         ps = plan_set(src, modes)
-        builds, merged, members = ps["builds"], ps["merged"], ps["members"]
+        builds, merged, members, shares = ps["builds"], ps["merged"], ps["members"], ps["shares"]
         nbuilds = len(builds)
         # the verifier's bindings are the per-binding members, in either layout
         check_counts(src, ps["per_binding"], modes)
         if merged:
             # ONE merged compile per shard: a merged file is one `mojo build` and cannot be split
             shards = len(builds)
-            jobs_per_set = max(shards + 1, MERGED_JOBS_PER_SET)
+            if shards + 1 > MERGED_JOBS_PER_SET:
+                raise SystemExit(f"plan: {shards} merged compiles per set need {shards + 1} upload-slot jobs, more "
+                                 f"than the {MERGED_JOBS_PER_SET} the Mac mints (MERGED_JOBS_PER_SET)")
+            jobs_per_set = MERGED_JOBS_PER_SET
         for si, arch in enumerate(sets):
             vendor = ARCHS[arch]
             for sh in split(builds, shards, ps["weights"]):
@@ -476,7 +577,7 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False):
                     raise SystemExit("plan: " + unit_refusal(sh["only"], vendor, sw + RUNNER_RAM_GIB))
                 include.append(dict(arch=arch, vendor=vendor, set_index=si, swap_gib=sw, peak_gib=peak,
                                     unit=unit_slug(sh["only"]) if merged else f"shard{sh['shard']}", **sh))
-    per_set, total = estimate(include, bool(merged), sets, host, host_donor)
+    per_set, total = estimate(include, bool(merged), sets, host, host_donor, shares)
     return dict(matrix=dict(include=include), sets=sets, host=host, builds=nbuilds, shards=shards,
                 jobs_per_set=jobs_per_set, modes=list(modes or []),
                 layout=None if merged is None else ("merged" if merged else "per-binding"), members=members,
