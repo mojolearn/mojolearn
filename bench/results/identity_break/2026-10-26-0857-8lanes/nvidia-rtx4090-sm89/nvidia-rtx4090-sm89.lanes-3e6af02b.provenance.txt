@@ -1,0 +1,9 @@
+commit=439199dcddf58ca68fe7c7ed2078da0a7a864326
+label=nvidia-rtx4090-sm89
+backend=cuda
+scope=routine shard= lanes_override=yes
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-138-generic x86_64 6dacd702d5e6
+date=2026-10-25T21:49:49Z
+dirty_tracked=none
+record_sha256=084a76a7624ccc43ee8576b24f4c1e3266efc9e11e87c03bcdbb76153186cb4f
