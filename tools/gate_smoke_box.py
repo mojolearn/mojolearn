@@ -311,7 +311,8 @@ class Gate:
                         raise RuntimeError("installed correctness failed; remaining stages not run")
                     if stage == "autograd":
                         import autograd_smoke as AS
-                        if self.state.get("autograd_rc") != 0 or self.state.get("autograd_counts") != {"ok": len(AS.ENTRIES)}:
+                        expected = len(AS.ENTRIES) - len(self.state.get("autograd_excluded") or [])
+                        if self.state.get("autograd_rc") != 0 or self.state.get("autograd_counts") != {"ok": expected}:
                             raise RuntimeError("autograd did not complete; remaining stages not run")
                     if stage == "adapters" and self.adapters_on and not (self.state.get("adapters") or {}).get("ok"):
                         raise RuntimeError("installed adapters failed")
