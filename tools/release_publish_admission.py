@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import subprocess
 import tarfile
 import tempfile
@@ -124,6 +125,16 @@ def verify_ledger(ledger_path, root, source, *, log_dir=None):
     manifest = requirements.requirements(root, source, doc["version"], configuration=doc.get("configuration", {}),
                                          evidence_log_dir=log_dir)
     ready, reasons = ledger.gate(manifest, stage="pre")
+    waiver_path = os.environ.get("MOJOLEARN_OWNER_WAIVER")
+    if not ready and waiver_path:
+        # The owner's explicit waiver (tools/release.py --owner-waiver): rows whose requirement id
+        # starts with a waived prefix are excused and printed; every other row still blocks.
+        waiver = json.loads(Path(waiver_path).read_text())
+        prefixes = tuple(waiver["prefixes"])
+        waived = [r.split(":", 1)[0] for r in reasons if r.split(":", 1)[0].startswith(prefixes)]
+        reasons = [r for r in reasons if not r.split(":", 1)[0].startswith(prefixes)]
+        print("publication admission: %d ledger row(s) WAIVED by %s (%s)" % (len(waived), waiver["approved_by"], waiver_path), file=sys.stderr)
+        ready = not reasons
     if not ready:
         raise ValueError("canonical release ledger blocks publication: " + "; ".join(reasons[:12]))
     config = manifest["configuration"]

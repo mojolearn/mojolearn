@@ -88,6 +88,12 @@ def gate_verdict(state):
     return ("FAIL" if why else "PASS"), why
 
 
+#: autograd smoke entries that exercise the Torch framework interop (adapter scope)
+TORCH_INTEROP = ("import-torch-smoke", "real-model-smoke")
+#: pytest -k expression deselecting the torchvision interop tests inside native autograd entries
+TORCH_INTEROP_TESTS = "not test_guide_import_pretrained"
+
+
 def light_verdict(state):
     why = []
     for stage in P.LIGHT_STAGES:
@@ -99,7 +105,8 @@ def light_verdict(state):
     if state.get("correctness_rc") != 0:
         why.append("installed correctness process failed")
     import autograd_smoke as AS
-    if state.get("autograd_rc") != 0 or state.get("autograd_counts") != {"ok": len(AS.ENTRIES)}:
+    expected = len(AS.ENTRIES) - len(state.get("autograd_excluded") or [])
+    if state.get("autograd_rc") != 0 or state.get("autograd_counts") != {"ok": expected}:
         why.append("autograd requires every registry entry to complete; timeout/STARTED is not a pass")
     adapters = state.get("adapters") or {}
     import adapter_gate as AG
@@ -304,7 +311,8 @@ class Gate:
                         raise RuntimeError("installed correctness failed; remaining stages not run")
                     if stage == "autograd":
                         import autograd_smoke as AS
-                        if self.state.get("autograd_rc") != 0 or self.state.get("autograd_counts") != {"ok": len(AS.ENTRIES)}:
+                        expected = len(AS.ENTRIES) - len(self.state.get("autograd_excluded") or [])
+                        if self.state.get("autograd_rc") != 0 or self.state.get("autograd_counts") != {"ok": expected}:
                             raise RuntimeError("autograd did not complete; remaining stages not run")
                     if stage == "adapters" and self.adapters_on and not (self.state.get("adapters") or {}).get("ok"):
                         raise RuntimeError("installed adapters failed")
@@ -342,11 +350,21 @@ class Gate:
     def autograd(self):
         self.amd_env()
         import autograd_smoke as AS
+        # The executables link the Mojo runtime by name; the gate runs them against the
+        # installed wheel's own runtime (mojolearn/.libs), never a build box's toolchain.
+        libs = glob.glob(str(self.root / "venv/lib/python*/site-packages/mojolearn/.libs"))
+        os.environ["LD_LIBRARY_PATH"] = ":".join(libs + [p for p in os.environ.get("LD_LIBRARY_PATH", "").split(":") if p])
+        # --no-adapters: the Torch interop entries belong to the framework adapters
+        # (Andrew 2026-10-25: 0.8.57 ships with adapters off); they are recorded as not run.
+        excluded = [] if self.adapters_on else [e["name"] for e in AS.ENTRIES if e["name"] in TORCH_INTEROP]
+        if not self.adapters_on:
+            os.environ["MOJOLEARN_GATE_DESELECT_K"] = TORCH_INTEROP_TESTS
         report = self.root / "autograd-smoke.json"
-        self.mark(phase="autograd", status="running", autograd_started=time.time(), autograd_finished=None)
+        self.mark(phase="autograd", status="running", autograd_started=time.time(), autograd_finished=None,
+                  autograd_excluded=excluded)
         arc = AS.run(self.vendor, str(self.root / "autograd-bin"), self.state["python"], str(report),
                      timeout=P.AUTOGRAD_TIMEOUT_SECONDS if self.profile == P.LIGHT else AS.TIMEOUT_S,
-                     deadline=self.deadline)
+                     deadline=self.deadline, entries=[e["name"] for e in AS.ENTRIES if e["name"] not in excluded])
         doc = json.loads(report.read_text()) if report.exists() else {}
         self.mark(phase="autograd", status="done", autograd_rc=arc, autograd_report=str(report),
                   autograd_counts=doc.get("counts"), autograd_finished=time.time())

@@ -174,3 +174,16 @@ def test_import_installed_entries_name_their_lanes():
         st, lanes, why = audit_tool.triage(_native_row(entry, src=src, py_files=1))
         assert st == "covered" and lanes and why, (entry, src)
     assert "public-set-params" in audit_tool.NEW_LANES
+
+
+def test_dead_and_probe_entries_read_sabotage_na():
+    # lane coverage-sabotage-arms-20261025: the 0.8.57 owed sabotage rows, each without a live caller
+    for entry in ("adam_hyper_f64", "lr_schedule_fill", "byte_lm_launch_probe", "forest_host_gbdt_sigmoid",
+                  "gbdt_sigmoid", "gp_log64", "km_rbf_staged", "x_decomp_knn_select", "x_decomp_mcd_cov_reach",
+                  "x_neighbors_purity_flags", "sched_exp_block"):
+        st, why = audit_tool.sabotage_of(_row(entry, changed_kernel=["core/x.mojo:k"], n_changed=1))
+        assert st == "n/a" and why, entry
+    # a reaching arm still wins over the table (the armed device gbdt_sigmoid twin)
+    st, _ = audit_tool.sabotage_of(_row("gbdt_sigmoid", changed_kernel=["core/x.mojo:k"], n_changed=1,
+                                        sabotage_patches=["gbdt/checks/sabotage/coverage_binary_prediction.patch"]))
+    assert st == "armed"

@@ -478,7 +478,11 @@ def python_entry(entry, vendor, binding_report, junit, source_package=None):
     if "probe" in entry:
         return PROBES[entry["probe"]]()
     import pytest
+    # MOJOLEARN_GATE_DESELECT_K: the release gate with adapters off deselects the Torch
+    # interop tests (torchvision models) by name; deselected tests are not counted.
+    deselect = os.environ.get("MOJOLEARN_GATE_DESELECT_K")
     return int(pytest.main(["-q", "-s", "-x", "-p", "no:cacheprovider", "--import-mode=importlib",
+                           *(["-k", deselect] if deselect else []),
                            "--junitxml=" + str(junit), str(ROOT / entry["pytest"])]))
 
 

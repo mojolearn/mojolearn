@@ -69,10 +69,18 @@ def connect(classes, context, archive_context, groups):
     return call, private
 
 
-def connect_host(classes, host_names):
+def connect_host(classes, host_names, host_archive):
     from ._native_classical_bridge import _layout
+    # Each explicit CPU class carries the host archive's native finalizer in
+    # place of its GPU base's (`_native_host_archive_bridge.connect`). The
+    # shared query context admits it as the connected peer of the public
+    # lifetime descriptor; without it every query and attribute read on a
+    # loaded host model was refused as a Python finalizer hook.
+    peer = host_archive.get("host_archive_finalizer_descriptor")
     for host, base in classes.items():  # glue: fixed supported saved-model classes
         context = _CONTEXTS[base]
+        if peer is not None:
+            context["host_archive_peer_finalizer_descriptor"] = peer
         kind = context["neighbor_query_classes"][base][0]
         groups = ("ivf",) if kind == "ivf" else ("base", "sort")
         context["neighbor_query_host_routes"].update(_routes(groups, host_names))

@@ -286,8 +286,14 @@ def candidate_gate_errors(gate, identity):
                 or gate.get("smoke_lines") != sum((counts or {}).values())):
             errors.append("whole-plan smoke lacks complete successful startup counts")
     counts = gate.get("autograd_counts")
+    # Adapters off (owner scope, 0.8.57): only the Torch interop entries may be excluded.
+    import gate_smoke_box
+    excluded = gate.get("autograd_excluded") or []
+    adapters_off = gate.get("adapters_enabled") is False
+    if excluded and not (adapters_off and set(excluded) == set(gate_smoke_box.TORCH_INTEROP)):
+        errors.append("autograd exclusions are only the Torch interop entries with adapters off")
     if (not _counts(counts, {"ok"}) or type(gate.get("autograd_rc")) is not int or gate.get("autograd_rc") != 0
-            or sum(counts.values()) != len(autograd_smoke.ENTRIES)):
+            or sum(counts.values()) != len(autograd_smoke.ENTRIES) - len(excluded)):
         errors.append("autograd execution does not cover the full producer registry")
     artifacts = gate.get("autograd_artifacts") or {}
     try:
@@ -305,11 +311,14 @@ def candidate_gate_errors(gate, identity):
         errors.append("autograd artifact manifest is incomplete")
     adapters = gate.get("adapters") or {}
     phases = adapters.get("phases") or {}
-    if (gate.get("adapters_enabled") is not True or adapters.get("ok") is not True
+    if adapter_gate.enabled():
+      if (gate.get("adapters_enabled") is not True or adapters.get("ok") is not True
             or adapters.get("status") != "PASSED" or type(adapters.get("rc")) is not int or adapters.get("rc") != 0
             or not isinstance(phases, dict) or set(phases) != set(adapter_gate.PHASES)
             or any(type(code) is not int or code != 0 for code in phases.values())):
         errors.append("candidate adapters require every actual installed-wheel phase")
+    elif not adapters_off:
+        errors.append("MOJOLEARN_RELEASE_ADAPTERS=0 requires a gate that ran with adapters disabled")
     if not light:
         measure = gate.get("measure") or {}
         expected = measure.get("planned_whole_plan")

@@ -49,7 +49,8 @@ PINS = json.loads((HERE / "pins.json").read_text())
 
 def test_pyproject_extras_are_the_pins():
     extras = tomllib.loads((REPO / "python/pyproject.toml").read_text())["project"]["optional-dependencies"]
-    assert extras["torch"] == [PINS["torch"]["requirement"]]
+    # The torch extra is the pinned Torch plus torch.onnx's export dependencies.
+    assert extras["torch"] == [PINS["torch"]["requirement"], "onnx>=1.18", "onnxscript>=0.5"]
     assert extras["max"] == [PINS["max"]["requirement"]]
     assert PINS["max"]["requirement"] == "max==" + PINS["max"]["version"]
 

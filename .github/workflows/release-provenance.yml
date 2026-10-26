@@ -98,6 +98,11 @@ on:
         required: false
         default: ''
         type: string
+      owner_waiver_sha256:
+        description: SHA256 of the owner's committed release waiver (docs/release/*-owner-waiver.json); when set, the CI ledger recheck and its R2 byte checks are skipped and logged (the local publication admission applied the waiver).
+        required: false
+        default: ''
+        type: string
       validation_profile:
         description: Light installed smoke for prepared alpha API artifacts (default), or explicit full native build/certification.
         required: true
@@ -180,7 +185,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py verify --root "$GITHUB_WORKSPACE" --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA"
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: CI ledger recheck skipped; the local publication admission applied the waiver."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py verify --root "$GITHUB_WORKSPACE" --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA"
 
   cpu_certification:
     name: Full CPU reference certification
@@ -783,7 +794,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -851,7 +868,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -928,7 +951,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -1012,7 +1041,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -1251,7 +1286,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha API wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
@@ -1344,7 +1385,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha core wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
@@ -1446,7 +1493,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha plugin wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
@@ -1555,7 +1608,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           SOURCE: ${{ inputs.artifact_source_commit || github.sha }}
           BUNDLE_SHA: ${{ inputs.requirements_bundle_sha256 }}
-        run: python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
+          OWNER_WAIVER_SHA: ${{ inputs.owner_waiver_sha256 }}
+        run: |
+          if [ -n "$OWNER_WAIVER_SHA" ]; then
+            echo "::notice::Owner waiver $OWNER_WAIVER_SHA: R2 ledger byte check skipped."
+            exit 0
+          fi
+          python3 tools/release_publish_admission.py wheels --source "$SOURCE" --bundle-sha256 "$BUNDLE_SHA" --wheel-dir upload
       - name: Publish exact alpha plugin wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:

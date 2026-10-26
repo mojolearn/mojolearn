@@ -1,0 +1,5185 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "439199dcddf58ca68fe7c7ed2078da0a7a864326",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "hf-checkpoint/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "01d49c671157e241"
+   ],
+   "parts": [
+    {
+     "dtypes": "34fd62b658dd1584",
+     "bits": "908f930834fbeb02",
+     "sharded": "34fd62b658dd1584",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.05666925001423806,
+    "stages": {
+     "repeat=1/train": 0.05635141604579985,
+     "repeat=1/infer-save-reload": 1.5625031664967537e-05,
+     "repeat=1/batch": 4.595902282744646e-05,
+     "repeat=1/batchgrad": 3.1542032957077026e-05,
+     "repeat=1/batchscale": 2.791709266602993e-05,
+     "repeat=1/ragged": 2.9209069907665253e-05,
+     "repeat=1/stepfull": 2.920802216976881e-05
+    }
+   }
+  },
+  "hf-checkpoint/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c36aaef1cd4b623"
+   ],
+   "parts": [
+    {
+     "dtypes": "ebfa325797547fe3",
+     "bits": "db2cd78588bdf1ce",
+     "sharded": "ebfa325797547fe3",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04500304092653096,
+    "stages": {
+     "repeat=1/train": 0.04469595802947879,
+     "repeat=1/infer-save-reload": 1.0792049579322338e-05,
+     "repeat=1/batch": 8.983304724097252e-05,
+     "repeat=1/batchgrad": 2.5999965146183968e-05,
+     "repeat=1/batchscale": 2.345908433198929e-05,
+     "repeat=1/ragged": 2.287491224706173e-05,
+     "repeat=1/stepfull": 2.258399035781622e-05
+    }
+   }
+  },
+  "hf-checkpoint/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "37b7f90586939a5e"
+   ],
+   "parts": [
+    {
+     "dtypes": "a540b4407a7e31d1",
+     "bits": "0d9947644aac090a",
+     "sharded": "a540b4407a7e31d1",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0651067920261994,
+    "stages": {
+     "repeat=1/train": 0.06479345902334899,
+     "repeat=1/infer-save-reload": 1.0999967344105244e-05,
+     "repeat=1/batch": 8.320808410644531e-05,
+     "repeat=1/batchgrad": 2.6124995201826096e-05,
+     "repeat=1/batchscale": 2.3250002413988113e-05,
+     "repeat=1/ragged": 2.3415894247591496e-05,
+     "repeat=1/stepfull": 2.420798409730196e-05
+    }
+   }
+  },
+  "hf-checkpoint/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1d1825212c9ebf1d"
+   ],
+   "parts": [
+    {
+     "dtypes": "9d8930104518d88e",
+     "bits": "985ccfb0506e60cb",
+     "sharded": "9d8930104518d88e",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04907354200258851,
+    "stages": {
+     "repeat=1/train": 0.048738791956566274,
+     "repeat=1/infer-save-reload": 1.0082963854074478e-05,
+     "repeat=1/batch": 0.0001093749888241291,
+     "repeat=1/batchgrad": 3.012490924447775e-05,
+     "repeat=1/batchscale": 2.4333014152944088e-05,
+     "repeat=1/ragged": 2.379098441451788e-05,
+     "repeat=1/stepfull": 2.3208907805383205e-05
+    }
+   }
+  },
+  "hf-checkpoint/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f852904c5f81ea8"
+   ],
+   "parts": [
+    {
+     "dtypes": "3e6ed351e5b04ecc",
+     "bits": "f14b3e05698f89fb",
+     "sharded": "3e6ed351e5b04ecc",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.045800166903063655,
+    "stages": {
+     "repeat=1/train": 0.04558795806951821,
+     "repeat=1/infer-save-reload": 8.500064723193645e-06,
+     "repeat=1/batch": 3.4084077924489975e-05,
+     "repeat=1/batchgrad": 2.233404666185379e-05,
+     "repeat=1/batchscale": 2.1082931198179722e-05,
+     "repeat=1/ragged": 2.1290965378284454e-05,
+     "repeat=1/stepfull": 2.091703936457634e-05
+    }
+   }
+  },
+  "hf-checkpoint/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7fa36f0833b27a09"
+   ],
+   "parts": [
+    {
+     "dtypes": "41720b4d4119cb3d",
+     "bits": "8a092b14d5075145",
+     "sharded": "41720b4d4119cb3d",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04394529096316546,
+    "stages": {
+     "repeat=1/train": 0.04371937504038215,
+     "repeat=1/infer-save-reload": 6.124959327280521e-06,
+     "repeat=1/batch": 6.466708146035671e-05,
+     "repeat=1/batchgrad": 2.2000051103532314e-05,
+     "repeat=1/batchscale": 2.1209008991718292e-05,
+     "repeat=1/ragged": 2.0915991626679897e-05,
+     "repeat=1/stepfull": 2.0749983377754688e-05
+    }
+   }
+  },
+  "hf-checkpoint/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "30a422299550a05f"
+   ],
+   "parts": [
+    {
+     "dtypes": "5d73af15d8e349cc",
+     "bits": "b9a340c9077dd20d",
+     "sharded": "5d73af15d8e349cc",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04650879208929837,
+    "stages": {
+     "repeat=1/train": 0.046305416035465896,
+     "repeat=1/infer-save-reload": 7.582944817841053e-06,
+     "repeat=1/batch": 3.2250070944428444e-05,
+     "repeat=1/batchgrad": 2.2209016606211662e-05,
+     "repeat=1/batchscale": 2.179096918553114e-05,
+     "repeat=1/ragged": 2.1415995433926582e-05,
+     "repeat=1/stepfull": 2.1292013116180897e-05
+    }
+   }
+  },
+  "hf-checkpoint/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "01d49c671157e241"
+   ],
+   "parts": [
+    {
+     "dtypes": "34fd62b658dd1584",
+     "bits": "908f930834fbeb02",
+     "sharded": "34fd62b658dd1584",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04949541692622006,
+    "stages": {
+     "repeat=1/train": 0.049143374897539616,
+     "repeat=1/infer-save-reload": 1.2333039194345474e-05,
+     "repeat=1/batch": 9.358394891023636e-05,
+     "repeat=1/batchgrad": 2.829195000231266e-05,
+     "repeat=1/batchscale": 2.6708003133535385e-05,
+     "repeat=1/ragged": 3.0667055398225784e-05,
+     "repeat=1/stepfull": 2.5957939215004444e-05
+    }
+   }
+  },
+  "hf-checkpoint/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "833050ab58799306"
+   ],
+   "parts": [
+    {
+     "dtypes": "1db75f4655c44168",
+     "bits": "79f68084a4850d25",
+     "sharded": "1db75f4655c44168",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "189534504634264a",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04527270793914795,
+    "stages": {
+     "repeat=1/train": 0.04495929193217307,
+     "repeat=1/infer-save-reload": 1.1333031579852104e-05,
+     "repeat=1/batch": 4.066608380526304e-05,
+     "repeat=1/batchgrad": 3.4374999813735485e-05,
+     "repeat=1/batchscale": 3.245798870921135e-05,
+     "repeat=1/ragged": 3.2708048820495605e-05,
+     "repeat=1/stepfull": 3.1791976653039455e-05
+    }
+   }
+  },
+  "par-samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f511095e5d92859"
+   ],
+   "parts": [
+    {
+     "logits": "3ce741e273f9eeac",
+     "params": "1d48bf74095626e9"
+    }
+   ],
+   "infer": [
+    "8f83d51e8218eac3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10c5047d8f326170"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8f83d51e8218eac3"
+   ],
+   "batch": [
+    "93b1a8070d27af11"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5727149579906836,
+    "stages": {
+     "repeat=1/train": 1.3869362080004066,
+     "repeat=1/infer-save-reload": 0.03345800004899502,
+     "repeat=1/batch": 0.15194983303081244,
+     "repeat=1/batchgrad": 9.68750100582838e-05,
+     "repeat=1/batchscale": 2.4875043891370296e-05,
+     "repeat=1/ragged": 2.591591328382492e-05,
+     "repeat=1/stepfull": 2.2249994799494743e-05
+    }
+   }
+  },
+  "par-samba/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c430a87eaeebfc51"
+   ],
+   "parts": [
+    {
+     "logits": "e5e9149675819dcf",
+     "params": "374273e6f600f36e"
+    }
+   ],
+   "infer": [
+    "ddcdb4f75a695447"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fa668f0370a12d79"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ddcdb4f75a695447"
+   ],
+   "batch": [
+    "fcdbceba8f5f207a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5052337920060381,
+    "stages": {
+     "repeat=1/train": 1.314086833037436,
+     "repeat=1/infer-save-reload": 0.03549675003159791,
+     "repeat=1/batch": 0.15525633399374783,
+     "repeat=1/batchgrad": 8.916598744690418e-05,
+     "repeat=1/batchscale": 2.5416957214474678e-05,
+     "repeat=1/ragged": 2.366607077419758e-05,
+     "repeat=1/stepfull": 2.4583074264228344e-05
+    }
+   }
+  },
+  "par-samba/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c2eba68a2d354545"
+   ],
+   "parts": [
+    {
+     "logits": "dfe3633ed276b055",
+     "params": "61bf32d660bb3ed0"
+    }
+   ],
+   "infer": [
+    "fee021f9262b3dda"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a80e3ed66e552abb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fee021f9262b3dda"
+   ],
+   "batch": [
+    "6628ec6818bb438d"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.4937651669606566,
+    "stages": {
+     "repeat=1/train": 1.3052688330644742,
+     "repeat=1/infer-save-reload": 0.0367897090036422,
+     "repeat=1/batch": 0.15137291699647903,
+     "repeat=1/batchgrad": 7.24580604583025e-05,
+     "repeat=1/batchscale": 2.595805563032627e-05,
+     "repeat=1/ragged": 2.2875028662383556e-05,
+     "repeat=1/stepfull": 2.2083986550569534e-05
+    }
+   }
+  },
+  "par-samba/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6f2eb18b168b363f"
+   ],
+   "parts": [
+    {
+     "logits": "e09e86acf8aee71c",
+     "params": "bbec7cf9a0f652c1"
+    }
+   ],
+   "infer": [
+    "ab0d9143b450b83c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f95b64c34dee6608"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ab0d9143b450b83c"
+   ],
+   "batch": [
+    "48d97bad7fd2a0b4"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5092336669331416,
+    "stages": {
+     "repeat=1/train": 1.32741991605144,
+     "repeat=1/infer-save-reload": 0.0335881250211969,
+     "repeat=1/batch": 0.14791637507732958,
+     "repeat=1/batchgrad": 3.870902583003044e-05,
+     "repeat=1/batchscale": 2.4916953407227993e-05,
+     "repeat=1/ragged": 2.3582950234413147e-05,
+     "repeat=1/stepfull": 2.316699828952551e-05
+    }
+   }
+  },
+  "par-samba/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9ca00246188fc1a2"
+   ],
+   "parts": [
+    {
+     "logits": "66ef28246f579465",
+     "params": "04e60ca93b0e0069"
+    }
+   ],
+   "infer": [
+    "060823f09d8757d9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8e40e58eef6eefe3"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "060823f09d8757d9"
+   ],
+   "batch": [
+    "30abcefa94b06168"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.4593259999528527,
+    "stages": {
+     "repeat=1/train": 1.2740753339603543,
+     "repeat=1/infer-save-reload": 0.035901666968129575,
+     "repeat=1/batch": 0.14901695889420807,
+     "repeat=1/batchgrad": 3.9375037886202335e-05,
+     "repeat=1/batchscale": 2.6957946829497814e-05,
+     "repeat=1/ragged": 2.887495793402195e-05,
+     "repeat=1/stepfull": 2.4417066015303135e-05
+    }
+   }
+  },
+  "par-samba/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "faf47f2ac802ea83"
+   ],
+   "parts": [
+    {
+     "logits": "8094d874918953d9",
+     "params": "4840ca96cb5b3b86"
+    }
+   ],
+   "infer": [
+    "808e17c94f99bf27"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ce11bb35d94b5ad4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "808e17c94f99bf27"
+   ],
+   "batch": [
+    "6d4129e185df43d0"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.4927329580532387,
+    "stages": {
+     "repeat=1/train": 1.309270124998875,
+     "repeat=1/infer-save-reload": 0.035631375038065016,
+     "repeat=1/batch": 0.1474559169728309,
+     "repeat=1/batchgrad": 9.508396033197641e-05,
+     "repeat=1/batchscale": 2.5374931283295155e-05,
+     "repeat=1/ragged": 2.4458044208586216e-05,
+     "repeat=1/stepfull": 2.4833017960190773e-05
+    }
+   }
+  },
+  "par-samba/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f4a04421483fb913"
+   ],
+   "parts": [
+    {
+     "logits": "c755a6b66dec5c46",
+     "params": "c6c93263df17687a"
+    }
+   ],
+   "infer": [
+    "a8be9549dad23f8f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "05c9ac6da08fc22c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a8be9549dad23f8f"
+   ],
+   "batch": [
+    "b5212942ca186ae9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.4970311250071973,
+    "stages": {
+     "repeat=1/train": 1.311750499997288,
+     "repeat=1/infer-save-reload": 0.03648158407304436,
+     "repeat=1/batch": 0.148438666947186,
+     "repeat=1/batchgrad": 9.04579646885395e-05,
+     "repeat=1/batchscale": 2.3958971723914146e-05,
+     "repeat=1/ragged": 2.2542080841958523e-05,
+     "repeat=1/stepfull": 2.2417050786316395e-05
+    }
+   }
+  },
+  "par-samba/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f511095e5d92859"
+   ],
+   "parts": [
+    {
+     "logits": "3ce741e273f9eeac",
+     "params": "1d48bf74095626e9"
+    }
+   ],
+   "infer": [
+    "8f83d51e8218eac3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10c5047d8f326170"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8f83d51e8218eac3"
+   ],
+   "batch": [
+    "93b1a8070d27af11"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.6442811660235748,
+    "stages": {
+     "repeat=1/train": 1.4178005419671535,
+     "repeat=1/infer-save-reload": 0.039741332991980016,
+     "repeat=1/batch": 0.18435083306394517,
+     "repeat=1/batchgrad": 2.9499991796910763e-05,
+     "repeat=1/batchscale": 1.89170241355896e-05,
+     "repeat=1/ragged": 1.9915984012186527e-05,
+     "repeat=1/stepfull": 1.8749968148767948e-05
+    }
+   }
+  },
+  "par-samba/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6331718c2ae81aa0"
+   ],
+   "parts": [
+    {
+     "logits": "e83aaa603487ab75",
+     "params": "608074629a893d35"
+    }
+   ],
+   "infer": [
+    "b202f29acf686abf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1f2050e3a4108911"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b202f29acf686abf"
+   ],
+   "batch": [
+    "717650b33c5401b8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.6739275410072878,
+    "stages": {
+     "repeat=1/train": 1.4425033750012517,
+     "repeat=1/infer-save-reload": 0.04703754198271781,
+     "repeat=1/batch": 0.18398462503682822,
+     "repeat=1/batchgrad": 8.500006515532732e-05,
+     "repeat=1/batchscale": 2.8000096790492535e-05,
+     "repeat=1/ragged": 2.3833010345697403e-05,
+     "repeat=1/stepfull": 2.7458067052066326e-05
+    }
+   }
+  },
+  "par-samba-clip/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "88ca4652b5ef3b46"
+   ],
+   "parts": [
+    {
+     "loss": "fa1a901ba5b5c987",
+     "logits": "f95b4656b77bcbbc",
+     "grads": "aac0f8b3fedc680c",
+     "params": "0d19ac76c0a42a98"
+    }
+   ],
+   "infer": [
+    "c83a505575b9f43c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c6da9d27e9d76f66"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c83a505575b9f43c"
+   ],
+   "batch": [
+    "ea0142614ca0fff5"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.6034484169213101,
+    "stages": {
+     "repeat=1/train": 1.4200096250278875,
+     "repeat=1/infer-save-reload": 0.034336208016611636,
+     "repeat=1/batch": 0.1487140420358628,
+     "repeat=1/batchgrad": 7.170892786234617e-05,
+     "repeat=1/batchscale": 2.887495793402195e-05,
+     "repeat=1/ragged": 2.6582973077893257e-05,
+     "repeat=1/stepfull": 2.8082984499633312e-05
+    }
+   }
+  },
+  "par-samba-clip/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "977b259585f381c5"
+   ],
+   "parts": [
+    {
+     "loss": "a2c63f4dd200b608",
+     "logits": "dd4473081931b363",
+     "grads": "d674e93f6d6c0ab7",
+     "params": "5eac7b7db362fb71"
+    }
+   ],
+   "infer": [
+    "4391d2eba20c9748"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "91e3471bed8e3d89"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4391d2eba20c9748"
+   ],
+   "batch": [
+    "ca5ed7cfbe3108ab"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5091987919295207,
+    "stages": {
+     "repeat=1/train": 1.3123310829978436,
+     "repeat=1/infer-save-reload": 0.03440524998586625,
+     "repeat=1/batch": 0.1621107499813661,
+     "repeat=1/batchgrad": 7.262500002980232e-05,
+     "repeat=1/batchscale": 2.475001383572817e-05,
+     "repeat=1/ragged": 2.3416010662913322e-05,
+     "repeat=1/stepfull": 2.2875028662383556e-05
+    }
+   }
+  },
+  "par-samba-clip/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f6c07613c496270a"
+   ],
+   "parts": [
+    {
+     "loss": "33d610d07c283749",
+     "logits": "a54058865368a46f",
+     "grads": "2483b8c4377bac47",
+     "params": "b0f446dd57ae3d47"
+    }
+   ],
+   "infer": [
+    "ee03b2d7b0eb10d2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f21cf5010aec4f69"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ee03b2d7b0eb10d2"
+   ],
+   "batch": [
+    "c653a6c85b758bf6"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5733665419975296,
+    "stages": {
+     "repeat=1/train": 1.3890327080152929,
+     "repeat=1/infer-save-reload": 0.03628125006798655,
+     "repeat=1/batch": 0.14761924999766052,
+     "repeat=1/batchgrad": 8.533301297575235e-05,
+     "repeat=1/batchscale": 2.7499976567924023e-05,
+     "repeat=1/ragged": 2.587493509054184e-05,
+     "repeat=1/stepfull": 2.4916953407227993e-05
+    }
+   }
+  },
+  "par-samba-clip/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ce3e3d9b8cf0fffe"
+   ],
+   "parts": [
+    {
+     "loss": "361bc534bc126f5d",
+     "logits": "70dc375490238b90",
+     "grads": "76cde6f7007a897c",
+     "params": "8479ec78a5aebc5f"
+    }
+   ],
+   "infer": [
+    "9044c3b3fd82f4d8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "bb34896c6351d311"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9044c3b3fd82f4d8"
+   ],
+   "batch": [
+    "06365d485a37425d"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5428118330892175,
+    "stages": {
+     "repeat=1/train": 1.3418658749433234,
+     "repeat=1/infer-save-reload": 0.03805291699245572,
+     "repeat=1/batch": 0.16253224993124604,
+     "repeat=1/batchgrad": 0.00010125001426786184,
+     "repeat=1/batchscale": 2.3416941985487938e-05,
+     "repeat=1/ragged": 2.2332998923957348e-05,
+     "repeat=1/stepfull": 2.1541956812143326e-05
+    }
+   }
+  },
+  "par-samba-clip/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "44c7a5592abe49b5"
+   ],
+   "parts": [
+    {
+     "loss": "31754110ff98d8a7",
+     "logits": "03083a86c52e941a",
+     "grads": "11ce2880fc11a527",
+     "params": "53802a89339015cb"
+    }
+   ],
+   "infer": [
+    "77e6d261c2fb64d8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d1de6bb1fe833323"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77e6d261c2fb64d8"
+   ],
+   "batch": [
+    "d9469c1c3645c3fb"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5547865410335362,
+    "stages": {
+     "repeat=1/train": 1.3713519159937277,
+     "repeat=1/infer-save-reload": 0.03358062508050352,
+     "repeat=1/batch": 0.14947549998760223,
+     "repeat=1/batchgrad": 9.991694241762161e-05,
+     "repeat=1/batchscale": 2.9291026294231415e-05,
+     "repeat=1/ragged": 2.8041889891028404e-05,
+     "repeat=1/stepfull": 2.704199869185686e-05
+    }
+   }
+  },
+  "par-samba-clip/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "48568f844c149a9d"
+   ],
+   "parts": [
+    {
+     "loss": "ae1a21274988fdbd",
+     "logits": "736f8d7ffb7d7c3d",
+     "grads": "b80b7c852111f853",
+     "params": "4576d72c1246e34b"
+    }
+   ],
+   "infer": [
+    "c5e7a672cf359968"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c50e2e9932f2ba8e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c5e7a672cf359968"
+   ],
+   "batch": [
+    "99d148341c002183"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5543296249816194,
+    "stages": {
+     "repeat=1/train": 1.3577831670409068,
+     "repeat=1/infer-save-reload": 0.03786787495482713,
+     "repeat=1/batch": 0.15832412499003112,
+     "repeat=1/batchgrad": 9.266601409763098e-05,
+     "repeat=1/batchscale": 2.5792047381401062e-05,
+     "repeat=1/ragged": 2.3958971723914146e-05,
+     "repeat=1/stepfull": 2.366595435887575e-05
+    }
+   }
+  },
+  "par-samba-clip/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fca447c2a36e7f37"
+   ],
+   "parts": [
+    {
+     "loss": "1394c15160819160",
+     "logits": "3346f26360b97349",
+     "grads": "8c4dc728de565797",
+     "params": "5b8af2b591a22b5b"
+    }
+   ],
+   "infer": [
+    "75fb2d26b20b864e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "542acaf0285826ae"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "75fb2d26b20b864e"
+   ],
+   "batch": [
+    "ee0172d90e3d3432"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5892207919387147,
+    "stages": {
+     "repeat=1/train": 1.3777037500403821,
+     "repeat=1/infer-save-reload": 0.05009650008287281,
+     "repeat=1/batch": 0.16097808303311467,
+     "repeat=1/batchgrad": 4.262488801032305e-05,
+     "repeat=1/batchscale": 2.5958986952900887e-05,
+     "repeat=1/ragged": 2.5000073947012424e-05,
+     "repeat=1/stepfull": 2.416700590401888e-05
+    }
+   }
+  },
+  "par-samba-clip/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "88ca4652b5ef3b46"
+   ],
+   "parts": [
+    {
+     "loss": "fa1a901ba5b5c987",
+     "logits": "f95b4656b77bcbbc",
+     "grads": "aac0f8b3fedc680c",
+     "params": "0d19ac76c0a42a98"
+    }
+   ],
+   "infer": [
+    "c83a505575b9f43c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c6da9d27e9d76f66"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c83a505575b9f43c"
+   ],
+   "batch": [
+    "ea0142614ca0fff5"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.7142889579990879,
+    "stages": {
+     "repeat=1/train": 1.4739601250039414,
+     "repeat=1/infer-save-reload": 0.042852874961681664,
+     "repeat=1/batch": 0.19706870801746845,
+     "repeat=1/batchgrad": 7.370905950665474e-05,
+     "repeat=1/batchscale": 1.90419377759099e-05,
+     "repeat=1/ragged": 1.76670728251338e-05,
+     "repeat=1/stepfull": 2.737506292760372e-05
+    }
+   }
+  },
+  "par-samba-clip/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d2cfddcb77203a4c"
+   ],
+   "parts": [
+    {
+     "loss": "65cc4b6824afe84e",
+     "logits": "6966cbc0fb8c80d1",
+     "grads": "617ff71532bdb2ba",
+     "params": "4b703de8ca2b1db6"
+    }
+   ],
+   "infer": [
+    "9fb8fb58d435525d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cd45f4386ca0578f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9fb8fb58d435525d"
+   ],
+   "batch": [
+    "58773c774bbf783e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.6971107909921557,
+    "stages": {
+     "repeat=1/train": 1.4663972079288214,
+     "repeat=1/infer-save-reload": 0.04417808400467038,
+     "repeat=1/batch": 0.18618154199793935,
+     "repeat=1/batchgrad": 4.537496715784073e-05,
+     "repeat=1/batchscale": 2.9459013603627682e-05,
+     "repeat=1/ragged": 2.8250040486454964e-05,
+     "repeat=1/stepfull": 2.762500662356615e-05
+    }
+   }
+  },
+  "sequence-onnx-import/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "35d3a866d9576787"
+   ],
+   "parts": [
+    {
+     "file": "c7c82045fed32d43",
+     "out": "73f8e35ecc29147d",
+     "held": "f44b3bbb8ab42f95"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.014414250035770237,
+    "stages": {
+     "repeat=1/train": 0.014077457948587835,
+     "repeat=1/infer-save-reload": 9.375042282044888e-06,
+     "repeat=1/batch": 9.962508920580149e-05,
+     "repeat=1/batchgrad": 2.4875043891370296e-05,
+     "repeat=1/batchscale": 2.316699828952551e-05,
+     "repeat=1/ragged": 2.3333006538450718e-05,
+     "repeat=1/stepfull": 2.2582942619919777e-05
+    }
+   }
+  },
+  "sequence-onnx-import/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3ec135b5c82e5079"
+   ],
+   "parts": [
+    {
+     "file": "39cd9010550410b1",
+     "out": "c44a4e608ce00929",
+     "held": "ba71e6aab0edc88f"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006829916965216398,
+    "stages": {
+     "repeat=1/train": 0.006580042070709169,
+     "repeat=1/infer-save-reload": 7.459078915417194e-06,
+     "repeat=1/batch": 3.866699989885092e-05,
+     "repeat=1/batchgrad": 2.4958979338407516e-05,
+     "repeat=1/batchscale": 2.274999860674143e-05,
+     "repeat=1/ragged": 2.3209024220705032e-05,
+     "repeat=1/stepfull": 2.3165950551629066e-05
+    }
+   }
+  },
+  "sequence-onnx-import/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d1fc48a0f0585392"
+   ],
+   "parts": [
+    {
+     "file": "7c331f9d29c660be",
+     "out": "0d44551f858e7704",
+     "held": "0ff81e7bea10848c"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005247541004791856,
+    "stages": {
+     "repeat=1/train": 0.004979124991223216,
+     "repeat=1/infer-save-reload": 8.165952749550343e-06,
+     "repeat=1/batch": 3.712496254593134e-05,
+     "repeat=1/batchgrad": 2.5707995519042015e-05,
+     "repeat=1/batchscale": 2.475001383572817e-05,
+     "repeat=1/ragged": 2.4041044525802135e-05,
+     "repeat=1/stepfull": 2.3834058083593845e-05
+    }
+   }
+  },
+  "sequence-onnx-import/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5a07854ae3e163a0"
+   ],
+   "parts": [
+    {
+     "file": "6d6a6e21d9ece5b7",
+     "out": "0b52c1d15155b4e2",
+     "held": "51ab67de9e2a0770"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005368166952393949,
+    "stages": {
+     "repeat=1/train": 0.005089582991786301,
+     "repeat=1/infer-save-reload": 9.375042282044888e-06,
+     "repeat=1/batch": 3.912497777491808e-05,
+     "repeat=1/batchgrad": 2.7374946512281895e-05,
+     "repeat=1/batchscale": 2.5250017642974854e-05,
+     "repeat=1/ragged": 2.5333021767437458e-05,
+     "repeat=1/stepfull": 2.6083900593221188e-05
+    }
+   }
+  },
+  "sequence-onnx-import/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8b7fac21e67960e6"
+   ],
+   "parts": [
+    {
+     "file": "75eff108a13e992f",
+     "out": "93d98caa815404ec",
+     "held": "b7f5509164d3078a"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005556000047363341,
+    "stages": {
+     "repeat=1/train": 0.0052776249358430505,
+     "repeat=1/infer-save-reload": 9.00006853044033e-06,
+     "repeat=1/batch": 4.137493669986725e-05,
+     "repeat=1/batchgrad": 2.5084009394049644e-05,
+     "repeat=1/batchscale": 2.2833002731204033e-05,
+     "repeat=1/ragged": 2.4416949599981308e-05,
+     "repeat=1/stepfull": 2.2792024537920952e-05
+    }
+   }
+  },
+  "sequence-onnx-import/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e1511d3bc8303379"
+   ],
+   "parts": [
+    {
+     "file": "8f0211987e747bb4",
+     "out": "93d98caa815404ec",
+     "held": "b7f5509164d3078a"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005243333987891674,
+    "stages": {
+     "repeat=1/train": 0.004950832924805582,
+     "repeat=1/infer-save-reload": 9.500072337687016e-06,
+     "repeat=1/batch": 4.1375053115189075e-05,
+     "repeat=1/batchgrad": 2.875004429370165e-05,
+     "repeat=1/batchscale": 2.7708010748028755e-05,
+     "repeat=1/ragged": 2.7583912014961243e-05,
+     "repeat=1/stepfull": 2.6916037313640118e-05
+    }
+   }
+  },
+  "sequence-onnx-import/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "248aad82b5bc5cf5"
+   ],
+   "parts": [
+    {
+     "file": "cac70cf32ce8ef5e",
+     "out": "96167278fcb63b8b",
+     "held": "d12cc82a696a9c24"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005135499988682568,
+    "stages": {
+     "repeat=1/train": 0.004828208009712398,
+     "repeat=1/infer-save-reload": 1.0915915481746197e-05,
+     "repeat=1/batch": 4.891701973974705e-05,
+     "repeat=1/batchgrad": 2.9374961741268635e-05,
+     "repeat=1/batchscale": 2.683396451175213e-05,
+     "repeat=1/ragged": 2.6458059437572956e-05,
+     "repeat=1/stepfull": 2.6583089493215084e-05
+    }
+   }
+  },
+  "sequence-onnx-import/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c5c81576f7839beb"
+   ],
+   "parts": [
+    {
+     "file": "c7c82045fed32d43",
+     "out": "57dfe8502fae329c",
+     "held": "163890f3379645ee"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0053279580315575,
+    "stages": {
+     "repeat=1/train": 0.00509204191621393,
+     "repeat=1/infer-save-reload": 1.35831069201231e-05,
+     "repeat=1/batch": 3.391597419977188e-05,
+     "repeat=1/batchgrad": 1.8749968148767948e-05,
+     "repeat=1/batchscale": 1.7459038645029068e-05,
+     "repeat=1/ragged": 1.7000013031065464e-05,
+     "repeat=1/stepfull": 1.60830095410347e-05
+    }
+   }
+  },
+  "sequence-onnx-import/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d2802666070e6a6a"
+   ],
+   "parts": [
+    {
+     "file": "a55305fd974ac243",
+     "out": "1f8913d0f95c4e8c",
+     "held": "9ea0af286fcb4459"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006079667015001178,
+    "stages": {
+     "repeat=1/train": 0.0054675000719726086,
+     "repeat=1/infer-save-reload": 2.362497616559267e-05,
+     "repeat=1/batch": 0.00020925002172589302,
+     "repeat=1/batchgrad": 4.1041988879442215e-05,
+     "repeat=1/batchscale": 2.562499139457941e-05,
+     "repeat=1/ragged": 2.4792039766907692e-05,
+     "repeat=1/stepfull": 2.5374931283295155e-05
+    }
+   }
+  },
+  "sequence-program-save-load/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "484a4b76443e9cc3"
+   ],
+   "parts": [
+    {
+     "out": "d52a5767f346e276",
+     "held": "64ae61449488cb23"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0064643340883776546,
+    "stages": {
+     "repeat=1/train": 0.00610999995842576,
+     "repeat=1/infer-save-reload": 1.0541989468038082e-05,
+     "repeat=1/batch": 0.00010075001046061516,
+     "repeat=1/batchgrad": 2.9708025977015495e-05,
+     "repeat=1/batchscale": 2.8084032237529755e-05,
+     "repeat=1/ragged": 2.6667024940252304e-05,
+     "repeat=1/stepfull": 2.7792062610387802e-05
+    }
+   }
+  },
+  "sequence-program-save-load/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "24300327b69d4b81"
+   ],
+   "parts": [
+    {
+     "out": "8369cf39f11dd0c9",
+     "held": "3dbbde33623505f7"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005484333029016852,
+    "stages": {
+     "repeat=1/train": 0.005259249941445887,
+     "repeat=1/infer-save-reload": 6.958958692848682e-06,
+     "repeat=1/batch": 3.6375015042722225e-05,
+     "repeat=1/batchgrad": 2.233404666185379e-05,
+     "repeat=1/batchscale": 2.13750172406435e-05,
+     "repeat=1/ragged": 2.1292013116180897e-05,
+     "repeat=1/stepfull": 2.220796886831522e-05
+    }
+   }
+  },
+  "sequence-program-save-load/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ad403fc1c2195815"
+   ],
+   "parts": [
+    {
+     "out": "6772508e59335cb8",
+     "held": "b9d7adb0e13087cf"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006332584074698389,
+    "stages": {
+     "repeat=1/train": 0.00596445903647691,
+     "repeat=1/infer-save-reload": 9.790994226932526e-06,
+     "repeat=1/batch": 0.00011787505354732275,
+     "repeat=1/batchgrad": 2.8833048418164253e-05,
+     "repeat=1/batchscale": 3.15000070258975e-05,
+     "repeat=1/ragged": 2.337503246963024e-05,
+     "repeat=1/stepfull": 2.3292028345167637e-05
+    }
+   }
+  },
+  "sequence-program-save-load/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c949211e963cc481"
+   ],
+   "parts": [
+    {
+     "out": "d4e6517abffe76c6",
+     "held": "260b2229180f43d3"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005594959016889334,
+    "stages": {
+     "repeat=1/train": 0.005366207915358245,
+     "repeat=1/infer-save-reload": 6.749993190169334e-06,
+     "repeat=1/batch": 3.633310552686453e-05,
+     "repeat=1/batchgrad": 2.362497616559267e-05,
+     "repeat=1/batchscale": 2.2540916688740253e-05,
+     "repeat=1/ragged": 2.179096918553114e-05,
+     "repeat=1/stepfull": 2.2292020730674267e-05
+    }
+   }
+  },
+  "sequence-program-save-load/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7935b040f1c25b37"
+   ],
+   "parts": [
+    {
+     "out": "eacda1143347cb56",
+     "held": "6667d7960b95c43d"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005909209023229778,
+    "stages": {
+     "repeat=1/train": 0.005653542000800371,
+     "repeat=1/infer-save-reload": 7.791910320520401e-06,
+     "repeat=1/batch": 3.708305303007364e-05,
+     "repeat=1/batchgrad": 2.6208930648863316e-05,
+     "repeat=1/batchscale": 2.520799171179533e-05,
+     "repeat=1/ragged": 2.5416025891900063e-05,
+     "repeat=1/stepfull": 2.54589831456542e-05
+    }
+   }
+  },
+  "sequence-program-save-load/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7935b040f1c25b37"
+   ],
+   "parts": [
+    {
+     "out": "eacda1143347cb56",
+     "held": "6667d7960b95c43d"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005911582964472473,
+    "stages": {
+     "repeat=1/train": 0.005571375018917024,
+     "repeat=1/infer-save-reload": 9.707990102469921e-06,
+     "repeat=1/batch": 9.008403867483139e-05,
+     "repeat=1/batchgrad": 2.8875074349343777e-05,
+     "repeat=1/batchscale": 2.7082976885139942e-05,
+     "repeat=1/ragged": 2.7082976885139942e-05,
+     "repeat=1/stepfull": 2.6916968636214733e-05
+    }
+   }
+  },
+  "sequence-program-save-load/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "484a4b76443e9cc3"
+   ],
+   "parts": [
+    {
+     "out": "d52a5767f346e276",
+     "held": "64ae61449488cb23"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0058232080191373825,
+    "stages": {
+     "repeat=1/train": 0.005560917081311345,
+     "repeat=1/infer-save-reload": 8.165952749550343e-06,
+     "repeat=1/batch": 3.975001163780689e-05,
+     "repeat=1/batchgrad": 2.545793540775776e-05,
+     "repeat=1/batchscale": 2.5499961338937283e-05,
+     "repeat=1/ragged": 2.4540931917726994e-05,
+     "repeat=1/stepfull": 3.083306364715099e-05
+    }
+   }
+  },
+  "sequence-program-save-load/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b96ed4e36cff8a8b"
+   ],
+   "parts": [
+    {
+     "out": "6f26cce4dafca865",
+     "held": "a2bb134259618233"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006150458008050919,
+    "stages": {
+     "repeat=1/train": 0.00593020801898092,
+     "repeat=1/infer-save-reload": 8.125090971589088e-06,
+     "repeat=1/batch": 2.829195000231266e-05,
+     "repeat=1/batchgrad": 1.825008075684309e-05,
+     "repeat=1/batchscale": 1.7249956727027893e-05,
+     "repeat=1/ragged": 1.6875099390745163e-05,
+     "repeat=1/stepfull": 1.666706521064043e-05
+    }
+   }
+  },
+  "sequence-program-save-load/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "64d9e80c6b93ae17"
+   ],
+   "parts": [
+    {
+     "out": "28c974fc0289c807",
+     "held": "efec53c0553f99a2"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00603899999987334,
+    "stages": {
+     "repeat=1/train": 0.005774499964900315,
+     "repeat=1/infer-save-reload": 7.750000804662704e-06,
+     "repeat=1/batch": 4.7958106733858585e-05,
+     "repeat=1/batchgrad": 2.433406189084053e-05,
+     "repeat=1/batchscale": 2.2666994482278824e-05,
+     "repeat=1/ragged": 2.320797648280859e-05,
+     "repeat=1/stepfull": 2.4124979972839355e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "27a9d0f7b489c914"
+   ],
+   "parts": [
+    {
+     "greedy": "9c6c53355c79b9f5",
+     "sampled": "5286f2681a1e9c43"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21623333299066871,
+    "stages": {
+     "repeat=1/train": 0.21596837509423494,
+     "repeat=1/infer-save-reload": 9.291921742260456e-06,
+     "repeat=1/batch": 3.604206722229719e-05,
+     "repeat=1/batchgrad": 2.4416949599981308e-05,
+     "repeat=1/batchscale": 2.229190431535244e-05,
+     "repeat=1/ragged": 2.2332998923957348e-05,
+     "repeat=1/stepfull": 2.2000051103532314e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ea6fa6626573f0d8"
+   ],
+   "parts": [
+    {
+     "greedy": "cf6edd207e633492",
+     "sampled": "3f0ccc9538ff34ef"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21069291606545448,
+    "stages": {
+     "repeat=1/train": 0.210355666000396,
+     "repeat=1/infer-save-reload": 9.999959729611874e-06,
+     "repeat=1/batch": 0.00010062509682029486,
+     "repeat=1/batchgrad": 2.3875036276876926e-05,
+     "repeat=1/batchscale": 2.2042077034711838e-05,
+     "repeat=1/ragged": 2.2541964426636696e-05,
+     "repeat=1/stepfull": 2.1792016923427582e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "16c7a2cf444fb58a"
+   ],
+   "parts": [
+    {
+     "greedy": "bcc0c483865538be",
+     "sampled": "d1b0113ab5e42f91"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.20867550000548363,
+    "stages": {
+     "repeat=1/train": 0.20837641693651676,
+     "repeat=1/infer-save-reload": 1.025001984089613e-05,
+     "repeat=1/batch": 3.7624966353178024e-05,
+     "repeat=1/batchgrad": 2.566596958786249e-05,
+     "repeat=1/batchscale": 2.404092811048031e-05,
+     "repeat=1/ragged": 2.4833017960190773e-05,
+     "repeat=1/stepfull": 2.354104071855545e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fe44a7aef13f6acf"
+   ],
+   "parts": [
+    {
+     "greedy": "b5142f7081a9ae65",
+     "sampled": "2d363dc8a3f9a4ed"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.23693599994294345,
+    "stages": {
+     "repeat=1/train": 0.23664104205090553,
+     "repeat=1/infer-save-reload": 9.457929991185665e-06,
+     "repeat=1/batch": 3.79589619114995e-05,
+     "repeat=1/batchgrad": 2.4084001779556274e-05,
+     "repeat=1/batchscale": 2.2791908122599125e-05,
+     "repeat=1/ragged": 2.237502485513687e-05,
+     "repeat=1/stepfull": 2.9416056349873543e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f18670237c50cd91"
+   ],
+   "parts": [
+    {
+     "greedy": "84068478c89740ff",
+     "sampled": "90ad6db50e19f500"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.20628029201179743,
+    "stages": {
+     "repeat=1/train": 0.20599904202390462,
+     "repeat=1/infer-save-reload": 1.0333023965358734e-05,
+     "repeat=1/batch": 3.733299672603607e-05,
+     "repeat=1/batchgrad": 2.3999949917197227e-05,
+     "repeat=1/batchscale": 2.2791908122599125e-05,
+     "repeat=1/ragged": 2.2583059035241604e-05,
+     "repeat=1/stepfull": 2.26249685510993e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1399a55ba9f66ecd"
+   ],
+   "parts": [
+    {
+     "greedy": "fddb7770b50e705f",
+     "sampled": "8cdeeed7fffcf02d"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.23697204096242785,
+    "stages": {
+     "repeat=1/train": 0.23663483292330056,
+     "repeat=1/infer-save-reload": 1.12500274553895e-05,
+     "repeat=1/batch": 3.6792014725506306e-05,
+     "repeat=1/batchgrad": 2.6041059754788876e-05,
+     "repeat=1/batchscale": 2.4499953724443913e-05,
+     "repeat=1/ragged": 2.4124979972839355e-05,
+     "repeat=1/stepfull": 2.4709035642445087e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "27a9d0f7b489c914"
+   ],
+   "parts": [
+    {
+     "greedy": "9c6c53355c79b9f5",
+     "sampled": "5286f2681a1e9c43"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2161304160254076,
+    "stages": {
+     "repeat=1/train": 0.21581974998116493,
+     "repeat=1/infer-save-reload": 1.2042000889778137e-05,
+     "repeat=1/batch": 3.8624973967671394e-05,
+     "repeat=1/batchgrad": 2.7582980692386627e-05,
+     "repeat=1/batchscale": 2.629193477332592e-05,
+     "repeat=1/ragged": 2.574990503489971e-05,
+     "repeat=1/stepfull": 2.5458051823079586e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "27a9d0f7b489c914"
+   ],
+   "parts": [
+    {
+     "greedy": "9c6c53355c79b9f5",
+     "sampled": "5286f2681a1e9c43"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2478917499538511,
+    "stages": {
+     "repeat=1/train": 0.24752720794640481,
+     "repeat=1/infer-save-reload": 1.2459000572562218e-05,
+     "repeat=1/batch": 3.416696563363075e-05,
+     "repeat=1/batchgrad": 4.141696263104677e-05,
+     "repeat=1/batchscale": 2.208305522799492e-05,
+     "repeat=1/ragged": 2.0749983377754688e-05,
+     "repeat=1/stepfull": 1.9416911527514458e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9499112b167c1d35"
+   ],
+   "parts": [
+    {
+     "greedy": "975b2b774d035e8e",
+     "sampled": "d255e0802ed444a6"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2213644579751417,
+    "stages": {
+     "repeat=1/train": 0.22106970800086856,
+     "repeat=1/infer-save-reload": 9.95793379843235e-06,
+     "repeat=1/batch": 3.754196222871542e-05,
+     "repeat=1/batchgrad": 2.775003667920828e-05,
+     "repeat=1/batchscale": 2.4999957531690598e-05,
+     "repeat=1/ragged": 2.4916022084653378e-05,
+     "repeat=1/stepfull": 2.445792779326439e-05
+    }
+   }
+  },
+  "hf-model-surface/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cda17ff755f84cbd"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "f47de0b21de4de11",
+     "shards": "0b935b3cef5e1e1b",
+     "weights": "634fedb46815a2fa",
+     "logits": "8bb6dc4443942376",
+     "gathered": "8bb6dc4443942376",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.047467792057432234,
+    "stages": {
+     "repeat=1/train": 0.047086625010706484,
+     "repeat=1/infer-save-reload": 1.0333023965358734e-05,
+     "repeat=1/batch": 0.00010187493171542883,
+     "repeat=1/batchgrad": 2.4792039766907692e-05,
+     "repeat=1/batchscale": 2.9916060157120228e-05,
+     "repeat=1/ragged": 2.4916953407227993e-05,
+     "repeat=1/stepfull": 2.379098441451788e-05
+    }
+   }
+  },
+  "hf-model-surface/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cf2180542e519182"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "20452532fca9526f",
+     "shards": "215f3276c6b72c04",
+     "weights": "634fedb46815a2fa",
+     "logits": "6270a0ad0674d081",
+     "gathered": "6270a0ad0674d081",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04993837501388043,
+    "stages": {
+     "repeat=1/train": 0.049592915922403336,
+     "repeat=1/infer-save-reload": 1.0500079952180386e-05,
+     "repeat=1/batch": 9.637500625103712e-05,
+     "repeat=1/batchgrad": 2.6583089493215084e-05,
+     "repeat=1/batchscale": 2.520799171179533e-05,
+     "repeat=1/ragged": 2.479099202901125e-05,
+     "repeat=1/stepfull": 2.416700590401888e-05
+    }
+   }
+  },
+  "hf-model-surface/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dfd447f7752f2fa7"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "1d9c6a3494b3b984",
+     "shards": "9a0951e692b40642",
+     "weights": "634fedb46815a2fa",
+     "logits": "59c536b0bb143a06",
+     "gathered": "59c536b0bb143a06",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.048189249937422574,
+    "stages": {
+     "repeat=1/train": 0.04787637502886355,
+     "repeat=1/infer-save-reload": 8.167000487446785e-06,
+     "repeat=1/batch": 9.600003249943256e-05,
+     "repeat=1/batchgrad": 2.3290980607271194e-05,
+     "repeat=1/batchscale": 2.162496093660593e-05,
+     "repeat=1/ragged": 2.1416926756501198e-05,
+     "repeat=1/stepfull": 2.1332991309463978e-05
+    }
+   }
+  },
+  "hf-model-surface/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8c740ed84e44e1bf"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "077bb412555c02f9",
+     "shards": "1f0c715bfeaa48b8",
+     "weights": "634fedb46815a2fa",
+     "logits": "c095f863aed358b2",
+     "gathered": "c095f863aed358b2",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04602308408357203,
+    "stages": {
+     "repeat=1/train": 0.04576641705352813,
+     "repeat=1/infer-save-reload": 8.624978363513947e-06,
+     "repeat=1/batch": 3.458396531641483e-05,
+     "repeat=1/batchgrad": 2.337503246963024e-05,
+     "repeat=1/batchscale": 2.3416941985487938e-05,
+     "repeat=1/ragged": 2.1792016923427582e-05,
+     "repeat=1/stepfull": 2.179096918553114e-05
+    }
+   }
+  },
+  "hf-model-surface/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9541ecd8610cc753"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "69c1b182ea104baf",
+     "shards": "b1e3cdb645e10d0c",
+     "weights": "634fedb46815a2fa",
+     "logits": "b244a585d18b8dc5",
+     "gathered": "b244a585d18b8dc5",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04857324995100498,
+    "stages": {
+     "repeat=1/train": 0.04826354200486094,
+     "repeat=1/infer-save-reload": 7.4589625000953674e-06,
+     "repeat=1/batch": 8.954200893640518e-05,
+     "repeat=1/batchgrad": 2.2249994799494743e-05,
+     "repeat=1/batchscale": 2.6791938580572605e-05,
+     "repeat=1/ragged": 2.150004729628563e-05,
+     "repeat=1/stepfull": 2.3208907805383205e-05
+    }
+   }
+  },
+  "hf-model-surface/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4868d55a6973e7f0"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "ea65deb0a5612f00",
+     "shards": "8e45d44bcf714710",
+     "weights": "634fedb46815a2fa",
+     "logits": "ed520e56620cb2d6",
+     "gathered": "ed520e56620cb2d6",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04900537501089275,
+    "stages": {
+     "repeat=1/train": 0.04863116703927517,
+     "repeat=1/infer-save-reload": 1.1790893040597439e-05,
+     "repeat=1/batch": 0.00010216690134257078,
+     "repeat=1/batchgrad": 2.8999987989664078e-05,
+     "repeat=1/batchscale": 2.7041067369282246e-05,
+     "repeat=1/ragged": 2.6708003133535385e-05,
+     "repeat=1/stepfull": 2.5957939215004444e-05
+    }
+   }
+  },
+  "hf-model-surface/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b0d981662befe61d"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "d081378cab9c9b16",
+     "shards": "d8595c08cad58602",
+     "weights": "634fedb46815a2fa",
+     "logits": "8bb6dc4443942376",
+     "gathered": "8bb6dc4443942376",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.047664750018157065,
+    "stages": {
+     "repeat=1/train": 0.04740666598081589,
+     "repeat=1/infer-save-reload": 9.124982170760632e-06,
+     "repeat=1/batch": 3.4791999496519566e-05,
+     "repeat=1/batchgrad": 2.3250002413988113e-05,
+     "repeat=1/batchscale": 2.216699067503214e-05,
+     "repeat=1/ragged": 2.3292028345167637e-05,
+     "repeat=1/stepfull": 2.150004729628563e-05
+    }
+   }
+  },
+  "hf-model-surface/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cda17ff755f84cbd"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "f47de0b21de4de11",
+     "shards": "0b935b3cef5e1e1b",
+     "weights": "634fedb46815a2fa",
+     "logits": "8bb6dc4443942376",
+     "gathered": "8bb6dc4443942376",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.049838208011351526,
+    "stages": {
+     "repeat=1/train": 0.049532084027305245,
+     "repeat=1/infer-save-reload": 1.283304300159216e-05,
+     "repeat=1/batch": 7.250008638948202e-05,
+     "repeat=1/batchgrad": 2.333289012312889e-05,
+     "repeat=1/batchscale": 1.6042031347751617e-05,
+     "repeat=1/ragged": 1.6290927305817604e-05,
+     "repeat=1/stepfull": 1.5375087969005108e-05
+    }
+   }
+  },
+  "hf-model-surface/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ac9592d2029b62fc"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "eb55cee85639be89",
+     "shards": "6c1a40775d74e793",
+     "weights": "634fedb46815a2fa",
+     "logits": "39f3e6c859549ae5",
+     "gathered": "39f3e6c859549ae5",
+     "flags": "75f84726eedfb105"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04941512504592538,
+    "stages": {
+     "repeat=1/train": 0.049048874992877245,
+     "repeat=1/infer-save-reload": 9.541981853544712e-06,
+     "repeat=1/batch": 9.608408436179161e-05,
+     "repeat=1/batchgrad": 3.495905548334122e-05,
+     "repeat=1/batchscale": 2.6834080927073956e-05,
+     "repeat=1/ragged": 2.6792054995894432e-05,
+     "repeat=1/stepfull": 2.6416964828968048e-05
+    }
+   }
+  },
+  "sequence-tape-program/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7f5b8d7bedbe065e"
+   ],
+   "parts": [
+    {
+     "tape_out": "d52a5767f346e276",
+     "tape_loss": "b9f7b1b4c7b825e3",
+     "tape_grad0": "2eb13424d05ed03a",
+     "tape_grad1": "4626ef19a9a0e415",
+     "tape_grad2": "594ee4017acdafac",
+     "tape_grad3": "0a031b4b9ba6653e",
+     "tape_param0": "8ebd4fdac551ac99",
+     "tape_param1": "b16038a08f42d804",
+     "tape_param2": "9c940e3f73412ab6",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "d52a5767f346e276",
+     "prog_loss": "b9f7b1b4c7b825e3",
+     "prog_grad0": "2eb13424d05ed03a",
+     "prog_param0": "ee2b34ec743a9f8c",
+     "prog_grad1": "4626ef19a9a0e415",
+     "prog_param1": "587e352562fd233b",
+     "prog_grad2": "594ee4017acdafac",
+     "prog_param2": "106d55bf459555a1",
+     "prog_grad3": "0a031b4b9ba6653e",
+     "prog_param3": "87d297944bee5288",
+     "prog_after": "bba5b76c6e4e6bde",
+     "prog_held": "f63a90274320d2e1"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01723083306569606,
+    "stages": {
+     "repeat=1/train": 0.01694050000514835,
+     "repeat=1/infer-save-reload": 1.066701952368021e-05,
+     "repeat=1/batch": 3.487500362098217e-05,
+     "repeat=1/batchgrad": 2.8667040169239044e-05,
+     "repeat=1/batchscale": 2.6833033189177513e-05,
+     "repeat=1/ragged": 2.6416964828968048e-05,
+     "repeat=1/stepfull": 2.6374938897788525e-05
+    }
+   }
+  },
+  "sequence-tape-program/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b45f8d993578fd2f"
+   ],
+   "parts": [
+    {
+     "tape_out": "8369cf39f11dd0c9",
+     "tape_loss": "cefe4f898c5854b8",
+     "tape_grad0": "e89392f048743e7d",
+     "tape_grad1": "2ef1a8196f133356",
+     "tape_grad2": "261e41bdc5fdabab",
+     "tape_grad3": "da30c40fa819e985",
+     "tape_param0": "6f4207cc46bfadb6",
+     "tape_param1": "0288f4e3eb4c113f",
+     "tape_param2": "dbf3130137baac6b",
+     "tape_param3": "8406a91ad8ab0f56",
+     "prog_out": "8369cf39f11dd0c9",
+     "prog_loss": "cefe4f898c5854b8",
+     "prog_grad0": "e89392f048743e7d",
+     "prog_param0": "97e83e81efe9a2f4",
+     "prog_grad1": "2ef1a8196f133356",
+     "prog_param1": "6602633ed0e876f1",
+     "prog_grad2": "261e41bdc5fdabab",
+     "prog_param2": "b687aa6ba305d0ff",
+     "prog_grad3": "da30c40fa819e985",
+     "prog_param3": "8ef982ebdee35f1f",
+     "prog_after": "1691846b0e9df7c2",
+     "prog_held": "96421c67640ea297"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.012218665913678706,
+    "stages": {
+     "repeat=1/train": 0.011959832976572216,
+     "repeat=1/infer-save-reload": 8.25000461190939e-06,
+     "repeat=1/batch": 3.7207966670393944e-05,
+     "repeat=1/batchgrad": 2.7209054678678513e-05,
+     "repeat=1/batchscale": 2.6166904717683792e-05,
+     "repeat=1/ragged": 2.595805563032627e-05,
+     "repeat=1/stepfull": 2.5999965146183968e-05
+    }
+   }
+  },
+  "sequence-tape-program/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5248c3cd6c260448"
+   ],
+   "parts": [
+    {
+     "tape_out": "6772508e59335cb8",
+     "tape_loss": "3f7f111c3170886e",
+     "tape_grad0": "3402dddd162c0611",
+     "tape_grad1": "0e87b0fd433e543a",
+     "tape_grad2": "19465871c7b55f97",
+     "tape_grad3": "1f7389b67fdf4b7e",
+     "tape_param0": "9d2bc8711bbbf7cf",
+     "tape_param1": "b16038a08f42d804",
+     "tape_param2": "eb6a7d7fd387f6f6",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "6772508e59335cb8",
+     "prog_loss": "3f7f111c3170886e",
+     "prog_grad0": "3402dddd162c0611",
+     "prog_param0": "8a99128ed66fb706",
+     "prog_grad1": "0e87b0fd433e543a",
+     "prog_param1": "04d8e1272b8794ea",
+     "prog_grad2": "19465871c7b55f97",
+     "prog_param2": "1a26605870b10f0b",
+     "prog_grad3": "1f7389b67fdf4b7e",
+     "prog_param3": "f9d3e6cef7ed167f",
+     "prog_after": "97fc500c3e4f35f9",
+     "prog_held": "2861949323f45eec"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.015961167053319514,
+    "stages": {
+     "repeat=1/train": 0.015696250018663704,
+     "repeat=1/infer-save-reload": 1.0124989785254002e-05,
+     "repeat=1/batch": 3.5207951441407204e-05,
+     "repeat=1/batchgrad": 2.4667009711265564e-05,
+     "repeat=1/batchscale": 2.3124972358345985e-05,
+     "repeat=1/ragged": 2.320797648280859e-05,
+     "repeat=1/stepfull": 2.3333937861025333e-05
+    }
+   }
+  },
+  "sequence-tape-program/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dca2ff85015e2198"
+   ],
+   "parts": [
+    {
+     "tape_out": "d4e6517abffe76c6",
+     "tape_loss": "025a19a22d691893",
+     "tape_grad0": "2ff33e013c9b7c19",
+     "tape_grad1": "51216aa3a1be111a",
+     "tape_grad2": "1107860973b590f5",
+     "tape_grad3": "f5951e53c80e487c",
+     "tape_param0": "18c57672f4929431",
+     "tape_param1": "e2abc6ba3c478242",
+     "tape_param2": "c82fcea41e4cf9b3",
+     "tape_param3": "8406a91ad8ab0f56",
+     "prog_out": "d4e6517abffe76c6",
+     "prog_loss": "025a19a22d691893",
+     "prog_grad0": "2ff33e013c9b7c19",
+     "prog_param0": "881ca8b99760714a",
+     "prog_grad1": "51216aa3a1be111a",
+     "prog_param1": "a3509501200d34f7",
+     "prog_grad2": "1107860973b590f5",
+     "prog_param2": "5134557dcc0966cc",
+     "prog_grad3": "f5951e53c80e487c",
+     "prog_param3": "36c6bbcce00fad1d",
+     "prog_after": "33888f9f8267fd62",
+     "prog_held": "43e29bee345bf4d8"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.012898709042929113,
+    "stages": {
+     "repeat=1/train": 0.012641833978705108,
+     "repeat=1/infer-save-reload": 1.0207993909716606e-05,
+     "repeat=1/batch": 3.241607919335365e-05,
+     "repeat=1/batchgrad": 2.5707995519042015e-05,
+     "repeat=1/batchscale": 2.420798409730196e-05,
+     "repeat=1/ragged": 2.4792039766907692e-05,
+     "repeat=1/stepfull": 2.4290988221764565e-05
+    }
+   }
+  },
+  "sequence-tape-program/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0c1c82322f1e43e7"
+   ],
+   "parts": [
+    {
+     "tape_out": "eacda1143347cb56",
+     "tape_loss": "bf0596f0cbf39609",
+     "tape_grad0": "30ea3c6c24002860",
+     "tape_grad1": "c607ed89242a43a8",
+     "tape_grad2": "eeb5a1d1f4b0083e",
+     "tape_grad3": "94afa157c9b681d5",
+     "tape_param0": "747d9585aaab1dec",
+     "tape_param1": "b16038a08f42d804",
+     "tape_param2": "8a8dba8881be87ee",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "eacda1143347cb56",
+     "prog_loss": "bf0596f0cbf39609",
+     "prog_grad0": "30ea3c6c24002860",
+     "prog_param0": "d20f2ad7be51425e",
+     "prog_grad1": "c607ed89242a43a8",
+     "prog_param1": "c4015cfa32066be8",
+     "prog_grad2": "eeb5a1d1f4b0083e",
+     "prog_param2": "7ec2411187cc650c",
+     "prog_grad3": "94afa157c9b681d5",
+     "prog_param3": "79e41cc3c7992112",
+     "prog_after": "815f73010a00d221",
+     "prog_held": "29a485c10b0cb05e"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01641791604924947,
+    "stages": {
+     "repeat=1/train": 0.016105666989460588,
+     "repeat=1/infer-save-reload": 7.958034984767437e-06,
+     "repeat=1/batch": 8.808297570794821e-05,
+     "repeat=1/batchgrad": 2.7249916456639767e-05,
+     "repeat=1/batchscale": 2.4709035642445087e-05,
+     "repeat=1/ragged": 2.4957931600511074e-05,
+     "repeat=1/stepfull": 2.5333021767437458e-05
+    }
+   }
+  },
+  "sequence-tape-program/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0c1c82322f1e43e7"
+   ],
+   "parts": [
+    {
+     "tape_out": "eacda1143347cb56",
+     "tape_loss": "bf0596f0cbf39609",
+     "tape_grad0": "30ea3c6c24002860",
+     "tape_grad1": "c607ed89242a43a8",
+     "tape_grad2": "eeb5a1d1f4b0083e",
+     "tape_grad3": "94afa157c9b681d5",
+     "tape_param0": "747d9585aaab1dec",
+     "tape_param1": "b16038a08f42d804",
+     "tape_param2": "8a8dba8881be87ee",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "eacda1143347cb56",
+     "prog_loss": "bf0596f0cbf39609",
+     "prog_grad0": "30ea3c6c24002860",
+     "prog_param0": "d20f2ad7be51425e",
+     "prog_grad1": "c607ed89242a43a8",
+     "prog_param1": "c4015cfa32066be8",
+     "prog_grad2": "eeb5a1d1f4b0083e",
+     "prog_param2": "7ec2411187cc650c",
+     "prog_grad3": "94afa157c9b681d5",
+     "prog_param3": "79e41cc3c7992112",
+     "prog_after": "815f73010a00d221",
+     "prog_held": "29a485c10b0cb05e"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.012510124943219125,
+    "stages": {
+     "repeat=1/train": 0.012278332957066596,
+     "repeat=1/infer-save-reload": 7.333001121878624e-06,
+     "repeat=1/batch": 3.2082898542284966e-05,
+     "repeat=1/batchgrad": 2.5999965146183968e-05,
+     "repeat=1/batchscale": 2.416700590401888e-05,
+     "repeat=1/ragged": 2.4124979972839355e-05,
+     "repeat=1/stepfull": 2.3833010345697403e-05
+    }
+   }
+  },
+  "sequence-tape-program/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "51439fb69fce9a62"
+   ],
+   "parts": [
+    {
+     "tape_out": "d52a5767f346e276",
+     "tape_loss": "9c46b209254d60db",
+     "tape_grad0": "6ee22852cad9e5dd",
+     "tape_grad1": "73a385e8708bf80c",
+     "tape_grad2": "ebe474e4b596ff67",
+     "tape_grad3": "ab60ea7e20b52cb0",
+     "tape_param0": "537819dd758e7b39",
+     "tape_param1": "f4c83851c403d6f3",
+     "tape_param2": "5c6167dd4980031b",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "d52a5767f346e276",
+     "prog_loss": "9c46b209254d60db",
+     "prog_grad0": "6ee22852cad9e5dd",
+     "prog_param0": "5b9c8ad931e82afa",
+     "prog_grad1": "73a385e8708bf80c",
+     "prog_param1": "dcc5c1c6204500fe",
+     "prog_grad2": "ebe474e4b596ff67",
+     "prog_param2": "eea0fb487fc1a3b8",
+     "prog_grad3": "ab60ea7e20b52cb0",
+     "prog_param3": "5ea161c2059fc05d",
+     "prog_after": "2472a08dfa5b4a71",
+     "prog_held": "b2d254db192deb05"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.012577457935549319,
+    "stages": {
+     "repeat=1/train": 0.012327832984738052,
+     "repeat=1/infer-save-reload": 8.499948307871819e-06,
+     "repeat=1/batch": 3.441690932959318e-05,
+     "repeat=1/batchgrad": 2.62079993262887e-05,
+     "repeat=1/batchscale": 2.4999957531690598e-05,
+     "repeat=1/ragged": 2.5582965463399887e-05,
+     "repeat=1/stepfull": 2.437504008412361e-05
+    }
+   }
+  },
+  "sequence-tape-program/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f83d5fe9d1455bf0"
+   ],
+   "parts": [
+    {
+     "tape_out": "6f26cce4dafca865",
+     "tape_loss": "fe357ec853d1bdfc",
+     "tape_grad0": "e8475c7eedffb657",
+     "tape_grad1": "eb2852456601cb70",
+     "tape_grad2": "d62d57ec380e6ae8",
+     "tape_grad3": "300e9c9ec00818cc",
+     "tape_param0": "c87dc1a75e0f9b6b",
+     "tape_param1": "b16038a08f42d804",
+     "tape_param2": "9471f8579bb1b2e5",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "6f26cce4dafca865",
+     "prog_loss": "fe357ec853d1bdfc",
+     "prog_grad0": "e8475c7eedffb657",
+     "prog_param0": "c8aea23a8fa8eed4",
+     "prog_grad1": "eb2852456601cb70",
+     "prog_param1": "3c0c8cc325ae126e",
+     "prog_grad2": "d62d57ec380e6ae8",
+     "prog_param2": "3274c1c50ef0fc5e",
+     "prog_grad3": "300e9c9ec00818cc",
+     "prog_param3": "1a96f646d1de5f21",
+     "prog_after": "7520774bde3b1e8e",
+     "prog_held": "2edb35090935d42e"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.015262041939422488,
+    "stages": {
+     "repeat=1/train": 0.015032791998237371,
+     "repeat=1/infer-save-reload": 8.417060598731041e-06,
+     "repeat=1/batch": 2.7916976250708103e-05,
+     "repeat=1/batchgrad": 2.008303999900818e-05,
+     "repeat=1/batchscale": 1.850002445280552e-05,
+     "repeat=1/ragged": 1.8666964024305344e-05,
+     "repeat=1/stepfull": 1.8124934285879135e-05
+    }
+   }
+  },
+  "sequence-tape-program/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ff298b25f802f5f6"
+   ],
+   "parts": [
+    {
+     "tape_out": "28c974fc0289c807",
+     "tape_loss": "810fbc2cb405d271",
+     "tape_grad0": "b95f9e030f421fd3",
+     "tape_grad1": "4626ba6ca829c658",
+     "tape_grad2": "00a72f8ae55976c4",
+     "tape_grad3": "5e8038ad53340f0c",
+     "tape_param0": "7b752b985a718783",
+     "tape_param1": "1701070f523a5331",
+     "tape_param2": "dbf3130137baac6b",
+     "tape_param3": "191864898c79c4f6",
+     "prog_out": "28c974fc0289c807",
+     "prog_loss": "810fbc2cb405d271",
+     "prog_grad0": "b95f9e030f421fd3",
+     "prog_param0": "aded1c2ce1834de3",
+     "prog_grad1": "4626ba6ca829c658",
+     "prog_param1": "3ac39c6a9de85ee4",
+     "prog_grad2": "00a72f8ae55976c4",
+     "prog_param2": "e3de5f36e9fce600",
+     "prog_grad3": "5e8038ad53340f0c",
+     "prog_param3": "edafe2e49fc7861d",
+     "prog_after": "baa95498c2eaba89",
+     "prog_held": "ea8ef93efb8c3aeb"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.012682624976150692,
+    "stages": {
+     "repeat=1/train": 0.012368625029921532,
+     "repeat=1/infer-save-reload": 8.665956556797028e-06,
+     "repeat=1/batch": 9.833404328674078e-05,
+     "repeat=1/batchgrad": 2.675002906471491e-05,
+     "repeat=1/batchscale": 2.4374923668801785e-05,
+     "repeat=1/ragged": 2.420798409730196e-05,
+     "repeat=1/stepfull": 2.420798409730196e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "linalg-eigh": "fixed-order-gram-1",
+  "x-metrics-regression": "metrics-undefined-weighted-score-1",
+  "trees-dart-options": "tree-shap-zero-cover-path-1",
+  "trees-shap-tree": "tree-shap-zero-cover-path-1",
+  "x-glm-poisson": "portable-positive-target-exp-1",
+  "x-glm-gamma": "portable-positive-target-exp-1",
+  "x-glm-tweedie": "portable-positive-target-exp-1",
+  "x-glm-poisson-sw": "portable-positive-target-exp-1",
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "tsvd": "explained-variance-train-contract-1",
+  "umap": "save-option-extras-contract-2",
+  "par-graph-umap": "save-option-extras-contract-2",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1",
+  "par-gmm": "classic-kmeanspp-init-1"
+ },
+ "batch_revisions": {
+  "et-clf-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-class-weights": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-multiclass-offgrid": "weighted-trees-batch-2026-10-20-v1",
+  "et-reg-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "optim-maximize": "expansion-batch-2026-09-28-v1",
+  "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+  "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+  "x-decomp-nmf": "nmf-inverse-batch-2026-09-28-v2",
+  "x-decomp-als": "expansion-batch-2026-09-28-v1",
+  "x-isotonic": "expansion-batch-2026-09-28-v1",
+  "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+  "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+  "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+  "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+  "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+  "x-metrics-search": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+  "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+  "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+  "x-prep-priors": "expansion-batch-2026-09-28-v1",
+  "resample-bca": "bca-distribution-batch-2026-09-28-v2",
+  "resample-unpaired": "bca-distribution-batch-2026-09-28-v2",
+  "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+  "resample-utils": "expansion-batch-2026-09-28-v1",
+  "sequence-lstm": "expansion-batch-2026-09-28-v1",
+  "sequence-gru": "expansion-batch-2026-09-28-v1",
+  "sequence-rnn": "expansion-batch-2026-09-28-v1",
+  "sequence-mlp": "expansion-batch-2026-09-28-v1",
+  "sequence-layernorm": "layernorm-batch-width-2026-09-28-v2",
+  "sequence-moe": "expansion-batch-2026-09-28-v1",
+  "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+  "sequence-lamb": "expansion-batch-2026-09-28-v1",
+  "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+  "sequence-var": "expansion-batch-2026-09-28-v1",
+  "sequence-theta": "expansion-batch-2026-09-28-v1",
+  "sequence-croston": "expansion-batch-2026-09-28-v1",
+  "sequence-ets": "expansion-batch-2026-09-28-v1",
+  "sequence-garch": "expansion-batch-2026-09-28-v1",
+  "sequence-prophet": "expansion-batch-2026-09-28-v1",
+  "sequence-stl": "expansion-batch-2026-09-28-v1",
+  "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+  "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+  "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+  "sequence-lion": "expansion-batch-2026-09-28-v1",
+  "sequence-adamax": "expansion-batch-2026-09-28-v1",
+  "sequence-nadam": "expansion-batch-2026-09-28-v1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-samba",
+  "par-samba-clip"
+ ],
+ "degenerate_column": "apple-metal",
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.57",
+  "package_dir": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "binding_provenance_protocol": "loaded-native-v2",
+  "bindings": [
+   {
+    "module": "mojolearn._host._mojolearn_core_host",
+    "sha256": "b085fcc5b251e7751e98cc698f859c272f0cb48566d38e2c1aa367e054654c6c",
+    "size": 1475816,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/6c19ddec9281143feea2da75901ee364e4f7b967551eb105976191c8db48abe1/_mojolearn_dev_core_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_embedding_infer_host",
+    "sha256": "f3fd24fe2e391d4d06aca0daf72613491f022b457b0444f339c21a72fa9f600a",
+    "size": 233944,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/325cab4de69bd96f86e20270061df5c1591dd103392cc2088be4c1792fc7efe5/_mojolearn_dev_embedding_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_estimators_host",
+    "sha256": "2db219ef5200f444d3c152ff306bd686a4f176f39ad3ccdf556ec41e0579a820",
+    "size": 1389200,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/57f77cd8df603b5ce8408d523466fdcc7ac3c6c44329f9fa03cf1a85eb0a1374/_mojolearn_dev_estimators_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forecast_host",
+    "sha256": "414d164d4fe03c4ca8b2d2eba7ed4a795bc1ecc04bd7bf8aa9cfbb6f81a27419",
+    "size": 425072,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/1580b6447d762e51385f6fa963d28e9649dd93f05a415ee23048f854b75de0d6/_mojolearn_dev_forecast_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forest_host",
+    "sha256": "91b5f58d82c3403d88579387930dfe006d5ab4b0dac92dd0c26fdeac3d2292e9",
+    "size": 550912,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/9fb71221c7d71d304fae5395bf423402dd9566d4aa91ef83c1e7accbc1fa7dcc/_mojolearn_dev_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gp_infer_host",
+    "sha256": "dace12768c7feef5da50d509463152d9bce940ca3d1bb41924b468e23442fac8",
+    "size": 380784,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/fd3804062da4f2bdbedffea9898a7002114e3f9e881a34d5834740b936c6e3c7/_mojolearn_dev_gp_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_hdbscan_infer_host",
+    "sha256": "9e35e0a7f9a719a653f9d7d8aa906be7116028cc480975eeea70e8dc32feb40d",
+    "size": 363368,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/87c055ed8b29f1eada48c85a88d1b960b3c20ed9abfa739db7f6dd7ecd8af2fd/_mojolearn_dev_hdbscan_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_ivf_search_host",
+    "sha256": "5f2b4b394af205ae49fd734232aefa59188ba16ed524bc3826c2f3eb5c09e7cc",
+    "size": 367056,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/4f8935b6828cb6a589c0b46bac81e0b3f1982344391a533b981481816fda7ca3/_mojolearn_dev_ivf_search_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_linalg_host",
+    "sha256": "9e010c8880df3c060b102b94823c716a263843c33420763187d697f82cd83300",
+    "size": 495936,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/724debacbb9a8b5ad7d23477fb1d28006fe0ab69fa3df157310cc5d51b819d98/_mojolearn_dev_linalg_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_metrics_host",
+    "sha256": "76132e8f930ddb4d8a13904004e6717d39c8a4bcf645d544fdba15bc0ed56e7b",
+    "size": 1004736,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/5f5ab6ca02cd2177cb9b4de0aec883345c07caf76a03edea183b257d0e9dd223/_mojolearn_dev_metrics_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mixture_infer_host",
+    "sha256": "7a42a33cd23d1f0231ba547a7daa7262f7cec3e894c84f049136dcd90a833efe",
+    "size": 295944,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/8a61175db0382be8fe2ef72489c309f53fb215b785b2c473e0f41f371d10db67/_mojolearn_dev_mixture_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_neural_host",
+    "sha256": "1b4fc81899c818cd7850af6fcd0590558ca6cee34c34bc42ff92112507e44bfd",
+    "size": 1215456,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/8f857f6a0c524e5a3418e923bdbaec3703fd32a0b3562f45f50306b4f2be02ce/_mojolearn_dev_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_preprocessing_host",
+    "sha256": "8d941f7e92b307016a8a2e7e04c5d743528ef9b4ef2c8c25188ff5e9cdd8e5d2",
+    "size": 297304,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/ef18c20cf86d7a7b4f3e3ef0744b873393f9eb5d81d783da94ce3d80e82e2d76/_mojolearn_dev_preprocessing_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_classical_host",
+    "sha256": "57db91ea5dde950f9f449603a1d864686a94106919ddd29f9b211a019935bfb7",
+    "size": 19314168,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/ec1184a251348c7730d204c494ca43cdbeb40bb11e3a7f85a56486163215ed45/_mojolearn_dev_runtime_classical_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_manifold_host",
+    "sha256": "136a9553d4caab9174cbe095edd2ba25d1d88d18333d565602950c0dda2667f8",
+    "size": 1626888,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/6d5d54a551a942fd6949310628a17d2078fc3293ce953d2af282ca74942d3203/_mojolearn_dev_runtime_manifold_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_model_selection_host",
+    "sha256": "e11bdfd7a558c3ab0b6cede56d771fc990382cf1183e1454e250dba5a8719a09",
+    "size": 3459168,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/d09a3d37c8abc3a9fbc4dff499cb72563bb56b3d87c1d21e78b692b0c53d7b61/_mojolearn_dev_runtime_model_selection_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_svm_host",
+    "sha256": "ac09ff859d5df83afd6554e9ab2193560e86c5187e22625892f07096571ea374",
+    "size": 603112,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/2a12a723602d8db2c16da9ea5a7a8a5e6c0d73da793abe8ad9a6c1ddfa5f60d9/_mojolearn_dev_svm_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_tokenizer_host",
+    "sha256": "1ec88157585cbfdbc73e07b8207948f4a0069b77924ad0a6b6b8f94580217409",
+    "size": 13780032,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/06e25164053d37d688b76c62e88e5d9b42873705946d0347b56750a52ab7da79/_mojolearn_dev_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_decomp_host",
+    "sha256": "3c20af59c9acf1b7d50165a933d14d0a12982a15d967e6bc9aa2a8a2d30dac0e",
+    "size": 2033024,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/10bdf99b279b2ef590b9ef5f4f9b1b8bfc8cd4c7ebb4d3bd3760c9cbce5ac5cb/_mojolearn_dev_x_decomp_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_linear_host",
+    "sha256": "85ba765f0a854a06bff248e1801cd377153842cd4318e1780ab496afbf39adb8",
+    "size": 800672,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/4b995c38baf65a57f9ce5f0edc1186484ce22e066e45c491567614bbfd2ce837/_mojolearn_dev_x_linear_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_neighbors_host",
+    "sha256": "834f4038e39eb975d5d8a612b7ca9029b0c74107418687e554bb6bd632af5bf7",
+    "size": 1570528,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/91ee2047108d5715a2a4312a7717c7101e9703ba211738337553973d578484f9/_mojolearn_dev_x_neighbors_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_prep_host",
+    "sha256": "aca9d7c37d443eafda3560bb57ca3db2fd8d36aef6511057fa55938a5ad1e1c6",
+    "size": 2652768,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/host/.development/da05ae67b854bbbb66a7a699adcd048063c90f6fbe58fd3cb8f5d164906a2b01/_mojolearn_dev_x_prep_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn",
+    "sha256": "852535bed79e9190153340f0db5b352a7df0d7cc0a1375e0202807688aacf2ef",
+    "size": 6583368,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/6cd0af0f1e0f109c505b7482e4ebacf8e062044c072f8e5a714c9cd4af6fcfac/_mojolearn_dev_core.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_arima",
+    "sha256": "8ab7168c33997be3189d1afacd9208f22895f942f533e9d23bb3552c2ed66ac4",
+    "size": 1386584,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/a38159cd760bf4922483989d95c25bebeaeaf6e32ff04cba9576bb64fcf2a077/_mojolearn_dev_arima.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_byte_lm",
+    "sha256": "0f3ed3374d61735ee72c039c48d68f5b4c70251626457304fec270114b55475c",
+    "size": 7850696,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/14be2dcf8f7d7e94799be69443f809047d1a1f5283acd5a926ba50b9f5e50f0d/_mojolearn_dev_byte_lm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_embedding",
+    "sha256": "02191506945958c2c4f6ebce981efbe39e59a3e8bf4baf92fab8d8a508ebb3a4",
+    "size": 725368,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/61d0439915660749a253d7f7a2e660b5dd5ce3de61ef9c026df80bed3556b571/_mojolearn_dev_embedding.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_estimators",
+    "sha256": "ae6eb6a84ab6c05f5ba0fff89babb8debce4dba76630df27f5adfdb8afbeee78",
+    "size": 8283696,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/daf33199a3b259672d8fb5a1e4e8702ed8c98d28a4cd5d6afdad55c699dc22a6/_mojolearn_dev_estimators_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_gbdt",
+    "sha256": "91344c6321bf5ef7b46aa5c87d97c5db53a74a5e81a9161f3fff52423ed4cf0f",
+    "size": 12144936,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/85d1181650ede4fc4252637ed321cfcb0ff8cd8c1042853a8a4012785555dd11/_mojolearn_dev_gbdt.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_gp",
+    "sha256": "a74adc29769ea5ef20b59fec8437971ef6f648dc25f5b4b1dbcf595c85ef02a0",
+    "size": 4165128,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/cd897cb63ff70480a52b801f3b167724095b6954fb7da203fe90b02052265a93/_mojolearn_dev_gp.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_hdbscan",
+    "sha256": "3157a65dcdea573660b1303d4ac773184be5e16146e94ef00777c913eef10785",
+    "size": 4269928,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/ee74cec8b82abae86635830a80df8cf23f86fbd8cb0d4c5e4b47a157e05277b2/_mojolearn_dev_hdbscan.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_ivf",
+    "sha256": "6b603a23b156e38d2876a430471d22f9ed683d1aab9e2c005b28fce0dd8f340e",
+    "size": 2149896,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/f6bcd64831151f120d0fc19360063a15bb0bf1589283eb1d8f7dfb301d95e701/_mojolearn_dev_ivf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_kernel_methods",
+    "sha256": "cdcd7a296814421f650118e16cf2f89caccdf16ea277e7282274aaecfe19a079",
+    "size": 3984032,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/075bd4db2fce6d079768cbd223693357633163924fac54dc1e0a74c0633833d6/_mojolearn_dev_kernel_methods.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_linalg",
+    "sha256": "89704701f133c17737b61cf1649c5bd88c5bcbf2f6de61d44ae0a24656096ecb",
+    "size": 3168648,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/e0bfa901cd5c70adee7f02e1d74f6d6da2c9b8d5b92942e33c229d5f92106214/_mojolearn_dev_linalg.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_mamba",
+    "sha256": "e5fe06d53038877071938ebcf88af24e448e19f81ccbaab180d8dfb47a79f7d7",
+    "size": 6049016,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/50caa6020b60858087350e806a36597b6658962aa33d8daea31c321854710d4b/_mojolearn_dev_mamba.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_metrics",
+    "sha256": "771265a3160e4596f44677a5ff1e23d06abaa0ba8fbac22b9d05bc7473b1b106",
+    "size": 8453712,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/067a119ffde7eb6014200b0746a5d987811813ed962ea1fd4f7dc9b01662987f/_mojolearn_dev_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_mixture",
+    "sha256": "d86025f2ccf11898ff1ec35e14b9db0ad74d653e3c679a594b9e4dd1af08547d",
+    "size": 4130440,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/9887cd08e5c3758de271a7abf8c351611dac2e54d23619aef60dfc8619fe6138/_mojolearn_dev_mixture.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_preprocessing",
+    "sha256": "89046e3ac7f9fae00d9eecd7cabf7f2d18db44191f134463aab7527e078f1d74",
+    "size": 451392,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/f81d4ea12a8647171ddb9aa0ef345cc51a6f40ef560e4f16ea37291bb2346556/_mojolearn_dev_preprocessing_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_resample",
+    "sha256": "31d00772928630126b6f7f16cee4d436817b5bf017555b2995861c6782940ea8",
+    "size": 1841848,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/4d66cd6a4533d8d7cd153ccf786073dee3c3442f7157c80a3d103ea8dc6ad897/_mojolearn_dev_resample.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_rf",
+    "sha256": "a7f9adfe56f313e0c5d70c3ee9771678871f6cd1b6e7ab99f25cccfe2355655b",
+    "size": 3750072,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/6bc4836ccf211254c86c78e9b8dc374ffe7e97dd2e353d36a6e45b531e19888f/_mojolearn_dev_rf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_solver",
+    "sha256": "cd80338175897de5afd0d17a6ca15331c7c8dd814c847adde4ff91fe11f45f32",
+    "size": 3088648,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/11b93752abb4fd0346850b041f66786f707bb93fecd56752cfb2e9b5a8ef369a/_mojolearn_dev_solver.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_svm",
+    "sha256": "38edb278221134cb6138faee0973f593d30e17524cfb93c4755929f1bbc38015",
+    "size": 4986616,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/053a2684a756239173e8096c71fd14ab56e52b59396123b8649e79bebffd58a1/_mojolearn_dev_svm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_training",
+    "sha256": "5011b9ef30b763cda96f04158b5d2ef5fbe807c9d3e4f182f0232f1ce3d49dba",
+    "size": 8834136,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/27a8b9cbc9041ae14af6f96164cef8b7f6bc02e5b9fb04d4c767a6375bcc3e68/_mojolearn_dev_training.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_transformer",
+    "sha256": "8664d63707ca5316d7cb0ddf164507b23360eb004650cc6639fd78a29ec971f9",
+    "size": 6816384,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/0140ae65d0095f3ec28922f810c6641e61fa937898310cfbd25d6c434814db60/_mojolearn_dev_transformer.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_trees",
+    "sha256": "f39378f6df0b5d7820daec2c5c642d4d986857591caefcace3ffdc245915eacb",
+    "size": 2572424,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/a097ea9b6ce21242e9cd51d4c6e9fdcfbc6b8efc3d5d8583afee40c5900fc421/_mojolearn_dev_trees.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_tsa",
+    "sha256": "4097fddf1eb6f24b755bcfc344d4d2f8b23304a70b3719b48a3109bd50e3a266",
+    "size": 813144,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/a105f66a6e44e72b00f1d80775302cdcf6c20f103ece8e145c2dfcb187db2215/_mojolearn_dev_tsa_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_ann",
+    "sha256": "3a4820ac1133eb83475dcdeb8d2354d4342446cda0de7c62b3cd3d956f788075",
+    "size": 2475848,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/b3898487979005687861664aee387d892f9d7dcd4771f47d4e2021b51e6eabe7/_mojolearn_dev_x_ann_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_cluster",
+    "sha256": "7163b165c0ec24414a7b34af82f8bad6e3a463a78f0356bd1e0565155051e12d",
+    "size": 6216752,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/43b441f7f4755dac62327079f6d13a22e645b44b48874b66475a407aca6e3fff/_mojolearn_dev_x_cluster_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_cnn",
+    "sha256": "7970ed9beee106ee898e9a294618825f7235c970c7f0487babe139043daf0298",
+    "size": 5475688,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/5f96c4a003362d8d923b6ff899313f51bec284ce23921b75d7f9d0c560e30525/_mojolearn_dev_x_cnn_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_decomp",
+    "sha256": "50d0c1a4a26c9883c72d69a7f7aa62564683d90a2480b2cd66c3f4254786c0f1",
+    "size": 7478240,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/408a9140e5ed5845bb85a7d9b6d5df686d4e6770872e90ae4872b0336b89fba4/_mojolearn_dev_x_decomp_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_linear",
+    "sha256": "ee95b0e0ffa94ce402d3569ed7ffedde7550f6e86d0081a6a72be69b84379761",
+    "size": 3776144,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/59ae98a0ff0b69a9f209ac4ae38748d10fc09f8356733966c7a038b6ab83700a/_mojolearn_dev_x_linear_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_metrics",
+    "sha256": "0d47cd60b45608861708e07789c96cf883d351ebf6b1020cf57cc02d6dc1829f",
+    "size": 2813536,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/349040d23f40b35ce9c186d1fd4c7bab89d7ae0d87c9482bf6108b00a5022fad/_mojolearn_dev_x_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_neighbors",
+    "sha256": "7703a9e8c417655011caea049718e78d385a2d156136e1e872822ddb196e252d",
+    "size": 5773632,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/81572fa1146083bc28beb550c440fba6d5c32c6b07932bc5a243a33cf29c983f/_mojolearn_dev_x_neighbors_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_prep",
+    "sha256": "1a58a0865927d417199baf775a258ad6140097f5208e87040ee77b0d07bf809a",
+    "size": 3797192,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/1ed66ec4aa9889d912db3ee5c1a3b403917755681c8496c6da6ac942eab8ff48/_mojolearn_dev_x_prep_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_sequence",
+    "sha256": "f005da4288f8adba7310671f89126a926b4885924bc6c14c33ab45fe4c552a85",
+    "size": 11739168,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/bb373fb7b5f37276d3d227254b7ba724480e52f4e6e626956db60215a3c051fe/_mojolearn_dev_x_sequence_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_trees",
+    "sha256": "5fb8ad10e36e690d124461fa82a14862be3b824be50cbaf8aefd5e8a629e44dd",
+    "size": 3837792,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/f6c983ca869a90abab835cbf4d3346b016da88af0bd5fe0500c9812b3caecaac/_mojolearn_dev_x_trees_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn",
+    "sha256": "852535bed79e9190153340f0db5b352a7df0d7cc0a1375e0202807688aacf2ef",
+    "size": 6583368,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/6cd0af0f1e0f109c505b7482e4ebacf8e062044c072f8e5a714c9cd4af6fcfac/_mojolearn_dev_core.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_arima",
+    "sha256": "8ab7168c33997be3189d1afacd9208f22895f942f533e9d23bb3552c2ed66ac4",
+    "size": 1386584,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/a38159cd760bf4922483989d95c25bebeaeaf6e32ff04cba9576bb64fcf2a077/_mojolearn_dev_arima.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_byte_lm",
+    "sha256": "0f3ed3374d61735ee72c039c48d68f5b4c70251626457304fec270114b55475c",
+    "size": 7850696,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/14be2dcf8f7d7e94799be69443f809047d1a1f5283acd5a926ba50b9f5e50f0d/_mojolearn_dev_byte_lm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_embedding",
+    "sha256": "02191506945958c2c4f6ebce981efbe39e59a3e8bf4baf92fab8d8a508ebb3a4",
+    "size": 725368,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/61d0439915660749a253d7f7a2e660b5dd5ce3de61ef9c026df80bed3556b571/_mojolearn_dev_embedding.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_estimators",
+    "sha256": "ae6eb6a84ab6c05f5ba0fff89babb8debce4dba76630df27f5adfdb8afbeee78",
+    "size": 8283696,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/daf33199a3b259672d8fb5a1e4e8702ed8c98d28a4cd5d6afdad55c699dc22a6/_mojolearn_dev_estimators_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_gbdt",
+    "sha256": "91344c6321bf5ef7b46aa5c87d97c5db53a74a5e81a9161f3fff52423ed4cf0f",
+    "size": 12144936,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/85d1181650ede4fc4252637ed321cfcb0ff8cd8c1042853a8a4012785555dd11/_mojolearn_dev_gbdt.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_gp",
+    "sha256": "a74adc29769ea5ef20b59fec8437971ef6f648dc25f5b4b1dbcf595c85ef02a0",
+    "size": 4165128,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/cd897cb63ff70480a52b801f3b167724095b6954fb7da203fe90b02052265a93/_mojolearn_dev_gp.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_hdbscan",
+    "sha256": "3157a65dcdea573660b1303d4ac773184be5e16146e94ef00777c913eef10785",
+    "size": 4269928,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/ee74cec8b82abae86635830a80df8cf23f86fbd8cb0d4c5e4b47a157e05277b2/_mojolearn_dev_hdbscan.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_ivf",
+    "sha256": "6b603a23b156e38d2876a430471d22f9ed683d1aab9e2c005b28fce0dd8f340e",
+    "size": 2149896,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/f6bcd64831151f120d0fc19360063a15bb0bf1589283eb1d8f7dfb301d95e701/_mojolearn_dev_ivf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_kernel_methods",
+    "sha256": "cdcd7a296814421f650118e16cf2f89caccdf16ea277e7282274aaecfe19a079",
+    "size": 3984032,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/075bd4db2fce6d079768cbd223693357633163924fac54dc1e0a74c0633833d6/_mojolearn_dev_kernel_methods.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_linalg",
+    "sha256": "89704701f133c17737b61cf1649c5bd88c5bcbf2f6de61d44ae0a24656096ecb",
+    "size": 3168648,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/e0bfa901cd5c70adee7f02e1d74f6d6da2c9b8d5b92942e33c229d5f92106214/_mojolearn_dev_linalg.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_mamba",
+    "sha256": "e5fe06d53038877071938ebcf88af24e448e19f81ccbaab180d8dfb47a79f7d7",
+    "size": 6049016,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/50caa6020b60858087350e806a36597b6658962aa33d8daea31c321854710d4b/_mojolearn_dev_mamba.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_metrics",
+    "sha256": "771265a3160e4596f44677a5ff1e23d06abaa0ba8fbac22b9d05bc7473b1b106",
+    "size": 8453712,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/067a119ffde7eb6014200b0746a5d987811813ed962ea1fd4f7dc9b01662987f/_mojolearn_dev_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_mixture",
+    "sha256": "d86025f2ccf11898ff1ec35e14b9db0ad74d653e3c679a594b9e4dd1af08547d",
+    "size": 4130440,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/9887cd08e5c3758de271a7abf8c351611dac2e54d23619aef60dfc8619fe6138/_mojolearn_dev_mixture.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_preprocessing",
+    "sha256": "89046e3ac7f9fae00d9eecd7cabf7f2d18db44191f134463aab7527e078f1d74",
+    "size": 451392,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/f81d4ea12a8647171ddb9aa0ef345cc51a6f40ef560e4f16ea37291bb2346556/_mojolearn_dev_preprocessing_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_resample",
+    "sha256": "31d00772928630126b6f7f16cee4d436817b5bf017555b2995861c6782940ea8",
+    "size": 1841848,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/4d66cd6a4533d8d7cd153ccf786073dee3c3442f7157c80a3d103ea8dc6ad897/_mojolearn_dev_resample.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_rf",
+    "sha256": "a7f9adfe56f313e0c5d70c3ee9771678871f6cd1b6e7ab99f25cccfe2355655b",
+    "size": 3750072,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/6bc4836ccf211254c86c78e9b8dc374ffe7e97dd2e353d36a6e45b531e19888f/_mojolearn_dev_rf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_solver",
+    "sha256": "cd80338175897de5afd0d17a6ca15331c7c8dd814c847adde4ff91fe11f45f32",
+    "size": 3088648,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/11b93752abb4fd0346850b041f66786f707bb93fecd56752cfb2e9b5a8ef369a/_mojolearn_dev_solver.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_svm",
+    "sha256": "38edb278221134cb6138faee0973f593d30e17524cfb93c4755929f1bbc38015",
+    "size": 4986616,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/053a2684a756239173e8096c71fd14ab56e52b59396123b8649e79bebffd58a1/_mojolearn_dev_svm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_training",
+    "sha256": "5011b9ef30b763cda96f04158b5d2ef5fbe807c9d3e4f182f0232f1ce3d49dba",
+    "size": 8834136,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/27a8b9cbc9041ae14af6f96164cef8b7f6bc02e5b9fb04d4c767a6375bcc3e68/_mojolearn_dev_training.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_transformer",
+    "sha256": "8664d63707ca5316d7cb0ddf164507b23360eb004650cc6639fd78a29ec971f9",
+    "size": 6816384,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/0140ae65d0095f3ec28922f810c6641e61fa937898310cfbd25d6c434814db60/_mojolearn_dev_transformer.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_trees",
+    "sha256": "f39378f6df0b5d7820daec2c5c642d4d986857591caefcace3ffdc245915eacb",
+    "size": 2572424,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/a097ea9b6ce21242e9cd51d4c6e9fdcfbc6b8efc3d5d8583afee40c5900fc421/_mojolearn_dev_trees.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_tsa",
+    "sha256": "4097fddf1eb6f24b755bcfc344d4d2f8b23304a70b3719b48a3109bd50e3a266",
+    "size": 813144,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/a105f66a6e44e72b00f1d80775302cdcf6c20f103ece8e145c2dfcb187db2215/_mojolearn_dev_tsa_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_ann",
+    "sha256": "3a4820ac1133eb83475dcdeb8d2354d4342446cda0de7c62b3cd3d956f788075",
+    "size": 2475848,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/b3898487979005687861664aee387d892f9d7dcd4771f47d4e2021b51e6eabe7/_mojolearn_dev_x_ann_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_cluster",
+    "sha256": "7163b165c0ec24414a7b34af82f8bad6e3a463a78f0356bd1e0565155051e12d",
+    "size": 6216752,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/43b441f7f4755dac62327079f6d13a22e645b44b48874b66475a407aca6e3fff/_mojolearn_dev_x_cluster_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_cnn",
+    "sha256": "7970ed9beee106ee898e9a294618825f7235c970c7f0487babe139043daf0298",
+    "size": 5475688,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/5f96c4a003362d8d923b6ff899313f51bec284ce23921b75d7f9d0c560e30525/_mojolearn_dev_x_cnn_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_decomp",
+    "sha256": "50d0c1a4a26c9883c72d69a7f7aa62564683d90a2480b2cd66c3f4254786c0f1",
+    "size": 7478240,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/408a9140e5ed5845bb85a7d9b6d5df686d4e6770872e90ae4872b0336b89fba4/_mojolearn_dev_x_decomp_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_linear",
+    "sha256": "ee95b0e0ffa94ce402d3569ed7ffedde7550f6e86d0081a6a72be69b84379761",
+    "size": 3776144,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/59ae98a0ff0b69a9f209ac4ae38748d10fc09f8356733966c7a038b6ab83700a/_mojolearn_dev_x_linear_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_metrics",
+    "sha256": "0d47cd60b45608861708e07789c96cf883d351ebf6b1020cf57cc02d6dc1829f",
+    "size": 2813536,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/349040d23f40b35ce9c186d1fd4c7bab89d7ae0d87c9482bf6108b00a5022fad/_mojolearn_dev_x_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_neighbors",
+    "sha256": "7703a9e8c417655011caea049718e78d385a2d156136e1e872822ddb196e252d",
+    "size": 5773632,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/81572fa1146083bc28beb550c440fba6d5c32c6b07932bc5a243a33cf29c983f/_mojolearn_dev_x_neighbors_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_prep",
+    "sha256": "1a58a0865927d417199baf775a258ad6140097f5208e87040ee77b0d07bf809a",
+    "size": 3797192,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/1ed66ec4aa9889d912db3ee5c1a3b403917755681c8496c6da6ac942eab8ff48/_mojolearn_dev_x_prep_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_sequence",
+    "sha256": "f005da4288f8adba7310671f89126a926b4885924bc6c14c33ab45fe4c552a85",
+    "size": 11739168,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/bb373fb7b5f37276d3d227254b7ba724480e52f4e6e626956db60215a3c051fe/_mojolearn_dev_x_sequence_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_trees",
+    "sha256": "5fb8ad10e36e690d124461fa82a14862be3b824be50cbaf8aefd5e8a629e44dd",
+    "size": 3837792,
+    "file": "/Users/andrewhendel/mojolearn-wt/mac-build/python/mojolearn/identical/.development/f6c983ca869a90abab835cbf4d3346b016da88af0bd5fe0500c9812b3caecaac/_mojolearn_dev_x_trees_m1.so",
+    "path_source": "__file__"
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "ca637a9ef1716cddf6bfcfa30212fef9912d74ce9f48cfcec0da35e75881fa78",
+  "options": {
+   "require_backend": "metal",
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "hf-causal-lm-stream,hf-checkpoint,hf-model-surface,par-samba,par-samba-clip,sequence-onnx-import,sequence-program-save-load,sequence-tape-program",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": "apple-m4",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "7d4c5d131e8beab7a3e72e493e51cf7e349db6f3d8b0d4b6da1d1b2126478a30",
+  "provenance": {
+   "commit": "439199dcddf58ca68fe7c7ed2078da0a7a864326",
+   "mode": "identical",
+   "vendor": "apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.13.15",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

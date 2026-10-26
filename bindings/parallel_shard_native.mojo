@@ -33,6 +33,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.parallel_public_result import parallel_public_result
 from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit
@@ -46,6 +47,7 @@ from bindings.native_codec import codec_initialize
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
     shard_model, shard_array, shard_join_rows, shard_row_vector, shard_open, shard_identity, shard_trace_take, shard_map, shard_faults_take,
+    shard_dtype,
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
@@ -171,7 +173,7 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
     var view = family_view(source, -1, "input", context)
     var b = shard_b()
     var listed = py_type(source) is b.list or py_type(source) is b.tuple
-    if not listed and String(py=view.dtype) != "<f4":
+    if not listed and shard_dtype(view) != "<f4":
         raise Error("TypeError: Scaler input must have dtype float32")
     if Int(py=view.ndim) != 2 or Int(py=view.shape[0]) == 0 or Int(py=view.shape[1]) == 0:
         raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
@@ -522,6 +524,11 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     _ = py_call(fields.update, merged)
     py_setitem(fields, "_n_trees", count)
     py_setitem(fields, "n_estimators", count)
+    if not regressor:
+        # The plain fit's completed-classifier metadata: public `classes_`
+        # labels from the shards' plain list, and `feature_names_in_` from
+        # this caller's X (an object array the codec does not carry).
+        classifier_after_fit(fields, args[1], trees_context)
     var cfg = py_get(fields, PythonObject("_cfg"), PythonObject(None))
     if cfg is not None:
         cfg = py_call(b.dict, cfg)
@@ -549,7 +556,7 @@ def _rebase_offsets(arrays: PythonObject, entry: PythonObject, context: PythonOb
     var n_raw = 0
     for p in range(len(arrays)):  # driver-loop: one offset table per tree range
         var a = arrays[p]
-        if String(py=a.dtype) != "<i4":
+        if shard_dtype(a) != "<i4":
             raise Error("ValueError: forest worker returned non-int32 node offsets")
         _ = py_call(parts.append, a)
         n_raw += Int(py=a.shape[0])
@@ -803,9 +810,12 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
     for p in range(count):  # driver-loop: one candidate table row per reference block
         var dist = family_as_f32(parts[p][0], 2, "distance shard", context)
         var ids = parts[p][1]
-        if String(py=ids.dtype) != "<i8":
+        var ids_dtype = shard_dtype(ids)
+        if ids_dtype != "<i8":
+            if ids_dtype != "<i4" and ids_dtype != "<u4":
+                raise Error("ValueError: reference shard ids require int32, uint32 or int64, got " + ids_dtype)
             var wide = shard_array("<i8", py_call(b.tuple, ids.shape), Int(py=ids.size), context)
-            var code = HP_I32 if String(py=ids.dtype) == "<i4" else HP_U32
+            var code = HP_I32 if ids_dtype == "<i4" else HP_U32
             _ = cast_elements(Int(py=classical_address(ids)), code, Int(py=classical_address(wide)), HP_I64,
                               Int(py=ids.size))
             _ = wide  # keep the Python object alive through the native call above
@@ -951,6 +961,13 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     _ = soff  # keep the Python object alive through the native call above
     _ = local_all  # keep the Python object alive through the native call above
     _ = map_all  # keep the Python object alive through the native call above
+    # `ind` and `offs` are fresh int32 copies owned only by these locals (and
+    # `admitted`): without these uses Mojo released them at their last named
+    # use, before the plan read their addresses, and the plan saw freed
+    # memory ("invalid global IVF list offsets" on a valid index).
+    _ = ind  # keep the Python object alive through the native call above
+    _ = offs  # keep the Python object alive through the native call above
+    _ = admitted  # keep the Python object alive through the native call above
     if status == 1:
         raise Error("ValueError: IVF original IDs must be a permutation of stored row IDs")
     if status != 0:
@@ -1135,6 +1152,13 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
                         Python.tuple(args[0], args[1], PythonObject(None), False, args[2]), _t("trees_context"))
         var fields = py_call(b.dict, py_fields(model))
         _ = py_call(fields.pop, "_resident_holder", PythonObject(None))
+        # A fitted classifier's `classes_` is the public ClassLabels list
+        # subclass, which the codec does not carry (shard_state dropped it
+        # and the joined forest's predict refused with 'classes_'). Send the
+        # plain label list; the driver restores the public labels.
+        var labels = py_get(fields, "classes_")
+        if labels is not None:
+            py_setitem(fields, "classes_", classifier_label_list(labels, _t("trees_context")))
         return shard_state(fields, b.frozenset(), context)
     if (operation == "reference_shard" or operation == "reference_vote" or operation == "query_state"
             or operation == "query_rows" or operation == "ivf_store" or operation == "ivf_search" or operation == "release"):

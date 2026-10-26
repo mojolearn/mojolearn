@@ -1575,4 +1575,5 @@ from ._native_neighbor_queries import connect_host as _connect_neighbor_host
 _connect_neighbor_host({HostNearestNeighbors: NearestNeighbors,
                         HostKNeighborsClassifier: KNeighborsClassifier,
                         HostKNeighborsRegressor: KNeighborsRegressor,
-                        HostRadiusNeighbors: RadiusNeighbors, HostIVFIndex: IVFIndex}, _HOST_BASENAMES)
+                        HostRadiusNeighbors: RadiusNeighbors, HostIVFIndex: IVFIndex}, _HOST_BASENAMES,
+                       _CLASSICAL["host_archive_context"])
