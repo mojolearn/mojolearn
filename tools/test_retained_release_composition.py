@@ -13,6 +13,8 @@ import test_release_host_composition as old_fixture
 OLD = 'b' * 40
 NEW = 'c' * 40
 COMPILER = old_fixture.COMPILER
+HOST_FILES, DEVICE_FILES = old_fixture.HOST_FILES, old_fixture.DEVICE_FILES
+DEVICE_PLAN = {stem + '.so': members for stem, _c, members in old_fixture.merged_bindings.plan('identical', 'linux', True)}
 
 
 def update(path, operation):
@@ -28,13 +30,14 @@ def augment(root, vendor, arch, identities):
     directory = root / 'sets' / leg
     keys = {k: v for k, v in identities.items() if k.startswith('linux-64/' + leg + '/')}
     update(root / 'compile-inputs.json', lambda d: d['binding_identities'].update(keys))
-    index = dict(format=1, files={'_mojolearn_native.so': sorted(v['name'] for v in keys.values())})
+    names = {v['name'] for v in keys.values()}
+    index = dict(format=1, files={f: sorted(n for n in members if n in names) for f, members in DEVICE_PLAN.items()})
+    assert sorted(n for m in index['files'].values() for n in m) == sorted(names)
     old_fixture.write(directory / 'identical' / hc.INDEX, index)
     with (directory / 'readback.txt').open('a') as out:
-        out.write(''.join(f'identical {name} {vendor}\n' for name in index['files']['_mojolearn_native.so']))
-    gpu = directory / 'identical/_mojolearn_native.so'
-    update(directory / 'manifest.json', lambda d: d['extensions'].append(
-        dict(path='identical/' + gpu.name, sha256=hc.file_sha(gpu))))
+        out.write(''.join(f'identical {name} {vendor}\n' for members in index['files'].values() for name in members))
+    update(directory / 'manifest.json', lambda d: d['extensions'].extend(
+        dict(path='identical/' + f, sha256=hc.file_sha(directory / 'identical' / f)) for f in DEVICE_FILES))
     def revise(proof):
         proof['compile_inputs_sha256'] = hc.file_sha(root / 'compile-inputs.json')
         proof['merged_indexes'][prefix + 'identical/' + hc.INDEX] = dict(
@@ -87,13 +90,14 @@ def assembled(fixture, tmp_path, index=0):
     output = tmp_path / ('assembled-' + str(index))
     if index == 1:
         directory = builds[index] / 'sets/cuda/sm_80'
-        members = json.loads((directory / 'identical' / hc.INDEX).read_text())['files']['_mojolearn_native.so']
+        files = json.loads((directory / 'identical' / hc.INDEX).read_text())['files']
         old_fixture.write(directory / 'PTX_BASELINE.json', dict(
             schema='mojolearn.ptx-set.v2', code_format='ptx', vendor='cuda', target='sm_80',
             min_compute_capability=[8, 0], errors=[], source_commit=OLD, source_dirty=False,
-            arithmetic='unchanged', files=[dict(file='identical/_mojolearn_native.so',
-                sha256=hc.file_sha(directory / 'identical/_mojolearn_native.so'), numeric_mode='identical',
-                members=members, ptx_modules=[dict(target='sm_80', ptx_isa='8.1', approx={}, sha256='f' * 64)])],
+            arithmetic='unchanged', files=[dict(file='identical/' + f,
+                sha256=hc.file_sha(directory / 'identical' / f), numeric_mode='identical',
+                members=members, ptx_modules=[dict(target='sm_80', ptx_isa='8.1', approx={}, sha256='f' * 64)])
+                for f, members in sorted(files.items())],
             indexes=[dict(file='identical/' + hc.INDEX, sha256=hc.file_sha(directory / 'identical' / hc.INDEX))]))
     proof = rc.prepare(builds[index], host, source, COMPILER, output)
     return proof, output
@@ -106,8 +110,10 @@ def test_retains_original_producers_and_independent_new_host(fixture, tmp_path):
     assert rc.validate(proof, source) and rc.validate_bytes(proof, output / 'set')
     assert proof['action'] == rc.ACTION and 'build_exit' not in proof
     assert {r['source_commit'] for r in proof['artifact_origins'].values()} == {OLD, NEW}
-    assert (output / 'set/host' / hc.HOST_FILE).read_bytes() == b'new-host'
-    assert (output / 'set/identical/_mojolearn_native.so').read_bytes() == b'device-cuda/sm_89'
+    for f in HOST_FILES:
+        assert (output / 'set/host' / f).read_bytes() == b'new-host-' + f.encode()
+    for f in DEVICE_FILES:
+        assert (output / 'set/identical' / f).read_bytes() == b'device-cuda/sm_89-' + f.encode()
     assert all(hc.file_sha(Path(path)) == value for path, value in original.items())
     with pytest.raises(ValueError, match='destination already exists'):
         rc.prepare(old[0], host, source, COMPILER, output)
@@ -148,7 +154,7 @@ def test_different_inputs_cannot_be_admitted(fixture, tmp_path, changed):
         rc.validate(proof, fixture[0])
 
 
-@pytest.mark.parametrize('rel', ['identical/_mojolearn_native.so', 'host/' + hc.HOST_FILE,
+@pytest.mark.parametrize('rel', ['identical/' + DEVICE_FILES[-1], 'host/' + HOST_FILES[-1],
                                 'identical/' + hc.INDEX, '.libs/libRuntime.so'])
 def test_mutated_shipped_bytes_fail(fixture, tmp_path, rel):
     proof, output = assembled(fixture, tmp_path)
@@ -209,15 +215,16 @@ def test_packer_reports_original_sources_and_zero_new_compilations(fixture, tmp_
     pw = old_fixture.load_packer()
     root = output / 'set'
     s = pw.SetDir('cuda', 'sm_89',
-        {'cuda/sm_89/identical/_mojolearn_native.so': root / 'identical/_mojolearn_native.so'},
+        {'cuda/sm_89/identical/' + f: root / 'identical' / f for f in DEVICE_FILES},
         {'libRuntime.so': root / '.libs/libRuntime.so'}, hc.decoded(proof['original_device']['manifest']),
-        {name: root / 'host' / hc.HOST_FILE for name in hc.expected_names()}, None, 'merged',
+        {name: root / 'host' / f for f, names in hc.host_plan().items() for name in names}, None, 'merged',
         {'host/' + hc.INDEX: root / 'host' / hc.INDEX, 'identical/' + hc.INDEX: root / 'identical' / hc.INDEX}, {})
     result = pw.release_inventory([s], [output / 'assembly-proof.json'], '0.8.57', source_root=source,
                                   required={('cuda','sm_89')}, profile=pw.RELEASE_SPLIT_PROFILE)
     assert result['sets']['cuda/sm_89']['origin'] == 'retained-composition'
-    assert result['reuse']['built'] == 0 and result['reuse']['retained_composed'] == 2
-    assert result['binding_origin']['mojolearn/cuda/sm_89/identical/_mojolearn_native.so']['source_commit'] == OLD
+    assert result['reuse']['built'] == 0 and result['reuse']['retained_composed'] == len(DEVICE_FILES) + len(HOST_FILES)
+    assert all(result['binding_origin']['mojolearn/cuda/sm_89/identical/' + f]['source_commit'] == OLD
+               for f in DEVICE_FILES)
     assert all('built_by' not in row and row['admitted_by'] == ['cuda/sm_89']
                for row in result['binding_origin'].values())
     assert all(r['source_commit'] == NEW and r['origin'] == 'retained-composition' and 'built_by' not in r
