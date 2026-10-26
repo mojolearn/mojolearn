@@ -15,7 +15,7 @@ generic`, which never carries the PTX slot) and all of them as the split
 
 BOTH BINDING LAYOUTS: `SplitWheels` packs per-binding sets (one `<name>.so`
 per binding) and `SplitWheelsMerged` reruns every test on merged sets (one
-`_mojolearn_native.so` / `_mojolearn_native_host.so` per directory plus the
+`<stem>.so` per merged group of each directory plus the
 index `_mojolearn_merged.json`, the bindings/merged_groups.json plan);
 `MergedLayoutRefusals` covers what only the merged layout can get wrong.
 
@@ -850,14 +850,17 @@ class MergedLayoutRefusals(unittest.TestCase):
         self.assertEqual(self.pack(dirs, "--profile", "generic"), 0)
         names = set(members(next((self.root / "out").glob("*.whl"))))
         for vendor, arch in NATIVE_SETS:
-            for sub in ("", "identical/"):
-                self.assertIn(f"mojolearn/{vendor}/{arch}/{sub}_mojolearn_native.so", names)
+            for sub, tier in (("", "fast"), ("identical/", "identical")):
+                for f in pw.merged_layout.plan(tier, False):   # every group's file
+                    self.assertIn(f"mojolearn/{vendor}/{arch}/{sub}{f}", names)
                 self.assertIn(f"mojolearn/{vendor}/{arch}/{sub}{MERGED_INDEX}", names)
                 self.assertNotIn(f"mojolearn/{vendor}/{arch}/{sub}_mojolearn_gbdt.so", names)
-        self.assertIn("mojolearn/host/_mojolearn_native_host.so", names)
+        hosts = {"mojolearn/host/" + f for f in pw.merged_layout.plan("host", False)}
+        self.assertGreater(len(hosts), 1)
+        self.assertLessEqual(hosts, names)
         self.assertIn(f"mojolearn/host/{MERGED_INDEX}", names)
         self.assertFalse([n for n in names if n.startswith("mojolearn/host/") and n.endswith(".so")
-                          and n != "mojolearn/host/_mojolearn_native_host.so"])
+                          and n not in hosts])
 
     def test_load_set_reads_the_layout_from_the_directory(self):
         dirs = self.native()
@@ -866,7 +869,7 @@ class MergedLayoutRefusals(unittest.TestCase):
                 self.assertEqual(s.layout, "merged")
                 self.assertEqual(sorted(s.indexes), sorted([MERGED_INDEX, "identical/" + MERGED_INDEX,
                                                             "host/" + MERGED_INDEX]))
-                self.assertEqual({p.name for p in s.hosts.values()}, {"_mojolearn_native_host.so"})
+                self.assertEqual({p.name for p in s.hosts.values()}, set(pw.merged_layout.plan("host", False)))
                 self.assertEqual(set(s.hosts), set(pw.HOST_NAMES))
         per = self.native(merged=False, root=self.root / "per")
         self.assertEqual({s.layout for d in per for s in pw.load_set(d)}, {"per-binding"})
@@ -899,7 +902,7 @@ class MergedLayoutRefusals(unittest.TestCase):
         dirs = self.native()
         index = self.root / "sets/hip/gfx942/identical" / MERGED_INDEX
         doc = json.loads(index.read_text())
-        doc["files"]["_mojolearn_native.so"].remove("_mojolearn_gbdt")
+        next(m for m in doc["files"].values() if "_mojolearn_gbdt" in m).remove("_mojolearn_gbdt")
         index.write_text(json.dumps(doc))
         with self.assertRaisesRegex(SystemExit, "undeclared or missing native payload"):
             self.pack(dirs, "--profile", "generic")
@@ -908,8 +911,8 @@ class MergedLayoutRefusals(unittest.TestCase):
         dirs = self.native()
         fast = self.root / "sets/cuda/sm_89"
         doc = json.loads((fast / MERGED_INDEX).read_text())
-        names = doc["files"].pop("_mojolearn_native.so")
-        doc["files"] = {"_mojolearn_native.so": names[:1], "_mojolearn_native_b.so": names[1:]}
+        names = doc["files"]["_mojolearn_native.so"]
+        doc["files"].update({"_mojolearn_native.so": names[:1], "_mojolearn_native_b.so": names[1:]})
         (fast / MERGED_INDEX).write_text(json.dumps(doc))
         (fast / "_mojolearn_native_b.so").write_bytes(b"second group")
         with self.assertRaisesRegex(SystemExit, "merged_groups.json plan"):
