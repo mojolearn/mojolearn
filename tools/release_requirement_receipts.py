@@ -238,8 +238,43 @@ def _counts(value, allowed):
             and sum(value.values()) > 0)
 
 
+def candidate_autograd_errors(gate, identity):
+    """Validate retained autograd execution and its original compile provenance."""
+    import autograd_smoke
+    import gate_autograd_artifacts
+    errors = []
+    counts = gate.get("autograd_counts")
+    # Adapters off (owner scope, 0.8.57): only the Torch interop entries may be excluded.
+    import gate_smoke_box
+    excluded = gate.get("autograd_excluded") or []
+    adapters_off = gate.get("adapters_enabled") is False
+    if excluded and not (adapters_off and set(excluded) == set(gate_smoke_box.TORCH_INTEROP)):
+        errors.append("autograd exclusions are only the Torch interop entries with adapters off")
+    if (not _counts(counts, {"ok"}) or type(gate.get("autograd_rc")) is not int or gate.get("autograd_rc") != 0
+            or sum(counts.values()) != len(autograd_smoke.ENTRIES) - len(excluded)):
+        errors.append("autograd execution does not cover the full producer registry")
+    artifacts = gate.get("autograd_artifacts") or {}
+    try:
+        files = artifacts["files"]
+        expected = gate_autograd_artifacts.expected(identity["vendor"])
+        if (artifacts.get("schema") != gate_autograd_artifacts.SCHEMA or artifacts.get("state") != "built"
+                or not gate_autograd_artifacts.source_matches(artifacts, identity["source_commit"])
+                or artifacts.get("vendor") != identity["vendor"] or len(files) != len(expected)
+                or {row["file"] for row in files} != set(expected)
+                or any(type(row.get("exit_code")) is not int or row.get("exit_code") != 0 or row.get("source") != expected[row["file"]]
+                       or not row.get("sha256") or not row.get("source_sha256")
+                       or not gate_autograd_artifacts.retained_artifact_valid(artifacts, row) for row in files)):
+            errors.append("autograd artifacts lack exact built source provenance")
+    except (KeyError, TypeError, ValueError, AttributeError):
+        errors.append("autograd artifact manifest is incomplete")
+    return errors
+
+
 def candidate_gate_errors(gate, identity):
     """Validate the existing gate producer schema, including actual counts."""
+    from release_gate_reuse import SCHEMA as component_schema, errors as component_errors
+    if isinstance(gate, dict) and gate.get('schema') == component_schema:
+        return component_errors(gate, identity)
     import adapter_gate
     import autograd_smoke
     import gate_autograd_artifacts
@@ -285,30 +320,8 @@ def candidate_gate_errors(gate, identity):
                 or not _count(gate.get("smoke_lines"))
                 or gate.get("smoke_lines") != sum((counts or {}).values())):
             errors.append("whole-plan smoke lacks complete successful startup counts")
-    counts = gate.get("autograd_counts")
-    # Adapters off (owner scope, 0.8.57): only the Torch interop entries may be excluded.
-    import gate_smoke_box
-    excluded = gate.get("autograd_excluded") or []
+    errors.extend(candidate_autograd_errors(gate, identity))
     adapters_off = gate.get("adapters_enabled") is False
-    if excluded and not (adapters_off and set(excluded) == set(gate_smoke_box.TORCH_INTEROP)):
-        errors.append("autograd exclusions are only the Torch interop entries with adapters off")
-    if (not _counts(counts, {"ok"}) or type(gate.get("autograd_rc")) is not int or gate.get("autograd_rc") != 0
-            or sum(counts.values()) != len(autograd_smoke.ENTRIES) - len(excluded)):
-        errors.append("autograd execution does not cover the full producer registry")
-    artifacts = gate.get("autograd_artifacts") or {}
-    try:
-        files = artifacts["files"]
-        expected = gate_autograd_artifacts.expected(identity["vendor"])
-        if (artifacts.get("schema") != gate_autograd_artifacts.SCHEMA or artifacts.get("state") != "built"
-                or not gate_autograd_artifacts.source_matches(artifacts, identity["source_commit"])
-                or artifacts.get("vendor") != identity["vendor"] or len(files) != len(expected)
-                or {row["file"] for row in files} != set(expected)
-                or any(type(row.get("exit_code")) is not int or row.get("exit_code") != 0 or row.get("source") != expected[row["file"]]
-                       or not row.get("sha256") or not row.get("source_sha256")
-                       or not gate_autograd_artifacts.retained_artifact_valid(artifacts, row) for row in files)):
-            errors.append("autograd artifacts lack exact built source provenance")
-    except (KeyError, TypeError, ValueError, AttributeError):
-        errors.append("autograd artifact manifest is incomplete")
     adapters = gate.get("adapters") or {}
     phases = adapters.get("phases") or {}
     if adapter_gate.enabled():

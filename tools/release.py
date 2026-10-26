@@ -2889,6 +2889,11 @@ class Release:
         doc = read_json(output / "gate-smoke.json")
         if not doc:
             return False, f"no gate report at {output / 'gate-smoke.json'}"
+        from release_gate_reuse import SCHEMA as component_schema, errors as component_errors
+        if doc.get('schema') == component_schema:
+            errors = component_errors(doc, identity)
+            return (False, '; '.join(errors)) if errors else (True,
+                'PASS: retained 11 correctness and 24 autograd records; final installed verifier and all three adapters passed')
         if doc.get('input_mode') != 'candidate' or doc.get('candidate') != identity:
             return False, 'gate report does not identify these candidate wheel hashes and source'
         if doc.get("version") != self.version or doc.get("vendor") != vendor:

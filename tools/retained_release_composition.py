@@ -228,6 +228,10 @@ def validate(proof, source_root=None):
     require(isinstance(compiler, str) and re.fullmatch('[0-9a-f]{64}', compiler), 'missing declared compiler identity')
     device, host = proof['original_device'], proof['original_host']
     projection = _projection(device, host, compiler)
+    if proof.get('native_adapter_refresh') is not None:
+        from native_adapter_composition import validate as validate_refresh
+        projection['adapters'] = validate_refresh(proof['native_adapter_refresh'], proof['device_inputs'],
+            proof['admitted_inputs'], compiler, device['leg'], projection['adapters'])
     require(all(proof.get(k) == v for k, v in projection.items()), 'assembled artifact/provenance projection differs')
     revision, inventory = proof.get('source_commit'), proof.get('source_inventory')
     require(isinstance(revision, str) and re.fullmatch('[0-9a-f]{40}', revision), 'missing admitted package revision')
@@ -258,7 +262,7 @@ def validate(proof, source_root=None):
     if host.get('kind') == 'independent-host-build':
         require(hcapture['runtime_identity'] == hbefore['runtime_identity']
                 and hcapture['merged_build_inputs'] == hbefore['merged_build_inputs'], 'independent host runtime/build inputs differ')
-    if projection['adapters']:
+    if projection['adapters'] and proof.get('native_adapter_refresh') is None:
         require(before['adapter_sources'] == current['adapter_sources']
                 and before.get('builder_phases', {}).get('adapters', before['adapter_builders'])
                 == current.get('builder_phases', {}).get('adapters', current['adapter_builders']), 'adapter source/build inputs changed')
@@ -270,6 +274,11 @@ def validate(proof, source_root=None):
         actual_revision, actual_inventory, actual = current_source(root)
         require(actual_revision == revision and actual_inventory == inventory and same_source_context(actual, current),
                 'admission does not match current committed source')
+        if proof.get('native_adapter_refresh') is not None:
+            from release_macos_assembly import adapter_role_inputs
+            require(proof['native_adapter_refresh']['frontend_inputs'] ==
+                    {role: adapter_role_inputs(root, role) for role in ('torch', 'max')},
+                    'retained frontend closure differs')
         for source, captured in ((device, before), (host, hbefore)):
             original_revision = hc.decoded(source['proof'])['source_commit']
             require(same_source_context(source_context(root, original_revision), captured), 'original source inputs do not reproduce')
@@ -339,7 +348,7 @@ def validate_ptx(doc, root):
     return True
 
 
-def prepare(device_build, host_build, source_root, compiler, output):
+def prepare(device_build, host_build, source_root, compiler, output, native_adapter_refresh=None):
     """Create a new set and assembly proof; originals and their proofs stay untouched."""
     if (Path(device_build) / 'device-stage-proof.json').is_file():
         from release_ptx_assembly import inspect as inspect_device
@@ -362,6 +371,12 @@ def prepare(device_build, host_build, source_root, compiler, output):
                  host_inputs=source_context(root, hp['source_commit']),
                  qualification='Retained build input/byte admission; not runtime, identity, or installed-wheel qualification',
                  **_projection(device, host, compiler))
+    if native_adapter_refresh is not None:
+        from native_adapter_composition import validate as validate_refresh
+        refresh = json.loads((Path(native_adapter_refresh) / 'native-refresh.json').read_text())
+        proof['native_adapter_refresh'] = refresh
+        proof['adapters'] = validate_refresh(refresh, proof['device_inputs'], context, compiler,
+                                             device['leg'], proof['adapters'])
     validate(proof, source_root)
     # Check originals before copying. Each source is checked with its own host.
     for original, directory in ((device, device_set), (host, host_set)):
@@ -386,6 +401,9 @@ def prepare(device_build, host_build, source_root, compiler, output):
         destination = pending / 'set'
         shutil.copytree(device_set, destination, ignore=lambda p, ns: ['host'] if Path(p) == device_set else [])
         shutil.copytree(host_set / 'host', destination / 'host')
+        if native_adapter_refresh is not None:
+            for name in ('libmojolearn_adapter.so', 'adapters.json'):
+                shutil.copy2(Path(native_adapter_refresh) / name, destination / '_adapters' / name)
         # Keep the old stage manifest as a raw original witness; do not claim it
         # staged the replacement host. The assembly receipt owns the new set.
         validate_bytes(proof, destination)
