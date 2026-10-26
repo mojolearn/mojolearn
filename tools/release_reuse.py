@@ -1558,18 +1558,57 @@ def record_identities(plan, linux_wheel, macos_wheel, out):
     shipped = {}
     # linux_wheel is one wheel, or the split set (core and plugins) as a list
     linux = list(linux_wheel) if isinstance(linux_wheel, (list, tuple)) else [linux_wheel]
-    for whl in (*linux, macos_wheel):
+    for target, whl in [*((LINUX, w) for w in linux), (MACOS, macos_wheel)]:
         if not whl or not Path(whl).is_file():
             continue
         with zipfile.ZipFile(whl) as z:
-            for n in z.namelist():
+            names = set(z.namelist())
+            hashes = {}
+
+            def supplied(logical, physical, index=None):
+                if physical not in names:
+                    raise SystemExit(f"release_reuse: missing merged binary {physical} in {Path(whl).name}")
+                if physical not in hashes:
+                    hashes[physical] = hashlib.sha256(z.read(physical)).hexdigest()
+                key = (target, legacy_archive_path(logical))
+                value = dict(shipped_sha256=hashes[physical], shipped_archive_path=physical,
+                             shipped_wheel=Path(whl).name)
+                if index:
+                    value["shipped_index"] = dict(archive_path=index,
+                        sha256=hashlib.sha256(z.read(index)).hexdigest())
+                if key in shipped and shipped[key] != value:
+                    raise SystemExit(f"release_reuse: ambiguous shipped binding {target}/{logical}")
+                shipped[key] = value
+
+            for n in sorted(names):
                 if n.endswith(".so") and n.startswith("mojolearn/"):
-                    shipped[legacy_archive_path(n)] = hashlib.sha256(z.read(n)).hexdigest()
+                    supplied(n, n)
+            # A logical binding can live in a shared production group or a
+            # separately compiled development group. Record its actual owner
+            # and index bytes; a missing logical filename is not a missing
+            # binding. Scope host paths by platform so Apple cannot overwrite
+            # the Linux host's hash in a split release.
+            for index in sorted(n for n in names if n.startswith("mojolearn/")
+                                and n.endswith("/_mojolearn_merged.json")):
+                doc = json.loads(z.read(index))
+                files = doc.get("files")
+                if doc.get("format") != 1 or not isinstance(files, dict):
+                    raise SystemExit(f"release_reuse: invalid merged index {index}")
+                folder = index.rsplit("/", 1)[0]
+                for filename, members in files.items():
+                    if (Path(filename).name != filename or not filename.endswith(".so")
+                            or not isinstance(members, list)):
+                        raise SystemExit(f"release_reuse: unsafe merged binary in {index}")
+                    for member in members:
+                        if not isinstance(member, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", member):
+                            raise SystemExit(f"release_reuse: invalid merged member in {index}")
+                        supplied(f"{folder}/{member}.so", f"{folder}/{filename}", index)
     rows = []
     for r in plan["rows"]:
         rows.append(dict(key=r["key"], target=r["target"], archive_path=r["archive_path"], decision=r["decision"],
                          reason=r["reason"], identity=r["identity"], identity_digest=r["identity_digest"],
-                         shipped_sha256=shipped.get(r["archive_path"]), reuse_from=r.get("reuse_from")))
+                         **shipped.get((r["target"], r["archive_path"]), {"shipped_sha256": None}),
+                         reuse_from=r.get("reuse_from")))
     prev = plan.get("previous") or {}
     doc = dict(schema="mojolearn.binding-identities.v1", commit=plan["commit"], rows=rows, runtime=plan["runtime"],
                previous=prev.get("version"), previous_channel=prev.get("channel") or ("pypi" if prev else None),
