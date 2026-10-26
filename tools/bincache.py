@@ -1112,12 +1112,18 @@ def _stat(p):
 
 def shard_entry(mode, script, args):
     """A build's name in a shard list: "<numeric mode>:<script file name>", the
-    planner's entries (tools/release_github_build.py plan_set). The merged host
-    set builds under MOJOLEARN_NUMERIC_MODE=identical with the same script as
-    the identical tier (bindings/merged_build.sh host), so it is "host:merged_build.sh"."""
+    planner's entries (tools/release_github_build.py plan_set). A merged build
+    is one group: "<mode>:merged_build.sh:<stem>" from its `--group <stem>`
+    (packaging/linux/build_sets.sh pool_jobs). The merged host groups build
+    under MOJOLEARN_NUMERIC_MODE=identical with the same script as the
+    identical tier (bindings/merged_build.sh host), so they are "host:..."."""
     name = os.path.basename(script)
-    if name == "merged_build.sh" and list(args)[:1] == ["host"]:
-        return "host:" + name
+    args = list(args)
+    if name == "merged_build.sh":
+        if args[:1] == ["host"]:
+            mode = "host"
+        if "--group" in args[:-1]:
+            return "%s:%s:%s" % (mode, name, args[args.index("--group") + 1])
     return "%s:%s" % (mode, name)
 
 

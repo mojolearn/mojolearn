@@ -276,10 +276,17 @@ for line in (p.read_text().splitlines() if p.is_file() else []):
     except (OSError, ValueError, KeyError):
         continue
     name = c[1].rsplit("/", 1)[-1]
-    # tools/bincache.py shard_entry: the merged host set is "host:merged_build.sh"
-    if name == "merged_build.sh" and (doc.get("args") or [])[:1] == ["host"]:
-        mode = "host"
-    seen["%s:%s" % (mode, name)] = (c[2], c[4], c[3])
+    args = list(doc.get("args") or [])
+    entry = "%s:%s" % (mode, name)
+    # tools/bincache.py shard_entry: a merged build is one group,
+    # "<mode>:merged_build.sh:<stem>"; the merged host groups are "host:..."
+    if name == "merged_build.sh":
+        if args[:1] == ["host"]:
+            mode = "host"
+        entry = "%s:%s" % (mode, name)
+        if "--group" in args[:-1]:
+            entry += ":" + args[args.index("--group") + 1]
+    seen[entry] = (c[2], c[4], c[3])
 bad = 0
 with open(out, "w") as fh:
     for w in want:
