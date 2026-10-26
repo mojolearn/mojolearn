@@ -58,18 +58,22 @@ The 2026-10-24 selector (call-site exports, routed import aliases) selects
 the desired set carrying an unresolved dispatcher record (the shared classical
 owner, reached per aliased export, never as the alias binding's whole closure). Their
 desired counts remain 84 / 55 / 93. (2026-10-23: 555 / 470 / 470, 540 / 470 /
-470 with records.)
+470 with records; 2026-10-26: 488 / 488 / 488 of 571.)
 The required checks retain essential family coverage, refuse unexplained
 widening, and validate those records. The independent forest-inference count
 54 and neural-inference count 89 (remeasured 2026-10-24) remain ordinary exact assertions.
+2026-10-26: forest inference is 63 (nine sequence lanes whose modules' import-time
+`connect_module` runs `_native_params_metadata.connect_classes`), neural inference 90.
 
 The neighbors generator writes two driver files and two binding files. Its
 selection must include the union of all four outputs, including callers that
 only use a binding's metadata. The current union is 524 lanes (469 through
 drivers, 55 additional binding callers), so the original less-than-half bound
-has the same unresolved native-owner dependency. That bound remains a strict
-precision regression; the exact four-output set, union, seam-check narrowing
-and output-specific provenance remain required checks. Quoted marker examples
+had the same unresolved native-owner dependency. Since 2026-10-26 the lane map
+reads each Python file in the region its importers ask for
+(`_region_closure`), the union is 199 of 571 lanes and the less-than-half
+bound is an ordinary assertion again; the exact four-output set, union,
+seam-check narrowing and output-specific provenance remain required checks. Quoted marker examples
 are not generated outputs.
 
 The shared-file guard remains active. Six new carrier files are traced to
