@@ -14,7 +14,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.common import X_PREP_HOST_SABOTAGE
 from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P
-from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.label_fast import IDN_LABEL
 from x_prep.blocked import IDN_NB_ONEPASS
 from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
@@ -76,9 +75,8 @@ def proba64_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
-def py2mojo_binding() raises -> PythonObject:
-    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF."""
-    return PythonObject(1)
+# TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_prep.patch
 
 
 def label_present_binding() raises -> PythonObject:
@@ -151,8 +149,8 @@ def build__mojolearn_x_prep_host() -> PythonObject:
         m.def_function[run_binding]("x_prep_run")
         m.def_function[x_prep_numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[x_prep_vendor_binding]("x_prep_vendor")
-        comptime if PY2MOJO_PREP:
-            m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        # TOMBSTONE: x_prep_calib_folds, x_prep_maxabs_pool, x_prep_py2mojo (dead native entries: constant / reach probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_prep.patch
         # lane idn-int-prep: the host column runs the same programs as the
         # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)
         comptime if IDN_LABEL:
