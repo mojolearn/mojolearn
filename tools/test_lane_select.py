@@ -1966,12 +1966,31 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # its owners' trees stay per export).
     assert "_mojolearn_runtime_classical_host" in lane_select.host_routes()["_mojolearn_tokenizer_host"]
     shared.add("bindings/_mojolearn_runtime_classical_host.mojo")
-    # The source audit found exactly these six additional paths in the
-    # unresolved owner closure. Keep the list finite and require its reported
-    # OLS edge; any other newly shared file remains an ordinary failure.
+    # 2026-10-26 (0.8.59): `_array.py` binds `array_native_call` at module
+    # level (62a812f92, one native entry per public Array operation) and
+    # `_user_objects.py` calls `user_objects_native_call` (aaf682a23). Both are
+    # tokenizer host exports every lane runs, so their impls and the files
+    # those import are in every lane: a real edge, checked at the source.
+    exports = lane_select._binding_exports("bindings/_mojolearn_tokenizer_host.mojo")
+    assert {"array_native_call", "user_objects_native_call"} <= set(exports)
+    assert "array_native_call" in lane_select._read("python/mojolearn/_array.py")
+    assert "user_objects_native_call" in lane_select._read("python/mojolearn/_user_objects.py")
+    native_owners = {"bindings/array_native.mojo", "bindings/native_buffer_owner.mojo",
+                     "bindings/native_loaded_module.mojo", "bindings/py_typed_call.mojo",
+                     "bindings/user_objects_native.mojo", "bindings/py_attr.mojo", "core/user_objects.mojo"}
+    assert native_owners <= lane_select._mojo_closure(["bindings/array_native.mojo",
+                                                       "bindings/user_objects_native.mojo"])
+    shared |= native_owners
+    # The source audit found exactly these additional paths in the unresolved
+    # owner closure. Keep the list finite and require its reported OLS edge;
+    # any other newly shared file remains an ordinary failure. 2026-10-26:
+    # `core/device_plan.mojo` (b693ed25a, the multi-GPU device plan the
+    # parallel plan door enters) and `bindings/native_error_class.mojo` joined
+    # through the classical owner's unresolved dispatch.
     unresolved = {"cluster/__init__.mojo", "cluster/host/__init__.mojo",
                   "cluster/host/kmeans_oracle.mojo", "core/ic_min_device.mojo",
-                  "core/knn_host_predict.mojo", "core/rows_bytes_device.mojo"}
+                  "core/knn_host_predict.mojo", "core/rows_bytes_device.mojo",
+                  "core/device_plan.mojo", "bindings/native_error_class.mojo"}
     for path in unresolved & set(every):
         _reported_native_limitation(lane_select.select([path]), path, "ols")
     assert not (set(every) - shared - unresolved), \
