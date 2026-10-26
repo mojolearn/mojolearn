@@ -454,6 +454,7 @@ def r2_score_binding(
     return PythonObject(Float64(out))
 
 
+
 def regression_error_binding[absolute: Bool = False, root: Bool = False](
     y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -466,6 +467,8 @@ def regression_error_binding[absolute: Bool = False, root: Bool = False](
     with GILReleased(Python()):
         result = regression_error_host[absolute, root](y, prediction, n)
     return PythonObject(Float64(result))
+
+
 
 
 def roc_auc_score_binding(true_addr: PythonObject, score_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:

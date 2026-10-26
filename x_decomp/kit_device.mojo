@@ -1543,11 +1543,8 @@ def mcd_dev_run(px: F32Ptr, pl: F32Ptr, pc: F32Ptr, ps: I32Ptr, pd: F32Ptr, q: L
     return n
 
 
-def lda_online_dev_check(n: Int, v: Int, nc: Int, bs: Int) raises:
-    """`lda_online_dev_py`'s shape check (runs before the float arguments
-    and buffer addresses are read)."""
-    if bs < 1 or v < 1 or nc < 1 or n * v > 2147483647 or nc * v > 2147483647:
-        raise Error("x_decomp: lda_online shape out of range")
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 def lda_online_dev_run(

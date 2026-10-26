@@ -1392,7 +1392,6 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "(host_surface ADAPTED_MODULES), whose TrainerOwnerEntries call it for every "
                  "SmallByteLanguageModelTrainer step; on a GPU install byte_lm_trainer_step runs the "
                  "same session ops inside Mojo")
-_DEAD_KIT = "no live caller (the _expansion_decomp helper that calls it is never called)"
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
 _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
@@ -1439,8 +1438,6 @@ ANNOTATIONS = {
     "device_plan_log": ("n/a", [], "the verifier's own two-device placement witness read (_verify_par "
                         "PoolWitness, lane native-parallel-driver-20261024): device groups, no data value"),
     "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
-    **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_eigh_batch", "x_decomp_knn_select",
-                                           "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
@@ -2166,20 +2163,15 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
 
 # lane verify-coverage-20261024: the whole-surface audit's last GAP rows,
 # each checked in the source.
-_DEAD_KIT_24 = ("no live caller: the _expansion_decomp._Kit method that calls it (als_cg, cd_rows, "
-                "chol, lda_rows, qr_r, rand_gamma) has no caller since the ALS, NMF, LDA and "
-                "linalg owners moved into Mojo (bindings/als_native.mojo, mani_kit.mojo, linalg_ops_kit.mojo)")
 _ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
                "owner context's arena_msel_put / _free / _take_rows; the arena owners "
                "(bindings/arena_resident_native.mojo, arena_materialize_native.mojo) put, gather and free "
                "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
                "take per fold (x-metrics-search reaches msel_free by name)")
 ANNOTATIONS.update({
-    **{e: ("n/a", [], _DEAD_KIT_24) for e in ("x_decomp_als_cg_rows", "x_decomp_cd_rows", "x_decomp_chol",
-                                              "x_decomp_dev_lda_rows", "x_decomp_dev_qr_r", "x_decomp_lda_rows",
-                                              "x_decomp_qr_r", "x_decomp_rand_gamma")},
     **{e: ("covered", ["x-metrics-search"], _ARENA_ROWS) for e in ("msel_put", "msel_take_rows")},
-    "nsum_f64": ("n/a", [], "no live caller: _portable_math.nsum, the only code that calls it, is never called"),
+    "nsum_f64": ("n/a", [], "a test seam: test_py_bugs.py holds the live Neumaier fold to CPython 3.12's sum "
+                            "through _portable_math.nsum and this export only"),
     "gemm_fused": ("n/a", [], "fast tier only (Apple): linalg_fast.matmul_fused, built only with "
                               "MOJOLEARN_AFN_GEMM_EPILOGUE; the verifier runs identical and refuses a fast process"),
     "host_archive_finalize_call": ("n/a", [], "a lifecycle finalizer: the saved-host-model archive's cleanup "

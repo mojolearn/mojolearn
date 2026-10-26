@@ -7,7 +7,6 @@ tokenizer/fast/bpe_fast_impl.mojo:*	fast tier only (the Apple FAST tokenizer); t
 x_decomp/fa_em.mojo:*	fast tier only: its only caller is FactorAnalysis._fit_fast (FAST + Apple)
 x_decomp/fa_fast.mojo:*	fast tier only: registered only under FA_FAST_APPLE (FAST + Apple)
 x_decomp/qfix.mojo:*	fast tier only: x_decomp_lu_resid is registered only under LU_QFIX (fast)
-x_decomp/resident.mojo:dev_first_nonfinite_run	fast tier only: registered only under LLE_FAST_DEV_LU (FAST + Apple)
 x_decomp/resident.mojo:dev_mcd_cov_run	fast tier only: registered only under MCD_ORDERED_COV (FAST + Apple)
 x_decomp/s_linalg_fast.mojo:dev_upload_scan_run	fast tier only: registered only under RSVD_FAST_DEVSCAN (FAST + Apple)
 x_decomp/s_linalg_fast.mojo:s_flags_run	a compile-time route-flag word, no data value

@@ -585,10 +585,8 @@ def fa_chol_df_kernel(g: F32Ptr, rt: F32Ptr, d_in: Int32):
         rt.unsafe_store(u, val)
 
 
-def fa_gram_check() raises:
-    """`fa_gram_py`'s page check (runs before the arguments are read)."""
-    comptime if not FG_FITS:
-        raise Error("x_decomp fa_gram: the tile slabs do not fit this column's threadgroup memory")
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 def fa_gram_run(x: Int, mean: Int, g: Int, var_: Int, n: Int, d: Int) raises -> Int:
@@ -1195,12 +1193,6 @@ def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, dst: F32Ptr, n_in: 
         dst.unsafe_store(row * nc + kk, acc[kk])
 
 
-def fa_transform_check() raises:
-    """`fa_transform_py`'s page check (runs before the arguments are read)."""
-    comptime if not FA_TR_FITS:
-        raise Error("x_decomp fa_transform: the P page does not fit this column's threadgroup memory")
-
-
 def fa_transform_run(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises -> Int:
     """dst (n x nc, device id) = (X - mean) P for the resident X (n x d),
     mean (d) and P (d x nc), all device ids; enqueued, no sync. Returns n."""
@@ -1220,26 +1212,3 @@ def fa_transform_run(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: I
 
 
 # ------------------------------------------------------------ the defines
-def fa_defines_run() -> String:
-    """The FactorAnalysis switches this FAST Apple binding was built with
-    (`-D MOJOLEARN_FA_...`), comma-joined, so python/mojolearn/
-    _expansion_decomp.py `_fa_fast_define` picks a route without an env read.
-    Registered only under FA_FAST_APPLE (bindings/_mojolearn_x_decomp.mojo)."""
-    var s = String("")
-    comptime if FA_GRAM_ONCE:
-        s += "MOJOLEARN_FA_GRAM_ONCE,"
-    comptime if FA_ITER_DEVICE:
-        s += "MOJOLEARN_FA_ITER_DEVICE,"
-    comptime if FA_LIVEBUF:
-        s += "MOJOLEARN_FA_LIVEBUF,"
-    comptime if FA_TRANSFORM_FUSED:
-        s += "MOJOLEARN_FA_TRANSFORM_FUSED,"
-    # not a -D name: the route ITER_DEVICE takes unless MOJOLEARN_FA_GRAM_QOLD
-    # (python/mojolearn/_expansion_decomp.py sizes G's buffer from it)
-    comptime if FA_GRAM_DF:
-        s += "MOJOLEARN_FA_GRAM_DF,"
-    comptime if FA_GRAM_SPREAD:
-        s += "MOJOLEARN_FA_FAST_GRAM_SPREAD,"
-    comptime if FA_FAST_APPLE and FA_GRAM_QOLD:
-        s += "MOJOLEARN_FA_GRAM_QOLD,"
-    return s

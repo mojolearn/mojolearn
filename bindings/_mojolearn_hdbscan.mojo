@@ -47,6 +47,7 @@ from hdbscan.estimator import (
 from hdbscan.impl.prediction_data import generate_prediction_data_device
 
 
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 

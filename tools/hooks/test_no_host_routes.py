@@ -227,7 +227,7 @@ BLOCKED = [
     ("GPU-path Python calls a native host helper by name (py-native-host)",
      {PY: "def _pz6(arr):\n    return _native(\"nsum_f64\")(arr._addr, arr.size)"}, "[py-native-host]"),
     ("GPU-path Python calls a native host helper as a binding attribute (py-native-host)",
-     {PY: "def _pz7(b, w, n):\n    b.x_decomp_argsort_f32(w, n)"}, "b.x_decomp_argsort_f32(w, n)"),
+     {PY: "def _pz7(b, w, n):\n    b.x_decomp_gather(w, n)"}, "b.x_decomp_gather(w, n)"),
     ("math.fsum over data in a def (py-fsum)", {PY: "def _pz11(w):\n    return math.fsum(w)"}, "[py-fsum]"),
     ("map(operator.*) arithmetic in a def (py-map-arith)",
      {PY: "def _pz12(x, y):\n    return list(map(operator.sub, x, y))"}, "[py-map-arith]"),
@@ -426,7 +426,7 @@ def test_native_host_exports_are_classified_by_code():
     ex = tree.host_exports()
     # current host-looping exports (all_finite_f32, argmax_rows_f32,
     # gather_rows_bytes and x_trees_samme_step moved to the device)
-    for name in ("nsum_f64", "x_decomp_argsort_f32", "x_trees_column_f64", "x_decomp_gather"):
+    for name in ("nsum_f64", "x_trees_column_f64", "x_decomp_gather"):
         assert name in ex, f"{name} loops on the host and must be a native host helper"
     for name in ("check_indices_i64", "unique_inverse", "cast_f64_to_f32"):
         assert name not in ex, f"{name} runs on the device and is not a native host helper"

@@ -1385,6 +1385,7 @@ def transformer_backward_binding(
     return PythonObject(0)
 
 
+
 def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[TransformerSession]()
     if owner[].busy:

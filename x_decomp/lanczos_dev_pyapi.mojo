@@ -9,12 +9,8 @@ from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_lancz
 from x_decomp.resident_pyapi import _id, _n
 
 
-def kpca_lanczos_dev_on_py() raises -> PythonObject:
-    """1 when this binding carries the device Lanczos route (every GPU build
-    since lane cpu2-l8-decomp)."""
-    comptime if KPCA_FAST_LANCZOS_DEV:
-        return PythonObject(1)
-    return PythonObject(0)
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
 def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -31,8 +27,3 @@ def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: Python
     var steps = dev_lanczos_run(ia, iq, iab, n, j0, j1, cap)
     return PythonObject(steps)
 
-
-def ipca_dev_on_py() raises -> PythonObject:
-    comptime if IPCA_FAST_DEV:
-        return PythonObject(1)
-    return PythonObject(0)

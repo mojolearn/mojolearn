@@ -131,6 +131,7 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+
 def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
                          params: PythonObject) raises -> PythonObject:
     """lane/apple-fast-py2mojo-linear: per-row probability glue on the

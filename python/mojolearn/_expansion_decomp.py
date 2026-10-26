@@ -484,25 +484,6 @@ def _kit_vendor(kit):
     return v
 
 
-def _kit_fast_define(kit, name):
-    """lane/apple-fast-rec-decomp (2026-10-04; from
-    lane/apple-fast-decomp-linalg@74d52352b): whether the kit's binding is a
-    FAST Metal build compiled with `-D <name>` (asked of the binding's
-    `x_decomp_fast_defines` once per kit; no env read). False for every
-    IDENTICAL kit, another vendor and a binding without the entry, so the
-    default never takes one of these routes."""
-    if kit.mode != "fast" or _kit_vendor(kit) != "metal":
-        return False
-    d = kit.__dict__.get("_fast_defines")
-    if d is None:
-        try:
-            d = str(kit._raw().x_decomp_fast_defines()).split(",")
-        except Exception:
-            d = []
-        kit._fast_defines = d
-    return name in d
-
-
 class _Kit:
     """The binding's cells, called on `_M` matrices."""
 
@@ -640,19 +621,6 @@ class _Kit:
                     r = False
             got[name] = r
         return r
-
-    def _dict_dev(self):
-        """`x_decomp_dev_dict_update` when this binding exports it (a FAST
-        GPU build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
-        if "_dd_fn" not in self.__dict__:
-            fn = None
-            if self._res():
-                try:
-                    fn = getattr(self._raw(), "x_decomp_dev_dict_update")
-                except Exception:
-                    fn = None
-            self._dd_fn = fn
-        return self._dd_fn
 
     def _did(self, M):
         """M's device id on this binding, uploading a host matrix (it moves)."""
@@ -841,16 +809,6 @@ class _Kit:
             return w, v
         self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
         return w, v
-
-    def eigh_batch(self, A, batch, n):
-        """`eigh` of `batch` n x n problems stacked in A (batch n x n), one
-        device block each (x_decomp/rr_batch.mojo): (W batch x n ascending,
-        V batch n x n, problem b's vectors in the COLUMNS of rows b n ..
-        (b + 1) n)."""
-        W, V = _M.zeros(batch, n), _M.zeros(batch * n, n)
-        if batch:
-            self.b.x_decomp_eigh_batch(A.addr, W.addr, V.addr, [int(batch), int(n)])
-        return W, V
 
     def lu(self, A):
         n = A.r
@@ -1150,33 +1108,6 @@ class _Kit:
         self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, p)
         return out
 
-    def cd_rows(self, W, HHt, XHt, perm):
-        """One sklearn `_update_cdnmf_fast` sweep over every row of W, in
-        place; returns the total violation (rows ascending)."""
-        n, kc = W.r, W.c
-        p = array.array("i", perm)
-        if "_cd_fn" not in self.__dict__:
-            # lane fam-decomp: `x_decomp_dev_cd_rows` when this binding
-            # exports it (an IDENTICAL GPU build without
-            # -D MOJOLEARN_IDN_CD_RESIDENT_OFF), else None
-            fn = None
-            if self._res():
-                try:
-                    fn = getattr(self._raw(), "x_decomp_dev_cd_rows")
-                except Exception:
-                    fn = None
-            self._cd_fn = fn
-        if self._cd_fn is not None and n * kc and self._use(W, HHt, XHt):
-            # W swept where it lives (it has moved to the device: no host
-            # store to go stale), the violations folded there, one float read
-            viol = self._dout(n, 1)
-            self.b.x_decomp_dev_cd_rows(self._did(W), self._did(HHt), self._did(XHt), p.buffer_info()[0],
-                                        viol._d.id, [n, kc])
-            return self.total(viol).s[0]
-        viol = _M.zeros(n, 1)
-        self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
-        return self.total(viol).s[0]
-
     def svd(self, A):
         """(S 1 x n DESCENDING, Vt n x n) of a tall A (m >= n): Householder QR
         then the one-sided Jacobi SVD of R (decomposition/'s full-PCA route),
@@ -1296,27 +1227,6 @@ class _Kit:
         na = _M.zeros(Q.r, 1)
         self.b.x_decomp_omp_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(nnz)])
         return W
-
-    def rand_gamma(self, r, c, seed, stream, shape):
-        out = _M.zeros(r, c)
-        if r * c:
-            self.b.x_decomp_rand_gamma(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF],
-                                       float(shape))
-        return out
-
-    def lda_rows(self, X, EW, Dt, Et, prior, max_iter, tol):
-        """Row-parallel `_update_doc_distribution` (x_decomp/cells.mojo
-        `lda_doc_row`); Dt and Et (n x k) are updated in place."""
-        if X.r and self._use(X, EW, Dt, Et):
-            # resident (lane/py-decomp-nbrs): X, EW, Dt and Et stay on the
-            # device; Dt and Et are updated in place there
-            self.b.x_decomp_dev_lda_rows(self._did(X), self._did(EW), self._did(Dt), self._did(Et),
-                                         [X.r, EW.r, X.c, int(max_iter)], [float(prior), float(tol)])
-            return Dt, Et
-        its = _M.zeros(X.r, 1)
-        self.b.x_decomp_lda_rows(X.addr, EW.addr, Dt.addr, Et.addr, its.addr,
-                                 [X.r, EW.r, X.c, int(max_iter)], [float(prior), float(tol)])
-        return Dt, Et
 
     def dijkstra(self, W):
         """All-pairs shortest paths on a dense undirected graph (0 = no edge),
@@ -1445,38 +1355,6 @@ class _Kit:
         self.b.x_decomp_orgqr(h.addr, tau.addr, Q.addr, [h.r, h.c, tau.c, qc])
         return Q
 
-    def als_cg(self, C, Y, X0, reg, cg_steps):
-        """implicit's `_least_squares_cg` half-sweep: every row of X0 (n x f)
-        moved by cg_steps conjugate-gradient steps (x_decomp/cells.mojo
-        `als_cg_row`, DEVIATION 5321); returns the new factors."""
-        n, f = C.r, Y.c
-        YtY = self.mm(Y, Y, ta=True)
-        X, steps = X0.copy(), _M.zeros(n, 1)
-        self.b.x_decomp_als_cg_rows(C.addr, Y.addr, YtY.addr, X.addr, steps.addr, [n, C.c, f, int(cg_steps)],
-                                    float(reg))
-        return X
-
-    def qr_r(self, A, consume=False):
-        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR).
-
-        consume=True: the caller gives A up (it is not read again). A device
-        A may then be factored in place (lane fix-d1-decomp,
-        IDN_QR_R_INPLACE: no second m x n device buffer); A is left empty
-        (0 x 0) when the binding consumed it."""
-        R = _M.zeros(A.c, A.c)
-        if A.r >= A.c >= 1 and self._opt_dev("x_decomp_dev_qr_r") and self._use(A):
-            # lane fam-decomp: the QR of a device copy of the resident
-            # operand (an IDENTICAL GPU build without
-            # -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF); only R comes down
-            used = self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c, 1 if consume else 0])
-            if consume and int(used) == 1:
-                # its buffer holds the destroyed factorization: drop it
-                # (back to the pool) and leave A an empty matrix
-                A._s, A._d, A.r, A.c = array.array("f"), None, 0, 0
-            return R
-        self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
-        return R
-
     def pad_zero_row(self, X):
         """[X; 0]: X ((r) x c) over one zero row. A device X stays on the
         device (lane fix-d1-decomp, `x_decomp_idn_flags` bit 8,
@@ -1495,12 +1373,6 @@ class _Kit:
             self.b.x_decomp_dev_move(did, one, did, [_MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
             return out
         return _M(array.array("f", X.s) + array.array("f", [0.0]) * c, r + 1, c)
-
-    def chol(self, A):
-        L = A.copy()
-        info = _M.zeros(1, 1)
-        self.b.x_decomp_chol(L.addr, info.addr, [A.r])
-        return L, int(info.s[0])
 
     # ---- composites (cells only)
     def colmean(self, A):

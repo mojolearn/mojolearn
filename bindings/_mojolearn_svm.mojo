@@ -117,6 +117,7 @@ def svm_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
+
 def _c_rows(params: PythonObject, slot: Int, n_rows: Int, who: String) raises -> List[Float32]:
     """The OPTIONAL per-row bounds `C * sample_weight` (float32, formed and
     rounded once by the caller; `InitPenalty`'s weighted arm) at the address
@@ -694,6 +695,7 @@ def iforest_device_scan_binding() raises -> PythonObject:
     comptime if IF_DEVICE_TRANSPOSE:
         return PythonObject(1)
     return PythonObject(0)
+
 
 
 def svm_scale_gamma_limbs_binding(

@@ -349,28 +349,6 @@ def launch_lda_fused_ss(
     )
 
 
-def dev_lda_estep_ss_run(
-    xi: Int, wi: Int, di: Int, ei: Int, si: Int, n: Int, k: Int, v: Int, max_iter: Int, prior_f: Float64,
-    tol_f: Float64,
-) raises -> Int:
-    """`x_decomp_dev_lda_estep_ss` on device matrices (resident ids x, ew, d,
-    e, ss): d and e (n x k) updated in place as `x_decomp_dev_lda_rows` does,
-    and ss (k x v) = the E-step's sufficient statistics. Returns 1, or 0 when
-    the shape is past the kernel's caps (the caller then runs main's chain)."""
-    if n < 1 or k < 1 or v < 1 or k > LFS_K_CAP or v > LFS_V_CAP:
-        return 0
-    var groups = min(LFS_BLOCKS, (n + LFS_DPB - 1) // LFS_DPB)
-    var kv = k * v
-    if n * v > 2147483647 or groups * kv > 2147483647:
-        return 0
-    var prior = Float32(prior_f)
-    var tol = Float32(tol_f)
-    var px = _ptr(xi, n * v)
-    var pw = _ptr(wi, kv)
-    var pd = _ptr(di, n * k)
-    var pe = _ptr(ei, n * k)
-    var ps = _ptr(si, kv)
-    var sid = pool_alloc(groups * kv)
-    launch_lda_fused_ss(xd_ctx(), px, pw, pd, pe, _ptr(sid, groups * kv), ps, n, k, v, prior, max_iter, tol, groups)
-    pool_free(sid)
-    return 1
+# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+

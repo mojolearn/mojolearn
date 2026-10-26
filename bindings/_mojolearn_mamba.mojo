@@ -296,6 +296,7 @@ from mamba.impl.mamba_shell_impl import (
 )
 
 
+
 def mamba_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
     IDENTICAL. The same shape as `gp_numeric_mode`,
@@ -316,6 +317,7 @@ def mamba_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 # Mamba-1: profile mojolearn.identical.mamba1.fp32.v1
 # ===========================================================================
+
 
 
 def mamba1_profile_binding() -> PythonObject:
