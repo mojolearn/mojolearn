@@ -317,8 +317,9 @@ def candidate_gate_errors(gate, identity):
             or not isinstance(phases, dict) or set(phases) != set(adapter_gate.PHASES)
             or any(type(code) is not int or code != 0 for code in phases.values())):
         errors.append("candidate adapters require every actual installed-wheel phase")
-    elif not adapters_off:
-        errors.append("MOJOLEARN_RELEASE_ADAPTERS=0 requires a gate that ran with adapters disabled")
+    elif not adapters_off and not (adapters.get("ok") is True and adapters.get("status") == "PASSED"):
+        # Adapters not required for this release: a gate that ran them must still have passed them.
+        errors.append("a gate that ran the adapters must pass them, even when the release does not require them")
     if not light:
         measure = gate.get("measure") or {}
         expected = measure.get("planned_whole_plan")
