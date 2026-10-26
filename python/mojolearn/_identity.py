@@ -260,22 +260,22 @@ def cmd_identity(args):
     if device_class is None:
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
                        f"unknown vendor read-back {vendor!r}")
-    asked = [x for x in args.lanes.split(",") if x]
+    asked = [x for x in args.lanes.split(",") if x]  # glue: verification CLI argument selection
     try:
         lanes, fixtures = engine.select_lanes(current, table, device_class, "full", asked)
     except ValueError as exc:
         return _finish(args, _verify.EXIT_USAGE, "USAGE", str(exc))
-    table_lanes = {key.split("/", 1)[0] for key in table["cells"]}
+    table_lanes = {key.split("/", 1)[0] for key in table["cells"]}  # glue: verification CLI table metadata
     if not asked:
-        lanes = [lane for lane in lanes if lane in table_lanes]
+        lanes = [lane for lane in lanes if lane in table_lanes]  # glue: verification CLI lane selection
     record_fixtures = list(fixtures)
     if args.fixtures:
-        requested = [x for x in args.fixtures.split(",") if x]
-        unknown = [x for x in requested if x not in fixtures]
+        requested = [x for x in args.fixtures.split(",") if x]  # glue: verification CLI fixture arguments
+        unknown = [x for x in requested if x not in fixtures]  # glue: verification CLI fixture validation
         if unknown:
             return _finish(args, _verify.EXIT_USAGE, "USAGE",
                            f"--fixtures names fixtures the harness does not define: {unknown}")
-        fixtures = [f for f in fixtures if f in requested]
+        fixtures = [f for f in fixtures if f in requested]  # glue: verification CLI fixture selection
     if args.repeats < 1:
         return _finish(args, _verify.EXIT_USAGE, "USAGE", "--repeats must be positive")
     if not lanes or not fixtures:
@@ -283,8 +283,8 @@ def cmd_identity(args):
                        "the admitted table carries no applicable selected cells")
     stale = set(vref.stale_reference_lanes(table, current)) & set(lanes)
     missing = []
-    for lane in lanes:
-        for fixture in fixtures:
+    for lane in lanes:  # glue: verification CLI reference coverage
+        for fixture in fixtures:  # glue: verification CLI reference coverage
             entry = vref.entry(table, lane, fixture, "train", device_class=device_class)
             if (lane in stale or not entry or entry.get("conflict")
                     or not re.fullmatch(r"[0-9a-f]{16}", str(entry.get("ref", "")))):
@@ -323,36 +323,36 @@ def cmd_identity(args):
             local = json.load(fh)
     except (OSError, ValueError) as exc:
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
-    expected = {f"{lane}/{fixture}" for lane in lanes for fixture in fixtures}
+    expected = {f"{lane}/{fixture}" for lane in lanes for fixture in fixtures}  # glue: verification CLI expected record keys
     cells = local.get("cells", {})
     if (local.get("complete") is not True or set(cells) != expected
             or local.get("repeats") != args.repeats):
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
                        f"incomplete local column: expected {len(expected)} cells; "
                        f"missing {sorted(expected - set(cells))}; unexpected {sorted(set(cells) - expected)}")
-    for fixture in fixtures:
+    for fixture in fixtures:  # glue: verification CLI input witness metadata
         if any(local.get(key, {}).get(fixture) != table.get(key, {}).get(fixture)
-               for key in ("fixtures", "heldout")):
+               for key in ("fixtures", "heldout")):  # glue: verification CLI input witness metadata
             return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
                            f"local {fixture} input bytes differ from the admitted reference")
     raw = []
-    for lane in lanes:
-        for fixture in fixtures:
+    for lane in lanes:  # glue: verification CLI recorded cell comparison
+        for fixture in fixtures:  # glue: verification CLI recorded cell comparison
             cell = cells[f"{lane}/{fixture}"]
-            for part in ("train", "infer", "model"):
+            for part in ("train", "infer", "model"):  # glue: verification CLI recorded part comparison
                 value = vref._part_value(cell, part, min_repeats=args.repeats)
                 raw.append(dict(lane=lane, fixture=fixture, part=part, value=value,
                                 error=None if value is not None else "missing or unstable local part"))
     rows = engine.judge_rows(raw, table, device_class=device_class)
     bad = [f"{r['lane']}/{r['fixture']} {r['part']}: {r['state']} ({r['detail']})"
-           for r in rows if r['state'] != vref.IDENTICAL
+           for r in rows if r['state'] != vref.IDENTICAL  # glue: verification CLI comparison verdict reporting
            and not (r['part'] != 'train' and r['state'] == vref.NA)]
     if rc:
         bad.append(f"collector exited {rc}; a collected property failed")
     evidence = engine.reference_evidence(rows)
     comparison_exit = int(bool(bad))
     extra = dict(record="verify_reference/table.json",
-                 columns=sorted({str(c['vendor']) for c in evidence['columns']}),
+                 columns=sorted({str(c['vendor']) for c in evidence['columns']}),  # glue: verification CLI evidence origin labels
                  commit=local.get("commit"), vendor=local.get("vendor"), lanes=lanes,
                  fixtures=fixtures, repeats=args.repeats, local_json=keep, harness=harness,
                  diff_exit=None, comparison_exit=comparison_exit, collector_exit=rc,
