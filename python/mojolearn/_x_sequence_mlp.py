@@ -338,3 +338,10 @@ _native_xseq_bridge.register(
     xseq_mlp_rates=_LR,
     xseq_mlp_outputs={"identity": 0, "logistic": 1, "tanh": 2, "relu": 3, "softmax": 4},
 )
+
+# Last statement: connect this module's classes to the native full-reset
+# set_params now that they exist. The package imports without NumPy, so it
+# cannot connect them at `import mojolearn`.
+from ._native_full_reset_params import connect_module as _connect_full_reset
+_connect_full_reset(globals())
+del _connect_full_reset
