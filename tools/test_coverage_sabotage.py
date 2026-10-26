@@ -223,3 +223,12 @@ def test_batch_plan_splits_patches_that_do_not_apply_together():
                               co_apply=lambda patches: len(patches) < 2)
     assert sorted(b['arms'] for b in batches) == [['a'], ['b']]
     assert {b['family'] for b in batches} == {'core'}
+
+
+def test_batch_plan_keeps_arms_of_one_patch_in_one_build():
+    table = {n: dict(arm=n, patch='same.patch', bindings=['build_rf'], lanes=['l' + n]) for n in ('a', 'b')}
+    audit = {'native': [dict(entry='e', sabotage_patches=['same.patch'], lanes=['la', 'lb'])]}
+    batches = gate.batch_plan(table, audit, triage=lambda r: ('covered', r['lanes'], ''),
+                              co_apply=lambda patches: len(patches) == len(set(patches)))
+    assert [b['arms'] for b in batches] == [['a', 'b']]
+    assert batches[0]['patches'] == ['same.patch']

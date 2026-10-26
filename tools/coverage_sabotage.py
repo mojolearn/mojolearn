@@ -467,9 +467,12 @@ def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
         for name in names:
             arm = arm_table[name]
             for batch in open_batches:
-                clash = any(set(arm["lanes"]) & reach[o] or set(arm_table[o]["lanes"]) & reach[name]
+                # arms sharing one patch are one fault: they always share a build
+                clash = any(arm_table[o]["patch"] != arm["patch"] and
+                            (set(arm["lanes"]) & reach[o] or set(arm_table[o]["lanes"]) & reach[name])
                             for o in batch)
-                if not clash and co_apply([arm_table[o]["patch"] for o in batch] + [arm["patch"]]):
+                patches = list(dict.fromkeys([arm_table[o]["patch"] for o in batch] + [arm["patch"]]))
+                if not clash and co_apply(patches):
                     batch.append(name)
                     break
             else:
@@ -480,7 +483,7 @@ def batch_plan(arm_table, audit, triage=None, co_apply=_co_apply):
                 builds += [b for b in arm_table[o]["bindings"] if b not in builds]
                 lanes += [x for x in arm_table[o]["lanes"] if x not in lanes]
             batches.append(dict(id=f"{family}-{k}", family=family, arms=batch,
-                                patches=[arm_table[o]["patch"] for o in batch],
+                                patches=list(dict.fromkeys(arm_table[o]["patch"] for o in batch)),
                                 arm_lanes={o: arm_table[o]["lanes"] for o in batch},
                                 builds=builds, lanes=lanes,
                                 columns=sorted({"cpu" if b.endswith("_host") else "device" for b in builds})))

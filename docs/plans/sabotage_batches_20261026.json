@@ -1,0 +1,803 @@
+{
+ "audit_head": "b4ed03f684a38828667fd426867df5944ca4c7be",
+ "batches": [
+  {
+   "arm_lanes": {
+    "coverage-precise-core-msel_host_put": [
+     "x-metrics-search"
+    ],
+    "coverage-precise-core-msel_rebase_device": [
+     "par-forest",
+     "par-forest-reg",
+     "par-forest-et-clf"
+    ],
+    "coverage-precise-core-shard_topk_merge_device": [
+     "par-reference-knn",
+     "par-reference-knn-reg"
+    ],
+    "coverage-training-optimizer_public_common": [
+     "optim-sgd",
+     "optim-adam-clip",
+     "optim-maximize"
+    ]
+   },
+   "arms": [
+    "coverage-precise-core-msel_host_put",
+    "coverage-precise-core-msel_rebase_device",
+    "coverage-precise-core-shard_topk_merge_device",
+    "coverage-training-optimizer_public_common"
+   ],
+   "builds": [
+    "build_core_host",
+    "build"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "core",
+   "id": "core-1",
+   "lanes": [
+    "x-metrics-search",
+    "par-forest",
+    "par-forest-reg",
+    "par-forest-et-clf",
+    "par-reference-knn",
+    "par-reference-knn-reg",
+    "optim-sgd",
+    "optim-adam-clip",
+    "optim-maximize"
+   ],
+   "patches": [
+    "core/sabotage/coverage_precise_msel_host_put.patch",
+    "core/sabotage/coverage_precise_msel_rebase_device.patch",
+    "core/sabotage/coverage_precise_shard_topk_merge_device.patch",
+    "training/checks/sabotage/coverage_optimizer_public_common.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-core-msel_host_read": [
+     "x-metrics-search"
+    ]
+   },
+   "arms": [
+    "coverage-precise-core-msel_host_read"
+   ],
+   "builds": [
+    "build_core_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "core",
+   "id": "core-2",
+   "lanes": [
+    "x-metrics-search"
+   ],
+   "patches": [
+    "core/sabotage/coverage_precise_msel_host_read.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-core-shard_topk_merge_host": [
+     "par-reference-knn"
+    ]
+   },
+   "arms": [
+    "coverage-precise-core-shard_topk_merge_host"
+   ],
+   "builds": [
+    "build_core_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "core",
+   "id": "core-3",
+   "lanes": [
+    "par-reference-knn"
+   ],
+   "patches": [
+    "core/sabotage/coverage_array_helpers_impl.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-decomposition-pca_fit_host": [
+     "pca",
+     "pca-whiten"
+    ]
+   },
+   "arms": [
+    "coverage-precise-decomposition-pca_fit_host"
+   ],
+   "builds": [
+    "build_estimators"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "estimators",
+   "id": "estimators-1",
+   "lanes": [
+    "pca",
+    "pca-whiten"
+   ],
+   "patches": [
+    "decomposition/sabotage/coverage_precise_pca_fit_host.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-mamba-m3_load_weights": [
+     "mamba3-decode-session"
+    ]
+   },
+   "arms": [
+    "coverage-precise-mamba-m3_load_weights"
+   ],
+   "builds": [
+    "build_mamba"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "mamba",
+   "id": "mamba-1",
+   "lanes": [
+    "mamba3-decode-session"
+   ],
+   "patches": [
+    "mamba/sabotage/coverage_precise_m3_load_weights.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-mamba-m3_session_copy_in": [
+     "mamba3-decode-session"
+    ]
+   },
+   "arms": [
+    "coverage-precise-mamba-m3_session_copy_in"
+   ],
+   "builds": [
+    "build_mamba"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "mamba",
+   "id": "mamba-2",
+   "lanes": [
+    "mamba3-decode-session"
+   ],
+   "patches": [
+    "mamba/sabotage/coverage_precise_m3_session_copy_in.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-mamba-m3_session_export": [
+     "mamba3-decode-session"
+    ]
+   },
+   "arms": [
+    "coverage-precise-mamba-m3_session_export"
+   ],
+   "builds": [
+    "build_mamba"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "mamba",
+   "id": "mamba-3",
+   "lanes": [
+    "mamba3-decode-session"
+   ],
+   "patches": [
+    "mamba/sabotage/coverage_precise_m3_session_export.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-mamba-rms_out": [
+     "mamba1-decode-session",
+     "mamba2-decode-session",
+     "mamba3-decode-session"
+    ]
+   },
+   "arms": [
+    "coverage-precise-mamba-rms_out"
+   ],
+   "builds": [
+    "build_mamba"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "mamba",
+   "id": "mamba-4",
+   "lanes": [
+    "mamba1-decode-session",
+    "mamba2-decode-session",
+    "mamba3-decode-session"
+   ],
+   "patches": [
+    "mamba/sabotage/coverage_precise_rms_out.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-bindings-rf_aux_oob_score": [
+     "trees-oob-cv-link"
+    ]
+   },
+   "arms": [
+    "coverage-precise-bindings-rf_aux_oob_score"
+   ],
+   "builds": [
+    "build_rf"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "rf",
+   "id": "rf-1",
+   "lanes": [
+    "trees-oob-cv-link"
+   ],
+   "patches": [
+    "bindings/sabotage/coverage_precise_rf_aux_oob_score.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-core-rf_export_colmajor": [
+     "trees-dt-clf",
+     "trees-dt-reg"
+    ],
+    "coverage-precise-core-rf_export_shard": [
+     "par-forest",
+     "par-forest-reg"
+    ],
+    "coverage-precise-core-rf_export_weighted": [
+     "trees-rf-weighted",
+     "trees-adaboost-clf",
+     "rf-clf-balanced-parallel"
+    ]
+   },
+   "arms": [
+    "coverage-precise-core-rf_export_colmajor",
+    "coverage-precise-core-rf_export_shard",
+    "coverage-precise-core-rf_export_weighted"
+   ],
+   "builds": [
+    "build_rf"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "rf",
+   "id": "rf-2",
+   "lanes": [
+    "trees-dt-clf",
+    "trees-dt-reg",
+    "par-forest",
+    "par-forest-reg",
+    "trees-rf-weighted",
+    "trees-adaboost-clf",
+    "rf-clf-balanced-parallel"
+   ],
+   "patches": [
+    "core/sabotage/coverage_mojolearn_rf_impl.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-core-scaler_fit_impl": [
+     "classical-float16-sequences"
+    ]
+   },
+   "arms": [
+    "coverage-core-scaler_fit_impl"
+   ],
+   "builds": [
+    "build_runtime_classical_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "runtime_classical",
+   "id": "runtime_classical-1",
+   "lanes": [
+    "classical-float16-sequences"
+   ],
+   "patches": [
+    "core/sabotage/coverage_scaler_fit_impl.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-core-sequential_inputs_impl": [
+     "classical-float16-sequences"
+    ]
+   },
+   "arms": [
+    "coverage-core-sequential_inputs_impl"
+   ],
+   "builds": [
+    "build_runtime_classical_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "runtime_classical",
+   "id": "runtime_classical-2",
+   "lanes": [
+    "classical-float16-sequences"
+   ],
+   "patches": [
+    "core/sabotage/coverage_sequential_inputs_impl.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-neighbors-knn_door": [
+     "knn-clf",
+     "knn-reg",
+     "knn-clf-distance"
+    ]
+   },
+   "arms": [
+    "coverage-neighbors-knn_door"
+   ],
+   "builds": [
+    "build_runtime_classical_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "runtime_classical",
+   "id": "runtime_classical-3",
+   "lanes": [
+    "knn-clf",
+    "knn-reg",
+    "knn-clf-distance"
+   ],
+   "patches": [
+    "neighbors/checks/sabotage/coverage_knn_door.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-svm-svc_ovo_layout_host": [
+     "x-neighbors-svc-multiclass"
+    ]
+   },
+   "arms": [
+    "coverage-precise-svm-svc_ovo_layout_host"
+   ],
+   "builds": [
+    "build_svm_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "svm",
+   "id": "svm-1",
+   "lanes": [
+    "x-neighbors-svc-multiclass"
+   ],
+   "patches": [
+    "svm/sabotage/coverage_precise_svc_ovo_layout_host.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-bindings-native_params": [
+     "public-set-params",
+     "x-huber-outliers"
+    ],
+    "coverage-core-causal_checkpoint_impl": [
+     "hf-checkpoint",
+     "hf-model-surface"
+    ],
+    "coverage-core-small_mlp_state_impl": [
+     "mlp"
+    ],
+    "coverage-precise-bindings-cross_vendor_fold": [
+     "cross-vendor-fold"
+    ],
+    "coverage-precise-tokenizer-ranks_text": [
+     "bpe-vocabulary"
+    ]
+   },
+   "arms": [
+    "coverage-bindings-native_params",
+    "coverage-core-causal_checkpoint_impl",
+    "coverage-core-small_mlp_state_impl",
+    "coverage-precise-bindings-cross_vendor_fold",
+    "coverage-precise-tokenizer-ranks_text"
+   ],
+   "builds": [
+    "build_tokenizer_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "tokenizer",
+   "id": "tokenizer-1",
+   "lanes": [
+    "public-set-params",
+    "x-huber-outliers",
+    "hf-checkpoint",
+    "hf-model-surface",
+    "mlp",
+    "cross-vendor-fold",
+    "bpe-vocabulary"
+   ],
+   "patches": [
+    "bindings/sabotage/coverage_native_params.patch",
+    "core/sabotage/coverage_causal_checkpoint_impl.patch",
+    "core/sabotage/coverage_small_mlp_state_impl.patch",
+    "bindings/sabotage/coverage_precise_cross_vendor_fold.patch",
+    "tokenizer/sabotage/coverage_precise_ranks_text.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-core-native_json_impl": [
+     "hf-checkpoint",
+     "hf-model-surface",
+     "hf-causal-lm"
+    ]
+   },
+   "arms": [
+    "coverage-core-native_json_impl"
+   ],
+   "builds": [
+    "build_tokenizer_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "tokenizer",
+   "id": "tokenizer-2",
+   "lanes": [
+    "hf-checkpoint",
+    "hf-model-surface",
+    "hf-causal-lm"
+   ],
+   "patches": [
+    "core/sabotage/coverage_native_json_impl.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-bindings-parallel_mlp_apply": [
+     "par-mlp"
+    ],
+    "coverage-precise-tokenizer-vocab_fingerprint": [
+     "hf-causal-lm-text"
+    ]
+   },
+   "arms": [
+    "coverage-precise-bindings-parallel_mlp_apply",
+    "coverage-precise-tokenizer-vocab_fingerprint"
+   ],
+   "builds": [
+    "build_tokenizer_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "tokenizer",
+   "id": "tokenizer-3",
+   "lanes": [
+    "par-mlp",
+    "hf-causal-lm-text"
+   ],
+   "patches": [
+    "bindings/sabotage/coverage_precise_parallel_mlp_apply.patch",
+    "tokenizer/sabotage/coverage_precise_vocab_fingerprint.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-transformer-causal_lm_construct_impl": [
+     "hf-model-surface"
+    ]
+   },
+   "arms": [
+    "coverage-transformer-causal_lm_construct_impl"
+   ],
+   "builds": [
+    "build_tokenizer_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "tokenizer",
+   "id": "tokenizer-4",
+   "lanes": [
+    "hf-model-surface"
+   ],
+   "patches": [
+    "transformer/checks/sabotage/coverage_causal_lm_construct_impl.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-training-optimizer_public_host": [
+     "optim-sgd"
+    ]
+   },
+   "arms": [
+    "coverage-training-optimizer_public_host"
+   ],
+   "builds": [
+    "build_training_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "training",
+   "id": "training-1",
+   "lanes": [
+    "optim-sgd"
+   ],
+   "patches": [
+    "training/checks/sabotage/coverage_optimizer_public_host.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_cnn-csr_build_host": [
+     "x-cnn-gcn",
+     "x-cnn-sage"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_cnn-csr_build_host"
+   ],
+   "builds": [
+    "build_x_cnn_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_cnn",
+   "id": "x_cnn-1",
+   "lanes": [
+    "x-cnn-gcn",
+    "x-cnn-sage"
+   ],
+   "patches": [
+    "x_cnn/sabotage/coverage_precise_csr_build_host.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_decomp-pca_mle_pick_dev": [
+     "x-decomp-pca-randomized"
+    ],
+    "coverage-precise-x_decomp-pca_mle_pick_host": [
+     "x-decomp-pca-randomized"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_decomp-pca_mle_pick_dev",
+    "coverage-precise-x_decomp-pca_mle_pick_host"
+   ],
+   "builds": [
+    "build_x_decomp",
+    "build_estimators",
+    "build_x_decomp_host",
+    "build_estimators_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_decomp",
+   "id": "x_decomp-1",
+   "lanes": [
+    "x-decomp-pca-randomized"
+   ],
+   "patches": [
+    "x_decomp/sabotage/coverage_precise_pca_mle_pick.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_linear-spearman_sign_host": [
+     "x-isotonic"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_linear-spearman_sign_host"
+   ],
+   "builds": [
+    "build_x_linear_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_linear",
+   "id": "x_linear-1",
+   "lanes": [
+    "x-isotonic"
+   ],
+   "patches": [
+    "x_linear/sabotage/coverage_precise_spearman_sign_host.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_metrics-first_rows": [
+     "x-metrics-splitters"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_metrics-first_rows"
+   ],
+   "builds": [
+    "build_x_metrics",
+    "build_x_metrics_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_metrics",
+   "id": "x_metrics-1",
+   "lanes": [
+    "x-metrics-splitters"
+   ],
+   "patches": [
+    "x_metrics/sabotage/coverage_precise_first_rows.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_neighbors-log_softmax_dev": [
+     "x-neighbors-nearest-centroid"
+    ],
+    "coverage-precise-x_neighbors-nan_cells_host": [
+     "x-neighbors-knn-imputer"
+    ],
+    "coverage-precise-x_neighbors-p2m_transpose_i": [
+     "knn-clf"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_neighbors-log_softmax_dev",
+    "coverage-precise-x_neighbors-nan_cells_host",
+    "coverage-precise-x_neighbors-p2m_transpose_i"
+   ],
+   "builds": [
+    "build_x_neighbors",
+    "build_x_neighbors_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_neighbors",
+   "id": "x_neighbors-1",
+   "lanes": [
+    "x-neighbors-nearest-centroid",
+    "x-neighbors-knn-imputer",
+    "knn-clf"
+   ],
+   "patches": [
+    "x_neighbors/sabotage/coverage_precise_log_softmax_dev.patch",
+    "x_neighbors/sabotage/coverage_precise_nan_cells_host.patch",
+    "x_neighbors/sabotage/coverage_precise_p2m_transpose_i.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_neighbors-p2m_const_cols": [
+     "x-neighbors-nearest-centroid"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_neighbors-p2m_const_cols"
+   ],
+   "builds": [
+    "build_x_neighbors_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_neighbors",
+   "id": "x_neighbors-2",
+   "lanes": [
+    "x-neighbors-nearest-centroid"
+   ],
+   "patches": [
+    "x_neighbors/sabotage/coverage_precise_p2m_const_cols.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_neighbors-row_all_zero": [
+     "x-cluster-agglo-linkages"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_neighbors-row_all_zero"
+   ],
+   "builds": [
+    "build_x_neighbors_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_neighbors",
+   "id": "x_neighbors-3",
+   "lanes": [
+    "x-cluster-agglo-linkages"
+   ],
+   "patches": [
+    "x_neighbors/sabotage/coverage_precise_row_all_zero.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-precise-x_neighbors-row_argmax": [
+     "x-neighbors-label-propagation",
+     "x-neighbors-label-spreading"
+    ]
+   },
+   "arms": [
+    "coverage-precise-x_neighbors-row_argmax"
+   ],
+   "builds": [
+    "build_x_neighbors_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_neighbors",
+   "id": "x_neighbors-4",
+   "lanes": [
+    "x-neighbors-label-propagation",
+    "x-neighbors-label-spreading"
+   ],
+   "patches": [
+    "x_neighbors/sabotage/coverage_precise_row_argmax.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-autograd-imported_run": [
+     "sequence-onnx-import"
+    ]
+   },
+   "arms": [
+    "coverage-autograd-imported_run"
+   ],
+   "builds": [
+    "build_x_sequence",
+    "build_x_sequence_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-1",
+   "lanes": [
+    "sequence-onnx-import"
+   ],
+   "patches": [
+    "autograd/checks/sabotage/coverage_imported_run.patch"
+   ]
+  }
+ ]
+}
