@@ -54,6 +54,11 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_CC_FAST_OFF"]() or is_defined["MOJOLEARN_CC_FAST"]()), "removed: connected_components' batched rounds with the device relabel are the only path (lane gap-graph 2026-10-08); the per-round-wait path is gone"
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent kNN selectors are parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
     comptime assert not (is_defined["MOJOLEARN_C29_STREAM_TOPK"]() or is_defined["MOJOLEARN_C29_TILE"]() or is_defined["MOJOLEARN_C29_TILE_128"]()), "removed: C29_STREAM_TOPK (and MOJOLEARN_C29_TILE) was one thread per query walking every index row; forbidden serial shape, incumbent kNN top-k is parallel"
+    # Deleted 2026-10-26 (lane dead-native-entries-0859): dead native entries (docs/TOMBSTONES.md). SCHED_FAST_TABLE only
+    # registered sched_exp_block, which nothing called after the schedules went native; PURITY_3_OFF / PURITY_6_OFF only
+    # changed the x_neighbors_purity_flags word, which nothing read. Recoverable at 485ba9cc1.
+    comptime assert not (is_defined["MOJOLEARN_SCHED_FAST_TABLE"]() or is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]()), "removed: MOJOLEARN_SCHED_FAST_TABLE (sched_exp_block) had no caller; the schedules run lr_schedule_at / lr_schedule_series"
+    comptime assert not (is_defined["MOJOLEARN_PURITY_3_OFF"]() or is_defined["MOJOLEARN_PURITY_6_OFF"]()), "removed: MOJOLEARN_PURITY_3_OFF / MOJOLEARN_PURITY_6_OFF only changed x_neighbors_purity_flags, which nothing read"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 1 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 2, "invalid neural STAGE_DEPTH configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 1, "invalid neural STAGE_PAD configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",1]() > 0, "positive neural resource budget required"

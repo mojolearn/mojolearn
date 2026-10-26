@@ -495,7 +495,7 @@ def forest_host_gbdt_ctr_sabotage_binding() raises -> PythonObject:
     return PythonObject(GBDT_CTR_HOST_SABOTAGE)
 
 
-# TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller; ensemble.py calls forest_host_gbdt_sigmoid_pair) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller; ensemble.py calls forest_host_gbdt_sigmoid_pair) deleted 2026-10-26 by 65616e765; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/forest_host_gbdt_sigmoid.patch
 
 
@@ -539,7 +539,7 @@ def build__mojolearn_forest_host() -> PythonObject:
         module.def_function[forest_host_groves_predict_binding]("forest_host_groves_predict")
         module.def_function[forest_host_groves_release_binding]("forest_host_groves_release")
         module.def_function[forest_host_gbdt_predict_binding]("forest_host_gbdt_predict")
-        # TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 65616e765; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/forest_host_gbdt_sigmoid.patch
         module.def_function[forest_host_gbdt_sigmoid_pair_binding]("forest_host_gbdt_sigmoid_pair")
         module.def_function[forest_host_gbdt_expand_ctr_binding]("forest_host_gbdt_expand_ctr")

@@ -1886,7 +1886,7 @@ def gbdt_fit_ordered_rmse_binding(
     return PythonObject(text)
 
 
-# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 
@@ -1967,7 +1967,7 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         module.def_function[gbdt_predict_binding]("gbdt_predict")
         module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
-        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/gbdt_sigmoid.patch
         module.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
         module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")

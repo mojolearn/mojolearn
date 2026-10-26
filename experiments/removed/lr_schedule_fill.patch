@@ -1,0 +1,154 @@
+diff --git a/bindings/_mojolearn.mojo b/bindings/_mojolearn.mojo
+index 43d9bc78e..5f81a0c6c 100644
+--- a/bindings/_mojolearn.mojo
++++ b/bindings/_mojolearn.mojo
+@@ -114,7 +114,7 @@ from bindings.normal_dist_helpers import truncnorm_draws_binding
+ from bindings.lr_table_helpers import (
+     lr_schedule_exact_binding,
+     lr_schedule_exact_block_binding,
+-    lr_schedule_at_c, lr_schedule_series_c,
++    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
+ )
+ from bindings.optimizer_public_door import entry_init
+ from bindings.array_helpers import (
+@@ -2160,8 +2160,7 @@ def build__mojolearn() -> PythonObject:
+         m.def_function[row_stds_f64_binding]("row_stds_f64")
+         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
+         m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+-        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/lr_schedule_fill.patch
++        m.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
+         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
+         m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
+         m.def_py_c_function(entry_init, "optimizer_door_init")
+diff --git a/bindings/_mojolearn_core_host.mojo b/bindings/_mojolearn_core_host.mojo
+index 7075f2b99..0454dc989 100644
+--- a/bindings/_mojolearn_core_host.mojo
++++ b/bindings/_mojolearn_core_host.mojo
+@@ -154,7 +154,7 @@ from bindings.normal_dist_helpers import truncnorm_draws_binding
+ from bindings.lr_table_helpers import (
+     lr_schedule_exact_binding,
+     lr_schedule_exact_block_binding,
+-    lr_schedule_at_c, lr_schedule_series_c,
++    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
+ )
+ from bindings.optimizer_public_door import entry_init
+ from bindings.array_helpers import (
+@@ -1295,8 +1295,7 @@ def build__mojolearn_core_host() -> PythonObject:
+         module.def_function[row_stds_f64_binding]("row_stds_f64")
+         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
+         module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+-        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/lr_schedule_fill.patch
++        module.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
+         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
+         module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
+         module.def_py_c_function(entry_init, "optimizer_door_init")
+diff --git a/bindings/lr_table_helpers.mojo b/bindings/lr_table_helpers.mojo
+index 1927a35cd..52c9993bd 100644
+--- a/bindings/lr_table_helpers.mojo
++++ b/bindings/lr_table_helpers.mojo
+@@ -98,8 +98,19 @@ def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
+     )
+ 
+ 
+-# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller; OneCycleLR._lr_at_slow calls lr_schedule_at with the exact-only kind) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/lr_schedule_fill.patch
++def lr_schedule_fill_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
++                             res_addr: PythonObject) raises -> PythonObject:
++    """`lr_at` and `lr_values` of every built-in schedule (sequence/
++    lr_table.mojo::lr_spec_fill): the float32 rates of ONE-BASED steps t0 ..
++    t0 + n - 1 into `out_addr` (n float32). ip = [kind, a, b, c, t0, n] and
++    fp = [f0, f1, f2, f3] are `LrSpec`'s words. `res_addr` (one int64)
++    receives the index of the first failing step. Returns the status: 0, or
++    1 overflow, 2 a float32 straddle, 3 a bad progress, 4 a step below 1, 5
++    a OneCycleLR step past total_steps + 1."""
++    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=res_addr))
++    var r = lr_spec_fill(_spec(ip, fp), Int(py=ip[4]), Int(py=ip[5]), F32P(unsafe_from_address=Int(py=out_addr)))
++    res[0] = Int64(r[1])
++    return PythonObject(r[0])
+ 
+ 
+ # --------------------------------------- `lr_at(t)` and `lr_values(n)`, one call each
+diff --git a/python/mojolearn/_training_impl.py b/python/mojolearn/_training_impl.py
+index 74bc78239..0056500aa 100644
+--- a/python/mojolearn/_training_impl.py
++++ b/python/mojolearn/_training_impl.py
+@@ -1102,14 +1102,14 @@ def _f32_bits(value):
+ # THE SCHEDULES' ONE NATIVE CALL (lane neural-optimizers, 2026-10-21). A
+ # schedule's value at step t is DEFINED as the float32 nearest an exact
+ # rational, and that definition does not change. `lr_at(t)` and
+-# `lr_values(n)` are each ONE call of the core binding's `lr_schedule_at` /
+-# `lr_schedule_series` (sequence/lr_table.mojo `lr_spec_fill`): the binary64 table with its
++# `lr_values(n)` are each ONE call of the core binding's `lr_schedule_fill`
++# (sequence/lr_table.mojo `lr_spec_fill`): the binary64 table with its
+ # rigorous error bounds, the float32 decision, the exact big-rational route
+ # for every step the table leaves undecided, the constant tail and, for
+ # OneCycleLR, the phases. MOJOLEARN_LR_TABLE=0 (or MOJOLEARN_LR_EXACT_ONLY=1)
+ # keeps every step on the exact route (the A/B); the answers are the same.
+ 
+-#: `lr_spec_fill`'s statuses beyond `_LR_ERRORS`: a step below 1, and a
++#: `lr_schedule_fill`'s statuses beyond `_LR_ERRORS`: a step below 1, and a
+ #: OneCycleLR step past total_steps + 1
+ _LR_ONE_BASED = 4
+ _LR_BEYOND = 5
+@@ -1132,8 +1132,15 @@ def _lr_buffers(n):
+     return array.array("d", bytes(8 * n)), array.array("d", bytes(8 * n))
+ 
+ 
+-# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/lr_schedule_fill.patch
++def _lr_fill(spec, t0, out):
++    """ONE native call: the float32 rates of steps t0 .. t0 + len(out) - 1
++    into the float32 array `out`. Returns (status, index of the failing
++    step)."""
++    ip, fp = spec
++    res = array.array("q", (0,))
++    st = _lr_native("lr_schedule_fill")(  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
++        ip + [int(t0), len(out)], fp, out.buffer_info()[0], res.buffer_info()[0])
++    return int(st), res[0]
+ 
+ 
+ class _LrTable(object):
+diff --git a/python/mojolearn/_x_sequence_sched.py b/python/mojolearn/_x_sequence_sched.py
+index cf50bfa34..2c14dc75a 100644
+--- a/python/mojolearn/_x_sequence_sched.py
++++ b/python/mojolearn/_x_sequence_sched.py
+@@ -26,8 +26,9 @@ Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
+ (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
+ `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
+ from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
+-from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_native, _lr_status
++from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_fill, _lr_status
+ 
++import array as _array
+ 
+ #: `LrSpec` kind codes (sequence/lr_table.mojo)
+ _KIND_ONECYCLE = 10
+@@ -224,8 +225,13 @@ class OneCycleLR(_Sched):
+     def _lr_at_slow(self, t):
+         """The exact route of one step (sequence/lr_exact.mojo
+         `onecycle_exact`), one native call: the table's reference."""
++        t = int(t)
+         ip, fp = self._lr_spec()
+-        return _lr_native("lr_schedule_at")([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp, t, self._LR_STYLE)  # glue: the kind word with the exact-only flag
++        out = _array.array("f", (0.0,))
++        st, _ = _lr_fill(([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp), t, out)  # glue: the kind word with the exact-only flag
++        if st:
++            self._lr_refuse(st, t)
++        return out[0]
+ 
+ # Import-time registration of built-in schedule identities, never a runtime hook.
+ from . import _training_impl as _schedule_training
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index 9c051d385..6cb1e524c 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -1828,6 +1828,7 @@ FAMILIES = (
+             # Native C-entry registrations are part of the exported ABI too.
+             "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
+             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
++            "lr_schedule_fill",
+             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
+             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
+             "knn_classify_neighbors", "knn_regress_neighbors",

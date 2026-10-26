@@ -144,7 +144,7 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     return PythonObject(count)
 
 
-# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller; every tier's link runs gbdt_sigmoid_pair) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller; every tier's link runs gbdt_sigmoid_pair) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 
@@ -901,7 +901,7 @@ def build__mojolearn_gbdt() -> PythonObject:
         m.def_function[gbdt_per_round_paths_binding]("gbdt_per_round_paths")
         m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
-        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/gbdt_sigmoid.patch
         m.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
         # DEVIATION 2980: the device-resident parsed model

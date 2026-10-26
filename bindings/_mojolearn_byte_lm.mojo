@@ -1462,7 +1462,7 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
     return PythonObject(owner[].completed)
 
 
-# TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe; byte_lm_session_launch_probe with it) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe; byte_lm_session_launch_probe with it) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
 
 
@@ -1490,7 +1490,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
-        # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
         module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
         # DEVIATION 2514: the device-owned session entries.

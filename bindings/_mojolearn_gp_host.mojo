@@ -594,7 +594,7 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
         module.def_function[gpr_optimize_binding]("gpr_optimize")
-        # TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/gp_log64.patch
         module.def_function[gp_theta_params_binding]("gp_theta_params")
         module.def_function[gpc_fit_binding]("gpc_fit")

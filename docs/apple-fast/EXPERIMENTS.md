@@ -2206,3 +2206,10 @@ One run per arm, `tools/bench_graph_optimizer.py run --rounds 1` through `tools/
 
 NVIDIA leg: not run (RunPod balance under the rental floor on 2026-10-21); the default decision needs it too.
 Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` and the per-workload `result.json`.
+
+## Dead native entries (lane dead-native-entries-0859, 2026-10-26)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `SCHED_FAST_TABLE` (rollback `SCHED_FAST_TABLE_OFF`) | lr-exponential / synthetic | lane/dead-native-entries-0859@9552c0ecb (code at 485ba9cc1) | rab13-schedtable (2026-10-05) | 231.8 -> 19.2 (then); no reader since | DELETED (dead code) | it only registered `sched_exp_block`, which nothing called after the schedules moved into `lr_schedule_at` / `lr_schedule_series`; the define now refuses (docs/TOMBSTONES.md) |
+| `PURITY_3_OFF`, `PURITY_6_OFF` | nearest-centroid, per-row argmax (lane apple-fast-purity) | lane/dead-native-entries-0859@1d3757533 (code at 485ba9cc1) | none | not timed | DELETED (dead code) | they only changed the `x_neighbors_purity_flags` word, which nothing read; the defines now refuse (docs/TOMBSTONES.md) |

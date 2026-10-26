@@ -98,7 +98,7 @@ def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
     )
 
 
-# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller; OneCycleLR._lr_at_slow calls lr_schedule_at with the exact-only kind) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller; OneCycleLR._lr_at_slow calls lr_schedule_at with the exact-only kind) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/lr_schedule_fill.patch
 
 

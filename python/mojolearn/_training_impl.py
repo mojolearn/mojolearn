@@ -1132,7 +1132,7 @@ def _lr_buffers(n):
     return array.array("d", bytes(8 * n)), array.array("d", bytes(8 * n))
 
 
-# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/lr_schedule_fill.patch
 
 

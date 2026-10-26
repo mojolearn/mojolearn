@@ -580,7 +580,7 @@ def gbdt_host_predict_multi_into(
 # ===========================================================================
 
 
-# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 7c1201602; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/gbdt_sigmoid.patch
 
 

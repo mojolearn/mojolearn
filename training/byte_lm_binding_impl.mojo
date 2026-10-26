@@ -381,7 +381,7 @@ def _stage_download(ctx: DeviceContext, mut host: HostBuffer[DType.float32],
 
 
 
-# TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
 
 

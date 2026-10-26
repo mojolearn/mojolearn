@@ -97,7 +97,7 @@ def forest_host_gbdt_expand_ctr_into(
         op[i] = out[i]
 
 
-# TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by 65616e765; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/forest_host_gbdt_sigmoid.patch
 
 

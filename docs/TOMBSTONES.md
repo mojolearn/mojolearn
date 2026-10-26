@@ -30,6 +30,15 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`adam_hyper_f64` (native entry)](#dead-native-entries-2026-10-26) | Core binding (CNN Adam hyper block) | removed (dead native entry: no live caller) | 2026-10-26 | [adam_hyper_f64.patch](../experiments/removed/adam_hyper_f64.patch) |
+| [`lr_schedule_fill` (native entry)](#dead-native-entries-2026-10-26) | Core binding (learning-rate schedules) | removed (dead native entry: no live caller) | 2026-10-26 | [lr_schedule_fill.patch](../experiments/removed/lr_schedule_fill.patch) |
+| [`gp_log64` (native entry)](#dead-native-entries-2026-10-26) | Gaussian process | removed (dead native entry: no live caller) | 2026-10-26 | [gp_log64.patch](../experiments/removed/gp_log64.patch) |
+| [`gbdt_sigmoid` (native entry)](#dead-native-entries-2026-10-26) | GBDT (single-column link) | removed (dead native entry: no live caller) | 2026-10-26 | [gbdt_sigmoid.patch](../experiments/removed/gbdt_sigmoid.patch) |
+| [`forest_host_gbdt_sigmoid` (native entry)](#dead-native-entries-2026-10-26) | Forest host (single-column link) | removed (dead native entry: no live caller) | 2026-10-26 | [forest_host_gbdt_sigmoid.patch](../experiments/removed/forest_host_gbdt_sigmoid.patch) |
+| [`x_decomp_knn_select` (native entry)](#dead-native-entries-2026-10-26) | Decomposition (device copy only) | removed (dead native entry: no live caller) | 2026-10-26 | [x_decomp_knn_select.patch](../experiments/removed/x_decomp_knn_select.patch) |
+| [`byte_lm_launch_probe` (native entry)](#dead-native-entries-2026-10-26) | Byte LM (launch-cost probe, + byte_lm_session_launch_probe) | removed (dead native entry: no live caller) | 2026-10-26 | [byte_lm_launch_probe.patch](../experiments/removed/byte_lm_launch_probe.patch) |
+| [`x_neighbors_purity_flags` (native entry)](#dead-native-entries-2026-10-26) | Neighbors (+ MOJOLEARN_PURITY_3_OFF / _6_OFF) | removed (dead native entry: no live caller) | 2026-10-26 | [x_neighbors_purity_flags.patch](../experiments/removed/x_neighbors_purity_flags.patch) |
+| [`sched_exp_block` (native entry)](#dead-native-entries-2026-10-26) | Sequence schedules (+ MOJOLEARN_SCHED_FAST_TABLE) | removed (dead native entry: no live caller) | 2026-10-26 | [sched_exp_block.patch](../experiments/removed/sched_exp_block.patch) |
 | [Framework adapter per-operation surfaces](#framework-adapter-per-operation-surfaces) (`torch.ops.mojolearn.operation`, MAX `mojolearn_matmul` / `mojolearn_relu` / `mojolearn_operation0..3`, native `mojolearn_adapter_operation*`) | Framework adapters | removed (API: whole-model only) | 2026-10-24 | none (recoverable at `b022e2ea5`) |
 | [`MOJOLEARN_IDN_XTY_TILED_OFF`](#mojolearn_idn_xty_tiled_off) (+ `MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`, `MOJOLEARN_PCA_FAST_COLMEAN_OFF`, `MOJOLEARN_TSVD_FAST_COLVAR_OFF`) | Shared / decomposition | removed (serial shape: one block per column walking all n rows) | 2026-10-21 | [MOJOLEARN_IDN_XTY_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch) |
 | [`MOJOLEARN_QN_TILED_MULTI_OFF`](#mojolearn_qn_tiled_multi_off) (+ `MOJOLEARN_QN_TILED_MULTI_ALL`, now the rule) | Linear | removed (serial shape: one block per gradient cell walking all n rows) | 2026-10-21 | [MOJOLEARN_QN_TILED_MULTI_OFF.patch](../experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch) |
@@ -3529,3 +3538,35 @@ Hand-glue deletion (lane ag-transformer-owners, 2026-10-19). No define: the walk
   anything but the whole-model entries; `packaging/adapters/build.sh` refuses a native library exporting
   `mojolearn_adapter_operation*`; `tools/check_native_adapters.py` fails if `torch.ops.mojolearn.operation` resolves.
   They must not come back (AGENTS.md "Framework adapters are the same API in another format").
+
+## Dead native entries (2026-10-26)
+
+- What they were: native registrations that no package code, native owner or identity lane called. The coverage audit
+  listed them in `tools/verify_coverage_audit.py` `SABOTAGE_NA_ENTRIES` (lane coverage-sabotage-arms-20261025, "no live
+  caller" / "tool-only probe"); lane dead-native-entries-0859 checked each in the source at `485ba9cc1` and deleted the
+  nine below, one commit each.
+- Verdict: removed as dead code, not an experiment. No timing or quality: no live path changed, so no identity bits move.
+
+| entry | where | deleted by | why it was dead | what replaced its one tool/test use |
+|---|---|---|---|---|
+| `adam_hyper_f64` | core binding + core host (`bindings/hotpath_helpers.mojo`, `core/hotpath_impl_rows.mojo`) | `ce303e2d1` | the CPU Adam hyper block left every route in lane cpu3-python; the CNN steps run `x_cnn_adam_hyper_d` | `tools/identical_wave_quality.py cnn_controls` holds `x_cnn_adam_hyper_d` to a float64 NumPy reference |
+| `lr_schedule_fill` | core binding + core host (`bindings/lr_table_helpers.mojo`), `_training_impl._lr_fill` | `a98f13f57` | `lr_at` / `lr_values` run `lr_schedule_at` / `lr_schedule_series` over the same `lr_spec_fill` | `OneCycleLR._lr_at_slow` (the reference of `tools/sched_table_check.py`) calls `lr_schedule_at` with the exact-only kind word |
+| `gp_log64` | GP binding + GP host, `gp_theta.gp_log64` and the two list helpers | `c8e73e3a4` | no caller | `packaging/portable_math/test_host_math.py` drops its float64 log half (`owned.log` stays held to the stdlib) |
+| `gbdt_sigmoid` | GBDT binding + GBDT host (`gbdt_host_sigmoid_into`) | `7c1201602` | every tier's link runs `gbdt_sigmoid_pair` (`ensemble.py`) | the e3 manifest test names `gbdt_sigmoid_pair` |
+| `forest_host_gbdt_sigmoid` | forest host (`forest_host_gbdt_sigmoid_into`) | `65616e765` | `ensemble.py` and the native host archive call `forest_host_gbdt_sigmoid_pair` | none |
+| `x_decomp_knn_select` (device copy) | `bindings/_mojolearn_x_decomp.mojo` registration only | `01f30742f` | its `_expansion_decomp` helper is never called | none; the host twin stays (it carries the e2e_host seam patches) |
+| `byte_lm_launch_probe` (+ `byte_lm_session_launch_probe`) | byte LM binding, `training/byte_lm_binding_impl.mojo` `_launch_probe*` | `be2f9a1be` | a launch-cost timing probe (lane neural-pass43, 2026-10-01) whose only caller was `tools/byte_lm_launch_probe.py` | the tool is deleted with them |
+| `x_neighbors_purity_flags` | x_neighbors binding + host, `sort_items.purity_flags`, `x_neighbors/gen.py` | `1d3757533` | the PURITY_3 / PURITY_6 switch word nothing reads; `-D MOJOLEARN_PURITY_3_OFF` / `_6_OFF` only changed this word | none; the two defines now refuse |
+| `sched_exp_block` (+ `MOJOLEARN_SCHED_FAST_TABLE`) | x_sequence binding, `sequence/sched_table.mojo`, `sequence/sched_table_pyapi.mojo` | `9552c0ecb` | registered only under SCHED_FAST_TABLE (FAST + Apple); no Python reads it since the schedules went native | none; the define and its `_OFF` now refuse |
+
+- Kept (tool reach probes of FAST switches still in the tree): `km_rbf_staged` (`tools/kfeat_pair.py` `REACH_EXTRA` checks
+  the KM_FAST_RBF_STAGED arm; that switch is the FAST + Apple default with a live `_OFF` rollback) and
+  `x_decomp_mcd_cov_reach` (`tools/mcd_ordered_quality.py` asserts the MCD_ORDERED_COV arm and reads its counters). The
+  probe goes when its experiment goes; MCD_ORDERED_COV is NEUTRAL in `docs/apple-fast/EXPERIMENTS.md` and still owes its
+  own deletion.
+- Recoverable at `485ba9cc1` (main before the lane; each commit's parent also has its code). Patches:
+  `experiments/removed/<entry>.patch`, the reverse of that entry's commit restricted to code files (`tools/` left out), each
+  checked with `git apply --check` against the lane head. To restore `sched_exp_block` or `x_neighbors_purity_flags`, also
+  delete their refusals in `core/six_lane_experiment_guards.mojo`.
+- Guard: `tools/test_verify_coverage_rules.py::test_deleted_dead_entries_leave_the_table`; the host manifest test
+  (`python/mojolearn/tests/test_host_surface.py`) fails if a host binding registers a name the manifest no longer lists.

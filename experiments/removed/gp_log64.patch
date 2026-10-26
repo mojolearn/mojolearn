@@ -1,0 +1,209 @@
+diff --git a/bindings/_mojolearn_gp.mojo b/bindings/_mojolearn_gp.mojo
+index 7e97db98c..362d49f0f 100644
+--- a/bindings/_mojolearn_gp.mojo
++++ b/bindings/_mojolearn_gp.mojo
+@@ -87,6 +87,7 @@ from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
+ from std.os import abort
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+ from gaussian_process.host.gp_theta import (
++    gp_log64,
+     gp_theta_param,
+ )
+ from std.python import Python, PythonObject
+@@ -111,6 +112,7 @@ from gaussian_process.gp_binding_entries import (
+     _gpr_sample_y_run,
+     _i32_ptr,
+     _rebuild_kernel_spec,
++    gp_log64_values,
+     gp_theta_params_values,
+ )
+ 
+@@ -1309,6 +1311,15 @@ def gpr_lml_grad_binding(
+     return PythonObject(info)
+ 
+ 
++def gp_log64_binding(values: PythonObject) raises -> PythonObject:
++    """`identical_log64` over a list of floats: theta of hyperparameter values
++    and bounds (DEVIATION 2880)."""
++    var vals = List[Float64]()
++    for i in range(len(values)):  # small-loop(theta words: one per kernel hyperparameter)
++        vals.append(Float64(py=values[i]))
++    return py_list_f64(gp_log64_values(vals))
++
++
+ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
+     """`Float32(identical_exp64(theta))` over a list, widened back to Python
+     floats: the float32 hyperparameters that run at theta (DEVIATION 2880)."""
+@@ -1341,8 +1352,7 @@ def build__mojolearn_gp() -> PythonObject:
+         m.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
+         m.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
+         m.def_function[gpr_optimize_binding]("gpr_optimize")
+-        # TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/gp_log64.patch
++        m.def_function[gp_log64_binding]("gp_log64")
+         m.def_function[gp_theta_params_binding]("gp_theta_params")
+         m.def_function[gpc_fit_binding]("gpc_fit")
+         m.def_function[gpc_predict_binding]("gpc_predict")
+diff --git a/bindings/_mojolearn_gp_host.mojo b/bindings/_mojolearn_gp_host.mojo
+index 049322a4a..0dead702e 100644
+--- a/bindings/_mojolearn_gp_host.mojo
++++ b/bindings/_mojolearn_gp_host.mojo
+@@ -53,6 +53,7 @@ from std.memory import memcpy
+ 
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
+ from gaussian_process.host.gp_theta import (
++    gp_log64,
+     gp_theta_param,
+ )
+ from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
+@@ -93,6 +94,7 @@ from gaussian_process.host.gp_host_fit_entries import (
+     _gpr_lml_grad_run,
+     _gpr_predict_cov_run,
+     _gpr_sample_y_run,
++    gp_log64_list,
+     gp_theta_params_list,
+ )
+ from bindings.py_lists import py_list_f64
+@@ -492,6 +494,14 @@ def gpr_optimize_binding(
+     return PythonObject(best)
+ 
+ 
++def gp_log64_binding(values: PythonObject) raises -> PythonObject:
++    """The GPU binding's `gp_log64`."""
++    var vals = List[Float64]()
++    for i in range(len(values)):  # small-loop(theta words: one per kernel hyperparameter)
++        vals.append(Float64(py=values[i]))
++    return py_list_f64(gp_log64_list(vals))
++
++
+ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
+     """The GPU binding's `gp_theta_params`."""
+     var vals = List[Float64]()
+@@ -594,8 +604,7 @@ def build__mojolearn_gp_host() -> PythonObject:
+         module.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
+         module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
+         module.def_function[gpr_optimize_binding]("gpr_optimize")
+-        # TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/gp_log64.patch
++        module.def_function[gp_log64_binding]("gp_log64")
+         module.def_function[gp_theta_params_binding]("gp_theta_params")
+         module.def_function[gpc_fit_binding]("gpc_fit")
+         module.def_function[gpc_predict_binding]("gpc_predict")
+diff --git a/gaussian_process/gp_binding_entries.mojo b/gaussian_process/gp_binding_entries.mojo
+index 6eb017033..3ca4caa35 100644
+--- a/gaussian_process/gp_binding_entries.mojo
++++ b/gaussian_process/gp_binding_entries.mojo
+@@ -8,6 +8,7 @@ address and params contracts are that file's."""
+ from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+ from gaussian_process.host.gp_theta import (
++    gp_log64,
+     gp_theta_param,
+ )
+ 
+@@ -442,8 +443,12 @@ def _gpr_lml_grad_run(
+     return r.info
+ 
+ 
+-# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/gp_log64.patch
++def gp_log64_values(values: List[Float64]) -> List[Float64]:
++    """`gp_log64` of each value, in order."""
++    var out = List[Float64]()
++    for i in range(len(values)):
++        out.append(gp_log64(values[i]))
++    return out^
+ 
+ 
+ def gp_theta_params_values(values: List[Float64]) -> List[Float64]:
+diff --git a/gaussian_process/host/gp_host_fit_entries.mojo b/gaussian_process/host/gp_host_fit_entries.mojo
+index 96b9274d4..f5f3356d4 100644
+--- a/gaussian_process/host/gp_host_fit_entries.mojo
++++ b/gaussian_process/host/gp_host_fit_entries.mojo
+@@ -6,6 +6,7 @@ that shell, so a Python-free caller reaches the same source; no Python here).
+ The address and params contracts are that file's."""
+ from core.hostptr import f32_ptr, f64_ptr
+ from gaussian_process.host.gp_theta import (
++    gp_log64,
+     gp_theta_param,
+ )
+ from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
+@@ -283,8 +284,12 @@ def _gpr_lml_grad_run(
+     return info
+ 
+ 
+-# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/gp_log64.patch
++def gp_log64_list(values: List[Float64]) -> List[Float64]:
++    """`gp_log64` of each value, in order."""
++    var out = List[Float64]()
++    for i in range(len(values)):
++        out.append(gp_log64(values[i]))
++    return out^
+ 
+ 
+ def gp_theta_params_list(values: List[Float64]) -> List[Float64]:
+diff --git a/gaussian_process/host/gp_theta.mojo b/gaussian_process/host/gp_theta.mojo
+index 424157292..0d675061c 100644
+--- a/gaussian_process/host/gp_theta.mojo
++++ b/gaussian_process/host/gp_theta.mojo
+@@ -18,7 +18,9 @@ DEVIATION 2880: THE HYPERPARAMETERS, THEIR LOGS AND THE GRADIENT'S FOLD.
+              ARD length scale contributes one entry per feature. A leaf whose
+              bounds are "fixed" contributes none.
+   log        the optimizer's start and bounds: `ftz(identical_log(v))` of
+-             the float32 value, on the device (`gp_optim_items.mojo`).
++             the float32 value, on the device (`gp_optim_items.mojo`);
++             `gp_log64` (`identical_log64`) remains the binding's float64
++             log for callers that want one.
+   exp        `ftz(identical_exp(Float32(theta)))`, `gp_theta_param`: the
+              hyperparameter that runs is that float32, the value the device
+              optimizer (`gp_optim_items.mojo`) writes from its float32
+@@ -52,6 +54,7 @@ from std.sys.compile import is_defined
+ from checks.numerics import (
+     ftz,
+     identical_exp,
++    identical_log64,
+     identical_mul,
+     identical_mul_add,
+ )
+@@ -70,8 +73,9 @@ comptime _K_SUM = 4
+ comptime _K_PROD = 5
+ 
+ 
+-# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/gp_log64.patch
++def gp_log64(v: Float64) -> Float64:
++    """theta of one hyperparameter value or bound (DEVIATION 2880)."""
++    return identical_log64(v)
+ 
+ 
+ def gp_theta_param(theta: Float64) -> Float32:
+diff --git a/packaging/portable_math/test_host_math.py b/packaging/portable_math/test_host_math.py
+index ebc0f32e1..ead737d7d 100644
+--- a/packaging/portable_math/test_host_math.py
++++ b/packaging/portable_math/test_host_math.py
+@@ -140,8 +140,9 @@ def test_affected_python_surfaces():
+ def test_existing_mojo_primitive_parity():
+     from mojolearn import _backend
+     binding = _backend.binding('_mojolearn_gp', 'identical')
+-    # The float64 log half went with the retired `gp_log64` entry (no live caller);
+-    # owned.log is held to the stdlib in test_transcendental_accuracy_and_cross_host_digest.
++    inputs = [x for x in samples() if math.isfinite(x) and x > 0]
++    expected = binding.gp_log64(inputs)
++    assert b''.join(map(bits, expected)) == b''.join(bits(owned.log(x)) for x in inputs)
+     theta = [i/32 for i in range(-2048, 2049)]
+     expected = binding.gp_theta_params(theta)
+     assert b''.join(struct.pack('<f', x) for x in expected) == b''.join(
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index 2e3fdb889..9c051d385 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2418,7 +2418,7 @@ FAMILIES = (
+         exports=(
+             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
+             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
+-            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_theta_params", "gpr_predict_cov",
++            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
+             "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
+             "cholesky_factor", "cholesky_solve", "gpr_optimize",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source

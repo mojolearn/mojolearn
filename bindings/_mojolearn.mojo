@@ -2142,7 +2142,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
         m.def_function[normal_init_f32_binding]("normal_init_f32")
-        # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
@@ -2160,7 +2160,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
         m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
-        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
         m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")

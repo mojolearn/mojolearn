@@ -442,7 +442,7 @@ def _gpr_lml_grad_run(
     return r.info
 
 
-# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: gp_log64 (dead native entry: no live caller) deleted 2026-10-26 by c8e73e3a4; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/gp_log64.patch
 
 

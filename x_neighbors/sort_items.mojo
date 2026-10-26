@@ -224,5 +224,5 @@ def nc_med_std_pick_item(t: Int, std: FP, res: FP, key: FP, d: Int, p: Int, n_st
     res.unsafe_store(1, Float32(1) if z else Float32(0))
 
 
-# TOMBSTONE: purity_flags (x_neighbors_purity_flags) (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: purity_flags (x_neighbors_purity_flags) (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch

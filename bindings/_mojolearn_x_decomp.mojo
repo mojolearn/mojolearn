@@ -132,7 +132,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[lu_py[DevExec]]("x_decomp_lu")
         m.def_function[lu_solve_py[DevExec]]("x_decomp_lu_solve")
         m.def_function[trisolve_py[DevExec]]("x_decomp_trisolve")
-        # TOMBSTONE: x_decomp_knn_select (device copy) (dead native entry: no live caller; the host twin stays) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # TOMBSTONE: x_decomp_knn_select (device copy) (dead native entry: no live caller; the host twin stays) deleted 2026-10-26 by 01f30742f; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_decomp_knn_select.patch
         m.def_function[chol_py[DevExec]]("x_decomp_chol")
         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")

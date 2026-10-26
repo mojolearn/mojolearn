@@ -1,0 +1,175 @@
+diff --git a/bindings/_mojolearn_x_neighbors.mojo b/bindings/_mojolearn_x_neighbors.mojo
+index ab5e35d58..a16bce623 100644
+--- a/bindings/_mojolearn_x_neighbors.mojo
++++ b/bindings/_mojolearn_x_neighbors.mojo
+@@ -29,6 +29,7 @@ from x_neighbors.ocsvm_dev import OCSVM_IDN_RES
+ from x_neighbors.dev_pyapi import ocsvm_alpha_init_binding
+ from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+ from x_neighbors.dev_pyapi import unit_ff_binding
++from x_neighbors.dev_pyapi import purity_flags_binding
+ from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
+ from x_neighbors.dev_pyapi import (
+     kfeat_first_negative_binding,
+@@ -1207,8 +1208,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+         m.def_function[nc_fit_lean_binding]("x_neighbors_nc_fit_lean")
+-        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
++        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
+         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
+diff --git a/bindings/_mojolearn_x_neighbors_host.mojo b/bindings/_mojolearn_x_neighbors_host.mojo
+index f1c46fd45..8a7058835 100644
+--- a/bindings/_mojolearn_x_neighbors_host.mojo
++++ b/bindings/_mojolearn_x_neighbors_host.mojo
+@@ -24,6 +24,7 @@ from x_neighbors.host_pyapi import unit_ff_binding
+ from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
+ from x_neighbors.host_pyapi import kpca_resident_binding
+ from x_neighbors.host_pyapi import lp_fast_resident_binding
++from x_neighbors.host_pyapi import purity_flags_binding
+ from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
+ from x_neighbors.host_pyapi import kfeat_pcs_draw_idn_host_binding, kfeat_schi2_fit_idn_host_binding
+ 
+@@ -1208,8 +1209,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+-        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
++        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+         # lane/fam2-neighbors: the host column of the device alpha start
+         comptime if XN_OCSVM_DEV_INIT:
+diff --git a/python/mojolearn/_surface_neighbors.py b/python/mojolearn/_surface_neighbors.py
+index 7f86e08f6..af7204f33 100644
+--- a/python/mojolearn/_surface_neighbors.py
++++ b/python/mojolearn/_surface_neighbors.py
+@@ -116,6 +116,7 @@ FAMILIES = (
+             "x_neighbors_py2mojo_off",
+             "x_neighbors_vendor",
+             "x_neighbors_kpca_resident",
++            "x_neighbors_purity_flags",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             # xn_softmax64 is not listed: bindings/_mojolearn_x_neighbors_host.mojo:1238 registers it only under
+             # NC_PROBA64, which is FAST-only, and a host binding is IDENTICAL (0.8.37 macOS wheel qualification).
+diff --git a/x_neighbors/dev_pyapi.mojo b/x_neighbors/dev_pyapi.mojo
+index f948542f3..54acdd7dc 100644
+--- a/x_neighbors/dev_pyapi.mojo
++++ b/x_neighbors/dev_pyapi.mojo
+@@ -22,6 +22,7 @@ from x_neighbors.kfeat_dev import (
+ from x_neighbors.nan_cells_device import nc_fit_lean
+ from x_neighbors.ocsvm_dev import op_ocsvm_alpha_init, op_ocsvm_x, op_unit_ff
+ from x_neighbors.ocsvm_init import oci_nu_hi, oci_nu_lo
++from x_neighbors.sort_items import purity_flags
+ 
+ 
+ def kpca_resident_binding() raises -> PythonObject:
+@@ -39,6 +40,11 @@ def nc_fit_lean_binding() raises -> PythonObject:
+     return PythonObject(nc_fit_lean())
+ 
+ 
++def purity_flags_binding() raises -> PythonObject:
++    """The lane apple-fast-purity switch bits (`x_neighbors/sort_items.mojo`)."""
++    return PythonObject(purity_flags())
++
++
+ def kfeat_flags_binding() raises -> PythonObject:
+     return PythonObject(kfeat_flags())
+ 
+diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
+index 43e2e3e20..278226958 100644
+--- a/x_neighbors/gen.py
++++ b/x_neighbors/gen.py
+@@ -745,6 +745,7 @@ def gpu_binding():
+             + "from x_neighbors.dev_pyapi import lp_fast_resident_binding\n"
+             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
+             + "from x_neighbors.dev_pyapi import ocsvm_resident_binding\n"
++            + "from x_neighbors.dev_pyapi import purity_flags_binding\n"
+             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
+             + "from x_neighbors.dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
+             + wrappers() + """
+@@ -762,8 +763,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+-        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
++        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
+         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
+@@ -789,6 +789,7 @@ def host_binding():
+             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
+             + "from x_neighbors.host_pyapi import kpca_resident_binding\n"
+             + "from x_neighbors.host_pyapi import lp_fast_resident_binding\n"
++            + "from x_neighbors.host_pyapi import purity_flags_binding\n"
+             + wrappers() + """
+ 
+ def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
+@@ -825,8 +826,7 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
+         _add_ops(m)
+         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+-        # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
+-        # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
++        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
+         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+         return m.finalize()
+     except e:
+@@ -846,7 +846,8 @@ if __name__ == "__main__":
+     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
+              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
+                                                                             "x_neighbors_vendor",
+-                                                                            "x_neighbors_kpca_resident"]
++                                                                            "x_neighbors_kpca_resident",
++                                                                            "x_neighbors_purity_flags"]
+     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
+     surf.write_text(t[:a] + body + t[b:])
+     print(f"x_neighbors/gen.py: {len(OPS)} ops -> device_ops, host_ops and the two bindings")
+diff --git a/x_neighbors/host_pyapi.mojo b/x_neighbors/host_pyapi.mojo
+index baa48f959..5fb1e63f6 100644
+--- a/x_neighbors/host_pyapi.mojo
++++ b/x_neighbors/host_pyapi.mojo
+@@ -12,6 +12,7 @@ from x_neighbors.kapprox_host import kpca_resident
+ from x_neighbors.kfeat_rng import op_kfeat_pcs_draw_idn_host, op_kfeat_schi2_fit_idn_host
+ from x_neighbors.ocsvm_host import op_ocsvm_alpha_init, op_unit_ff
+ from x_neighbors.ocsvm_init import oci_nu_hi, oci_nu_lo
++from x_neighbors.sort_items import purity_flags
+ 
+ 
+ def kpca_resident_binding() raises -> PythonObject:
+@@ -24,6 +25,11 @@ def lp_fast_resident_binding() raises -> PythonObject:
+     return PythonObject(lp_fast_resident())
+ 
+ 
++def purity_flags_binding() raises -> PythonObject:
++    """The lane apple-fast-purity switch bits (`x_neighbors/sort_items.mojo`)."""
++    return PythonObject(purity_flags())
++
++
+ def _kfeat_args(p: PythonObject, what: String) raises -> Tuple[UInt32, Int, Int]:
+     var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
+     var a = Int(py=p[1])
+diff --git a/x_neighbors/sort_items.mojo b/x_neighbors/sort_items.mojo
+index 4f2fd1cb0..832bee397 100644
+--- a/x_neighbors/sort_items.mojo
++++ b/x_neighbors/sort_items.mojo
+@@ -224,5 +224,14 @@ def nc_med_std_pick_item(t: Int, std: FP, res: FP, key: FP, d: Int, p: Int, n_st
+     res.unsafe_store(1, Float32(1) if z else Float32(0))
+ 
+ 
+-# TOMBSTONE: purity_flags (x_neighbors_purity_flags) (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
+-# Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
++def purity_flags() -> Int:
++    """lane apple-fast-purity switches the Python layer reads
++    (`x_neighbors_purity_flags`): bit 1 the per-row argmax on the device
++    (off under -D MOJOLEARN_PURITY_3_OFF), bit 2 NearestCentroid's median
++    std on the device (off under -D MOJOLEARN_PURITY_6_OFF)."""
++    var f = 0
++    comptime if not is_defined["MOJOLEARN_PURITY_3_OFF"]():
++        f |= 1
++    comptime if not is_defined["MOJOLEARN_PURITY_6_OFF"]():
++        f |= 2
++    return f

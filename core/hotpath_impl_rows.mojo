@@ -267,7 +267,7 @@ def normal_init_f32(
 
 
 @always_inline
-# TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller; tools/identical_wave_quality.py holds x_cnn_adam_hyper_d to a NumPy reference) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller; tools/identical_wave_quality.py holds x_cnn_adam_hyper_d to a NumPy reference) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/adam_hyper_f64.patch
 
 
