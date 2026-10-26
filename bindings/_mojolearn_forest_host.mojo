@@ -35,9 +35,9 @@ border_offsets i32 (n_cols + 1), borders f32, one_hot i32 (n_cols), out f32
 (n_rows * n_cols, COLUMN-major)]` and `params` is `[n_rows, n_raw, n_cols,
 n_ctr_tables, len(ctr_ints), len(ctr_floats), n_tensor_tables,
 len(tensor_ints), len(tensor_floats), len(counts), n_borders]`.
-`forest_host_gbdt_sigmoid` is `gbdt_sigmoid`'s body
-(`bindings/_mojolearn_gbdt.mojo:133-149`), the Logloss link the GPU binding
-already computes on the host.
+`forest_host_gbdt_sigmoid_pair` is `gbdt_sigmoid_pair`'s body
+(`bindings/_mojolearn_gbdt.mojo`), the Logloss link of both probability
+columns.
 
 Address contract, shared by the three predict entries. `addresses` is
 `[offsets i32 (n_trees + 1), colid i32 (n_nodes), quesval f32 (n_nodes),
@@ -101,7 +101,6 @@ from core.gbdt_host_predict import gbdt_host_predict
 from core.mojolearn_forest_host_impl import (
     forest_host_gbdt_expand_ctr_into,
     forest_host_gbdt_raw_into,
-    forest_host_gbdt_sigmoid_into,
     forest_host_gbdt_sigmoid_pair_into,
     forest_host_vote_into,
 )
@@ -374,8 +373,8 @@ def forest_host_gbdt_predict_binding(
 ) raises -> PythonObject:
     """`gbdt_predict` / `gbdt_predict_multi` at `PREDICT_RAW` on the host:
     the raw approxes, `n_rows * dim` float32, ROW-major. The link (the
-    Logloss sigmoid) is the Python layer's call to `forest_host_gbdt_sigmoid`,
-    as it is `gbdt_sigmoid` for the GPU binding."""
+    Logloss sigmoid) is the Python layer's call to
+    `forest_host_gbdt_sigmoid_pair`, as it is `gbdt_sigmoid_pair` for the GPU binding."""
     var entry = String("forest_host_gbdt_predict")
     if len(addresses) != 15 or (len(params) != 8 and len(params) != 9):
         raise Error(entry + ": expected 15 addresses and 8 or 9 params")
@@ -496,19 +495,8 @@ def forest_host_gbdt_ctr_sabotage_binding() raises -> PythonObject:
     return PythonObject(GBDT_CTR_HOST_SABOTAGE)
 
 
-def forest_host_gbdt_sigmoid_binding(
-    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """`gbdt_sigmoid` (`bindings/_mojolearn_gbdt.mojo:133-149`), the same
-    body: `out[i] = 1 / (1 + exp(-raw[i]))` in double through
-    `identical_exp64`, `n` values, both buffers float64."""
-    var rp = f64_ptr(_index(raw_addr))
-    var op = f64_ptr(_index(out_addr))
-    var count = _index(n)
-    if count < 0:
-        raise Error("forest_host_gbdt_sigmoid: n must be non-negative")
-    forest_host_gbdt_sigmoid_into(rp, op, count)
-    return PythonObject(count)
+# TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller; ensemble.py calls forest_host_gbdt_sigmoid_pair) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/forest_host_gbdt_sigmoid.patch
 
 
 def forest_host_gbdt_sigmoid_pair_binding(
@@ -518,8 +506,7 @@ def forest_host_gbdt_sigmoid_pair_binding(
     probability columns of a Logloss or CrossEntropy `predict_proba`,
     `out[2 * i] = 1 - p` and `out[2 * i + 1] = p` with
     `p = 1 / (1 + exp(-raw[i]))` through `identical_exp64`, `n` rows, both
-    buffers float64 and the caller's. `p` is `forest_host_gbdt_sigmoid`'s
-    value and `1.0 - p` is the one IEEE double subtraction the Python
+    buffers float64 and the caller's. `p` is that double and `1.0 - p` is the one IEEE double subtraction the Python
     layer computed per row (DEVIATION 2333, retired by this entry point
     where the binary carries it); a subtraction has no fusion partner and
     no association, so the column's bits are the Python column's. Under
@@ -552,7 +539,8 @@ def build__mojolearn_forest_host() -> PythonObject:
         module.def_function[forest_host_groves_predict_binding]("forest_host_groves_predict")
         module.def_function[forest_host_groves_release_binding]("forest_host_groves_release")
         module.def_function[forest_host_gbdt_predict_binding]("forest_host_gbdt_predict")
-        module.def_function[forest_host_gbdt_sigmoid_binding]("forest_host_gbdt_sigmoid")
+        # TOMBSTONE: forest_host_gbdt_sigmoid (dead native entry: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/forest_host_gbdt_sigmoid.patch
         module.def_function[forest_host_gbdt_sigmoid_pair_binding]("forest_host_gbdt_sigmoid_pair")
         module.def_function[forest_host_gbdt_expand_ctr_binding]("forest_host_gbdt_expand_ctr")
         module.def_function[forest_host_gbdt_ctr_sabotage_binding]("forest_host_gbdt_ctr_sabotage")
