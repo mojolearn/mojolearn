@@ -65,7 +65,7 @@ def assert_same(actual, expected):
     for name, value in vars(expected).items():
         current = vars(actual)[name]
         if type(value) in (str, int, float, bool, type(None)):
-            assert current == value and type(current) is type(value)
+            assert (current is value or current == value) and type(current) is type(value)
         else:
             assert current is value
 
