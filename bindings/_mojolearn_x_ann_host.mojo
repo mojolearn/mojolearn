@@ -11,7 +11,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from x_ann.abi_shell_impl import rabitq_padded_dim, cagra_check_graph
 from x_ann.filter_topk import filter_topk_host
-from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, tsne_first_components, tsne_init_y0
+from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search
 from x_ann.abi_pyapi import in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
@@ -314,11 +314,8 @@ def filter_topk_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
     return PythonObject(m)
 
 
-def py2mojo_binding() raises -> PythonObject:
-    """1: TSNE's start, refine's euclidean roots and CAGRA's filtered
-    compaction run in this binding (lane apple-fast-py2mojo-cluster); 0 under
-    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and `_expansion_ann.py` runs them."""
-    return PythonObject(1 if X_ANN_PY2MOJO else 0)
+# TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_ann.patch
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -352,7 +349,8 @@ def build__mojolearn_x_ann_host() -> PythonObject:
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
         m.def_function[ivf_sq_search_binding]("x_ann_ivf_sq_search")
         m.def_function[refine_binding]("x_ann_refine")
-        m.def_function[py2mojo_binding]("x_ann_py2mojo")
+        # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_ann.patch
         m.def_function[filter_topk_binding]("x_ann_filter_topk")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
         m.def_function[ivf_rabitq_search_binding]("x_ann_ivf_rabitq_search")
