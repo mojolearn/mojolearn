@@ -19,10 +19,13 @@ release would have skipped the lanes the fix touched.
         merged file, recording every member's own build script digest (the
         closure of the module body it compiles) plus the merged build's own
         inputs (MERGED_INPUTS); check holds every one of them
-    python3 tools/binding_stamps.py check [--quiet]
-        before a pass: every mojolearn binding in the package must carry a
-        stamp whose digest equals the closure's digest in THIS tree. Prints
-        STALE or UNSTAMPED per binding and exits 1 if any is.
+    python3 tools/binding_stamps.py check [--quiet] [--development-cache DIR]
+        before a pass: legacy bindings need current source stamps. Active
+        development indexes need successful cache receipts, current source and
+        toolchain closures, and matching installed bytes. Set the cache with
+        --development-cache or MOJOLEARN_BINCACHE_DEVELOPMENT_DIR (default:
+        ~/.cache/mojolearn-development). Inactive development history is ignored
+        only after its active index is validated. Any failed check exits 1.
     python3 tools/binding_stamps.py --self-test
 
 Stamps live in python/.binding-stamps/ (gitignored, never packaged), one JSON
@@ -32,6 +35,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -115,9 +119,121 @@ def bindings(pkg=PKG):
             yield p
 
 
-def cmd_check(quiet=False, stamps=STAMPS, pkg=PKG, repo=REPO):
+def development_bindings(pkg, repo, cache):
+    """Validate active development groups without requiring inactive history.
+
+    Receipts retain the build configuration; the verifier's process environment
+    is not a request to rebuild with different compiler flags. Reconstruct every
+    group using that configuration and CURRENT source/toolchain/dependency facts,
+    then hold both the cached and actually indexed bytes against its receipt.
+    This is source/binary admission only, never runtime qualification.
+    """
+    import development_build as dev
+
+    pkg, repo, cache = Path(pkg).resolve(), Path(repo).resolve(), Path(cache).resolve()
+    indexes = {}
+    for mode in ("host", "identical"):
+        path = pkg / mode / "_mojolearn_merged.json"
+        if path.is_file():
+            index = json.loads(path.read_text())
+            if index.get("layout") == "development":
+                indexes[mode] = index
+    if not indexes:
+        return set(), set()
+    if dev.merged.REPO.resolve() != repo or pkg != repo / "python/mojolearn":
+        raise ValueError("development validation must use the selected source root's build tools")
+    facts = dev.toolchain_facts(repo)
+    if not facts.get("available"):
+        raise ValueError("development compiler/dependency facts are unavailable")
+    active, ignored = set(), set()
+    for mode, index in indexes.items():
+        provenance = index.get("provenance")
+        if not isinstance(provenance, dict) or not provenance:
+            raise ValueError(f"{mode}: missing development provenance")
+        receipts = {}
+        for stem, key in provenance.items():
+            if not re.fullmatch(r"_mojolearn_dev_[a-zA-Z0-9_]+", stem) or not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64}", key):
+                raise ValueError(f"{mode}: malformed development group/key")
+            receipt = json.loads((cache / "artifacts" / key / "receipt.json").read_text())
+            if receipt.get("state") != "built" or receipt.get("exit_code") != 0 or receipt.get("key") != key:
+                raise ValueError(f"{mode}:{stem}: no successful build receipt")
+            receipts[stem] = receipt
+        first = next(iter(receipts.values()))["fields"]
+        retained = first["environment"]
+        link = first["link_environment"]
+        if any(r["fields"]["environment"] != retained or r["fields"]["link_environment"] != link
+               for r in receipts.values()):
+            raise ValueError(f"{mode}: inconsistent active build configuration")
+        # PATH locates the supported C compiler; all recorded compiler/link
+        # inputs come from the build receipt, not the test runner's settings.
+        env = {"PATH": os.environ.get("PATH", ""), **retained, **link}
+        plan = dev.make_plan(repo, cache, [mode], env, facts=facts)
+        expected = {"format": dev.merged.INDEX_FORMAT, "layout": "development", "files": {}, "provenance": {}}
+        for row in plan["groups"]:
+            stem = row["stem"]
+            if stem not in receipts:
+                raise ValueError(f"{mode}:{stem}: required group missing from active index")
+            # make_plan records its controller's sys.executable as the root
+            # generator. Verification may use the test Python instead. Retain
+            # the producer interpreter identity: the current generator recipe
+            # AND exact generated Mojo root bytes are still compared below.
+            # No compiler, flag, source, dependency or binary field is relaxed.
+            producer = retained.get("MOJOLEARN_MERGED_PYTHON")
+            if not isinstance(producer, str) or not Path(producer).is_absolute():
+                raise ValueError(f"{mode}:{stem}: missing producer interpreter identity")
+            row["fields"]["environment"]["MOJOLEARN_MERGED_PYTHON"] = producer
+            row["key"] = dev.digest(row["fields"])
+            receipt = receipts[stem]
+            if receipt["fields"] != row["fields"] or receipt["key"] != row["key"]:
+                raise ValueError(dev.input_change_reason(f"{mode}:{stem}: stale receipt", receipt["fields"], row["fields"]))
+            artifact = dev.cached_artifact(cache, row)
+            if artifact is None:
+                raise ValueError(f"{mode}:{stem}: cached binary/receipt mismatch")
+            relative = f".development/{row['key']}/{stem}.so"
+            installed = pkg / mode / relative
+            if installed.is_symlink() or installed.resolve() != installed or not installed.is_file() or bincache.sha256_file(installed) != receipt["sha256"]:
+                raise ValueError(f"{mode}:{stem}: active binary/receipt mismatch")
+            for member in row["members"]:
+                if (pkg / mode / (member + ".so")).exists():
+                    raise ValueError(f"{mode}:{member}: direct binding shadows active development index")
+            expected["files"][relative] = row["members"]
+            expected["provenance"][stem] = row["key"]
+            active.add(installed)
+        if index != expected:
+            raise ValueError(f"{mode}: active index membership/paths/provenance do not match current plan")
+        for row in plan["support"]:
+            artifact = dev.cached_artifact(cache, row)
+            receipt_path = cache / "artifacts" / row["key"] / "receipt.json"
+            receipt = json.loads(receipt_path.read_text())
+            installed = pkg / row["install"]
+            if (artifact is None or receipt.get("state") != "built" or not installed.is_file()
+                    or bincache.sha256_file(installed) != receipt.get("sha256")):
+                raise ValueError(f"support:{row['name']}: current dependency receipt/installed bytes mismatch")
+        # Immutable historical groups are unreachable through the exact index
+        # just validated. Other direct bindings still follow legacy stamp checks.
+        ignored.update((pkg / mode / ".development").rglob("_mojolearn*.so"))
+        logical_members = {member for row in plan["groups"] for member in row["members"]}
+        for stem, _, members in dev.merged.plan(mode, plan["platform"], True, "release"):
+            # A leftover release aggregate cannot own a logical import after
+            # the development index selects every member. Never ignore a
+            # direct logical binding (including an optional disabled member).
+            if stem not in logical_members and stem not in members:
+                ignored.add(pkg / mode / (stem + ".so"))
+    return active, ignored
+
+
+def cmd_check(quiet=False, stamps=STAMPS, pkg=PKG, repo=REPO, development_cache=None):
     bad, seen, cache = [], 0, {}
+    development_cache = development_cache or os.environ.get("MOJOLEARN_BINCACHE_DEVELOPMENT_DIR") or Path.home() / ".cache/mojolearn-development"
+    try:
+        active, ignored = development_bindings(pkg, repo, development_cache)
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+        print(f"STALE DEVELOPMENT: {exc}; nothing is verified")
+        return 1
+    seen += len(active)
     for so in bindings(pkg):
+        if so in ignored:
+            continue
         seen += 1
         sp = stamp_path(so, stamps, pkg)
         rel = os.path.relpath(so, pkg)
@@ -153,7 +269,7 @@ def cmd_check(quiet=False, stamps=STAMPS, pkg=PKG, repo=REPO):
         return 1
     if bad:
         print(f"# {len(bad)} of {seen} bindings are not built from this tree; nothing is verified. "
-              "Rebuild them (packaging/macos/build_release_wheel.sh) and rerun.")
+              "Repair the affected build inputs or receipts before running verification.")
         return 1
     if not quiet:
         print(f"# {seen} of {seen} bindings are built from this tree's sources")
@@ -204,6 +320,7 @@ def main():
     ap.add_argument("cmd", nargs="?", choices=("write", "write-merged", "check"))
     ap.add_argument("args", nargs="*")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--development-cache", type=Path, help="development artifact/receipt cache (or MOJOLEARN_BINCACHE_DEVELOPMENT_DIR)")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
@@ -219,7 +336,7 @@ def main():
         cmd_write_merged(a.args[0], a.args[1])
         return 0
     if a.cmd == "check":
-        return cmd_check(a.quiet)
+        return cmd_check(a.quiet, development_cache=a.development_cache)
     ap.error("write or check")
 
 
