@@ -1,0 +1,62 @@
+name: Forest host component smoke
+run-name: "forest-component-smoke build ${{ inputs.host_run_id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      host_run_id:
+        description: Completed host-build artifact run
+        required: true
+      source_commit:
+        description: Frozen native source commit
+        required: true
+      baseline_version:
+        description: Existing wheel whose unchanged components are reused
+        required: true
+      baseline_sha256:
+        description: Exact retained core wheel SHA-256
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: host-build
+          run-id: ${{ inputs.host_run_id }}
+          github-token: ${{ github.token }}
+          path: host-build
+      - name: Test only the changed public forest boundary
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          BASELINE_VERSION: ${{ inputs.baseline_version }}
+          BASELINE_SHA256: ${{ inputs.baseline_sha256 }}
+        run: |
+          python3 tools/qualify_forest_host_component.py \
+            --host-build host-build --source-commit "$SOURCE_COMMIT" \
+            --baseline-version "$BASELINE_VERSION" --baseline-sha256 "$BASELINE_SHA256" \
+            --out "$RUNNER_TEMP/forest-component" > "$RUNNER_TEMP/forest-component-controller.log" 2>&1
+      - name: Retain complete test logs and provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: forest-component-smoke
+          path: |
+            ${{ runner.temp }}/forest-component-controller.log
+            ${{ runner.temp }}/forest-component/*.log
+            ${{ runner.temp }}/forest-component/*.exit
+            ${{ runner.temp }}/forest-component/*.json
+            ${{ runner.temp }}/forest-component/*.xml
+            ${{ runner.temp }}/forest-component/test_parallel_forest_first_call.py
