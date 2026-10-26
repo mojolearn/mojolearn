@@ -1406,8 +1406,8 @@ _ARRAY_CONTEXT = dict(
 
 def connect_helpers(resolve):
     """Capture the shared core helpers once (`_buffer._native_optional`);
-    an absent helper is refused by name by the operation that needs it."""
-    for key in ("cast_elements", "reduce_stat", "strided_copy_bytes"):  # glue: three fixed helper names
-        fn = resolve(key)
-        if fn is not None:
-            _ARRAY_CONTEXT["helpers"][key] = fn
+    an absent helper (None) is refused by name by the operation that needs it.
+    The names are literal so the lane selector sees exactly these exports."""
+    found = (("cast_elements", resolve("cast_elements")), ("reduce_stat", resolve("reduce_stat")),
+             ("strided_copy_bytes", resolve("strided_copy_bytes")))
+    _ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None)  # glue: three fixed helper names

@@ -20,10 +20,74 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.py_typed_call import py_call_typed
-from bindings.optimizer_public_words import stash_python_error, optimizer_python_error
+from std.ffi import _Global
 
 
 # ------------------------------------------------------------------ calls
+#
+# A caller's exception raised inside a C call (a user `__index__`, struct.pack,
+# slice.indices) reaches the caller unchanged: it is fetched once here and
+# restored at the entry's boundary. The same pattern as
+# bindings/optimizer_public_words.mojo, kept local so this owner's compile
+# closure stays the six small files it needs.
+
+comptime ARRAY_PYTHON_ERROR_PENDING = "mojolearn-array: a Python exception is pending"
+
+
+struct ArrayPendingError(Defaultable, Movable):
+    """The (type, value, traceback) of a pending exception, as addresses."""
+    var words: List[Int]
+
+    def __init__(out self):
+        self.words = List[Int](length=3, fill=0)
+
+
+comptime ARRAY_PENDING_ERROR = _Global[
+    StorageType=ArrayPendingError, name="MojoArrayPendingPythonError",
+    init_fn=ArrayPendingError.__init__,
+]
+
+
+def stash_python_error() raises -> Error:
+    """Fetch the exception the last CPython call set (keeping its references)."""
+    ref cpy = Python().cpython()
+    var pending = ARRAY_PENDING_ERROR.get_or_create_ptr()
+    var p = pending[].words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    cpy.lib.get_function[NoneType]("PyErr_Fetch")(p, p + 1, p + 2)
+    return Error(ARRAY_PYTHON_ERROR_PENDING)
+
+
+def _restore_python_error() -> PyObjectPtr:
+    try:
+        ref cpy = Python().cpython()
+        var pending = ARRAY_PENDING_ERROR.get_or_create_ptr()
+        var w = pending[].words.copy()
+        pending[].words = List[Int](length=3, fill=0)
+        cpy.lib.get_function[NoneType]("PyErr_Restore")(w[0], w[1], w[2])
+        return PyObjectPtr()
+    except error:
+        return raise_python_exception(error)
+
+
+def _raise_error(error: Error) -> PyObjectPtr:
+    """Raise the Python class an error names (`ValueError: ...`) without its
+    prefix, or restore a caller's pending exception unchanged."""
+    var message = String(error)
+    if message == ARRAY_PYTHON_ERROR_PENDING:
+        return _restore_python_error()
+    if message.startswith("ValueError: "):
+        return raise_python_exception(Error(message[byte=12:]), ExceptionType.ValueError)
+    if message.startswith("TypeError: "):
+        return raise_python_exception(Error(message[byte=11:]), ExceptionType.TypeError)
+    if message.startswith("IndexError: "):
+        return raise_python_exception(Error(message[byte=12:]), ExceptionType("PyExc_IndexError"))
+    if message.startswith("BufferError: "):
+        return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_BufferError"))
+    if message.startswith("OverflowError: "):
+        return raise_python_exception(Error(message[byte=15:]), ExceptionType("PyExc_OverflowError"))
+    if message.startswith("RuntimeError: "):
+        return raise_python_exception(Error(message[byte=14:]), ExceptionType("PyExc_RuntimeError"))
+    return raise_python_exception(error)
 
 
 def _call(callable: PythonObject, *args: PythonObject) raises -> PythonObject:
@@ -1029,9 +1093,4 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var result = _dispatch(String(args[0]), args[1], args[2], rest)
         return result.steal_data()
     except error:
-        var message = String(error)
-        if message.startswith("IndexError: "):
-            return raise_python_exception(Error(message[byte=12:]), ExceptionType("PyExc_IndexError"))
-        if message.startswith("BufferError: "):
-            return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_BufferError"))
-        return optimizer_python_error(error)
+        return _raise_error(error)
