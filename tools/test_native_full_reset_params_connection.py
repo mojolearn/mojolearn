@@ -233,6 +233,12 @@ def test_constructor_resolution_and_mode_wrapper_still_match_the_audited_source(
     cls = next(node for node in source.body if isinstance(node, ast.ClassDef) and node.name == wrapper['class'])
     method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == wrapper['method'])
     assert hashlib.sha256(ast.dump(method, include_attributes=False).encode()).hexdigest() == wrapper['ast_sha256']
+    # The class hook now delegates the wrapper and application-subclass schema
+    # connection. Bind those audited helpers too, rather than pinning only the
+    # three-line hook (b2133a474; public subclass tests passed in tests-r4).
+    for name, digest in wrapper['helpers'].items():
+        helper = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        assert hashlib.sha256(ast.dump(helper, include_attributes=False).encode()).hexdigest() == digest, name
 
 
 def deferred_fixture():

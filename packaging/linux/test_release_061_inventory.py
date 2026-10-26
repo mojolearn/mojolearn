@@ -101,6 +101,8 @@ class ReleaseInventory(unittest.TestCase):
                 build_exit=0, action='build', source_commit='a' * 40,
                 source_inventory=inventory, source_sha256=source_sha,
                 extensions={'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items() if n.endswith('.so')},
+                host_extension={f'mojolearn/{vendor}/{arch}/host/{p.name}': packer.sha(p).hex()
+                                for p in hosts.values()},
                 **(dict(binding_layout='merged', merged_indexes={
                     f'mojolearn/{vendor}/{arch}/{rel}': packer.index_record(path)
                     for rel, path in indexes.items()}) if merged else {}))))
@@ -205,7 +207,7 @@ class ReleaseInventory(unittest.TestCase):
                     self.assertEqual(members, sorted(packer.tier_names(mode, True)))
             # every host binding's record names the merged host file it loads from
             self.assertEqual({r['archive_path'] for r in result['host_native'].values()},
-                             {'mojolearn/host/_mojolearn_native_host.so'})
+                             {'mojolearn/host/' + name for name in packer.merged_layout.plan('host', True)})
             self.assertEqual(set(result['host_native']), set(packer.HOST_NAMES))
             per, per_proofs = self.fixture(root / 'per')
             flat = packer.release_inventory(per, per_proofs, packer.read_version(root / 'per'), root / 'per')

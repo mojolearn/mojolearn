@@ -394,13 +394,16 @@ class SplitWheels(unittest.TestCase):
             self.assertIn(f"{dist_info(self.split[key])}/licenses/LICENSE", members(self.split[key]))
         self.assertEqual(meta(self.split["mojolearn_nvidia_ptx"]).get_all("Requires-Dist"), [f"mojolearn-core=={v}"])
         # THE LINUX mojolearn: `pip install mojolearn` installs the core and both
-        # vendors, exactly at its version; no extras
+        # vendors, exactly at its version; extras forward to the matching core.
         agg = meta(self.split["mojolearn"])
         self.assertEqual((agg.get("Name"), agg.get("Version")), ("mojolearn", v))
         self.assertEqual(agg.get_all("Requires-Dist"),
-                         [f"mojolearn-core=={v}", f"mojolearn-nvidia=={v}", f"mojolearn-amd=={v}"])
-        self.assertEqual(agg.get_all("Requires-Dist"), pw.gpu_plugins.meta_requirements(v))
-        self.assertIsNone(agg.get_all("Provides-Extra"))
+                         [f'mojolearn-core[{extra}]=={v}; extra == "{extra}"'
+                          for extra in ("numpy", "verify", "torch", "max")]
+                         + [f"mojolearn-core=={v}", f"mojolearn-nvidia=={v}", f"mojolearn-amd=={v}"])
+        self.assertEqual([r for r in agg.get_all("Requires-Dist") if ';' not in r],
+                         pw.gpu_plugins.meta_requirements(v))
+        self.assertEqual(agg.get_all("Provides-Extra"), ["numpy", "verify", "torch", "max"])
         self.assertEqual(agg.get("Requires-Python"), core.get("Requires-Python"))
         self.assertEqual(agg.get("License-Expression"), core.get("License-Expression"))
         self.assertIn(f"{dist_info(self.split['mojolearn'])}/licenses/LICENSE", members(self.split["mojolearn"]))
@@ -812,7 +815,7 @@ class SplitWheels(unittest.TestCase):
                "meta lacks amd": "Requires-Dist differs from the core and both vendors",
                "meta lacks the core": "Requires-Dist differs from the core and both vendors",
                "meta pins loosely": "Requires-Dist differs from the core and both vendors",
-               "meta declares an extra": "must not declare extras",
+               "meta declares an extra": "meta extras must each forward exactly",
                "meta lost its marker": "is missing or disagrees with package ownership"}
         for label, wheels in cases.items():
             with self.subTest(label):

@@ -136,7 +136,27 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
             for path in paths:
                 if path in closure['files']:
                     owners[path].add((mode, name))
-    assert all(found == {('host', 'runtime_classical')} for found in owners.values()), owners
+    # The tokenizer imports iforest_validate and the RBC metric descriptor.
+    # Their files also define resident allocator callers, but these two helpers
+    # do not reach them. Check the named export graph instead of treating every
+    # definition in an imported file as executed by the tokenizer.
+    for path, found in owners.items():
+        expected = {('host', 'runtime_classical')}
+        if path in ('bindings/trees_lifetime.mojo', 'bindings/host_archive_native.mojo'):
+            expected.add(('host', 'tokenizer'))
+        assert found == expected, (path, found)
+    from lane_select import _MojoDefGraph, _binding_exports
+    source = 'bindings/_mojolearn_tokenizer_host.mojo'
+    graph = _MojoDefGraph()
+    exports = _binding_exports(source)
+    assert exports
+    for name in exports:
+        closure = graph.closure(source, name)
+        assert closure is not None, name
+        assert not any(node[1] == 'bindings/trees_lifetime.mojo' for node in closure), name
+        archive_nodes = {node for node in closure if node[1] == 'bindings/host_archive_native.mojo'}
+        assert archive_nodes <= {('t', 'bindings/host_archive_native.mojo',
+                                  'host_archive_rbc_metric_object')}, (name, archive_nodes)
 
 
 def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_registration():

@@ -77,40 +77,27 @@ class CpuBox(unittest.TestCase):
         self.assertEqual(bincache.build_env({"MOJOLEARN_RELEASE_BUILD_RSS_GIB": "64",
                                              "MOJOLEARN_RELEASE_BUILD_CORES": "16"}), {})
 
-    def test_github_refused_and_cpu_box_allowed_without_gpu_smoke_when_merged(self):
+    def test_github_and_cpu_box_build_without_renting_a_gpu(self):
         from unittest import mock
         import contextlib
         import io
         import os
-        # c730927ea: a release selects identical alone by default, and a selected tier set only
-        # builds on cpu-box; the backend rules below are those of the full legacy tier set.
-        with mock.patch.object(rel.Release, "go", lambda self: self.args), \
-                mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: False), \
-                mock.patch.dict(os.environ, {"MOJOLEARN_RELEASE_MODES": "identical"}):
-            err = io.StringIO()
-            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
-                rel.main(["0.8.14", "--build-backend", "github"])
-            self.assertIn("selected release tiers require --build-backend cpu-box", err.getvalue())
-        legacy = mock.patch.dict(os.environ, {"MOJOLEARN_RELEASE_MODES": "fast identical"})
-        legacy.start()
-        self.addCleanup(legacy.stop)
-        with mock.patch.object(rel.Release, "go", lambda self: self.args), \
-                mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: True):
-            self.assertEqual(rel.main(["0.8.14"]).build_backend, "cpu-box")
-            err = io.StringIO()
-            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
-                rel.main(["0.8.14", "--build-backend", "github"])
-            self.assertIn("cannot build on GitHub's free runners", err.getvalue())
-            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                rel.main(["0.8.14", "--build-backend", "gpu-legs"])
-            self.assertEqual(rel.main(["0.8.14", "--build-backend", "gpu-legs", "--gpu-smoke"]).build_backend,
-                             "gpu-legs")
-        with mock.patch.object(rel.Release, "go", lambda self: self.args), \
-                mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: False):
-            self.assertEqual(rel.main(["0.8.14"]).build_backend, "github")
-            # per-binding: cpu-box stays --gpu-smoke only, as before
-            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-                rel.main(["0.8.14", "--build-backend", "cpu-box"])
+        # The split merged groups now fit GitHub runners. Both layouts support
+        # the identical-only release on GitHub and on CPU boxes.
+        for merged in (False, True):
+            with self.subTest(merged=merged), \
+                    mock.patch.object(rel.Release, "go", lambda self: self.args), \
+                    mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: merged), \
+                    mock.patch.dict(os.environ, {"MOJOLEARN_RELEASE_MODES": "identical"}):
+                self.assertEqual(rel.main(["0.8.14"]).build_backend, "github")
+                for backend in ("github", "cpu-box"):
+                    args = rel.main(["0.8.14", "--build-backend", backend])
+                    self.assertEqual(args.build_backend, backend)
+                    self.assertFalse(args.gpu_smoke)
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                    rel.main(["0.8.14", "--build-backend", "gpu-legs"])
+                self.assertIn("selected release tiers require --build-backend github or cpu-box", err.getvalue())
 
     def test_three_legs_one_set_each(self):
         legs = rel.cpu_legs(self.ctx)

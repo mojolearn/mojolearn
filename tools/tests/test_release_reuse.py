@@ -402,14 +402,15 @@ def linux_plan(prev, build=()):
                 leg_reasons={}, runtime=dict(decision="REUSE"))
 
 
-def build_proof(path, extensions):
+def build_proof(path, extensions, host_extension=None):
     """A complete build proof of this checkout's commit naming `extensions`."""
     from check_linux_release_qualification import tracked_native_inventory, inventory_digest
     inventory = tracked_native_inventory(ROOT)
     commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     path.write_text(json.dumps(dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
                                     action="build", source_commit=commit, source_inventory=inventory,
-                                    source_sha256=inventory_digest(inventory), extensions=extensions)))
+                                    source_sha256=inventory_digest(inventory), extensions=extensions,
+                                    host_extension=host_extension or {})))
     return path
 
 
@@ -450,7 +451,9 @@ def ptx_leg(tmp, plan, new_hosts=()):
                                       + "".join(f"host {n} cpu\n" for n in pack_wheel.HOST_NAMES))
     (leg / "arch_readback.txt").write_text("".join(f"{t} {n} sm_80\n" for t, n in rows)
                                            + "".join(f"host {n} NONE-BY-DESIGN\n" for n in pack_wheel.HOST_NAMES))
-    return leg, build_proof(tmp / "cuda-sm_80.json", ext)
+    hosts = {f'mojolearn/cuda/sm_80/host/{p.name}': sha(p.read_bytes())
+             for p in (leg / 'host').glob('*.so')}
+    return leg, build_proof(tmp / "cuda-sm_80.json", ext, hosts)
 
 
 def ptx_legs(tmp, plan, new_hosts=()):

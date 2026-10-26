@@ -607,5 +607,25 @@ class Run(unittest.TestCase):
             rgb.main(["run", "--commit", C, "--arch", "gfx942", "--out", str(self.d / "o2"), "--no-bincache"])
 
 
+class StatusReadRecovery(unittest.TestCase):
+    def test_transient_read_recovers_without_dispatch(self):
+        done = dict(status="completed", conclusion="success", jobs=[])
+        with unittest.mock.patch.object(rgb, "gh", side_effect=[
+                RuntimeError("error connecting to api.github.com"), json.dumps(done)]) as gh, \
+                unittest.mock.patch.object(rgb.time, "sleep"):
+            self.assertEqual(rgb.wait_run(123, 1, 60), done)
+        self.assertEqual(gh.call_count, 2)
+        self.assertTrue(all(call.args[:3] == ("run", "view", "123") for call in gh.call_args_list))
+
+    def test_persistent_or_nontransient_errors_still_fail(self):
+        for message, count in (("error connecting to api.github.com", 3), ("HTTP 403 forbidden", 1)):
+            with self.subTest(message=message), \
+                    unittest.mock.patch.object(rgb, "gh", side_effect=RuntimeError(message)) as gh, \
+                    unittest.mock.patch.object(rgb.time, "sleep"), \
+                    self.assertRaisesRegex(RuntimeError, message):
+                rgb.wait_run(123, 1, 60)
+            self.assertEqual(gh.call_count, count)
+
+
 if __name__ == "__main__":
     unittest.main()

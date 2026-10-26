@@ -811,8 +811,23 @@ def wait_run(run_id, timeout_min, pause):
     deadline = time.time() + timeout_min * 60
     last = None
     while True:
-        view = json.loads(gh("run", "view", str(run_id), "--json",
-                             "status,conclusion,jobs,headSha,url,createdAt,updatedAt"))
+        # A failed status read must not strand an otherwise healthy build's
+        # artifacts. Retry only this read, never workflow dispatch. Both
+        # 216d04c7c collectors exited on a transient api.github.com connection
+        # error while their remote jobs continued (2026-10-26).
+        for attempt in range(3):
+            try:
+                view = json.loads(gh("run", "view", str(run_id), "--json",
+                                     "status,conclusion,jobs,headSha,url,createdAt,updatedAt"))
+                break
+            except RuntimeError as exc:
+                transient = any(text in str(exc).lower() for text in (
+                    "error connecting", "connection reset", "connection refused",
+                    "timed out", "timeout", "http 502", "http 503", "http 504"))
+                if not transient or attempt == 2 or time.time() >= deadline:
+                    raise
+                say(f"run {run_id} status read failed; retry {attempt + 1}/2: {exc}")
+                time.sleep(min(5, max(0, deadline - time.time())))
         jobs = view.get("jobs") or []
         line = ", ".join(f"{j['name']}={j.get('conclusion') or j.get('status')}" for j in jobs)
         if line != last:

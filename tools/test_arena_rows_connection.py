@@ -54,8 +54,14 @@ def connect(native_entry=len, store_binding=None, backend_fields=None):
     bridge = ModuleType('mojolearn._native_classical_bridge')
     bridge._numpy_free_context = lambda: {'array_class': Array}
     tokenizer = ModuleType('mojolearn.tokenizer')
-    tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(arena_rows_native_call=len))
+    tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(
+        arena_rows_native_call=len, mode_metadata_native_call=len,
+        params_metadata_native_call=len))
     backend = ModuleType('mojolearn._backend')
+    # The real connector now initializes native mode metadata before the cache
+    # routes. Supply that import-time protocol in this inert fixture too.
+    backend.default_mode = lambda: 'identical'
+    backend._CODE_MODE = {0: 'fast', 1: 'identical'}
     backend.binding = lambda name, mode: SimpleNamespace() if store_binding is None else store_binding
     if backend_fields:
         vars(backend).update(backend_fields)
