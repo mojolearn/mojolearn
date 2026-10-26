@@ -512,3 +512,13 @@ class CurrentFrozenSource(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_version_literal_view_rejects_other_changes():
+    before = b'# same\n__version__ = "0.8.58"\n'
+    after = b'# same\n__version__ = "0.8.59"\n'
+    assert d._version_literal_view(before) == d._version_literal_view(after)
+    assert d._version_literal_view(before) != d._version_literal_view(after.replace(b'same', b'changed'))
+    for source in (b'__version__ = version()\n', b'__version__ = "0.8.59"\nexecute()\n',
+                   b'__version__ = "0.8.59"; other = 1\n', b'__version__ = "arbitrary"\n'):
+        assert d._version_literal_view(source) is None

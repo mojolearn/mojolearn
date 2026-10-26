@@ -499,3 +499,74 @@ def test_report_without_fingerprint_equality_is_refused_on_reevaluation(tmp_path
     report["revisions"]["columns"]["apple"] = "3" * 40
     with pytest.raises(ValueError, match="not a fingerprint-equal run"):
         E.column_revisions(report["revisions"], SOURCE, "amd", wanted, E.required_classes(wanted))
+
+
+@pytest.fixture
+def version_label_units(monkeypatch):
+    import hashlib
+    import release_requirement_dependencies as D
+    old_bytes = b'# version only\n__version__ = "0.8.58"\n'
+    new_bytes = b'# version only\n__version__ = "0.8.59"\n'
+    sources = {SOURCE: old_bytes, OTHER: new_bytes}
+    anchor = b'version only in unconsumed sidecar'
+    monkeypatch.setattr(D, 'VERSION_LABEL_ANCHORS', {'reviewed-consumer': hashlib.sha256(anchor).hexdigest()})
+    monkeypatch.setattr(D, '_git_bytes', lambda root, revision, path: sources[revision] if path == D.VERSION_PATH else anchor)
+    monkeypatch.setattr(D, '_revision', lambda root, revision: revision)
+    def make(vendor, revision):
+        wanted = unit(vendor, 'sequence-export-roundtrip', revision=revision)
+        wanted['inputs']['native_sources'][D.VERSION_PATH] = hashlib.sha256(sources[revision]).hexdigest()
+        wanted['fingerprint'] = R.digest(wanted['inputs'])
+        return wanted
+    return make, sources
+
+
+def test_version_only_refreeze_preserves_begun_fingerprints_and_admits(tmp_path, version_label_units):
+    make, _ = version_label_units
+    lane = 'sequence-export-roundtrip'
+    ledger = R.RequirementsLedger(tmp_path / 'ledger.json', source_root=tmp_path)
+    def sync(revision):
+        ledger.sync(dict(schema=R.SCHEMA, version='0.8.59', source_revision=revision, configuration={},
+                         requirements={f'identity-{v}/{lane}': make(v, revision) for v in E.VENDORS}))
+    sync(SOURCE)
+    launches = begin_all(ledger, tmp_path)
+    original = copy.deepcopy(ledger.read()['runs'])
+    sync(OTHER)
+    result = E.admit(ledger, [columns(tmp_path, lanes=(lane,))], launches, tmp_path / 'out', check=fake_check)
+    assert result['passed'] == 4, result
+    assert ledger.read()['runs'] == original
+    rows = ledger.plan()
+    assert all(row['action'] == 'reuse' for row in rows.values())
+    assert all(row['tested_revision'] == SOURCE for row in rows.values())
+    assert all(row['equivalence_proof']['kind'] == 'unconsumed-release-version-literal' for row in rows.values())
+    attempt = ledger.read()['attempts'][0]
+    report = E.load(attempt['receipt']['producer_report']['path'])
+    wanted = dict(attempt['manifest'], inputs=attempt['inputs'])
+    report['revisions']['version_label_proof']['version_source_sha256']['new'] = '0' * 64
+    with pytest.raises(ValueError, match='cannot qualify'):
+        E.column_revisions(report['revisions'], SOURCE, wanted['inputs']['unit']['vendor'], wanted, E.required_classes(wanted))
+
+
+@pytest.mark.parametrize('change', ['source', 'flags', 'lane', 'consumer', 'literal_code', 'version_hash', 'missing'])
+def test_version_proof_refuses_meaningful_or_unreviewed_changes(version_label_units, monkeypatch, change):
+    import release_requirement_dependencies as D
+    make, sources = version_label_units
+    old, new = make('amd', SOURCE), make('amd', OTHER)
+    assert D.version_label_proof('.', old, new)
+    if change == 'source':
+        new['inputs']['native_sources']['bindings/x.mojo'] = 'changed'
+    elif change == 'flags':
+        new['inputs']['unit']['build_flags'] = {'changed': True}
+    elif change == 'lane':
+        for wanted in (old, new):
+            wanted['inputs']['unit']['lanes'] = ['checkpoint-version-consumer']
+            wanted['fingerprint'] = R.digest(wanted['inputs'])
+    elif change == 'consumer':
+        monkeypatch.setattr(D, 'VERSION_LABEL_ANCHORS', {'reviewed-consumer': '0' * 64})
+    elif change == 'literal_code':
+        sources[OTHER] += b'execute()\n'
+    elif change == 'version_hash':
+        new['inputs']['native_sources'][D.VERSION_PATH] = '0' * 64
+    elif change == 'missing':
+        new['missing_inputs'] = ['compiler']
+    new['fingerprint'] = R.digest(new['inputs'])
+    assert D.version_label_proof('.', old, new) is None
