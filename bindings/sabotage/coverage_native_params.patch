@@ -1,0 +1,36 @@
+--- a/bindings/declared_params_native.mojo
++++ b/bindings/declared_params_native.mojo
+@@ -115,7 +115,8 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject)
+             var previous = native_instance_item(fields, name)
+             if previous is not value:
+                 _release(previous, context)
+-        py_setitem(fields, name, value)
++        if i == 0:  # SABOTAGE (coverage-bindings-native_params): every assignment after the first is dropped
++            py_setitem(fields, name, value)
+     return model
+ 
+ 
+--- a/bindings/linear_constructor_native.mojo
++++ b/bindings/linear_constructor_native.mojo
+@@ -94,7 +94,8 @@ def _initialize(model: PythonObject, positional: PythonObject, keywords: PythonO
+             raise Error("TypeError: " + label + "() got an unexpected keyword argument '" + String(name) + "'")
+         if py_contains(values, name):
+             raise Error("TypeError: " + label + "() got multiple values for argument '" + String(name) + "'")
+-        py_setitem(values, name, keywords[name])
++        if i == 0:  # SABOTAGE (coverage-bindings-native_params): every keyword after the first falls back to its default
++            py_setitem(values, name, keywords[name])
+     if len(positional) > len(allowed):
+         var required = 1  # the already bound self still appears in Python's error counts
+         for i in range(len(allowed)):  # driver-loop: exact constructor positional arity metadata
+--- a/bindings/params_setter_native.mojo
++++ b/bindings/params_setter_native.mojo
+@@ -126,7 +126,8 @@ def _set_inner(model: PythonObject, params: PythonObject, context: PythonObject)
+                         + String(owner["class_name"]) + ". Valid parameters are: "
+                         + String(py_call(b.repr, py_call(b.sorted, values))) + ".")
+         if String(parts[1]) == "":
+-            py_setitem(values, name, params[key])
++            if i == 0:  # SABOTAGE (coverage-bindings-native_params): every keyword after the first is dropped
++                py_setitem(values, name, params[key])
+         else:
+             if not py_contains(nested, name):
+                 py_setitem(nested, name, Python.dict())
