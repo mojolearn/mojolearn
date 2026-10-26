@@ -18,9 +18,15 @@
 #                                                      most 3). Idempotent: never more than N.
 #   tools/nvidia_central.sh sync   <lane> <worktree>   patch-sync to /root/mojolearn-<lane> on the lane's pod
 #                                                      (a lane is assigned to one pod at its first sync)
-#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] <script-on-box>
+#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--no-persist] <script-on-box>
 #                                                      THE WAY TO RUN A GATE: enqueue; prints the job id
 #                                                      (<pod>-<n>, e.g. nvc1-0003). Default and max cap 240 min.
+#                                                      The job runs under tools/box_persist_run.sh: DIR (relative to
+#                                                      the lane tree; default box-out/<tag>, the script sees it as
+#                                                      $MOJOLEARN_RESULTS_DIR) and the script's output persist to R2
+#                                                      from the pod every NVC_PERSIST_EVERY_MIN and on any exit
+#                                                      (tools/box_persist.py fetch --tag <tag>, printed on stderr).
+#                                                      --no-persist refuses unless MOJOLEARN_ALLOW_UNPERSISTED=1.
 #   tools/nvidia_central.sh queue                      every pod's queued/running jobs, last finished, slots, lease
 #   tools/nvidia_central.sh status [<id>]              no id: pods, lanes, queues; id: that job
 #   tools/nvidia_central.sh log    <id> [N]            last N (default 40) lines of the job's log
@@ -78,6 +84,9 @@ NVC_IDLE_MIN=${NVC_IDLE_MIN:-60}
 NVC_GRACE_MIN=${NVC_GRACE_MIN:-15}
 NVC_CAP_MIN=${NVC_CAP_MIN:-240}                       # a job's default AND maximum wall-clock cap
 NVC_WATCH_SECONDS=${NVC_WATCH_SECONDS:-300}
+NVC_PERSIST_SLOTS=${NVC_PERSIST_SLOTS:-4}             # submit: R2 ring slots per job (tools/box_persist.py)
+NVC_PERSIST_EVERY_MIN=${NVC_PERSIST_EVERY_MIN:-10}    # ... a results upload every this many minutes
+NVC_PERSIST_DAYS=${NVC_PERSIST_DAYS:-2}               # ... the upload URLs' lifetime (queue wait + cap)
 DEVPOD="${MOJOLEARN_NVC_DEVPOD:-$ROOT/tools/dev_pod.sh}"
 NO_API="${MOJOLEARN_NVC_NO_API:-0}"                   # tests only: no RunPod API calls (reconcile, balance)
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o BatchMode=yes"
@@ -92,6 +101,7 @@ sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/nvc.XXXXXX")"; trap 'rm -rf "$TMPD"' EXIT
 CURLRC="$TMPD/curlrc"
 . "$ROOT/tools/runpod_pod_lib.sh"
+. "$ROOT/tools/box_persist_lib.sh"
 mkdir -p "$NVC_HOME/lanes"
 
 pod_keys() { local i; for i in $(seq 1 $NVC_MAX_PODS); do echo nvc$i; done; }
@@ -249,6 +259,15 @@ export GQ_DIR=$QD GQ_LOCKD=$LOCKD GQ_UNIT=nvq; $NVQ ensure; sleep 7; $NVQ lease-
     # the fixed-deadline runpod_guard watchdog would delete the pod under running jobs; the queue lease replaces it
     BOX_TIMEOUT=60 box "p=\$(cat /tmp/mojolearn-lease.pid 2>/dev/null); [ -z \"\$p\" ] || kill \$p 2>/dev/null; rm -f /tmp/mojolearn-lease.pid; echo 'retired by nvidia_central.sh install: the queue lease ($NVQ lease-check) owns this pod' >> /tmp/mojolearn-lease.out; true" < /dev/null
     echo "the queue lease ($NVQ, idle $NVC_IDLE_MIN min) owns this pod since $(date -u +%FT%TZ)" > "$STATE_ROOT/$k/QUEUE_LEASE"
+    # the pod's own R2 archive: before the lease deletes the pod it flushes every box-persisted job and uploads the
+    # queue dir (every job's log and record) with these URLs (7 days, the presign limit; `install` re-mints them)
+    if bp_prepare "nvc-pod-$k" nvidia_central-pod "$TMPD/podpersist.sh" --slots 1 --every-min 60 --days 7 --exclude 'gpu*.lock'; then
+        out=$({ cat "$TMPD/podpersist.sh"; printf 'echo %s > %s/pod_persist\n' "$(sq "$BP_JSON")" "$QD"; } | BOX_TIMEOUT=120 box "bash -s") || true
+        printf '%s\n' "$out" | grep -q '^BOX_PERSIST_STAGED ' && say "$k: the queue dir goes to R2 ($BP_TAG) before any lease delete" \
+            || say "$k: WARNING: the pod archive did not stage; jobs still persist one by one"
+    else
+        say "$k: WARNING: could not mint the pod archive; jobs still persist one by one"
+    fi
     start_watch $k
     say "$k: queue up, $n GPU slots, pod $POD_ID deletes itself $NVC_IDLE_MIN idle minutes after its last job"
 }
@@ -319,18 +338,47 @@ sync)
     say "lane $lane is on $k ($GPU_COUNT GPU slots, $GPU); submit with: tools/nvidia_central.sh submit $lane <script>"
     ;;
 submit)
-    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''
+    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1
     while [ $# -gt 0 ]; do
         case "$1" in
             --gpus) n="${2:?--gpus N}"; shift 2 ;;
             --cap) cap="${2:?--cap MIN}"; shift 2 ;;
             --note) note="${2:?--note TEXT}"; shift 2 ;;
+            --results) results="${2:?--results DIR}"; shift 2 ;;
+            --no-persist) persist=0; shift ;;
             *) break ;;
         esac
     done
-    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] <script-on-box> (one script path; put arguments inside the script)"
+    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--no-persist] <script-on-box> (one script path; put arguments inside the script)"
     need_lane_pod "$lane"
-    id=$(box "$NVQ ensure > /dev/null && $NVQ submit $(sq "$lane") $(sq "$n") $(sq "$cap") $(sq "$1") $(sq "$note")" < /dev/null) || exit 1
+    script=$1
+    if [ "$persist" = 1 ]; then
+        # the queued script is a job.sh that runs <script> under tools/box_persist_run.sh (results to R2 from the pod)
+        bp_prepare "nvc-$lane" nvidia_central "$TMPD/persist.sh" --slots "$NVC_PERSIST_SLOTS" \
+            --every-min "$NVC_PERSIST_EVERY_MIN" --days "$NVC_PERSIST_DAYS" || die "$BP_MINT_FAILED"
+        tree=/root/mojolearn-$lane
+        case "$script" in /*) abs=$script ;; *) abs=$tree/$script ;; esac
+        res=${results:-box-out/$BP_TAG}; case "$res" in /*) ;; *) res=$tree/$res ;; esac
+        jobsh=$BP_BOX_ROOT/jobs/$BP_TAG/job.sh
+        {
+            printf '[ -f %s ] || { echo "nvidia_central: no script %s on the box" >&2; exit 4; }\n' "$(sq "$abs")" "$abs"
+            cat "$TMPD/persist.sh"
+            printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
+            printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
+            printf 'exec bash %s %s %s -- bash %s\n' "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
+            printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
+        } > "$TMPD/stage.sh"
+        staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true
+        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
+        note="${note:+$note }[persist $BP_TAG: $script -> $res]"
+        script=$jobsh
+    else
+        bp_opt_out nvidia_central "submit $lane $script" || exit 1
+    fi
+    id=$(box "$NVQ ensure > /dev/null && $NVQ submit $(sq "$lane") $(sq "$n") $(sq "$cap") $(sq "$script") $(sq "$note")" < /dev/null) || exit 1
+    if [ "$persist" = 1 ]; then
+        bp_note_job "$(printf '%s\t%s\t%s\t%s' "$LANE_POD-$id" "$lane" "$1" "$res")"
+    fi
     echo "$LANE_POD-$id"
     ;;
 queue)
@@ -416,7 +464,9 @@ down)
     [ -n "$keys" ] || die "down <pod>|--all [--force]"
     for k in $keys; do
         pod_env $k
-        busy=$(BOX_TIMEOUT=60 box "cat $QD/pending 2>/dev/null; grep -lE '^(starting|running)\$' $QD/[0-9]*/status 2>/dev/null | wc -l" < /dev/null | tr '\n' ' ' || true)
+        # queued counted from the job records, not $QD/pending: the dispatcher writes that file once a pass, so a job
+        # submitted since its last pass was missing and down deleted the pod under it
+        busy=$(BOX_TIMEOUT=60 box "grep -lx queued $QD/[0-9]*/status 2>/dev/null | wc -l; grep -lE '^(starting|running)\$' $QD/[0-9]*/status 2>/dev/null | wc -l" < /dev/null | tr '\n' ' ' || true)
         set -- $busy
         if [ "${1:-0}" != 0 ] || [ "${2:-0}" != 0 ]; then
             [ $force = 1 ] || die "$k has ${1:-0} queued and ${2:-0} running job(s); it goes down by itself $NVC_IDLE_MIN min after they finish (or pass --force)"

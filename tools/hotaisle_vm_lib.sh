@@ -290,6 +290,8 @@ echo $$ > "$G/watchdog.pid"
 T=$(( $(date +%s) + @SECS@ ))
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) armed ref=@REF@ fires_in=@SECS@s" >> "$G/watchdog.out"
 while [ "$(date +%s)" -lt "$T" ]; do sleep 10; done
+# every box-persisted job's results to R2 before the delete (tools/box_persist_run.sh; bounded at 120 s)
+[ ! -f /root/box-persist/bin/box_persist_run.sh ] || bash /root/box-persist/bin/box_persist_run.sh --flush-all 120 >> "$G/watchdog.out" 2>&1 || true
 n=1
 while [ "$n" -le 20 ]; do
     code=$(curl -K "$G/curlrc" --max-time 900 -o "$G/watchdog.body" -w '%{http_code}' \

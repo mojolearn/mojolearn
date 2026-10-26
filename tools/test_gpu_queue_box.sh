@@ -15,6 +15,15 @@ Q=$T/q/bin/nvq
 cd $T/q && echo 4 > slots && echo nvidia > vendor && echo plain > mode && echo - > service && echo 30 > default_cap && echo 30 > max_cap
 printf 'POD_ID=fakepod\nIDLE_MIN=30\nGRACE_MIN=15\nIDLE_SEC=12\nGRACE_SEC=6\nFAKE_DELETE=1\n' > lease.conf
 date +%s > lease.last_busy
+# the idle delete flushes box-persisted jobs and archives the queue dir first (tools/box_persist_run.sh, beside $SRC;
+# URLs to a closed port, or no curl in the container: the attempts are what is checked)
+export BOX_PERSIST_ROOT=$T/bp; mkdir -p $BOX_PERSIST_ROOT/bin $BOX_PERSIST_ROOT/active $T/bpres
+cp "$(dirname "$SRC")/box_persist_run.sh" $BOX_PERSIST_ROOT/bin/
+for t in podq jobx; do
+    printf '{\n  "tag": "%s",\n  "slots": "1",\n  "every_sec": "3600",\n  "expires_epoch": "%s",\n  "final.put": "http://127.0.0.1:9/%s"\n}\n' $t $(( $(date +%s) + 3600 )) $t > $T/$t.json
+done
+echo $T/podq.json > $T/q/pod_persist
+printf 'PID=999999\nJSON=%s\nRES=%s\n' $T/jobx.json $T/bpres > $BOX_PERSIST_ROOT/active/jobx.env
 for l in lane-a lane-b; do mkdir -p /root/mojolearn-$l; done
 EV=$T/ev; mkdir -p $EV
 FAILS=0
@@ -105,6 +114,7 @@ check "j9 cut short twice: interrupted" "[ \"\$(stof $j9)\" = interrupted ]"
 
 echo "== a FRONT job (GQ_FRONT=1, lq add --front) starts before plain queued jobs, never before the running one"
 ja=$($Q submit lane-a 4 20 "$(job fa 'sleep 3')")
+waitst $ja running 10   # fa must be RUNNING before the front jobs arrive: a still-queued fa is rightly overtaken
 jb=$($Q submit lane-b 1 20 "$(job fb 'sleep 1')")
 jc=$(GQ_FRONT=1 $Q submit lane-a 1 20 "$(job fc 'sleep 1')")
 jd=$(GQ_FRONT=1 $Q submit lane-b 1 20 "$(job fd 'sleep 1')")
@@ -127,6 +137,7 @@ exec 5>&-
 check "not closing while recently busy" "[ ! -e $T/q/closing ]"
 i=0; while [ $i -lt 30 ] && [ ! -e $T/q/lease.deleted_ok ]; do sleep 1; i=$((i + 1)); done
 check "idle past the deadline: closing and the pod DELETE issued by the dispatcher" "[ -e $T/q/closing ] && grep -q 'FAKE DELETE fakepod by dispatcher' $T/q/lease.deleted"
+check "before the delete: every active job flushed, then the queue dir archived" "grep -q 'box_persist: flush jobx' $T/q/lease.log && grep -qE 'FAILED name=final.tgz|PERSIST-DISABLED' $T/bpres/persist.log && grep -q 'archiving $T/q to R2' $T/q/lease.log && grep -qE 'FAILED name=final.tgz|PERSIST-DISABLED' $T/q/persist.log"
 check "submit refuses once closing" "! $Q submit lane-a 1 20 $EV/j3.sh 2>/dev/null"
 check "ensure refuses once closing" "! $Q ensure 2>/dev/null"
 

@@ -34,6 +34,38 @@ Datasets, corpora and token shards come from the R2 bucket `mojolearn-data` (`do
 To read a bulk object: `sh tools/dataset_store.sh presign <key>` gives a short-lived URL; fetch it on a box, not the
 laptop, unless it is small.
 
+## Box jobs persist from the box (2026-10-26)
+
+A result that lives only on a rented box dies with it: a Mac that disconnects stops the watcher that would have
+pulled it home, and the box's dead-man deletes it on schedule. So every job on a rented box writes its results
+to R2 from the box itself, by default:
+
+| entry point | results dir (on the box) |
+|---|---|
+| `tools/nvidia_central.sh submit <lane> [--results DIR] <script>` | `DIR` relative to the lane tree; default `box-out/<tag>` |
+| `tools/do_amd_steward.sh run <tag> <results-dir> <command>` | `<results-dir>`, relative to `/root/mojolearn` |
+| `tools/dev_pod.sh run <lane> [--results DIR] <command>` | `DIR` relative to the box tree; default `box-out/<tag>` |
+
+The Mac mints presigned PUT and GET URLs for the job's keys only (`tools/box_persist.py prepare`; the R2
+credentials never leave the Mac; the URLs expire, at most 7 days) and hands them to the box as a 0600 json on ssh
+stdin. On the box, `tools/box_persist_run.sh` runs the command (its output also goes to `command.log` in the
+results dir, which the command sees as `$MOJOLEARN_RESULTS_DIR`), tars the results dir every 10 minutes into a
+ring of slots, and uploads `final.tgz` on any exit (normal, TERM, INT). HUP is ignored: an ssh drop leaves the job
+running and uploading. Every self-destruct path (`tools/runpod_guard.sh` watchdog, the `gpu_queue_box.sh` lease
+delete, the Hot Aisle watchdog, `do_amd_steward.sh`'s `mojolearn-selfkill` unit) runs
+`box_persist_run.sh --flush-all 120` before its delete.
+
+R2 layout: `measurements/box-jobs/<YYYY-MM-DD>/<tag>/{00..N-1}.tgz`, `final.tgz`, each with a `.sha256` sidecar,
+and `manifest.json` (every upload: seq, name, sha256, bytes, utc; state running|flushed|final; exit code). The
+box logs each upload to `persist.log` in the results dir (`UPLOADED`, `FAILED`, `REJECTED`, `EXPIRED`).
+Tarballs leave out venvs, `.pixi`, wheels and caches; one over the size cap (3.8 GB) drops its largest files and
+names them in `PERSIST_TRUNCATED.txt`.
+
+Read a job back: `python3 tools/box_persist.py fetch --tag <tag> [--all|--list] [--extract]` downloads `final.tgz`
+(else the newest slot) to `~/mojolearn-evidence/box-persist/<tag>/fetched/` and verifies it against its sidecar.
+The tag is printed when the job starts and indexed in `~/mojolearn-evidence/box-persist/index.tsv`.
+`--no-persist` on an entry point is logged and refused unless `MOJOLEARN_ALLOW_UNPERSISTED=1`.
+
 ## Closed-run cold archives (2026-10-21)
 
 Andrew authorized moving old local evidence to S3 Glacier Deep Archive and removing verified local copies.

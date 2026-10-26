@@ -23,6 +23,7 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
   - Full-size RACE lines are for speed and quality only: NVIDIA and AMD timing and opponent comparisons. IDENTICAL speed work targets NVIDIA and AMD.
   - `lq add <box> CMD <branch> <tag> '<command>'`: runs in the branch tree. Scripts it calls must be committed in the branch.
   - `lq results <box> [pattern]` and `lq log <box> <id|tag> [pattern]`: grep-sized output only.
+  - **Box jobs persist from the box (Andrew, 2026-10-26).** Outside `lq`, a job on a rented RunPod or DigitalOcean box starts only through `tools/nvidia_central.sh submit`, `tools/do_amd_steward.sh run` or `tools/dev_pod.sh run`; each wraps it in `tools/box_persist_run.sh`, which uploads its results dir to R2 from the box every few minutes, on any exit and before the box self-destructs, so nothing depends on the Mac staying connected. `--no-persist` is refused unless `MOJOLEARN_ALLOW_UNPERSISTED=1`; read results with `tools/box_persist.py fetch --tag <tag>`.
 
   Boxes: nv is the RunPod L40S, amd the DO MI325X, and apple is the M2 Pro (the M3 Ultra is the Apple FAST peer's). Each runs one job at a time. The orchestrator watches the queues and sends results back. After queuing, the lane ends with a reply listing what it queued (box, id), so the orchestrator can match the results.
 - **Lanes never compile (Andrew, 2026-10-07).** No `mojo build`, binding build or compile check in a lane, on the laptop or

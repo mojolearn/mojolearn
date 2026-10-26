@@ -206,6 +206,8 @@ cmd_arm() {
 #!/bin/sh
 # Installed by tools/runpod_guard.sh. Terminates THIS POD at the deadline.
 sleep SECONDS_PLACEHOLDER
+# every box-persisted job's results to R2 before the delete (tools/box_persist_run.sh; bounded at 120 s)
+[ ! -f /root/box-persist/bin/box_persist_run.sh ] || bash /root/box-persist/bin/box_persist_run.sh --flush-all 120 >> /tmp/mojolearn-lease.out 2>&1 || true
 # v2 first (v1 is deprecated), v1 as a FALLBACK. Two endpoints because this
 # is the only thing standing between an orphan and the bill, and an API
 # deprecation that silently 404s would disarm every lease at once. Both were
