@@ -23,11 +23,13 @@ import traceback
 import generated_sources as gs
 import release_host_composition as hc
 
-SCHEMA = 'mojolearn.linux.host-build.v1'
+# v2 (0.8.59): the merged host set is several files, one per host group of
+# bindings/merged_groups.json (hc.host_plan); every per-file field is a
+# {file: value} map and binding-stamp.json holds one stamp per file.
+SCHEMA = 'mojolearn.linux.host-build.v2'
 CAPTURE_SCHEMA = 'mojolearn.linux.host-compile-inputs.v1'
 KIND = 'independent-host-build'
 PREFIX = 'mojolearn/cpu/'  # Proof namespace only; the wheel uses mojolearn/host/.
-HOST_PATH = 'host/' + hc.HOST_FILE
 HOST_INDEX = 'host/' + hc.INDEX
 RUNPATH = '$ORIGIN/../.libs:$ORIGIN/../cuda/.libs:$ORIGIN/../hip/.libs:$ORIGIN/.libs'
 FLAGS = dict(MOJOLEARN_TARGET_COLUMN='cpu', MOJOLEARN_NUMERIC_MODE='identical',
@@ -37,6 +39,11 @@ FLAGS = dict(MOJOLEARN_TARGET_COLUMN='cpu', MOJOLEARN_NUMERIC_MODE='identical',
 
 def require(ok, message):
     hc.require(ok, 'Independent host: ' + message)
+
+
+def host_paths():
+    """{file: 'host/<file>'} of every merged host file the plan ships."""
+    return {f: 'host/' + f for f in hc.host_files()}
 
 
 def write(path, data):
@@ -165,23 +172,25 @@ def record(source, compiler):
     require(isinstance(packages, list) and packages and isinstance(toolchain, dict)
             and toolchain.get('packages') and set(toolchain['packages']) <= set(packages)
             and all(i['toolchain'] == toolchain for i in identities.values()), 'compiler package provenance differs')
-    require(type(index.get('format')) is int and index['format'] == 1
-            and set(index.get('files', {})) == {hc.HOST_FILE}
-            and len(index['files'][hc.HOST_FILE]) == len(names)
-            and set(index['files'][hc.HOST_FILE]) == names, 'incomplete merged host index')
+    hc.check_host_index(index, names, 'Independent host: incomplete merged host index')
     require(proof.get('merged_indexes') == {PREFIX + HOST_INDEX: dict(
         sha256=source['index']['sha256'], files=index['files'])}, 'host index proof differs')
-    require(stamp.get('schema') == 2 and stamp.get('binding') == HOST_PATH
-            and stamp.get('script') == 'merged_build.sh' and stamp.get('commit') == revision
-            and set(stamp.get('members', {})) == names, 'host stamp differs')
+    paths = host_paths()
+    # one stamp per merged host file (tools/binding_stamps.py write-merged), naming its members
+    require(isinstance(stamp, dict) and set(stamp) == set(paths), 'host stamp differs')
+    for f, one in stamp.items():
+        require(isinstance(one, dict) and one.get('schema') == 2 and one.get('binding') == paths[f]
+                and one.get('script') == 'merged_build.sh' and one.get('commit') == revision
+                and set(one.get('members', {})) == set(index['files'][f]), 'host stamp differs')
     by_name = {v['name']: v for v in identities.values()}
     generated = generated_record(proof, source, inventory)
     closures = proof.get('generated_closures', {})
     require(isinstance(closures, dict) and set(closures) <= names
             and {r[0] for rows in closures.values() for r in rows if r[0] in gs.GENERATED} == set(generated),
             'generated closure coverage differs')
-    for name, row in stamp['members'].items():
-        check_member_stamp(name, row, by_name[name], closures, generated, inventory)
+    for one in stamp.values():
+        for name, row in one['members'].items():
+            check_member_stamp(name, row, by_name[name], closures, generated, inventory)
     import binding_stamps
     merged_inputs = {name:dict(inventory).get(name) for name in binding_stamps.MERGED_INPUTS}
     require(all(merged_inputs.values()) and capture.get('merged_build_inputs') == merged_inputs,
@@ -189,7 +198,8 @@ def record(source, compiler):
     merged_hash = hashlib.sha256()
     for name in binding_stamps.MERGED_INPUTS:
         merged_hash.update(name.encode() + b'\0' + merged_inputs[name].encode() + b'\n')
-    require(stamp.get('merged_inputs') == merged_hash.hexdigest(), 'merged build stamp differs')
+    require(all(one.get('merged_inputs') == merged_hash.hexdigest() for one in stamp.values()),
+            'merged build stamp differs')
     require(proof.get('stamp_sha256') == source['stamp']['sha256'], 'stamp proof linkage differs')
     rows = readback.get('members', [])
     require(readback.get('schema') == 'mojolearn.host-readback.v1'
@@ -208,17 +218,21 @@ def record(source, compiler):
             and stage.get('runtime_libraries') == libraries
             and stage.get('runtime_byte_changes') == []
             and proof.get('stage_sha256') == source['stage']['sha256'], 'runtime staging provenance differs')
+    hex64 = lambda v: isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v)
+    per_file = lambda key: isinstance(stage.get(key), dict) and set(stage[key]) == set(paths)
     require(stage.get('raw_sha256') == proof.get('raw_host_sha256')
-            and re.fullmatch('[0-9a-f]{64}', stage.get('raw_sha256', ''))
-            and re.fullmatch('[0-9a-f]{64}', stage.get('staged_sha256', ''))
-            and stage.get('runpath') == RUNPATH and not stage.get('rpath'), 'host RUNPATH staging differs')
-    require(proof.get('host_extension') == {PREFIX + HOST_PATH: stage['staged_sha256']},
+            and all(per_file(k) for k in ('raw_sha256', 'staged_sha256', 'needed', 'runpath', 'rpath'))
+            and all(hex64(v) for v in stage['raw_sha256'].values())
+            and all(hex64(v) for v in stage['staged_sha256'].values())
+            and all(v == RUNPATH for v in stage['runpath'].values())
+            and not any(stage['rpath'].values()), 'host RUNPATH staging differs')
+    require(proof.get('host_extension') == {PREFIX + p: stage['staged_sha256'][f] for f, p in paths.items()},
             'staged host output differs')
     require(capture.get('runtime_identity') == proof.get('runtime_identity'), 'runtime input record differs')
     contract = dict(source_commit=revision, source_inventory=inventory, compiler_sha256=compiler,
         host_identities=identities, installed_packages=packages, toolchain=toolchain,
         index=index, runtime_libraries=libraries, generated_sources=generated,
-        host_dependencies={k: stage.get(k) for k in ('needed', 'runpath', 'rpath')})
+        host_dependencies={f: {k: stage[k][f] for k in ('needed', 'runpath', 'rpath')} for f in paths})
     return contract, dict(leg='cpu', host_sha256=stage['staged_sha256'],
                           unstaged_sha256=proof['raw_host_sha256'], proof_sha256=source['proof']['sha256']), proof, capture
 
@@ -236,7 +250,9 @@ def inspect(root):
         source['generated'] = {rel: hc.witness(root / 'generated' / hc.relative(rel)) for rel in generated}
         source['generated_inputs'] = {name: hc.witness(root / 'generated-inputs' / hc.relative(name))
                                       for rel in generated for name in gs.GENERATED.get(rel, ())}
-    require(hc.file_sha(root / 'raw' / hc.HOST_FILE) == hc.decoded(source['proof'])['raw_host_sha256'],
+    raw_shas = hc.decoded(source['proof'])['raw_host_sha256']
+    require(isinstance(raw_shas, dict) and set(raw_shas) == set(host_paths())
+            and all((root / 'raw' / f).is_file() and hc.file_sha(root / 'raw' / f) == v for f, v in raw_shas.items()),
             'original compiler output bytes are missing or changed')
     return source, root / 'set'
 
@@ -244,7 +260,7 @@ def inspect(root):
 def validate_bytes(source, root, compiler):
     contract, _, proof, _ = record(source, compiler)
     root = Path(root)
-    require(hc.file_sha(root / HOST_PATH) == proof['host_extension'][PREFIX + HOST_PATH]
+    require(all(hc.file_sha(root / p) == proof['host_extension'][PREFIX + p] for p in host_paths().values())
             and hc.file_sha(root / HOST_INDEX) == source['index']['sha256'], 'staged host bytes differ')
     require({p.name: hc.file_sha(p) for p in (root / '.libs').iterdir() if p.is_file()}
             == contract['runtime_libraries'], 'borrowed runtime bytes differ')
@@ -281,7 +297,8 @@ def run_logged(argv, root, env, log):
 
 
 def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=None):
-    """One actual host compile followed by standard staging and native readback."""
+    """The actual host compile (every host group, one after another: each fits a free runner) followed by
+    standard staging and native readback."""
     require(sys.platform == 'linux', 'the host producer runs on Linux')
     import retained_release_composition as rc
     import binding_stamps
@@ -300,8 +317,10 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     packages = sorted(p.stem for p in (prefix / 'conda-meta').glob('*.json'))
     require(hc.file_sha(compiler) == compiler_sha and packages == donor_contract['installed_packages'],
             'installed compiler/package bytes differ from retained runtime producer')
-    raw_output = root / 'python/mojolearn' / HOST_PATH
-    require(not raw_output.exists(), 'host output already exists; use a clean frozen checkout')
+    paths = host_paths()
+    plan = hc.host_plan()
+    raw_outputs = {f: root / 'python/mojolearn' / p for f, p in paths.items()}
+    require(not any(r.exists() for r in raw_outputs.values()), 'host output already exists; use a clean frozen checkout')
     # Unknown compiler flags cannot silently enter this production recipe.
     require(not any(os.environ.get(k) for k in ('CC','CXX','CFLAGS','CXXFLAGS','LDFLAGS')), 'custom C/C++ flags are unsupported')
     env = {k:v for k,v in os.environ.items() if not k.startswith(('MOJOLEARN_', 'MOJO_', 'MODULAR_'))}
@@ -329,10 +348,13 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     require(rc.current_source(root)[:2] == (revision, inventory) and hc.file_sha(compiler) == compiler_sha,
             'source/compiler changed during compilation')
     (out / 'raw').mkdir()
-    shutil.copy2(raw_output, out / 'raw' / hc.HOST_FILE)
-    stamp_exit = run_logged(['python3','tools/binding_stamps.py','write-merged',str(raw_output),
-                            ','.join(sorted(hc.expected_names()))], root, env, out / 'stamp.log')
-    shutil.copy2(binding_stamps.stamp_path(raw_output), out / 'binding-stamp.json')
+    stamps = {}
+    for f, raw_output in raw_outputs.items():
+        shutil.copy2(raw_output, out / 'raw' / f)
+        stamp_exit = run_logged(['python3','tools/binding_stamps.py','write-merged',str(raw_output),
+                                ','.join(sorted(plan[f]))], root, env, out / ('stamp-' + f[:-3] + '.log'))
+        stamps[f] = json.loads(binding_stamps.stamp_path(raw_output).read_text())
+    write(out / 'binding-stamp.json', stamps)
     # The compile read gitignored generated sources (the tokenizer unicode
     # table) that git archive, and so the binding identities, never carry.
     # Retain them with their tracked generator inputs and each reaching
@@ -354,8 +376,9 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
                                               for name in gs.GENERATED[rel]})
     staged = out / 'set'
     (staged / 'host').mkdir(parents=True)
-    shutil.copy2(raw_output, staged / HOST_PATH)
-    shutil.copy2(raw_output.parent / hc.INDEX, staged / HOST_INDEX)
+    for f, raw_output in raw_outputs.items():
+        shutil.copy2(raw_output, staged / paths[f])
+    shutil.copy2(root / 'python/mojolearn' / HOST_INDEX, staged / HOST_INDEX)
     shutil.copytree(donor_set / '.libs', staged / '.libs')
     require({p.name: hc.file_sha(p) for p in (staged / '.libs').iterdir() if p.is_file()}
             == donor_contract['runtime_libraries'], 'retained runtime bytes changed')
@@ -363,23 +386,29 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     import stage_libs
     patchelf = patchelf or shutil.which('patchelf')
     require(patchelf and Path(patchelf).is_file(), 'patchelf is missing')
+    needed, runpath, rpath = {}, {}, {}
     with (out / 'stage.log').open('w') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-        stage_libs.set_runpath(patchelf, staged / HOST_PATH, RUNPATH)
-        needed, runpath, rpath = stage_libs.elf_dynamic(staged / HOST_PATH)
-        require(not any(stage_libs.classify(dep, prefix / 'lib') == 'driver' for dep in needed), 'CPU host unexpectedly needs a GPU driver')
-        stage_libs.verify_closed([staged / HOST_PATH, *(staged / '.libs').glob('*.so*')], staged / '.libs', prefix / 'lib')
+        for f, p in paths.items():
+            stage_libs.set_runpath(patchelf, staged / p, RUNPATH)
+            needed[f], runpath[f], rpath[f] = stage_libs.elf_dynamic(staged / p)
+            require(not any(stage_libs.classify(dep, prefix / 'lib') == 'driver' for dep in needed[f]),
+                    'CPU host unexpectedly needs a GPU driver')
+        stage_libs.verify_closed([*(staged / p for p in paths.values()), *(staged / '.libs').glob('*.so*')],
+                                 staged / '.libs', prefix / 'lib')
     write(out / 'stage.json', dict(schema='mojolearn.host-staging.v1', action='stage-host-only',
-        raw_sha256=hc.file_sha(out / 'raw' / hc.HOST_FILE), staged_sha256=hc.file_sha(staged / HOST_PATH),
+        raw_sha256={f: hc.file_sha(out / 'raw' / f) for f in paths},
+        staged_sha256={f: hc.file_sha(staged / p) for f, p in paths.items()},
         needed=needed, runpath=runpath, rpath=rpath, runtime_libraries=donor_contract['runtime_libraries'],
         runtime_origin_proof_sha256=donor['proof']['sha256'], runtime_byte_changes=[],
         patchelf_path=str(patchelf), patchelf_sha256=hc.file_sha(patchelf)))
     (out / 'stage.log.rc').write_text('0\n')
     readbacks = out / 'readback-members'; readbacks.mkdir()
     rows = []
+    owner = {name: f for f, names in plan.items() for name in names}
     for name in sorted(hc.expected_names()):
         result = readbacks / (name + '.json')
         argv = ['pixi','run','-e',pixi_env,'python3','tools/release_host_build.py','readback-member',
-                '--root',str(root),'--binary',str(staged / HOST_PATH),'--name',name,'--output',str(result)]
+                '--root',str(root),'--binary',str(staged / paths[owner[name]]),'--name',name,'--output',str(result)]
         run_logged(argv, root, env, readbacks / (name + '.log'))
         rows.append(json.loads(result.read_text()))
     write(out / 'readback.json',dict(schema='mojolearn.host-readback.v1',source_commit=revision,members=rows))
@@ -391,8 +420,8 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
         binding_layout='merged', release_modes=['identical'], compiler_sha256=compiler_sha,
         compile_inputs_sha256=hc.file_sha(out / 'compile-inputs.json'), source_inventory=inventory,
         source_sha256=inventory_sha(inventory), command=command(pixi_env),
-        raw_host_sha256=hc.file_sha(out / 'raw' / hc.HOST_FILE),
-        host_extension={PREFIX + HOST_PATH:hc.file_sha(staged / HOST_PATH)},
+        raw_host_sha256={f: hc.file_sha(out / 'raw' / f) for f in paths},
+        host_extension={PREFIX + p: hc.file_sha(staged / p) for p in paths.values()},
         merged_indexes={PREFIX + HOST_INDEX:dict(sha256=hc.file_sha(staged / HOST_INDEX),files=index['files'])},
         stamp_sha256=hc.file_sha(out / 'binding-stamp.json'), stage_sha256=hc.file_sha(out / 'stage.json'),
         readback_sha256=hc.file_sha(out / 'readback.json'), runtime_identity=context['runtime_identity'],
