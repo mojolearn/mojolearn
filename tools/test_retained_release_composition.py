@@ -253,3 +253,57 @@ def test_adapter_closure_resolves_symlinked_temp_root_and_rejects_source_escape(
     (root / 'core/fixture.mojo').symlink_to(outside)
     with pytest.raises(ValueError, match='escaping adapter source'):
         rc.adapter_inputs(link)
+
+
+def phase_context(context):
+    context['builder_phases'] = dict(schema='mojolearn.linux.builder-phases.v1',
+        bindings={key:dict(value['builders']) for key,value in context['binding_identities'].items()},
+        runtime=context['runtime_identity'].get('builders', {'runtime-builder':'1'*64}),
+        adapters=dict(context['adapter_builders']), cuda_postcompile={'policy':'2'*64})
+
+
+def test_phase_admission_preserves_full_original_identity_and_rejects_cuda_policy_change(fixture, tmp_path):
+    source, old, host, before, current = fixture
+    phase_context(before); phase_context(current)
+    # A CUDA-only packaging change leaves AMD compiler/runtime/adapter inputs unchanged.
+    for identity in current['binding_identities'].values():
+        identity['builders'] = {'changed-full-builder':'3'*64}
+    current['adapter_builders'] = {'changed-full-builder':'3'*64}
+    current['builder_phases']['cuda_postcompile'] = {'policy':'4'*64}
+    # Host source was produced at current; preserve that original capture verbatim.
+    update(host/'compile-inputs.json', lambda d:d.update(binding_identities={
+        key:value for key,value in current['binding_identities'].items() if '/host/' in key or '/cuda/sm_89/' in key}))
+    update(host/'build-provenance.json', lambda d:d.update(compile_inputs_sha256=hc.file_sha(host/'compile-inputs.json')))
+    proof = rc.prepare(old[2], host, source, COMPILER, tmp_path/'phase-amd')
+    assert rc.validate(proof, source)
+    assert proof['device_inputs']['binding_identities'] != proof['admitted_inputs']['binding_identities']
+    with pytest.raises(ValueError, match='CUDA post-compilation'):
+        rc.prepare(old[0], host, source, COMPILER, tmp_path/'phase-cuda')
+    changed_key = next(key for key in proof['admitted_inputs']['binding_identities'] if '/hip/' in key)
+    proof['admitted_inputs']['binding_identities'][changed_key]['closure']['digest'] = '8'*64
+    with pytest.raises(ValueError, match='device compiler'):
+        rc.validate(proof)
+
+
+def test_linux_builder_phase_projection_is_narrow_and_fail_closed(tmp_path):
+    for rel in rr.LINUX_BUILDERS:
+        path = tmp_path/rel; path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('pass\n' if rel.endswith('.py') else 'echo original\n')
+    path = tmp_path/'packaging/linux/build_sets.sh'
+    def recipe(compile='echo mojo', phase='echo packaging'):
+        return compile+'\n'+rr.CUDA_PHASE_START+'if [[ "$VENDOR" = cuda ]]; then\n'+phase+'\nfi\n'+rr.CUDA_PHASE_END+'echo isa\n'
+    path.write_text(recipe())
+    identities={'linux-64/host/-/host/example':{'name':'example'}}
+    before=rr.linux_phase_builders(tmp_path, identities)
+    path.write_text(recipe(phase='echo different-packaging'))
+    after=rr.linux_phase_builders(tmp_path, identities)
+    assert before['bindings']==after['bindings'] and before['runtime']==after['runtime']
+    assert before['cuda_postcompile']!=after['cuda_postcompile']
+    path.write_text(recipe(compile='echo different-compiler-flags'))
+    assert before['bindings']!=rr.linux_phase_builders(tmp_path, identities)['bindings']
+    path.write_text(recipe(compile='python3 packaging/linux/ptx_contract.py patch unexpected.so'))
+    with pytest.raises(ValueError, match='outside'):
+        rr.linux_phase_builders(tmp_path, identities)
+    path.write_text('unknown format\n')
+    with pytest.raises(ValueError, match='boundary'):
+        rr.linux_phase_builders(tmp_path, identities)

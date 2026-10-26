@@ -373,6 +373,8 @@ def _host_facts(root, producer):
     return dict(producer="linux-host-build", source_root=str(Path(root).resolve()),
                 source_revision=contract["source_commit"], compiler_sha256=compiler,
                 binding_identities=contract["host_identities"], build_environment=capture["build_environment"],
+                group_origins=contract.get("group_origins", {}),
+                member_groups={name:filename for filename,names in contract["index"]["files"].items() for name in names},
                 members=sorted(n for names in contract["index"]["files"].values() for n in names), evidence=refs)
 
 
@@ -381,7 +383,8 @@ def _host_collect(root, document, producer):
     units = {}
     for key in facts["binding_identities"]:
         for spec in ("compile-cpu", "compile-nvidia", "compile-amd"):
-            units[spec + "/" + key] = dict(binding_key=key)
+            units[spec + "/" + key] = dict(binding_key=key,
+                compilation_origin=facts["group_origins"].get(facts["member_groups"][key.rsplit("/", 1)[-1]]))
     configuration = dict(release_modes=["identical"], build_flags={},
                          dependency_context=dict(cpu_target=LINUX, compiler_sha256={LINUX: facts["compiler_sha256"]}))
     return dict(source_revision=facts["source_revision"], facts=facts, units=units,
@@ -400,6 +403,8 @@ def _host_check(requirement_id, wanted, facts, unit):
     require(declared["build_flags"] == {} and facts["build_environment"] == rhb.FLAGS,
             "declared build flags differ from the host invocation")
     require(binding["name"] in facts["members"], "merged host index lacks this binding")
+    origin = facts.get("group_origins", {}).get(facts.get("member_groups", {}).get(binding["name"]))
+    require(unit.get("compilation_origin") == origin, "host compilation origin differs")
     return coverage_rows(wanted), list(facts["evidence"])
 
 

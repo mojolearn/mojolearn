@@ -97,6 +97,42 @@ def expected_names():
     return set(wheel_bindings())
 
 
+def shard_evidence_root(build_root):
+    """Locate retained GHA receipts beside a downloaded complete build."""
+    root = Path(build_root).resolve()
+    for parent in (root, *list(root.parents)[:3]):
+        candidate = parent / 'GHA'
+        if (candidate / 'shards').is_dir() and (candidate / 'assemble/hot_sha256.tsv').is_file():
+            return candidate
+    return None
+
+
+def _tsv(witness_record):
+    return [line.split('\t') for line in raw(witness_record).decode().splitlines() if line.strip()]
+
+
+def validate_shard_origin(receipt, filename, cache, key):
+    """Bind an assembly hot hit to an actual successful original shard compile."""
+    require(isinstance(receipt, dict), 'Missing original shard compilation receipt')
+    token = 'host:merged_build.sh:' + filename[:-3]
+    rows = [r for r in _tsv(receipt['shard']) if r[0] == token]
+    require(len(rows) == 1 and len(rows[0]) == 5 and rows[0][1] == 'ok'
+            and rows[0][2].startswith('miss+built-') and rows[0][4] == cache['key'],
+            'Original shard did not compile this host group successfully')
+    require(decoded(receipt['key']) == key and digest(key) == cache['key'], 'Original shard compiler inputs differ')
+    prov = [r for r in _tsv(receipt['provenance']) if len(r) == 6 and r[3] == cache['key']]
+    require(len(prov) == 1 and prov[0][1] == 'bindings/merged_build.sh' and prov[0][2] == rows[0][2]
+            and prov[0][5] == 'python/mojolearn/host/' + filename + '=' + cache['unstaged_sha256'],
+            'Original shard compiler output differs')
+    archives = []
+    for name in ('archive', 'assembly_archive'):
+        hashes = [r for r in _tsv(receipt[name]) if r[0] == cache['key']]
+        require(len(hashes) == 1 and len(hashes[0]) == 2 and re.fullmatch('[0-9a-f]{64}', hashes[0][1]),
+                'Missing original shard archive hash')
+        archives.append(hashes[0][1])
+    require(archives[0] == archives[1], 'Assembly restored another shard archive')
+
+
 def _record(source, compiler):
     proof, capture, manifest, index, key = (decoded(source[n]) for n in
         ('proof', 'capture', 'manifest', 'index', 'host_cache_key'))
@@ -177,9 +213,15 @@ def _record(source, compiler):
     normalized, caches, formats = {}, {}, set()
     for f, host_path in host_paths.items():
         one, cache = key[f], proof.get('bincache', {}).get(prefix + host_path, {})
-        require(cache.get('key') == digest(one) and cache.get('compiled_from_commit') == commit
-                and cache.get('outcome') == 'miss+built-uploaded' and re.fullmatch('[0-9a-f]{64}', cache.get('unstaged_sha256', '')),
+        require(cache.get('key') == digest(one)
+                and re.fullmatch('[0-9a-f]{40}', cache.get('compiled_from_commit', ''))
+                and re.fullmatch('[0-9a-f]{64}', cache.get('unstaged_sha256', '')),
                 'Missing original successful host compiler/cache witness')
+        if cache.get('outcome') == 'hot-hit':
+            validate_shard_origin(source.get('host_shard_origins', {}).get(f), f, cache, one)
+        else:
+            require(cache.get('outcome') == 'miss+built-uploaded' and cache['compiled_from_commit'] == commit,
+                    'Missing original successful host compiler/cache witness')
         # one group per compile: bindings/merged_build.sh host --group <stem>
         require(one.get('schema') == 'mojolearn-bincache-v1' and one.get('script') == 'bindings/merged_build.sh'
                 and one.get('args') == ['host', '--group', f[:-len('.so')]] and one.get('target_column') == 'cpu'
@@ -196,7 +238,9 @@ def _record(source, compiler):
     # This project-only flag is consumed by GPU format staging, not the host
     # command in merged_build.sh. No compiler/source/target flag is dropped.
     contract = dict(source_commit=commit, source_inventory=inventory, compiler_sha256=compiler,
-        host_identities=identities, host_cache_inputs=normalized, installed_packages=capture.get('installed_packages'),
+        host_identities=identities, host_cache_inputs=normalized,
+        group_compilation_sources={f:c['compiled_from_commit'] for f,c in caches.items()},
+        installed_packages=capture.get('installed_packages'),
         toolchain=capture.get('toolchain'), index=index, runtime_libraries=libraries,
         host_dependencies={f: {k: row.get(k) for k in ('needed', 'runpath', 'rpath')} for f, row in staged.items()})
     variant = dict(leg=leg, host_sha256=host_sha, unstaged_sha256={f: c['unstaged_sha256'] for f, c in caches.items()},
@@ -280,6 +324,22 @@ def inspect_build(root):
         index=witness(setdir / 'host' / INDEX), readback=witness(setdir / 'readback.txt'),
         # every host group's cache key, {file: key}, as one witness
         host_cache_key={'sha256': hashlib.sha256(text.encode()).hexdigest(), 'utf8': text})
+    gha = shard_evidence_root(root)
+    if gha is not None:
+        origins = {}
+        for f, cache in caches.items():
+            if cache.get('outcome') != 'hot-hit':
+                continue
+            token = 'host:merged_build.sh:' + f[:-3]
+            matches = [p for p in (gha/'shards').glob('*/shard.tsv')
+                       if any(line.split('\t')[0] == token for line in p.read_text().splitlines())]
+            require(len(matches) == 1, 'Missing or ambiguous original host shard')
+            shard = matches[0].parent
+            origins[f] = {name:witness(path) for name,path in dict(shard=shard/'shard.tsv',
+                provenance=shard/'bincache/provenance.tsv', key=shard/'bincache/keys'/(cache['key']+'.json'),
+                archive=shard/'hot_sha256.tsv', assembly_archive=gha/'assemble/hot_sha256.tsv').items()}
+        if origins:
+            source['host_shard_origins'] = origins
     require(all(file_sha(setdir / 'host' / f) == proof['host_extension']['mojolearn/' + leg + '/host/' + f] for f in files),
             'Retained original host bytes differ from original proof')
     return source, setdir
