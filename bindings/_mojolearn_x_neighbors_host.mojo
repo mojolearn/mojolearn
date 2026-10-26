@@ -9,13 +9,11 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_neighbors.eigh import op_eigh
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from x_neighbors.host_ops import op_softmax64
 from x_neighbors.proba64_nc import NC_PROBA64
-from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
+from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
 from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_host import op_ocsvm
 from x_neighbors.host_pyapi import ocsvm_alpha_init_binding
@@ -46,27 +44,12 @@ def _f(v: PythonObject, k: Int) raises -> Float32:
     return Float32(Float64(py=v[k]))
 
 
-def eigh_binding(a: PythonObject, i: PythonObject, f: PythonObject) raises -> PythonObject:
-    var x = _a(a, 0)
-    var w = _a(a, 1)
-    var v = _a(a, 2)
-    var n = _n(i, 0)
-    if n <= 0:
-        raise Error("x_neighbors: eigh needs n >= 1")
-    var sweeps = 0
-    with GILReleased(Python()):
-        sweeps = op_eigh(x, n, w, v)
-    return PythonObject(sweeps)
+# TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
 
 
 def x_neighbors_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
-
-
-def x_neighbors_py2mojo_off_binding() raises -> PythonObject:
-    """1 when built with -D MOJOLEARN_PY2MOJO_neighbors_OFF: Python runs its
-    old data loops instead of the p2m_* ops (lane apple-fast-py2mojo-neighbors)."""
-    return PythonObject(1 if is_defined["MOJOLEARN_PY2MOJO_neighbors_OFF"]() else 0)
 
 
 def sqdist_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
@@ -473,17 +456,6 @@ def ls_laplacian_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
     var v_n = _n(i_, 0)
     with GILReleased(Python()):
         op_ls_laplacian(v_a, v_res, v_n)
-    return PythonObject(None)
-
-
-def knn_graph_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_idx = _a(a_, 0)
-    var v_res = _a(a_, 1)
-    var v_n = _n(i_, 0)
-    var v_m = _n(i_, 1)
-    var v_k = _n(i_, 2)
-    with GILReleased(Python()):
-        op_knn_graph(v_idx, v_res, v_n, v_m, v_k)
     return PythonObject(None)
 
 
@@ -1123,7 +1095,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[lp_clamp_binding]("xn_lp_clamp")
     m.def_function[ls_clamp_binding]("xn_ls_clamp")
     m.def_function[ls_laplacian_binding]("xn_ls_laplacian")
-    m.def_function[knn_graph_binding]("xn_knn_graph")
+    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
     m.def_function[knn_impute_binding]("xn_knn_impute")
     m.def_function[col_degree_binding]("xn_col_degree")
     m.def_function[ls_laplacian_deg_binding]("xn_ls_laplacian_deg")
@@ -1169,9 +1142,11 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[louvain_binding]("xn_louvain")
     m.def_function[pr_csr_binding]("xn_pr_csr")
     m.def_function[louvain_csr_binding]("xn_louvain_csr")
-    m.def_function[eigh_binding]("xn_eigh")
+    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
-    m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
+    # TOMBSTONE: xn_eigh, xn_knn_graph, x_neighbors_py2mojo_off (dead native entries: no live caller; KernelPCA and LabelPropagation run their own owners) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+    # Restore: git apply experiments/removed/dead_entries_x_neighbors.patch
 
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:

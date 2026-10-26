@@ -153,12 +153,7 @@ def _graph_affinity(est, X):
     n = X.shape[0]
     if est.kernel == "rbf":
         return est._kernel(X, X, "rbf", est.gamma, 0.0, 0)
-    if est.kernel == "knn":
-        k = min(int(est.n_neighbors), n)
-        _, idx = est._knn_sq(X, X, k, False)
-        g = _empty_out((n, n), "<f4")
-        est._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
-        return g
+    # kernel="knn" never reaches here: the caller takes _compact_graph (lp_knn_graph)
     raise NotImplementedError(f"{type(est).__name__}: kernel={est.kernel!r} is not implemented ('rbf' or 'knn')")
 
 
