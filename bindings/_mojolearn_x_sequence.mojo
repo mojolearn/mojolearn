@@ -85,18 +85,12 @@ from sequence.seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
 from sequence.layernorm_dev_pyapi import layer_norm_dev_py
-from sequence.sched_table_pyapi import sched_exp_block_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-#: MOJOLEARN_SCHED_FAST_TABLE (FAST + Apple; sequence/sched_table.mojo):
-#: registers `sched_exp_block`, which ExponentialLR uses when present.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
-#: rab13-schedtable): lr-exponential 231.8 -> 19.2 ms, digest same. KEEP: the
-#: FAST + Apple default; rollback -D MOJOLEARN_SCHED_FAST_TABLE_OFF.
-comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                             and not is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]())
+# TOMBSTONE: sched_exp_block (MOJOLEARN_SCHED_FAST_TABLE) (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+# Restore: git apply experiments/removed/sched_exp_block.patch
 from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 from sequence.moe_dev_pyapi import moe_forward_dev_py
@@ -195,10 +189,6 @@ def layer_norm_dev_binding(handles: PythonObject, addrs: PythonObject, ip: Pytho
 def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return stl_py(ex, addrs, ip)
-
-
-def sched_exp_block_binding(addrs: PythonObject, fp: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return sched_exp_block_py(addrs, fp, ip)
 
 
 def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -905,8 +895,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[stl_binding]("stl")
         m.def_function[var_fit_binding]("var_fit")
-        comptime if SCHED_FAST_TABLE:
-            m.def_function[sched_exp_block_binding]("sched_exp_block")
+        # TOMBSTONE: sched_exp_block (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by @@SHA@@; code recoverable at 485ba9cc1.
+        # Restore: git apply experiments/removed/sched_exp_block.patch
         m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
