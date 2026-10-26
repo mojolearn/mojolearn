@@ -169,7 +169,7 @@ import sys
 import threading
 
 from . import _merged
-from . import gpu_plugins, host_surface
+from . import _rocm_runtime, gpu_plugins, host_surface
 from ._version import __version__ as _CORE_VERSION
 
 
@@ -526,6 +526,13 @@ def _probe_box():
         paths = {p: os.path.exists(p) for p in spec["paths"]}
         libs = {}
         for lib in spec["libs"]:
+            if v == "hip":
+                # LOOK, NEVER LOAD (2026-10-26, amd-torch-interop): dlopening every
+                # candidate mapped ROCm 7 and ROCm 6 HIP copies (and torch's) into one
+                # process, and two HIP runtimes cannot share one (a HIP fat-binary
+                # registration then aborts in hip.cpp). _rocm_runtime.locate opens nothing.
+                libs[lib] = _rocm_runtime.locate(lib) is not None
+                continue
             try:
                 ctypes.CDLL(lib)
                 libs[lib] = True
@@ -536,6 +543,19 @@ def _probe_box():
             "found": any(paths.values()) or any(libs.values()),
         }
     return out
+
+
+def _rocm_prepare(vendor):
+    """One HIP and one HSA runtime per process (see _rocm_runtime): when the hip
+    set is selected, before any hip binding loads. Raises GpuPluginError (so
+    `select()` never turns it into the CPU-only set) when torch or another
+    library already loaded a runtime copy the MAX runtime would not reuse. A module-level hook so the
+    selector tests can replace it."""
+    if vendor == "hip":
+        try:
+            _rocm_runtime.prepare()
+        except _rocm_runtime.RocmRuntimeConflict as exc:
+            raise GpuPluginError(str(exc)) from None
 
 
 def _force_requested():
@@ -557,7 +577,10 @@ def _probe_lines(probe, only=None):
         for p, ok in r["paths"].items():
             lines.append(f"    {p:<28} {'FOUND' if ok else 'absent'}")
         for lib, ok in r["libs"].items():
-            lines.append(f"    {lib:<28} {'loads' if ok else 'not loadable'}")
+            if v == "hip":  # looked up on the library path, never loaded (_probe_box)
+                lines.append(f"    {lib:<28} {'found' if ok else 'not found'}")
+            else:
+                lines.append(f"    {lib:<28} {'loads' if ok else 'not loadable'}")
     return lines
 
 
@@ -1234,6 +1257,7 @@ def _layout():
         base = _vendor_base(pkg, forced)
         _VENDOR_SELECTED = forced
         _VENDOR_HOW = "MOJOLEARN_VENDOR in the environment"
+        _rocm_prepare(forced)
         _LAYOUT = ("vendor", base)
         return _LAYOUT
     probe = probe or _probe_box()
@@ -1242,6 +1266,7 @@ def _layout():
         base = _vendor_base(pkg, hits[0])
         _VENDOR_SELECTED = hits[0]
         _VENDOR_HOW = "the box probe (device nodes and driver libraries)"
+        _rocm_prepare(hits[0])
         _LAYOUT = ("vendor", base)
         return _LAYOUT
     if len(hits) > 1:

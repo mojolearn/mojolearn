@@ -145,6 +145,24 @@ pip install torch --index-url https://download.pytorch.org/whl/rocm7.2
 pip install mojolearn-amd
 ```
 
+On AMD, PyTorch and mojolearn share one ROCm runtime in a process. Import mojolearn before PyTorch, and
+PyTorch uses the runtime mojolearn loaded:
+
+```python
+import mojolearn
+import torch
+```
+
+To import PyTorch first, start Python with PyTorch's bundled ROCm libraries first on the library path,
+so mojolearn uses the runtime PyTorch loaded:
+
+```sh
+export LD_LIBRARY_PATH="$(python -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib"))'):$LD_LIBRARY_PATH"
+```
+
+In the other order without that setting, `import mojolearn` raises an `ImportError` that names both
+setups.
+
 If the installed PyTorch or MAX is not the release the adapter was built for, importing the adapter
 raises an `ImportError` that names the release to install. `import mojolearn` never imports PyTorch or
 MAX; an adapter loads only when you import it.

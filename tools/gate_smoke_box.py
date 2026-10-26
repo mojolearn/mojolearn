@@ -404,7 +404,12 @@ class Gate:
         env = self.env()
         if self.vendor == "amd":
             env["LD_LIBRARY_PATH"] = ":".join(
-                glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
+                # torch/lib FIRST (2026-10-26, amd-torch-interop): the adapter probes import torch
+                # before mojolearn, and the MAX runtime's bare-name dlopen then reaches torch's
+                # loaded HIP/HSA copies instead of mapping second ones (python/mojolearn/
+                # _rocm_runtime.py; the documented setup for that import order).
+                glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/torch/lib"))
+                + glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
                 # Exactly ONE ROCm runtime: two HSA runtimes in one process (PyTorch's ROCm 7 build
                 # loaded beside a 6.x libhsa) fail with "Failed to initialize HSA runtime".
                 + [next((d for d in ("/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib") if os.path.isdir(d)), "/opt/rocm/lib")])
