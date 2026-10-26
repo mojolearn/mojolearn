@@ -13,6 +13,11 @@ tar -czf "$out/adapter-source.tar.gz" adapters tools/build_native_adapters.sh to
 pixi run mojo --version > "$out/compiler.txt" 2>&1
 host_flags=()
 target_flags=()
+column_flags=()
+if [[ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]]; then
+    [[ "$MOJOLEARN_TARGET_COLUMN" =~ ^[a-z]+$ ]] || { echo 'invalid target column'; exit 2; }
+    column_flags=(-D "MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')")
+fi
 case "$(uname -s)" in
     Linux) host_flags=(--target-cpu x86-64-v3); target_flags=(--target-accelerator "$arch") ;;
     Darwin)
@@ -30,7 +35,7 @@ esac
 # Linux and macOS without requiring a GNU timeout executable on the Apple host.
 python3 - "$out" pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" \
     --emit shared-lib "${host_flags[@]}" "${target_flags[@]}" \
-    -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
+    -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${column_flags[@]}" -I . -I bindings \
     adapters/native/c_api.mojo -o "$out/libmojolearn_adapter.so" <<'PY'
 import json, os, signal, subprocess, sys
 from pathlib import Path

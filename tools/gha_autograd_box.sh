@@ -110,7 +110,7 @@ with tarfile.open(out/'adapter-source-closure.tar.gz','w:gz') as archive:
     for name in ('pixi.toml','pixi.lock','tools/build_native_adapters.sh'):
         archive.add(root/name,arcname=name)
 PY
-    MOJOLEARN_COMPILE_JOBS="$JOBS" "$PIXI" run -e default bash tools/build_native_adapters.sh "$OUT/artifacts" "$TARGET"
+    MOJOLEARN_COMPILE_JOBS="$JOBS" MOJOLEARN_TARGET_COLUMN="$VENDOR" "$PIXI" run -e default bash tools/build_native_adapters.sh "$OUT/artifacts" "$TARGET"
     PHASE=validate
     "$PYTHON" - "$OUT" "$VENDOR" "$TARGET" "$MOJOLEARN_COMMIT" <<'PY'
 import hashlib,json,pathlib,sys
