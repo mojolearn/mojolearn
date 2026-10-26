@@ -100,9 +100,18 @@
     },
     {
       "id": "post-publication",
-      "task": "After 0.8.60 publication, run the requested Mac/NVIDIA full routine and neural sweeps and compare both ways.",
-      "status": "pending",
+      "task": "Do not run broad post-publication sweeps merely for the next version; owner now requests new-verifier evidence and reuse of existing verification.",
+      "status": "not-automatically-scheduled",
       "evidence": null
+    }
+  ],
+  "latest_owner_clarification": "2026-10-26: reuse existing verification; focus on testing the new verifiers and creating their missing evidence. No blanket re-verification.",
+  "verification_policy": "Qualify new or changed verifier paths and missing negative controls. Existing valid product compilation, identity and runtime results carry forward. Rerun only inputs invalidated by a relevant change or an observed failure.",
+  "uncompiled_drafts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/array-from-buffer-native-draft.patch",
+      "status": "retained outside candidate",
+      "reason": "Avoid introducing product changes before new-verifier evidence establishes which repairs are required."
     }
   ]
 }
