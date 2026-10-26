@@ -15,8 +15,7 @@ _FAMILIES = {
                 "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"),
                "numeric_mode must be fast, identical or None"),
     "x_metrics": ("_mojolearn_x_metrics", "x_metrics_run",
-                  ("x_metrics_run_out", "x_metrics_run_ranges",
-                   "x_metrics_dev_put", "x_metrics_dev_free", "x_metrics_dev_live", "x_metrics_dev_take_rows"),
+                  ("x_metrics_run_out", "x_metrics_run_ranges"),
                   "numeric_mode must be 'fast' or 'identical'"),
 }
 

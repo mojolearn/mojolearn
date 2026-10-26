@@ -2375,11 +2375,11 @@ SABOTAGE_NA_ENTRIES = {
         "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
         "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
-        "msel_alloc", "msel_free", "x_metrics_dev_free", "x_prep_dev_free", "seq_tensor_alloc",
+        "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
         "mlp_resident_open", "mlp_resident_close", "rf_data_session_open", "rf_data_session_close")},
     **{e: _METADATA for e in (
         "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
-        "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_metrics_dev_live", "x_prep_dev_live",
+        "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_prep_dev_live",
         "gbdt_model_dim")},
 }
 
