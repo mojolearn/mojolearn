@@ -49,11 +49,16 @@ def test_model_selection_edits_invalidate_only_the_independent_development_owner
     assert owners == {('host', 'runtime_model_selection')}
 
 
-def test_release_keeps_one_host_file_and_includes_the_new_logical_entry():
-    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())
-    groups = release['dirs']['host']['groups']
-    assert set(groups) == {'_mojolearn_native_host'}
-    assert groups['_mojolearn_native_host'].count('_mojolearn_runtime_model_selection_host') == 1
+def release_host_members():
+    """Every member of the release host groups, in group order (0.8.59: several
+    host files, one compile each; a member lives in exactly one of them)."""
+    groups = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
+    assert groups and all(stem.endswith('_host') for stem in groups)
+    return [name for members in groups.values() for name in members]
+
+
+def test_release_host_groups_hold_each_member_once_and_include_the_new_logical_entry():
+    assert release_host_members().count('_mojolearn_runtime_model_selection_host') == 1
     entry = ROOT/'bindings/entry/entry__mojolearn_runtime_model_selection_host.mojo'
     assert 'PyInit__mojolearn_runtime_model_selection_host' in entry.read_text()
 
@@ -82,9 +87,7 @@ def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency
     assert 'bindings/host_archive_native.mojo' not in closure['files']
     assert 'bindings/_mojolearn_tokenizer_host.mojo' not in closure['files']
     assert all('.add_type' not in (ROOT/path).read_text() for path in closure['files'])
-    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
-    assert set(release) == {'_mojolearn_native_host'}
-    assert release['_mojolearn_native_host'].count('_mojolearn_runtime_manifold_host') == 1
+    assert release_host_members().count('_mojolearn_runtime_manifold_host') == 1
 
 
 def test_sequential_implementation_edits_do_not_invalidate_tokenizer():
@@ -116,9 +119,7 @@ def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_own
     assert classical.count('module.add_type[') == 1
     assert 'module.add_type[TreesResident]("_TreesResident")' in classical
     assert 'module.add_type[TreesResident]' not in source
-    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
-    assert set(release) == {'_mojolearn_native_host'}
-    assert release['_mojolearn_native_host'].count('_mojolearn_runtime_sequential_host') == 1
+    assert release_host_members().count('_mojolearn_runtime_sequential_host') == 1
 
 
 def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development_unit():
@@ -157,6 +158,4 @@ def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_regi
     registrations = [str(path.relative_to(ROOT)) for path in (ROOT/'bindings').glob('*.mojo')
                      if 'module.add_type[TreesResident]' in path.read_text()]
     assert registrations == ['bindings/_mojolearn_runtime_classical_host.mojo']
-    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
-    assert set(release) == {'_mojolearn_native_host'}
-    assert release['_mojolearn_native_host'].count(spec['binding']) == 1
+    assert release_host_members().count(spec['binding']) == 1
