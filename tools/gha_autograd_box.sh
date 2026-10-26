@@ -92,7 +92,11 @@ find "$R/.pixi/envs/default/lib/mojo" -maxdepth 1 -type f \( -name '*.mojoc' -o 
 # one-worker compiler crash; capped runner swap supports peaks over RAM.
 # No retained-artifact substitution and no GPU execution.
 PHASE=compile
-"$PYTHON" tools/gate_autograd_artifacts.py build --vendor "$VENDOR" --source-commit "$MOJOLEARN_COMMIT" \
+# Pixi activation supplies MODULAR_HOME from the pinned package's activation
+# script. Calling its Python directly omitted that supported environment and
+# both vendors refused before compiling because Mojo could not locate std.
+"$PIXI" run -e default "$PYTHON" -c 'import os; print("MODULAR_HOME=" + os.environ.get("MODULAR_HOME", ""))' > "$G/activation.txt"
+"$PIXI" run -e default "$PYTHON" tools/gate_autograd_artifacts.py build --vendor "$VENDOR" --source-commit "$MOJOLEARN_COMMIT" \
     --target "$TARGET" --mojo "$MOJO" --compile-jobs "$JOBS" --out "$OUT/artifacts" > "$G/build.log" 2>&1
 PHASE=validate
 "$PYTHON" - "$VENDOR" "$MOJOLEARN_COMMIT" "$OUT" <<'PY'
