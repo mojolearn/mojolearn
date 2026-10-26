@@ -93,6 +93,7 @@ def main():
             raise AssertionError('nonfinite last shard accepted')
         assert out.tobytes() == before
     if args.faults:
+        assert binding.accumulate_pool_fault_available() == 1
         for rank in (0,1):
             out = np.full(257,-17,dtype='<f4')
             before = out.tobytes()

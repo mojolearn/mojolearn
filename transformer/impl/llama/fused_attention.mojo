@@ -1716,34 +1716,8 @@ def attention_estash_recompute_granted() -> Bool:
         return False
 
 
-def attention_estash_gate_state() -> List[Int]:
-    """[gated, granted, denied, need_bytes, free_bytes, recompute] of the
-    last grant (all zero when nothing asked), for a run's read-back."""
-    var out = List[Int]()
-    comptime if not ATTN_APPLE_ESTASH_GATED:
-        out.append(0)
-        out.append(0)
-        out.append(0)
-        out.append(0)
-        out.append(0)
-        out.append(0)
-        return out^
-    try:
-        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
-        out.append(1)
-        out.append(1 if g[].granted else 0)
-        out.append(1 if g[].denied else 0)
-        out.append(g[].need)
-        out.append(g[].free)
-        out.append(1 if attention_estash_recompute_granted() else 0)
-    except:
-        out.append(1)
-        out.append(0)
-        out.append(0)
-        out.append(0)
-        out.append(0)
-        out.append(0)
-    return out^
+# TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_byte_lm.patch
 
 
 def fused_attention_arm_estash_runs(arm: Int) -> Bool:

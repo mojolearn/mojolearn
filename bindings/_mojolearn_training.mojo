@@ -80,7 +80,7 @@ comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MO
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext, HostBuffer
 
-from training.accumulate_multi_gpu import parallel_accumulate_host
+from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
 from bindings.optimizer_public_door import entry_zero
 from bindings.optimizer_public_pyapi import (
@@ -195,12 +195,16 @@ def training_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-# TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_training.patch
 
 
 def clip_parallel_available_binding() raises -> PythonObject:
     return PythonObject(1)
+
+
+def accumulate_pool_fault_available_binding() raises -> PythonObject:
+    return PythonObject(accumulate_pool_fault_available())
 
 
 def accumulate_parallel_available_binding() raises -> PythonObject:
@@ -1408,11 +1412,10 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[sha256_hex_binding]("sha256_hex")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
-        # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_training.patch
         m.def_function[clip_parallel_available_binding]("clip_parallel_available")
-        # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
-        # Restore: git apply experiments/removed/dead_entries_training.patch
+        m.def_function[accumulate_pool_fault_available_binding]("accumulate_pool_fault_available")
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
@@ -1441,9 +1444,9 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[linear_forward_dev_binding]("linear_forward_dev")
             m.def_function[linear_backward_dev_binding]("linear_backward_dev")
             m.def_function[ce_loss_dev_binding]("ce_loss_dev")
-            # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+            # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
             # Restore: git apply experiments/removed/dead_entries_training.patch
-        # TOMBSTONE: clip_grad_norm, clip/accumulate_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_training.patch
         m.def_function[ce_loss_binding]("ce_loss")
         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")

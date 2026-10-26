@@ -98,7 +98,6 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_backward_resolved,
     fused_attention_arm_forward_resolved,
     fused_attention_arm_from_env,
-    attention_estash_gate_state,
     fused_attention_arm_name,
     attention_v1_backward_memory_profile,
     attention_v1_retained_exp_bytes,
@@ -150,15 +149,8 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
     out.append(PythonObject(fused_attention_arm_name(resolved)))
     return out
 
-def byte_lm_attention_estash_gate_binding() raises -> PythonObject:
-    """lane/neural-apple (2026-09-28): [gated, granted, denied, need_bytes,
-    free_bytes, recompute (lane/neural-apple2)] of the Apple estash memory grant (all 0 on a build that is
-    not gated). Host state only; no GPU operation."""
-    var st = attention_estash_gate_state()
-    var out = Python.list()
-    for i in range(len(st)):  # small-loop(st: six estash gate words): copies gate words to Python, not data
-        out.append(PythonObject(st[i]))
-    return out
+# TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_byte_lm.patch
 
 
 def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> PythonObject:
@@ -168,12 +160,6 @@ def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> Pyth
     out.append(PythonObject(attention_v1_backward_memory_profile()))
     out.append(PythonObject(attention_v1_retained_exp_bytes(cfg.batch,cfg.length,cfg.n_heads,cfg.length)))
     return out
-
-
-def byte_lm_context_keeper_active_binding() raises -> PythonObject:
-    """DEVIATION 2513 read-back: True once the keeper holds a context.
-    Creates the empty slot if absent; never creates a DeviceContext."""
-    return PythonObject(BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].active())
 
 
 def byte_lm_session_create_binding() raises -> PythonObject:
@@ -1492,7 +1478,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/byte_lm_launch_probe.patch
-        module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
+        # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
         # DEVIATION 2514: the device-owned session entries.
         module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")
         module.def_function[byte_lm_session_step_binding]("byte_lm_session_step")
@@ -1522,7 +1509,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
-        module.def_function[byte_lm_attention_estash_gate_binding]("byte_lm_attention_estash_gate")
+        # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
         module.def_function[byte_lm_attention_memory_profile_binding]("byte_lm_attention_memory_profile")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
         module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
