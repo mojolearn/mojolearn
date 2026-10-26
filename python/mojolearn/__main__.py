@@ -595,7 +595,7 @@ def build_parser():
         help="run identity checks on this box against the admitted reference table",
         description=(
             "Runs the installed identity harness under the identical tier and "
-            "compares its train, inference and model values with the admitted "
+            "compares its train, inference, model and property values with the admitted "
             "reference table. Each reference retains its original vendor and "
             "source record. On a CPU-only install only applicable CPU lanes run. "
             "Needs numpy. Use --fixtures base --repeats 1 for a smaller check; "
@@ -606,7 +606,7 @@ def build_parser():
                         "witness and run nothing (exit 0 ready, 5 missing)")
     d.add_argument("--lanes", default="",
                    help="comma separated subset of the admitted table's lanes "
-                        "(default: every lane this box can run)")
+                        "(default: historical record scope on this box)")
     d.add_argument("--fixtures", default="",
                    help="comma separated subset of the harness's fixtures "
                         "(default: all nine)")
