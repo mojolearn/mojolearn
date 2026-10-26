@@ -50,6 +50,11 @@ HOTAISLE_RELEASE_BUILD_CAP=6000
 # GPU legs' 6000; the pod's default lease is 120 min.
 CPU_BOX_RELEASE_BUILD_SECONDS=6000
 
+# The GitHub route (tools/gha_release_box.sh): the RELEASE_MERGED_TIMEOUT_SECONDS
+# of ONE merged compile on a free runner (4 vCPU; it may page to swap). Inside
+# CPU_BOX_RELEASE_BUILD_SECONDS, which still bounds the shard's whole route.
+GHA_MERGED_TIMEOUT_SECONDS=5700
+
 # tools/cross_compile_check.py: the per-binding compile bound on the Mac.
 # IDENTICAL svm cross-compiles for sm_89 in about 3 minutes at -j 1; a binding
 # that takes ten is a hang to look at before a rental pays for it.

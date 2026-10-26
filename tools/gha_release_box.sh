@@ -6,6 +6,8 @@
 #
 #   bash /tooling/tools/gha_release_box.sh shard    ARCH   # this runner's slice of one set
 #   bash /tooling/tools/gha_release_box.sh assemble ARCH   # the whole set, from the slices
+#   bash /tooling/tools/gha_release_box.sh host     host   # the host producer (release_host_build.py)
+#   bash tooling/tools/gha_release_box.sh swap GIB RECORD  # ON THE RUNNER, before docker: add swap
 #
 # WHAT IT IS. The box half of tools/runpod_cpu_leg.sh (pixi, the locked
 # default env, the toolchain check, the portable math library) followed by
@@ -26,19 +28,73 @@
 # verified hot-hit (or an R2 hit), so the tree it writes is the one a single
 # box would have written, and a build no shard delivered compiles here.
 #
+# THE MERGED LAYOUT (2026-10-26). A merged shard is ONE compile (one
+# `mojo build` of a directory set's root), the same compile the cpu box runs:
+# same image, path, flags and compiler workers, so the same bytes and keys.
+# When its recorded peak exceeds the runner's 15 GiB the workflow first runs
+# `swap` here ON THE RUNNER (not in the container): a swapfile on the larger
+# of /mnt and /, the size the plan gave (tools/release_github_build.py
+# UNIT_PEAK_GIB), capped at that disk's free space less a reserve, recorded in
+# RECORD. The container has no memory limit, so the compile pages to it.
+#
+# THE HOST PRODUCER (`host`): /root/mojolearn is a GIT CHECKOUT of the commit
+# (the producer reads HEAD, a clean tracked tree and `git archive` of the
+# donor's revision), /root/donor/build the donor runtime build. It runs the
+# SOURCE's own tools/release_host_build.py build (no overlay: the producer
+# refuses tools from outside the frozen checkout) with the default pixi env
+# and the pinned patchelf 0.17.2, as the 0.8.58 box did
+# (docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md), into
+# /root/leg_out/host-build.
+#
+# THE CACHE WITHOUT R2. GHA_PRUNE_HOT=1 (no map_url: actions/cache restored
+# the hot directory): after a shard, every archive no build of this shard used
+# or made is removed, so the cache saves only current archives.
+#
 # Mounts (the workflow's docker run): /root/mojolearn the source tree,
 # /tooling the tooling checkout (read-only), /root/.mojolearn_bincache the URL
-# map and hot directory, /root/leg_out the results.
-# Environment: MOJOLEARN_COMMIT, GHA_BUILD_JOBS, GHA_SHARD_ONLY (shard).
+# map and hot directory, /root/leg_out the results; host: /root/donor.
+# Environment: MOJOLEARN_COMMIT, GHA_BUILD_JOBS, GHA_SHARD_ONLY (shard),
+# GHA_RELEASE_MODES (MOJOLEARN_RELEASE_MODES for the route), GHA_PRUNE_HOT.
 set -u
-MODE=${1:?shard or assemble}
+
+# swap GIB RECORD: on the runner, with sudo. The reserve keeps the build's own
+# disk (tree, image, pixi env, outputs) free when the swap must share /.
+swap_up() {
+    local want=$1 rec=$2 dir=/ free m cap reserve=30 made f=/mojolearn-build.swap
+    mkdir -p "$(dirname "$rec")"
+    [[ "$want" =~ ^[0-9]+$ ]] || { echo "swap: GiB must be a number, got '$want'" >&2; return 2; }
+    if (( want == 0 )); then { echo "requested_gib=0 made_gib=0"; free -g; } > "$rec"; return 0; fi
+    free=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
+    if [[ -d /mnt ]]; then
+        m=$(df -BG --output=avail /mnt | tail -1 | tr -dc 0-9)
+        if (( m - 4 > free - reserve )); then dir=/mnt; free=$m; reserve=4; f=/mnt/mojolearn-build.swap; fi
+    fi
+    cap=$((free - reserve)); (( cap > 0 )) || cap=0
+    made=$want; (( made <= cap )) || made=$cap
+    if (( made > 0 )); then
+        { sudo fallocate -l "${made}G" "$f" && sudo chmod 600 "$f" && sudo mkswap "$f" > /dev/null && sudo swapon "$f"; } \
+            || { echo "swap: could not add ${made}G at $f" >&2; made=0; }
+    fi
+    { echo "requested_gib=$want made_gib=$made file=$f disk=$dir disk_free_gib=$free reserve_gib=$reserve"
+      swapon --show; free -g; } | tee "$rec"
+    (( made >= want )) || echo "::warning::swap: ${made} of ${want} GiB on $dir; the compile may run out of memory"
+    return 0
+}
+MODE=${1:?shard, assemble, host or swap}
+if [[ "$MODE" = swap ]]; then swap_up "${2:?GiB}" "${3:?record file}"; exit $?; fi
 ARCH=${2:?arch}
 R=/root/mojolearn
 T=/tooling
 OUT=/root/leg_out
 PIXIVER=0.77.0
-case "$MODE" in shard|assemble) ;; *) echo "mode must be shard or assemble" >&2; exit 2 ;; esac
-case "$ARCH" in sm_90a|sm_89|sm_80) VENDOR=cuda ;; gfx942) VENDOR=hip ;; *) echo "unknown arch $ARCH" >&2; exit 2 ;; esac
+case "$MODE" in shard|assemble|host) ;; *) echo "mode must be shard, assemble, host or swap" >&2; exit 2 ;; esac
+case "$MODE:$ARCH" in
+    host:host) VENDOR=none ;;
+    host:*) echo "host mode takes the arch 'host'" >&2; exit 2 ;;
+    *:sm_90a|*:sm_89|*:sm_80) VENDOR=cuda ;;
+    *:gfx942) VENDOR=hip ;;
+    *) echo "unknown arch $ARCH" >&2; exit 2 ;;
+esac
 [[ "${MOJOLEARN_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || { echo "MOJOLEARN_COMMIT must be a full SHA" >&2; exit 2; }
 JOBS=${GHA_BUILD_JOBS:-2}
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo "GHA_BUILD_JOBS must be 1..16" >&2; exit 2; }
@@ -58,6 +114,7 @@ ph start
 need=""
 command -v curl > /dev/null || need="$need curl ca-certificates"
 command -v xz > /dev/null || need="$need xz-utils"
+[[ "$MODE" = host ]] && ! command -v git > /dev/null && need="$need git"
 if [[ -n "$need" ]]; then
     say "apt-get install$need"
     ( export DEBIAN_FRONTEND=noninteractive
@@ -70,16 +127,20 @@ fi
 # kernel keeps it, and the sampled maximum of memory.current and of host
 # MemTotal - MemAvailable either way.
 (
-    max_cg=0; max_host=0
+    max_cg=0; max_host=0; max_swap=0
     while :; do
         cg=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+        # the RAM cgroup stops at the runner's 16 GB; what a merged compile pages out is here
+        sw=$(cat /sys/fs/cgroup/memory.swap.current 2>/dev/null || echo 0)
+        (( sw > max_swap )) && max_swap=$sw
         # %.0f, never print or %d: the image's mawk prints values above 2^31
         # in exponent form (2.16e+09, a bash arithmetic error every sample)
         # and clamps %d at 2147483647 (the runs of 2026-10-20 and 10-21).
         used=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{printf "%.0f\n", (t-a)*1024}' /proc/meminfo)
         (( cg > max_cg )) && max_cg=$cg
         (( used > max_host )) && max_host=$used
-        printf 'cgroup_sampled_max_bytes=%s\nhost_used_sampled_max_bytes=%s\n' "$max_cg" "$max_host" > "$G/memory.sampled"
+        printf 'cgroup_sampled_max_bytes=%s\nhost_used_sampled_max_bytes=%s\ncgroup_swap_sampled_max_bytes=%s\n' \
+            "$max_cg" "$max_host" "$max_swap" > "$G/memory.sampled"
         sleep 2
     done
 ) &
@@ -107,6 +168,40 @@ done
 "$R/.pixi/envs/default/bin/mojo" --version >> "$G/box.txt" 2>&1 || { say "mojo does not run"; exit 3; }
 ph env_end
 
+if [[ "$MODE" = host ]]; then
+    # ------------------------------------------------ the host producer
+    # The checkout belongs to the runner's user; git refuses it to root without this.
+    git config --global --add safe.directory "$R"
+    [[ "$(git -C "$R" rev-parse HEAD)" = "$MOJOLEARN_COMMIT" ]] || { say "the checkout is not $MOJOLEARN_COMMIT"; exit 3; }
+    [[ -f /root/donor/build/build-provenance.json ]] || { say "no donor build at /root/donor/build"; exit 3; }
+    # patchelf 0.17.2.4, the stager every release route pins (release_linux_cpu_box.sh)
+    "$R/.pixi/envs/default/bin/python3" -m venv /root/release-tools > "$G/patchelf.log" 2>&1 \
+        && /root/release-tools/bin/python -m pip install -q --disable-pip-version-check --only-binary=:all: \
+            --retries 2 --timeout 30 'patchelf==0.17.2.4' >> "$G/patchelf.log" 2>&1 \
+        || { say "patchelf did not install"; tail -5 "$G/patchelf.log"; exit 3; }
+    [[ $(/root/release-tools/bin/patchelf --version) = "patchelf 0.17.2" ]] || { say "patchelf 0.17.2 required"; exit 3; }
+    COMPILER_SHA=$(sha256sum "$R/.pixi/envs/default/bin/mojo" | cut -c1-64)
+    { echo "source_commit=$MOJOLEARN_COMMIT"
+      echo "donor_commit=$("$R/.pixi/envs/default/bin/python3" -c 'import json; print(json.load(open("/root/donor/build/build-provenance.json"))["source_commit"])')"
+      echo "compiler_sha256=$COMPILER_SHA"
+      echo "producer_sha256=$(sha256sum "$R/tools/release_host_build.py" | cut -c1-64)"; } > "$G/host.txt"
+    ph run_start
+    rc=0
+    ( cd "$R" && env -u MOJOLEARN_COMMIT HOME=/root PATH="/root/.pixi/bin:$PATH" \
+        "$R/.pixi/envs/default/bin/python3" tools/release_host_build.py build --root "$R" \
+        --runtime-build /root/donor/build --output "$OUT/host-build" --pixi-env default \
+        --patchelf /root/release-tools/bin/patchelf --compiler-sha256 "$COMPILER_SHA" ) > "$G/host.log" 2>&1 || rc=$?
+    ph run_end
+    echo "exit=$rc" >> "$G/host.txt"
+    tail -5 "$G/host.log" >> "$G/host.txt"
+    kill $SAMPLER 2>/dev/null
+    cat "$G/memory.sampled" > "$G/memory.txt" 2>/dev/null
+    echo "cgroup_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
+    echo "cgroup_swap_peak_bytes=$(cat /sys/fs/cgroup/memory.swap.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
+    cat "$G/host.txt"
+    exit "$rc"
+fi
+
 # The host math library, as tools/runpod_cpu_leg.sh builds it on every CPU pod
 # before its command (packaging/portable_math/stage.py's own recipe).
 env PYTHONPATH="$R/packaging/portable_math" "$R/.pixi/envs/default/bin/python3" -c \
@@ -124,6 +219,13 @@ for f in $OVERLAY; do printf 'after %s %s\n' "$f" "$(sha256sum "$f" | cut -c1-64
 # ---------------------------------------------------------------- the command
 ph run_start
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS=$JOBS MOJOLEARN_LINUX_CPU=x86-64-v3
+# The release modes choose the tiers, as tools/release_linux_build.sh exports
+# them to the cpu box (MOJOLEARN_RELEASE_* is never a cache key field).
+export MOJOLEARN_RELEASE_MODES="${GHA_RELEASE_MODES:-identical}"
+# One merged compile on 4 vCPU, possibly paging: the merged bound from
+# tools/release_limits.sh (not MOJOLEARN_*, so never a key field either).
+. "$T/tools/release_limits.sh"
+export RELEASE_MERGED_TIMEOUT_SECONDS="$GHA_MERGED_TIMEOUT_SECONDS"
 export MOJOLEARN_COMMIT PYTHONPATH="$R/python" LEG_OUT="$OUT"
 export MOJOLEARN_BINCACHE_OUT="$OUT/bincache" MOJOLEARN_BINCACHE=1
 unset MOJOLEARN_BINCACHE_SHARD_ONLY
@@ -137,6 +239,7 @@ tail -40 "$G/route.log"
 kill $SAMPLER 2>/dev/null
 cat "$G/memory.sampled" > "$G/memory.txt" 2>/dev/null
 echo "cgroup_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
+    echo "cgroup_swap_peak_bytes=$(cat /sys/fs/cgroup/memory.swap.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
 echo "mem_total_bytes=$(awk '/^MemTotal:/{printf "%.0f\n", $2*1024}' /proc/meminfo)" >> "$G/memory.txt"
 echo "nproc=$(nproc)" >> "$G/memory.txt"
 df -B1 /root | tail -1 | awk '{print "disk_used_bytes=" $3 "\ndisk_free_bytes=" $4}' >> "$G/memory.txt"
@@ -189,6 +292,18 @@ print(open(out).read(), end="")
 sys.exit(1 if bad else 0)
 PY
     src=$?
+    if [[ "${GHA_PRUNE_HOT:-0}" = 1 ]]; then
+        # keep only the archives this shard's builds used or made (shard.tsv's key column)
+        keep=$(awk -F'\t' '$5 != "-" {print $5}' "$G/shard.tsv")
+        for a in /root/.mojolearn_bincache/hot/*.tar.gz; do
+            [[ -f "$a" ]] || continue
+            k=$(basename "$a" .tar.gz)
+            grep -qxF "$k" <<< "$keep" || { rm -f "$a"; echo "pruned $k" >> "$G/hot_pruned.txt"; }
+        done
+        for a in /root/.mojolearn_bincache/hot/*.tar.gz; do
+            [[ -f "$a" ]] && printf '%s\t%s\n' "$(basename "$a" .tar.gz)" "$(sha256sum "$a" | cut -c1-64)"
+        done > "$G/hot_sha256.tsv"
+    fi
     say "shard: $(grep -c $'\tok\t' "$G/shard.tsv") of $(wc -l < "$G/shard.tsv") builds ok, $(wc -l < "$G/hot_sha256.tsv") archives in the hot directory"
     exit "$src"
 fi

@@ -49,14 +49,43 @@ RELEASE_LEGS = ["cuda-sm_89"] + (["cuda-sm_80"] if ptx_shipped() else []) + ["hi
 class Workflow(unittest.TestCase):
     def test_manual_only_and_never_interpolates_the_map_url(self):
         text = WF.read_text()
-        # Both native artifact jobs and the isolated experimental PTX job retain .libs.
-        self.assertEqual(text.count("include-hidden-files: true"), 2)  # the experimental PTX job is gone
+        # shard, assemble and the host producer each carry a .libs/ runtime closure
+        self.assertEqual(text.count("include-hidden-files: true"), 3)
         on = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
         self.assertIn("workflow_dispatch:", on)
         for trigger in ("push:", "pull_request", "schedule:"):
             self.assertNotIn(trigger, on)
         self.assertNotIn("inputs.map_url", text)
+        self.assertNotIn("inputs.host_donor_url", text)
         self.assertIn('--event "$GITHUB_EVENT_PATH"', text)
+
+    def test_merged_jobs_get_swap_modes_and_the_cache_only_without_r2(self):
+        text = WF.read_text()
+        self.assertEqual(text.count("gha_release_box.sh swap"), 3)   # shard, assemble and host
+        self.assertIn("SWAP_GIB: ${{ matrix.swap_gib }}", text)
+        self.assertEqual(text.count('GHA_RELEASE_MODES="$MODES"'), 2)
+        self.assertEqual(text.count("steps.map.outputs.r2 == 'false'"), 3)  # restore, prune, save
+        self.assertIn("timeout-minutes: 360", text)
+        gha = (ROOT / "tools/gha_release_box.sh").read_text()
+        self.assertIn('export MOJOLEARN_RELEASE_MODES="${GHA_RELEASE_MODES:-identical}"', gha)
+        self.assertIn('export RELEASE_MERGED_TIMEOUT_SECONDS="$GHA_MERGED_TIMEOUT_SECONDS"', gha)
+        sys.path.insert(0, str(ROOT / "tools"))
+        import release_limits
+        self.assertLessEqual(release_limits.LIMITS["GHA_MERGED_TIMEOUT_SECONDS"],
+                             release_limits.LIMITS["CPU_BOX_RELEASE_BUILD_SECONDS"])
+        # the release modes are never a cache-key field, so passing them keeps every key the cpu box's
+        self.assertNotIn("MOJOLEARN_RELEASE_MODES", bincache.build_env({"MOJOLEARN_RELEASE_MODES": "identical"}))
+
+    def test_the_host_job_runs_the_sources_own_producer_from_a_git_checkout(self):
+        text = WF.read_text()
+        host = text.split("\n  host:\n", 1)[1]
+        self.assertIn('-v "$GITHUB_WORKSPACE/src:/root/mojolearn"', host)
+        self.assertIn("gha_release_box.sh host host", host)
+        self.assertIn("release_github_build.py donor --event", host)
+        gha = (ROOT / "tools/gha_release_box.sh").read_text()
+        self.assertIn('tools/release_host_build.py build --root "$R"', gha)
+        self.assertIn("--pixi-env default", gha)
+        self.assertIn("'patchelf==0.17.2.4'", gha)
 
     def test_same_image_and_overlay_as_the_cpu_box(self):
         box = (ROOT / "tools/release_linux_build.sh").read_text()
@@ -183,63 +212,86 @@ class MergedPlan(unittest.TestCase):
 
     def run_plan(self, src, *extra):
         d = Path(tempfile.mkdtemp())
-        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds: None):
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
             rc = rgb.main(["plan", "--src", str(src), "--sets", "sm_89 gfx942", "--shards", "6",
                            "--json", str(d / "plan.json"), *extra])
         return rc, json.loads((d / "plan.json").read_text())
 
-    def test_free_runners_refuse_the_merged_layout_with_one_sentence(self):
-        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds: None):
-            with self.assertRaises(SystemExit) as cm:
-                rgb.main(["plan", "--src", str(merged_source()), "--sets", "sm_89", "--shards", "6"])
-        msg = str(cm.exception)
-        self.assertIn("cannot build on GitHub's free runners", msg)
-        self.assertIn("46.4 GB", msg)
-        self.assertIn("tools/release_linux_build.sh", msg)
-        self.assertIn("--runner-mem-gib N when the runners have N >= 50 GiB", msg)
-        self.assertEqual(msg.count(". "), 0, "one sentence")
-        # not enough for the identical tier: still refused
-        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds: None):
-            with self.assertRaises(SystemExit):
-                rgb.main(["plan", "--src", str(merged_source()), "--sets", "sm_89", "--runner-mem-gib", "40"])
-
-    def test_large_runners_get_one_merged_build_per_shard(self):
-        rc, doc = self.run_plan(merged_source(), "--runner-mem-gib", str(max(rgb.NEEDED_GIB.values())))
+    def test_one_merged_compile_per_shard_with_swap_for_its_peak(self):
+        rc, doc = self.run_plan(merged_source())
         self.assertEqual(rc, 0)
         self.assertEqual((doc["layout"], doc["shards"], doc["builds"]), ("merged", 3, 3))
+        self.assertGreaterEqual(doc["jobs_per_set"], doc["shards"] + 1)
         rows = doc["matrix"]["include"]
         self.assertEqual(len(rows), 6)
-        for arch in ("sm_89", "gfx942"):
+        for arch, vendor in (("sm_89", "cuda"), ("gfx942", "hip")):
             mine = [r for r in rows if r["arch"] == arch]
             self.assertTrue(all(r["n"] == 1 for r in mine))
             self.assertEqual(sorted(r["only"] for r in mine),
                              ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
+            for r in mine:
+                tier = r["only"].split(":")[0]
+                self.assertEqual(r["peak_gib"], rgb.UNIT_PEAK_GIB[(tier, vendor)])
+                self.assertEqual(r["swap_gib"], rgb.swap_gib(r["peak_gib"]))
+                self.assertEqual(r["unit"], tier + "-merged_build")
+            # both merged compiles page past the runner's RAM (the host one was killed at 16 GB
+            # without swap, run 40272710760)
+            for r in mine:
+                if r["only"] != "fast:merged_build.sh":
+                    self.assertGreater(r["swap_gib"] + rgb.RUNNER_RAM_GIB, r["peak_gib"])
+        self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows))
         # the heaviest (identical) goes onto shard 0
         self.assertEqual(rows[0]["only"], "identical:merged_build.sh")
 
-    def test_the_needed_memory_covers_the_measured_peaks(self):
-        # DO MI325X 2026-10-20: host 6.9 GB, fast 36.6 GB, identical (+ byte LM) 46.4 GB
-        for tier, peak in (("host", 6.9), ("fast", 36.6), ("identical", 46.4)):
-            self.assertGreater(rgb.NEEDED_GIB[tier], peak)
+    def test_the_release_modes_choose_the_tiers(self):
+        rc, doc = self.run_plan(merged_source(), "--modes", "identical")
+        self.assertEqual(rc, 0)
+        self.assertEqual(doc["modes"], ["identical"])
+        self.assertEqual(sorted(r["only"] for r in doc["matrix"]["include"] if r["arch"] == "sm_89"),
+                         ["host:merged_build.sh", "identical:merged_build.sh"])
 
-    def test_the_real_source_is_refused_or_planned_per_its_layout(self):
+    def test_a_compile_no_free_runner_can_hold_is_refused_with_one_sentence(self):
+        big = dict(rgb.UNIT_PEAK_GIB, **{("identical", "cuda"): 100})
+        with unittest.mock.patch.object(rgb, "UNIT_PEAK_GIB", big), \
+                unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
+            with self.assertRaises(SystemExit) as cm:
+                rgb.main(["plan", "--src", str(merged_source()), "--sets", "sm_89", "--shards", "6"])
+        msg = str(cm.exception)
+        self.assertIn("identical:merged_build.sh", msg)
+        self.assertIn("tools/release_linux_build.sh", msg)
+        self.assertEqual(msg.count(". "), 0, "one sentence")
+
+    def test_the_planning_peaks_cover_every_recorded_peak(self):
+        # 0.8.57 cpu box (guard): sm_89 48.59, sm_80 48.12, gfx942 47.87 GiB; DO MI325X 2026-10-20:
+        # fast 36.6 GB; the host compile was killed at 16.0 GB on a free runner (run 40272710760)
+        for key, peak in ((("identical", "cuda"), 48.59), (("identical", "hip"), 47.87),
+                          (("fast", "cuda"), 36.6), (("fast", "hip"), 36.6), (("host", "cuda"), 16.0),
+                          (("host", "hip"), 16.0)):
+            self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[key], peak)
+            self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[key]), rgb.SWAP_MAX_GIB)
+
+    def test_the_host_producer_needs_a_donor(self):
+        with self.assertRaisesRegex(SystemExit, "donor"):
+            rgb.build_plan(merged_source(), ["host"], 6)
+        doc = rgb.build_plan(merged_source(), ["host"], 6, host_donor=True)
+        self.assertEqual((doc["sets"], doc["host"], doc["matrix"]["include"]), ([], True, []))
+        self.assertEqual(doc["host_swap_gib"], rgb.swap_gib(rgb.HOST_PRODUCER_PEAK_GIB))
+        self.assertGreater(doc["host_swap_gib"], 0)
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
+            doc = rgb.build_plan(merged_source(), ["sm_89", "host"], 6)
+        self.assertEqual((doc["sets"], doc["host"]), (["sm_89"], True))
+        self.assertIn("host", doc["estimate"]["per_set"])
+
+    def test_the_real_source_plans_per_its_layout(self):
         merged = rgb.source_merged(ROOT)
         if not merged:
             self.skipTest("this checkout builds per-binding")
-        ps = rgb.plan_set(ROOT)
-        self.assertEqual(sorted(e for e, _ in ps["builds"]),
-                         ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
-        rgb.check_counts(ROOT, ps["per_binding"])
-        with self.assertRaises(SystemExit) as cm:
-            rgb.main(["plan", "--src", str(ROOT), "--sets", "sm_89 gfx942", "--shards", "6"])
-        self.assertIn("cannot build on GitHub's free runners", str(cm.exception))
-
-    def test_run_refuses_a_merged_commit_before_dispatching(self):
-        with unittest.mock.patch.object(rgb, "commit_merged", lambda c, env=None: True), \
-                unittest.mock.patch.object(rgb, "gh", lambda *a, **k: self.fail("dispatched")):
-            with self.assertRaises(SystemExit) as cm:
-                rgb.main(["run", "--commit", C, "--arch", "sm_89", "--out", tempfile.mkdtemp()])
-        self.assertIn("cannot build on GitHub's free runners", str(cm.exception))
+        ps = rgb.plan_set(ROOT, ("identical",))
+        self.assertEqual(sorted(e for e, _ in ps["builds"]), ["host:merged_build.sh", "identical:merged_build.sh"])
+        rgb.check_counts(ROOT, ps["per_binding"], ("identical",))
+        doc = rgb.build_plan(ROOT, ["sm_89", "sm_80", "gfx942"], 6, ("identical",))
+        self.assertEqual(len(doc["matrix"]["include"]), 6)
+        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + 3 * 3)
 
     def test_layout_reads_the_commit_without_a_checkout(self):
         head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -267,6 +319,31 @@ class JobMap(unittest.TestCase):
                   "--set-index", "0", "--job", "0", "--jobs-per-set", "3", "--leg", "99"])
         m = bincache.read_map(d / "urls2.tsv")
         self.assertEqual((m["get"], m["put"]), ({}, []))
+        # the job learns whether R2 is its cache (else actions/cache)
+        rgb.main(["job-map", "--event", str(d / "event.json"), "--dest", str(d / "urls3.tsv"),
+                  "--set-index", "0", "--job", "0", "--jobs-per-set", "3", "--github-output", str(d / "out")])
+        self.assertEqual((d / "out").read_text(), "r2=false\n")
+
+    def test_the_donor_is_verified_by_its_sha256(self):
+        import tarfile
+        d = Path(tempfile.mkdtemp())
+        (d / "src/build").mkdir(parents=True)
+        (d / "src/build/build-provenance.json").write_text(json.dumps({"source_commit": C}))
+        with tarfile.open(d / "donor.tar.gz", "w:gz") as tf:
+            tf.add(str(d / "src/build"), arcname="build")
+        good = hashlib.sha256((d / "donor.tar.gz").read_bytes()).hexdigest()
+        for sha, ok in (("0" * 64, False), (good, True)):
+            (d / "event.json").write_text(json.dumps({"inputs": {"host_donor_url": (d / "donor.tar.gz").as_uri(),
+                                                                 "host_donor_sha256": sha}}))
+            dest = d / ("ok" if ok else "bad")
+            if ok:
+                self.assertEqual(rgb.main(["donor", "--event", str(d / "event.json"), "--dest", str(dest),
+                                           "--github-output", str(d / "gho")]), 0)
+                self.assertEqual((d / "gho").read_text(), "revision=%s\n" % C)
+                self.assertTrue((dest / "build/build-provenance.json").is_file())
+            else:
+                with self.assertRaisesRegex(SystemExit, "the dispatch named"):
+                    rgb.main(["donor", "--event", str(d / "event.json"), "--dest", str(dest)])
         self.assertEqual(m["header"], {"partition": rgb.partition(), "image": rgb.IMAGE_DECL, "leg": "gha-99"})
 
 
@@ -344,7 +421,10 @@ elif a[:2] == ["run", "view"]:
 elif a[:2] == ["run", "download"]:
     if os.environ.get("STUB_NO_ARTIFACT"):
         sys.exit(1)
-    shutil.copytree(os.environ["STUB_ART"], os.path.join(a[a.index("-D") + 1], "leg"))
+    if a[a.index("-n") + 1] == "host-build":
+        shutil.copytree(os.environ["STUB_HOST_ART"], a[a.index("-D") + 1], dirs_exist_ok=True)
+    else:
+        shutil.copytree(os.environ["STUB_ART"], os.path.join(a[a.index("-D") + 1], "leg"))
 else:
     sys.exit(3)
 '''
@@ -398,6 +478,9 @@ class Run(unittest.TestCase):
         self.assertEqual(wr[2], "7")
         self.assertIn("commit=" + C, wr)
         self.assertIn("map_url=", wr)
+        self.assertIn("sets=sm_89", wr)
+        self.assertIn("modes=identical", wr)
+        self.assertIn("host_donor_url=", wr)
         self.assertTrue((self.d / "out/cuda-sm_89/release-build/build/build-provenance.json").is_file())
         self.assertIn("TREE OK", (self.d / "out/GHA/summary.txt").read_text())
         self.assertIn("assemble sm_89\tsuccess", (self.d / "out/GHA/jobs.tsv").read_text())
@@ -417,6 +500,52 @@ class Run(unittest.TestCase):
         os.environ["STUB_CONCLUSION"] = "failure"
         with self.assertRaisesRegex(SystemExit, "assemble sm_89 \\(failure\\)"):
             self.run_()
+
+    def test_the_release_modes_reach_the_dispatch(self):
+        os.environ["MOJOLEARN_RELEASE_MODES"] = "fast identical"
+        try:
+            self.assertEqual(self.run_(), 0)
+        finally:
+            os.environ.pop("MOJOLEARN_RELEASE_MODES")
+        calls = [json.loads(l) for l in (self.d / "log").read_text().splitlines()]
+        self.assertIn("modes=fast identical", next(c for c in calls if c[:2] == ["workflow", "run"]))
+
+    def host_art(self, commit=C, data=b"h"):
+        h = self.d / "host-art"
+        (h / "set/host").mkdir(parents=True, exist_ok=True)
+        (h / "set/host/_mojolearn_native_host.so").write_bytes(b"h")
+        proof = dict(schema="mojolearn.linux.host-build.v1", complete=True, build_exit=0, source_commit=commit,
+                     host_extension={"mojolearn/cpu/host/_mojolearn_native_host.so": hashlib.sha256(data).hexdigest()})
+        (h / "host-build-proof.json").write_text(json.dumps(proof))
+        os.environ["STUB_HOST_ART"] = str(h)
+
+    def test_the_host_producer_is_downloaded_and_verified(self):
+        self.host_art()
+        try:
+            rc = rgb.main(["run", "--commit", C, "--arch", "sm_89", "--host", "--out", str(self.d / "out"),
+                           "--no-bincache", "--poll", "0"])
+        finally:
+            os.environ.pop("STUB_HOST_ART")
+        self.assertEqual(rc, 0)
+        calls = [json.loads(l) for l in (self.d / "log").read_text().splitlines()]
+        self.assertIn("sets=sm_89 host", next(c for c in calls if c[:2] == ["workflow", "run"]))
+        summary = (self.d / "out/GHA/summary.txt").read_text()
+        self.assertIn("HOST OK", summary)
+        self.assertIn("retained_release_composition.py", summary)
+
+    def test_a_host_the_proof_does_not_name_is_refused(self):
+        self.host_art(data=b"other")
+        try:
+            rc = rgb.main(["run", "--commit", C, "--arch", "sm_89", "--host", "--out", str(self.d / "out"),
+                           "--no-bincache", "--poll", "0"])
+        finally:
+            os.environ.pop("STUB_HOST_ART")
+        self.assertEqual(rc, 1)
+        self.assertIn("HOST REFUSED", (self.d / "out/GHA/summary.txt").read_text())
+
+    def test_host_only_needs_a_donor(self):
+        with self.assertRaisesRegex(SystemExit, "host-donor"):
+            rgb.main(["run", "--commit", C, "--host", "--out", str(self.d / "o3"), "--no-bincache"])
 
     def test_amd_refuses_to_build_cold(self):
         with self.assertRaisesRegex(SystemExit, "allow-cold-amd"):
