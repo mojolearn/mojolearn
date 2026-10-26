@@ -522,3 +522,36 @@ def test_version_literal_view_rejects_other_changes():
     for source in (b'__version__ = version()\n', b'__version__ = "0.8.59"\nexecute()\n',
                    b'__version__ = "0.8.59"; other = 1\n', b'__version__ = "arbitrary"\n'):
         assert d._version_literal_view(source) is None
+
+
+def test_scope_annotation_preserves_inputs_and_separate_multi_device_obligations():
+    import pytest
+    snap = snapshot()
+    fixture = Dependencies(); fixture.setUp()
+    old = manifest(fixture.expand(('identity',), snap), 'b' * 40)
+    for wanted in old['requirements'].values():
+        wanted['required'] = True
+    old['requirements'].update({name: dict(required=True, kind='multi', inputs={}, fingerprint=d.digest({}))
+                               for name in ('multi-gpu-nvidia', 'multi-gpu-amd')})
+    rows = {
+        'one': dict(kind='cpu-host-route-only', claim_devices=1, oracle='self', anchor='in-cell-self',
+                    required_columns=['cpu'], excluded={'nvidia': 'host only'}, separate_requirements=[]),
+        'two': dict(kind='multi-device-driver', claim_devices=2, oracle='independent', anchor='in-cell-independent',
+                    required_columns=[], excluded={'nvidia': 'two physical devices required'},
+                    separate_requirements=['multi-gpu-nvidia', 'multi-gpu-amd'])}
+    scope = dict(schema='mojolearn.release-identity-applicability.v1', source_revision='b' * 40,
+                 lanes=rows, digest='scope-digest')
+    with patch.object(d, 'identity_scope_snapshot', return_value=scope):
+        new = d.scope_identity_manifest('.', old)
+        for name in old['requirements']:
+            assert old['requirements'][name]['inputs'] == new['requirements'][name]['inputs']
+            assert old['requirements'][name]['fingerprint'] == new['requirements'][name]['fingerprint']
+        assert not new['requirements']['identity-nvidia/one']['required']
+        assert not new['requirements']['identity-nvidia/two']['required']
+        assert new['requirements']['multi-gpu-nvidia']['required']
+        assert new['requirements']['multi-gpu-amd']['required']
+        assert old['requirements']['identity-nvidia/one']['required']
+        old['requirements']['multi-gpu-amd']['required'] = False
+        deferred = d.scope_identity_manifest('.', old)
+        assert deferred['requirements']['multi-gpu-amd']['required'] is False
+        assert deferred['requirements']['identity-nvidia/two']['dependency_provenance']['identity_applicability']['separate_requirements'] == ['multi-gpu-nvidia', 'multi-gpu-amd']

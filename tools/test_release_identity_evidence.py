@@ -21,8 +21,18 @@ LABELS = {"apple": "apple-m4", "nvidia": "nvidia-l40s-sm89", "amd": "amd-mi325x-
 BACKENDS = {"apple": "metal", "nvidia": "cuda", "amd": "hip", "cpu": "cpu", "ptx": "cuda"}
 
 
+def synthetic_scope(wanted, columns=("apple", "nvidia", "amd", "cpu"), kind="estimator-both-routes"):
+    vendor = wanted["inputs"]["unit"]["vendor"]
+    return dict(schema="mojolearn.release-identity-applicability.v1", source_revision=wanted["source_revision"],
+                lane=E.unit_lane(wanted), vendor=vendor, kind=kind, claim_devices=1,
+                applicable=vendor in columns, required_columns=list(columns),
+                excluded={v: "no applicable arithmetic" for v in E.VENDORS if v not in columns},
+                separate_requirements=[])
+
+
 @pytest.fixture(autouse=True)
 def no_git_declarations(monkeypatch):
+    monkeypatch.setattr(E, "unit_scope", synthetic_scope)
     E._RECORDS.clear()
     monkeypatch.setattr(E, "declarations", lambda revision: (frozenset({"gpu-lane"}), ("par-",)))
 
@@ -113,7 +123,7 @@ def columns(tmp_path, lanes=("ols",), classes=("apple", "nvidia", "amd", "cpu", 
 
 def begin_all(ledger, tmp_path):
     out = tmp_path / "out"
-    return [E.begin(ledger, v, out)[0] for v in E.VENDORS]
+    return [path for v in E.VENDORS if (path := E.begin(ledger, v, out)[0]) is not None]
 
 
 def run(ledger, tmp_path, records, launches=None, **kwargs):
@@ -570,3 +580,59 @@ def test_version_proof_refuses_meaningful_or_unreviewed_changes(version_label_un
         new['missing_inputs'] = ['compiler']
     new['fingerprint'] = R.digest(new['inputs'])
     assert D.version_label_proof('.', old, new) is None
+
+
+def scoped_ledger(tmp_path, monkeypatch, columns, kind):
+    lane = 'host-lane' if columns == ('cpu',) else 'gpu-lane'
+    monkeypatch.setattr(E, 'unit_scope', lambda wanted: synthetic_scope(wanted, columns, kind))
+    ledger = ledger_with(tmp_path, lanes=(lane,))
+    doc = ledger.read()
+    for wanted in doc['requirements'].values():
+        wanted['required'] = wanted['inputs']['unit']['vendor'] in columns
+    ledger.sync(doc)
+    return ledger, lane
+
+
+def test_host_only_lane_admits_original_cpu_run_without_gpu_records(tmp_path, monkeypatch):
+    ledger, lane = scoped_ledger(tmp_path, monkeypatch, ('cpu',), 'cpu-host-route-only')
+    launches = begin_all(ledger, tmp_path)
+    original = copy.deepcopy(ledger.read()['runs'])
+    result = E.admit(ledger, [columns(tmp_path, lanes=(lane,), classes=('cpu',))], launches,
+                     tmp_path / 'out', check=fake_check)
+    assert result['passed'] == 1 and not result['problems']
+    assert ledger.read()['runs'] == original
+    rows = ledger.plan()
+    assert rows['identity-cpu/host-lane']['status'] == 'passed'
+    assert all(rows[f'identity-{v}/host-lane']['required'] is False for v in E.GPU_CLASSES)
+    detail = rows['identity-cpu/host-lane']['receipt']['identity_detail']
+    assert set(detail['records']) == {'cpu'}
+    assert 'no GPU arithmetic' in detail['comparison']
+
+
+def test_host_only_unusable_cell_is_failure_not_scope_success(tmp_path, monkeypatch):
+    ledger, lane = scoped_ledger(tmp_path, monkeypatch, ('cpu',), 'cpu-host-route-only')
+    cpu = record('cpu', [lane])
+    cpu['cells'][f'{lane}/base']['verdict'] = 'DIVERGENT'
+    result = E.admit(ledger, [columns(tmp_path, lanes=(lane,), classes=('cpu',), cpu=cpu)],
+                     begin_all(ledger, tmp_path), tmp_path / 'out', check=fake_check)
+    assert result['passed'] == 0
+    assert ledger.plan()['identity-cpu/host-lane']['status'] == 'failed'
+
+
+def test_gpu_only_scope_requires_no_cpu_record_but_keeps_ptx_and_three_gpus(tmp_path, monkeypatch):
+    ledger, lane = scoped_ledger(tmp_path, monkeypatch, E.GPU_CLASSES, 'gpu-only')
+    result = E.admit(ledger, [columns(tmp_path, lanes=(lane,), classes=(*E.GPU_CLASSES, 'ptx'))],
+                     begin_all(ledger, tmp_path), tmp_path / 'out', check=fake_check)
+    assert result['passed'] == 3
+    rows = ledger.plan()
+    assert rows['identity-cpu/gpu-lane']['required'] is False
+    nv = rows['identity-nvidia/gpu-lane']['receipt']['identity_detail']
+    assert set(nv['records']) == {*E.GPU_CLASSES, 'ptx'}
+    assert nv['counts']['cpu_declared_na'] > 0
+
+
+def test_host_scope_cannot_qualify_a_gpu_unit(tmp_path, monkeypatch):
+    wanted = unit('amd', 'host-lane')
+    monkeypatch.setattr(E, 'unit_scope', lambda w: synthetic_scope(w, ('cpu',), 'cpu-host-route-only'))
+    with pytest.raises(ValueError, match='inapplicable'):
+        E.required_classes(wanted)

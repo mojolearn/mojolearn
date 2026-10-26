@@ -4,6 +4,8 @@ import argparse
 import ast
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 
@@ -19,6 +21,35 @@ CPU_CLASS = "cpu"
 #: writes none (python/mojolearn/_verify_reference.py `entry`).
 CPU_MODEL_NA = "n/a:gpu-saved-file"
 HERE = Path(__file__).resolve().parent
+
+
+def host_only_declarations(tools_dir=HERE):
+    """Actual CPU-only propositions, using the same rules as column selection.
+
+    This does not accept a caller-supplied exemption or classify cooperative
+    drivers as host-only. No product operation is imported or executed.
+    """
+    tools_dir = Path(tools_dir).resolve()
+    if not (tools_dir / "lane_applicability.py").is_file():
+        return frozenset()  # no source analysis means no scope exemptions
+    if tools_dir != HERE:
+        # Keep source analysis isolated from this tooling checkout's imports.
+        program = ("import json,sys;sys.path.insert(0,sys.argv[1]);"
+                   "import lane_applicability as a;"
+                   "print(json.dumps(sorted(n for n,s in a.scopes().items() "
+                   "if s.claim_devices<2 and s.applicable('cpu-host')[0] and "
+                   "all(not s.applicable(c)[0] for c in "
+                   "('apple-metal','nvidia-1gpu','amd-1gpu')))))")
+        result = subprocess.run([sys.executable, "-c", program, str(tools_dir)],
+                                capture_output=True, text=True, check=True)
+        return frozenset(json.loads(result.stdout))
+    import lane_applicability as applicability
+    if Path(applicability.__file__).resolve().parent != HERE:
+        raise ValueError("lane applicability came from another source checkout")
+    return frozenset(name for name, scope in applicability.scopes().items()
+                     if scope.claim_devices < 2 and scope.applicable("cpu-host")[0]
+                     and all(not scope.applicable(column)[0] for column in
+                             ("apple-metal", "nvidia-1gpu", "amd-1gpu")))
 
 
 def gpu_only_declarations(tools_dir=HERE):
@@ -101,7 +132,7 @@ def selected_lanes(paths, asked=""):
 
 
 def validate(base, candidate, lanes, gpu_only=None):
-    """Require Apple, NVIDIA, AMD and cpu to agree for the selected complete lanes.
+    """Require agreeing applicable columns for the selected complete lanes.
 
     Existing agreeing columns count: an incoming CPU or single-GPU record does
     not require re-recording unaffected vendors. A cpu value that differs from
@@ -113,6 +144,7 @@ def validate(base, candidate, lanes, gpu_only=None):
     the harness's declarations.
     """
     only_lanes, only_prefixes = gpu_only_declarations() if gpu_only is None else gpu_only
+    host_only = host_only_declarations()
     selected = set(lanes)
     problems = []
     if not selected:
@@ -158,8 +190,17 @@ def validate(base, candidate, lanes, gpu_only=None):
                 # merge_reference_lanes keeps global metadata from the base;
                 # a NEW PTX disagreement therefore also needs this local check.
                 ptx = cols.get("ptx")
-                if isinstance(ptx, list) and len(ptx) == 2 and ptx[1] != ref:
+                if lane not in host_only and isinstance(ptx, list) and len(ptx) == 2 and ptx[1] != ref:
                     problems.append(f"{key}/{part}: PTX differs from the reference")
+                if lane in host_only:
+                    # These lanes execute only host arithmetic. Keep original
+                    # GPU-labelled historical observations as provenance, not
+                    # as witnesses of GPU execution or cross-device identity.
+                    if type(cols.get(CPU_CLASS)) is not int:
+                        problems.append(f"{key}/{part}: no agreeing CPU-only host column")
+                    if not ref.startswith("n/a:"):
+                        numerical += 1
+                    continue
                 if ref.startswith("n/a:"):
                     # CPU model loading can be N/A while GPU model bytes exist;
                     # a genuine N/A part is not a numerical identity witness.
@@ -202,6 +243,8 @@ def publish(candidate_path, base_path, destination, lanes):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+    scope = sub.add_parser("host-only")
+    scope.add_argument("--source-root", type=Path, default=HERE.parent)
     selection = sub.add_parser("lanes")
     selection.add_argument("--lanes", default="")
     selection.add_argument("records", nargs="+")
@@ -214,6 +257,9 @@ def main(argv=None):
             check.add_argument("--destination", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "host-only":
+            print(json.dumps(sorted(host_only_declarations(args.source_root / "tools"))))
+            return 0
         if args.command == "lanes":
             print(",".join(selected_lanes(args.records, args.lanes)))
             return 0

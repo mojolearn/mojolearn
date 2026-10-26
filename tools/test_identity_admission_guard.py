@@ -19,6 +19,11 @@ HASH = "a" * 16
 OTHER = "b" * 16
 
 
+@pytest.fixture(autouse=True)
+def inert_scope(monkeypatch):
+    monkeypatch.setattr(GUARD, "host_only_declarations", lambda: frozenset())
+
+
 def tables():
     records = [dict(class_=cls, commit="1" * 40) for cls in ("apple", "nvidia", "amd", "cpu", "ptx")]
     records = [{"class": r["class_"], "commit": "0" * 40 if r["class_"] == "cpu" else r["commit"]} for r in records]
@@ -320,3 +325,42 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
         assert json.loads(table.read_text()) == candidate
         retained = repo / "bench/results/identity_break/2026-10-23-inert/apple-inert" / raw.name
         assert retained.read_bytes() == original
+
+
+def test_source_derived_host_only_cpu_is_sufficient(monkeypatch):
+    monkeypatch.setattr(GUARD, "host_only_declarations", lambda: {"selected"})
+    base, candidate = tables()
+    for key, cell in candidate["cells"].items():
+        if key.startswith("selected/"):
+            for entry in cell.values():
+                entry["cols"] = {"cpu": 3}
+                entry["scope"] = "cpu-host-route-only"
+    report = GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)
+    assert report["admissible"] and report["numerical_parts"] == 8
+    # Scope metadata is descriptive, never an exemption supplied by a caller.
+    monkeypatch.setattr(GUARD, "host_only_declarations", lambda: frozenset())
+    assert not GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
+
+
+@pytest.mark.parametrize("value", [None, [3, OTHER], True, [99, HASH]])
+def test_host_only_still_requires_a_valid_agreeing_cpu(monkeypatch, value):
+    monkeypatch.setattr(GUARD, "host_only_declarations", lambda: {"selected"})
+    base, candidate = tables()
+    candidate["cells"]["selected/base"]["train"]["cols"]["cpu"] = value
+    assert not GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
+
+
+def test_host_only_historical_gpu_observations_do_not_claim_gpu_execution(monkeypatch):
+    monkeypatch.setattr(GUARD, "host_only_declarations", lambda: {"selected"})
+    base, candidate = tables()
+    candidate["cells"]["selected/base"]["train"]["cols"].update(ptx=[4, OTHER], nvidia=[1, OTHER])
+    assert GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]
+
+
+def test_host_only_na_needs_cpu_observation_too(monkeypatch):
+    monkeypatch.setattr(GUARD, "host_only_declarations", lambda: {"selected"})
+    base, candidate = tables()
+    entry = candidate["cells"]["selected/base"]["train"]
+    entry["ref"] = "n/a:declared"
+    del entry["cols"]["cpu"]
+    assert not GUARD.validate(base, candidate, ["selected"], NO_DECLARATIONS)["admissible"]

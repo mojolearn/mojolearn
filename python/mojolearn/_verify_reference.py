@@ -63,6 +63,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 FORMAT = "mojolearn.verify-reference.v1"
 TABLE_DIR = "verify_reference"
@@ -581,6 +582,25 @@ def _corroborated(by_cls, ref):
     return len(agree) >= 2 or any(won[3] >= 2 for won in agree)
 
 
+def _host_only_source_lanes(repo_root):
+    """Read the producer checkout's existing column applicability rules.
+
+    The installed verifier never calls this helper. Isolating source analysis
+    avoids importing a second checkout's harness into the producer process.
+    Without source tooling retain the stricter historical admission rule.
+    """
+    guard = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
+                                        "tools", "identity_admission_guard.py"))
+    if not os.path.isfile(guard) or not os.path.isfile(os.path.join(repo_root, "tools", "lane_applicability.py")):
+        return frozenset()
+    result = subprocess.run([sys.executable, guard, "host-only", "--source-root", os.fspath(repo_root)],
+                            capture_output=True, text=True, check=True)
+    lanes = json.loads(result.stdout)
+    if not isinstance(lanes, list) or any(not isinstance(lane, str) for lane in lanes):
+        raise TableError("invalid source-derived host-only applicability")
+    return frozenset(lanes)
+
+
 def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=None):
     """The table dict from the column JSONs at `record_paths`. `harness` is
     the imported identity_break module: its fixtures decide which columns
@@ -592,6 +612,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         raise ValueError(f"unknown reference parts: {sorted(unknown)}")
     log = log or (lambda s: None)
     lanes = set(lanes if lanes is not None else harness.LANES)
+    host_only = _host_only_source_lanes(repo_root) & lanes
     want_fix = {f: dict(X=harness._h(X), y_clf=harness._h(yc), y_reg=harness._h(yr))
                 for f, (X, yc, yr) in ((f, harness.fixture(f)) for f in harness.FIXTURES)}
     want_held = {f: dict(X=harness._h(harness.heldout(f))) for f in harness.FIXTURES}
@@ -716,7 +737,9 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     grouped = {}
     for (cell_key, part, cls), won in best.items():
         grouped.setdefault((cell_key, part), {})[cls] = won
-    def deciding(g):
+    def deciding(cell_key, g):
+        if cell_key.partition("/")[0] in host_only:
+            return {c: w for c, w in g.items() if c == "cpu"}
         # Apple is a full participant in IDENTICAL, including conflict and
         # corroboration checks. PTX keeps its separate codegen evidence role.
         return {c: w for c, w in g.items() if c != PTX_CLASS}
@@ -724,26 +747,32 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     def newest(g):
         return max(g, key=lambda c: g[c][0])
 
-    used = sorted({won[1] for g in grouped.values() for won in g.values()
-                   if deciding(g) and _corroborated(deciding(g), deciding(g)[newest(deciding(g))][2])})
+    def corroborated(cell_key, decide):
+        return bool(decide) and (cell_key.partition("/")[0] in host_only or
+                                _corroborated(decide, decide[newest(decide)][2]))
+
+    used = sorted({won[1] for (cell_key, _), g in grouped.items() for won in g.values()
+                   if corroborated(cell_key, deciding(cell_key, g))})
     renum = {old: new for new, old in enumerate(used)}
     ptx_divergent = []
     for (cell_key, part), by_cls in sorted(grouped.items()):
-        decide = deciding(by_cls)
+        decide = deciding(cell_key, by_cls)
         if not decide:
             uncorroborated[part] = uncorroborated.get(part, 0) + 1
             continue
         newest_cls = newest(decide)
         n_key, _, ref, _ = by_cls[newest_cls]
-        if not _corroborated(decide, ref):
+        if not corroborated(cell_key, decide):
             uncorroborated[part] = uncorroborated.get(part, 0) + 1
             continue
         ent = dict(ref=ref, cols={})
+        if cell_key.partition("/")[0] in host_only:
+            ent["scope"] = "cpu-host-route-only"
         for cls in sorted(by_cls):
             k, idx, value, _ = by_cls[cls]
             if value == ref:
                 ent["cols"][cls] = renum[idx]
-            elif cls == PTX_CLASS:
+            elif cls == PTX_CLASS and cell_key.partition("/")[0] not in host_only:
                 # A bug to fix in the PTX codegen (docs/NVIDIA_PTX_IDENTITY.md),
                 # listed, never a conflict and never a reason to rerun.
                 ent["cols"][cls] = [renum[idx], value]
@@ -781,7 +810,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         #: reference predates the input it is supposed to describe. A table
         #: generated before this key existed carries none, which reads as
         #: "unknown" and therefore stale for any lane that has a revision.
-        admission_policy=dict(ADMISSION_POLICY),
+        admission_policy=dict(ADMISSION_POLICY, cpu_host_only_witnesses=1),
         #: WHAT THE ADMITTED COLUMNS DID NOT CARRY (2026-09-20). The per-part
         #: counts `build_table` logged, kept in the table so a reader of the
         #: FILE, not only of the build log, can see that (say) every stepfull
