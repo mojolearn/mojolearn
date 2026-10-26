@@ -73,15 +73,29 @@ def members(dir_name, plat, byte_lm):
     """{stem: [members]} for one directory set on one platform."""
     m = manifest()
     d = m["dirs"][dir_name]
-    out = {}
-    for stem, names in d["groups"].items():
-        names = list(names)
-        if byte_lm:
-            for opt, plats in d.get("optional", {}).items():
-                if plat in plats and opt not in names:
-                    names.append(opt)
-        out[stem] = names
+    out = {stem: list(names) for stem, names in d["groups"].items()}
+    if byte_lm:
+        for opt, rule in d.get("optional", {}).items():
+            stem, plats = optional_rule(dir_name, d, opt, rule)
+            if plat in plats and opt not in out[stem]:
+                out[stem].append(opt)
     return out
+
+
+def optional_rule(dir_name, d, name, rule):
+    """(group stem, platforms) of one optional member. The manifest form is
+    {"group": stem, "platforms": [...]}; a bare platform list is accepted only
+    while the directory has ONE group (a member lives in exactly one file)."""
+    if isinstance(rule, dict):
+        stem, plats = rule.get("group"), rule.get("platforms")
+    elif len(d["groups"]) == 1:
+        stem, plats = next(iter(d["groups"])), rule
+    else:
+        raise ValueError(f"merged_groups.json dirs.{dir_name}.optional.{name}: name its group "
+                         f"({{\"group\": stem, \"platforms\": [...]}}); the directory has several")
+    if stem not in d["groups"] or not isinstance(plats, list):
+        raise ValueError(f"merged_groups.json dirs.{dir_name}.optional.{name}: unknown group {stem!r}")
+    return stem, plats
 
 
 def development_members(dir_name, plat, byte_lm):
