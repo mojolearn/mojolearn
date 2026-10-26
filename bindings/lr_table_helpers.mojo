@@ -15,7 +15,7 @@ from bindings.optimizer_public_words import optimizer_python_error
 from bindings.py_balanced import py_call
 from sequence.lr_exact import LrOut, onecycle_exact, pow_exact, schedule_exact
 from sequence.lr_table import (
-    F32P, F64P, LR_BEYOND, LR_ONE_BASED, U8P, LrSpec, decide_many, exact_block, lr_spec_fill, onecycle_fill,
+    F32P, F64P, LR_BEYOND, LR_ONE_BASED, LrSpec, decide_many, lr_spec_fill, onecycle_fill,
     pow_values, schedule_block_values,
 )
 
@@ -27,18 +27,8 @@ def _f64p(addr: PythonObject) raises -> F64P:
     return F64P(unsafe_from_address=a)
 
 
-def _ints(words: PythonObject, count: Int) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(count):  # driver-loop: over argument words (a fixed count per entry point)
-        out.append(Int(py=words[i]))
-    return out^
-
-
-def _floats(words: PythonObject, count: Int) raises -> List[Float64]:
-    var out = List[Float64]()
-    for i in range(count):  # driver-loop: over argument words (a fixed count per entry point)
-        out.append(Float64(py=words[i]))
-    return out^
+# TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_core.patch
 
 
 # ----------------------------------------------------------- the exact route
@@ -59,33 +49,6 @@ def lr_schedule_exact_binding(ip: PythonObject, fp: PythonObject) raises -> Pyth
     min_lr]."""
     return _pair(schedule_exact(Int(py=ip[0]), Float64(py=fp[0]), Float64(py=fp[1]), Int(py=ip[1]),
                                 Int(py=ip[2]), Int(py=ip[3])))
-
-
-def _status_pair(r: Tuple[Int, Int]) raises -> PythonObject:
-    return Python.list(PythonObject(r[0]), PythonObject(r[1]))
-
-
-def _exact_block(kind: Int, ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
-                 ok_addr: PythonObject) raises -> PythonObject:
-    """The exact route over a run: out[i] (float32 words) for every i < n
-    whose ok[i] is 0 (ok_addr 0: every i). kind 0: `_Schedule`, ip = [kind,
-    warmup, total, t0, n], fp = [peak, min_lr]; kind 1: OneCycleLR, ip =
-    [linear, three_phase, total_steps, t0, n], fp as lr_onecycle_exact.
-    Returns [status, index]."""
-    var words = _ints(ip, 5)
-    var oka = Int(py=ok_addr)
-    var r = exact_block(
-        kind, words, _floats(fp, 2 if kind == 0 else 5), words[3], words[4],
-        F32P(unsafe_from_address=Int(py=out_addr)), U8P(unsafe_from_address=oka), oka != 0,
-    )
-    if r[0] != 0:
-        return _status_pair(r)
-    return _status_pair((0, 0))
-
-
-def lr_schedule_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
-                                    ok_addr: PythonObject) raises -> PythonObject:
-    return _exact_block(0, ip, fp, out_addr, ok_addr)
 
 
 # ------------------------------------------------- the public schedule methods

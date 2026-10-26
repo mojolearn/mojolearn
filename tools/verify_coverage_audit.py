@@ -1457,10 +1457,6 @@ ANNOTATIONS = {
     "lr_schedule_exact": ("covered", ["samba-untied-dropout-accum"],
                           _SAMBA_OWNER + " (`exact_schedule`): samba_schedule_rate evaluates the stack's "
                           "WarmupCosineLR at every step through it"),
-    "lr_schedule_exact_block": ("n/a", [], "no live caller: _Schedule._exact_params names it and its one "
-                                           "reader, _lr_at_slow, discards the name; exact_block runs inside "
-                                           "lr_spec_fill (lr_schedule_at / lr_schedule_series), which the "
-                                           "optim-* and sequence-lr-schedulers lanes cover"),
     "optimizer_maximize_dev": ("n/a", [], "a capability probe returning a build constant; its one caller "
                                           "(samba_train_step) tests its presence only, and the maximized "
                                           "step it selects is optimizer_resident_step_io"),

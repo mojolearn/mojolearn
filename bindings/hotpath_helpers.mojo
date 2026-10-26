@@ -96,7 +96,6 @@ from core.hotpath_impl import (
     indices_overlap_i64,
     leave_range_i64,
     mask_from_indices_u8,
-    next_combination_i64,
     reduce_stat,
     select_fold_i64,
     select_mask_u8_i64,
@@ -378,13 +377,8 @@ def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> Py
     return PythonObject(c)
 
 
-def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonObject) raises -> PythonObject:
-    """Advance the ascending p-combination of range(n) at `addr` (int64) to
-    its lexicographic successor; 1 when it advanced, 0 when it was the last."""
-    var k = Int(py=p)
-    var rows = Int(py=n)
-    var a = Int(py=addr)
-    return PythonObject(next_combination_i64(a, k, rows))
+# TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_core.patch
 
 
 def ic_running_min_f32_host_binding(

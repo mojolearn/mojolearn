@@ -1187,7 +1187,7 @@ class _Schedule(_LrTable):
     def _exact_params(self):
         return ([self._KIND_CODE[self.kind], self.warmup_steps,
                  -1 if self.total_steps is None else self.total_steps],
-                [float(self.peak_lr), float(self.min_lr)], "lr_schedule_exact_block")  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
+                [float(self.peak_lr), float(self.min_lr)])  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
 
     def _lr_at_slow(self, t):
         """The exact route of one ONE-BASED step, in Mojo big rationals
@@ -1196,7 +1196,7 @@ class _Schedule(_LrTable):
         if t < 1:
             raise ValueError(
                 "mojolearn schedule: step t is ONE-BASED, got %d" % t)
-        ip, fp, _ = self._exact_params()
+        ip, fp = self._exact_params()
         st, v = _lr_native("lr_schedule_exact")(ip + [t], fp)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
         _lr_status(st)
         return float(v)

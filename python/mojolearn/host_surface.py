@@ -1836,12 +1836,10 @@ FAMILIES = (
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "argmax_last_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
-            # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
-            # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
-            # install used to run as a Python loop.
+            # of bindings/hotpath_helpers.mojo that stand in for per-row Python
+            # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
+            # prepare_targets).
             "cast_elements", "reduce_stat", "equal_elements",
-            "encode_labels_f32", "encode_labels_f64", "encode_labels_i32",
-            "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
             "gather_i32", "check_indices_i64", "indices_overlap_i64",
             "fold_ids", "select_fold_i64",
             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
@@ -1858,7 +1856,7 @@ FAMILIES = (
             # lane migrate-shared-labels: the shared argument-and-label entry
             "prepare_targets",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
-            "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
+            "ic_running_min_f64", "ic_running_min_f32",
             "fold_pair_f32", "threshold_labels_i64",
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
@@ -1871,7 +1869,7 @@ FAMILIES = (
             "ragged_rows_bytes", "nsum_f64", "row_means_f64",
             "truncnorm_draws", "fsum_f64", "row_stds_f64",
             "lr_schedule_exact",
-            "lr_schedule_exact_block", "class_ratio_f64",
+            "class_ratio_f64",
             "shard_topk_merge_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
