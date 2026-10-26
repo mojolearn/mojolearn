@@ -28,7 +28,11 @@ import release_reuse as reuse
 
 SCHEMA='mojolearn.apple.retained-device-admission.v1'
 PACK_SCHEMA='mojolearn.apple.retained-pack.v1'
-GROUPS=('_mojolearn_native','_mojolearn_native_m1')
+import merged_bindings
+# The identical device groups the Mac packer compiles (bindings/merged_groups.json
+# on darwin with the byte LM: each group and its metal:1 half). A retained run
+# made under another split names other groups and is refused, never mapped.
+GROUPS=tuple(stem for stem,_cls,_members in merged_bindings.plan('identical','darwin',True))
 SWITCH='MOJOLEARN_BINCACHE_RETAINED_APPLE'
 PLACEMENTS='MOJOLEARN_BINCACHE_RETAINED_PLACEMENTS'
 
@@ -84,7 +88,7 @@ def original(run):
     summary=witness.witness(run/'summary.json');completed=witness.decoded(summary)
     require((run/'controller.rc').read_text().strip()=='0' and completed.get('complete') is True
             and completed.get('expected_groups')==completed.get('completed_groups')==list(GROUPS),
-            'original subset controller did not finish both device groups')
+            'original subset controller did not finish every device group')
     revision=capture.get('source_commit')
     require(capture.get('schema')=='mojolearn.apple.device-subset-inputs.v1'
             and capture.get('phase')=='before-build' and re.fullmatch('[0-9a-f]{40}',revision or '')

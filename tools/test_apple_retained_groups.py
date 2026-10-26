@@ -149,7 +149,7 @@ def test_final_wheel_proof_preserves_raw_staged_and_packed_identity(admitted,tmp
     monkeypatch.setattr(a.subprocess,'run',production)
     report=a.pack(admission,root,tmp_path/'pack-evidence',tmp_path/'cache')
     assert report['pack_exit']==0 and 'build_exit' not in report
-    assert len(report['artifact_origins'])==2 and report['admission']==w.witness(admission)
+    assert len(report['artifact_origins'])==len(a.GROUPS) and report['admission']==w.witness(admission)
     for row in report['artifact_origins'].values():
         assert row['origin']=='retained-admitted' and row['original_source_commit']==OLD
         assert len({row['raw_compiler_sha256'],row['staged_tree_sha256'],row['wheel_sha256']})==3
