@@ -147,11 +147,8 @@ def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) ra
     return (cprm^, pprm^, pool)
 
 
-def conv_block_forward_binding(
-    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
-    conv_prm: PythonObject, pool_prm: PythonObject,
-) raises -> PythonObject:
-    return _block_forward(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm, 0, 0)
+# TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_cnn.patch
 
 
 def _block_forward(
@@ -999,10 +996,6 @@ def fit_epoch_d_binding(
     return out
 
 
-def numeric_mode_binding() raises -> PythonObject:
-    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
-
-
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
@@ -1025,8 +1018,8 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
-        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward")
-        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward")
+        # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")
@@ -1048,7 +1041,8 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[pad2d_backward_binding]("x_cnn_pad2d_backward")
         m.def_function[adaptive_pool_binding]("x_cnn_adaptive_pool")
         m.def_function[graph_op_binding]("x_cnn_graph_op")
-        m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
+        # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
         m.def_function[vendor_binding]("x_cnn_vendor")
         m.def_function[res_alloc_binding]("x_cnn_res_alloc")
         m.def_function[res_free_binding]("x_cnn_res_free")

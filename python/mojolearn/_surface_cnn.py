@@ -38,7 +38,6 @@ FAMILIES = (
         exports=(
             "x_cnn_host_numeric_mode", "x_cnn_host_vendor", "x_cnn_host_column", "x_cnn_host_sabotage",
             "x_cnn_gemm", "x_cnn_conv2d_forward", "x_cnn_conv2d_backward", "x_cnn_conv_shape",
-            "x_cnn_conv_block_forward", "x_cnn_conv_block_backward",
             "x_cnn_pool_shape", "x_cnn_maxpool2d_forward", "x_cnn_maxpool2d_backward",
             "x_cnn_avgpool2d_forward", "x_cnn_avgpool2d_backward",
             "x_cnn_relu_forward", "x_cnn_relu_backward", "x_cnn_add", "x_cnn_linear_forward",
@@ -46,7 +45,7 @@ FAMILIES = (
             "x_cnn_batchnorm_forward", "x_cnn_batchnorm_backward", "x_cnn_dropout2d", "x_cnn_mul",
             "x_cnn_spmm", "x_cnn_gcn_norm", "x_cnn_pad2d_forward", "x_cnn_pad2d_backward",
             "x_cnn_adaptive_pool", "x_cnn_graph_op",
-            "x_cnn_numeric_mode", "x_cnn_vendor",
+            "x_cnn_vendor",
             "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_argmax", "x_cnn_res_gather",
             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
             "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r", "x_cnn_fit_epoch_r",
