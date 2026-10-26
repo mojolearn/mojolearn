@@ -351,7 +351,7 @@ def refresh_installed_members(names=("__init__", "set_params")):
     layouts, _IMPORT_LAYOUTS = _IMPORT_LAYOUTS, None
     for layout in layouts or ():  # glue: import-time class layouts, once
         bindings = layout["bindings"]
-        dictionaries = tuple(type.__dict__["__dict__"].__get__(base) for base in layout["mro"])  # glue: class metadata
+        dictionaries = tuple(type.__dict__["__dict__"].__get__(base) for base in layout["mro"])  # glue: read class metadata once
         for name in names:  # glue: the fixed installer-replaced member names
             if name not in bindings:
                 continue
