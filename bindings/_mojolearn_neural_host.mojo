@@ -45,8 +45,8 @@ WHAT IT COMPUTES, and from which functions (no arithmetic of its own):
       addresses (x, the nine weights, k_cache, v_cache, y) through the same
       `transformer_host_forward` with the caller's caches, which are read
       at entry and written back. Returns the post-call cached_tokens.
-  `mamba1_forward_fresh`, `mamba2_forward_fresh`, `mamba3_forward_fresh`
-      the three block oracles from a constructed zero state, the final state
+  `mamba3_forward_fresh`
+      the block oracle from a constructed zero state, the final state
       discarded. `mamba3_forward_fresh` takes `_mojolearn_mamba`'s fifteen
       addresses (the four report buffers included), the arity
       `Mamba3Block._call_fresh` passes.
@@ -547,20 +547,8 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, position: Int = 0) raises
     _write(a[12], state.h, b * di * D_STATE)
 
 
-def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """12 addresses (x, the ten `Mamba1Block` weights, y); params B, L,
-    d_model. Returns B * L * d_model, the cells written."""
-    var a = _addrs(addrs, 12, String("mamba1_forward_fresh"))
-    var s = _shape3(params, 3, String("mamba1_forward_fresh"))
-    var b = s[0]
-    var l = s[1]
-    var dm = s[2]
-    with GILReleased(Python()):
-        var w = _m1_weights(a, dm)
-        var state = MambaState(b, w.dims)
-        var st = mamba_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
-        _write(a[11], st.residual_out, b * l * dm)
-    return PythonObject(b * l * dm)
+# TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_mamba.patch
 
 
 def mamba1_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -646,24 +634,6 @@ def _mamba2_run(
     _write(a[12], state.buf_xbc, b * M2_CHUNK_SIZE * cd)
     _write(a[13], state.buf_dtraw, b * M2_CHUNK_SIZE * nh)
     return state.buf_len
-
-
-def mamba2_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """11 addresses (x, the nine `Mamba2Block` weights, y); params B, L,
-    d_model, dt_lo, dt_hi. Returns B * L * d_model."""
-    var a = _addrs(addrs, 11, String("mamba2_forward_fresh"))
-    var s = _shape3(params, 5, String("mamba2_forward_fresh"))
-    var b = s[0]
-    var l = s[1]
-    var dm = s[2]
-    var dt_lo = Float32(Float64(py=params[3]))
-    var dt_hi = Float32(Float64(py=params[4]))
-    with GILReleased(Python()):
-        var w = _m2_weights(a, dm)
-        var state = Mamba2State(b, w.dims)
-        var st = mamba2_block_oracle(w, read_f32(a[0], b * l * dm), b, l, dt_lo, dt_hi, state)
-        _write(a[10], st.residual_out, b * l * dm)
-    return PythonObject(b * l * dm)
 
 
 def mamba2_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -952,10 +922,12 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_int15_binding]("transformer_forward_int15")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
-        module.def_function[mamba1_forward_fresh_binding]("mamba1_forward_fresh")
+        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_mamba.patch
         module.def_function[mamba1_forward_binding]("mamba1_forward")
         module.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
-        module.def_function[mamba2_forward_fresh_binding]("mamba2_forward_fresh")
+        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_mamba.patch
         module.def_function[mamba2_forward_binding]("mamba2_forward")
         module.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         module.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")

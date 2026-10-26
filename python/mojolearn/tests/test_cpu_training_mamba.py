@@ -68,7 +68,7 @@ def test_host_binding_registers_every_gpu_entry():
     # Resident sessions own GPU buffers; CPU blocks expose ordinary stateful
     # inference instead and decode_session explicitly refuses this GPU API.
     resident = {"mamba1_session_" + name for name in
-                ("create", "open", "step", "export_state", "load_state", "info", "close")}
+                ("create", "open", "step", "export_state", "load_state", "close")}
     # The Mamba-2/3 resident sessions (769936f70) are the same kind of entry:
     # on the host route their private session classes take the host arm over
     # the per-call `mamba2_decode_step` / `mamba3_decode_step`, which the host

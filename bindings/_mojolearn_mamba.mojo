@@ -296,7 +296,6 @@ from mamba.impl.mamba_shell_impl import (
 )
 
 
-
 def mamba_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
     IDENTICAL. The same shape as `gp_numeric_mode`,
@@ -317,7 +316,6 @@ def mamba_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 # Mamba-1: profile mojolearn.identical.mamba1.fp32.v1
 # ===========================================================================
-
 
 
 def mamba1_profile_binding() -> PythonObject:
@@ -567,15 +565,8 @@ def mamba1_session_load_state_binding(
     return PythonObject(0)
 
 
-def mamba1_session_info_binding(session: PythonObject) raises -> PythonObject:
-    """[open, usable, B, d_model] as ints."""
-    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
-    var out = Python.list()
-    _ = py_call(out.append, PythonObject(1 if owner[].is_open() else 0))
-    _ = py_call(out.append, PythonObject(1 if owner[].usable else 0))
-    _ = py_call(out.append, PythonObject(owner[].b))
-    _ = py_call(out.append, PythonObject(owner[].dm))
-    return out
+# TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_mamba.patch
 
 
 def mamba1_session_close_binding(session: PythonObject) raises -> PythonObject:
@@ -1505,7 +1496,8 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba1_session_step_binding]("mamba1_session_step")
         m.def_function[mamba1_session_export_state_binding]("mamba1_session_export_state")
         m.def_function[mamba1_session_load_state_binding]("mamba1_session_load_state")
-        m.def_function[mamba1_session_info_binding]("mamba1_session_info")
+        # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_mamba.patch
         m.def_function[mamba1_session_close_binding]("mamba1_session_close")
         m.def_function[mamba2_backward_binding]("mamba2_backward")
         m.def_function[mamba2_forward_binding]("mamba2_forward")
