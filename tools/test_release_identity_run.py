@@ -128,7 +128,21 @@ def test_completed_pass_reused_without_new_launch(setup, monkeypatch):
     assert len(ledger.read()['runs']) == before
 
 
-def test_direct_producer_refuses_before_import(tmp_path):
+def test_supplied_release_claim_refuses_before_import(tmp_path):
+    root = tmp_path / 'tree'
+    (root / 'tools').mkdir(parents=True)
+    script = root / 'tools/record_identity_column.sh'
+    script.write_text((Path(__file__).parent / script.name).read_text())
+    result = subprocess.run(['bash', str(script), 'amd-mi325x-gfx942', str(tmp_path / 'out')],
+                            env={'PATH': os.environ['PATH'], 'PYTHON': sys.executable,
+                                 'MOJOLEARN_IDENTITY_LAUNCH': str(tmp_path / 'missing-launch.json'),
+                                 'MOJOLEARN_IDENTITY_GUARD': G.__file__}, capture_output=True, text=True)
+    assert result.returncode == 2
+    assert 'release identity launch validation failed' in result.stderr
+    assert 'ModuleNotFoundError' not in result.stderr
+
+
+def test_legacy_controller_keeps_existing_source_preflight(tmp_path):
     root = tmp_path / 'tree'
     (root / 'tools').mkdir(parents=True)
     script = root / 'tools/record_identity_column.sh'
@@ -136,8 +150,8 @@ def test_direct_producer_refuses_before_import(tmp_path):
     result = subprocess.run(['bash', str(script), 'amd-mi325x-gfx942', str(tmp_path / 'out')],
                             env={'PATH': os.environ['PATH'], 'PYTHON': sys.executable}, capture_output=True, text=True)
     assert result.returncode == 2
-    assert 'guarded launch is required' in result.stderr
-    assert 'ModuleNotFoundError' not in result.stderr
+    assert 'not a git checkout' in result.stderr
+    assert 'guarded launch is required' not in result.stderr
 
 
 def test_mismatched_source_refuses_before_begin(setup, monkeypatch):
