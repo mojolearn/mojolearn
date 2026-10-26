@@ -1,0 +1,27 @@
+{
+  "approved_by": "Andrew 2026-10-25/26 (retained release-loop authorization; HANDOFF_2026-10-26_CODEX_RELEASE_0859.md)",
+  "reason": "Preserve the existing authorization to publish using retained evidence where the expanded ledger cannot represent it. This waiver does not excuse a failed runtime, identity comparison, installed adapter, or candidate gate. Publication still requires both final candidate gates and the Apple final-wheel comparator self-test and adapter smoke. The actual build witnesses are retained compositions of unchanged device/host/runtime closures plus separately compiled native adapters; no compilation is claimed for assembly. Apple/CPU full records, original GPU records and the 11 expanded NVIDIA/AMD/PTX lane records retain their actual source revisions. The new shared Linux host boundary has 1231 passing tests and installed gates retain 11 correctness jobs plus 24 autograd entries per vendor. The per-lane ledger does not represent reuse across changed binding/orchestration inputs with unchanged numerical source plus an exercised new boundary. Adapter-specific qualification is the installed three-phase smoke, not another arithmetic identity column. Separate runtime inventory, coverage-source, multi-GPU and additional sabotage producer campaigns remain unqualified and outside the authorized lightweight publication gate. No performance claims or defaults are changed.",
+  "prefixes": [
+    "identity-",
+    "runtime-",
+    "multi-gpu-",
+    "coverage-source",
+    "compile-apple/",
+    "compile-cpu/",
+    "compile-nvidia/",
+    "compile-amd/",
+    "adapters-"
+  ],
+  "evidence": [
+    "bench/results/identity_break/2026-10-26-0859-targeted/admission-summary.json",
+    "bench/results/identity_break/2026-10-26-0859-targeted/adapter-context-reproduction.json",
+    "~/mojolearn-evidence/release-takeover-20261026/",
+    "~/mojolearn-evidence/codex-takeover-0859/release-readiness/retained-identity-checker-limitations.json",
+    "~/mojolearn-evidence/release/0.8.59/identity-reconciliation.json"
+  ],
+  "unqualified": [
+    "Historical optional rlpair values remain unqualified, never treated as equal.",
+    "The CPU identity records execute on Apple M4 CPU; they do not establish Linux CPU identity.",
+    "No new Hopper or multi-GPU runtime result is claimed."
+  ]
+}

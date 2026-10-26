@@ -1,0 +1,86 @@
+{
+  "schema": "mojolearn.release-provenance.v1",
+  "version": "0.8.59",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42",
+  "published": [
+    "linux",
+    "nvidia",
+    "nvidia-ptx",
+    "amd",
+    "linux-meta",
+    "macos"
+  ],
+  "earlier_commits": [
+    "132b5aa5d78cc551a879af8e50bed3f39f2fee54"
+  ],
+  "legs": {
+    "cuda-sm_89": {
+      "origin": "retained-composition",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/composed-final/cuda-sm89/assembly-proof.json",
+        "sha256": "28d1a3010b650027373dbc83ef8f361c88f15795081e4e53880202555e9def1b",
+        "bytes": 9518504
+      }
+    },
+    "cuda-sm_80": {
+      "origin": "retained-composition",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/composed-final/cuda-sm80/assembly-proof.json",
+        "sha256": "e81de6f1368d6a9f67ab0c45ba9793af9e40d53c458ea8b5dca423b60867cc5b",
+        "bytes": 17061358
+      }
+    },
+    "hip-gfx942": {
+      "origin": "retained-composition",
+      "evidence": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/composed-final/hip-gfx942/assembly-proof.json",
+        "sha256": "85f5b2b7cd6ff75dfb997fc2fcbf48a4a934218586a3b2955603c0a12f942cd0",
+        "bytes": 9519328
+      }
+    }
+  },
+  "columns": {},
+  "qualification": {
+    "nvidia": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/gate-nvidia/9d3c4cda92df53e96bd1-release-light-v1/gate-smoke.json",
+      "sha256": "84ae7373863a0e7599426c2d047af3252db20025dbea3a98682cf62652b814a1",
+      "bytes": 123432
+    },
+    "amd": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/gate-amd/fe508db3c292f5f5af7c-release-light-v1/gate-smoke.json",
+      "sha256": "c3503103cb2108a426907315eed92408e7fdb5c04a480d3d408a73edb3ac5b34",
+      "bytes": 122061
+    },
+    "apple_adapters": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/gate-apple/adapters/adapter-smoke.json",
+      "sha256": "5d67fba5c9b28e245eb587489ae949c7d3ab83fff802e4984e1198292b15900b",
+      "bytes": 2664
+    },
+    "apple_comparator": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/self-test-macos/results.json",
+      "sha256": "ffaa04d46950dd9ccf2b640d30b680b97f2f2ee9b3e8b7d175a7dc69b059dd7e",
+      "bytes": 617
+    },
+    "ptx_loader": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/final-ptx-loader-r2-admission.json",
+      "sha256": "ab719bebf08941e78676f7523fc0a4f589e20dc8a4af508b877f908fb3bc8596",
+      "bytes": 137
+    }
+  },
+  "post_publication": {
+    "status": "deferred-by-owner",
+    "date": "2026-10-26",
+    "instruction": "Finish this publication, complete everything remaining in the next release, then perform post-publication verification.",
+    "nvidia_routine": "interrupted; not a pass",
+    "neural_training": "not started",
+    "apple": "not started",
+    "cross_vendor_comparison": "not started",
+    "evidence": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/nvidia-pypi-interrupted/user-deferred.json",
+      "sha256": "17fd5a2646fcdbb2e8a7afd087c70b3e1dea39b3c746c311509fe16125f95b24",
+      "bytes": 370
+    }
+  },
+  "publication_only": true
+}

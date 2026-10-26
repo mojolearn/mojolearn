@@ -1,0 +1,17 @@
+{
+  "files": {
+    "mojolearn_nvidia_ptx-0.8.59-py3-none-manylinux_2_35_x86_64.whl": "cb01e561bf345b060c0608c1a79f3004166e91b0a1a3757b935f7e1fbe70b418"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da"
+  },
+  "release_profile": "alpha-api",
+  "requirements_admission": {
+    "bundle_sha256": "da07b71facbf50ad3306d75ba80d478a0d9c8901cd50c573b68cf8021214b777",
+    "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da"
+  },
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.59"
+}

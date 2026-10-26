@@ -1,0 +1,188 @@
+{
+  "version": "0.8.59",
+  "publication": "complete",
+  "platforms": {
+    "linux": {
+      "publication": {
+        "at": "2026-10-26T20:48:07Z",
+        "commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "done": true,
+        "result": "pypi via alpha-api-0.8.59-linux-20261026 (source bf8ea7fcbe53, tooling 8a21d5899f12)",
+        "smoke": null,
+        "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42"
+      },
+      "workflow_run": 40398481831,
+      "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40398481831",
+      "admission": {
+        "artifacts": [
+          {
+            "distribution": "mojolearn-core",
+            "file": "mojolearn_core-0.8.59-py3-none-manylinux_2_35_x86_64.whl",
+            "scope": "qualified artifact bytes",
+            "sha256": "534d8f4ffe07044a0133f5adf5b2dcbced389ca6e3019492225f95981083d92b",
+            "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+            "version": "0.8.59"
+          }
+        ],
+        "bundle_sha256": "4b302f4739f0ea5074cfb201152b638e45d80e313d27d6afe06bd433cc2a56a8",
+        "key": "release-readiness/v1/4b302f4739f0ea5074cfb201152b638e45d80e313d27d6afe06bd433cc2a56a8.tar.gz",
+        "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "version": "0.8.59"
+      }
+    },
+    "nvidia": {
+      "publication": {
+        "at": "2026-10-26T21:02:42Z",
+        "commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "done": true,
+        "result": "pypi via alpha-api-0.8.59-nvidia-20261026 (source bf8ea7fcbe53, tooling 8a21d5899f12)",
+        "smoke": null,
+        "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42"
+      },
+      "workflow_run": 40400618753,
+      "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40400618753",
+      "admission": {
+        "artifacts": [
+          {
+            "distribution": "mojolearn-nvidia",
+            "file": "mojolearn_nvidia-0.8.59-py3-none-manylinux_2_35_x86_64.whl",
+            "scope": "qualified artifact bytes",
+            "sha256": "c9ce775a0f4c2d367bde629edac19527c2e0a59a45c530f6567ce1bcb9573ddc",
+            "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+            "version": "0.8.59"
+          }
+        ],
+        "bundle_sha256": "aac0d68fca3f7442c268dec19a4caf7f0c3cfe14e49ba1cefdc4b4d91af38f86",
+        "key": "release-readiness/v1/aac0d68fca3f7442c268dec19a4caf7f0c3cfe14e49ba1cefdc4b4d91af38f86.tar.gz",
+        "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "version": "0.8.59"
+      }
+    },
+    "nvidia-ptx": {
+      "publication": {
+        "at": "2026-10-26T20:55:32Z",
+        "commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "done": true,
+        "result": "pypi via alpha-api-0.8.59-nvidia-ptx-20261026 (source bf8ea7fcbe53, tooling 8a21d5899f12)",
+        "smoke": null,
+        "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42"
+      },
+      "workflow_run": 40399574361,
+      "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40399574361",
+      "admission": {
+        "artifacts": [
+          {
+            "distribution": "mojolearn-nvidia-ptx",
+            "file": "mojolearn_nvidia_ptx-0.8.59-py3-none-manylinux_2_35_x86_64.whl",
+            "scope": "qualified artifact bytes",
+            "sha256": "cb01e561bf345b060c0608c1a79f3004166e91b0a1a3757b935f7e1fbe70b418",
+            "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+            "version": "0.8.59"
+          }
+        ],
+        "bundle_sha256": "da07b71facbf50ad3306d75ba80d478a0d9c8901cd50c573b68cf8021214b777",
+        "key": "release-readiness/v1/da07b71facbf50ad3306d75ba80d478a0d9c8901cd50c573b68cf8021214b777.tar.gz",
+        "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "version": "0.8.59"
+      }
+    },
+    "amd": {
+      "publication": {
+        "at": "2026-10-26T21:09:49Z",
+        "commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "done": true,
+        "result": "pypi via alpha-api-0.8.59-amd-20261026 (source bf8ea7fcbe53, tooling 8a21d5899f12)",
+        "smoke": null,
+        "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42"
+      },
+      "workflow_run": 40401662095,
+      "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40401662095",
+      "admission": {
+        "artifacts": [
+          {
+            "distribution": "mojolearn-amd",
+            "file": "mojolearn_amd-0.8.59-py3-none-manylinux_2_35_x86_64.whl",
+            "scope": "qualified artifact bytes",
+            "sha256": "53417b1f867e53808200c74e4dcb97971b5b7eb10c3c942f2dd2366fd724a638",
+            "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+            "version": "0.8.59"
+          }
+        ],
+        "bundle_sha256": "ff5298252f903147577e7bb20beabd3939a5492e094b0a9cdc6cb75103bb351b",
+        "key": "release-readiness/v1/ff5298252f903147577e7bb20beabd3939a5492e094b0a9cdc6cb75103bb351b.tar.gz",
+        "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "version": "0.8.59"
+      }
+    },
+    "linux-meta": {
+      "publication": {
+        "at": "2026-10-26T21:17:30Z",
+        "commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "done": true,
+        "result": "pypi via alpha-api-0.8.59-linux-meta-20261026 (source bf8ea7fcbe53, tooling 8a21d5899f12)",
+        "smoke": null,
+        "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42"
+      },
+      "workflow_run": 40402786521,
+      "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40402786521",
+      "admission": {
+        "artifacts": [
+          {
+            "distribution": "mojolearn",
+            "file": "mojolearn-0.8.59-py3-none-manylinux_2_35_x86_64.whl",
+            "scope": "file-free pinned dependencies",
+            "sha256": "caf0488b0bbc1bedf10e19351d6b955facec4accb82778da37c67bda0b2dab80",
+            "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+            "version": "0.8.59"
+          }
+        ],
+        "bundle_sha256": "4ea391fd31dd15bc8ad826e1bb9ddcde2ca3bc07addda29980e86db1e0739ee5",
+        "key": "release-readiness/v1/4ea391fd31dd15bc8ad826e1bb9ddcde2ca3bc07addda29980e86db1e0739ee5.tar.gz",
+        "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "version": "0.8.59"
+      }
+    },
+    "macos": {
+      "publication": {
+        "at": "2026-10-26T21:22:57Z",
+        "commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "done": true,
+        "result": "pypi via alpha-api-0.8.59-macos-20261026 (source bf8ea7fcbe53, tooling 8a21d5899f12)",
+        "smoke": "/Users/andrewhendel/mojolearn-evidence/release/0.8.59/bf8ea7fcbe53/self-test-macos/results.json",
+        "tooling_commit": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42"
+      },
+      "workflow_run": 40403419029,
+      "workflow_url": "https://github.com/mojolearn/mojolearn/actions/runs/40403419029",
+      "admission": {
+        "artifacts": [
+          {
+            "distribution": "mojolearn",
+            "file": "mojolearn-0.8.59-py3-none-macosx_26_0_arm64.whl",
+            "scope": "qualified artifact bytes",
+            "sha256": "3a4647a3076c9c154101972002226ff1bcbe518819ae70a47b5f6ef0634ba2da",
+            "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+            "version": "0.8.59"
+          }
+        ],
+        "bundle_sha256": "44cd530a665995fd42a5bca82e92640d1e8d098ac06aaf7ae96fdccad2f0c3de",
+        "key": "release-readiness/v1/44cd530a665995fd42a5bca82e92640d1e8d098ac06aaf7ae96fdccad2f0c3de.tar.gz",
+        "source_revision": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+        "version": "0.8.59"
+      }
+    }
+  },
+  "post_publication": {
+    "status": "deferred-by-owner",
+    "date": "2026-10-26",
+    "instruction": "Finish this publication, complete everything remaining in the next release, then perform post-publication verification.",
+    "nvidia_routine": "interrupted; not a pass",
+    "neural_training": "not started",
+    "apple": "not started",
+    "cross_vendor_comparison": "not started",
+    "evidence": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/nvidia-pypi-interrupted/user-deferred.json",
+      "sha256": "17fd5a2646fcdbb2e8a7afd087c70b3e1dea39b3c746c311509fe16125f95b24",
+      "bytes": 370
+    }
+  }
+}
