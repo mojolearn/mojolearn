@@ -15,13 +15,11 @@ from x_linear.spearman import spearman_sign_host
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
 from x_linear.ridgecv import ridge_best_alpha
 from x_linear.class_prep import class_prep_host
-from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM
 from x_linear.x_linear_host_impl import x_linear_fit_host, x_linear_decision_host, x_linear_decision_codes_host
 
 
-def glm_ydom_binding() raises -> PythonObject:
-    """1: a GLM fit checks its targets' range itself (x_linear/glm_ydom.mojo)."""
-    return PythonObject(1)
+# TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_x_linear.patch
 
 
 def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
@@ -169,8 +167,8 @@ def build__mojolearn_x_linear_host() -> PythonObject:
         m.def_function[x_linear_host_sabotage_binding]("x_linear_host_sabotage")
         m.def_function[fit_binding]("x_linear_fit")
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
-        comptime if XLIN_GLM_DEV_YDOM:
-            m.def_function[glm_ydom_binding]("x_linear_glm_ydom")
+        # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_x_linear.patch
         m.def_function[class_prep_binding]("x_linear_class_prep")
         m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")

@@ -37,7 +37,7 @@ The device fit is already the fast grid Gram (ridge taxi regression is 16.2 ms o
 - predict: `scores.tolist()` + a Python threshold per row (:184) + label decode.
 Candidates: MOJOLEARN_RIDGE_FAST_CLS1_CODES (int32 codes straight to the binding, +-1 targets built on the device:
 cls1_fast.mojo c1_codes_targets_kernel, device.mojo:140), _PREDICT (device class code per row,
-device.mojo:171 + `x_linear_decision_codes`, native gather), both. Python reads `x_linear_cls1_flags`.
+device.mojo:171 + `x_linear_decision_codes`, native gather), both.
 
 ### nearest-centroid taxi (algos: fit 1M x 16, predict + predict_proba 100k)
 - `_labels_of` (_expansion_neighbors.py:183): y.tolist(), set, dict lookup per row (1M); the Python counting loop
