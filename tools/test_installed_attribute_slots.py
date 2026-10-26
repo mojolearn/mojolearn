@@ -29,83 +29,112 @@ def write(path, data):
 class BuildProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        stem, flags, members = next(r for r in merged.plan("host", "darwin", True, "development")
-                                    if slots.MEMBER in r[2])
         scripts = {p: hashlib.sha256(build.recipe_text((ROOT / p).read_text()).encode()).hexdigest()
                    for p in build.BUILD_INPUTS}
-        cls.fields = {"schema": build.KEY_SCHEMA, "mode": "host", "platform": "darwin", "stem": stem,
-                      "flags_class": flags, "members": members, "source": build.SourceGraph(ROOT).closure(members),
-                      "builders": build.compile_recipe(scripts, "host", stem, flags),
-                      "root_sha256": hashlib.sha256(merged.root_text(stem, members).encode()).hexdigest(),
-                      "toolchain": {"available": True, "compiler_sha256": "a" * 64},
-                      "environment": {"MOJOLEARN_NUMERIC_MODE": "identical", "MOJOLEARN_PACKAGE_BYTE_LM": "1"}}
+        graph = build.SourceGraph(ROOT)
+        cls.fields_by_name = {}
+        for name, member in slots.owner_members(ROOT).items():
+            stem, flags, members = next(r for r in merged.plan("host", "darwin", True, "development")
+                                        if member in r[2])
+            cls.fields_by_name[name] = {
+                "schema": build.KEY_SCHEMA, "mode": "host", "platform": "darwin", "stem": stem,
+                "flags_class": flags, "members": members, "source": graph.closure(members),
+                "builders": build.compile_recipe(scripts, "host", stem, flags),
+                "root_sha256": hashlib.sha256(merged.root_text(stem, members).encode()).hexdigest(),
+                "toolchain": {"available": True, "compiler_sha256": "a" * 64},
+                "environment": {"MOJOLEARN_NUMERIC_MODE": "identical", "MOJOLEARN_PACKAGE_BYTE_LM": "1"}}
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name)
-        self.receipt = {"state": "built", "exit_code": 0, "fields": copy.deepcopy(self.fields),
-                        "mode": "host", "stem": self.fields["stem"]}
-        self.binary = self.home / (self.fields["stem"] + ".so")
-        self.binary.write_bytes(b"inert source-test fixture; not executable or runtime evidence")
-        self.receipt["sha256"] = slots.sha256(self.binary)
-        self.proof = {"binary": slots.reference(self.binary), "origins": {
-            n: {"name": n, "path": str(self.binary), "offset": 1} for n in (slots.ENTRY, slots.FACTORY)}}
+        self.receipts, self.binaries = {}, {}
+        self.proof = {"owners": {}}
+        for name, member in slots.owner_members(ROOT).items():
+            fields = self.fields_by_name[name]
+            binary = self.home / (fields["stem"] + ".so")
+            binary.write_bytes(b"inert source-test fixture; not executable or runtime evidence")
+            self.binaries[name] = binary
+            self.receipts[name] = {"state": "built", "exit_code": 0, "fields": copy.deepcopy(fields),
+                                   "mode": "host", "stem": fields["stem"], "sha256": slots.sha256(binary)}
+            self.proof["owners"][name] = {"member": member, "binary": slots.reference(binary),
+                "origin": {"name": name, "path": str(binary), "offset": 1}}
         self.refresh()
 
     def refresh(self):
-        self.receipt["key"] = build.digest(self.receipt["fields"])
-        self.proof["receipt"] = write(self.home / "receipt.json", self.receipt)
+        for name, receipt in self.receipts.items():
+            receipt["key"] = build.digest(receipt["fields"])
+            self.proof["owners"][name]["receipt"] = write(self.home / (name + ".receipt.json"), receipt)
         self.proof["index"] = write(self.home / "_mojolearn_merged.json", {
             "format": merged.INDEX_FORMAT, "layout": "development",
-            "files": {self.binary.name: self.receipt["fields"]["members"]},
-            "provenance": {self.fields["stem"]: self.receipt["key"]}})
+            "files": {self.binaries[n].name: r["fields"]["members"] for n, r in self.receipts.items()},
+            "provenance": {r["fields"]["stem"]: r["key"] for r in self.receipts.values()}})
 
-    def test_receipted_unchanged_inputs_are_accepted_without_build(self):
-        self.assertEqual(slots.validate_build(ROOT, self.proof), self.receipt["key"])
+    def test_receipted_split_owners_are_accepted_without_build(self):
+        self.assertNotEqual(self.binaries[slots.ENTRY], self.binaries[slots.FACTORY])
+        self.assertEqual(slots.validate_build(ROOT, self.proof),
+                         {n: r["key"] for n, r in self.receipts.items()})
 
-    def test_mutations_fail_even_with_refreshed_ordinary_hashes(self):
+    def test_mutations_of_either_owner_fail_with_refreshed_hashes(self):
         changes = {
-            "failed compiler": lambda: self.receipt.update(exit_code=1),
-            "wrong output": lambda: self.receipt.update(sha256="b" * 64),
-            "missing compiler": lambda: self.receipt["fields"]["toolchain"].pop("compiler_sha256"),
-            "malformed compiler": lambda: self.receipt["fields"]["toolchain"].update(compiler_sha256="name-only"),
-            "wrong result identity": lambda: self.receipt.update(stem="other"),
-            "wrong source": lambda: self.receipt["fields"]["source"]["files"].update({"bindings/public_attributes_native.mojo": "b" * 64}),
-            "wrong recipe": lambda: self.receipt["fields"]["builders"].update(command=[]),
-            "wrong root": lambda: self.receipt["fields"].update(root_sha256="b" * 64),
-            "wrong members": lambda: self.receipt["fields"].update(members=[]),
-            "wrong mode": lambda: self.receipt["fields"]["environment"].update(MOJOLEARN_NUMERIC_MODE="fast"),
-            "unsupported define": lambda: self.receipt["fields"]["environment"].update(MOJOLEARN_EXTRA_DEFINES="x"),
+            "failed compiler": lambda r: r.update(exit_code=1),
+            "wrong output": lambda r: r.update(sha256="b" * 64),
+            "missing compiler": lambda r: r["fields"]["toolchain"].pop("compiler_sha256"),
+            "malformed compiler": lambda r: r["fields"]["toolchain"].update(compiler_sha256="name-only"),
+            "wrong result identity": lambda r: r.update(stem="other"),
+            "wrong source": lambda r: r["fields"]["source"]["files"].update({"bindings/public_attributes_native.mojo": "b" * 64}),
+            "wrong recipe": lambda r: r["fields"]["builders"].update(command=[]),
+            "wrong root": lambda r: r["fields"].update(root_sha256="b" * 64),
+            "wrong members": lambda r: r["fields"].update(members=[]),
+            "wrong mode": lambda r: r["fields"]["environment"].update(MOJOLEARN_NUMERIC_MODE="fast"),
+            "unsupported define": lambda r: r["fields"]["environment"].update(MOJOLEARN_EXTRA_DEFINES="x"),
         }
-        original = copy.deepcopy(self.receipt)
-        for name, change in changes.items():
-            with self.subTest(name=name):
-                self.receipt = copy.deepcopy(original)
-                change()
-                self.refresh()
-                with self.assertRaises((slots.WitnessError, build.BuildError)):
-                    slots.validate_build(ROOT, self.proof)
+        original = copy.deepcopy(self.receipts)
+        for owner in self.receipts:
+            for name, change in changes.items():
+                with self.subTest(owner=owner, mutation=name):
+                    self.receipts = copy.deepcopy(original)
+                    change(self.receipts[owner])
+                    self.refresh()
+                    with self.assertRaises((slots.WitnessError, build.BuildError)):
+                        slots.validate_build(ROOT, self.proof)
 
-    def test_missing_or_changed_evidence_refuses(self):
-        for field in ("binary", "receipt", "index"):
-            with self.subTest(field=field):
-                proof = copy.deepcopy(self.proof)
-                proof[field]["sha256"] = "c" * 64
-                with self.assertRaisesRegex(slots.WitnessError, "digest mismatch"):
-                    slots.validate_build(ROOT, proof)
-        self.binary.unlink()
+    def test_missing_or_changed_evidence_refuses_for_either_owner(self):
+        for owner in self.receipts:
+            for field in ("binary", "receipt"):
+                with self.subTest(owner=owner, field=field):
+                    proof = copy.deepcopy(self.proof)
+                    proof["owners"][owner][field]["sha256"] = "c" * 64
+                    with self.assertRaisesRegex(slots.WitnessError, "digest mismatch"):
+                        slots.validate_build(ROOT, proof)
+        proof = copy.deepcopy(self.proof)
+        proof["index"]["sha256"] = "c" * 64
+        with self.assertRaisesRegex(slots.WitnessError, "digest mismatch"):
+            slots.validate_build(ROOT, proof)
+        self.binaries[slots.FACTORY].unlink()
         with self.assertRaisesRegex(slots.WitnessError, "restore retained bytes"):
             slots.validate_build(ROOT, self.proof)
 
     def test_wrong_loaded_origin_and_unactivated_binary_refuse(self):
-        self.proof["origins"][slots.ENTRY]["path"] = str(self.home / "other.so")
-        with self.assertRaisesRegex(slots.WitnessError, "pointer"):
-            slots.validate_build(ROOT, self.proof)
-        self.proof["origins"][slots.ENTRY]["path"] = str(self.binary)
-        self.proof["index"] = write(self.home / "index.json", {"format": 1, "layout": "development", "files": {},
-            "provenance": {self.fields["stem"]: self.receipt["key"]}})
+        for owner in self.receipts:
+            proof = copy.deepcopy(self.proof)
+            proof["owners"][owner]["origin"]["path"] = str(self.home / "other.so")
+            with self.subTest(owner=owner), self.assertRaisesRegex(slots.WitnessError, "pointer"):
+                slots.validate_build(ROOT, proof)
+        self.proof["index"] = write(self.home / "index.json", {
+            "format": 1, "layout": "development", "files": {},
+            "provenance": {r["fields"]["stem"]: r["key"] for r in self.receipts.values()}})
         with self.assertRaisesRegex(slots.WitnessError, "activated"):
+            slots.validate_build(ROOT, self.proof)
+
+    def test_entry_receipt_cannot_substitute_for_factory_receipt(self):
+        self.proof["owners"][slots.FACTORY] = copy.deepcopy(self.proof["owners"][slots.ENTRY])
+        with self.assertRaisesRegex(slots.WitnessError, "wrong declared owner"):
+            slots.validate_build(ROOT, self.proof)
+
+    def test_missing_factory_proof_refuses(self):
+        del self.proof["owners"][slots.FACTORY]
+        with self.assertRaisesRegex(slots.WitnessError, "owner proofs missing"):
             slots.validate_build(ROOT, self.proof)
 
 
@@ -234,7 +263,7 @@ class AdmissionTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.stamp = {"revision": "frozen", "files": {"connection.py": "sha"}}
         self.data = {"schema": slots.OBSERVATIONS, "source": self.stamp, "owner": slots.OWNER,
-                     "runtime_qualified": False, "provenance": {"binary": {"sha256": "binary"}},
+                     "runtime_qualified": False, "provenance": {"owners": {n: {"binary": {"sha256": n}} for n in (slots.ENTRY, slots.FACTORY)}},
                      "rows": [{"class": "mojolearn.est.Model", "exports": ["mojolearn.Model"],
                                "method": "__getattribute__", "status": "witnessed", "checks": list(slots.CHECKS)}]}
         self.path = self.root / "witness.json"
@@ -248,7 +277,7 @@ class AdmissionTests(unittest.TestCase):
         # Only producer/source setup is synthetic here. Real build/source validation
         # is exercised above; no fixture exemption exists in production admission.
         with mock.patch.object(slots, "source_snapshot", return_value=self.stamp), \
-             mock.patch.object(slots, "validate_build", return_value="build-key"):
+             mock.patch.object(slots, "validate_build", return_value={n: n + "-key" for n in (slots.ENTRY, slots.FACTORY)}):
             return slots.validate(self.path, self.root)
 
     def test_scope_is_getter_only_and_never_claims_runtime_pass(self):

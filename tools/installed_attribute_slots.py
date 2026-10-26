@@ -6,14 +6,15 @@ activation. Wheel/release layouts need their own producer; they are not guessed.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
 import re
 import subprocess
 
-SCHEMA = "mojolearn.installed-attribute-slots.v1"
-OBSERVATIONS = "mojolearn.installed-attribute-observations.v1"
+SCHEMA = "mojolearn.installed-attribute-slots.v2"
+OBSERVATIONS = "mojolearn.installed-attribute-observations.v2"
 OWNER = "mojolearn._native_public_attributes"
 ENTRY = "public_attribute_native_call"
 FACTORY = "classical_attribute_descriptor"
@@ -81,6 +82,31 @@ def read_reference(value, label, *, json_data=True):
     return json.loads(path.read_text()) if json_data else path
 
 
+def owner_members(root):
+    """The fixed import-time aliases decide each native entry's logical owner.
+
+    Read the frozen registry without importing product code. Unsupported dynamic
+    registry construction refuses instead of guessing where a pointer belongs.
+    """
+    tree = ast.parse((Path(root) / "python/mojolearn/host_surface.py").read_text())
+    values = [node.value for node in tree.body if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "HOST_IMPORT_ALIASES"
+                      for target in node.targets)]
+    require(len(values) == 1, "native alias registry is missing or ambiguous")
+    aliases = ast.literal_eval(values[0])
+    members = dict.fromkeys((ENTRY, FACTORY), MEMBER)
+    seen = set()
+    for row in aliases.get(MEMBER, ()):
+        for name in (ENTRY, FACTORY):
+            if name in row["functions"]:
+                require(name not in seen, "native entry has multiple alias owners")
+                require(type(row["binding"]) is str and row["binding"].startswith("_mojolearn_"),
+                        "native alias owner is malformed")
+                members[name] = row["binding"]
+                seen.add(name)
+    return members
+
+
 def validate_build(root, proof):
     """Reconcile actual loaded bytes with the existing successful cache receipt.
 
@@ -96,9 +122,22 @@ def validate_build(root, proof):
     require(all(sha256(policy_root / path) == sha256(root / path) for path in
                 ("bindings/development_groups.json", "bindings/merged_groups.json")),
             "executing group manifest differs from frozen source")
+    members = owner_members(root)
+    require(type(proof.get("owners")) is dict and set(proof["owners"]) == set(members),
+            "native entry/factory owner proofs missing")
+    index = read_reference(proof["index"], "activation index")
+    source_graph = build.SourceGraph(root)
+    return {name: _validate_owner(root, item, proof["index"], index, name, members[name], source_graph)
+            for name, item in proof["owners"].items()}
+
+
+def _validate_owner(root, proof, index_reference, index, name, member, source_graph):
+    """Validate every loaded owner independently, including an aliased factory."""
+    import development_build as build
+    import merged_bindings as merged
+    require(proof.get("member") == member, "native proof names the wrong declared owner")
     binary = read_reference(proof["binary"], "loaded binary", json_data=False)
     receipt = read_reference(proof["receipt"], "build receipt")
-    index = read_reference(proof["index"], "activation index")
     fields = receipt.get("fields", {})
     require(receipt.get("exit_code") == 0 and receipt.get("state") == "built",
             "native build receipt is not a successful producer result")
@@ -120,9 +159,9 @@ def validate_build(root, proof):
                             fields["environment"].get("MOJOLEARN_PACKAGE_BYTE_LM", "1") == "1", "development"))
     expected = [r for r in plans if r[0] == fields.get("stem")]
     require(len(expected) == 1 and expected[0][1] == fields.get("flags_class")
-            and expected[0][2] == fields.get("members") and MEMBER in fields["members"],
+            and expected[0][2] == fields.get("members") and member in fields["members"],
             "loaded group does not contain the declared attribute owner")
-    closure = build.SourceGraph(root).closure(fields["members"])
+    closure = source_graph.closure(fields["members"])
     require(not closure["unresolved"] and fields.get("source") == closure,
             "native source closure differs or is unresolved")
     scripts = {p: hashlib.sha256(build.recipe_text((root / p).read_text()).encode()).hexdigest()
@@ -134,18 +173,16 @@ def validate_build(root, proof):
     require(index.get("format") == merged.INDEX_FORMAT and index.get("layout") == "development",
             "unsupported native activation layout")
     require(index.get("provenance", {}).get(fields["stem"]) == receipt["key"], "activation input key differs")
-    index_dir = Path(proof["index"]["path"]).parent.resolve()
+    index_dir = Path(index_reference["path"]).parent.resolve()
     matches = [name for name, members in index.get("files", {}).items()
-               if MEMBER in members and (index_dir / name).resolve() == binary.resolve()]
+               if member in members and (index_dir / name).resolve() == binary.resolve()]
     require(len(matches) == 1 and index["files"][matches[0]] == fields["members"],
             "loaded binary is not the activated attribute-owner group")
     require(binary.name == fields["stem"] + ".so", "native artifact name differs")
-    origins = proof.get("origins", {})
-    require(set(origins) == {ENTRY, FACTORY}, "native entry/factory origins missing")
-    for name, origin in origins.items():
-        require(origin.get("name") == name and Path(origin.get("path", "")).resolve() == binary.resolve()
-                and type(origin.get("offset")) is int and origin["offset"] >= 0,
-                "native entry/factory pointer is not in the receipted binary")
+    origin = proof.get("origin", {})
+    require(origin.get("name") == name and Path(origin.get("path", "")).resolve() == binary.resolve()
+            and type(origin.get("offset")) is int and origin["offset"] >= 0,
+            "native entry/factory pointer is not in the receipted binary")
     return receipt["key"]
 
 
@@ -157,7 +194,7 @@ def validate(path, root):
             "unsupported installed-slot observation producer")
     require(data.get("runtime_qualified") is False, "slot witness cannot qualify runtime safety")
     require(data.get("source") == source_snapshot(root), "installed-slot source revision/bytes/policy are stale")
-    build_key = validate_build(root, data["provenance"])
+    build_keys = validate_build(root, data["provenance"])
     admitted, seen = {}, set()
     require(type(data.get("rows")) is list, "installed-slot rows missing")
     for row in data["rows"]:
@@ -175,7 +212,9 @@ def validate(path, root):
                 and v.count(".") == 1 for v in exports), "installed-slot root exports missing")
         admitted[key] = {"owner": OWNER, "entry": ENTRY, "exports": exports,
                          "witness_sha256": sha256(path), "observations_sha256": envelope["observations"]["sha256"],
-                         "build_key": build_key, "binary_sha256": data["provenance"]["binary"]["sha256"],
+                         "build_keys": build_keys,
+                         "binary_sha256s": {name: item["binary"]["sha256"]
+                                            for name, item in data["provenance"]["owners"].items()},
                          "source_revision": data["source"]["revision"]}
     return admitted
 
