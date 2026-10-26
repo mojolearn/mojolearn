@@ -363,8 +363,9 @@ def _host_facts(root, producer):
     rhb.validate_bytes(source, set_root, compiler)
     refs = [reference(directory / name) for name in ("host-build-proof.json", "compile-inputs.json",
             "source-inventory.json", "binding-stamp.json", "stage.json", "readback.json", "runtime-source.json")]
-    refs += [reference(set_root / rhb.HOST_PATH), reference(set_root / rhb.HOST_INDEX),
-             reference(directory / "raw" / hc.HOST_FILE)]
+    files = sorted(rhb.host_paths().items())  # every merged host group file
+    refs += [reference(set_root / path) for _f, path in files] + [reference(set_root / rhb.HOST_INDEX)]
+    refs += [reference(directory / "raw" / f) for f, _path in files]
     import generated_sources as gs
     for rel in sorted(contract["generated_sources"]):  # retained, verified in rhb.record
         refs += [reference(directory / "generated" / rel)]
@@ -372,7 +373,7 @@ def _host_facts(root, producer):
     return dict(producer="linux-host-build", source_root=str(Path(root).resolve()),
                 source_revision=contract["source_commit"], compiler_sha256=compiler,
                 binding_identities=contract["host_identities"], build_environment=capture["build_environment"],
-                members=sorted(contract["index"]["files"][hc.HOST_FILE]), evidence=refs)
+                members=sorted(n for names in contract["index"]["files"].values() for n in names), evidence=refs)
 
 
 def _host_collect(root, document, producer):
