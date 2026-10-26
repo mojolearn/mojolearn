@@ -339,9 +339,42 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-precise-core-rf_export_colmajor",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-rf_export_shard",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-core-rf_export_weighted",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 21,
+  "remaining_declared_fault_arms": 18,
   "verifier_findings": [
     {
       "id": "reviewed-independent-oracles",
