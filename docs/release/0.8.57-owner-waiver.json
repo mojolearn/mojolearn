@@ -1,0 +1,15 @@
+{
+  "approved_by": "Andrew 2026-10-25 (ship gate: core only)",
+  "reason": "0.8.57 ships on identity (Apple/NVIDIA/AMD/CPU + PTX records; 28,512 GPU parts agree, 0 disagree) plus the release-light installed correctness gate on NVIDIA and AMD with adapters off. Identity ledger rows: records at b25df4e21/439199dcd; the final freeze ebcb9fe94 changed only which native finalizer the host layout check accepts (no arithmetic), and the gates' installed verify re-checks every lane against the regenerated table at the final source. Runtime-per-vendor, multi-GPU, coverage gaps, adapter smoke, performance and published-install rows are owed for 0.8.58. Candidate rows: both release-light gates PASS on the exact candidate wheels (adapters off; release.py gate_ok verifies them before publication); the gates were staged by hand, so the ledger lacks lq-bound producer input provenance. compile-apple: the final macOS wheel (f44f0d4ed) took its host/adapter bytes from the bincache filled by the 4112dbd9e pack, whose Mojo tree is identical (f44f0d4ed only adds the verify reference table); the pack adapter admits compiles only from the run that compiled them, and that run's wheel differs by the table data.",
+  "prefixes": [
+    "identity-",
+    "runtime-",
+    "multi-gpu-",
+    "adapters-",
+    "coverage-source",
+    "performance-",
+    "published-",
+    "candidate-",
+    "compile-apple/"
+  ]
+}

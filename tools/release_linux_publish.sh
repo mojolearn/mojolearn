@@ -198,7 +198,7 @@ fi
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
 # Choose explicitly: old calls keep full certification, receipts use bounded admission.
 DISPATCHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f artifact_source_commit="$ARTIFACT_SOURCE_COMMIT" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA" -f requirements_bundle_sha256="$BUNDLE_SHA"
+gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f artifact_source_commit="$ARTIFACT_SOURCE_COMMIT" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA" -f requirements_bundle_sha256="$BUNDLE_SHA" ${MOJOLEARN_OWNER_WAIVER:+-f owner_waiver_sha256="$(shasum -a 256 "$MOJOLEARN_OWNER_WAIVER" | cut -d" " -f1)"}
 sleep 20
 RUN=$(gh run list --workflow release-provenance.yml --branch "$TAG" --event workflow_dispatch \
   --created ">=$DISPATCHED_AT" --limit 1 --json databaseId --jq '.[0].databaseId')
