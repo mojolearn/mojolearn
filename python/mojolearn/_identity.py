@@ -233,6 +233,23 @@ def cmd_check(args):
         f"commit {commit or 'from the checkout'} ({source})", report)
 
 
+def _unrecorded_optional_pair(cell, entry):
+    """An absent optional pair is pending, never a numerical N/A pass."""
+    reference_absent = (entry is None or (not entry.get("conflict")
+                        and isinstance(entry.get("ref"), str) and entry["ref"].startswith("n/a:")))
+    if not reference_absent:
+        return False
+    values, verdict = cell.get("rlpair"), cell.get("rlpair_verdict")
+    if values is None and verdict is None:
+        return True
+    if verdict in ("NOT_RUN", "NOT-RUN", "NOT-COMPARED") and not values:
+        return True
+    return (verdict in ("N/A", "NOT_RUN", "NOT-RUN", "NOT-COMPARED")
+            and isinstance(values, list) and bool(values)
+            and all(isinstance(value, str) and value.startswith("n/a:")
+                    for value in values))  # glue: verification CLI optional record metadata
+
+
 def cmd_identity(args):
     if getattr(args, "check", False):
         return cmd_check(args)
@@ -347,18 +364,19 @@ def cmd_identity(args):
                for key in ("fixtures", "heldout")):  # glue: verification CLI input witness metadata
             return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
                            f"local {fixture} input bytes differ from the admitted reference")
-    raw = []
+    raw, uncompared = [], []
     for lane in lanes:  # glue: verification CLI recorded cell comparison
         for fixture in fixtures:  # glue: verification CLI recorded cell comparison
             cell = cells[f"{lane}/{fixture}"]
             for part in vref.PARTS + vref.OPTIONAL_PARTS:  # glue: verification CLI recorded part comparison
-                # Every previously compared property remains a comparison.
-                # RLPAIR alone is lane-specific; absent undeclared pairs do
-                # not create synthetic work. Missing declared/recorded parts
-                # are refused, including not-run markers, by _part_value.
-                if (part == "rlpair" and lane not in getattr(current, "RLPAIR", {})
-                        and part not in cell and part + "_verdict" not in cell
-                        and part not in table["cells"].get(f"{lane}/{fixture}", {})):
+                # Preserve all measured properties. Optional RLPAIR with no
+                # numerical reference or local measurement stays explicitly
+                # NOT-COMPARED; a real reference or failed local attempt is
+                # still strict. This does not create a new pair campaign.
+                if part == "rlpair" and _unrecorded_optional_pair(
+                        cell, table["cells"].get(f"{lane}/{fixture}", {}).get(part)):
+                    uncompared.append(dict(lane=lane, fixture=fixture, part=part,
+                        state="NOT-COMPARED", reason="optional pair has no numerical reference or local measurement"))
                     continue
                 value = vref._part_value(cell, part, min_repeats=args.repeats)
                 raw.append(dict(lane=lane, fixture=fixture, part=part, value=value,
@@ -377,13 +395,16 @@ def cmd_identity(args):
                  commit=local.get("commit"), vendor=local.get("vendor"), lanes=lanes,
                  fixtures=fixtures, repeats=args.repeats, local_json=keep, harness=harness,
                  diff_exit=None, comparison_exit=comparison_exit, collector_exit=rc,
-                 cells_run=len(cells), summary=[f"summary admitted-table: {len(cells)} cells; {len(bad)} failures"],
+                 cells_run=len(cells), summary=[f"summary admitted-table: {len(cells)} cells; {len(bad)} failures; "
+                                               f"{len(uncompared)} optional parts NOT-COMPARED"],
                  bad=bad, full_fixture_set=set(fixtures) == set(record_fixtures),
-                 reference_table=table_file, reference_evidence=evidence, compared_parts=rows)
+                 reference_table=table_file, reference_evidence=evidence, compared_parts=rows,
+                 uncompared_parts=uncompared, optional_parts_not_compared=len(uncompared))
     if not bad:
         return _finish(args, _verify.EXIT_VERIFIED, "IDENTICAL",
                        f"{len(cells)} cells on this box match the admitted reference table; "
-                       "all collected parts compared with each part's original evidence", extra)
+                       "measured parts compared with each part's original evidence; "
+                       f"{len(uncompared)} optional parts NOT-COMPARED", extra)
     return _finish(args, _verify.EXIT_MISMATCH, "MISMATCH",
                    f"{len(bad)} comparisons or collected properties failed; "
                    + "; ".join(bad[:5]) + f". The local column is kept at {keep}", extra)

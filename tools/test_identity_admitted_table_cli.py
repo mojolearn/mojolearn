@@ -163,7 +163,7 @@ def test_stable_train_cannot_hide_cross_device_property_divergence(cli, capsys, 
     assert next(row for row in report['compared_parts'] if row['part'] == 'train')['state'] == 'IDENTICAL'
 
 
-@pytest.mark.parametrize('damage', ['absent', 'not-run', 'declared-pair', 'pair-reference', 'batch-revision'])
+@pytest.mark.parametrize('damage', ['absent', 'not-run', 'pair-reference', 'batch-revision'])
 def test_missing_or_not_run_properties_are_not_success(cli, capsys, damage):
     def change(record):
         cell = record['cells']['changed/base']
@@ -175,7 +175,6 @@ def test_missing_or_not_run_properties_are_not_success(cli, capsys, damage):
         if damage == 'batch-revision':
             cell.update(batch=['c'*16], batch_verdict='STABLE')
     cli.state.mutate = change
-    if damage == 'declared-pair': cli.harness.RLPAIR = {'changed': object()}
     if damage == 'pair-reference':
         cli.table['cells']['changed/base']['rlpair'] = dict(ref='c'*16, cols={'nvidia': 0})
     if damage == 'batch-revision':
@@ -208,3 +207,36 @@ def test_default_historical_fixture_scope_does_not_run_extra_fixtures(cli, capsy
     rc, report = cli.invoke(capsys)
     assert rc == 0 and report['fixtures'] == ['base']
     assert set(cli.state.local['cells']) == {'changed/base'}
+
+
+@pytest.mark.parametrize('declared', [False, True])
+@pytest.mark.parametrize('local_marker', [None, 'n/a:not_run'])
+def test_unmeasured_optional_pair_is_reported_not_compared_without_new_campaign(cli, capsys, declared, local_marker):
+    # Actual retained table pattern: no-sampler placeholder with absent local
+    # pair. Also preserve older collectors' explicit not_run marker.
+    cli.table['cells']['changed/base']['rlpair'] = dict(ref='n/a:no-sampler-trainer-pair', cols={'nvidia': 0})
+    if declared: cli.harness.RLPAIR = {'changed': object()}
+    if local_marker:
+        cli.state.mutate = lambda record: record['cells']['changed/base'].update(
+            rlpair=[local_marker], rlpair_verdict='N/A')
+    rc, report = cli.invoke(capsys)
+    assert rc == 0 and report['optional_parts_not_compared'] == 1
+    assert report['uncompared_parts'][0]['state'] == 'NOT-COMPARED'
+    assert all(row['part'] != 'rlpair' for row in report['compared_parts'])
+    assert '1 optional parts NOT-COMPARED' in report['detail']
+
+
+def test_declared_real_pair_reference_still_requires_local_measurement(cli, capsys):
+    cli.harness.RLPAIR = {'changed': object()}
+    cli.table['cells']['changed/base']['rlpair'] = dict(ref='c'*16, cols={'nvidia': 0})
+    rc, report = cli.invoke(capsys)
+    assert rc == 1 and report['optional_parts_not_compared'] == 0
+    assert any(row['part'] == 'rlpair' and row['state'] == 'REFUSED' for row in report['compared_parts'])
+
+
+@pytest.mark.parametrize('verdict,values', [('STABLE', ['c'*16]), ('REFUSED', ['n/a:not_run'])])
+def test_actual_pair_observation_or_failure_is_not_relabelled_pending(cli, capsys, verdict, values):
+    cli.state.mutate = lambda record: record['cells']['changed/base'].update(
+        rlpair=values, rlpair_verdict=verdict)
+    rc, report = cli.invoke(capsys)
+    assert rc == 1 and report['optional_parts_not_compared'] == 0
