@@ -4,6 +4,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.59 (published 2026-10-26)
+
 - **Native parameter setup and arrays.** Estimator constructors and more `Array` operations enter compiled bindings directly. Nested parameter updates retain their validation and object lifetimes.
 - **NVIDIA builds.** Embedded PTX extraction starts at the compiler's module header, fixing an assembler crash caused by preceding binary data.
 - **AMD framework loading.** The library and its PyTorch adapter share one HIP runtime when loaded together.
