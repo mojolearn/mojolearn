@@ -62,3 +62,22 @@ def test_evidence_transport_locations_do_not_invalidate_builds():
         "CXXFLAGS": "-DNUMERIC_FLAG=1",
     })
     assert flags == {"CXXFLAGS": "-DNUMERIC_FLAG=1"}
+
+
+def test_frozen_analysis_reused_but_new_artifact_and_freeze_invalidate(tmp_path, monkeypatch):
+    ctx = controller(tmp_path, monkeypatch)
+    calls = []
+    def analyze(root, rev, version, configuration):
+        calls.append((rev, configuration))
+        return {"source": rev, "configuration": configuration}
+    monkeypatch.setattr(release.release_requirements, "requirements", analyze)
+    first = ctx.readiness_manifest()
+    first['configuration']['mutated'] = True
+    assert 'mutated' not in ctx.readiness_manifest()['configuration']
+    assert len(calls) == 1
+    ctx.candidate_gate_identity = lambda vendor: dict(wheels={vendor: 'new-bytes'})
+    ctx.readiness_manifest()
+    assert len(calls) == 2
+    ctx.state['commit'] = 'b' * 40
+    ctx.readiness_manifest()
+    assert len(calls) == 3

@@ -1400,8 +1400,17 @@ class Release:
                 configuration["artifacts:apple"] = {Path(wheel).name: sha256(wheel)}
         except (StepFailed, OSError, ValueError):
             pass
-        return release_requirements.requirements(ROOT, self.commit, self.version,
-                                                  configuration=configuration)
+        # One publication controller checks the same frozen inputs for every
+        # split wheel. Reuse that source analysis; any candidate wheel hash,
+        # configuration, freeze, tooling commit or catalog change invalidates it.
+        key = (self.commit, self.tooling_commit, sha256(ROOT / 'tools/release_requirements.json'),
+               json.dumps(configuration, sort_keys=True))
+        cached = getattr(self, '_readiness_manifest_cache', None)
+        if cached is None or cached[0] != key:
+            manifest = release_requirements.requirements(ROOT, self.commit, self.version,
+                                                        configuration=configuration)
+            self._readiness_manifest_cache = (key, manifest)
+        return json.loads(json.dumps(self._readiness_manifest_cache[1]))
 
     def readiness_status(self, write=False):
         manifest = self.readiness_manifest()
