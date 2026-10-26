@@ -455,7 +455,9 @@ down)
     [ -n "$keys" ] || die "down <pod>|--all [--force]"
     for k in $keys; do
         pod_env $k
-        busy=$(BOX_TIMEOUT=60 box "cat $QD/pending 2>/dev/null; grep -lE '^(starting|running)\$' $QD/[0-9]*/status 2>/dev/null | wc -l" < /dev/null | tr '\n' ' ' || true)
+        # queued counted from the job records, not $QD/pending: the dispatcher writes that file once a pass, so a job
+        # submitted since its last pass was missing and down deleted the pod under it
+        busy=$(BOX_TIMEOUT=60 box "grep -lx queued $QD/[0-9]*/status 2>/dev/null | wc -l; grep -lE '^(starting|running)\$' $QD/[0-9]*/status 2>/dev/null | wc -l" < /dev/null | tr '\n' ' ' || true)
         set -- $busy
         if [ "${1:-0}" != 0 ] || [ "${2:-0}" != 0 ]; then
             [ $force = 1 ] || die "$k has ${1:-0} queued and ${2:-0} running job(s); it goes down by itself $NVC_IDLE_MIN min after they finish (or pass --force)"
