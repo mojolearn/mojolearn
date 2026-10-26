@@ -52,9 +52,12 @@ def fixture():
                   if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_EVENTS')
     body = [n for n in source.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))]
     calls = []
+    hooks = next(ast.literal_eval(n.value) for n in source.body
+                 if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CONSTRUCTOR_HOOKS')
     ns = {'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
           'BuiltinFunctionType': BuiltinFunctionType, '_ENTRY': lambda *args: calls.append(args),
-          '_CONTEXT': dict(plans={}, missing=object(), ready=False)}
+          '_INIT_ENTRY': lambda *args: calls.append(('init',) + args), '_CONSTRUCTOR_HOOKS': hooks,
+          '_CONTEXT': dict(plans={}, missing=object(), ready=False, originals={})}
     exec(compile(ast.Module(body=body, type_ignores=[]), str(CONNECTOR), 'exec'), ns)
     modules = {module.__name__: module for module in (mode, attributes, package, host)}
     return ns, modules, calls
@@ -77,7 +80,11 @@ def test_install_preserves_77_signatures_defaults_and_one_call_boundary():
         ns['install']()
     assert len(ns['_CONTEXT']['plans']) == 77
     for cls, (constructor, signature) in originals.items():
-        assert cls.__init__ is constructor
+        # The public constructor is now one native call; the original body
+        # is retained only as the test oracle, never called by the product.
+        assert cls.__init__ is not constructor and ns['_CONTEXT']['originals'][cls] is constructor
+        assert not hasattr(cls.__init__, '__wrapped__')
+        assert cls.__init__.__qualname__ == cls.__qualname__ + '.__init__'
         current = inspect.signature(cls.__init__)
         assert tuple(current.parameters) == tuple(signature.parameters)
         for name, parameter in signature.parameters.items():
@@ -92,7 +99,17 @@ def test_install_preserves_77_signatures_defaults_and_one_call_boundary():
         obj.set_params(z=marker, a=marker)
         assert calls[-1][0] is obj and calls[-1][2] is ns['_CONTEXT']
         assert list(calls[-1][1]) == ['z', 'a'] and calls[-1][1]['z'] is marker
-    assert len(calls) == 77
+        made = cls(marker, z=marker)
+        assert calls[-1][0] == 'init' and calls[-1][1] is made and calls[-1][2] == (marker,)
+        assert calls[-1][3] == {'z': marker} and calls[-1][4] is ns['_CONTEXT'] and calls[-1][5] is cls
+        names = tuple(signature.parameters)[1:]
+        assert plan['positional'] == tuple(n for n in names
+            if signature.parameters[n].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        assert set(plan['required_positional'] + plan['required_kwonly']) == {
+            n for n in names if signature.parameters[n].default is inspect.Parameter.empty}
+        assert plan['rule_fields'] == tuple(dict.fromkeys(e[0] for e in plan['events'] if e[3]))
+        assert plan['label'] == constructor.__qualname__
+    assert len(calls) == 2 * 77
 
 
 def test_host_inheritance_stays_on_original_pending_contract():
@@ -126,8 +143,13 @@ def test_stale_or_non_field_only_contract_fails_before_installing_any_setter(kin
 def test_connection_pins_final_storage_hooks_without_constructing():
     ns, modules, calls = connected()
     assert ns['_CONTEXT']['ready'] and not calls
+    assert ns['_CONTEXT']['constructor_hook_types'] == (type(vars(object)['__getattribute__']),
+                                                         type(vars(object)['__setattr__']))
     for cls, plan in ns['_CONTEXT']['plans'].items():
         assert plan['mro'] == cls.__mro__
+        assert tuple(name for name, _ in plan['constructor_hooks']) == ('__getattribute__', '__getattr__', '__setattr__')
+        assert plan['constructor_hooks'][0][1] is object.__getattribute__
+        assert plan['constructor_hooks'][1][1] is ns['_CONTEXT']['missing']
         assert all(value is vars(base).get(name) for base, name, value in plan['layout_hooks'])
         assert plan['release_allowed']
         assert plan['field_names'] == tuple(dict.fromkeys(event[0] for event in plan['events']))
@@ -246,5 +268,40 @@ def test_compile_invalidation_is_only_host_tokenizer():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
             if 'bindings/full_reset_params_native.mojo' in closure['files']:
+                owners.add((mode, name))
+    assert owners == {('host', 'tokenizer')}
+
+
+def test_native_constructor_is_one_call_and_never_runs_python_initializers():
+    tree = ast.parse(CONNECTOR.read_text())
+    factory = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_initializer')
+    wrapper = factory.body[0]
+    assert isinstance(wrapper, ast.FunctionDef) and len(wrapper.body) == 1
+    assert ast.unparse(wrapper.body[0]) == 'return _INIT_ENTRY(self, args, kwargs, _CONTEXT, owner)'
+    source = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    for forbidden in ('Python.import_module', '.__init__(', '.__setattr__(', 'fields[', 'fields.clear',
+                      'native_storage_allocate', 'py_setattr(', 'b.hasattr', 'Python.evaluate'):
+        assert forbidden not in source, forbidden
+    # Every dropped owner is admitted before the first write.
+    assert source.index('_release_owned(previous, retained, context)') < source.index(
+        'py_setitem(fields, targets[i], sources[i])')
+    # Argument errors precede any admission or state access.
+    body = source[source.index('def _construct('):]
+    assert body.index('_bind(positional, keywords, plan)') < body.index('_admit(model, owner, plan, context)') < body.index('_fields(model)')
+    registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+    assert 'from bindings.full_reset_constructor_native import full_reset_constructor_c\n' in registration
+    assert '\n        module.def_py_c_function(full_reset_constructor_c, "full_reset_constructor_native_call")\n' in registration
+
+
+def test_constructor_compile_invalidation_is_only_host_tokenizer():
+    from development_build import SourceGraph
+    groups = json.loads((ROOT / 'bindings/development_groups.json').read_text())['groups']
+    graph = SourceGraph(ROOT)
+    owners = set()
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            if 'bindings/full_reset_constructor_native.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}

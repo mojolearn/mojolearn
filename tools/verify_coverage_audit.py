@@ -2237,6 +2237,16 @@ ANNOTATIONS.update({
         "_native_linear_constructors.install replaces the __init__ of the 19 field-only linear models "
         "with a function calling this entry; x-huber-outliers constructs HuberRegressor(max_iter=30, "
         "epsilon=1.1) and digests its outliers_; " + _NATIVE_PARAMS),
+    "full_reset_constructor_native_call": (
+        "covered", ["kmeans", "public-set-params"],
+        "_native_full_reset_params.install and _native_declared_constructors.install replace the __init__ of "
+        "the 77 full-reset and 52 declared or plain field-only classes with a function calling this entry; the kmeans "
+        "lane constructs KMeans(n_clusters=8, random_state=3) and digests its fit, and " + _NATIVE_PARAMS),
+    "array_native_call": (
+        "covered", ["kmeans", "public-set-params"],
+        "every public mojolearn.Array operation (python/mojolearn/_array.py) is one call of this entry; "
+        "identity_break._h digests each lane's outputs through numpy.asarray (the Array buffer/interface "
+        "operations), and the kmeans lane's cluster_centers_/labels_ are Arrays"),
     "params_setter_native_call": (
         "covered", ["public-set-params"],
         "NativeParamsSetter.set_params (the linear models' set_params) calls this entry; " + _NATIVE_PARAMS),
