@@ -1,0 +1,846 @@
+{
+  "schema": "mojolearn.worktree-reconciliation.v1",
+  "worktrees": 79,
+  "unique_unmatched_commits": 39,
+  "scope": "Source integration audit only; existing runtime evidence is not re-executed or newly qualified by this audit.",
+  "commits": [
+    {
+      "commit": "da0dee72e7c1c9721cb322f6620bc53a8d596ca3",
+      "subject": "da0dee72e Guard identity launches with existing ledger selection and active-run claims",
+      "status": "superseded",
+      "reason": "The subsequent launch guard supports legacy controllers while enforcing claims for ledger-managed launches (ffedc13be). Restoring the older guard would undo that compatibility repair.",
+      "current_sources": [
+        "tools/release_identity_run.py",
+        "tools/test_release_identity_run.py"
+      ],
+      "historical_test_audit": {
+        "commit": "da0dee72e7c1c9721cb322f6620bc53a8d596ca3",
+        "subject": "da0dee72e Guard identity launches with existing ledger selection and active-run claims",
+        "missing_tests": [
+          {
+            "file": "tools/test_release_identity_run.py",
+            "missing_tests": [
+              "test_direct_producer_refuses_before_import"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commit": "42103476cdc6856f6e58e04943df629cc5fc5a69",
+      "subject": "42103476c Add conservative literal operation analysis for native dispatch",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "42103476cdc6856f6e58e04943df629cc5fc5a69",
+        "subject": "42103476c Add conservative literal operation analysis for native dispatch",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "10af38e98e7003368dbc9a92a00ab8d176e2befe",
+      "subject": "10af38e98 Refuse constructor shadowing in native dispatch analysis",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "10af38e98e7003368dbc9a92a00ab8d176e2befe",
+        "subject": "10af38e98 Refuse constructor shadowing in native dispatch analysis",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "f126ccac678a72a7f806b393e005bab35494ce71",
+      "subject": "f126ccac6 Retain whole native functions for unsupported statements",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "f126ccac678a72a7f806b393e005bab35494ce71",
+        "subject": "f126ccac6 Retain whole native functions for unsupported statements",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "ab84c78f7d805111c00e701ac400981a606b2ff9",
+      "subject": "ab84c78f7 Analyze Mojo move expressions and byte slices conservatively",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "ab84c78f7d805111c00e701ac400981a606b2ff9",
+        "subject": "ab84c78f7 Analyze Mojo move expressions and byte slices conservatively",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "c24b712c85be18f627415883fd922c77cb920c6a",
+      "subject": "c24b712c8 fix: follow native helper dependencies beyond one import hop",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "c24b712c85be18f627415883fd922c77cb920c6a",
+        "subject": "c24b712c8 fix: follow native helper dependencies beyond one import hop",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "f176211b750ba76309212acfb29f8cbaac613eab",
+      "subject": "f176211b7 fix: derive numerical export uses from reached native owners",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "f176211b750ba76309212acfb29f8cbaac613eab",
+        "subject": "f176211b7 fix: derive numerical export uses from reached native owners",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "f3cdad19ef480e4b90ef4db8438735a873d054ba",
+      "subject": "f3cdad19e fix: distinguish unused native factory results from executed entries",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "f3cdad19ef480e4b90ef4db8438735a873d054ba",
+        "subject": "f3cdad19e fix: distinguish unused native factory results from executed entries",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "437feba01cc487c3a7df7d72997807bb70e94c1b",
+      "subject": "437feba01 fix: refuse native factory pointer escapes and unsupported binding forms",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "437feba01cc487c3a7df7d72997807bb70e94c1b",
+        "subject": "437feba01 fix: refuse native factory pointer escapes and unsupported binding forms",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "fbc2b8fafc35cbabab687ed887d11037d23e3297",
+      "subject": "fbc2b8faf fix: refuse shadowed and argument-dependent dictionary factories",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "fbc2b8fafc35cbabab687ed887d11037d23e3297",
+        "subject": "fbc2b8faf fix: refuse shadowed and argument-dependent dictionary factories",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "3ab3bbae211f9c84d7c398845229d8824838824b",
+      "subject": "3ab3bbae2 fix: keep native pointer calls through unknown instance checks attributed",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "3ab3bbae211f9c84d7c398845229d8824838824b",
+        "subject": "3ab3bbae2 fix: keep native pointer calls through unknown instance checks attributed",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "59528015d4a8865f387a6af84cd10bbb4859a6c6",
+      "subject": "59528015d fix: retain attribution when dictionary factories expose local namespaces",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "59528015d4a8865f387a6af84cd10bbb4859a6c6",
+        "subject": "59528015d fix: retain attribution when dictionary factories expose local namespaces",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "931b13be31457c149eabea7ceaf0214fae265ad6",
+      "subject": "931b13be3 fix: keep literal namespace lookups precise for deferred native factories",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "931b13be31457c149eabea7ceaf0214fae265ad6",
+        "subject": "931b13be3 fix: keep literal namespace lookups precise for deferred native factories",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "0cdbbd0d69ba1d09480b397aefe1a8ce57c09ce0",
+      "subject": "0cdbbd0d6 Add conservative literal operation analysis for native dispatch",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "0cdbbd0d69ba1d09480b397aefe1a8ce57c09ce0",
+        "subject": "0cdbbd0d6 Add conservative literal operation analysis for native dispatch",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "ffe7b3f49614245ba6de619f9c22233b6ca4b2d1",
+      "subject": "ffe7b3f49 Refuse constructor shadowing in native dispatch analysis",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "ffe7b3f49614245ba6de619f9c22233b6ca4b2d1",
+        "subject": "ffe7b3f49 Refuse constructor shadowing in native dispatch analysis",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "6bbd11b3a06dd672fdab032e7ab3103e420a8667",
+      "subject": "6bbd11b3a Track explicit module members without dropping import effects",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "6bbd11b3a06dd672fdab032e7ab3103e420a8667",
+        "subject": "6bbd11b3a Track explicit module members without dropping import effects",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "c215eb8ed3edd3f59105003a78b46d73a8ed6bd7",
+      "subject": "c215eb8ed Retain whole native functions for unsupported statements",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "c215eb8ed3edd3f59105003a78b46d73a8ed6bd7",
+        "subject": "c215eb8ed Retain whole native functions for unsupported statements",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "ac9585e84fa6f2582c2dcfc032f307ade7bcbd87",
+      "subject": "ac9585e84 Retain named public symbols at lane dependency roots",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "ac9585e84fa6f2582c2dcfc032f307ade7bcbd87",
+        "subject": "ac9585e84 Retain named public symbols at lane dependency roots",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "3f051bdfdc751b49af57ee0ccecd003c4262ce97",
+      "subject": "3f051bdfd Keep inherited and indirect local public-root dependencies",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "3f051bdfdc751b49af57ee0ccecd003c4262ce97",
+        "subject": "3f051bdfd Keep inherited and indirect local public-root dependencies",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "06c61c97993460b9d8696934ce258c450fda9e12",
+      "subject": "06c61c979 Analyze Mojo move expressions and byte slices conservatively",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "06c61c97993460b9d8696934ce258c450fda9e12",
+        "subject": "06c61c979 Analyze Mojo move expressions and byte slices conservatively",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "75e59297ad10efa80043205553357b692d27073b",
+      "subject": "75e59297a Distinguish public member writes from root rebinding",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "75e59297ad10efa80043205553357b692d27073b",
+        "subject": "75e59297a Distinguish public member writes from root rebinding",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "7dd04f90e6d3dc1c9f0ecde322e27c50cfcd24e6",
+      "subject": "7dd04f90e Report conservative native dispatch precision limitations",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "7dd04f90e6d3dc1c9f0ecde322e27c50cfcd24e6",
+        "subject": "7dd04f90e Report conservative native dispatch precision limitations",
+        "missing_tests": [
+          {
+            "file": "tools/test_lane_select.py",
+            "missing_tests": [
+              "test_pending_precision_shared_binding_paths_exclude_unrelated_lanes"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commit": "5674beb5343924847756f28dca28161eeef3c974",
+      "subject": "5674beb53 Keep selector precision provenance compact",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "5674beb5343924847756f28dca28161eeef3c974",
+        "subject": "5674beb53 Keep selector precision provenance compact",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "51c6cc07caefa5615251a0b07f7215b77dd2f0ee",
+      "subject": "51c6cc07c Trace precision evidence per export without changing selection",
+      "status": "integrated-with-subsequent-fixes",
+      "reason": "Current selector retains the historical regression coverage. The old pending shared-binding exclusion test survives under test_shared_binding_paths_exclude_unrelated_lanes; conservative over-selection remains explicitly documented, not silently treated as a narrow proof.",
+      "current_sources": [
+        "tools/lane_select.py",
+        "tools/native_dispatch_reach.py",
+        "tools/test_lane_select.py",
+        "tools/test_native_dispatch_reach.py",
+        "tools/LANE_SELECTOR_PRECISION.md"
+      ],
+      "historical_test_audit": {
+        "commit": "51c6cc07caefa5615251a0b07f7215b77dd2f0ee",
+        "subject": "51c6cc07c Trace precision evidence per export without changing selection",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "fd32577292279bf69a1039cb410ca38b351cdef9",
+      "subject": "fd3257729 Retain bagging OOB buffers through native R2 calculation",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under 14bd67bd94a1d1d11bb242cd27dbbce7b30c39b7.",
+      "current_sources": [
+        "bindings/trees_public_boost.mojo",
+        "python/mojolearn/tests/test_native_transient_buffer_lifetimes.py"
+      ],
+      "historical_test_audit": {
+        "commit": "fd32577292279bf69a1039cb410ca38b351cdef9",
+        "subject": "fd3257729 Retain bagging OOB buffers through native R2 calculation",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "a901b0c44295a6482d6266ab2e2cc7494ef49cf2",
+      "subject": "a901b0c44 Preserve native parameter lookup crash and test-only controls",
+      "status": "superseded-by-reduced-reproduction-and-supported-repair",
+      "reason": "The retained reproduction, submitted Modular report and owner-authorized native dictionary repair preserve the issue and its resolution. Historical reduction variants remain in git.",
+      "current_sources": [
+        "experiments/python_object_item_lookup/MODULAR_REPORT.md",
+        "bindings/native_instance_item.mojo"
+      ],
+      "historical_test_audit": {
+        "commit": "a901b0c44295a6482d6266ab2e2cc7494ef49cf2",
+        "subject": "a901b0c44 Preserve native parameter lookup crash and test-only controls",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "01ee4347bbf25ac3f85768d90fcdc89d90adb087",
+      "subject": "01ee4347b Use PythonObject envelope for standalone lookup export",
+      "status": "superseded-by-reduced-reproduction-and-supported-repair",
+      "reason": "The retained reproduction, submitted Modular report and owner-authorized native dictionary repair preserve the issue and its resolution. Historical reduction variants remain in git.",
+      "current_sources": [
+        "experiments/python_object_item_lookup/MODULAR_REPORT.md",
+        "bindings/native_instance_item.mojo"
+      ],
+      "historical_test_audit": {
+        "commit": "01ee4347bbf25ac3f85768d90fcdc89d90adb087",
+        "subject": "01ee4347b Use PythonObject envelope for standalone lookup export",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "60a4c0a6ddee1e716dc90422af501a6c54b161a2",
+      "subject": "60a4c0a6d Record reproduced parameter lookup fault and precise control oracle",
+      "status": "superseded-by-reduced-reproduction-and-supported-repair",
+      "reason": "The retained reproduction, submitted Modular report and owner-authorized native dictionary repair preserve the issue and its resolution. Historical reduction variants remain in git.",
+      "current_sources": [
+        "experiments/python_object_item_lookup/MODULAR_REPORT.md",
+        "bindings/native_instance_item.mojo"
+      ],
+      "historical_test_audit": {
+        "commit": "60a4c0a6ddee1e716dc90422af501a6c54b161a2",
+        "subject": "60a4c0a6d Record reproduced parameter lookup fault and precise control oracle",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "e4b3991860e963d2aaa0600396ff75a584c2939c",
+      "subject": "e4b399186 Add standalone supported-API lookup reduction candidates",
+      "status": "superseded-by-reduced-reproduction-and-supported-repair",
+      "reason": "The retained reproduction, submitted Modular report and owner-authorized native dictionary repair preserve the issue and its resolution. Historical reduction variants remain in git.",
+      "current_sources": [
+        "experiments/python_object_item_lookup/MODULAR_REPORT.md",
+        "bindings/native_instance_item.mojo"
+      ],
+      "historical_test_audit": {
+        "commit": "e4b3991860e963d2aaa0600396ff75a584c2939c",
+        "subject": "e4b399186 Add standalone supported-API lookup reduction candidates",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "11b282b62a78995639ca1c55c452b6ef3980bb3d",
+      "subject": "11b282b62 Move linear parameter setters into native constructor plans",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under 6d3bf6ad500879bd8d9e75db240ffa4ffebd3b19.",
+      "current_sources": [
+        "bindings/_mojolearn_tokenizer_host.mojo",
+        "bindings/mode_metadata_native.mojo",
+        "bindings/params_setter_native.mojo",
+        "docs/plans/NATIVE_PARAMS_SETTER_20261025.md",
+        "python/mojolearn/__init__.py",
+        "python/mojolearn/_expansion_linear.py",
+        "python/mojolearn/_native_params_setter.py",
+        "python/mojolearn/tests/test_native_params_setter.py",
+        "tools/test_native_params_setter_connection.py"
+      ],
+      "historical_test_audit": {
+        "commit": "11b282b62a78995639ca1c55c452b6ef3980bb3d",
+        "subject": "11b282b62 Move linear parameter setters into native constructor plans",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "0aa9905f2096c341fc24c1edf28eda816698a567",
+      "subject": "0aa9905f2 Retain held native archive pathname IO experiment and compatibility controls",
+      "status": "superseded",
+      "reason": "The held POSIX pathname prototype was not the accepted runtime repair. Current supported native FileIO archive handling and installed qualification supersede it; see 7af8cf2cd. Restoring the prototype would discard retained compatibility behavior.",
+      "current_sources": [
+        "bindings/classical_archive.mojo",
+        "docs/plans/runtime_takeover_status_20261022.json"
+      ],
+      "historical_test_audit": {
+        "commit": "0aa9905f2096c341fc24c1edf28eda816698a567",
+        "subject": "0aa9905f2 Retain held native archive pathname IO experiment and compatibility controls",
+        "missing_tests": [
+          {
+            "file": "python/mojolearn/tests/test_archive_path_io_native.py",
+            "missing_tests": [
+              "test_save_never_enters_target_path_audit_hook",
+              "test_path_errors_match_existing_native_file_semantics",
+              "test_surrogate_path_respects_platform_filesystem_contract",
+              "test_native_file_errors_ignore_replaced_python_helpers",
+              "test_preopened_stream_keeps_position_prefix_and_ownership",
+              "test_created_path_respects_process_umask_in_isolated_child",
+              "test_partial_native_file_write_preserves_error_and_written_prefix",
+              "test_blocking_path_open_allows_caller_thread_progress"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commit": "9818b67b1d4551a8f5ab54fb07bd2336524fb9cb",
+      "subject": "9818b67b1 Retain native builtin identities for owner release admission",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under 9cb5b9ef2d85ac396e43853139a2c3f15b672d46.",
+      "current_sources": [
+        "bindings/native_owner_lifetime.mojo",
+        "python/mojolearn/_native_owner_lifetime.py",
+        "python/mojolearn/tests/test_native_owner_builtin_identity.py",
+        "tools/qualify_native_runtime_installed.py",
+        "tools/test_arena_rows_connection.py",
+        "tools/test_qualify_native_runtime_installed.py"
+      ],
+      "historical_test_audit": {
+        "commit": "9818b67b1d4551a8f5ab54fb07bd2336524fb9cb",
+        "subject": "9818b67b1 Retain native builtin identities for owner release admission",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "24d055be1e524b795e10893571ec375f4d755e25",
+      "subject": "24d055be1 Checkpoint held native resident lifecycle and Arrow owner blocker",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under 1b173327beccaf6a56518d541518889c20289e80.",
+      "current_sources": [
+        "bindings/arena_resident_native.mojo",
+        "bindings/arena_rows_native.mojo",
+        "python/mojolearn/_native_arena_rows.py",
+        "python/mojolearn/model_selection.py",
+        "python/mojolearn/tests/test_resident_lifecycle_native.py",
+        "tools/native_runtime_debt/resident_arrow_owner.json",
+        "tools/qualify_native_runtime_installed.py",
+        "tools/test_arena_rows_connection.py",
+        "tools/test_qualify_native_runtime_installed.py"
+      ],
+      "historical_test_audit": {
+        "commit": "24d055be1e524b795e10893571ec375f4d755e25",
+        "subject": "24d055be1 Checkpoint held native resident lifecycle and Arrow owner blocker",
+        "missing_tests": [
+          {
+            "file": "python/mojolearn/tests/test_resident_lifecycle_native.py",
+            "missing_tests": [
+              "test_constructor_reinitialization_and_context_lifetime_are_native",
+              "test_native_lifetime_preserves_supported_buffer_owners",
+              "test_native_lifetime_preserves_ordinary_pandas_owner_graphs",
+              "test_native_lifetime_preserves_ordinary_arrow_owners",
+              "test_native_lifetime_refuses_hidden_arrow_finalizers_without_replacement",
+              "test_native_cleanup_attempts_remaining_slots_and_preserves_first_failure",
+              "test_native_cleanup_refuses_actual_lifetime_hooks_before_state_changes",
+              "test_native_cleanup_refuses_pandas_class_finalizers_before_release",
+              "test_release_identity_miss_never_calls_application_protocols",
+              "test_native_cleanup_uses_connected_container_constructors",
+              "test_device_rows_keep_their_resident_snapshot_across_lifecycle_calls",
+              "test_native_lifecycle_refuses_custom_dictionary_keys_before_lookup",
+              "test_native_lifecycle_refuses_application_class_hooks",
+              "test_native_empty_lifecycle_preserves_numpy_free_startup"
+            ]
+          },
+          {
+            "file": "tools/test_arena_rows_connection.py",
+            "missing_tests": [
+              "test_resident_owner_metadata_preserves_native_timezone_and_container_identities"
+            ]
+          },
+          {
+            "file": "tools/test_qualify_native_runtime_installed.py",
+            "missing_tests": [
+              "test_resident_lifetime_scope_preserves_partial_operation_boundaries"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commit": "0f7e107297b64760c333f83ce49ef565f9155f7a",
+      "subject": "0f7e10729 Annotate native timezone metadata traversal",
+      "status": "superseded",
+      "reason": "The accepted lifecycle retains all owners until native frees finish, then releases owners last. It supports Arrow without the older owner-graph inspection prototype. The replacement and old prototype are explicitly recorded in resident_arrow_owner.json; its historical pending qualification fields are not newly claimed as passes here.",
+      "current_sources": [
+        "tools/native_runtime_debt/resident_arrow_owner.json",
+        "bindings/arena_cache_release.mojo",
+        "bindings/arena_resident_native.mojo",
+        "python/mojolearn/tests/test_resident_lifecycle_native.py"
+      ],
+      "historical_test_audit": {
+        "commit": "0f7e107297b64760c333f83ce49ef565f9155f7a",
+        "subject": "0f7e10729 Annotate native timezone metadata traversal",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "f9fbfff2b874cf2ab8d4c81f373a5728174b48f4",
+      "subject": "f9fbfff2b Guard cache cleanup exception identity and register upload qualification",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under 530d15e559d11d3c4fcaaea893c8f8706f6357fb.",
+      "current_sources": [
+        "python/mojolearn/_native_arena_rows.py",
+        "tools/qualify_native_runtime_installed.py",
+        "tools/test_arena_rows_connection.py",
+        "tools/test_qualify_native_runtime_installed.py"
+      ],
+      "historical_test_audit": {
+        "commit": "f9fbfff2b874cf2ab8d4c81f373a5728174b48f4",
+        "subject": "f9fbfff2b Guard cache cleanup exception identity and register upload qualification",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "8306242d8275961db4df23fe7b62759f20ac780e",
+      "subject": "8306242d8 Register bounded installed cache live and entry qualification",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under c879243567c698efa083197d4a8e0bf8dcc71b40.",
+      "current_sources": [
+        "tools/qualify_native_runtime_installed.py",
+        "tools/test_qualify_native_runtime_installed.py"
+      ],
+      "historical_test_audit": {
+        "commit": "8306242d8275961db4df23fe7b62759f20ac780e",
+        "subject": "8306242d8 Register bounded installed cache live and entry qualification",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "90c8a201ecb40b074c8480d16abad89f6c3bef3a",
+      "subject": "90c8a201e Register bounded installed cache capability qualification",
+      "status": "integrated",
+      "reason": "Equivalent implementation is already on main under 1c9d62ddbd341ff31643b91709a44d9f430497e9.",
+      "current_sources": [
+        "tools/qualify_native_runtime_installed.py",
+        "tools/test_qualify_native_runtime_installed.py"
+      ],
+      "historical_test_audit": {
+        "commit": "90c8a201ecb40b074c8480d16abad89f6c3bef3a",
+        "subject": "90c8a201e Register bounded installed cache capability qualification",
+        "missing_tests": []
+      }
+    },
+    {
+      "commit": "58ecc0cdb815fe9acb4af7de16adf5a7b79feff3",
+      "subject": "58ecc0cdb Own read-only cache lookup and resident statistics natively",
+      "status": "superseded",
+      "reason": "Separate native cache-get and statistics owners implement this surface, including subsequent compilation, ownership and NumPy-string fixes. Historical combined prototype is retained in git.",
+      "current_sources": [
+        "bindings/arena_cache_get.mojo",
+        "bindings/arena_cache_stats.mojo",
+        "python/mojolearn/tests/test_cache_get_native.py",
+        "python/mojolearn/tests/test_cache_stats_native.py"
+      ],
+      "historical_test_audit": {
+        "commit": "58ecc0cdb815fe9acb4af7de16adf5a7b79feff3",
+        "subject": "58ecc0cdb Own read-only cache lookup and resident statistics natively",
+        "missing_tests": [
+          {
+            "file": "python/mojolearn/tests/test_cache_readonly_native.py",
+            "missing_tests": [
+              "test_cache_get_preserves_ordinary_metadata_layouts",
+              "test_cache_get_preserves_native_integer_conversion",
+              "test_cache_get_preserves_ordinary_cache_variants",
+              "test_cache_itemsize_equality_preserves_native_values",
+              "test_cache_itemsize_comparison_avoids_numpy_numeric_dispatch",
+              "test_cache_itemsize_refusal_preserves_value_error",
+              "test_cache_metadata_preserves_versioned_warning_and_error_contracts",
+              "test_cache_scalar_warning_error_action_preserves_exact_category",
+              "test_cache_scalar_warning_refuses_application_display_hook",
+              "test_cache_get_refuses_application_hooks_before_execution",
+              "test_cache_field_descriptor_is_refused_before_execution",
+              "test_cache_native_errors_preserve_existing_exception_classes",
+              "test_stats_preserves_none_empty_duplicate_prefix_and_nested_scope",
+              "test_stats_preserves_native_thread_local_isolation",
+              "test_stats_retains_counter_aliases_without_reading_or_releasing_owners",
+              "test_stats_preserves_numpy_string_prefix",
+              "test_cache_reads_preserve_numpy_free_startup",
+              "test_stats_refuses_application_metadata_hooks",
+              "test_cache_reads_use_retained_native_builtin_identities"
+            ]
+          },
+          {
+            "file": "tools/test_arena_rows_connection.py",
+            "missing_tests": [
+              "test_readonly_cache_retains_native_attribute_and_scalar_entries"
+            ]
+          },
+          {
+            "file": "tools/test_qualify_native_runtime_installed.py",
+            "missing_tests": [
+              "test_cache_readonly_scope_is_public_without_claiming_lifecycle"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "commit": "0525bd1fdf906165ebbcd13c656fbf912423f4aa",
+      "subject": "0525bd1fd Build StandardScaler sklearn metadata through native record slots",
+      "status": "superseded",
+      "reason": "Current StandardScaler native lifecycle and tag metadata supersede the older record-slot prototype. Apply the owner-authorized sklearn-tag metadata exception when auditing it.",
+      "current_sources": [
+        "bindings/scaler_lifecycle_native.mojo",
+        "python/mojolearn/preprocessing.py",
+        "python/mojolearn/tests/test_standard_scaler_native_lifecycle.py"
+      ],
+      "historical_test_audit": {
+        "commit": "0525bd1fdf906165ebbcd13c656fbf912423f4aa",
+        "subject": "0525bd1fd Build StandardScaler sklearn metadata through native record slots",
+        "missing_tests": [
+          {
+            "file": "python/mojolearn/tests/test_standard_scaler_native_lifecycle.py",
+            "missing_tests": [
+              "test_sklearn_transformer_tags_use_native_record_slots",
+              "test_sklearn_tag_overrides_are_metadata_without_callbacks",
+              "test_sklearn_tag_callback_is_refused_without_invocation"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "untracked": [
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/apple-release-0857",
+      "status": "retained-historical-built-adapters",
+      "reason": "Only generated adapter binaries and their manifest are untracked; the accepted 0.8.59 adapter sources and final artifacts are already published.",
+      "files": [
+        {
+          "path": "libmojolearn_adapter.so",
+          "sha256": "523b246beb19ec1643cc39ca575ed0aac573298bc262afb92b216d0d3d747c3c"
+        },
+        {
+          "path": "mojolearn_torch.so",
+          "sha256": "b915dc068ff87fc9c60d6fe154eca7ab8380365204ad59da5fcc5b92a360b340"
+        },
+        {
+          "path": "mojolearn_ops.mojoc",
+          "sha256": "a85e88984c82cb7e6af63b1eb735129167a9f47fa069bd90bc078d21b69b138d"
+        },
+        {
+          "path": "adapters.json",
+          "sha256": "3a0aeb85c0fc50a69ff9d9d1c88191c398863f02101adb0749027ea56c8e17b9"
+        }
+      ]
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/release0856-native",
+      "status": "retained-historical-built-adapters",
+      "reason": "Only generated adapter binaries and their manifest are untracked; the accepted 0.8.59 adapter sources and final artifacts are already published.",
+      "files": [
+        {
+          "path": "libmojolearn_adapter.so",
+          "sha256": "1f35e2973cdf105239d09ac2420ebfab024eff48b81d0292562a404127d46910"
+        },
+        {
+          "path": "mojolearn_torch.so",
+          "sha256": "939869ca361f2a4e7967d422134a3201863ce8cc49b23434ecaa06fb5d22ea3b"
+        },
+        {
+          "path": "mojolearn_ops.mojoc",
+          "sha256": "bf9263a39a1689f5c5d90ec67d0bc38c667639f63b647ad9363cbb3e560e4c49"
+        },
+        {
+          "path": "adapters.json",
+          "sha256": "6b1993f63baaea4bebc88cb23508619fce90769dfc4e5961b297f7e4a1d6d6be"
+        }
+      ]
+    }
+  ],
+  "audit_sources": {
+    "next-release-worktree-audit.json": "6a5ed51190b24df0769a3a5044a2592ba771f4b062e0335c4c93b3528a354fc6",
+    "next-release-unmatched-commits.json": "e2b900a549b2ad993582aa658b51073d01da8fed87a7228e37bd0cf89d301dd2",
+    "next-release-historical-test-audit.json": "6a65c6ddf0932a997ba7d03b1abbd679680b47cd425595c3a1ef1548507121b9"
+  }
+}

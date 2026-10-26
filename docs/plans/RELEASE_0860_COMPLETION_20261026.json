@@ -23,11 +23,12 @@
     {
       "id": "worktrees",
       "task": "Reconcile every unmatched worktree change against the shipped source; integrate or repair any remaining implementation.",
-      "status": "pending",
+      "status": "complete",
       "evidence": {
         "path": "/Users/andrewhendel/mojolearn-evidence/release-takeover-20261026/next-release-worktree-audit.json",
         "sha256": "6a5ed51190b24df0769a3a5044a2592ba771f4b062e0335c4c93b3528a354fc6"
-      }
+      },
+      "reconciliation": "docs/plans/RELEASE_0860_WORKTREE_RECONCILIATION_20261026.json"
     },
     {
       "id": "runtime-source",
