@@ -2032,7 +2032,7 @@ FAMILIES = (
             # lane fg-pca T1 (2026-10-09): tsvd_fit + tsvd_explained in one call
             "tsvd_fit_explained",
             "dbscan_fit_core", "labeled_reference_predict",
-            "dbscan_core_arrays", "estimators_py2mojo_cluster",
+            "dbscan_core_arrays",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
@@ -2045,7 +2045,7 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "py2mojo_rows", "py2mojo_linear_flags", "lm_classical_stats",
             "lm_col_sums_pair", "lm_means_finish", "lm_intercept",
-            "pca_rank_finish", "linear_gram_fit", "linear_gram_solve_default",
+            "linear_gram_fit", "linear_gram_solve_default",
             # lane activate-pca-owner (2026-10-21): PCA.fit / fit_transform in one call
             "pca_fit_owned", "pca_fit_randomized",
         ),
