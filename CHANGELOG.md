@@ -4,7 +4,17 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
-## 0.8.57 (published 2026-10-25)
+## 0.8.58 (published 2026-10-26)
+
+- **Extras on Linux.** `pip install "mojolearn[verify]"`, `"mojolearn[torch]"` and `"mojolearn[max]"` install their
+  dependencies again: the Linux `mojolearn` package forwards each extra to `mojolearn-core`. With 0.8.57 on Linux,
+  `python -m mojolearn verify` needed `pip install "mojolearn-core[verify]"`.
+- **Native `set_params`.** `set_params` on the remaining estimators, clustering, decomposition, neighbors, kernel and
+  sequence models runs as one native call, like the rest of the public API; nested estimator parameters are set on
+  their native owners.
+- **Verification.** `python -m mojolearn verify` covers `set_params` and the native parameter readers.
+
+## 0.8.57 (published 2026-10-26)
 
 0.8.56 was never published; its changes ship in this release.
 
