@@ -2268,9 +2268,97 @@ PY_ANNOTATIONS = {
 GATE_DEFINES = frozenset({"MOJOLEARN_HOST_SABOTAGE"})
 
 
+#: THE PRECISE-COVERAGE DECLARATIONS (lane precise-coverage-0859, 2026-10-26):
+#: one decision per registration the static reach leaves "wide only" (a lane
+#: runs the binding whole but no reach of its own names the export), each
+#: followed in the source. TAB separated: entry, binding source (or `*` for
+#: every registration of the entry), status, lanes, why.
+#:   covered  the lanes (comma separated, each in the lane inventory) run a
+#:            public call whose path reaches the export; `why` names that path
+#:   n/a      a public path exists but no identical-mode lane can run it (the
+#:            fast tier only, the verifier's own probes); `why` says which
+#:   dead     no public path at all (no package code, native owner or lane
+#:            calls it); `why` says what does name it. Listed for deletion.
+DECLARED_TSV = os.path.join(ROOT, "tools", "identity_lanes", "coverage_declared.tsv")
+DECLARED_STATUSES = ("covered", "n/a", "dead")
+_DECLARED = None
+
+
+def declared(path=None):
+    """{(entry, src | "*"): (status, lanes, why)} from DECLARED_TSV."""
+    global _DECLARED
+    if _DECLARED is not None and path is None:
+        return _DECLARED
+    out = {}
+    src_path = path or DECLARED_TSV
+    try:
+        fh = open(src_path, encoding="utf-8")
+    except OSError:
+        fh = None
+    if fh is not None:
+        with fh:
+            for n, line in enumerate(fh, 1):
+                line = line.rstrip("\n")
+                if not line.strip() or line.startswith("#"):
+                    continue
+                cols = line.split("\t")
+                if len(cols) != 5:
+                    raise SystemExit(f"{src_path}:{n}: {len(cols)} columns, expected 5 (entry, src, status, lanes, why)")
+                entry, src, status, lanes, why = cols
+                lanes = [x for x in lanes.split(",") if x]
+                if status not in DECLARED_STATUSES:
+                    raise SystemExit(f"{src_path}:{n}: status {status!r}, expected one of {DECLARED_STATUSES}")
+                if (status == "covered") != bool(lanes):
+                    raise SystemExit(f"{src_path}:{n}: a covered row names its lanes; an n/a or dead row names none")
+                if not why.strip():
+                    raise SystemExit(f"{src_path}:{n}: no reason")
+                if src != "*" and not src.startswith("bindings/"):
+                    raise SystemExit(f"{src_path}:{n}: src {src!r} is a bindings/ path or *")
+                if (entry, src) in out:
+                    raise SystemExit(f"{src_path}:{n}: {entry} {src} declared twice")
+                out[(entry, src)] = (status, lanes, why)
+    if path is None:
+        _DECLARED = out
+    return out
+
+
+def declaration(row):
+    """The DECLARED_TSV row for one native row, or None."""
+    table = declared()
+    return table.get((row["entry"], row["src"])) or table.get((row["entry"], "*"))
+
+
+DEAD_PREFIX = "dead (listed for deletion): "
+
+
+def reach_state(row):
+    """How one native row is reached, for the summary: `static` (a lane's own
+    reach names it), `declared` (a hand-checked declaration or annotation names
+    its lanes), `decided` (a declaration or annotation says n/a or dead, with
+    its reason), `wide` (a lane runs the binding whole and nothing decided it)
+    or `none`."""
+    if row["lanes_precise"]:
+        return "static"
+    explicit = declaration(row) is not None or (row["entry"], row["src"]) in ANNOTATIONS_BY_SRC \
+        or row["entry"] in ANNOTATIONS
+    if explicit:
+        status, lanes, _ = triage(row)
+        if status.startswith("covered") and lanes:
+            return "declared"
+        if status == "n/a":
+            return "decided"
+    return "wide" if row["lanes_wide"] else "none"
+
+
 def triage(row):
     """(status, lanes, why) for one native row."""
     key = (row["entry"], row["src"])
+    decl = declaration(row)
+    if decl is not None:
+        status, lanes, why = decl
+        if status == "covered":
+            return "covered", sorted(set(lanes) | set(row["lanes_precise"])), why
+        return "n/a", [], (DEAD_PREFIX + why) if status == "dead" else why
     if key in ANNOTATIONS_BY_SRC:
         status, lanes, why = ANNOTATIONS_BY_SRC[key]
         if status == "n/a":
@@ -2792,10 +2880,20 @@ def main(argv=None):
         print("python: " + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())))
     references = audit_references(audit)
     nat = audit["native"]
+    states = defaultdict(int)
+    dead = 0
+    for r in nat:
+        states[reach_state(r)] += 1
+        dead += triage(r)[2].startswith(DEAD_PREFIX)
+    unknown = sorted({lane for d in declared().values() for lane in d[1]} - set(audit.get("lane_inventory", ())))
+    if unknown and audit.get("lane_inventory"):
+        print(f"DECLARED LANES NOT IN THE INVENTORY ({DECLARED_TSV}): " + ", ".join(unknown[:20]))
     print(f"native: {len(nat)} new/changed registrations; "
-          f"{sum(1 for r in nat if r['lanes_precise'])} precise lane(s), "
-          f"{sum(1 for r in nat if not r['lanes_precise'] and r['lanes_wide'])} wide only, "
-          f"{sum(1 for r in nat if not r['lanes_precise'] and not r['lanes_wide'])} none; "
+          f"{states['static'] + states['declared']} precise lane(s) ({states['static']} static, "
+          f"{states['declared']} declared), "
+          f"{states['wide']} wide only, "
+          f"{states['decided']} decided n/a ({dead} dead, listed for deletion), "
+          f"{states['none']} none; "
           f"{sum(1 for r in nat if r['sabotage_defines'] or r['sabotage_patches'])} with a sabotage arm")
     print(f"python: {len(audit['python'])} changed public methods; "
           f"{sum(1 for r in audit['python'] if r['lanes'])} with a lane")
