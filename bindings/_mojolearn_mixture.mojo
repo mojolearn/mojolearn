@@ -82,10 +82,8 @@ def mixture_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def gmm_parallel_available() raises -> PythonObject:
-    """1: every E-step (fit and scoring) reads MOJOLEARN_GMM_DEVICE_COUNT and
-    row-shards through mixture/multi_gpu.mojo::gmm_e_step_dispatch."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def gmm_fit_binding(
@@ -297,7 +295,8 @@ def gmm_score_bic_aic_binding(
 def build__mojolearn_mixture() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mixture")
-        m.def_function[gmm_parallel_available]("gmm_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

@@ -1467,7 +1467,6 @@ def estimators_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-
 def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
                          params: PythonObject) raises -> PythonObject:
     """lane/apple-fast-py2mojo-linear: per-row probability glue on the
@@ -1510,11 +1509,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
-        m.def_function[gram_parallel_available_binding]("gram_parallel_available")
-        m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")
-        m.def_function[gram_parallel_available_binding]("qr_parallel_available")
-        m.def_function[glm_parallel_available_binding]("glm_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         m.def_function[py2mojo_rows_binding]("py2mojo_rows")
@@ -1588,13 +1584,10 @@ def build__mojolearn_estimators() -> PythonObject:
         abort(String("failed to create _mojolearn_estimators: ", e))
 
 
-def gram_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
-def glm_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
-
-def dbscan_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)

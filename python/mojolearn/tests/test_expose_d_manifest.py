@@ -31,17 +31,10 @@ NEW = {
     "_mojolearn_ivf": ("build_ivf.sh", "python/mojolearn/_ivf_impl.py"),
     "_mojolearn_embedding": ("build_embedding.sh", "python/mojolearn/embedding.py"),
 }
-#: the availability flag each workstream D binding exports (its multi-GPU
-#: driver binds a device plan through `device_plan_enter` since 2026-10-24,
+#: the workstream D bindings whose multi-GPU driver binds a device plan
+#: through `device_plan_enter` (since 2026-10-24,
 #: docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md)
-PARALLEL_FLAGS = {
-    "kernel_methods": "kernel_methods_rows_parallel_available",
-    "mixture": "gmm_parallel_available",
-    "hdbscan": "hdbscan_rows_parallel_available",
-    "resample": "resample_ranges_parallel_available",
-    "ivf": None,
-    "embedding": None,
-}
+PLAN_FAMILIES = {"kernel_methods", "mixture", "hdbscan", "resample"}
 CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN", "IVFIndex", "Embedding")
 
 
@@ -103,16 +96,12 @@ def test_binding_exports_match_python_calls():
         stem = binding.rsplit("/", 1)[1][len("_mojolearn_"):-len(".mojo")]
         for suffix in ("_vendor", "_numeric_mode"):
             assert stem + suffix in exported, (binding, stem + suffix)
-        # A multi-GPU availability flag must name a driver that reads it. The
-        # generic `<stem>_parallel_available` names returned 1 with no driver
-        # behind them and were removed on 2026-09-15; the flags the ordered
-        # drivers check are the ones below, and IVF and Embedding have none.
-        assert stem + "_parallel_available" not in exported, (binding, "stale flag", stem + "_parallel_available")
-        flag = PARALLEL_FLAGS[stem]
-        if flag is None:
-            assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
-        else:
-            assert flag in exported, (binding, flag)
+        # A multi-GPU availability flag must name a driver that reads it. None
+        # does any more (the generic names went on 2026-09-15, the ordered
+        # drivers' flags on 2026-10-26, lane dead-entries-2-0859): the native
+        # drivers bind a device plan instead.
+        assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
+        if stem in PLAN_FAMILIES:
             # the native driver binds its device plan in this binding
             assert "device_plan_enter" in exported and "device_plan_exit" in exported, (binding, "no plan entries")
     gp = _exports("bindings/_mojolearn_gp.mojo")

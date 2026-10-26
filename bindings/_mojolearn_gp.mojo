@@ -592,11 +592,8 @@ def gpr_predict_cov_binding(
 # ===========================================================================
 
 
-def cholesky_parallel_available() raises -> PythonObject:
-    """1: potrf_lower and cho_solve read MOJOLEARN_CHOLESKY_DEVICE_COUNT and
-    move whole trailing-update rows and right-hand-side columns
-    (cholesky/multi_gpu.mojo)."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def cholesky_profile_jitter_binding() raises -> PythonObject:
@@ -1318,10 +1315,6 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
     return py_list_f64(gp_theta_params_values(vals))
 
 
-def gp_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1329,7 +1322,8 @@ def build__mojolearn_gp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
-        m.def_function[gp_parallel_available]("gp_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -1353,7 +1347,8 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_fit_ptr_binding]("gpr_fit_ptr")
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
         # The Cholesky door (workstream D, 2026-09-14).
-        m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         m.def_function[cholesky_factor_binding]("cholesky_factor")
         m.def_function[cholesky_solve_binding]("cholesky_solve")

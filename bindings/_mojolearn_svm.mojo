@@ -118,7 +118,6 @@ def svm_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-
 def _c_rows(params: PythonObject, slot: Int, n_rows: Int, who: String) raises -> List[Float32]:
     """The OPTIONAL per-row bounds `C * sample_weight` (float32, formed and
     rounded once by the caller; `InitPenalty`'s weighted arm) at the address
@@ -659,8 +658,8 @@ def svm_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def svm_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def iforest_device_finite_scan_binding() raises -> PythonObject:
@@ -668,10 +667,6 @@ def iforest_device_finite_scan_binding() raises -> PythonObject:
     cell through a device scan (IF_FAST_ROWMAJOR, FAST on Apple), so the
     Python layer skips its host scan of the same cells; 0 otherwise."""
     return PythonObject(1 if IF_FAST_ROWMAJOR else 0)
-
-
-def iforest_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
 
 
 def iforest_resident_binding() raises -> PythonObject:
@@ -700,7 +695,6 @@ def iforest_device_scan_binding() raises -> PythonObject:
     comptime if IF_DEVICE_TRANSPOSE:
         return PythonObject(1)
     return PythonObject(0)
-
 
 
 def svm_scale_gamma_limbs_binding(
@@ -732,11 +726,13 @@ def svc_dual_gemv_binding(
 def build__mojolearn_svm() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_svm")
-        m.def_function[svm_parallel_available]("svm_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        m.def_function[iforest_parallel_available]("iforest_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[svm_vendor_binding]("svm_vendor")
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         m.def_function[svc_fit_binding]("svc_fit")

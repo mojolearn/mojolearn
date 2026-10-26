@@ -2882,9 +2882,7 @@ FAMILIES = (
         # CPU-only install with the GPU binding's bootstrap,
         # permutation_test and monte_carlo_integrate over
         # resample/host/resample_host.mojo (resample/estimator.mojo's entry
-        # points with every device kernel restated on the host);
-        # resample_ranges_parallel_available reports the one-device
-        # cooperative pool (f90ad45de, the par-resample CPU arm). The
+        # points with every device kernel restated on the host). The
         # option lanes (BCa, paired=False, permutation_type='samples',
         # resample / resample_indices) route through the same entries.
         family="resample",
@@ -2904,7 +2902,6 @@ FAMILIES = (
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
             "bootstrap", "permutation_test", "monte_carlo_integrate",
             "bootstrap_unpaired", "permutation_samples", "resample_indices",
-            "resample_ranges_parallel_available",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

@@ -1801,9 +1801,8 @@ def argmax_last_rows_f32_binding(
     return PythonObject(0)
 
 
-def kmeans_parallel_available_binding() raises -> PythonObject:
-    """Version of the whole-row-tile multi-GPU assignment contract."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 # ===========================================================================
@@ -2172,7 +2171,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        m.def_function[kmeans_parallel_available_binding]("kmeans_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn module: ", e))

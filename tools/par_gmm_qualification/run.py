@@ -155,8 +155,7 @@ def main():
     native = out / 'native-manifest.json'
     native.write_text(json.dumps(native_manifest(tree), indent=2) + '\n')
     python = str(tree / '.pixi/envs/default/bin/python')
-    bounded([python, '-c', 'from mojolearn import _backend as b; assert b.vendor()=="cuda"; '
-             'assert b.binding("_mojolearn_mixture").gmm_parallel_available()==1'],
+    bounded([python, '-c', 'from mojolearn import _backend as b; assert b.vendor()=="cuda"'],
             tree, env, out / 'preflight.log')
     records = [amd]
     for fixture in FIXTURES:

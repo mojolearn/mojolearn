@@ -109,14 +109,8 @@ def kernel_methods_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def kernel_methods_rows_parallel_available() raises -> PythonObject:
-    """1: km_kernel_matrix reaches svm kernel_op, which reads its owner count
-    through `core/device_plan.mojo::device_plan_setting`
-    (MOJOLEARN_SVM_DEVICE_COUNT without a plan), and potrf_lower/cho_solve
-    read MOJOLEARN_CHOLESKY_DEVICE_COUNT the same way;
-    parallel_classical.fit_kernel_method and apply_kernel_method bind a
-    device plan around the plain owners (`device_plan_enter`)."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 # ===========================================================================
@@ -793,9 +787,8 @@ def km_scale_gamma_limbs_binding(
 def build__mojolearn_kernel_methods() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
-        m.def_function[kernel_methods_rows_parallel_available](
-            "kernel_methods_rows_parallel_available"
-        )
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

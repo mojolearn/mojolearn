@@ -47,7 +47,6 @@ from hdbscan.estimator import (
 from hdbscan.impl.prediction_data import generate_prediction_data_device
 
 
-
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -66,12 +65,8 @@ def hdbscan_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def hdbscan_rows_parallel_available() raises -> PythonObject:
-    """1: the core-distance k-NN reads MOJOLEARN_NEIGHBORS_DEVICE_COUNT
-    (neighbors/impl/multi_gpu.mojo) and the dense pairwise distance matrix
-    reads MOJOLEARN_HIERARCHY_DEVICE_COUNT (hierarchy/impl/cluster/detail/
-    multi_gpu.mojo); parallel_classical.fit_hdbscan sets both in its worker."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def hdbscan_fit_binding(
@@ -516,7 +511,8 @@ def hdbscan_all_points_membership_vectors_binding(
 def build__mojolearn_hdbscan() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_hdbscan")
-        m.def_function[hdbscan_rows_parallel_available]("hdbscan_rows_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

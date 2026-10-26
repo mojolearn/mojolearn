@@ -238,8 +238,8 @@ def test_manifest_covers_the_resample_lanes():
     for name in ("bootstrap", "permutation_test", "monte_carlo_integrate", "resample_numeric_mode", "resample_vendor"):
         assert f'("{name}")' in src and f'("{name}")' in gpu, name
         assert name in fam["exports"], name
-    assert '("resample_ranges_parallel_available")' in gpu
-    assert "resample_ranges_parallel_available" in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
+    assert '("resample_ranges_parallel_available")' not in gpu
+    assert "resample_ranges_parallel_available" not in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
     assert (ROOT / host_surface.build_shim("resample")).is_file()
 
 
@@ -364,10 +364,6 @@ def test_bootstrap_runs_on_the_host_when_built():
     assert 0.0 < p.pvalue <= 1.0
     m = rs.monte_carlo_integrate("const", [0.0, 0.0], [1.0, 2.0], 1000)
     assert m.integral == 2.0 and m.closed_form == 2.0
-    # The host binding serves the range probe since f90ad45de (par-resample's
-    # CPU arm): 1, the one-device cooperative shard; two or more devices
-    # refuse by name in the driver before reaching it.
-    assert int(_backend.binding("_mojolearn_resample").resample_ranges_parallel_available()) == 1
 
 
 @reference_training()

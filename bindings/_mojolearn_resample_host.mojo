@@ -16,12 +16,10 @@ THE EXPORTED NAMES AND CONTRACTS ARE THE GPU BINDING'S
 orders, plus `resample_numeric_mode` (1) and `resample_vendor` ("cpu"), so
 `python/mojolearn/resample.py` runs unchanged on a CPU-only install through
 `_backend._HOST_MODULES` (`"_mojolearn_resample": "_mojolearn_resample_host"`).
-`resample_ranges_parallel_available` is 1 (2026-09-28, the prep lane's
-coverage audit: par-resample had no CPU arm): the CPU route admits the
-`resample` operation from a ONE-device cooperative pool only
-(`_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE`), where the driver's range
-split is one shard and the host entry points here ARE the plain path; two or
-more devices refuse by name before reaching this module.
+The CPU route admits the `resample` operation from a ONE-device cooperative
+pool only, where the driver's range split is one shard and the host entry
+points here ARE the plain path; two or more devices refuse by name before
+reaching this module.
 """
 
 from std.os import abort
@@ -95,10 +93,8 @@ def resample_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-def resample_ranges_parallel_available() raises -> PythonObject:
-    """1: the one-device cooperative `resample` shard is served here (see the
-    module docstring); no device count is read, nothing is split."""
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
 def resample_vendor_binding() raises -> PythonObject:
@@ -537,7 +533,8 @@ def build__mojolearn_resample_host() -> PythonObject:
         m.def_function[resample_host_column_binding]("resample_host_column")
         m.def_function[resample_host_sabotage_binding]("resample_host_sabotage")
         m.def_function[resample_vendor_binding]("resample_vendor")
-        m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[bootstrap_binding]("bootstrap")
         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")

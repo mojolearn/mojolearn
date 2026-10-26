@@ -454,7 +454,6 @@ def r2_score_binding(
     return PythonObject(Float64(out))
 
 
-
 def regression_error_binding[absolute: Bool = False, root: Bool = False](
     y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -467,8 +466,6 @@ def regression_error_binding[absolute: Bool = False, root: Bool = False](
     with GILReleased(Python()):
         result = regression_error_host[absolute, root](y, prediction, n)
     return PythonObject(Float64(result))
-
-
 
 
 def roc_auc_score_binding(true_addr: PythonObject, score_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1397,7 +1394,8 @@ def metrics_vendor_binding() raises -> PythonObject:
 def build__mojolearn_metrics() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
-        m.def_function[graph_parallel_available_binding]("graph_parallel_available")
+        # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -1452,5 +1450,6 @@ def build__mojolearn_metrics() -> PythonObject:
         abort(String("failed to create _mojolearn_metrics: ", e))
 
 
-def graph_parallel_available_binding() raises -> PythonObject:
-    return PythonObject(1)
+# TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+
