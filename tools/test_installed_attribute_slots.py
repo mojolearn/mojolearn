@@ -166,12 +166,24 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(slots.WitnessError, "untracked"):
             slots.source_snapshot(self.root)
 
-    def test_new_commit_is_distinct_even_when_package_source_unchanged(self):
+    def test_new_commit_preserves_origin_and_reuses_exact_source_bytes(self):
         old = slots.source_snapshot(self.root)
         (self.root / "note.txt").write_text("new freeze\n")
         self.git("add", ".")
         self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "next freeze")
-        self.assertNotEqual(old, slots.source_snapshot(self.root))
+        current = slots.source_snapshot(self.root)
+        self.assertNotEqual(old["revision"], current["revision"])
+        self.assertEqual(slots.validate_source(old, self.root), current)
+
+    def test_committed_package_or_policy_changes_refuse_reuse(self):
+        for name in ("python/mojolearn/__init__.py", slots.POLICY[0], "python/mojolearn/new_module.py"):
+            with self.subTest(name=name):
+                old = slots.source_snapshot(self.root)
+                (self.root / name).write_text("# changed source bytes\n")
+                self.git("add", ".")
+                self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "source change")
+                with self.assertRaisesRegex(slots.WitnessError, "bytes/policy"):
+                    slots.validate_source(old, self.root)
 
 
 class LiveIdentityTests(unittest.TestCase):
@@ -309,7 +321,8 @@ class AdmissionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.stamp = {"revision": "frozen", "files": {"connection.py": "sha"}}
+        files = {"connection.py": "sha"}
+        self.stamp = {"revision": "frozen", "tree": "frozen-tree", "files": files, "files_sha256": slots.digest(files)}
         self.data = {"schema": slots.OBSERVATIONS, "source": self.stamp, "owner": slots.OWNER,
                      "runtime_qualified": False, "provenance": {"owners": {n: {"binary": {"sha256": n}} for n in (slots.ENTRY, slots.FACTORY)}},
                      "rows": [{"class": "mojolearn.est.Model", "exports": ["mojolearn.Model"],
@@ -348,7 +361,7 @@ class AdmissionTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.data = copy.deepcopy(original)
                 if name == "stale":
-                    self.data["source"]["revision"] = "old"
+                    self.data["source"]["files_sha256"] = "old"
                 elif name == "constructor":
                     self.data["rows"][0]["method"] = "__init__"
                 elif name == "checks":
@@ -360,6 +373,14 @@ class AdmissionTests(unittest.TestCase):
                 self.refresh()
                 with self.assertRaises(slots.WitnessError):
                     self.validate()
+
+    def test_reuse_keeps_original_revision_and_records_current_revision(self):
+        self.data["source"] = dict(self.stamp, revision="original", tree="original-tree")
+        self.refresh()
+        witness = self.validate()["mojolearn.est.Model"]
+        self.assertEqual(witness["source_revision"], "original")
+        self.assertEqual(witness["validated_source_revision"], "frozen")
+        self.assertEqual(witness["source_files_sha256"], self.stamp["files_sha256"])
 
     def test_pending_and_other_native_owners_remain_unqualified(self):
         for status in ("pending", "unmodeled"):
