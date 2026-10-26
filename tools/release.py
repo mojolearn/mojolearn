@@ -2603,6 +2603,8 @@ class Release:
         work = self.rel / f"publish-{platform}"
         env = dict(MOJOLEARN_ARTIFACT_SOURCE_COMMIT=self.commit,
                    MOJOLEARN_REQUIREMENTS_LEDGER=str(self.readiness().path))
+        if getattr(self.args, "owner_waiver", None):
+            env["MOJOLEARN_OWNER_WAIVER"] = str(Path(self.args.owner_waiver).resolve())
         notes = self.smoke_notes(platform)
         if notes:
             env["MOJOLEARN_ALPHA_SMOKE_NOTES"] = json.dumps(notes, sort_keys=True)
