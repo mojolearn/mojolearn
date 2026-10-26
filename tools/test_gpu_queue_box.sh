@@ -105,6 +105,7 @@ check "j9 cut short twice: interrupted" "[ \"\$(stof $j9)\" = interrupted ]"
 
 echo "== a FRONT job (GQ_FRONT=1, lq add --front) starts before plain queued jobs, never before the running one"
 ja=$($Q submit lane-a 4 20 "$(job fa 'sleep 3')")
+waitst $ja running 10   # fa must be RUNNING before the front jobs arrive: a still-queued fa is rightly overtaken
 jb=$($Q submit lane-b 1 20 "$(job fb 'sleep 1')")
 jc=$(GQ_FRONT=1 $Q submit lane-a 1 20 "$(job fc 'sleep 1')")
 jd=$(GQ_FRONT=1 $Q submit lane-b 1 20 "$(job fd 'sleep 1')")
