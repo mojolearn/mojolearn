@@ -138,3 +138,31 @@ def errors(document, identity):
         return []
     except (ValueError, RuntimeError, OSError, KeyError, TypeError, AssertionError) as error:
         return [str(error)]
+
+
+def apple_adapters(document, wheel_sha256):
+    """Retain the installed adapter result when its whole runtime is unchanged."""
+    import adapter_gate
+    require(document.get('schema') == 'mojolearn.release.apple-adapter-reuse.v1'
+            and document['after']['sha256'] == wheel_sha256, 'Apple reuse identifies another wheel')
+    stamp = reuse.read(document['original_wheel_stamp'])
+    require(stamp['wheel_sha256'] == document['before']['sha256'], 'original adapter wheel differs')
+    report = reuse.read(document['original_adapter_report'])
+    _, passed, reason = adapter_gate.judge(report)
+    require(passed, reason)
+    boundary = reuse.read(document['boundary'])
+    require(boundary.get('schema') == 'mojolearn.release.apple-host-boundary.v1'
+            and boundary.get('passed') is True and boundary['wheel_sha256'] == wheel_sha256,
+            'missing installed Apple host boundary')
+    require([c['vendor'] for c in boundary['checks']] == ['cpu', 'apple'], 'missing CPU/Apple boundary')
+    for check in boundary['checks']:
+        require(check['exit_code'] == 0 and check['cases'] == 4, 'failed Apple host boundary')
+        reuse.checked_ref(check['log'])
+        cases = list(ET.fromstring(evidence.read_bytes(reuse.checked_ref(check['junit']))).iter('testcase'))
+        require(len(cases) == 4 and not any(c.find(t) is not None
+                for c in cases for t in ('failure', 'error', 'skipped')), 'incomplete Apple host boundary')
+    qualified = {'mojolearn/host/_mojolearn_dev_tokenizer_host.so': boundary['host_native_sha256'],
+                 VERIFIER: boundary['verifier_sha256']}
+    require(delta(document['before'], document['after'], document['old_version'],
+                  document['version'], qualified) == document['changed'], 'Apple wheel changes differ')
+    return True

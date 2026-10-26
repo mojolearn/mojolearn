@@ -109,3 +109,46 @@ def test_other_candidate_wheel_is_refused(boundary):
     identity['wheels']['mojolearn-core'] = 'different wheel'
     with pytest.raises(ValueError, match='exact candidate'):
         gate.host_boundary(doc, identity)
+
+
+@pytest.fixture
+def apple_reuse(tmp_path):
+    import adapter_gate
+    def document(name, value):
+        path = tmp_path / name
+        path.write_text(json.dumps(value))
+        return ref(path)
+    old = wheel(tmp_path / 'old.whl', {'mojolearn/_adapters/a.so': b'adapter'})
+    new = wheel(tmp_path / 'new.whl', {'mojolearn/_adapters/a.so': b'adapter'})
+    checks = []
+    for vendor in ['cpu', 'apple']:
+        log, xml = tmp_path / (vendor + '.log'), tmp_path / (vendor + '.xml')
+        log.write_text('completed')
+        xml.write_text('<testsuite>' + '<testcase/>' * 4 + '</testsuite>')
+        checks.append(dict(vendor=vendor, exit_code=0, cases=4, log=ref(log), junit=ref(xml)))
+    return dict(schema='mojolearn.release.apple-adapter-reuse.v1', before=old, after=new,
+                original_wheel_stamp=document('stamp.json', dict(wheel_sha256=old['sha256'])),
+                original_adapter_report=document('adapters.json', dict(status='PASSED',
+                    phases={name: dict(exit=0) for name in adapter_gate.PHASES})),
+                boundary=document('boundary.json', dict(schema='mojolearn.release.apple-host-boundary.v1',
+                    passed=True, wheel_sha256=new['sha256'], checks=checks,
+                    host_native_sha256='host', verifier_sha256='verifier')),
+                old_version='1', version='2', changed=[])
+
+
+def test_unchanged_apple_adapter_is_reused(apple_reuse):
+    assert gate.apple_adapters(apple_reuse, apple_reuse['after']['sha256'])
+
+
+def test_failed_original_adapter_cannot_be_reused(apple_reuse):
+    from pathlib import Path
+    path = Path(apple_reuse['original_adapter_report']['path'])
+    path.write_text(json.dumps(dict(status='NO_FRAMEWORK')))
+    apple_reuse['original_adapter_report'] = ref(path)
+    with pytest.raises(ValueError, match='nothing ran'):
+        gate.apple_adapters(apple_reuse, apple_reuse['after']['sha256'])
+
+
+def test_apple_reuse_for_other_wheel_is_refused(apple_reuse):
+    with pytest.raises(ValueError, match='another wheel'):
+        gate.apple_adapters(apple_reuse, 'other wheel')

@@ -2690,6 +2690,14 @@ class Release:
         """(ok, why): the installed-wheel adapter smoke PASSED for these macOS wheel bytes."""
         AG = adapter_gate_module()
         w, out = self.macos_wheel(), self.apple_adapters_out()
+        reuse = read_json(out / "reuse.json")
+        if reuse and w:
+            from release_incremental_gate import apple_adapters
+            try:
+                apple_adapters(reuse, sha256(w))
+                return True, 'PASSED: original installed adapters retained with unchanged runtime bytes; changed host qualified'
+            except (ValueError, OSError, KeyError, TypeError) as error:
+                return False, 'Apple adapter reuse refused: ' + str(error)
         stamp = read_json(out / "wheel.json") or {}
         if not w or stamp.get("wheel_sha256") != sha256(w):
             return False, f"no adapter smoke receipt for this macOS wheel ({out})"

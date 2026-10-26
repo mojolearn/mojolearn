@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "tests": 15,
+  "scope": "Original adapter failure, another wheel and altered runtime bytes cannot qualify reuse.",
+  "log": {
+    "path": "apple-adapter-reuse-tests.log",
+    "sha256": "42741f7ed0e38cf1e505a56b792913fdce074f13de67a5716b43cb2da56f5f8b"
+  }
+}
