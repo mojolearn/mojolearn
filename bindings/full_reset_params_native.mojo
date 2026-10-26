@@ -109,7 +109,7 @@ def _fresh_fields(model: PythonObject, values: PythonObject, plan: PythonObject,
     return fresh
 
 
-def _reset(model: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
+def _reset(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = _fields(model)
     var plan = _plan(model, fields, context)
@@ -134,7 +134,7 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject) rai
             py_setitem(nested[name], parts[2], pairs[i][1])
     var names = py_call(b.list, nested.keys())
     for i in range(len(names)):  # driver-loop: earlier successful nested changes remain if a later child refuses
-        _ = _set(values[names[i]], nested[names[i]], context)
+        _ = _set(values[names[i]], nested[names[i]], context, depth + 1)
     var fresh = _fresh_fields(model, values, plan, context)
     var previous = py_call(b.list, fields.values())
     var retained = py_call(b.list, fresh.values())
@@ -146,7 +146,7 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject) rai
     return model
 
 
-def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
+def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(params) is not b.dict:
         raise Error("TypeError: native parameter keywords require an ordinary dict")
@@ -158,7 +158,7 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject) 
     if py_type(cls) is not b.type:
         raise Error("TypeError: native parameter reset cannot invoke Python metaclass hooks")
     if _connected_plan(cls, context) is not None:
-        return _reset(model, params, context)
+        return _reset(model, params, context, depth)
     if _connected_plan(cls, context["linear"]) is not None:
         return _linear_set(model, params, context["linear"])
     if _connected_plan(cls, context["declared"]) is not None:
@@ -167,9 +167,12 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject) 
     if native is not None:
         var fields = _fields(model)
         _constructor_layout(model, fields, native["layout"])
+        # The snapshot keeps every old field owner alive across the call, so
+        # nothing the setter drops is released before it is admitted.
+        var snapshot = py_call(b.dict, fields)
         # Forward the exact existing native ABI, never a Python public method
         # or constructor. Export identity alone does not qualify its transitive
-        # owner release: the public nested-lifetime tests remain mandatory.
+        # owner release, so the owners it dropped are admitted below.
         ref cpy = Python().cpython()
         var entry = native["entry"]
         var args = Python.tuple(model, native["operation"], Python.tuple(params), native["context"])
@@ -177,20 +180,40 @@ def _dispatch(model: PythonObject, params: PythonObject, context: PythonObject) 
         if not result:
             var failure = stash_python_error()
             raise failure^
-        return PythonObject(from_owned=result)
+        var out = PythonObject(from_owned=result)
+        var after = _fields(model)
+        try:
+            # Owners still referenced by the child's fields are retained;
+            # every dropped one (a caller's object with a Python __del__,
+            # for one) must pass the same admission as a full reset.
+            _release_owned(py_call(b.list, snapshot.values()), py_call(b.list, after.values()), context)
+        except error:
+            # Refused: restore the child's exact fields and order; the
+            # snapshot still owns every old value, so no finalizer ran.
+            _ = py_call(after.clear)
+            _ = py_call(after.update, snapshot)
+            raise error^
+        return out
     if _resolved(cls, "set_params", context["missing"]) is context["missing"]:
         raise Error("AttributeError: '" + String(cls.__name__) + "' object has no attribute 'set_params'")
     raise Error("TypeError: Python parameter callbacks are not accepted; use a connected native setter")
 
 
-def _set(model: PythonObject, params: PythonObject, context: PythonObject) raises -> PythonObject:
+def _set(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     ref cpy = Python().cpython()
     var label = String(" while setting estimator parameters")
+    # Python 3.12+ bounds Py_EnterRecursiveCall by the C stack, not by
+    # sys.getrecursionlimit(): a cyclic estimator__estimator__... chain past
+    # the limit raised nothing and the outer reset rewrote the parent.
+    # Each nested level is one Python set_params call in the scikit-learn
+    # contract, so the interpreter's own limit bounds the nesting depth.
+    if depth >= Int(cpy.lib.get_function[Int32]("Py_GetRecursionLimit")()):
+        raise Error("RecursionError: maximum recursion depth exceeded" + label)
     if cpy.lib.get_function[Int32]("Py_EnterRecursiveCall")(label.as_c_string_slice().unsafe_ptr()) != 0:
         var failure = stash_python_error()
         raise failure^
     try:
-        var result = _dispatch(model, params, context)
+        var result = _dispatch(model, params, context, depth)
         cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
         return result
     except error:
