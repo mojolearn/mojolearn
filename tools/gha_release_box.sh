@@ -127,16 +127,20 @@ fi
 # kernel keeps it, and the sampled maximum of memory.current and of host
 # MemTotal - MemAvailable either way.
 (
-    max_cg=0; max_host=0
+    max_cg=0; max_host=0; max_swap=0
     while :; do
         cg=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+        # the RAM cgroup stops at the runner's 16 GB; what a merged compile pages out is here
+        sw=$(cat /sys/fs/cgroup/memory.swap.current 2>/dev/null || echo 0)
+        (( sw > max_swap )) && max_swap=$sw
         # %.0f, never print or %d: the image's mawk prints values above 2^31
         # in exponent form (2.16e+09, a bash arithmetic error every sample)
         # and clamps %d at 2147483647 (the runs of 2026-10-20 and 10-21).
         used=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END{printf "%.0f\n", (t-a)*1024}' /proc/meminfo)
         (( cg > max_cg )) && max_cg=$cg
         (( used > max_host )) && max_host=$used
-        printf 'cgroup_sampled_max_bytes=%s\nhost_used_sampled_max_bytes=%s\n' "$max_cg" "$max_host" > "$G/memory.sampled"
+        printf 'cgroup_sampled_max_bytes=%s\nhost_used_sampled_max_bytes=%s\ncgroup_swap_sampled_max_bytes=%s\n' \
+            "$max_cg" "$max_host" "$max_swap" > "$G/memory.sampled"
         sleep 2
     done
 ) &
@@ -193,6 +197,7 @@ if [[ "$MODE" = host ]]; then
     kill $SAMPLER 2>/dev/null
     cat "$G/memory.sampled" > "$G/memory.txt" 2>/dev/null
     echo "cgroup_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
+    echo "cgroup_swap_peak_bytes=$(cat /sys/fs/cgroup/memory.swap.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
     cat "$G/host.txt"
     exit "$rc"
 fi
@@ -234,6 +239,7 @@ tail -40 "$G/route.log"
 kill $SAMPLER 2>/dev/null
 cat "$G/memory.sampled" > "$G/memory.txt" 2>/dev/null
 echo "cgroup_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
+    echo "cgroup_swap_peak_bytes=$(cat /sys/fs/cgroup/memory.swap.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
 echo "mem_total_bytes=$(awk '/^MemTotal:/{printf "%.0f\n", $2*1024}' /proc/meminfo)" >> "$G/memory.txt"
 echo "nproc=$(nproc)" >> "$G/memory.txt"
 df -B1 /root | tail -1 | awk '{print "disk_used_bytes=" $3 "\ndisk_free_bytes=" $4}' >> "$G/memory.txt"

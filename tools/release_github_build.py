@@ -206,6 +206,10 @@ PEAK_HEADROOM = 1.2
 #:                    free runner's 16.0 GB cgroup peak after 1123 s, so its peak
 #:                    is ABOVE 15 GiB (a lower bound only); planned at the
 #:                    identical tier's 48 until a run with swap records it.
+#:                    Run 40275379578 (same source, 43 GiB swap on /mnt):
+#:                    built in 5275 s, RAM cgroup at the runner's 15.98 GB
+#:                    the whole time (the swap use was not sampled then; the
+#:                    sampler records memory.swap.current since).
 #:                    Older: DO MI325X 2026-10-20, 6.9 GB.
 #: Each shard records its own peak (GHA/memory.txt): raise a row when a run
 #: records more, never lower one below a recorded value.
@@ -231,6 +235,9 @@ UNIT_SECONDS_CPU_BOX = {
 JOB_OVERHEAD_SECONDS = 260
 ASSEMBLE_ROUTE_SECONDS = 240
 CPU_BOX_VCPU, RUNNER_VCPU = 16, 4
+#: Seconds measured ON a free runner, which replace the scaled cpu-box figure:
+#: the merged host compile paging to swap (run 40275379578, 78af017e2).
+UNIT_SECONDS_RUNNER = {("host", "cuda"): 5275, ("host", "hip"): 5275}
 
 
 def unit_tier(entry):
@@ -404,6 +411,8 @@ def unit_seconds(entry, vendor, merged):
     if not merged:
         return WEIGHTS.get(entry, DEFAULT_GPU_WEIGHT)
     tier = unit_tier(entry)
+    if (tier, vendor) in UNIT_SECONDS_RUNNER:
+        return UNIT_SECONDS_RUNNER[(tier, vendor)]
     base = UNIT_SECONDS_CPU_BOX.get((tier, vendor), max(UNIT_SECONDS_CPU_BOX.values()))
     workers = 8 if vendor == "hip" and tier in ("identical", "fast") else 2
     return int(base * min(workers, CPU_BOX_VCPU) / min(workers, RUNNER_VCPU))
@@ -421,7 +430,7 @@ def estimate(include, merged, sets, host, host_donor=False):
         out[arch] = dict(jobs=len(rows) + 1, wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
                          swap_gib=max([r["swap_gib"] for r in rows] or [0]))
     if host:
-        h = JOB_OVERHEAD_SECONDS + UNIT_SECONDS_CPU_BOX[("host", "cuda")] + ASSEMBLE_ROUTE_SECONDS
+        h = JOB_OVERHEAD_SECONDS + UNIT_SECONDS_RUNNER[("host", "cuda")] + ASSEMBLE_ROUTE_SECONDS
         # the donor is an uploaded build, else this run's first device set (its assemble job)
         donor_wall = out[sets[0]]["wall_s"] if sets and not host_donor else 0
         out["host"] = dict(jobs=1, wall_s=donor_wall + h, runner_s=h, swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB))
