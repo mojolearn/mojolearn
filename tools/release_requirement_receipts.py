@@ -103,7 +103,8 @@ def validate_producer_receipt(requirement_id, wanted, receipt):
     """
     producer = receipt.get("producer", {})
     pair = (wanted.get("kind"), producer.get("tool") if isinstance(producer, dict) else None)
-    supported = {("candidate", "tools/gate_smoke_box.py"), ("source", "tools/public_runtime_inventory.py"),
+    supported = {("candidate", "tools/gate_smoke_box.py"), ("candidate", "tools/release_gate_reuse.py"),
+                 ("source", "tools/public_runtime_inventory.py"),
                  ("compile", "tools/linux_surface_qualification.sh"),
                  ("runtime", "tools/release_public_runtime_evidence.py"),
                  ("identity", "tools/record_identity_column.sh")}
