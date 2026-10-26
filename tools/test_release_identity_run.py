@@ -187,3 +187,103 @@ def test_missing_provenance_is_blocked_not_silently_omitted(setup):
     with pytest.raises(ValueError, match='restored provenance'):
         G.launch(ledger, root, 'amd-mi325x-gfx942', out, environment={})
     assert not ledger.read()['runs']
+
+
+def reconciliation_fixture(ledger, tmp_path):
+    doc = ledger.read()
+    for vendor in ('amd', 'nvidia'):
+        doc['requirements'][f'identity-{vendor}/knn-clf'] = fixtures.unit(vendor, 'knn-clf')
+    ledger.sync(doc)
+    record = tmp_path / 'retained-original.json'
+    record.write_text('{"original":true}\n')
+    paths = {}
+    def write(name, data):
+        path = tmp_path / (name + '.json')
+        path.write_text(json.dumps(data))
+        paths[name] = path
+        return path
+    origin = dict(commit='b' * 40, path=str(record), verdict='STABLE')
+    origins = {route: dict(latest_cells={f'{lane}/base': origin for lane in ('ols', 'knn-clf')})
+               for route in ('nvidia', 'amd', 'ptx')}
+    source = doc['source_revision']
+    receipt = G.prepare_reconciliation(ledger,
+        origin_map=write('origins', origins), source_audit=write('audit', dict(target=source)),
+        comparison=write('comparison', dict(failures=[], excluded_new_train_lanes=['knn-clf'],
+            records=[dict(E.reference(record), admission_error=None)])),
+        reviewed_plan=write('reviewed', dict(source=source, gpu_identity=dict(lanes=['knn-clf']),
+            expanded_identity=[dict(lane='knn-clf', reason='New multioutput transpose payload')])),
+        boundary_report=tmp_path / 'future-linux-boundary.json')
+    return receipt, paths
+
+
+def test_historical_missing_is_reconciliation_and_only_changed_payload_runs(setup, tmp_path):
+    ledger, root, out = setup
+    receipt, _ = reconciliation_fixture(ledger, tmp_path)
+    result = G.plan(ledger, 'amd')
+    assert result['counts'] == {'run': 1, 'reconcile-evidence': 1}
+    assert result['selected']['identity-amd/ols']['retained_origins']['amd']['origins']
+    assert not result['executable']
+    with pytest.raises(ValueError, match='reconciliation'):
+        G.launch(ledger, root, 'amd-mi325x-gfx942', out, environment={},
+                 runner=lambda *a, **k: pytest.fail('historical rows must not execute'))
+    assert not ledger.read()['runs']
+    changed = G.plan(ledger, 'amd', ['knn-clf'])
+    assert changed['executable'] and changed['counts'] == {'run': 1}
+    assert changed['selected']['identity-amd/knn-clf']['reasons'] == ['New multioutput transpose payload']
+    proof = E.load(receipt)
+    assert proof['boundary']['status'] == 'pending' and not proof['runtime_qualified']
+    assert not ledger.read()['attempts']
+
+
+def test_fresh_ledger_discovers_adjacent_receipt_without_manual_metadata(setup, tmp_path):
+    ledger, _, _ = setup
+    reconciliation_fixture(ledger, tmp_path)
+    with ledger.edit() as doc:
+        doc.pop('identity_reconciliation')
+    assert G.plan(ledger, 'nvidia')['counts']['reconcile-evidence'] == 1
+
+
+@pytest.mark.parametrize('change', ['receipt', 'evidence', 'source', 'fingerprint', 'missing'])
+def test_reconciliation_tamper_or_changed_inputs_refuse_before_launch(setup, tmp_path, change):
+    ledger, root, out = setup
+    receipt, paths = reconciliation_fixture(ledger, tmp_path)
+    if change == 'receipt':
+        data = E.load(receipt); data['requirements']['identity-amd/ols']['decision'] = 'run-changed-payload'
+        receipt.write_text(json.dumps(data))
+    elif change == 'evidence':
+        paths['audit'].write_text('{}')
+    elif change == 'missing':
+        receipt.unlink()
+    else:
+        with ledger.edit() as doc:
+            if change == 'source':
+                doc['source_revision'] = 'c' * 40
+            else:
+                wanted = doc['requirements']['identity-amd/ols']
+                wanted['inputs']['changed'] = True
+                wanted['fingerprint'] = G.digest(wanted['inputs'])
+    with pytest.raises((ValueError, OSError)):
+        G.launch(ledger, root, 'amd-mi325x-gfx942', out, environment={},
+                 runner=lambda *a, **k: pytest.fail('invalid reconciliation must not execute'))
+    assert not ledger.read()['runs']
+
+
+def test_recorded_failure_remains_specific_repair_with_historical_receipt(setup, tmp_path):
+    ledger, root, out = setup
+    reconciliation_fixture(ledger, tmp_path)
+    run = ledger.begin('identity-amd/ols')
+    evidence = tmp_path / 'failure.log'; evidence.write_text('actual specific failure\n')
+    ledger.record_many([dict(run_id=run, status='failed', paths=[str(evidence)],
+        summary='Observed failure in this lane', exit_code=1, expected=1, completed=1, failed=1, skipped=0)])
+    result = G.plan(ledger, 'amd', ['ols'])
+    assert result['counts'] == {'repair': 1} and result['executable']
+    assert 'Observed failure' in result['selected']['identity-amd/ols']['reasons'][0]
+
+
+def test_verified_pass_reuses_even_when_reconciliation_is_pending(setup, tmp_path):
+    ledger, root, out = setup
+    launches = fixtures.begin_all(ledger, out)
+    E.admit(ledger, [fixtures.columns(out)], launches, out / 'admit', check=fixtures.fake_check)
+    reconciliation_fixture(ledger, tmp_path)
+    result = G.plan(ledger, 'amd', ['ols'])
+    assert result['counts'] == {'reuse': 1} and result['executable']

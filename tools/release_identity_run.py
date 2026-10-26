@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 import release_identity_evidence as identity
-from release_requirements import RequirementsLedger
+from release_requirements import RequirementsLedger, digest
 
 SCHEMA = 'mojolearn.release-identity-execution.v1'
 
@@ -71,6 +71,102 @@ def applicability(root, vendor, source):
                                              cwd=root, text=True))
 
 
+RECONCILIATION_SCHEMA = 'mojolearn.identity-reconciliation.v1'
+
+
+def prepare_reconciliation(ledger, *, origin_map, source_audit, comparison, reviewed_plan,
+                           boundary_report):
+    """Derive a scheduling receipt from retained audit artifacts, never a PASS.
+
+    This is an agent/producer API. The normal plan/run commands discover its
+    result beside the ledger; callers do not author per-lane manifests.
+    Original record bytes and source commits remain untouched.
+    """
+    doc = ledger.read()
+    origins, audit, compared, reviewed = [identity.load(p) for p in
+                                        (origin_map, source_audit, comparison, reviewed_plan)]
+    require(audit['target'].strip() == doc['source_revision'] == reviewed['source'],
+            'reconciliation source audit/plan differs from the ledger source')
+    require(not compared['failures'], 'offline comparison has unresolved disagreements')
+    changed = set(reviewed['gpu_identity']['lanes'])
+    require(changed == set(compared['excluded_new_train_lanes']),
+            'reviewed changed payloads differ from offline comparison exclusions')
+    reasons = {row['lane']: row['reason'] for row in reviewed['expanded_identity']}
+    require(changed <= set(reasons), 'changed payloads lack specific source/operation reasons')
+    evidence = {name: identity.reference(path) for name, path in dict(
+        origin_map=origin_map, source_audit=source_audit, comparison=comparison,
+        reviewed_plan=reviewed_plan).items()}
+    record_refs = {}
+    for row in compared['records']:
+        require(row.get('admission_error') is None, 'historical/current record failed ordinary admission')
+        ref = dict(path=row['path'], sha256=row['sha256'])
+        identity.checked(ref)
+        record_refs[row['path']] = ref
+    requirements = {}
+    for name, wanted in doc['requirements'].items():
+        if (wanted.get('kind') != 'identity' or wanted.get('required') is False
+                or wanted['inputs']['unit']['vendor'] not in ('nvidia', 'amd')):
+            continue
+        lane, vendor = identity.unit_lane(wanted), wanted['inputs']['unit']['vendor']
+        routes = ('nvidia', 'ptx') if vendor == 'nvidia' else ('amd',)
+        retained = {}
+        for route in routes:
+            cells = {key: row for key, row in origins[route]['latest_cells'].items()
+                     if key.partition('/')[0] == lane}
+            require(cells, 'retained origin map lacks ' + route + '/' + lane)
+            for row in cells.values():
+                require(row['path'] in record_refs, 'origin map names an unverified record')
+            retained[route] = dict(fixtures=sorted(key.partition('/')[2] for key in cells),
+                origins=sorted({(r['commit'], r['path']) for r in cells.values()}),
+                verdicts=dict(Counter(r['verdict'] for r in cells.values())))
+        requirements[name] = dict(fingerprint=wanted['fingerprint'], lane=lane, vendor=vendor,
+            decision='run-changed-payload' if lane in changed else 'reconcile-evidence',
+            reason=reasons[lane] if lane in changed else
+                'Retained GPU runtime exists; reconcile original algorithm evidence with changed host boundary.',
+            retained=retained)
+    body = dict(schema=RECONCILIATION_SCHEMA, source_revision=doc['source_revision'],
+        runtime_qualified=False, evidence=evidence, records=list(record_refs.values()),
+        changed_payload_lanes=sorted(changed), requirements=requirements,
+        boundary=dict(status='pending', expected_report=str(Path(boundary_report).resolve()),
+                      claim='No runtime result admitted by this scheduling receipt.'),
+        admission_limitations=[
+            'record_errors accepts the requested source or validated dependency-equivalent originals; '
+            'shared changed host closures are not exact dependency equivalence.',
+            'Offline equality and source-body analysis alone do not execute the new Linux boundary.',
+            'After boundary success, bind its actual report and original records to scoped reuse admission '
+            'or an explicitly authorized owner record. Never relabel historical records or schedule a broad rerun.'])
+    body['digest'] = digest(body)
+    path = ledger.path.with_name('identity-reconciliation.json')
+    identity.write_json(path, body)
+    with ledger.edit() as current:
+        require(current['source_revision'] == doc['source_revision'], 'ledger source changed during reconciliation')
+        current['identity_reconciliation'] = identity.reference(path)
+    return path
+
+
+def reconciliation(ledger, doc):
+    """Automatically find and verify the retained-evidence scheduling receipt."""
+    ref = doc.get('identity_reconciliation')
+    path = identity.checked(ref) if ref else ledger.path.with_name('identity-reconciliation.json')
+    if not ref and not path.is_file():
+        return None
+    receipt = identity.load(path)
+    body = dict(receipt)
+    expected = body.pop('digest', None)
+    require(receipt.get('schema') == RECONCILIATION_SCHEMA and digest(body) == expected,
+            'retained identity reconciliation receipt content differs')
+    require(receipt['source_revision'] == doc['source_revision'],
+            'retained identity reconciliation source changed; reconcile before scheduling execution')
+    require(receipt.get('runtime_qualified') is False,
+            'scheduling reconciliation cannot claim runtime qualification')
+    for evidence_ref in list(receipt['evidence'].values()) + receipt['records']:
+        identity.checked(evidence_ref)
+    reviewed = identity.load(receipt['evidence']['reviewed_plan']['path'])
+    require(set(receipt['changed_payload_lanes']) == set(reviewed['gpu_identity']['lanes']),
+            'reconciliation changed-payload selection differs from reviewed evidence')
+    return receipt
+
+
 def plan(ledger, vendor, lanes=None):
     doc, rows = ledger.read(), ledger.plan()
     units = {name: wanted for name, wanted in doc['requirements'].items()
@@ -84,10 +180,25 @@ def plan(ledger, vendor, lanes=None):
     require(names, 'no applicable identity lanes in this selection')
     selected = {name: dict(action=rows[name]['action'], reasons=rows[name].get('reasons', []),
                            fingerprint=units[name]['fingerprint']) for name in names}
+    retained = (reconciliation(ledger, doc) if vendor in ('nvidia', 'amd')
+                and any(row['action'] == 'run' for row in selected.values()) else None)
     for name in selected:
         if not identity.supports_requirement(units[name]):
             selected[name] = dict(selected[name], action='complete-provenance',
                                   reasons=['identity requirement lacks complete source/coverage provenance'])
+        if retained is not None and vendor in ('nvidia', 'amd') and selected[name]['action'] == 'run':
+            row = retained['requirements'].get(name)
+            require(row is not None and row['fingerprint'] == units[name]['fingerprint'],
+                    'reconciliation input fingerprint changed or absent: ' + name)
+            lane = identity.unit_lane(units[name])
+            if row['decision'] == 'run-changed-payload':
+                require(lane in retained['changed_payload_lanes'], 'unreviewed changed payload: ' + lane)
+                selected[name]['reasons'] = [row['reason']]
+            else:
+                require(row['decision'] == 'reconcile-evidence', 'unknown reconciliation decision')
+                selected[name].update(action='reconcile-evidence', reasons=[row['reason'],
+                    'Historical execution is retained but not yet imported; boundary/reuse proof is pending.'])
+            selected[name]['retained_origins'] = row['retained']
     blocked = [name for name, row in selected.items() if row['action'] not in ('run', 'repair', 'reuse')]
     return dict(schema=SCHEMA, source_revision=doc['source_revision'], vendor=vendor,
                 selected=selected, counts=dict(Counter(row['action'] for row in selected.values())),
@@ -125,7 +236,7 @@ def launch(ledger, root, label, out, lanes=None, *, environment=None, runner=sub
     vendor = vendor_for(label)
     require(not label.startswith('nvidia-ptx-'), 'start the NVIDIA column with its native label; PTX is included automatically')
     planned = plan(ledger, vendor, lanes)
-    require(planned['executable'], 'selected identity units are active or need restored provenance: ' + ', '.join(planned['blocked']))
+    require(planned['executable'], 'selected identity units are active or need restored provenance/reconciliation: ' + ', '.join(planned['blocked']))
     if planned['counts'].get('run', 0) + planned['counts'].get('repair', 0):
         source_preflight(root, planned['source_revision'])
     out.mkdir(parents=True, exist_ok=True)
