@@ -23,10 +23,8 @@
                                          and check its output bits against
                                          a report from another install
                                          (_verify_model.py)
-    python -m mojolearn identity         run the identity_break lanes on
-                                         this box and diff them against the
-                                         three GPU columns shipped in the
-                                         wheel; --check resolves the files
+    python -m mojolearn identity         run the identity harness on this box
+                                         against the admitted reference table; --check resolves the files
                                          and runs nothing (_identity.py)
 
 The logic is in `_verify.py`; this file is argument parsing and nothing else,
@@ -594,28 +592,23 @@ def build_parser():
     # as the top level -- no default subcommand.
     d = sub.add_parser(
         "identity",
-        help="run the identity_break lanes on this box and diff them "
-             "against the three GPU columns shipped in this install",
+        help="run identity checks on this box against the admitted reference table",
         description=(
-            "Runs tools/identity_break.py (the wheel's copy, or the "
-            "checkout's) on this box under the identical tier, then diffs "
-            "the column it wrote against the three training GPU columns the "
-            "manifest names (Apple M4, NVIDIA L40S, AMD MI325X at the "
-            "recorded commit), requiring IDENTICAL x4 on every cell this box "
-            "ran. On a CPU-only install only the lanes with a CPU training "
-            "path run. Needs numpy. The whole record takes minutes to an "
-            "hour depending on the box; --fixtures base --repeats 1 is the "
-            "quick pass and is judged cell by cell rather than through "
-            "--require-columns."),
+            "Runs the installed identity harness under the identical tier and "
+            "compares its train, inference and model values with the admitted "
+            "reference table. Each reference retains its original vendor and "
+            "source record. On a CPU-only install only applicable CPU lanes run. "
+            "Needs numpy. Use --fixtures base --repeats 1 for a smaller check; "
+            "--keep retains the actual local harness column."),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     d.add_argument("--check", action="store_true",
                    help="resolve the harness, the columns and the commit "
                         "witness and run nothing (exit 0 ready, 5 missing)")
     d.add_argument("--lanes", default="",
-                   help="comma separated subset of the record's lanes "
+                   help="comma separated subset of the admitted table's lanes "
                         "(default: every lane this box can run)")
     d.add_argument("--fixtures", default="",
-                   help="comma separated subset of the record's fixtures "
+                   help="comma separated subset of the harness's fixtures "
                         "(default: all nine)")
     d.add_argument("--repeats", type=int, default=1,
                    help="fits per cell (default %(default)s); a hash equal to "
