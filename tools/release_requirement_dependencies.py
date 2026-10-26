@@ -17,6 +17,7 @@ the corresponding unit; it never expands to a guessed whole-library rerun.
 from __future__ import annotations
 
 import copy
+from functools import lru_cache
 import hashlib
 import json
 import os
@@ -546,6 +547,93 @@ def evidence_restoration(evidence):
     return dict(status="restore-required" if restore else "available", restore=restore)
 
 
+# Reviewed release-label boundary: Sequential puts this value only in the
+# unconsumed .verify.json install metadata. The export lane hashes model.ckpt
+# and predictions, not that sidecar. Keep exact reviewed consumers/fixture bytes:
+# new use of version in computation or a consumed checkpoint requires review.
+VERSION_PATH = "python/mojolearn/_version.py"
+VERSION_LABEL_ANCHORS = {'python/mojolearn/_x_sequence_model.py': 'bf42be02698ce0f67c5f0dfd94630e0c607841950c24ff3d1a313192ce65f5b6', 'bindings/sequential_checkpoint.mojo': 'ee37e236bbc6846032eeed31a22900723dcd18b561198c8e403a44306a6dcee7', 'tools/identity_lanes/coverage.py': 'db8d3ae94a2a635cb169d97dfd1267267f4a830afe5cae5e53047ff67a4e191d'}
+VERSION_LABEL_LANES = frozenset("""public-theta-variants sequence-adamax sequence-croston
+sequence-ets sequence-export-roundtrip sequence-garch sequence-gru sequence-lion
+sequence-lr-schedulers sequence-lstm sequence-mlp sequence-nadam sequence-prophet
+sequence-rnn sequence-stl sequence-tape-sequential sequence-theta sequence-var""".split())
+
+
+def _version_literal_view(data):
+    import ast
+    text = data.decode("utf-8")
+    body = ast.parse(text).body
+    if (len(body) != 1 or not isinstance(body[0], ast.Assign)
+            or len(body[0].targets) != 1 or not isinstance(body[0].targets[0], ast.Name)
+            or body[0].targets[0].id != "__version__"
+            or not isinstance(body[0].value, ast.Constant)
+            or not isinstance(body[0].value.value, str)
+            or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", body[0].value.value)):
+        return None
+    value = body[0].value
+    if value.lineno != value.end_lineno:
+        return None
+    lines = text.splitlines(keepends=True)
+    line = lines[value.lineno - 1].encode()
+    lines[value.lineno - 1] = (line[:value.col_offset] + b'"<release-label>"'
+                              + line[value.end_col_offset:]).decode()
+    return "".join(lines)
+
+
+@lru_cache(maxsize=512)
+def _git_bytes(root, revision, path):
+    return subprocess.check_output(["git", "-C", str(root), "show", revision + ":" + path])
+
+
+def version_label_proof(root, old, new):
+    """Retain original fingerprints; prove only an unconsumed release label changed."""
+    if old.get("kind") != "identity" or new.get("kind") != "identity":
+        return None
+    if old.get("missing_inputs") or new.get("missing_inputs"):
+        return None
+    if any(w.get("fingerprint") != digest(w.get("inputs")) for w in (old, new)):
+        return None
+    a, b = copy.deepcopy(old["inputs"]), copy.deepcopy(new["inputs"])
+    x, y = a.pop("native_sources", {}), b.pop("native_sources", {})
+    lanes = b.get("unit", {}).get("lanes", [])
+    changed = {p for p in set(x) | set(y) if x.get(p) != y.get(p)}
+    if a != b or changed != {VERSION_PATH} or not lanes or not set(lanes) <= VERSION_LABEL_LANES:
+        return None
+    old_rev, new_rev = old["source_revision"], new["source_revision"]
+    try:
+        before, after = (_git_bytes(root, rev, VERSION_PATH) for rev in (old_rev, new_rev))
+        views = [_version_literal_view(data) for data in (before, after)]
+        if views[0] is None or views[0] != views[1]:
+            return None
+        if [hashlib.sha256(data).hexdigest() for data in (before, after)] != [x[VERSION_PATH], y[VERSION_PATH]]:
+            return None
+        for path, sha in VERSION_LABEL_ANCHORS.items():
+            if any(hashlib.sha256(_git_bytes(root, rev, path)).hexdigest() != sha for rev in (old_rev, new_rev)):
+                return None
+    except (OSError, UnicodeError, SyntaxError, subprocess.SubprocessError):
+        return None
+    proof = dict(schema=PROOF_SCHEMA, kind="unconsumed-release-version-literal",
+                 unit_id=b["contract"]["id"], old_revision=old_rev, new_revision=new_rev,
+                 old_fingerprint=old["fingerprint"], new_fingerprint=new["fingerprint"],
+                 stable_inputs_digest=digest(a), lanes=sorted(lanes),
+                 version_source_sha256=dict(old=x[VERSION_PATH], new=y[VERSION_PATH]),
+                 reviewed_consumers=VERSION_LABEL_ANCHORS)
+    proof["digest"] = digest(proof)
+    return proof
+
+
+def validate_version_label_proof(root, proof, old):
+    """Reconstruct the sole permitted delta and independently re-read both commits."""
+    if not isinstance(proof, dict) or proof.get("kind") != "unconsumed-release-version-literal":
+        return False
+    new = copy.deepcopy(old)
+    new["source_revision"] = proof.get("new_revision")
+    new["inputs"] = dict(new["inputs"], native_sources=dict(new["inputs"]["native_sources"]))
+    new["inputs"]["native_sources"][VERSION_PATH] = proof.get("version_source_sha256", {}).get("new")
+    new["fingerprint"] = digest(new["inputs"])
+    return version_label_proof(root, old, new) == proof
+
+
 def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retained_evidence=None):
     """Source-only plan: exact reuse proofs, affected units, or blocked provenance.
 
@@ -557,7 +645,7 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
     vendors = sorted({w.get("inputs", {}).get("unit", {}).get("vendor")
         for w in new_manifest["requirements"].values() if w.get("kind") in ("identity", "performance")})
     vendors = [v for v in vendors if v in VENDORS]
-    snapshot = frozen_snapshot(root, new_rev, dict(base_revision=old_rev, vendors=vendors), log_dir=log_dir) if vendors else {}
+    snapshot = None
     plan = dict(schema=PROOF_SCHEMA, old_revision=_revision(root, old_rev),
                 new_revision=_revision(root, new_rev), units={})
     for rid, new in new_manifest["requirements"].items():
@@ -580,6 +668,12 @@ def equivalence_proofs(root, old_manifest, new_manifest, *, log_dir=None, retain
         if new.get("kind") not in ("identity", "performance") or a != b:
             row["reason"] = "execution, coverage, recipe, flags or build inputs changed"
             continue
+        version_proof = version_label_proof(root, old, new)
+        if version_proof:
+            row.update(decision="retained", reason="only unconsumed release version literal changed", reuse_proof=version_proof)
+            continue
+        if snapshot is None:
+            snapshot = frozen_snapshot(root, new_rev, dict(base_revision=old_rev, vendors=vendors), log_dir=log_dir)
         selection = snapshot["selections"][unit["vendor"]]
         lanes = set(unit.get("lanes", []))
         limited = [row for row in selection.get("precision_limitations", []) if row.get("lane") in lanes]

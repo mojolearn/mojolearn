@@ -425,16 +425,31 @@ def column_revisions(revisions, source, vendor, wanted, classes):
             "identity unit report does not bind its begun, frozen and column revisions")
     frozen = revisions["frozen_revision"]
     equal = revisions.get("frozen_fingerprint") == wanted.get("fingerprint")
-    require(frozen == source or equal,
+    from release_requirement_dependencies import validate_version_label_proof
+    version_proof = revisions.get("version_label_proof")
+    version_equal = (isinstance(version_proof, dict)
+                     and version_proof.get("new_revision") == frozen
+                     and version_proof.get("new_fingerprint") == revisions.get("frozen_fingerprint")
+                     and validate_version_label_proof(ROOT, version_proof, wanted))
+    require(frozen == source or equal or version_equal,
             f"begun inputs at {source[:12]} differ from the requirement frozen at {frozen[:12]}; "
             "records at the begun revision cannot qualify it")
     basis = revisions.get("basis") if isinstance(revisions.get("basis"), dict) else {}
     for cls, commit in sorted(columns.items()):
         own = basis.get(cls) if isinstance(basis.get(cls), dict) else {}
-        require(commit in (source, frozen) or (own.get("fingerprint_equal") is True and own.get("revision") == commit),
+        other_proof = own.get("version_label_proof")
+        other_wanted = own.get("begun_requirement")
+        other_equal = (isinstance(other_wanted, dict) and isinstance(other_proof, dict)
+                       and other_wanted.get("source_revision") == commit
+                       and other_proof.get("new_revision") == frozen
+                       and other_wanted.get("inputs", {}).get("unit", {}).get("lanes") == wanted["inputs"]["unit"]["lanes"]
+                       and other_wanted.get("inputs", {}).get("unit", {}).get("vendor") == cls
+                       and validate_version_label_proof(ROOT, other_proof, other_wanted))
+        require(commit in (source, frozen) or (own.get("revision") == commit
+                and (own.get("fingerprint_equal") is True or other_equal)),
                 f"{cls} column revision {commit[:12]} is not a fingerprint-equal run of its unit")
     return dict(columns), dict(begun_revision=source, frozen_revision=frozen, record_commits=dict(sorted(columns.items())),
-                               input_fingerprint_equal=equal)
+                               input_fingerprint_equal=equal, version_label_proof=version_proof if version_equal else None)
 
 
 def producer_payload(requirement_id, wanted, report_path, provenance):
@@ -575,7 +590,7 @@ def harness_check(records, root, source, out):
     return reference(path)
 
 
-def unit_bases(doc, rows, source):
+def unit_bases(doc, rows, source, root=ROOT):
     """The revision each identity unit's column records must carry, with its basis.
 
     The ledger's active run, or the passed attempt the unit rests on, when its
@@ -583,6 +598,7 @@ def unit_bases(doc, rows, source):
     source. A commit name is provenance, never an invalidation input.
     """
     attempts = {a["id"]: a for a in doc.get("attempts", [])}
+    runs = {r["id"]: r for r in doc.get("runs", [])}
     bases = {}
     for name, wanted in identity_units(doc):
         row = rows.get(name, {})
@@ -598,7 +614,17 @@ def unit_bases(doc, rows, source):
             bases[name] = dict(requirement=name, run_id=found["run_id"], revision=found["revision"],
                                fingerprint_equal=True)
         else:
-            bases[name] = dict(requirement=name, run_id=None, revision=source, basis="frozen-source")
+            original = runs.get(found["run_id"]) if found else None
+            if original is None and row.get("attempt") in attempts:
+                original = attempts[row["attempt"]]
+            old = dict(original.get("manifest", {}), inputs=original["inputs"]) if original else None
+            from release_requirement_dependencies import version_label_proof
+            proof = version_label_proof(root, old, wanted) if old else None
+            if found and proof:
+                bases[name] = dict(requirement=name, run_id=found["run_id"], revision=found["revision"],
+                                   fingerprint_equal=False, version_label_proof=proof, begun_requirement=old)
+            else:
+                bases[name] = dict(requirement=name, run_id=None, revision=source, basis="frozen-source")
     return bases
 
 
@@ -611,7 +637,7 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
     paths = sorted({p.resolve() for d in record_dirs for p in Path(d).glob("*.identical.json")})
     require(paths, "no *.identical.json records")
     rows = ledger.plan()
-    bases = unit_bases(doc, rows, source)
+    bases = unit_bases(doc, rows, source, root=ledger.source_root or ROOT)
     # Begun revisions other than the frozen source; a run with different inputs
     # is listed so its unit is refused by name below rather than by record.
     begun_revisions = ({b["revision"] for b in bases.values()}
@@ -648,7 +674,8 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
             continue
         row = rows[name]
         own = row["active_revision"] if row["action"] == "resume" else source
-        if own != source and row.get("active_input_fingerprint") != wanted["fingerprint"]:
+        if (own != source and row.get("active_input_fingerprint") != wanted["fingerprint"]
+                and not bases[name].get("version_label_proof")):
             problems[name] = (f"begun run {row['active_run']} at {own[:12]} has inputs that differ from the "
                               f"requirement frozen at {source[:12]}; its records cannot qualify the current "
                               "inputs: finish that run and begin a new one at the frozen source")
@@ -716,7 +743,7 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
                       gpu_only=gpu_only(lane, run["source_revision"]), records=chosen["records"],
                       revisions=dict(begun_revision=run["source_revision"], frozen_revision=source,
                                      frozen_fingerprint=wanted["fingerprint"], columns=chosen["columns"],
-                                     basis=chosen["basis"]))
+                                     basis=chosen["basis"], version_label_proof=bases[name].get("version_label_proof")))
         report_ref = write_json(unit_dir / "report.json", report)
         import release_requirement_receipts as receipts
         provenance = dict(schema=receipts.PROVENANCE_SCHEMA, requirement_id=name, kind="identity",
@@ -733,7 +760,7 @@ def admit(ledger, record_dirs, launch_paths, out, *, harness_root=ROOT, begin_mi
         summary = (f"{vendor} identity {lane}: {counts['column_agree']}/{counts['slots']} column parts and "
                    f"{counts['contract_agree']}/{counts['slots']} cross-vendor parts agree at {run['source_revision'][:12]}"
                    + ("" if run["source_revision"] == source else
-                      f" (inputs fingerprint-equal to the frozen source {source[:12]})")
+                      f" (inputs retained under proven equivalence to the frozen source {source[:12]})")
                    + ("" if receipt["status"] == "passed" else f"; {receipt['identity_detail']['problem_count']} problems"))
         entries.append(dict(run_id=run["id"], status=receipt["status"], paths=[report_ref["path"]], summary=summary,
                             exit_code=receipt["exit_code"], receipt=receipt, **totals))
