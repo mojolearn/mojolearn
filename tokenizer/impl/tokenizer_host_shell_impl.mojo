@@ -321,30 +321,8 @@ def bpe_encode_batch_into(
     return total
 
 
-def bpe_decode_into(
-    handle: BpeHandle, ids_address: Int, n: Int, out_address: Int, cap: Int
-) raises -> Int:
-    """`bpe_decode`'s work: read `n` int32 ids, write the bytes."""
-    var src = i32_ptr(ids_address)
-    var ids = List[Int](capacity=n)
-    for k in range(n):
-        ids.append(Int(src[k]))
-    # THE ONE CALL THAT COMPUTES ANYTHING; an id outside [0, n_vocab) is
-    # refused here by name and position, nothing written.
-    var out = handle.tok.value().decode_bytes(ids)
-    var count = len(out)
-    if count > cap:
-        raise Error(
-            "bpe_decode: "
-            + String(count)
-            + " bytes do not fit an output of "
-            + String(cap)
-            + "; nothing written"
-        )
-    var dst = _u8_ptr(out_address)
-    if count > 0:
-        memcpy(dest=dst, src=out.unsafe_ptr(), count=count)
-    return count
+# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
 
 
 def bpe_train_fill(

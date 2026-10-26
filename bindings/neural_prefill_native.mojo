@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native zero-state training prefill and immutable tape ownership."""
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
-from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -172,27 +169,6 @@ def neural_prefill_close(tape: PythonObject) raises:
     _ = py_call(_native_function(tape[0], kind + "_close_tape"), tape[1])
 
 
-def neural_prefill_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
-    try:
-        var args = PythonObject(from_borrowed=args_ptr)
-        var op = String(args[0])
-        var values = args[1]
-        var context = args[2]
-        var result = PythonObject(None)
-        if op == "forward":
-            result = neural_prefill_forward(values[0], values[1], context)
-        elif op == "backward":
-            result = neural_prefill_backward(values[0], values[1], values[2], context)
-        elif op == "close":
-            neural_prefill_close(values[0])
-        else:
-            raise Error("neural prefill: unknown operation")
-        return result.steal_data()
-    except error:
-        if String(error).startswith("TypeError:"):
-            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
-        if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
-        if String(error).startswith("NotImplementedError:"):
-            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
-        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
+

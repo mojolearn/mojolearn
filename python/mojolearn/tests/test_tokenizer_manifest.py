@@ -135,7 +135,7 @@ def test_binding_source_reads_the_sabotage_define():
 
 def test_batch_encoder_parallelizes_whole_documents_only():
     src = _read("tokenizer/impl/tokenizer_host_shell_impl.mojo")
-    body = src[src.index("def bpe_encode_batch_into("):src.index("def bpe_decode_into(")]
+    body = src[src.index("def bpe_encode_batch_into("):src.index("def bpe_train_fill(")]
     assert "host_parallelize(_documents, tasks)" in body
     assert "host_predict_task_count(n_docs) if n >= 16384 else 1" in body
     assert "stagep.unsafe_store(a + j" in body

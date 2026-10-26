@@ -1218,19 +1218,6 @@ class TransformerBlock(NumericModeMixin):
             tape._consumed = True
             ext.transformer_session_backward_tape(tape._session, addrs, tape._token)
         return dict(zip(("x",) + self._W_NAMES, grads))
-    def _forward_with_tape(self, x):
-        return _native_neural_bridge.RUNTIME.neural_prefill_call(
-            "forward", (self, x), _native_neural_bridge.CONTEXT)
-
-    def _backward_from_tape(self, tape, grad_output):
-        return _native_neural_bridge.RUNTIME.neural_prefill_call(
-            "backward", (self, tape, grad_output), _native_neural_bridge.CONTEXT)
-
-    @staticmethod
-    def _close_forward_tape(tape):
-        return _native_neural_bridge.RUNTIME.neural_prefill_call(
-            "close", (tape,), _native_neural_bridge.CONTEXT)
-
     def backward(self, x, grad_output):
         """Gradients of a zero-state prefill with respect to the input and the weights.
 

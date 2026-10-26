@@ -1981,10 +1981,6 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     return _OPT_NATIVE("mlp_inference_sessions", None, (inputs, weight1, bias1, weight2, bias2), numeric_mode, _OPT_CONTEXT)
 
 
-# Import-time ABI connection only; finalization never invokes the selector.
-from .tokenizer import _binding as _connect_optimizer_lifecycle
-_optimizer_finalize_native = _connect_optimizer_lifecycle()._module.optimizer_finalize
-
 # Package-import ABI connection; no product operation calls the Python loader.
 from ._native_optimizer_bridge import connect as _connect_native_optimizer
 import sys as _optimizer_sys

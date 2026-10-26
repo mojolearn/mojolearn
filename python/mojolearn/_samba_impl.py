@@ -454,7 +454,7 @@ class SambaStack(object):
         return _buffers.as_i32_c(x, ndim=2, name=what)[0]
 
     def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True,
-                 norm=True, retain_tapes=False):
+                 norm=True):
         """The forward with every block input kept for the backward.
         `head=False` stops after the final norm (`logits` is None): the
         fused `samba_head_loss` runs the head itself. `norm=False` (with
@@ -474,16 +474,10 @@ class SambaStack(object):
                                             offset=token_offset * c.d_model,
                                             stream=dropout_stream)
         xs = []
-        tapes = []
         for i in range(len(c.layers)):  # glue: dispatches each layer block
             xs.append(x)
             block = self._block(i)
-            forward_tape = getattr(block, "_forward_with_tape", None)
-            if retain_tapes and callable(forward_tape):
-                x, tape = forward_tape(x)
-            else:
-                x, tape = block.forward(x), None
-            tapes.append(tape)
+            x = block.forward(x)
         hn = None
         logits = None
         afn = self._afn() if (norm and head) else None
@@ -495,7 +489,7 @@ class SambaStack(object):
             if head:
                 logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
                                           self._head_weight(), self.numeric_mode)
-        return {"ids": ids, "key": key, "xs": xs, "tapes": tapes, "h": x, "hn": hn,
+        return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
 
     def forward(self, inputs, state=None, *, lengths=None):

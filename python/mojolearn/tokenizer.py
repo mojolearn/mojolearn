@@ -67,7 +67,7 @@ _NO_VOCABULARY = (
 #: since. A binding built before the rename (an older host directory under
 #: MOJOLEARN_HOST_DIR) is read through its old names so it keeps loading;
 #: the ids are the same arithmetic under either name.
-_ABI = ("load", "n_vocab", "max_token_bytes", "encode", "encode_batch", "decode")
+_ABI = ("load", "n_vocab", "max_token_bytes", "encode", "encode_batch")
 
 
 class _Entries:

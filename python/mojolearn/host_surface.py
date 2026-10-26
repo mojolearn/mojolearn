@@ -1666,13 +1666,13 @@ FAMILIES = (
             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
             "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
-            "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
+            "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
             "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "tokenizer_host_runtime_classical_abi", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
-            "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
+            "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
             "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
             "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
             "tokens_gather_rows",
@@ -1682,7 +1682,7 @@ FAMILIES = (
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
+            "optimizer_finalize_descriptor", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
             # lane migrate-neural-2: the Embedding layer's native lifetime,
             # parallel forecasting's owner and the GPU byte-LM trainer step

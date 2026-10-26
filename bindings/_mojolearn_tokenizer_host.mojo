@@ -37,11 +37,6 @@ tokenizer.py`:
         id), so `out_cap = n_bytes` always suffices; a count above `out_cap`
         is refused before anything is written. `n_bytes = 0` reads and
         writes nothing and returns 0.
-    bpe_decode(handle, ids_addr, n_ids, out_addr, out_cap)
-        reads `n_ids` int32 at `ids_addr`, writes the bytes at `out_addr`
-        and returns how many. An id outside [0, n_vocab) is refused BY NAME
-        AND POSITION (`encoding.mojo`'s own sentence) with nothing written;
-        `out_cap = n_ids * bpe_max_token_bytes` always suffices.
 
 THE SABOTAGE. `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` makes `bpe_encode`
 write the ids in REVERSE order. It is the Python gate's negative control: a
@@ -89,7 +84,6 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
-from bindings.neural_prefill_native import neural_prefill_c
 from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
 from bindings.samba_config_native import samba_config_c
 from bindings.samba_public_native import samba_public_c
@@ -105,7 +99,7 @@ from bindings.parallel_forecast_native import parallel_forecast_c
 from bindings.parallel_shard_native import parallel_shard_c
 from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
-from bindings.optimizer_lifecycle import optimizer_finalize_binding, optimizer_finalize_descriptor_binding
+from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
@@ -188,7 +182,6 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     bpe_check_ids,
     bpe_decode_batch_append,
     bpe_decode_batch_fit,
-    bpe_decode_into,
     bpe_decode_seq_bytes,
     bpe_encode_batch_into,
     bpe_encode_corpus_into,
@@ -212,7 +205,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from bindings.causal_lm_public import (
-    GenerationHandle, causal_public_c, causal_lm_admit_binding, causal_lm_allocate_binding,
+    GenerationHandle, causal_public_c, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
@@ -391,30 +384,8 @@ def bpe_encode_batch_binding(
     return PythonObject(total)
 
 
-def bpe_decode_binding(
-    handle: PythonObject,
-    ids_addr: PythonObject,
-    n_ids: PythonObject,
-    out_addr: PythonObject,
-    out_cap: PythonObject,
-) raises -> PythonObject:
-    """`BpeTokenizer.decode_bytes` on the host. Returns the byte count."""
-    var owner = handle.downcast_value_ptr[BpeHandle]()
-    _require_loaded(Bool(owner[].tok))
-    var n = _index(n_ids)
-    var cap = _index(out_cap)
-    if n < 0:
-        raise Error("bpe_decode: n_ids must be >= 0, got " + String(n))
-    if cap < 0:
-        raise Error("bpe_decode: out_cap must be >= 0, got " + String(cap))
-    if n == 0:
-        return PythonObject(0)
-    var ids_address = _index(ids_addr)
-    var out_address = _index(out_addr)
-    var count = 0
-    with GILReleased(Python()):
-        count = bpe_decode_into(owner[], ids_address, n, out_address, cap)
-    return PythonObject(count)
+# TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+# Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
 
 
 def bpe_train_binding(
@@ -1328,7 +1299,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neighbor_query_c, "neighbor_query_call")
         module.def_py_c_function(neighbor_query_attribute_c, "neighbor_query_attribute_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
-        module.def_function[optimizer_finalize_binding]("optimizer_finalize")
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
@@ -1392,7 +1364,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[bpe_max_token_bytes_binding]("bpe_max_token_bytes")
         module.def_function[bpe_encode_binding]("bpe_encode")
         module.def_function[bpe_encode_batch_binding]("bpe_encode_batch")
-        module.def_function[bpe_decode_binding]("bpe_decode")
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         _ = module.add_type[BpeTrainedHandle]("_BpeTrainedHandle")
         module.def_function[bpe_train_binding]("bpe_train")
         module.def_function[bpe_trained_sizes_binding]("bpe_trained_sizes")
@@ -1447,7 +1420,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
-        module.def_py_c_function(neural_prefill_c, "neural_prefill_call")
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(mamba_native_c, "mamba_native_call")
         _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
@@ -1455,7 +1429,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
-        module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
+        # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by @@SHA@@; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
         module.def_py_c_function(causal_public_c[3], "causal_lm_forward")

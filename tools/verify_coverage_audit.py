@@ -1461,9 +1461,6 @@ ANNOTATIONS = {
                                            "reader, _lr_at_slow, discards the name; exact_block runs inside "
                                            "lr_spec_fill (lr_schedule_at / lr_schedule_series), which the "
                                            "optim-* and sequence-lr-schedulers lanes cover"),
-    "optimizer_finalize": ("n/a", [], "a finalizer: Optimizer.__del__ closes the resident slot through the "
-                                      "owning module's optimizer_resident_close and returns None; nothing it "
-                                      "writes is a value a part could hash"),
     "optimizer_maximize_dev": ("n/a", [], "a capability probe returning a build constant; its one caller "
                                           "(samba_train_step) tests its presence only, and the maximized "
                                           "step it selects is optimizer_resident_step_io"),
@@ -2004,11 +2001,6 @@ ANNOTATIONS_BY_SRC.update({
         "_native_optimizer_bridge retains it at import with the training binding's entries; "
         "training.cross_entropy on a TrainDeviceArray of logits takes it "
         "(bindings/training_cross_entropy_native.mojo, `ce_loss_dev`); GPU columns only"),
-    ("neural_prefill_call", _TOK): (
-        "n/a", [],
-        "no live caller: its callers are TransformerBlock's and the Mamba blocks' _forward_with_tape, "
-        "_backward_from_tape and _close_forward_tape, whose one caller (SambaStack._forward) takes them "
-        "only under retain_tapes=True, which no call in the package passes"),
 })
 
 
