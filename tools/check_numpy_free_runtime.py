@@ -26,11 +26,12 @@ def metadata_errors(required, extras, plugins=()):
                     and separator and any(extra in extras
                     and re.fullmatch(r"\s*extra\s*==\s*[\"']" + extra + r"[\"']\s*", marker)
                     for extra in ('numpy', 'verify')))
-  # The framework adapters' extras (packaging/adapters/pins.json): torch under
-  # extra "torch", max under extra "max", never a base requirement.
-  framework = re.match(r"\s*(torch|max)(?=\s*[<>=!~]|\s*$)", name, re.I)
-  optional_framework = (framework and separator and framework.group(1).lower() in extras
-                        and re.fullmatch(r"\s*extra\s*==\s*[\"']" + framework.group(1).lower() + r"[\"']\s*", marker))
+  # Torch's model-import frontend also needs ONNX/ONNXScript. All three
+  # belong only to the declared torch extra; none is a base dependency.
+  framework = re.match(r"\s*(torch|max|onnx|onnxscript)(?=\s*[<>=!~]|\s*$)", name, re.I)
+  framework_extra = ("max" if framework.group(1).lower() == "max" else "torch") if framework else None
+  optional_framework = (framework and separator and framework_extra in extras
+                        and re.fullmatch(r"\s*extra\s*==\s*[\"']" + framework_extra + r"[\"']\s*", marker))
   if not (optional_numpy or optional_framework):
    errors.append('unexpected runtime requirement: ' + dependency)
  return errors

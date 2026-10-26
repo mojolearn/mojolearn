@@ -44,3 +44,18 @@ def test_only_optional_verifier_and_exact_split_plugins_are_allowed(requires, ex
 ])
 def test_unconditional_numpy_other_packages_and_invalid_plugin_pins_fail(requires, extras, plugins):
     assert check.metadata_errors(requires, extras, plugins)
+
+
+@pytest.mark.parametrize("dependency", ["onnx>=1.18", "onnxscript>=0.5"])
+def test_model_import_dependencies_require_only_declared_torch_extra(dependency):
+    assert check.metadata_errors([dependency + '; extra == "torch"'], ["torch"], []) == []
+    assert check.metadata_errors([dependency + "; extra == 'torch'"], ["torch"], []) == []
+    for marker, extras in [
+        ("", ["torch"]),
+        ('; extra == "torch"', []),
+        ('; extra == "max"', ["torch", "max"]),
+        ('; extra == "verify"', ["verify"]),
+        ('; extra == "torch" or python_version >= "3"', ["torch"]),
+    ]:
+        assert check.metadata_errors([dependency + marker], extras, [])
+    assert check.metadata_errors(['onnxruntime; extra == "torch"'], ["torch"], [])
