@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-precise-x_neighbors-row_all_zero",
+  "records": {
+    "clean": "d0a36f59dabb608e3522e5f31ef55866ca986b34c14c54d80a2938dbad05113b",
+    "sabotaged": "0c6a9dac4a9c9a37a7e0851d856e553d69e8718c072f7bd9a59598c79acfb56f",
+    "restored": "2d4be83d59abe9cf9ced5c1202c7a9ac0115e8b1f205c4992f1fe8e01de36760"
+  },
+  "patch_sha256": "e16a9a3b071f2c98e3fbc9eef2fb63f2d24e961a15e04484d29cf6e969564884",
+  "refusals": {
+    "x-cluster-agglo-linkages/base": {
+      "product_check": "Cosine clustering refuses zero-length input vectors before calculating cosine distances.",
+      "why_fault_reaches_check": "The retained fault patch inverts the first row all-zero flag after calculating it. The bounded cosine fixture has nonzero rows; the mutated flag falsely reports a zero vector and the public AgglomerativeClustering.fit raises its exact zero-vector ValueError. Clean and restored executions complete. This is the intended input-refusal path, not infrastructure failure.",
+      "error": "ValueError: Cosine affinity cannot be used when X contains zero vectors\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 12356, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_lanes/cluster.py\", line 417, in _\n    compute_distances=True).fit(_cluster_cosine_rows(Z))\n                            ~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/_mode.py\", line 148, in tracked\n    out = method(self, *args, **kwargs)\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/_hierarchy_impl.py\", line 283, in fit\n    return _NATIVE(self, \"family_cfb_agglo_fit\", (\n        self._bind(self._BINDING), _mojolearn_solver,\n        _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, \"numeric_mode\", None)),\n        _backend.binding(\"_mojolearn_x_neighbors\", getattr(self, \"numeric_mode\", None)), X), _NATIVE_CONTEXT)\nValueError: Cosine affinity cannot be used when X contains zero vectors"
+    }
+  }
+}

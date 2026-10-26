@@ -1,0 +1,5 @@
+{
+  "r2": "measurements/verification/0.8.60/verifier-fixture-update.tgz",
+  "sha256": "624b8f29d86dba93091130094ca123ace393db56020d18b9002daca1ce4417dd",
+  "scope": "Changed verifier bytes and Apple checks; original missed const-cols proof and failed retry setup preserved. Native mutant bytes are retained; no new compilation."
+}

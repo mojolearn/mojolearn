@@ -438,9 +438,142 @@
       "fixtures": [
         "base"
       ]
+    },
+    {
+      "arm": "coverage-precise-x_decomp-pca_mle_pick_dev",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_decomp-1/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_decomp-pca_mle_pick_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_decomp-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-core-small_mlp_state_impl",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-3/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-tokenizer-vocab_fingerprint",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-3/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-transformer-causal_lm_construct_impl",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/tokenizer-4/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-log_softmax_dev",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_neighbors-1/proof.json",
+      "columns": [
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-nan_cells_host",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_neighbors-1/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-p2m_transpose_i",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_neighbors-1-verifier-r3/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-p2m_const_cols",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_neighbors-2-verifier-r2/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-row_all_zero",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_neighbors-3/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-row_argmax",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_neighbors-4/proof.json",
+      "columns": [
+        "cpu"
+      ],
+      "fixtures": [
+        "base"
+      ]
+    },
+    {
+      "arm": "coverage-autograd-imported_run",
+      "status": "caught",
+      "path": "bench/results/verification_faults/2026-10-26-0860/x_sequence-1/proof.json",
+      "columns": [
+        "cpu",
+        "device"
+      ],
+      "fixtures": [
+        "base"
+      ]
     }
   ],
-  "remaining_declared_fault_arms": 12,
+  "remaining_declared_fault_arms": 0,
   "verifier_findings": [
     {
       "id": "reviewed-independent-oracles",
@@ -485,5 +618,19 @@
       "status": "fixed-and-qualified-on-nvidia-and-amd",
       "proof": "bench/results/verification_faults/2026-10-26-0860/multi-gpu/proof.json"
     }
-  ]
+  ],
+  "verifier_fixture_repairs": {
+    "status": "caught-and-restored",
+    "all_declared_arms": 124,
+    "new_arms_completed": 41,
+    "remaining": 0,
+    "repairs": [
+      "KNN fitted label transpose oracle prevents majority-vote masking",
+      "NearestCentroid exact-mean supplemental fixture reaches zero-variance guard"
+    ],
+    "native_recompiled_for_fixture_repair": false,
+    "apple_changed_fixtures": "2/2 STABLE; original output hashes unchanged",
+    "previous_clean_records_retained": true,
+    "release_status": "Prepared wheels passed; repack tested verifier fixtures before publication"
+  }
 }

@@ -2,6 +2,7 @@
 import hashlib
 import json
 import zipfile
+import copy
 
 import pytest
 
@@ -49,6 +50,31 @@ def test_metadata_cannot_hide_dependency_change(tmp_path):
     after = wheel(tmp_path / 'new.whl', {'pkg-2.dist-info/METADATA': b'Version: 2\nRequires-Dist: numpy==4\n'})
     with pytest.raises(ValueError, match='beyond version'):
         gate.delta(before, after, '1', '2', {})
+
+
+def test_gpu_plugin_registry_only_allows_version_change(tmp_path):
+    name = 'pkg-1.dist-info/gpu_plugins.json'
+    before = wheel(tmp_path / 'old.whl', {name: '{"version":"1","distribution":"core"}'})
+    after = wheel(tmp_path / 'new.whl', {name.replace('-1.', '-2.'): '{"version":"2","distribution":"core"}'})
+    assert gate.delta(before, after, '1', '2', {})
+    bad = wheel(tmp_path / 'bad.whl', {name.replace('-1.', '-2.'): '{"version":"2","distribution":"other"}'})
+    with pytest.raises(ValueError, match='beyond version'):
+        gate.delta(before, bad, '1', '2', {})
+
+
+def test_fixture_update_cannot_qualify_arbitrary_runtime_file(tmp_path):
+    path = tmp_path / 'update.json'
+    path.write_text(json.dumps(dict(schema='mojolearn.release.verifier-fixture-update.v1',
+                                    files={'mojolearn/_backend.py': {}}, proofs={})))
+    with pytest.raises(ValueError, match='coverage differs'):
+        gate.verifier_update(ref(path))
+
+
+def test_fixture_repack_requires_a_qualified_original_gate(tmp_path):
+    path = tmp_path / 'gate.json'
+    path.write_text(json.dumps(dict(schema=gate.SCHEMA, verifier_update={})))
+    with pytest.raises(ValueError, match='original qualified'):
+        gate.fixture_repack({'retained_gate': ref(path)}, {})
 
 
 def test_removed_member_is_refused(tmp_path):
@@ -164,3 +190,35 @@ def test_failed_original_adapter_cannot_be_reused(apple_reuse):
 def test_apple_reuse_for_other_wheel_is_refused(apple_reuse):
     with pytest.raises(ValueError, match='another wheel'):
         gate.apple_adapters(apple_reuse, 'other wheel')
+
+
+@pytest.fixture
+def host_builds():
+    name = '_mojolearn_native_host.so'
+    before = dict(admitted_inputs=dict(binding_identities={
+        'linux-64/host/-/host/_mojolearn_core_host': dict(source='closure', compiler='compiler', flags='flags')}),
+        merged_indexes={'mojolearn/cuda/sm_89/host/_mojolearn_merged.json':
+                        dict(files={name: ['_mojolearn_core_host']})},
+        host_extension={'mojolearn/cuda/sm_89/host/' + name: 'original-binary'})
+    after = copy.deepcopy(before)
+    after['host_extension']['mojolearn/cuda/sm_89/host/' + name] = 'other-original-compilation'
+    return before, after
+
+
+def test_separate_compilation_with_same_inputs_reuses_evidence(host_builds):
+    result = gate.retained_host_groups(*host_builds)
+    assert result['mojolearn/host/_mojolearn_native_host.so']['compilation_inputs_equal']
+
+
+@pytest.mark.parametrize('field', ['source', 'compiler', 'flags'])
+def test_changed_compile_input_cannot_reuse_host_group(host_builds, field):
+    before, after = host_builds
+    after['admitted_inputs']['binding_identities']['linux-64/host/-/host/_mojolearn_core_host'][field] = 'changed'
+    assert gate.retained_host_groups(before, after) == {}
+
+
+def test_changed_group_membership_cannot_reuse_host_group(host_builds):
+    before, after = host_builds
+    next(iter(after['merged_indexes'].values()))['files']['_mojolearn_native_host.so'].append('_another')
+    with pytest.raises(ValueError, match='membership'):
+        gate.retained_host_groups(before, after)

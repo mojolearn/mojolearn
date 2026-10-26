@@ -1,0 +1,84 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "verdict": "CAUGHT",
+  "batch": "x_sequence-1",
+  "arms": [
+    {
+      "arm": "coverage-autograd-imported_run",
+      "checks": [
+        {
+          "arm": "coverage-autograd-imported_run",
+          "column": "cpu",
+          "exit_code": 0
+        },
+        {
+          "arm": "coverage-autograd-imported_run",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "sequence-onnx-import"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "0bbd4b429cf78f51af690dc69e2346e0b2125cc46e72517afbda8a2fbb7bd360"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "eeb825d6fdc6e163a3a8cc50a23dce8702a01dd93904a3a6c585b3baa01bcebf"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "bc71fb670e3b39fc4f750953be020aa0757d290ed664e0b3419578bcd5de8c95"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "283bd05227e755436bc0f47f806cef96cdbebbb21b0026456ee27663bc46174a"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "c8c6971c9b0b0e8fb6b034179a02eec77b50c255b112b8aad9c9606011e8b309"
+    },
+    "fixed-proof-baseline.json": {
+      "path": "fixed-proof-baseline.json",
+      "sha256": "16187d625bcbc3fca2e549967ffdce0e59750d5fcef08c7f0068c7067d102592"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "8cc29bb2f24ca821f9ca6a9a9950db8faea4476fc7f1892876ea9cf1b7cb7dbb"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "1341be2c9bbf1aa695520f2d81bb9f92b2e715ba558358440d39bdd829a012d1"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "65e0c3138b925eb7a9af4e9ff9b3c9e177162cac39748cb8ae1e03db6a88354b"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "cfdfb7ab159bac0a176782f7edabab9b45f6be0ee8aa6ead7a7a72f74888d1ca"
+    },
+    "check-coverage-autograd-imported_run-cpu.log": {
+      "path": "check-coverage-autograd-imported_run-cpu.log",
+      "sha256": "9a5f29f1acc1ff6cc21b65cd3ae9f535ec1ad5cffbbaeefafa162f09feea3d94"
+    },
+    "check-coverage-autograd-imported_run-device.log": {
+      "path": "check-coverage-autograd-imported_run-device.log",
+      "sha256": "9a5f29f1acc1ff6cc21b65cd3ae9f535ec1ad5cffbbaeefafa162f09feea3d94"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1",
+  "r2_archive": "measurements/verification/0.8.60/x_sequence-1-proof.tgz"
+}

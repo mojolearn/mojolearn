@@ -1,0 +1,68 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "verdict": "CAUGHT",
+  "batch": "x_neighbors-3",
+  "arms": [
+    {
+      "arm": "coverage-precise-x_neighbors-row_all_zero",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_neighbors-row_all_zero",
+          "column": "cpu",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-3/oracle-review.json"
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-cluster-agglo-linkages"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "99fdf7178f85ffbff804782e6d262664bdcad40ff020ee08724be4540b2b15eb"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "d0a36f59dabb608e3522e5f31ef55866ca986b34c14c54d80a2938dbad05113b"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "2f6b9344985330fc07955a055ac4a778b9173c09dcd221c26db8ca0f1760139e"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "ed91c0e455512a775e5ffd3d6ac70f507417b939a80b92bb246e18d587457501"
+    },
+    "fixed-proof-baseline.json": {
+      "path": "fixed-proof-baseline.json",
+      "sha256": "16187d625bcbc3fca2e549967ffdce0e59750d5fcef08c7f0068c7067d102592"
+    },
+    "oracle-review.json": {
+      "path": "oracle-review.json",
+      "sha256": "05225d0e1334e6b18dc888f5c1fee634f4fb8b62f2c3542d12c6c20665793760"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "2d4be83d59abe9cf9ced5c1202c7a9ac0115e8b1f205c4992f1fe8e01de36760"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "0c6a9dac4a9c9a37a7e0851d856e553d69e8718c072f7bd9a59598c79acfb56f"
+    },
+    "check-coverage-precise-x_neighbors-row_all_zero-cpu.log": {
+      "path": "check-coverage-precise-x_neighbors-row_all_zero-cpu.log",
+      "sha256": "924ea4a4a81aeb8370e714bb822e39c0833b1a88ce620a7ffb482218fa39f192"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-3",
+  "r2_archive": "measurements/verification/0.8.60/x_neighbors-3-proof.tgz"
+}

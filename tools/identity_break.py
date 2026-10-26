@@ -1979,8 +1979,16 @@ def _(ml, X, yc, yr, Xh=None):
     # (bindings/neighbors_knn_native.mojo -> xn_p2m_transpose_i)
     y2 = np.ascontiguousarray(np.stack([yc[:1024], (X[:1024, 1] > 0).astype(yc.dtype)], axis=1)).astype(np.int64)
     m2 = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:1024], y2)
-    return _fit(dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160])),
-                     multi=_h(m2.predict(X[4096:4160]))),
+    parts = dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160])),
+                 multi=_h(m2.predict(X[4096:4160])))
+    # A majority vote can hide a corrupted training label. Check the public
+    # fit's stored label columns against an independent transpose as well;
+    # keep existing output hashes so unchanged reference evidence remains valid.
+    mismatch = _mismatch_bytes("fitted label columns", m2._y_cols,
+                               "input labels transposed", np.ascontiguousarray(y2.T, dtype=np.int32))
+    if mismatch is not None:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 m, lambda e: (e.predict(Xh[:64]), e.predict_proba(Xh[:64])))
 
 

@@ -1,0 +1,59 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "tokenizer-4",
+  "arms": [
+    {
+      "arm": "coverage-transformer-causal_lm_construct_impl",
+      "checks": [
+        {
+          "arm": "coverage-transformer-causal_lm_construct_impl",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "hf-model-surface"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "9bd0c6dbdd27127ba34749d538b7d71fedb59f494b608eab987982a1e97eacff"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "256672fc30fa9bd77f0ae97f89d0fd0cffe40d48096929862bf67efae8f5dac1"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "1e3fd4aa2a1ea4b416b17dee9bb7e6a89093815003ab02e133352196b5504523"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "3f6d17cd636da1760d19faf8caba027ec96b39b30e53e3d1f6424218f4ea5ca8"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "a9c8b72ad9e36625c507a205ec8b01d3eccafb1112877b3effb48f1a95657084"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "2501df27afbd243af26f47dd6c8b0349089c3ae1170d183f3d2a16ec1051db67"
+    },
+    "check-coverage-transformer-causal_lm_construct_impl-cpu.log": {
+      "path": "check-coverage-transformer-causal_lm_construct_impl-cpu.log",
+      "sha256": "5d7fd0b53805a3a4096b2b445b88ea8f1d7d2cc34d1c3f4fb9d9c3c453761bca"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4",
+  "r2_archive": "measurements/verification/0.8.60/tokenizer-4-proof.tgz"
+}

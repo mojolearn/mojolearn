@@ -1,0 +1,77 @@
+{
+  "schema": "mojolearn.release.verifier-fixture-update.v1",
+  "files": {
+    "mojolearn/_identity_break.py": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/verifier-fixture-update/_identity_break.py",
+      "sha256": "19b256553d4aa932f89b8cdd2c93716e813b0d972328b304385b1468bc96a92a"
+    },
+    "mojolearn/_identity_lane_neighbors.py": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/verifier-fixture-update/_identity_lane_neighbors.py",
+      "sha256": "7062a3feabbb3195ce0512af531965469365f980c44d69568e27b02ad13ee64d"
+    }
+  },
+  "proofs": {
+    "coverage-precise-x_neighbors-p2m_transpose_i": {
+      "source": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1-verifier-r3/fault-source-sha256.json",
+        "sha256": "9ad94e1a48bd391f054d0821d9de785ea0317645b154612b28fc2370a591bced"
+      },
+      "clean": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1-verifier-r3/clean_cpu.json",
+        "sha256": "fddda376bc67924e42adf5d72c7252b08da8003881119b8d496a19f0fda36e3d"
+      },
+      "sabotaged": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1-verifier-r3/sab_cpu.json",
+        "sha256": "3cd67c0d4fb51bd4b29ef68fe38613199f43934b00df20901dacdcff9c956797"
+      },
+      "restored": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1-verifier-r3/restored_cpu.json",
+        "sha256": "7e3a0290bab2da98ed23710104604932bc645c133c92240af8ad96c5d1645145"
+      },
+      "review": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1-verifier-r3/oracle-review.json",
+        "sha256": "6c81e4f21448f69408ba14ff1892ff57fe5783f33f6abdd8529975345edcf721"
+      },
+      "previous_clean": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1/clean_cpu.json",
+        "sha256": "b379e7ef04567ccb68ad2e49220d2bcba89c97a4255c17ec79a5c366b7518b2a"
+      },
+      "batch_bindings": [
+        "build_x_neighbors_host"
+      ]
+    },
+    "coverage-precise-x_neighbors-p2m_const_cols": {
+      "source": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/fault-source-sha256.json",
+        "sha256": "ab3b8006139760454e53bb9bd50e425fabe4fd6b5680e9391b4c72476b5e6752"
+      },
+      "clean": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/clean_cpu.json",
+        "sha256": "80163b9cf1092e7cef1341e88851a4bb74519be877e86a76ad3d726ce8318077"
+      },
+      "sabotaged": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/sab_cpu.json",
+        "sha256": "d83c5dbc87c3f55ffe15a165d6bcbc9e12d1fc4c8794c0a100cfa994db73da88"
+      },
+      "restored": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/restored_cpu.json",
+        "sha256": "51425abcb9a32e50f34b6cfd55a67174d98853c8ece3cc45f8a646124cb2460b"
+      },
+      "review": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/oracle-review.json",
+        "sha256": "512984e6ef1065ef149f2f01003545e3f7604e16dbacbd99c8ae2dfe6f1a632d"
+      },
+      "previous_clean": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2/clean_cpu.json",
+        "sha256": "3dba93a087eb11d66726e03cabc36a4216b71c82a1dfce67c4ac22a87022f0ce"
+      },
+      "batch_bindings": [
+        "build_x_neighbors_host"
+      ]
+    }
+  },
+  "apple": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/verifier-fixture-apple/result.json",
+    "sha256": "f213dd2b4b5b5ab32de945421778fa4546208a29aa355c67c46266ab41b7f4a3"
+  }
+}

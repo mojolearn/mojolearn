@@ -1,0 +1,402 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-x_decomp-pca_mle_pick_dev": [
+        "x-decomp-pca-randomized"
+      ],
+      "coverage-precise-x_decomp-pca_mle_pick_host": [
+        "x-decomp-pca-randomized"
+      ]
+    },
+    "arms": [
+      "coverage-precise-x_decomp-pca_mle_pick_dev",
+      "coverage-precise-x_decomp-pca_mle_pick_host"
+    ],
+    "builds": [
+      "build_x_decomp",
+      "build_estimators",
+      "build_x_decomp_host",
+      "build_estimators_host"
+    ],
+    "columns": [
+      "cpu",
+      "device"
+    ],
+    "family": "x_decomp",
+    "id": "x_decomp-1",
+    "lanes": [
+      "x-decomp-pca-randomized"
+    ],
+    "patches": [
+      "x_decomp/sabotage/coverage_precise_pca_mle_pick.patch"
+    ]
+  },
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-decomp-pca-randomized",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 11.815158125013113
+    },
+    {
+      "name": "clean-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-decomp-pca-randomized",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/clean_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 9.966901915962808
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "x_decomp/sabotage/coverage_precise_pca_mle_pick.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.04429733392316848
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "x_decomp/sabotage/coverage_precise_pca_mle_pick.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.0243021659553051
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_estimators_m1",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_estimators_m1",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/identical/_mojolearn_dev_estimators_m1",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/identical/_mojolearn_dev_estimators_m1/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 214.6114727499662,
+      "reused": false
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_x_decomp_m1",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_decomp_m1",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/identical/_mojolearn_dev_x_decomp_m1",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/identical/_mojolearn_dev_x_decomp_m1/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 216.61194791598246,
+      "reused": false
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_estimators_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_estimators_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/host/_mojolearn_dev_estimators_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/host/_mojolearn_dev_estimators_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 55.90765370905865,
+      "reused": false
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_x_decomp_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_decomp_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/host/_mojolearn_dev_x_decomp_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/host/_mojolearn_dev_x_decomp_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 71.27791412500665,
+      "reused": false
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-decomp-pca-randomized",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 13.462820542044938
+    },
+    {
+      "name": "sab-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-decomp-pca-randomized",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/sab_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 13.050010542036034
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "x_decomp/sabotage/coverage_precise_pca_mle_pick.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.034170541912317276
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-decomp-pca-randomized",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 10.450225415988825
+    },
+    {
+      "name": "restored-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-decomp-pca-randomized",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/restored_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 9.678873457945883
+    },
+    {
+      "name": "check-coverage-precise-x_decomp-pca_mle_pick_dev-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-x_decomp-pca_mle_pick_dev",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/restored_device.json",
+        "--batch-bindings",
+        "build_x_decomp,build_estimators,build_x_decomp_host,build_estimators_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.13053974998183548
+    },
+    {
+      "name": "check-coverage-precise-x_decomp-pca_mle_pick_host-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-x_decomp-pca_mle_pick_host",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_x_decomp,build_estimators,build_x_decomp_host,build_estimators_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.1270667500793934
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_estimators_m1",
+      "members": [
+        "_mojolearn_estimators"
+      ],
+      "sha256": "49d7945b4ca845907efd319bbee5862f954f042377e81a4a7b6073915b49e973",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/identical/_mojolearn_dev_estimators_m1/_mojolearn_dev_estimators_m1.so",
+      "original_path": ".development/6120909208d2e5b24e4fad02ff82c1ef0cfe26c8dababe51eefa00466338dfd7/_mojolearn_dev_estimators_m1.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/.development/49d7945b4ca845907efd319bbee5862f954f042377e81a4a7b6073915b49e973/_mojolearn_dev_estimators_m1.so",
+      "created": true
+    },
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_x_decomp_m1",
+      "members": [
+        "_mojolearn_x_decomp"
+      ],
+      "sha256": "0a65e42e53cf9d1dac898f2a340dabf1740d06c00af2e51980a9240920f4f763",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/identical/_mojolearn_dev_x_decomp_m1/_mojolearn_dev_x_decomp_m1.so",
+      "original_path": ".development/372605f0244e62056741130b7c283729a3d912d2f514d6dc80cc0d54d562f9ee/_mojolearn_dev_x_decomp_m1.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/.development/0a65e42e53cf9d1dac898f2a340dabf1740d06c00af2e51980a9240920f4f763/_mojolearn_dev_x_decomp_m1.so",
+      "created": true
+    },
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_estimators_host",
+      "members": [
+        "_mojolearn_estimators_host"
+      ],
+      "sha256": "be02f521c25116427f1ef2bdf7180dcd633303a2740c8951767f9cd8e629b748",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/host/_mojolearn_dev_estimators_host/_mojolearn_dev_estimators_host.so",
+      "original_path": ".development/029cbf0420ca4f22e707d5a8c4a9656d88e1d2793bd76e10f82bea71e90f89f8/_mojolearn_dev_estimators_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/.development/be02f521c25116427f1ef2bdf7180dcd633303a2740c8951767f9cd8e629b748/_mojolearn_dev_estimators_host.so",
+      "created": true
+    },
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_x_decomp_host",
+      "members": [
+        "_mojolearn_x_decomp_host"
+      ],
+      "sha256": "d9d792f69a8fb84049a4be2bdef5a9710e82935cb9333eb72e2d00ebc9c89df8",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_decomp-1/build/host/_mojolearn_dev_x_decomp_host/_mojolearn_dev_x_decomp_host.so",
+      "original_path": ".development/66396530846544780c5e332e75f10a6b62b0dcdf7b75fbf07be023c4d6b41632/_mojolearn_dev_x_decomp_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/.development/d9d792f69a8fb84049a4be2bdef5a9710e82935cb9333eb72e2d00ebc9c89df8/_mojolearn_dev_x_decomp_host.so",
+      "created": true
+    }
+  ],
+  "baseline_composition": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/fixed-proof-baseline.json",
+  "checks": [
+    {
+      "arm": "coverage-precise-x_decomp-pca_mle_pick_dev",
+      "column": "device",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-x_decomp-pca_mle_pick_host",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,74 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "verdict": "CAUGHT",
+  "batch": "tokenizer-3",
+  "arms": [
+    {
+      "arm": "coverage-core-small_mlp_state_impl",
+      "checks": [
+        {
+          "arm": "coverage-core-small_mlp_state_impl",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-tokenizer-vocab_fingerprint",
+      "checks": [
+        {
+          "arm": "coverage-precise-tokenizer-vocab_fingerprint",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "mlp",
+    "hf-causal-lm-text"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "9bd0c6dbdd27127ba34749d538b7d71fedb59f494b608eab987982a1e97eacff"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "1d7e9fe4195861b05c6b52c5e1cd4ed082991ed0948af3c0314325757fd05895"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "88d3bf98942778f781d8bf10d50431696906cfff59ae9cb61da137792e24fe4f"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "c20e90c2ed837e8d13727c135706b171edeb1ed206e585b39d6a85078f11a1f0"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "13b3ccb607e6b9cb8724c464917b23e6776de53dfdbf0e4b7b4b41dd0c0af532"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "a20f9e39d69d45b733bd78f4771330bacfa7d249d5a84dfda72289cc10584012"
+    },
+    "check-coverage-core-small_mlp_state_impl-cpu.log": {
+      "path": "check-coverage-core-small_mlp_state_impl-cpu.log",
+      "sha256": "f73aa65c2cc49a48fd99498da925d11aefccaacc832101f304d3a4ca265e17ca"
+    },
+    "check-coverage-precise-tokenizer-vocab_fingerprint-cpu.log": {
+      "path": "check-coverage-precise-tokenizer-vocab_fingerprint-cpu.log",
+      "sha256": "3e2eafd36aaa23d2d546edc3ef060e2695ad4952bd8f64dbaa770cb13a0038c3"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3",
+  "r2_archive": "measurements/verification/0.8.60/tokenizer-3-proof.tgz"
+}

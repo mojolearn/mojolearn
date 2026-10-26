@@ -1,0 +1,231 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-core-small_mlp_state_impl": [
+        "mlp"
+      ],
+      "coverage-precise-tokenizer-vocab_fingerprint": [
+        "hf-causal-lm-text"
+      ]
+    },
+    "arms": [
+      "coverage-core-small_mlp_state_impl",
+      "coverage-precise-tokenizer-vocab_fingerprint"
+    ],
+    "builds": [
+      "build_tokenizer_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "tokenizer",
+    "id": "tokenizer-3",
+    "lanes": [
+      "mlp",
+      "hf-causal-lm-text"
+    ],
+    "patches": [
+      "core/sabotage/coverage_small_mlp_state_impl.patch",
+      "tokenizer/sabotage/coverage_precise_vocab_fingerprint.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "mlp,hf-causal-lm-text",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.313335790997371
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "core/sabotage/coverage_small_mlp_state_impl.patch",
+        "tokenizer/sabotage/coverage_precise_vocab_fingerprint.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.019360584090463817
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "core/sabotage/coverage_small_mlp_state_impl.patch",
+        "tokenizer/sabotage/coverage_precise_vocab_fingerprint.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.019068249966949224
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_tokenizer_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tokenizer_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/build/host/_mojolearn_dev_tokenizer_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/build/host/_mojolearn_dev_tokenizer_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 1430.943922375096,
+      "reused": false
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "mlp,hf-causal-lm-text",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 8.994410207960755
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "tokenizer/sabotage/coverage_precise_vocab_fingerprint.patch",
+        "core/sabotage/coverage_small_mlp_state_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.021174583001993597
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "mlp,hf-causal-lm-text",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 11.416213167016394
+    },
+    {
+      "name": "check-coverage-core-small_mlp_state_impl-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-core-small_mlp_state_impl",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.0681885409867391
+    },
+    {
+      "name": "check-coverage-precise-tokenizer-vocab_fingerprint-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-tokenizer-vocab_fingerprint",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.06507604196667671
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_tokenizer_host",
+      "members": [
+        "_mojolearn_tokenizer_host"
+      ],
+      "sha256": "5ad0bf0851cfb27d8c6eb449ccd32223b4050b0d319d018f5fc1c8f60b548c52",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-3/build/host/_mojolearn_dev_tokenizer_host/_mojolearn_dev_tokenizer_host.so",
+      "original_path": ".development/68a22a6352b3a5205d25d890c975789f9e6b0de80ce85b7ff60706ae134d64d9/_mojolearn_dev_tokenizer_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/5ad0bf0851cfb27d8c6eb449ccd32223b4050b0d319d018f5fc1c8f60b548c52/_mojolearn_dev_tokenizer_host.so",
+      "created": true
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-core-small_mlp_state_impl",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-precise-tokenizer-vocab_fingerprint",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

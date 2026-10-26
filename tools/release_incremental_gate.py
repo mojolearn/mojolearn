@@ -1,8 +1,9 @@
 """Admit unchanged release components plus exercised, byte-bound repairs.
 
 Version and provenance changes alone do not invalidate runtime evidence. This
-adapter deliberately supports only the forest input-admission and split-wheel
-verifier repairs qualified by the retained producers, not arbitrary native edits.
+adapter supports the qualified forest input-admission and split-wheel verifier
+repairs, plus the two caught-and-restored fixture corrections. It rejects other
+runtime edits.
 """
 import hashlib
 import io
@@ -16,6 +17,14 @@ import release_gate_reuse as reuse
 SCHEMA = 'mojolearn.release.incremental-gate.v1'
 HOST = 'mojolearn/host/_mojolearn_native_tokenizer_host.so'
 VERIFIER = 'mojolearn/_verify_distributed.py'
+FIXTURE_FILES = {
+    'mojolearn/_identity_break.py': 'tools/identity_break.py',
+    'mojolearn/_identity_lane_neighbors.py': 'tools/identity_lanes/neighbors.py',
+}
+FIXTURE_ARMS = {
+    'coverage-precise-x_neighbors-p2m_transpose_i': 'knn-clf/base',
+    'coverage-precise-x_neighbors-p2m_const_cols': 'x-neighbors-nearest-centroid/base',
+}
 
 
 def require(ok, message):
@@ -56,7 +65,7 @@ def delta(before, after, old_version, new_version, qualified):
                                  for r in d['binaries']}
             require(policy(a) == policy(b) and imports(a) == imports(b),
                     'portable-math policy or import coverage changed')
-        elif name.endswith('.dist-info/METADATA') or name in (
+        elif name.endswith(('.dist-info/METADATA', '.dist-info/gpu_plugins.json')) or name in (
                 'mojolearn/_version.py', 'mojolearn/CITATION.cff'):
             require(left[name].replace(old_version.encode(), new_version.encode()) == right[name],
                     'change beyond version metadata: ' + name)
@@ -90,10 +99,89 @@ def host_boundary(document, identity):
     return boundary
 
 
+def retained_host_groups(before, after):
+    """Map separately built host bytes only when every compile input matches.
+
+    Both assembly proofs must also pass the original producer validators. A
+    different original compilation is provenance, not an input invalidation.
+    """
+    import retained_release_composition as composition
+    old_context, new_context = before['admitted_inputs'], after['admitted_inputs']
+    old = composition.compilation_bindings(old_context, composition._host_keys(old_context))
+    new = composition.compilation_bindings(new_context, composition._host_keys(new_context))
+    old_index, = [r['files'] for n, r in before['merged_indexes'].items() if '/host/' in n]
+    new_index, = [r['files'] for n, r in after['merged_indexes'].items() if '/host/' in n]
+    require(old_index == new_index, 'host physical/logical group membership changed')
+    result = {}
+    for filename, members in new_index.items():
+        keys = ['linux-64/host/-/host/' + name for name in members]
+        if not all(k in old and k in new and old[k] == new[k] for k in keys):
+            continue
+        before_hash, = [h for p, h in before['host_extension'].items() if p.endswith('/' + filename)]
+        after_hash, = [h for p, h in after['host_extension'].items() if p.endswith('/' + filename)]
+        result['mojolearn/host/' + filename] = dict(before_sha256=before_hash,
+            after_sha256=after_hash, members=members, compilation_inputs_equal=True)
+    return result
+
+
+def verifier_update(reference):
+    """Admit only the two exercised fixture repairs; never native changes."""
+    import coverage_sabotage
+    update = reuse.read(reference)
+    require(update.get('schema') == 'mojolearn.release.verifier-fixture-update.v1',
+            'unknown verifier update')
+    require(set(update['files']) == set(FIXTURE_FILES)
+            and set(update['proofs']) == set(FIXTURE_ARMS), 'verifier update coverage differs')
+    qualified = {}
+    for name, source in FIXTURE_FILES.items():
+        reuse.checked_ref(update['files'][name])
+        qualified[name] = update['files'][name]['sha256']
+    for arm, cell in FIXTURE_ARMS.items():
+        proof = update['proofs'][arm]
+        snapshot = reuse.read(proof['source'])
+        require(all(snapshot[source] == qualified[name] for name, source in FIXTURE_FILES.items()),
+                'fault proof used different verifier bytes')
+        paths = [reuse.checked_ref(proof[key]) for key in ('clean', 'sabotaged', 'restored', 'review')]
+        failures = coverage_sabotage.check(coverage_sabotage.arms()[arm], *paths,
+                                           batch_bindings=proof['batch_bindings'])
+        require(not failures, 'verifier fault proof failed: ' + str(failures))
+        previous, clean = reuse.read(proof['previous_clean']), reuse.read(proof['clean'])
+        require(previous['cells'][cell]['hashes'] == clean['cells'][cell]['hashes'],
+                'fixture repair changed reference outputs')
+    apple = reuse.read(update['apple'])
+    require(apple.get('complete') is True and set(apple['cells']) == set(FIXTURE_ARMS.values())
+            and all(c['verdict'] == 'STABLE' and not c.get('oracle_errors')
+                    for c in apple['cells'].values()), 'changed Apple fixtures did not pass')
+    return qualified
+
+
+def fixture_repack(document, identity):
+    """Carry exact prior execution forward across a tested verifier-only repack."""
+    prior = reuse.read(document['retained_gate'])
+    require(prior.get('schema') == SCHEMA and 'verifier_update' not in prior,
+            'fixture repack needs the original qualified incremental gate')
+    validate(prior, prior['candidate'])
+    for name in ('version', 'vendor', 'release_modes'):
+        require(identity[name] == prior['candidate'][name], 'fixture repack changes ' + name)
+    for field in ('correctness', 'autograd_counts', 'autograd_artifacts', 'adapters'):
+        require(document[field] == prior[field], 'fixture repack rewrote retained execution')
+    qualified = verifier_update(document['verifier_update'])
+    require(set(document['wheels']) == set(identity['wheels']) == set(prior['candidate']['wheels']),
+            'fixture repack wheel coverage differs')
+    for package, row in document['wheels'].items():
+        require(row['before']['sha256'] == prior['candidate']['wheels'][package]
+                and row['after']['sha256'] == identity['wheels'][package], 'fixture repack wheel identity differs')
+        require(delta(row['before'], row['after'], identity['version'], identity['version'], qualified)
+                == row['changed'], 'fixture repack changes differ')
+    return True
+
+
 def validate(document, identity):
     require(document.get('schema') == SCHEMA and document.get('candidate') == identity
             and document.get('verdict') == 'PASS' and document.get('profile') == 'release-light-v1',
             'incremental gate does not identify exact candidate')
+    if 'verifier_update' in document:
+        return fixture_repack(document, identity)
     old = reuse.read(document['retained_gate'])
     require(old.get('schema') == reuse.SCHEMA, 'expected original component gate')
     reuse.validate(old, old['candidate'])
@@ -106,10 +194,15 @@ def validate(document, identity):
             and repair.get('passed') is True and repair.get('exit_code') == 0
             and repair.get('cases') == 4, 'missing separately compiled host qualification')
     require(repair['native_sha256'] == boundary['host_native_sha256'], 'installed host differs from tested component')
+    require(repair['test_sha256'] == boundary['test_sha256'], 'host boundary tested different public operations')
     import retained_release_composition as composition
     import release_host_composition as hc
     assembly = reuse.read(document['assembly'])
     composition.validate(assembly)
+    prior_assembly = reuse.read(old['assembly'])
+    composition.validate(prior_assembly)
+    retained = retained_host_groups(prior_assembly, assembly)
+    require(document['retained_host_groups'] == retained, 'retained host input comparison differs')
     require(assembly['source_commit'] == identity['source_commit'], 'assembly source differs')
     host = hc.decoded(assembly['original_host']['proof'])
     require(host['source_commit'] == repair['native_source_commit']
@@ -130,7 +223,8 @@ def validate(document, identity):
     require(capture['status'] == 'NUMERICS_AND_PLACEMENT_PASS'
             and capture['source']['source_sha256']['_verify_distributed.py'] == boundary['verifier_sha256'],
             'new verifier bytes were not qualified')
-    qualified = {HOST: boundary['host_native_sha256'], VERIFIER: boundary['verifier_sha256']}
+    qualified = {name: r['after_sha256'] for name, r in retained.items()}
+    qualified.update({HOST: boundary['host_native_sha256'], VERIFIER: boundary['verifier_sha256']})
     require(set(document['wheels']) == set(identity['wheels']) == set(old['candidate']['wheels']),
             'candidate wheel coverage differs')
     for package, row in document['wheels'].items():
@@ -138,6 +232,11 @@ def validate(document, identity):
                 and row['after']['sha256'] == identity['wheels'][package], 'candidate wheel identity differs')
         require(delta(row['before'], row['after'], old['candidate']['version'], identity['version'], qualified)
                 == row['changed'], 'candidate wheel changes differ')
+        if package == 'mojolearn-core':
+            original = contents(row['before'], old['candidate']['version'])
+            for name, item in retained.items():
+                require(hashlib.sha256(original[name]).hexdigest() == item['before_sha256'],
+                        'old host wheel differs from its admitted producer')
     return True
 
 
@@ -154,6 +253,16 @@ def apple_adapters(document, wheel_sha256):
     import adapter_gate
     require(document.get('schema') == 'mojolearn.release.apple-adapter-reuse.v1'
             and document['after']['sha256'] == wheel_sha256, 'Apple reuse identifies another wheel')
+    if 'verifier_update' in document:
+        prior = reuse.read(document['retained_gate'])
+        require('verifier_update' not in prior and prior['after'] == document['before'],
+                'Apple fixture repack needs the original qualified wheel')
+        apple_adapters(prior, document['before']['sha256'])
+        qualified = verifier_update(document['verifier_update'])
+        require(delta(document['before'], document['after'], document['version'],
+                      document['version'], qualified) == document['changed'],
+                'Apple fixture repack changes differ')
+        return True
     stamp = reuse.read(document['original_wheel_stamp'])
     require(stamp['wheel_sha256'] == document['before']['sha256'], 'original adapter wheel differs')
     report = reuse.read(document['original_adapter_report'])

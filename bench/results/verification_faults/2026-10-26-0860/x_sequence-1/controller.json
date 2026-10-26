@@ -1,0 +1,328 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-autograd-imported_run": [
+        "sequence-onnx-import"
+      ]
+    },
+    "arms": [
+      "coverage-autograd-imported_run"
+    ],
+    "builds": [
+      "build_x_sequence",
+      "build_x_sequence_host"
+    ],
+    "columns": [
+      "cpu",
+      "device"
+    ],
+    "family": "x_sequence",
+    "id": "x_sequence-1",
+    "lanes": [
+      "sequence-onnx-import"
+    ],
+    "patches": [
+      "autograd/checks/sabotage/coverage_imported_run.patch"
+    ]
+  },
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "sequence-onnx-import",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.039850416011177
+    },
+    {
+      "name": "clean-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "sequence-onnx-import",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/clean_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.307105166953988
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "autograd/checks/sabotage/coverage_imported_run.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.01947104197461158
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "autograd/checks/sabotage/coverage_imported_run.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.018111499957740307
+    },
+    {
+      "name": "compile-identical-_mojolearn_dev_x_sequence_m1",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "gpu",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_sequence_m1",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/build/identical/_mojolearn_dev_x_sequence_m1",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/build/identical/_mojolearn_dev_x_sequence_m1/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 164.76560404105112,
+      "reused": false
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_x_sequence_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_sequence_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/build/host/_mojolearn_dev_x_sequence_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/build/host/_mojolearn_dev_x_sequence_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 108.15986258292105,
+      "reused": false
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "sequence-onnx-import",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.813510959036648
+    },
+    {
+      "name": "sab-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "sequence-onnx-import",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/sab_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.476180249941535
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "autograd/checks/sabotage/coverage_imported_run.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.015443834010511637
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "sequence-onnx-import",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.007389292004518
+    },
+    {
+      "name": "restored-device",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "metal",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "sequence-onnx-import",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/restored_device.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.8983640410006046
+    },
+    {
+      "name": "check-coverage-autograd-imported_run-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-autograd-imported_run",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/restored_cpu.json",
+        "--batch-bindings",
+        "build_x_sequence,build_x_sequence_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.05896641605067998
+    },
+    {
+      "name": "check-coverage-autograd-imported_run-device",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-autograd-imported_run",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/clean_device.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/sab_device.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/restored_device.json",
+        "--batch-bindings",
+        "build_x_sequence,build_x_sequence_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.056833500042557716
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "identical",
+      "stem": "_mojolearn_dev_x_sequence_m1",
+      "members": [
+        "_mojolearn_x_sequence"
+      ],
+      "sha256": "909c9b77f264a2642d067ea851b1d52c9e7e93ba37cb0ef1a9c064b1465745de",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/build/identical/_mojolearn_dev_x_sequence_m1/_mojolearn_dev_x_sequence_m1.so",
+      "original_path": ".development/60c31daf4c04f06e7b13d4d3d36b823c8b673a5169e84be9db15e66a47608edf/_mojolearn_dev_x_sequence_m1.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/identical/.development/909c9b77f264a2642d067ea851b1d52c9e7e93ba37cb0ef1a9c064b1465745de/_mojolearn_dev_x_sequence_m1.so",
+      "created": true
+    },
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_x_sequence_host",
+      "members": [
+        "_mojolearn_x_sequence_host"
+      ],
+      "sha256": "76bda611167ab688f5f4c6bfb4bc3d13029e3cf1af1a46856dc88a2efac7d87b",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_sequence-1/build/host/_mojolearn_dev_x_sequence_host/_mojolearn_dev_x_sequence_host.so",
+      "original_path": ".development/636df8fe5210a7e8f47ca4bf75e0431fb48f6210906f9c33e734c1ee830a9726/_mojolearn_dev_x_sequence_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/.development/76bda611167ab688f5f4c6bfb4bc3d13029e3cf1af1a46856dc88a2efac7d87b/_mojolearn_dev_x_sequence_host.so",
+      "created": true
+    }
+  ],
+  "baseline_composition": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/fixed-proof-baseline.json",
+  "checks": [
+    {
+      "arm": "coverage-autograd-imported_run",
+      "column": "cpu",
+      "exit_code": 0
+    },
+    {
+      "arm": "coverage-autograd-imported_run",
+      "column": "device",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

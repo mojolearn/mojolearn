@@ -43,6 +43,13 @@ def _(ml, X, yc, yr, Xh=None):
     # divide by a zero spread here, so only the centroids and labels are hashed.
     lab = (np.arange(96) % 3).astype(np.int32)
     mc = ml.NearestCentroid().fit(np.ascontiguousarray(X[:3][lab]), lab)
+    # Repeated arbitrary floats can accumulate a nonzero rounding residual in
+    # the class mean, bypassing the exact zero-variance guard. These small
+    # integer rows have exact means and force that public-fit guard to execute.
+    # This supplemental assertion leaves the existing reference hashes intact.
+    exact_lab = np.tile(np.arange(3, dtype=np.int32), 2)
+    exact_rows = np.array([[0, 0], [1, 2], [2, 4]], dtype=np.float32)
+    ml.NearestCentroid().fit(np.ascontiguousarray(exact_rows[exact_lab]), exact_lab)
     return _fit(dict(centroids=_h(m.centroids_), std=_h(m.within_class_std_dev_), predict=_h(m.predict(X[:512])),
                      const_class=_h(mc.centroids_, mc.predict(X[:256])),
                      shrunk=_h(s.centroids_), shrunk_predict=_h(s.predict(X[:512])),

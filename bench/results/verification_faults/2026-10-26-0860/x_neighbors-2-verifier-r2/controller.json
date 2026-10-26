@@ -1,0 +1,233 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-precise-x_neighbors-p2m_const_cols": [
+        "x-neighbors-nearest-centroid"
+      ]
+    },
+    "arms": [
+      "coverage-precise-x_neighbors-p2m_const_cols"
+    ],
+    "builds": [
+      "build_x_neighbors_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "x_neighbors",
+    "id": "x_neighbors-2",
+    "lanes": [
+      "x-neighbors-nearest-centroid"
+    ],
+    "patches": [
+      "x_neighbors/sabotage/coverage_precise_p2m_const_cols.patch"
+    ]
+  },
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-neighbors-nearest-centroid",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.965087624965236
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "x_neighbors/sabotage/coverage_precise_p2m_const_cols.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.011964416946284473
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "x_neighbors/sabotage/coverage_precise_p2m_const_cols.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.0129926250083372
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_x_neighbors_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_x_neighbors_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/build/host/_mojolearn_dev_x_neighbors_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/build/host/_mojolearn_dev_x_neighbors_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 0.005037624971009791,
+      "reused": true
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-neighbors-nearest-centroid",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 3.717443083995022
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "x_neighbors/sabotage/coverage_precise_p2m_const_cols.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.013259667088277638
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "x-neighbors-nearest-centroid",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 4.726623292081058
+    },
+    {
+      "name": "check-coverage-precise-x_neighbors-p2m_const_cols-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-precise-x_neighbors-p2m_const_cols",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/restored_cpu.json",
+        "--batch-bindings",
+        "build_x_neighbors_host"
+      ],
+      "exit_code": 1,
+      "seconds": 0.047798958024941385
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_x_neighbors_host",
+      "members": [
+        "_mojolearn_x_neighbors_host"
+      ],
+      "sha256": "78b0f0760c2468ac787fb1cb027c17e5701d479a1bcca53b0257949f8ad4a78b",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/build/host/_mojolearn_dev_x_neighbors_host/_mojolearn_dev_x_neighbors_host.so",
+      "original_path": ".development/fcb070b74207a0efb8a5a6d5d4d11c898fde0f9d0c286a4c5ed67e87619ed9ca/_mojolearn_dev_x_neighbors_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/host/.development/78b0f0760c2468ac787fb1cb027c17e5701d479a1bcca53b0257949f8ad4a78b/_mojolearn_dev_x_neighbors_host.so",
+      "created": true
+    }
+  ],
+  "baseline_composition": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/fixed-proof-baseline.json",
+  "reused_fault_compilation": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2/build/host/_mojolearn_dev_x_neighbors_host",
+      "sha256": "78b0f0760c2468ac787fb1cb027c17e5701d479a1bcca53b0257949f8ad4a78b",
+      "original_controller_sha256": "f811fcdfa51f8643d109bac78b358ee0e04e571c436f74afc39f51889295c4be",
+      "reason": "Only verifier fixtures changed; all native fault compilation inputs match."
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-precise-x_neighbors-p2m_const_cols",
+      "column": "cpu",
+      "exit_code": 0,
+      "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/oracle-review.json"
+    }
+  ],
+  "passed": true,
+  "original_checks": [
+    {
+      "arm": "coverage-precise-x_neighbors-p2m_const_cols",
+      "column": "cpu",
+      "exit_code": 1
+    }
+  ],
+  "review_commands": [
+    [
+      "python3",
+      "tools/coverage_sabotage.py",
+      "check",
+      "--arm",
+      "coverage-precise-x_neighbors-p2m_const_cols",
+      "--clean",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/clean_cpu.json",
+      "--sabotaged",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/sab_cpu.json",
+      "--restored",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/restored_cpu.json",
+      "--evidence",
+      "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/oracle-review.json",
+      "--batch-bindings",
+      "build_x_neighbors_host"
+    ]
+  ]
+}

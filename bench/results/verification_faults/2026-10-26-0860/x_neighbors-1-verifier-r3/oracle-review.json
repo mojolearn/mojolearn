@@ -1,0 +1,18 @@
+{
+  "arm": "coverage-precise-x_neighbors-p2m_transpose_i",
+  "records": {
+    "clean": "fddda376bc67924e42adf5d72c7252b08da8003881119b8d496a19f0fda36e3d",
+    "sabotaged": "3cd67c0d4fb51bd4b29ef68fe38613199f43934b00df20901dacdcff9c956797",
+    "restored": "7e3a0290bab2da98ed23710104604932bc645c133c92240af8ad96c5d1645145"
+  },
+  "patch_sha256": "8c99b0471c3a4961da636d16b1357a673642f2c802a0f6b65123cbdea0df3ce8",
+  "oracles": {
+    "knn-clf/base": {
+      "product_check": "The public KNeighborsClassifier.fit preserves every training label in its transposed int32 columns.",
+      "why_fault_reaches_check": "The native fault increments the first transposed int32 label. The independent NumPy transpose reads the original input, not the native result. The strengthened oracle reports exactly one byte differing in 8192 bytes while the prior prediction majority vote masked this corruption. Clean/restored records retain the original prediction hashes and have no oracle error. The same already compiled mutant is reused; the original missed proof remains retained.",
+      "errors": [
+        "fitted label columns and input labels transposed differ: 1 bytes of 8192"
+      ]
+    }
+  }
+}

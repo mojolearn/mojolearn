@@ -1,0 +1,204 @@
+{
+  "schema": "mojolearn.verifier-fault-experiment.v1",
+  "batch": {
+    "arm_lanes": {
+      "coverage-transformer-causal_lm_construct_impl": [
+        "hf-model-surface"
+      ]
+    },
+    "arms": [
+      "coverage-transformer-causal_lm_construct_impl"
+    ],
+    "builds": [
+      "build_tokenizer_host"
+    ],
+    "columns": [
+      "cpu"
+    ],
+    "family": "tokenizer",
+    "id": "tokenizer-4",
+    "lanes": [
+      "hf-model-surface"
+    ],
+    "patches": [
+      "transformer/checks/sabotage/coverage_causal_lm_construct_impl.patch"
+    ]
+  },
+  "source_commit": "bf8ea7fcbe53b66e3c1ee78a46b26fe7a6fe21da",
+  "complete": true,
+  "source_restored": true,
+  "commands": [
+    {
+      "name": "clean-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "hf-model-surface",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/clean_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 6.698779833037406
+    },
+    {
+      "name": "apply-check",
+      "argv": [
+        "git",
+        "apply",
+        "--check",
+        "transformer/checks/sabotage/coverage_causal_lm_construct_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.02160304202698171
+    },
+    {
+      "name": "apply",
+      "argv": [
+        "git",
+        "apply",
+        "transformer/checks/sabotage/coverage_causal_lm_construct_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.02081554103642702
+    },
+    {
+      "name": "compile-host-_mojolearn_dev_tokenizer_host",
+      "argv": [
+        "bash",
+        "/Users/andrewhendel/mojolearn-evidence/compile_slot.sh",
+        "sh",
+        "bindings/merged_build.sh",
+        "host",
+        "--layout",
+        "development",
+        "--group",
+        "_mojolearn_dev_tokenizer_host",
+        "--outdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/tokenizer-4/build/host/_mojolearn_dev_tokenizer_host",
+        "--rootdir",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/tokenizer-4/build/host/_mojolearn_dev_tokenizer_host/roots"
+      ],
+      "exit_code": 0,
+      "seconds": 0.02865787490736693,
+      "reused": true
+    },
+    {
+      "name": "sab-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "hf-model-surface",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/sab_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 6.433830125024542
+    },
+    {
+      "name": "restore-source",
+      "argv": [
+        "git",
+        "apply",
+        "-R",
+        "transformer/checks/sabotage/coverage_causal_lm_construct_impl.patch"
+      ],
+      "exit_code": 0,
+      "seconds": 0.022890125052072108
+    },
+    {
+      "name": "restored-cpu",
+      "argv": [
+        "python3",
+        "tools/mac_slot.py",
+        "--wait-timeout",
+        "3600",
+        "run",
+        "--",
+        "/Users/andrewhendel/mojolearn-wt/integ-0859/.pixi/envs/test/bin/python",
+        "tools/identity_break.py",
+        "--lanes",
+        "hf-model-surface",
+        "--fixtures",
+        "base",
+        "--repeats",
+        "1",
+        "--json",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/restored_cpu.json"
+      ],
+      "exit_code": 0,
+      "seconds": 5.818015999975614
+    },
+    {
+      "name": "check-coverage-transformer-causal_lm_construct_impl-cpu",
+      "argv": [
+        "python3",
+        "tools/coverage_sabotage.py",
+        "check",
+        "--arm",
+        "coverage-transformer-causal_lm_construct_impl",
+        "--clean",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/clean_cpu.json",
+        "--sabotaged",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/sab_cpu.json",
+        "--restored",
+        "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/restored_cpu.json",
+        "--batch-bindings",
+        "build_tokenizer_host"
+      ],
+      "exit_code": 0,
+      "seconds": 0.08735658309888095
+    }
+  ],
+  "mutants": [
+    {
+      "mode": "host",
+      "stem": "_mojolearn_dev_tokenizer_host",
+      "members": [
+        "_mojolearn_tokenizer_host"
+      ],
+      "sha256": "44c44470c7b9182d7f0101cd8de480fd64f64c089cd11cc65a5eac4baee1c522",
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/tokenizer-4/build/host/_mojolearn_dev_tokenizer_host/_mojolearn_dev_tokenizer_host.so",
+      "original_path": ".development/68a22a6352b3a5205d25d890c975789f9e6b0de80ce85b7ff60706ae134d64d9/_mojolearn_dev_tokenizer_host.so",
+      "index_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/_mojolearn_merged.json",
+      "installed_path": "/Users/andrewhendel/mojolearn-wt/integ-0859/python/mojolearn/host/.development/44c44470c7b9182d7f0101cd8de480fd64f64c089cd11cc65a5eac4baee1c522/_mojolearn_dev_tokenizer_host.so",
+      "created": true
+    }
+  ],
+  "reused_fault_compilation": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/prebuilt/tokenizer-4",
+      "receipt_sha256": "6ff74ae4e9e6499826a21c1fb5750d165925bc85181191b1474110d2597a15de",
+      "source_sha256": "3f6d17cd636da1760d19faf8caba027ec96b39b30e53e3d1f6424218f4ea5ca8"
+    }
+  ],
+  "checks": [
+    {
+      "arm": "coverage-transformer-causal_lm_construct_impl",
+      "column": "cpu",
+      "exit_code": 0
+    }
+  ],
+  "passed": true
+}

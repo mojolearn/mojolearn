@@ -1,0 +1,64 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "verdict": "CAUGHT",
+  "batch": "x_neighbors-2-verifier-r2",
+  "arms": [
+    {
+      "arm": "coverage-precise-x_neighbors-p2m_const_cols",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_neighbors-p2m_const_cols",
+          "column": "cpu",
+          "exit_code": 0,
+          "review": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2/oracle-review.json"
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-neighbors-nearest-centroid"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "99fdf7178f85ffbff804782e6d262664bdcad40ff020ee08724be4540b2b15eb"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "80163b9cf1092e7cef1341e88851a4bb74519be877e86a76ad3d726ce8318077"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "cf604b45b4551b31df3f64a64c5ff489fdacce7ae53e19316eb2112e5b92cc5e"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "ab3b8006139760454e53bb9bd50e425fabe4fd6b5680e9391b4c72476b5e6752"
+    },
+    "oracle-review.json": {
+      "path": "oracle-review.json",
+      "sha256": "512984e6ef1065ef149f2f01003545e3f7604e16dbacbd99c8ae2dfe6f1a632d"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "51425abcb9a32e50f34b6cfd55a67174d98853c8ece3cc45f8a646124cb2460b"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "d83c5dbc87c3f55ffe15a165d6bcbc9e12d1fc4c8794c0a100cfa994db73da88"
+    },
+    "check-coverage-precise-x_neighbors-p2m_const_cols-cpu.log": {
+      "path": "check-coverage-precise-x_neighbors-p2m_const_cols-cpu.log",
+      "sha256": "df5327eb6343118a96439a3c776525a46970f625b5c02c1994640fb510a41c74"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-2-verifier-r2",
+  "r2_archive": "measurements/verification/0.8.60/x_neighbors-2-verifier-r2-proof.tgz"
+}

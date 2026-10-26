@@ -1,0 +1,64 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "verdict": "CAUGHT",
+  "batch": "x_neighbors-4",
+  "arms": [
+    {
+      "arm": "coverage-precise-x_neighbors-row_argmax",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_neighbors-row_argmax",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-neighbors-label-propagation",
+    "x-neighbors-label-spreading"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "99fdf7178f85ffbff804782e6d262664bdcad40ff020ee08724be4540b2b15eb"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "2e5ed040da2a2a5e9b4e85e16cde588000f922b1497ead50935edf4c89910d1c"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "e5dbf7408a068ffd1f6bcaf37bfb7915f6ae8598bcb13d29545bd3a10f862c3e"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "0bae57f79bb2c28cb53433c00c5e944396146c3517ab77ba0cc6eb0e0f6b9a19"
+    },
+    "fixed-proof-baseline.json": {
+      "path": "fixed-proof-baseline.json",
+      "sha256": "16187d625bcbc3fca2e549967ffdce0e59750d5fcef08c7f0068c7067d102592"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "7d1e3cf0c8120ebcae512f50403cdf0432d9b253f8069c393701b0b7a69df3c2"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "b5bdb69ebdd6dea676d6b7205281d09251a618ce5a277ba5b0e8d1096d8f9004"
+    },
+    "check-coverage-precise-x_neighbors-row_argmax-cpu.log": {
+      "path": "check-coverage-precise-x_neighbors-row_argmax-cpu.log",
+      "sha256": "2202a1cd134511f27105715716f9f825ec5509cc9439b11de1f5c2df3016c76a"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-4",
+  "r2_archive": "measurements/verification/0.8.60/x_neighbors-4-proof.tgz"
+}

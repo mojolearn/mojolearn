@@ -1,0 +1,91 @@
+{
+  "schema": "mojolearn.verifier-fault-proof.v1",
+  "source_commit": "04af3a7565a4d418eaebdebb55655e05ef212001",
+  "verdict": "CAUGHT",
+  "batch": "x_neighbors-1",
+  "arms": [
+    {
+      "arm": "coverage-precise-x_neighbors-log_softmax_dev",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_neighbors-log_softmax_dev",
+          "column": "device",
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "arm": "coverage-precise-x_neighbors-nan_cells_host",
+      "checks": [
+        {
+          "arm": "coverage-precise-x_neighbors-nan_cells_host",
+          "column": "cpu",
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "lanes": [
+    "x-neighbors-nearest-centroid",
+    "x-neighbors-knn-imputer",
+    "knn-clf"
+  ],
+  "fixtures": [
+    "base"
+  ],
+  "repeats": 1,
+  "evidence": {
+    "clean-build-inputs.json": {
+      "path": "clean-build-inputs.json",
+      "sha256": "0dd40b8dafca9c3e7936c444cb38c68393e684aa8bbb1535e6536370efd4b9da"
+    },
+    "clean_cpu.json": {
+      "path": "clean_cpu.json",
+      "sha256": "b379e7ef04567ccb68ad2e49220d2bcba89c97a4255c17ec79a5c366b7518b2a"
+    },
+    "clean_device.json": {
+      "path": "clean_device.json",
+      "sha256": "78bd33b1dba721b6bbfe3fe5e8d9fb9f3e141347f8068170004905a6e7b0f258"
+    },
+    "controller.json": {
+      "path": "controller.json",
+      "sha256": "6a9f427c1a460787e7cd6ecf6192ab2ca56a845e310e92aad544bc1f67c89688"
+    },
+    "fault-source-sha256.json": {
+      "path": "fault-source-sha256.json",
+      "sha256": "de50e360fec6894c57213dd01b3995e01ec55bb02e00708f867739db6b36f6f7"
+    },
+    "fixed-proof-baseline.json": {
+      "path": "fixed-proof-baseline.json",
+      "sha256": "16187d625bcbc3fca2e549967ffdce0e59750d5fcef08c7f0068c7067d102592"
+    },
+    "restored_cpu.json": {
+      "path": "restored_cpu.json",
+      "sha256": "0716a9caa2161d41e2167f41d5dfdb699f89ac7e47da0f381c3ac8e0d313ba5c"
+    },
+    "restored_device.json": {
+      "path": "restored_device.json",
+      "sha256": "9b64e83ceef265b0198b05b8a15e597a356b5218f15e6e9b6cacf97f3129fbea"
+    },
+    "sab_cpu.json": {
+      "path": "sab_cpu.json",
+      "sha256": "46c416292744bf73c887388be1c2d07385a1b299be699ba390929daf3ea4a42a"
+    },
+    "sab_device.json": {
+      "path": "sab_device.json",
+      "sha256": "ccfdf22b57f51641ac450c241950fb1da0dfd0807e85358d1e873593c0bd6fb2"
+    },
+    "check-coverage-precise-x_neighbors-log_softmax_dev-device.log": {
+      "path": "check-coverage-precise-x_neighbors-log_softmax_dev-device.log",
+      "sha256": "7301721eef33370b1f3683c609474021686a00bf73c4b59bd2c217656ee7d778"
+    },
+    "check-coverage-precise-x_neighbors-nan_cells_host-cpu.log": {
+      "path": "check-coverage-precise-x_neighbors-nan_cells_host-cpu.log",
+      "sha256": "f980fbdb36fefc3e2d3911ebffd6a5a72c0745ec9e5b10364b27aa377e192db1"
+    }
+  },
+  "build": "Only deliberately faulted development groups compiled; clean native groups reused.",
+  "restoration": "Original source, indexes and native bytes restored; fault artifacts retained outside the package.",
+  "full_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/x_neighbors-1",
+  "r2_archive": "measurements/verification/0.8.60/x_neighbors-1-proof.tgz"
+}

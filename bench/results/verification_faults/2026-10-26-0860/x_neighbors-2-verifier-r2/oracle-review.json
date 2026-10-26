@@ -1,0 +1,16 @@
+{
+  "arm": "coverage-precise-x_neighbors-p2m_const_cols",
+  "records": {
+    "clean": "80163b9cf1092e7cef1341e88851a4bb74519be877e86a76ad3d726ce8318077",
+    "sabotaged": "d83c5dbc87c3f55ffe15a165d6bcbc9e12d1fc4c8794c0a100cfa994db73da88",
+    "restored": "51425abcb9a32e50f34b6cfd55a67174d98853c8ece3cc45f8a646124cb2460b"
+  },
+  "patch_sha256": "fe2e7c6471794003de754ff45d59869b482c88a926a6aa128e29ff968d2d5e5e",
+  "refusals": {
+    "x-neighbors-nearest-centroid/base": {
+      "product_check": "NearestCentroid.fit checks whether all features are constant when within-class variance is exactly zero.",
+      "why_fault_reaches_check": "The supplemental six-row fixture has exact integer class means and distinct class rows, guaranteeing exactly zero within-class variance without rounding residuals. The native fault inverts the const-cols flag, falsely marking all features constant. The public fit raises the exact All features have zero variance error; clean/restored fits pass. The original random-float fixture could bypass this branch, and that missed proof is preserved.",
+      "error": "ValueError: All features have zero variance. Division by zero.\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_break.py\", line 12364, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/tools/identity_lanes/neighbors.py\", line 52, in _\n    ml.NearestCentroid().fit(np.ascontiguousarray(exact_rows[exact_lab]), exact_lab)\n    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/_mode.py\", line 55, in guarded\n    return method(self, *args, **kwargs)\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/_mode.py\", line 148, in tracked\n    out = method(self, *args, **kwargs)\n  File \"/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed/python/mojolearn/_expansion_neighbors.py\", line 663, in fit\n    return _NATIVE(self, \"family_xn_loc_nc_fit\", (self._bind(), X, y), _NATIVE_CONTEXT)\nValueError: All features have zero variance. Division by zero."
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "schema": "mojolearn.release.host-boundary.v1",
+  "passed": true,
+  "exit_code": 0,
+  "version": "0.8.60",
+  "source_commit": "0cd9de91ca915563a7b86b4bd03712cd359b6de5",
+  "wheels": {
+    "mojolearn-0.8.60-py3-none-manylinux_2_35_x86_64.whl": "0bf4085224fecc75783b4fcc03942ffc2525961e5851bd6e9de97956a8c86dca",
+    "mojolearn_amd-0.8.60-py3-none-manylinux_2_35_x86_64.whl": "e76e4a0680dea8a3dc7ec0e4be49ecd76816f582d95a0eb0a6eb232524511e75",
+    "mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl": "8b84a6ba57c9c7af140d504fe216b0a6a1b4f37febe41ed41988362a375d8112",
+    "mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl": "79e260ff0445724ce197918f95d954ecbf110d7da4a22da304b54849fe4fff2d",
+    "mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl": "1e4021aff073067a333104752b203339923e35de1cf618b8f37a149903fe546e"
+  },
+  "checks": {
+    "venv": {
+      "exit_code": 0,
+      "log": "venv.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "install": {
+      "exit_code": 0,
+      "log": "install.log",
+      "sha256": "e83150614ea45660f987da6eff8773df415e9a6387307e4f7c8e23e420240982"
+    },
+    "dependencies": {
+      "exit_code": 0,
+      "log": "dependencies.log",
+      "sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+    },
+    "self-test": {
+      "exit_code": 0,
+      "log": "self-test.log",
+      "sha256": "c7ee4ca8eb2a58f076fb248697c59980903baaf6370ae4b71ffc4a025195dd0c"
+    },
+    "forest": {
+      "exit_code": 0,
+      "log": "forest.log",
+      "sha256": "41b53e773aa148e49c86d83839739226b3c00e4b38afccccc6c50c1abf808ceb"
+    }
+  },
+  "cases": 4,
+  "junit": {
+    "path": "tests.xml",
+    "sha256": "a9e7423a00f839537be2c8f0a522121938782cbddde0aad16ceeedaf3ff22067"
+  },
+  "test_sha256": "26b64cfc440b8c3294fceee94b6c81e07b21f56b0eb37fa4ec40a503feb47b44",
+  "host_native_sha256": "b65680c7ffcefe47097acdf4dbb2a2309d7bf7bd57a4e14a16f410c853c9d452",
+  "verifier_sha256": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c",
+  "scope": "Final installed wheel, dependencies, comparator self-test and four public CPU forest cases. GPU arithmetic and adapter checks are reused separately."
+}
