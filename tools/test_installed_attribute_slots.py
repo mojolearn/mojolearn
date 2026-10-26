@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from types import MethodType, SimpleNamespace
+from types import MethodType, ModuleType, SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -216,6 +216,54 @@ class LiveIdentityTests(unittest.TestCase):
     def test_python_replacement_never_enters_pointer_inspection(self):
         with self.assertRaisesRegex(slots.WitnessError, "replaced"):
             collector.native_origin(lambda: None, slots.ENTRY)
+
+    def setup_later_owner(self):
+        cls = type("LogisticRegression", (), {"__module__": "mojolearn.linear_model"})
+        context = {}
+        descriptor = SimpleNamespace(__func__=MethodType(len, context))
+        cls.__getattribute__ = descriptor
+        context.update(classical_attribute_descriptor=descriptor,
+            classical_public_layouts={cls: {"mro": cls.__mro__, "bindings": {"__getattribute__": (descriptor, None)}}})
+        module = ModuleType("mojolearn.linear_model")
+        module.LogisticRegression, module._LR_CONTEXT = cls, context
+        proof = {"owners": {slots.FACTORY: {"binary": {"path": "/receipted/factory.so"}}}}
+        origin = {"name": "standard_scaler_attribute_call", "path": "/receipted/factory.so", "offset": 1}
+        return cls, context, descriptor, module, proof, origin
+
+    def test_known_later_owner_is_evidence_only_and_not_a_getter_admission(self):
+        cls, context, descriptor, module, proof, origin = self.setup_later_owner()
+        with mock.patch.dict(sys.modules, {module.__name__: module}), \
+             mock.patch.object(collector, "native_origin", return_value=origin):
+            result = collector.later_owner(cls, len, SimpleNamespace, proof)
+        self.assertIs(result["runtime_qualified"], False)
+        self.assertEqual(result["origin"], origin)
+        self.assertIn("_native_logistic_bridge.py:connect_public", result["installer"])
+        self.assertNotIn("checks", result)
+
+    def test_later_owner_replacements_refuse_instead_of_becoming_unmodeled(self):
+        for mutation in ("slot", "context", "entry", "layout", "binary", "class"):
+            cls, context, descriptor, module, proof, origin = self.setup_later_owner()
+            if mutation == "slot":
+                cls.__getattribute__ = object.__getattribute__
+            elif mutation == "context":
+                descriptor.__func__ = MethodType(len, {})
+            elif mutation == "entry":
+                descriptor.__func__ = MethodType(abs, context)
+            elif mutation == "layout":
+                context["classical_public_layouts"][cls]["bindings"] = {}
+            elif mutation == "binary":
+                origin["path"] = "/unreceipted/other.so"
+            else:
+                module.LogisticRegression = type("Replacement", (), {})
+            with self.subTest(mutation=mutation), \
+                 mock.patch.dict(sys.modules, {module.__name__: module}), \
+                 mock.patch.object(collector, "native_origin", return_value=origin), \
+                 self.assertRaises(slots.WitnessError):
+                collector.later_owner(cls, len, SimpleNamespace, proof)
+
+    def test_unrecognized_replacement_cannot_use_the_later_owner_exception(self):
+        cls, _, _ = self.setup_model()
+        self.assertIsNone(collector.later_owner(cls, len, SimpleNamespace, {}))
 
     def test_later_plain_function_binding_does_not_execute_or_qualify_method(self):
         cls, context, descriptor = self.setup_model()
