@@ -70,8 +70,13 @@ def test_saved_neighbor_model_queries_on_the_cpu(tmp_path, name):
     model.save(path)
     host = mojolearn.host_model(path)
     assert type(host) is getattr(_classical_host, "Host" + name)
-    # The host class keeps its own connected native finalizer.
-    assert type(host).__del__ is not getattr(mojolearn, name).__del__
+    # The host class keeps its own connected native finalizer. RadiusNeighbors
+    # holds no resident device handle, so neither class has a finalizer.
+    public_finalizer = getattr(getattr(mojolearn, name), "__del__", None)
+    if public_finalizer is None:
+        assert not hasattr(type(host), "__del__")
+    else:
+        assert type(host).__del__ is not public_finalizer
     assert host.n_features_in_ == model.n_features_in_
     for wanted, got in zip(_answers(model, q, name), _answers(host, q, name)):
         _same(wanted, got)
