@@ -152,30 +152,50 @@ class Plan(unittest.TestCase):
         self.assertIn(heaviest, shards[0]["only"].split())
 
 
-#: The same lists with build_sets.sh's merged switch and pool (MOJOLEARN_MERGED_BINDINGS, lane/merged-bindings).
-MERGED_BUILD_SETS = BUILD_SETS.replace("host_so() { printf 'x'; }", """host_so() { printf 'x'; }
-running=0
-pool_jobs() {   # tier -> "tier:script" per build of that tier
-  if [[ "$MERGED" = 1 ]]; then
-    printf '%s:merged_build.sh\\n' "$1"
-    if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf 'host:merged_build.sh\\n'; fi
-  else
-    for s in $(tier_scripts "$1"); do printf '%s:%s\\n' "$1" "$s"; done
-  fi
-}
-echo SHOULD NOT RUN EITHER
-""").replace('PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}',
-             'PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}\nMERGED=$(python3 packaging/linux/merged_layout.py enabled) || exit 2')
+#: The same lists with build_sets.sh's merged switch and THIS checkout's pool
+#: (MOJOLEARN_MERGED_BINDINGS, lane/merged-bindings; one job per merged group since 0.8.59).
+REAL_POOL_JOBS = re.search(r"^pool_jobs\(\) \{.*?^\}\n", (ROOT / "packaging/linux/build_sets.sh").read_text(),
+                           re.M | re.S).group(0)
+MERGED_BUILD_SETS = BUILD_SETS.replace("host_so() { printf 'x'; }", "host_so() { printf 'x'; }\nrunning=0\n"
+                                       + REAL_POOL_JOBS + "echo SHOULD NOT RUN EITHER\n").replace(
+    'PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}',
+    'PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}\nMERGED=$(python3 packaging/linux/merged_layout.py enabled) || exit 2'
+    '\nADAPTERS=0')
+#: The fixture's merged groups: two device groups per tier (the byte LM joins
+#: the identical sequence group) and two host groups.
+FIXTURE_GROUPS = {
+    "_doc": ["fixture"], "index_file": "_mojolearn_merged.json",
+    "dirs": {
+        "fast": {"path": "", "groups": {"_mojolearn_native": ["_mojolearn", "_mojolearn_rf"],
+                                        "_mojolearn_native_trees": ["_mojolearn_gbdt"]}, "optional": {}},
+        "identical": {"path": "identical",
+                      "groups": {"_mojolearn_native": ["_mojolearn", "_mojolearn_rf"],
+                                 "_mojolearn_native_trees": ["_mojolearn_gbdt"],
+                                 "_mojolearn_native_sequence": ["_mojolearn_mamba"]},
+                      "optional": {"_mojolearn_byte_lm": {"group": "_mojolearn_native_sequence",
+                                                          "platforms": ["darwin", "linux"]}}},
+        "host": {"path": "host", "groups": {"_mojolearn_native_host": ["_mojolearn_core_host"],
+                                            "_mojolearn_native_forest_host": ["_mojolearn_svm_host"]},
+                 "optional": {}}},
+    "darwin_metal1": [], "darwin_metal1_suffix": "_m1"}
+FAST = ["fast:merged_build.sh:_mojolearn_native", "fast:merged_build.sh:_mojolearn_native_trees"]
+IDENTICAL = ["identical:merged_build.sh:_mojolearn_native", "identical:merged_build.sh:_mojolearn_native_sequence",
+             "identical:merged_build.sh:_mojolearn_native_trees"]
+HOST = ["host:merged_build.sh:_mojolearn_native_forest_host", "host:merged_build.sh:_mojolearn_native_host"]
 
 
 def merged_source(default="1"):
     src = Path(tempfile.mkdtemp())
     (src / "packaging/linux").mkdir(parents=True)
+    (src / "tools").mkdir()
+    (src / "bindings").mkdir()
     (src / "packaging/linux/build_sets.sh").write_text(MERGED_BUILD_SETS)
     layout = (ROOT / "packaging/linux/merged_layout.py").read_text()
     if default != "1":
         layout = layout.replace('get(SWITCH, "1")', 'get(SWITCH, "%s")' % default)
     (src / "packaging/linux/merged_layout.py").write_text(layout)
+    (src / "tools/merged_bindings.py").write_text((ROOT / "tools/merged_bindings.py").read_text())
+    (src / "bindings/merged_groups.json").write_text(json.dumps(FIXTURE_GROUPS))
     return src
 
 
@@ -183,17 +203,18 @@ class MergedPlan(unittest.TestCase):
     def test_the_merged_pool_is_planned_exactly(self):
         ps = rgb.plan_set(merged_source())
         self.assertTrue(ps["merged"])
-        self.assertEqual(sorted(e for e, _ in ps["builds"]),
-                         ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
-        self.assertEqual({e for e, h in ps["builds"] if h}, {"host:merged_build.sh"})
-        # members are the per-binding builds each merged file replaces
-        self.assertEqual(ps["members"], {"fast:merged_build.sh": 3, "identical:merged_build.sh": 5,
-                                         "host:merged_build.sh": 2})
+        # one pool job per merged group of the source's own manifest
+        self.assertEqual(sorted(e for e, _ in ps["builds"]), sorted(FAST + HOST + IDENTICAL))
+        self.assertEqual({e for e, h in ps["builds"] if h}, set(HOST))
+        # members are the bindings each merged file holds (the byte LM joins its named group)
+        self.assertEqual(ps["members"], {FAST[0]: 2, FAST[1]: 1, IDENTICAL[0]: 2, IDENTICAL[1]: 2, IDENTICAL[2]: 1,
+                                         HOST[0]: 1, HOST[1]: 1})
+        self.assertEqual(ps["shares"][IDENTICAL[0]], 2 / 5)
         w = lambda e: rgb.WEIGHTS.get(e, rgb.DEFAULT_GPU_WEIGHT)
-        self.assertEqual(ps["weights"]["fast:merged_build.sh"],
-                         w("fast:build_gbdt.sh") + w("fast:build_rf.sh") + w("fast:build.sh"))
-        self.assertEqual(ps["weights"]["host:merged_build.sh"],
-                         rgb.WEIGHTS["identical:build_core_host.sh"] + rgb.WEIGHTS["identical:build_svm_host.sh"])
+        self.assertEqual(ps["weights"]["fast:merged_build.sh:_mojolearn_native"], w("fast:build_rf.sh") + w("fast:build.sh"))
+        self.assertEqual(ps["weights"][IDENTICAL[1]], w("identical:build_mamba.sh") + w("identical:build_byte_lm.sh"))
+        self.assertEqual(ps["weights"]["host:merged_build.sh:_mojolearn_native_host"],
+                         rgb.WEIGHTS["identical:build_core_host.sh"])
         self.assertEqual(len(ps["per_binding"]), 10)
         # the planner ignores the caller's switch: the box gets none
         old = os.environ.get("MOJOLEARN_MERGED_BINDINGS")
@@ -220,55 +241,68 @@ class MergedPlan(unittest.TestCase):
     def test_one_merged_compile_per_shard_with_swap_for_its_peak(self):
         rc, doc = self.run_plan(merged_source())
         self.assertEqual(rc, 0)
-        self.assertEqual((doc["layout"], doc["shards"], doc["builds"]), ("merged", 3, 3))
+        self.assertEqual((doc["layout"], doc["shards"], doc["builds"]), ("merged", 7, 7))
+        self.assertEqual(doc["jobs_per_set"], rgb.MERGED_JOBS_PER_SET)
         self.assertGreaterEqual(doc["jobs_per_set"], doc["shards"] + 1)
         rows = doc["matrix"]["include"]
-        self.assertEqual(len(rows), 6)
+        self.assertEqual(len(rows), 14)
         for arch, vendor in (("sm_89", "cuda"), ("gfx942", "hip")):
             mine = [r for r in rows if r["arch"] == arch]
             self.assertTrue(all(r["n"] == 1 for r in mine))
-            self.assertEqual(sorted(r["only"] for r in mine),
-                             ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
+            self.assertEqual(sorted(r["only"] for r in mine), sorted(FAST + HOST + IDENTICAL))
             for r in mine:
-                tier = r["only"].split(":")[0]
-                self.assertEqual(r["peak_gib"], rgb.UNIT_PEAK_GIB[(tier, vendor)])
+                tier, _script, group = r["only"].split(":")
+                self.assertEqual(r["peak_gib"], rgb.UNIT_PEAK_GIB[(tier, group, vendor)])
                 self.assertEqual(r["swap_gib"], rgb.swap_gib(r["peak_gib"]))
-                self.assertEqual(r["unit"], tier + "-merged_build")
-            # both merged compiles page past the runner's RAM (the host one was killed at 16 GB
-            # without swap, run 40272710760)
-            for r in mine:
-                if r["only"] != "fast:merged_build.sh":
-                    self.assertGreater(r["swap_gib"] + rgb.RUNNER_RAM_GIB, r["peak_gib"])
+                self.assertEqual(r["unit"], tier + "-merged_build-" + group)
+                # every group fits a free runner without heavy swap
+                self.assertLessEqual(r["swap_gib"], 2)
         self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows))
-        # the heaviest (identical) goes onto shard 0
-        self.assertEqual(rows[0]["only"], "identical:merged_build.sh")
+        # the heaviest group goes onto shard 0
+        self.assertTrue(rows[0]["only"].startswith("identical:merged_build.sh:"))
 
     def test_the_release_modes_choose_the_tiers(self):
         rc, doc = self.run_plan(merged_source(), "--modes", "identical")
         self.assertEqual(rc, 0)
         self.assertEqual(doc["modes"], ["identical"])
         self.assertEqual(sorted(r["only"] for r in doc["matrix"]["include"] if r["arch"] == "sm_89"),
-                         ["host:merged_build.sh", "identical:merged_build.sh"])
+                         sorted(HOST + IDENTICAL))
 
     def test_a_compile_no_free_runner_can_hold_is_refused_with_one_sentence(self):
-        big = dict(rgb.UNIT_PEAK_GIB, **{("identical", "cuda"): 100})
+        big = {**rgb.UNIT_PEAK_GIB, ("identical", "_mojolearn_native_trees", "cuda"): 100}
         with unittest.mock.patch.object(rgb, "UNIT_PEAK_GIB", big), \
                 unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
             with self.assertRaises(SystemExit) as cm:
                 rgb.main(["plan", "--src", str(merged_source()), "--sets", "sm_89", "--shards", "6"])
         msg = str(cm.exception)
-        self.assertIn("identical:merged_build.sh", msg)
+        self.assertIn("identical:merged_build.sh:_mojolearn_native_trees", msg)
         self.assertIn("tools/release_linux_build.sh", msg)
         self.assertEqual(msg.count(". "), 0, "one sentence")
 
     def test_the_planning_peaks_cover_every_recorded_peak(self):
-        # 0.8.57 cpu box (guard): sm_89 48.59, sm_80 48.12, gfx942 47.87 GiB; DO MI325X 2026-10-20:
-        # fast 36.6 GB; the host compile was killed at 16.0 GB on a free runner (run 40272710760)
+        # whole-set compiles before the 0.8.59 split: 0.8.57 cpu box (guard): sm_89 48.59, sm_80 48.12,
+        # gfx942 47.87 GiB; DO MI325X 2026-10-20: fast 36.6 GB; the host compile was killed at 16.0 GB on
+        # a free runner (run 40272710760)
         for key, peak in ((("identical", "cuda"), 48.59), (("identical", "hip"), 47.87),
                           (("fast", "cuda"), 36.6), (("fast", "hip"), 36.6), (("host", "cuda"), 16.0),
                           (("host", "hip"), 16.0)):
-            self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[key], peak)
-            self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[key]), rgb.SWAP_MAX_GIB)
+            self.assertGreaterEqual(rgb.WHOLE_DIR_PEAK_GIB[key], peak)
+            self.assertLessEqual(rgb.swap_gib(rgb.WHOLE_DIR_PEAK_GIB[key]), rgb.SWAP_MAX_GIB)
+            # an unlisted group plans at its directory's whole-set peak
+            self.assertEqual(rgb.unit_peak_gib(key[0] + ":merged_build.sh:_mojolearn_unlisted", key[1], True),
+                             rgb.WHOLE_DIR_PEAK_GIB[key])
+
+    def test_every_real_group_has_a_planning_peak_that_fits_a_runner(self):
+        # the per-group rows name exactly this checkout's groups, and none needs more than light swap
+        sys.path.insert(0, str(ROOT / "tools"))
+        import merged_bindings as mb
+        for tier in ("identical", "fast", "host"):
+            stems = {stem for stem, _cls, _m in mb.plan(tier, "linux", True)}
+            self.assertEqual({g for t, g, _v in rgb.UNIT_PEAK_GIB if t == tier}, stems)
+            for vendor in ("cuda", "hip"):
+                for stem in stems:
+                    self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[(tier, stem, vendor)]), 2)
+        self.assertLessEqual(rgb.swap_gib(rgb.HOST_PRODUCER_PEAK_GIB), 0)
 
     def test_the_host_producer_needs_a_donor(self):
         with self.assertRaisesRegex(SystemExit, "donor"):
@@ -276,7 +310,8 @@ class MergedPlan(unittest.TestCase):
         doc = rgb.build_plan(merged_source(), ["host"], 6, host_donor=True)
         self.assertEqual((doc["sets"], doc["host"], doc["matrix"]["include"]), ([], True, []))
         self.assertEqual(doc["host_swap_gib"], rgb.swap_gib(rgb.HOST_PRODUCER_PEAK_GIB))
-        self.assertGreater(doc["host_swap_gib"], 0)
+        # the producer compiles the host groups one at a time: the largest fits the runner
+        self.assertEqual(doc["host_swap_gib"], 0)
         with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
             doc = rgb.build_plan(merged_source(), ["sm_89", "host"], 6)
         self.assertEqual((doc["sets"], doc["host"]), (["sm_89"], True))
@@ -287,11 +322,17 @@ class MergedPlan(unittest.TestCase):
         if not merged:
             self.skipTest("this checkout builds per-binding")
         ps = rgb.plan_set(ROOT, ("identical",))
-        self.assertEqual(sorted(e for e, _ in ps["builds"]), ["host:merged_build.sh", "identical:merged_build.sh"])
+        sys.path.insert(0, str(ROOT / "tools"))
+        import merged_bindings as mb
+        want = sorted("%s:merged_build.sh:%s" % (d, stem) for d in ("identical", "host")
+                      for stem, _cls, _m in mb.plan(d, "linux", True))
+        self.assertEqual(sorted(e for e, _ in ps["builds"]), want)
         rgb.check_counts(ROOT, ps["per_binding"], ("identical",))
+        # every member of the real manifest is in exactly one group
+        self.assertEqual(sum(ps["members"].values()), sum(1 for e, _ in ps["per_binding"]))
         doc = rgb.build_plan(ROOT, ["sm_89", "sm_80", "gfx942"], 6, ("identical",))
-        self.assertEqual(len(doc["matrix"]["include"]), 6)
-        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + 3 * 3)
+        self.assertEqual(len(doc["matrix"]["include"]), 3 * len(want))
+        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + 3 * (len(want) + 1))
 
     def test_layout_reads_the_commit_without_a_checkout(self):
         head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -319,6 +360,7 @@ class JobMap(unittest.TestCase):
                   "--set-index", "0", "--job", "0", "--jobs-per-set", "3", "--leg", "99"])
         m = bincache.read_map(d / "urls2.tsv")
         self.assertEqual((m["get"], m["put"]), ({}, []))
+        self.assertEqual(m["header"], {"partition": rgb.partition(), "image": rgb.IMAGE_DECL, "leg": "gha-99"})
         # the job learns whether R2 is its cache (else actions/cache)
         rgb.main(["job-map", "--event", str(d / "event.json"), "--dest", str(d / "urls3.tsv"),
                   "--set-index", "0", "--job", "0", "--jobs-per-set", "3", "--github-output", str(d / "out")])
@@ -344,7 +386,6 @@ class JobMap(unittest.TestCase):
             else:
                 with self.assertRaisesRegex(SystemExit, "the dispatch named"):
                     rgb.main(["donor", "--event", str(d / "event.json"), "--dest", str(dest)])
-        self.assertEqual(m["header"], {"partition": rgb.partition(), "image": rgb.IMAGE_DECL, "leg": "gha-99"})
 
 
 class Shard(unittest.TestCase):
@@ -364,10 +405,16 @@ class Shard(unittest.TestCase):
         self.assertNotIn("MOJOLEARN_BINCACHE_SHARD_ONLY", bincache.build_env(env))
 
     def test_the_merged_host_build_is_its_own_shard_entry(self):
-        # bindings/merged_build.sh host runs under MOJOLEARN_NUMERIC_MODE=identical, like the identical tier
+        # bindings/merged_build.sh host runs under MOJOLEARN_NUMERIC_MODE=identical, like the identical tier;
+        # a merged build is one group (--group <stem>, packaging/linux/build_sets.sh pool_jobs)
         self.assertEqual(bincache.shard_entry("identical", "bindings/merged_build.sh", ["host"]), "host:merged_build.sh")
         self.assertEqual(bincache.shard_entry("identical", "bindings/merged_build.sh", ["gpu"]),
                          "identical:merged_build.sh")
+        self.assertEqual(bincache.shard_entry("identical", "bindings/merged_build.sh",
+                                              ["host", "--group", "_mojolearn_native_x_host"]),
+                         "host:merged_build.sh:_mojolearn_native_x_host")
+        self.assertEqual(bincache.shard_entry("fast", "bindings/merged_build.sh", ["gpu", "--group", "_mojolearn_native"]),
+                         "fast:merged_build.sh:_mojolearn_native")
         self.assertEqual(bincache.shard_entry("fast", "bindings/build_x.sh", []), "fast:build_x.sh")
         d = Path(tempfile.mkdtemp())
         (d / "bindings").mkdir()
@@ -379,9 +426,17 @@ class Shard(unittest.TestCase):
         self.assertFalse(marker.exists())
         self.assertEqual(bincache.cmd_build([str(d / "bindings/merged_build.sh"), "host"], env), 0)
         self.assertEqual(marker.read_text().split(), ["host"])
+        # one group of a directory: the shard runs only its own group
+        marker.unlink()
+        env["MOJOLEARN_BINCACHE_SHARD_ONLY"] = "host:merged_build.sh:_g1"
+        self.assertEqual(bincache.cmd_build([str(d / "bindings/merged_build.sh"), "host", "--group", "_g2"], env), 0)
+        self.assertFalse(marker.exists())
+        self.assertEqual(bincache.cmd_build([str(d / "bindings/merged_build.sh"), "host", "--group", "_g1"], env), 0)
+        self.assertEqual(marker.read_text().split(), ["host"])
         # the shard judge on the runner names it the same way
         gha = (ROOT / "tools/gha_release_box.sh").read_text()
-        self.assertIn('if name == "merged_build.sh" and (doc.get("args") or [])[:1] == ["host"]:', gha)
+        self.assertIn('if args[:1] == ["host"]:', gha)
+        self.assertIn('entry += ":" + args[args.index("--group") + 1]', gha)
 
 
 class Backend(unittest.TestCase):
