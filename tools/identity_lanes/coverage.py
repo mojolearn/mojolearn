@@ -924,8 +924,12 @@ def _(ml, X, yc, yr, Xh=None):
     the decoded ids of `generate` on the encoded prompt, and across the three
     tokenizers; on a build with the resident decode session,
     `CausalLM._generate_resident` (`causal_lm_resident`) is held to `generate`.
-    Parts: the greedy and sampled texts, the prompt ids and the greedy
-    continuation ids."""
+    A text stream paused after one read, checkpointed with `state_dict` and
+    resumed with `resume_generation` (the tokenizer's `vocab_fingerprint`) is
+    held to the greedy text too, and `CausalLM.blocks` to the layer count.
+    Parts: the greedy and sampled texts, the prompt ids, the greedy
+    continuation ids, the resumed text, the checkpoint's tokenizer fingerprint
+    and the block count."""
     from mojolearn import _causal_lm_fixtures as fx
     d = _coverage_digester(ml)
     A = ml.Array.from_buffer
@@ -951,6 +955,18 @@ def _(ml, X, yc, yr, Xh=None):
         full = np.asarray(m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW), dtype=np.int32)
         resident = m._generate_resident(A(np.ascontiguousarray(prompt)), HF_LM_NEW,
                                         prompt.shape[1] + HF_LM_NEW)
+        # A text stream paused after one read, checkpointed (state_dict records
+        # the tokenizer's vocab_fingerprint) and resumed with the same tokenizer
+        # (resume_generation checks it) must continue the greedy text byte for
+        # byte; CausalLM.blocks (causal_lm_blocks) lists every layer.
+        paused = m.stream_text(text, HF_LM_NEW, tokenizer=from_json)
+        head = paused.read(2)
+        checkpoint = paused.state_dict()
+        resumed = m.resume_generation(checkpoint, tokenizer=from_json)
+        tail = "".join(resumed.read(2) for _ in range(-(-HF_LM_NEW // 2)))  # glue: bounded reads
+        n_blocks = len(m.blocks)
+        if n_blocks != m.n_layers:
+            raise AssertionError(f"CausalLM.blocks has {n_blocks} blocks for {m.n_layers} layers")
     cont = np.ascontiguousarray(full[:, prompt.shape[1]:])
     _same_bytes("stream_text read two at a time", _hf_text("".join(pieces)),
                 "generate_text", _hf_text(greedy))
@@ -960,8 +976,13 @@ def _(ml, X, yc, yr, Xh=None):
     if resident is not None:
         _same_bytes("CausalLM._generate_resident", np.asarray(resident, dtype=np.int32),
                     "CausalLM.generate", full)
+    _same_bytes("stream_text resumed from state_dict", _hf_text(head + tail),
+                "generate_text", _hf_text(greedy))
     return _fit(dict(greedy=d(_hf_text(greedy)), sampled=d(_hf_text(sampled)),
-                     prompt=d(prompt), continuation=d(cont)))
+                     prompt=d(prompt), continuation=d(cont),
+                     resumed=d(_hf_text(head + tail)),
+                     fingerprint=d(_hf_text(str(checkpoint["tokenizer"]))),
+                     blocks=d(np.asarray([n_blocks], dtype=np.int64))))
 
 
 @lane("hf-model-surface")

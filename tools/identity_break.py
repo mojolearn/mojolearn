@@ -1485,15 +1485,21 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("et-clf")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+    # a float64 Fortran-order copy takes the column-major fit entry (et_classifier_fit_export)
+    mf = ml.ExtraTreesClassifier(n_estimators=4, max_depth=8, random_state=7).fit(
+        np.asfortranarray(X[:2000], dtype=np.float64), yc[:2000])
     predict, proba = m._predict_with_proba(X)
-    return _fit(dict(predict=_h(predict), proba=_h(proba)),
+    return _fit(dict(predict=_h(predict), proba=_h(proba), colmajor=_h(mf.predict_proba(X))),
                 m, lambda e: e._predict_with_proba(Xh))
 
 
 @lane("et-reg")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
-    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+    # a float64 Fortran-order copy takes the column-major fit entry (et_regressor_fit_export)
+    mf = ml.ExtraTreesRegressor(n_estimators=4, max_depth=8, random_state=7).fit(
+        np.asfortranarray(X[:2000], dtype=np.float64), yr[:2000])
+    return _fit(dict(predict=_h(m.predict(X)), colmajor=_h(mf.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
 @lane("et-clf-weighted")
@@ -2807,6 +2813,15 @@ def _(ml, X, yc, yr, Xh=None):
         near_one=("B_norm.weight", "C_norm.weight"))
     blk = ml.Mamba3Block(w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
+    # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
+    # mamba3_prefill_session_info: the counters of the device prefill session the
+    # stateless forward above opened. The host column opens none (None there), so
+    # the dict is checked, not hashed, and the lane's bits stay the same.
+    info = blk.session_info()
+    keys = ["backward_recomputes", "backward_reuses", "stages_held", "weight_recopies", "weight_reuses",
+            "weight_uploads"]
+    if info is not None and (sorted(info) != keys or min(int(info[k]) for k in keys) < 0):  # glue: six counters
+        raise AssertionError(f"Mamba3Block.session_info returned {info!r}")
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
 
@@ -6093,8 +6108,14 @@ def _(ml, X, yc, yr, Xh=None):
     the kernel matrix, the ridge, potrf and potrs, and the identical GEMM
     at OP_NN in predict. Train hashes dual_coef_ and the predictions on
     the training rows; infer predicts 64 held-out rows; the model column
-    is n/a:no-save."""
+    is n/a:no-save. vendor_used() reads the binding's compiled vendor
+    (kernel_methods_vendor through the native mode metadata: the GPU binding
+    on a device column, the host binding's GPU-named export on the CPU
+    column); the string differs per column by design, so it is checked
+    against the selected backend, never hashed."""
     m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
+    if m.vendor_used() != ml._backend.vendor():
+        raise AssertionError("KernelRidge.vendor_used disagrees with the selected backend")
     return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
                 m, lambda e: (e.predict(Xh[:64, :4]),))
 
@@ -6604,6 +6625,12 @@ def _(ml, X, yc, yr, Xh=None):
     ids = (_ids(X, 1, T).reshape(T) % V).astype(np.int32)
     dy = np.ascontiguousarray(_seq(X, 1, T, Dm).reshape(T, Dm))
     e = ml.Embedding(V, Dm, padding_idx=3, weight=w)
+    # The layer's compiled read-backs (embedding_vendor / embedding_numeric_mode
+    # through the native mode metadata; on the CPU column the host binding's
+    # GPU-named exports) must name the selected backend. Checked, not hashed:
+    # the vendor string differs per column by design.
+    if e.vendor_used() != ml._backend.vendor() or e.numeric_mode_used() != "identical":
+        raise AssertionError("Embedding.vendor_used/numeric_mode_used disagree with the selected backend")
     y = np.asarray(e.forward(ids))
     dw = np.asarray(e.backward(ids, dy))
     t0 = 171
@@ -8499,7 +8526,8 @@ def _(ml, X, yc, yr, Xh=None):
     session's refusals, which are part of its contract and which no sabotage
     build can move: a closed session refuses to step, a state that already
     belongs to a session refuses to open a second one, and a row count that
-    does not match the state's refuses by name.
+    does not match the state's refuses by name. `reload` is four decoded
+    positions after `load_state()` rewound the resident state to a synced one.
 
     THE ORACLE IS IN THE CELL. Both hashed parts are held BYTE FOR BYTE to
     the per-call `block.step` on a second fresh state, which is the session
@@ -8572,7 +8600,31 @@ def _(ml, X, yc, yr, Xh=None):
         _refused(lambda: blk.decode_session(None), "state is required"),
     ], dtype=np.int64)
     open_session.close()
-    return _fit(dict(step=_h(*steps), state=_h(*resident), flags=_h(flags)),
+    # load_state (Mamba1DecodeSession.load_state -> mamba_public_native.mojo
+    # session_load -> mamba1_session_load_state): sync after four tokens, step
+    # four tokens the reload throws away, reload, then step four more. Held
+    # byte for byte to a per-call state that stepped the first four tokens and
+    # then the same last four.
+    xr = _seq(X, 2, 12, dm, skip=1024)
+
+    def tok(t):
+        return np.ascontiguousarray(xr[:, t:t + 1])
+
+    st_r = blk.allocate_state(2)
+    with blk.decode_session(st_r) as sr:
+        for t in range(4):  # glue: four decode steps
+            sr.step(tok(t))
+        sr.sync_state()
+        for t in range(4, 8):  # glue: four steps the reload discards
+            sr.step(tok(t))
+        sr.load_state()
+        reload_out = np.concatenate([np.asarray(sr.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+    plain_r = blk.allocate_state(2)
+    for t in range(4):  # glue: the same first four steps, per call
+        blk.step(tok(t), plain_r)
+    want_r = np.concatenate([np.asarray(blk.step(tok(t), plain_r)) for t in range(8, 12)], axis=1)  # glue: four steps
+    _same_bytes("mamba1 steps after load_state", reload_out, "per-call steps after the same four tokens", want_r)
+    return _fit(dict(step=_h(*steps), state=_h(*resident), flags=_h(flags), reload=_h(reload_out)),
                 blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
 

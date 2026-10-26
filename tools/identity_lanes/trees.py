@@ -21,16 +21,25 @@
 
 @lane("trees-dt-clf")
 def _(ml, X, yc, yr, Xh=None):
-    """One CART tree, entropy, every feature (the weighted entry has no CPU arm yet)."""
+    """One CART tree, entropy, every feature (the weighted entry has no CPU arm yet); the same tree
+    on a float64 Fortran-order copy of 2000 rows, the column-major fit entry (rf_classifier_fit_export:
+    every fixture is float32 C-order, which takes the row-major entry)."""
     m = ml.DecisionTreeClassifier(max_depth=8, criterion="entropy", random_state=7).fit(X, yc)
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), depth=_h(np.int64(m.get_depth()))),
+    mf = ml.DecisionTreeClassifier(max_depth=8, criterion="entropy", random_state=7).fit(
+        np.asfortranarray(X[:2000], dtype=np.float64), yc[:2000])
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), depth=_h(np.int64(m.get_depth())),
+                     colmajor=_h(mf.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
 @lane("trees-dt-reg")
 def _(ml, X, yc, yr, Xh=None):
+    """One CART regression tree; the same tree on a float64 Fortran-order copy of 2000 rows, the
+    column-major fit entry (rf_regressor_fit_export)."""
     m = ml.DecisionTreeRegressor(max_depth=8, min_samples_leaf=2, random_state=7).fit(X, yr)
-    return _fit(dict(predict=_h(m.predict(X)), leaves=_h(np.int64(m.get_n_leaves()))),
+    mf = ml.DecisionTreeRegressor(max_depth=8, min_samples_leaf=2, random_state=7).fit(
+        np.asfortranarray(X[:2000], dtype=np.float64), yr[:2000])
+    return _fit(dict(predict=_h(m.predict(X)), leaves=_h(np.int64(m.get_n_leaves())), colmajor=_h(mf.predict(X))),
                 m, lambda e: (e.predict(Xh),))
 
 
@@ -240,7 +249,9 @@ def _(ml, X, yc, yr, Xh=None):
     Revised 2026-10-25 (lane verify-lane-contracts-20261025): calibration's
     splitter object was a Python class with split(X, y), which the native
     owner refuses (no Python protocol in the runtime) and the lane read
-    REFUSED; it is now the native splitter KFold(3, shuffle=True)."""
+    REFUSED; it is now the native splitter KFold(3, shuffle=True). Random
+    forests with oob_score=True and feature_importances=True (the aux fit
+    entries) added 2026-10-26 (lane precise-coverage-0859)."""
     bc = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=5), n_estimators=6, max_features=0.8,
                               oob_score=True, random_state=7).fit(X, yc)
     br = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=5), n_estimators=6, max_samples=0.8,
@@ -256,8 +267,18 @@ def _(ml, X, yc, yr, Xh=None):
     X6 = np.ascontiguousarray(X[:, :6])
     dm = ml.DARTClassifier(n_estimators=4, num_leaves=7, max_depth=3, min_child_samples=5, random_state=7).fit(X6, y2)
     ke = ml.KernelExplainer(dm, X6[:10], link="logit")
+    # The forests' requested fit outputs (oob_score=True, feature_importances=True)
+    # take the aux fit entries (rf_classifier_fit_aux_export, rf_regressor_fit_aux_export).
+    rfc = ml.RandomForestClassifier(n_estimators=8, max_depth=6, oob_score=True, random_state=7).fit(
+        X[:2000], yc[:2000], feature_importances=True)
+    rfr = ml.RandomForestRegressor(n_estimators=8, max_depth=6, oob_score=True, random_state=7).fit(
+        X[:2000], yr[:2000], feature_importances=True)
     return _fit(dict(oob_c=_h(np.float64(bc.oob_score_)), oob_df=_h(bc.oob_decision_function_),
                      oob_r=_h(np.float64(br.oob_score_)), oob_p=_h(br.oob_prediction_),
+                     rf_oob_df=_h(rfc.oob_decision_function_), rf_oob=_h(np.float64(rfc.oob_score_)),
+                     rf_imp=_h(rfc.feature_importances_),
+                     rfr_oob_p=_h(rfr.oob_prediction_), rfr_oob=_h(np.float64(rfr.oob_score_)),
+                     rfr_imp=_h(rfr.feature_importances_),
                      bag=_h(bc.predict_proba(X)), stack=_h(st.predict(X)), cal=_h(ca.predict_proba(X)),
                      shap=_h(ke.shap_values(X6[:3])), ev=_h(np.asarray(ke.expected_value))),
                 ca, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -270,12 +291,15 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "trees-oob-cv-link")
 def _(ml, X, yc, yr, Xh=None):
     """The RF weighted objective (class weights without bootstrap): a balanced
     entropy forest on column samples, and a gini tree on per-row sample weights
-    that zero some rows out."""
+    that zero some rows out; a regression tree on the same weights."""
     f = ml.RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7, class_weight="balanced",
                                   bootstrap=False, criterion="entropy", max_features=0.6).fit(X, yc)
     w = np.array([(1.0, 2.5, 0.0, 0.75)[i % 4] for i in range(len(X))], dtype=np.float32)
     t = ml.DecisionTreeClassifier(max_depth=7, min_samples_leaf=2).fit(X, yc, sample_weight=w)
-    return _fit(dict(forest=_h(f.predict_proba(X)), tree=_h(t.predict_proba(X)), predict=_h(t.predict(X))),
+    # the weighted regression entry (rf_regressor_fit_weighted_export) on the same weights
+    tr = ml.DecisionTreeRegressor(max_depth=7, min_samples_leaf=2).fit(X, yr, sample_weight=w)
+    return _fit(dict(forest=_h(f.predict_proba(X)), tree=_h(t.predict_proba(X)), predict=_h(t.predict(X)),
+                     tree_reg=_h(tr.predict(X))),
                 t, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 

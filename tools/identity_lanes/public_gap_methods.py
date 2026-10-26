@@ -27,6 +27,12 @@ def _(ml, X, yc, yr, Xh=None):
     # already selected backend and hash the consumed qualification result.
     if vendor != ml._backend.vendor():
         raise AssertionError("training.vendor_used disagrees with the selected backend")
+    # An estimator's own read-backs (NumericModeMixin.numeric_mode_used / vendor_used through the native
+    # mode metadata: x_ann_* and x_cluster_* on a device column, the host bindings' GPU-named exports on
+    # the CPU column). Checked against the selected backend, not hashed, so the digest keeps its bits.
+    for est in (ml.TSNE(random_state=5), ml.MiniBatchKMeans(n_clusters=2, random_state=5)):  # glue: two classes
+        if est.numeric_mode_used() != "identical" or est.vendor_used() != ml._backend.vendor():
+            raise AssertionError(f"{type(est).__name__}.numeric_mode_used/vendor_used disagree with the selected backend")
     return _fit(dict(rates=_h(np.asarray(rates, dtype=np.float64)),
                      dimensions=_h(np.asarray(dimensions, dtype=np.int64)),
                      metadata=_h(np.asarray([missing is None, vendor in ("cpu", "metal", "cuda", "hip")], dtype=np.uint8))))

@@ -10,6 +10,9 @@
 #                                   families (python/mojolearn/_native_declared_params.py)
 #   public_attribute_native_call    __getattribute__ of every connected class
 #                                   (python/mojolearn/_native_public_attributes.py)
+#   full_reset_params_native_call   set_params of the 90 field-only classes (KMeans, PCA,
+#                                   SVC, ...), which also clears the fit
+#                                   (python/mojolearn/_native_full_reset_params.py)
 # The lane sets parameters through the public calls a user makes and digests
 # what they change: a dropped or reverted assignment moves the refit's outputs.
 # Sizes are correctness-check sizes, never product dispatch rules.
@@ -40,12 +43,24 @@ def _(ml, X, yc, yr, Xh=None):
     projection = ml.GaussianRandomProjection(n_components=3, random_state=1)
     projection.set_params(n_components=4, random_state=7)
     projected = projection.fit_transform(rows)
+    # The full-reset family (python/mojolearn/_native_full_reset_params.py,
+    # full_reset_params_native_call): set_params replaces the constructor
+    # fields and clears the fit, so the refit runs on the new settings.
+    km = ml.KMeans(n_clusters=3, n_init=1, max_iter=20, random_state=0)
+    km.fit(rows)
+    km.set_params(n_clusters=4, random_state=1)
+    if hasattr(km, "cluster_centers_"):
+        raise AssertionError("KMeans.set_params must drop the fitted centers")
+    km_params = km.get_params()
+    km.fit(rows)
     settings = np.asarray([params["alpha"], params["epsilon"], params["max_iter"],
                            expansion.get_params()["degree"], projection.get_params()["n_components"]],
                           dtype=np.float64)
     return _fit(dict(linear=_h(before, after, huber.coef_, np.float64(huber.intercept_), np.float64(huber.scale_)),
                      prep=_h(expanded, expansion.powers_), decomp=_h(projected, projection.components_),
-                     settings=_h(settings)))
+                     settings=_h(settings),
+                     full_reset=_h(np.asarray(km.cluster_centers_), np.asarray(km.labels_), np.float64(km.inertia_),
+                                   np.asarray([km_params["n_clusters"], km_params["random_state"]], dtype=np.int64))))
 
 
 _batch_decl("n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; "
