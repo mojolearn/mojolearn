@@ -1,0 +1,650 @@
+{
+  "comparisons": {
+    "equal:train": 1188,
+    "equal:infer": 1188,
+    "equal:model": 1188,
+    "equal:batch": 1188,
+    "equal:stepfull": 1188,
+    "equal:batchgrad": 1188,
+    "equal:batchscale": 1188,
+    "equal:ragged": 1188,
+    "unqualified:rlpair": 1188
+  },
+  "failures": [],
+  "conflicts": [],
+  "table": {
+    "cells": 5139,
+    "parts": 45045,
+    "conflicts": 0,
+    "classes_agreeing": {
+      "1": 3357,
+      "3": 549,
+      "4": 2664,
+      "5": 38475
+    },
+    "records": 28
+  },
+  "records": 155,
+  "inputs": [
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
+      "sha256": "65d9b82ca062baf3edb26880d3810d35214d3e0a73288dcd73767708121e1c7b"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
+      "sha256": "13965d0eac96a31a8b24e4c66e0fd757d2728bb0787553acef52339d2e9e8cbb"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
+      "sha256": "11896c55ec4fca53e4971fa7bd08574b7e9e6c56cab40c3d918c4bf408e02179"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba1-bf16w/cpu-clean.json",
+      "sha256": "79935fd2e78d340ecb329784cf98f509e3390aee1cbce26d700cc4777b7299d6"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba2-bf16w/cpu-clean.json",
+      "sha256": "140235e9ee25130a713b12c26a6924520aea299cfef2f096dfbbbb2f20ea94eb"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba2-int8w/cpu-clean.json",
+      "sha256": "25257c8d36f6ed92797c8f12a36944c2142935c012c59b54ba2968e179838fb8"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba3-bf16w/cpu-clean.json",
+      "sha256": "6532b0514c384fb7ded2804cb5f0b3d0d6a7fb4d37dd519ca129a5b3a4722ec1"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba3-int8w/cpu-clean.json",
+      "sha256": "e1398b1c303adf61240cd3d57f03b75d2f9be70805178fdf3816cca532ceefec"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/transformer-int8w/cpu-clean.json",
+      "sha256": "4488ee796baeacb5efee1f0bbf41a6a4ade625ccc47ce3cd8333b06af3c3f4ec"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-mamba2-completion/cpu-mac-clean.json",
+      "sha256": "5edbd4693c6eb1a8c9cdfc53cc9cc29557f4a9195ff0462e691ac22f7f83da74"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-native-nine/records/cross-entropy-arms/cross-entropy-arms/cpu-clean.json",
+      "sha256": "54c2a685bb872ef5698de9e5a32873b1e0d66a27feb6deb25f5d70e49db0a5c6"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-native-nine/records/mlp/mlp/cpu-clean.json",
+      "sha256": "7b64306791561ecf5667107a9683bcaa8f475adf581e781c5a6e163dbc8a5cfc"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-native-nine/records/optim-sgd/optim-sgd/cpu-clean.json",
+      "sha256": "a4dd18ff4c3f3e735caa960be4633a0cdf560298cb9e8fadd12d85dcbfc8367d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-native-nine/records/training-primitives/training-primitives/cpu-clean.json",
+      "sha256": "ac3ef89e6df77264064cc6b34025738c13a3366f5a4fa56f053795617b3deb81"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_cpu-reference-repair/cpu-clean.json",
+      "sha256": "c23411f18bade45139604cba2a389b1de366fbefa1e8fb6f16ce68923d59bcfe"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json",
+      "sha256": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json",
+      "sha256": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-neural.json",
+      "sha256": "24ec3680878e949b40d11e597a35203257692e2b0087132d49c970880b0a7e67"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json",
+      "sha256": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json",
+      "sha256": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json",
+      "sha256": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json",
+      "sha256": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_sabotage-sweep/d-neural/cpu-x86.json",
+      "sha256": "3bb76498a8edd269195112449acf1848a121cae877ffcf6b17952c46d271f798"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-17_sabotage-sweep/g-accumulate-arm-family-define/cpu-x86.json",
+      "sha256": "e94d63bd1236cbf9ccc6bb209c39fd375511d5284e0659d53c17121e67c07e6a"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-19_laneless-public-classes/clean-linalg-rebuilt.json",
+      "sha256": "e5bb04d2f531dcb08169fecfef9824b4ea7ef2a91b0abc44e902e113e7b23559"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-19_laneless-public-classes/clean.json",
+      "sha256": "fdf1efefbd3e59593dc38dc7106b93e2ecdd62b896dd1211654ad4dfc4bdf4a4"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-19_laneless-public-classes/regression-rebuilt-linalg.json",
+      "sha256": "650ff6d9efdfaca959ac1475d7c7af438c48bed592be438ff047557bb59400c2"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-19_par-lane-oracles/after.cpu-apple-m4.json",
+      "sha256": "cbec972b626461e028c4ed30718b6b123b87efa840984d5684e51c4b8c328ef1"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/clean.json",
+      "sha256": "9244e3c3b76b6055ff37e009d484d2c554b9b5fa45139034a4d4c90853b71b51"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/nvidia-nvidia-geforce-rtx-4090-sm_89.stepfull-never-recorded-2026-09-20.json",
+      "sha256": "4d36a27b237484b57015ca37421114f5ac05780896ca8cc43077bcf8cc6e170d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-20_par-sabotage-defines/cpu-apple-m4.par-sweep.clean.json",
+      "sha256": "d72c577b975530ffcef0b00e9016783b51a533e473dc0a573ab0a128234d9bf5"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-20_parallel-next-amd935/amd-mi325x-gfx942.json",
+      "sha256": "54abffd127aafacf136c09ededfbdb5958e8e54f515f419e2e557dbe20e836ab"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/apple-m4-causal.json",
+      "sha256": "4edad60982d3af3a945fc5cc87da64a3959c9021aa1a88023743baca9823b0e1"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-last-four-2026-09-20.json",
+      "sha256": "a6f13a8ae7d39482fb12d62c2dc4ae0254b9c673bda5f9e9f85764f2b18a45ab"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-27_byte-lm-host-train-weight-decay/cpu-amd-epyc-7k62-x86_64.json",
+      "sha256": "7db981fd887665c5d8121235ab1a38473ec1f2a89200ea2efa382ebd04489c2c"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-batchnorm.cpudefault.json",
+      "sha256": "bfcda9f23306edd1f29a9f9b08d3758c44dda00e8c134de382ea9b2478015a50"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-bn-options.cpudefault.json",
+      "sha256": "d8ca651cce33604a9b7e9d4673af0f13df223932d776a5cf590ad9ef8c06be5b"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-conv-options.cpudefault.json",
+      "sha256": "f9027a765b5c3ef90b914c9b67a9240392223b8d329215dd7ddd7ed8dcdb6aa1"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-conv1d.cpudefault.json",
+      "sha256": "3b65b0c070356aef46d1964eb4eb4b49dc82bed4a70064e9521159e80cd40025"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-conv2d.cpudefault.json",
+      "sha256": "2a545b774f13443ffd7fdd6df27771d7ba3fd8fb725ea772396c12b15d02cd46"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-globalpool.cpudefault.json",
+      "sha256": "97b04d1f79859d6292c581961790a024b5d4688fddfd2af2c586d71d5090872c"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-pool-options.cpudefault.json",
+      "sha256": "28e849ecd152a2e419433781eb3383e0f13e0f1667257d557b4809338928396d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-pool.cpudefault.json",
+      "sha256": "c51e3390c6b691fbc7a6c821791d5b17c2a39b5552d8d85738bfc38f21f7eac8"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-resnet-block.cpudefault.json",
+      "sha256": "51cd7dee4d71125fb297ad9835c9d3c52f72e694c497f4c7bf6de40b9e6b204d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-trainer-options.cpudefault.json",
+      "sha256": "ea32af6ab648147731972d72aa46341694e2d9ae468589da33234f9fc5367399"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-124/current/m4-a/x-cnn-trainer.cpudefault.json",
+      "sha256": "0b2f30782d35fd992c0ad2f8680e19dcc43e8515f81772ec30bd634f5a8c9ddf"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/optim-maximize.cpudefault.json",
+      "sha256": "eee34da0c5163c70e54297164d8269e30e779cb1df90220f2a3bdc67bca4c660"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-adafactor.cpudefault.json",
+      "sha256": "4cadcf845e8b3bac2ff1d722de6286771909c2a521a2cb4ea6ee90a9e827a493"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-adagrad.cpudefault.json",
+      "sha256": "da17b8fcaab7dfdf99e3d5a95e6834635f10d0ac28e4659510db3e7488557b5f"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-adamax.cpudefault.json",
+      "sha256": "c5a6149c5dcced02da003bde4113142589a3a8e811b46a959eef45dbbab1ef78"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-gru.cpudefault.json",
+      "sha256": "0cc0adc07b985a8cb9da0be695a8a6e4549eda7415d9f0d4fb6a8df07536d326"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-lamb.cpudefault.json",
+      "sha256": "c45dcf76c89a2c3d902d8aac38e03d61115bf008bf7cc3c840d405202c055054"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-lion.cpudefault.json",
+      "sha256": "bc23a155d4213f545e62732255196fb5356ec77b6fd6821c1fe2a6c0b225c666"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-lr-schedulers.cpudefault.json",
+      "sha256": "eff742118f33e851d9a2003f102ea2abce60b6e0c8faf597b6d7c54b5ca7cf0f"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-lstm.cpudefault.json",
+      "sha256": "83c41d8268c85eae2893c1994665c29f85825531a89766b0b0e4df36eb470f46"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-mlp.cpudefault.json",
+      "sha256": "368d239f97d30693ebc600378527f20027344ec3d433cfffd13ddbaa39f0ecfc"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-moe.cpudefault.json",
+      "sha256": "e1efd6f2a87cee776e54ddbfb6df50003d82fef3dbd0c9050d33cbccb526baf1"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-nadam.cpudefault.json",
+      "sha256": "6caf3dd91a3f7f05da864a49ae318ec78077171876cd7332c6ede53a03f992f1"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-rmsprop.cpudefault.json",
+      "sha256": "f9c343bc2a179af8022c21332195147e75eabce2e25520a79a398f7083ea8496"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/sequence-rnn.cpudefault.json",
+      "sha256": "faa13c976dc1c8a45814da4143196c17f5c8b30d2f013df591a6eb0399b45f59"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/x-cnn-dropout2d.cpudefault.json",
+      "sha256": "7cbe622d3b83ef99e9e49c1e5ced065212dc4acd596682fe9d07b9a46386ddb9"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/x-cnn-gcn.cpudefault.json",
+      "sha256": "2a058213b9894de56540db1bdd12cbf22d129ab298f563f6725d01bd0a5135bb"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/x-cnn-gnn-options.cpudefault.json",
+      "sha256": "dae3cb86e95136b55e5277b8da2a003e795f52da8303b573c0fe33fef82e977f"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/base/m4-a/x-cnn-sage.cpudefault.json",
+      "sha256": "9f878b10823da26e0e425353f4696f4d0ba153587128782e5eb3904538c8d73e"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/remaining8/m4-a/sequence-adafactor.cpudefault.json",
+      "sha256": "0751d9c3e7dae06931b46548bd928fbe153c859a0cb1c660de4fb24bfd347afa"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/remaining8/m4-a/sequence-lamb.cpudefault.json",
+      "sha256": "be39dd7b07fd806fe625e51be91f89c79343218286a2449f71dfe5dfc17fea92"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/remaining8/m4-a/x-cnn-gcn.cpudefault.json",
+      "sha256": "fc2ceea2a428b272bd898212cd4ddca1f138ae1cfe79292a27c4c14a12c5b85d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/remaining8/m4-a/x-cnn-gnn-options.cpudefault.json",
+      "sha256": "d52341d700f18c23b4967b4ac00bcaa8d5089485af6766ff5fb38787c0374738"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-batch-52/remaining8/m4-a/x-cnn-sage.cpudefault.json",
+      "sha256": "50a47036fb2bd41d41ad409994c50dafe5769797d1a4816958203b9b3c926428"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_admitted-layernorm/m4-a/sequence-layernorm.cpudefault.json",
+      "sha256": "e6fd026e787c51f685658c53a6bbf20964ebd4cd6c1cdfc9106c3186a62ba67c"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/do-amd/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-batchnorm.cpudefault.json",
+      "sha256": "9a554d8b83da15a6940de1c38f788c2e993ac4d04d44fd1938c9e88a9263539d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/do-amd/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-conv-options.cpudefault.json",
+      "sha256": "c4f3dbd8d447e428ad6ccd805390aad4601d419842267b4f99dcc575b4ade045"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/do-amd/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-conv1d.cpudefault.json",
+      "sha256": "bea2e1691bb67733d83221a5e425ac79ca57a28ffbcc07496c7455d939b2dfcf"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/do-amd/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-pool.cpudefault.json",
+      "sha256": "3a74908dac162fdb88b39d18b4052643071491c87c9c2872a282f2225b938478"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/do-amd/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-resnet-block.cpudefault.json",
+      "sha256": "f123547f5bb8d9ff16e5f4b0fe844768bad848e6a2fb3a9123d1d4c099f97592"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/do-amd/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-trainer-options.cpudefault.json",
+      "sha256": "a56a21adc1988f96f8756610d81a95f4df5dbbf8691bdb53dfbe98743848c31f"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/m4-a/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-bn-options.cpudefault.json",
+      "sha256": "d29e4c65411149f8ec7bfd810ee5cf3a0cc76971604b0b4a8ae3ec938e67b291"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/m4-a/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-conv2d.cpudefault.json",
+      "sha256": "0e4ad9bf18ab503370f8a3d8b1558a69973cb5ecb7946804d5706f854c59b9c0"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/m4-a/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-globalpool.cpudefault.json",
+      "sha256": "315d0f028548682c25efb72df7476c9cedd1e5c3c98c572c851e3eceeb649aca"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/m4-a/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-pool-options.cpudefault.json",
+      "sha256": "6ba94f6f81c8e14e82830783e3d3e4087e4d7805035312ebc009f56e439b304e"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-28_consolidated-historical-witnesses/m4-a/ev-apple-merged-9f20e20ac/s/clean_0of1/x-cnn-trainer.cpudefault.json",
+      "sha256": "cf3f5b000da1e70b99aa616c4161627705629576d6755261bf8390ff660c95d4"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/optim-maximize.cpu1.json",
+      "sha256": "7f7906d964307eb992e38f14e65d908e0b1c007b89b0888ee62a93741df309c4"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-adagrad.cpu1.json",
+      "sha256": "6059ba5fde0c0db08f8055efaa5c8bf3ce4c8893973456c7db9cc779b1904d05"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-adamax.cpu1.json",
+      "sha256": "17e6dac0191f42bd1b916f17a29c6fcb232766b3b3cc1092fcdf9e337b49b3ad"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-gru.cpu1.json",
+      "sha256": "35c5c7a05acfb60d2ad71e6c01d5b63246027856bc048a59be3053584de647c6"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-layernorm.cpu1.json",
+      "sha256": "5540c50fff351de1ffa195ad27b2c7bfbeab442cb8f57000c27bb175975b461c"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-lion.cpu1.json",
+      "sha256": "c26c6513e53e539e6307b1028e9ca40e53486e1c1867cc37ae3b4e57cd0d07e4"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-lr-schedulers.cpu1.json",
+      "sha256": "6ed225264a382e28a077ff1a978d9ce35f8322799c9f43600fe40f05e4847521"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-lstm.cpu1.json",
+      "sha256": "f5d1ae50c43713abecee1d7408970eaee8b07f11e3f619413052b21c059bd324"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-mlp.cpu1.json",
+      "sha256": "6bc33ef76c8e951032044d1f21c0a43db3321a8bc85012d4ff17f9f912bfeedf"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-moe.cpu1.json",
+      "sha256": "cf3f638a74207c7cfeebfdbcfb9d63d1a7a5aaf1c1469328e0f13b6c577d8af8"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-nadam.cpu1.json",
+      "sha256": "b41208c4ec653654a76fdff5094095b4631f4144539a8a79a622f357080b50fd"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-rmsprop.cpu1.json",
+      "sha256": "f83cc4df122c28546921f5f3db867bbe2e6256cb90da85fe3512de83db8986ea"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/sequence-rnn.cpu1.json",
+      "sha256": "aac71036ffb7d500313fd9b355b888c95cafc7eb214ed64ad1ec2b3a7a55c541"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-09-29_final-scoped-485/nvidia/batch41/x-cnn-dropout2d.cpu1.json",
+      "sha256": "b4dd0981e1118ee2fd6d7db54282e43400a922cff88c6f9cf901c830b1085e62"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-03-0836/amd-mi325x-gfx942/amd-mi325x-gfx942.identical.json",
+      "sha256": "f0f1a41d30c3bffd0b06ff7d28846aedf6ac0f45135308b23ea85d236fe19b45"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-03-0836/apple-m4/apple-m4.s0of1.identical.json",
+      "sha256": "6b37729637a92fcc50bc30674f873a1d7d8b1f4cb104fcda16e120580adfba0b"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-03-0836/cpu-amd-epyc-9575f-64-core-processor/cpu.s0of4.identical.json",
+      "sha256": "a78d6ecad3e3c0166c815d1e8efe4390ed02330dfc75b0ed1cd1331eb290334c"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-03-0836/cpu-amd-epyc-9575f-64-core-processor/cpu.s2of4.identical.json",
+      "sha256": "0a70baf6ad2a2432c0739332217132a5ec901ad8c4babe3db82f7b46fadd4d69"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-03-0836/nvidia-l40s-sm_89/nvidia-l40s-sm_89.lanes-e42d881e.identical.json",
+      "sha256": "ed734b5937a15a06ff44c82cdac078379119e0530bd256422a6ee4df340fc572"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-09-0836/cpu-apple-m4/cpu.identical.json",
+      "sha256": "271ed52b999a350eee56b2e3a54c07432bbb9edbd5c92370f01eca0a6ca4301a"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-10-0837d/apple-m4/apple-m4.identical.json",
+      "sha256": "aede75580fb88e9ac5b74b10238b1ae5d4e2508291720cb7f6bc6df49ae07e66"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-10-0837d/cpu-apple-m4/cpu.identical.json",
+      "sha256": "6194a64fb7b9f65cd5c059d1559a972e91f1f70ad1b8b4e993673193caacdd3a"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.json",
+      "sha256": "330d6112ebbff1755ddbfe39c2a81c52e670f07fe35d19d1b259a3292092e1fc"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.json",
+      "sha256": "b4cde2ba04114b7b5e889d14fa86f2bd8f212e8341faf7dfd0df4d5e05da731b"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.json",
+      "sha256": "baba35a2cde91ec13146686e16e36ce439fb27978c2fb62241173a2983625eab"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.json",
+      "sha256": "aafdb2552bc198420fb9a72b2725e816df9b8f9187fe2210f942cfb1d0fab524"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-13-0844/cpu-apple-m4/cpu.lanes-6759ae6a.identical.json",
+      "sha256": "0b625091136304d8fc4bd1f6ac230abf3c56e1748273a1ad5bcb13159516c086"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-13-0844b/cpu-apple-m4/cpu.lanes-0d3ea030.identical.json",
+      "sha256": "dd88d5f0991230bada66d3df7b1eeda40c0943a983b7e214dc28e89ca95e5ce9"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-14_0844-pypi/amd-mi325x-gfx942.json",
+      "sha256": "920483395011d0bae2653d6093220877e15dbaf38810faadd9f1fc133a104818"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-14_0844-pypi/apple-m4.json",
+      "sha256": "bada5869ee416f8077af7a5b3e41bf813e66955ac49c6834377bb3b5e529dcd5"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-14_0844-pypi/nvidia-l40s-sm_89.json",
+      "sha256": "8aa0ed62483041ed50baabca7ede37a26e7908d5e2820ea3480bba5c64f4246d"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-16-0849/apple-m4/apple-m4.lanes-127b645d.identical.json",
+      "sha256": "bd1dac65a5ebc0a498ba93fc380265097a1c788b9a8425795694432a9ff098c6"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-17-0.8.52/nvidia-l40s-sm_89/nvidia-l40s-sm_89.lanes-e2a6ca3f.identical.json",
+      "sha256": "a4b378dc80d23cf02d24fdc455423f7f01169287be5abb78ff0ae4ea37700abe"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-17-0.8.52a/nvidia-l40s-sm_89/nvidia-l40s-sm_89.lanes-e2a6ca3f.identical.json",
+      "sha256": "2a3a5943bdcf95125e016a6e4c24aa489f405d417e0d5d6d5fa397d00c5eeaaf"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-20-0854/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-9044db46.identical.json",
+      "sha256": "7c5297e06e39c1b34adf079935355d36d3c6c4d630276428fbda907d1dd5c745"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-20-0854/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-e2a6ca3f.identical.json",
+      "sha256": "912ff1ec69a47a19deaa1980f7867ad3ed3b8b79353e3b3dced6d6f42b0b24b3"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-20-0854/nvidia-l40s-sm_89/nvidia-l40s-sm_89.s0of4.identical.json",
+      "sha256": "f6914c937b60a07563d665c1a117f5cee5d62bb9290267b5b759980a4676b77e"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-20-0854/nvidia-l40s-sm_89/nvidia-l40s-sm_89.s2of4.identical.json",
+      "sha256": "b03f03969c9fc3661d91e79b3146e126f6c7322600596e5058590c760602a048"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-20-0854/nvidia-l40s-sm_89/nvidia-l40s-sm_89.s3of4.identical.json",
+      "sha256": "e6836b76b8a57db86065ae42d545d828bbc7d6595c1f97a746d7aa7ac45f8222"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-20-0854/nvidia-rtx4090-sm_89/nvidia-rtx4090-sm_89.lanes-9044db46.identical.json",
+      "sha256": "6a5eb54f33560d93e0a1d85e19eff065fe74f1e1ddab8f6f729d194054ca3227"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-chunked-d197/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-48eaadc5.identical.json",
+      "sha256": "8657ce7bcb57bbd69a51487178786803968f1a35fc1fee152284cdeb188a4bec"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-chunked-d197/apple-m2-pro/apple-m2-pro.lanes-48eaadc5.identical.json",
+      "sha256": "53cf71e2f22ccfaad28ecd158e146319a67ad8bb40a99d2aa91f39d84d04fcf6"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-chunked-d197/cpu-amd-epyc-9575f-64-core-processor/cpu.lanes-48eaadc5.identical.json",
+      "sha256": "cd177696d0558415df46dd0a4505cd9ac93ad35ab530e6ced55187ddd649c554"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-chunked-d197/nvidia-rtx6000ada-sm89/nvidia-rtx6000ada-sm89.lanes-48eaadc5.identical.json",
+      "sha256": "bc8e761d4e233e63b9cd0573850482b6af0717b15d906c0cf1aa2f6e819f59fc"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-reference243/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-758a5371.identical.json",
+      "sha256": "f7b1c2b01a3366714144501adc241e8ab77955547d3b7f9b06c8ad69d7a701e8"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-reference243/apple-m2-pro/apple-m2-pro.lanes-758a5371.identical.json",
+      "sha256": "d6acbae9f69d0fdcd84ffdb835c40b27b8881d2f1e4b85db24d527f71d174343"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-reference243/cpu-amd-epyc-9575f-64-core-processor/cpu.lanes-758a5371.identical.json",
+      "sha256": "bf8af50de5cfe92e155a2e559f7f7cae4f9e179e137767f2a6bc82d8f9e5ad71"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-23-0856-reference243/nvidia-rtx6000ada-sm89/nvidia-rtx6000ada-sm89.lanes-758a5371.identical.json",
+      "sha256": "31b8c697bfbbe3bcf053c01ca07afc56682e82a2e76a77864de6a004f8886b7f"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/amd-mi325x-gfx942/amd-mi325x-gfx942.identical.json",
+      "sha256": "5cbb21fcd071c0bbd50a382e8300f3ff1d01d29f2874b5ba86d625b26cacba93"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-f29d921d.identical.json",
+      "sha256": "350a14c0093200d5a59ed5194ddccdb13367d69107384255d66091b18bc12fcd"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/apple-m4/apple-m4.identical.json",
+      "sha256": "7762ab745cabeec55d07fbf33f1072d25424032302ab516b44d7322e1c6b49c6"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/apple-m4/apple-m4.lanes-f29d921d.identical.json",
+      "sha256": "6d09856f484606b6cbdfdc77de5b1f5d20e8eacb8f29eed589e89062b93477f5"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/cpu-amd-epyc-9575f-64-core-processor/cpu.identical.json",
+      "sha256": "29cc0a81185b68d704d68a6b7a12c5df792488dde9a9698ebd3e2892de440002"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/nvidia-rtx4090-sm89/nvidia-rtx4090-sm89.identical.json",
+      "sha256": "c2d7f9331367c976d6851ccc1ebd476794bc3345d5c27bc9a745ddfddb669236"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-24-0836/nvidia-rtx4090-sm89/nvidia-rtx4090-sm89.lanes-f29d921d.identical.json",
+      "sha256": "eee19f1a59211b5228771ede9bf789dcbfc36129eefea2ff48071f6c08a93c44"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857-8lanes/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-3e6af02b.identical.json",
+      "sha256": "96ef06c3d7aa8520771da548dae4266febc7915c5ed35ae35426ba5dd2cbd85a"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857-8lanes/apple-m4/apple-m4.lanes-3e6af02b.identical.json",
+      "sha256": "cd82e2eddc55d31df3d569289f76a3536a23c2a56830f9dfe5f183aa63916812"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857-8lanes/cpu-amd-epyc-9575f-64-core-processor/cpu.lanes-3e6af02b.identical.json",
+      "sha256": "8daed1638369e7c513073c2c7c03ed00c45263515330331d3cec4d2273787317"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857-8lanes/nvidia-ptx-rtx4090-sm80/nvidia-ptx-rtx4090-sm80.lanes-3e6af02b.identical.json",
+      "sha256": "e864d81612174be6b28df68cd181ce192dc25aa603c8acc91b1a4d6839520392"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857-8lanes/nvidia-rtx4090-sm89/nvidia-rtx4090-sm89.lanes-3e6af02b.identical.json",
+      "sha256": "084a76a7624ccc43ee8576b24f4c1e3266efc9e11e87c03bcdbb76153186cb4f"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857/amd-mi325x-gfx942/amd-mi325x-gfx942.lanes-020b22f8.identical.json",
+      "sha256": "7827987d27ac3f869d8fa23e8a61d9b913da8d706b2aae146cd9920ec3b47320"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857/apple-m4/apple-m4.lanes-020b22f8.identical.json",
+      "sha256": "213af3b331bbd8214fa8cef44398ac0055e5e12da3b26c9ad830f44b4041787e"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857/cpu-amd-epyc-9575f-64-core-processor/cpu.lanes-020b22f8.identical.json",
+      "sha256": "5c41bfc207d463c059090984be4a37b9a4cfd74825695a31d49ff4dafad1827a"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857/nvidia-ptx-rtx4090-sm80/nvidia-ptx-rtx4090-sm80.lanes-900f2f4b.identical.json",
+      "sha256": "6e2c623f269abb92e86b18e0e1070e93176c8eb0236d817560abc4ff3a219630"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0857/nvidia-rtx4090-sm89/nvidia-rtx4090-sm89.lanes-020b22f8.identical.json",
+      "sha256": "81079460281e32b300fc165898c8ac5367c19efb1c06b55caa354ff4cd2805e4"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0859-targeted/amd-mi325x-gfx942.identical.json",
+      "sha256": "bf66084b87a29a186f2c0d6ace6b6526c54b582e8473ceec03d8edef19fb99a5"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0859-targeted/nvidia-ptx-rtx4090-sm80.identical.json",
+      "sha256": "c7d38c44092116fdaec97567f48b2f9a45a2c5519ed2ac90976579b833a182a9"
+    },
+    {
+      "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/identity_break/2026-10-26-0859-targeted/nvidia-rtx4090-sm89.identical.json",
+      "sha256": "6e91eb4522505dae55add68206602a1a4917ff87b95f34addef57c5b6c992637"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/boxes-0857/pull/do/results-0858-amd/column/amd-mi325x-gfx942.lanes-43ee3717.identical.json",
+      "sha256": "4430fa849d5c27615f06b91ee0cc44751271ee3606922d9c486cb952f79f4e7b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/boxes-0857/pull/nv/results-0858-nv/column/nvidia-l40s-sm89.lanes-43ee3717.identical.json",
+      "sha256": "b8a0e294284cdd408c5e5bd5c50efdf76c5eb1defe5378f9c48f1e066356e697"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/boxes-0857/pull/nv/results-0858-ptx/column/nvidia-ptx-l40s-sm80.lanes-43ee3717.identical.json",
+      "sha256": "e35a19f4ef16cd80aef578a9490f70023aa8fa15d32fde49a3640e8694167f45"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/codex-takeover-0859/identity-apple-full-r1/apple-mac.lanes-019f3adf.identical.json",
+      "sha256": "b9809f3e9d9f4739d9ab9054d9698322648d982192c532083fa83fc0cda72914"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/codex-takeover-0859/identity-cpu-full-r1/shard0/cpu.lanes-b2134a2d.identical.json",
+      "sha256": "6e57de87650d5fc0c0dd25bbebef9cbd3c8bf33f0a82a58ef1d70198475748fb"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/codex-takeover-0859/identity-cpu-full-r1/shard1/cpu.lanes-93ca423a.identical.json",
+      "sha256": "7ea85000788352a4beac25c2cda3f00835e5d9282da344c13c95fdaf67751cfe"
+    }
+  ]
+}
