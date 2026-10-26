@@ -2746,6 +2746,17 @@ def test_an_unplaceable_registry_diff_is_refused_by_name_never_every_lane():
     assert "`family`" in sel["reasons"][path], sel["reasons"][path]
 
 
+def test_explicit_path_selection_preserves_the_comparison_ref():
+    from unittest.mock import patch
+    sources = {"example": {"bindings/changed.mojo"}}
+    answer = {"lanes": [], "total": 1, "reasons": {}, "unattributed": []}
+    with patch.object(lane_select, "lane_sources", return_value=(sources, {})), \
+            patch.object(lane_select, "select", return_value=answer) as select:
+        assert lane_select.main(["--lanes-for-paths", "bindings/changed.mojo",
+                                 "--changed-since", "previous-release"]) == 0
+    select.assert_called_once_with(["bindings/changed.mojo"], ref="previous-release", sources=sources)
+
+
 # ------------------------------------------------ module definitions (Python)
 
 PY_BASE = '''import array
