@@ -16,7 +16,7 @@ cd $T/q && echo 4 > slots && echo nvidia > vendor && echo plain > mode && echo -
 printf 'POD_ID=fakepod\nIDLE_MIN=30\nGRACE_MIN=15\nIDLE_SEC=12\nGRACE_SEC=6\nFAKE_DELETE=1\n' > lease.conf
 date +%s > lease.last_busy
 # the idle delete flushes box-persisted jobs and archives the queue dir first (tools/box_persist_run.sh, beside $SRC;
-# URLs to a closed port: the attempts are what is checked)
+# URLs to a closed port, or no curl in the container: the attempts are what is checked)
 export BOX_PERSIST_ROOT=$T/bp; mkdir -p $BOX_PERSIST_ROOT/bin $BOX_PERSIST_ROOT/active $T/bpres
 cp "$(dirname "$SRC")/box_persist_run.sh" $BOX_PERSIST_ROOT/bin/
 for t in podq jobx; do
@@ -137,7 +137,7 @@ exec 5>&-
 check "not closing while recently busy" "[ ! -e $T/q/closing ]"
 i=0; while [ $i -lt 30 ] && [ ! -e $T/q/lease.deleted_ok ]; do sleep 1; i=$((i + 1)); done
 check "idle past the deadline: closing and the pod DELETE issued by the dispatcher" "[ -e $T/q/closing ] && grep -q 'FAKE DELETE fakepod by dispatcher' $T/q/lease.deleted"
-check "before the delete: every active job flushed, then the queue dir archived" "grep -q 'box_persist: flush jobx' $T/q/lease.log && grep -q 'FAILED name=final.tgz' $T/bpres/persist.log && grep -q 'archiving $T/q to R2' $T/q/lease.log && grep -q 'FAILED name=final.tgz' $T/q/persist.log"
+check "before the delete: every active job flushed, then the queue dir archived" "grep -q 'box_persist: flush jobx' $T/q/lease.log && grep -qE 'FAILED name=final.tgz|PERSIST-DISABLED' $T/bpres/persist.log && grep -q 'archiving $T/q to R2' $T/q/lease.log && grep -qE 'FAILED name=final.tgz|PERSIST-DISABLED' $T/q/persist.log"
 check "submit refuses once closing" "! $Q submit lane-a 1 20 $EV/j3.sh 2>/dev/null"
 check "ensure refuses once closing" "! $Q ensure 2>/dev/null"
 

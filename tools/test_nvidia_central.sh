@@ -119,6 +119,7 @@ check "sh sees no GPU and runs in the lane tree" "[ \"\$($N sh lane-a 'echo \$CU
 check "the lane tree's HEAD is the worktree's merge base" "[ \"\$($N sh lane-a 'git rev-parse HEAD')\" = \"\$(git -C $ROOT merge-base HEAD origin/main)\" ]"
 check "the sync records the synced commit and the patch hash (.git/devpod_synced)" "$N sh lane-a 'cat .git/devpod_synced' > $W/synced-a && grep -qx \"commit=\$(git -C $ROOT rev-parse HEAD)\" $W/synced-a && grep -qE '^patch_sha256=[0-9a-f]{64}\$' $W/synced-a"
 
+check "install staged the pod's R2 archive (the lease delete uploads the queue dir with it)" "$N sh lane-a 'test -s /root/gpu-queue/pod_persist && test -s \$(cat /root/gpu-queue/pod_persist)'"
 echo "== submit, queue, status, log, cancel, run, fetch"
 $N sh lane-a "mkdir -p /root/ev-lane-a && printf '#!/bin/bash\necho gpus=\$CUDA_VISIBLE_DEVICES job=\$NVQ_JOB_ID\nsleep 4\n' > /root/ev-lane-a/gate.sh"
 id1=$($N submit lane-a --gpus 2 --note two /root/ev-lane-a/gate.sh)
