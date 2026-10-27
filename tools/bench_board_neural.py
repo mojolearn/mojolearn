@@ -3279,6 +3279,7 @@ OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": Ours
 
 def _torch_device():
     import torch
+    _load("bench_board_torch_rocm").configure_hipblaslt(torch)
     if torch.cuda.is_available():
         return torch, torch.device("cuda"), "cuda", torch.cuda.get_device_name(0), torch.cuda.synchronize
     mps = getattr(torch.backends, "mps", None)
