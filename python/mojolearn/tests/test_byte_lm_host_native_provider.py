@@ -124,7 +124,7 @@ def test_inference_constructor_native_flat_named_packed_and_atomic_admission():
     assert model.weight_format == 'float32' and np.asarray(model._parameters).tobytes() == flat.tobytes()
     for fmt in ('bfloat16', 'int8'):
         packed = lowbit.pack(named, fmt)
-        materialized = lowbit.materialize(packed)
+        materialized = lowbit.unpack(packed)
         expected = np.concatenate([np.asarray(materialized[name]).ravel() for name in shape.parameter_names])
         result = audit_native_call(LanguageModelInference, packed, shape=shape, threads=1).assert_native()
         assert result.weight_format == fmt and np.asarray(result._parameters).tobytes() == expected.tobytes()
@@ -142,3 +142,27 @@ def test_inference_constructor_native_flat_named_packed_and_atomic_admission():
     with pytest.raises((TypeError, ValueError)):
         LanguageModelInference(MappingHook(), shape=shape)
     assert not calls
+
+
+def test_host_inference_checkpoint_native_integrity_and_file_errors(tmp_path):
+    from mojolearn._byte_lm_host import LanguageModelInference
+    from mojolearn._byte_lm_impl import SmallByteLanguageModelTrainer
+    from mojolearn._verify_native_runtime import audit_native_call
+    template = _model()
+    trainer = SmallByteLanguageModelTrainer(template.parameters_, shape=template.shape, resident=False)
+    path = tmp_path / 'state.json'
+    trainer.export_checkpoint(path)
+    restored = audit_native_call(LanguageModelInference.from_checkpoint, path, threads=1).assert_native()
+    assert restored.shape == template.shape
+    assert np.asarray(restored._parameters).tobytes() == np.asarray(template.parameters_).tobytes()
+    with pytest.raises(FileNotFoundError) as failure:
+        LanguageModelInference.from_checkpoint(tmp_path / 'missing.json')
+    assert failure.value.errno == 2
+    bad = tmp_path / 'bad.json'
+    encoded = bytearray(path.read_bytes())
+    position = encoded.index(b'payload_sha256') + len(b'payload_sha256') + 3
+    encoded[position] = ord('0') if encoded[position] != ord('0') else ord('1')
+    bad.write_bytes(encoded)
+    with pytest.raises(ValueError, match='integrity'):
+        LanguageModelInference.from_checkpoint(bad)
+    trainer.close()
