@@ -3683,8 +3683,8 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    # Registered reset/refit coverage has no admitted reference cells yet.
-    "public-set-params": "no reference",
+    # public-set-params has nine admitted fixtures with agreeing Apple,
+    # NVIDIA, AMD, CPU and PTX records; do not retain the old no-reference hold.
     # New owner lanes: no execution/reference admission is implied by registration.
     "native-schedule-series": "unwatched",
     "optim-owner-lifecycle": "unwatched",

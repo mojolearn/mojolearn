@@ -206,6 +206,23 @@ def connect_sequence_device(training, device):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["sequence_bindings"] = bindings
+    # Embedding.to_device uses the embedding module's own device context.
+    # Connect its fixed native buffer ABI here, at import, so native tensor
+    # admission/readback/finalization recognize that owner without callbacks.
+    extra = []
+    for mode in ("identical", "fast"):  # glue: existing numeric-mode owners
+        try:
+            owner = _backend.binding("_mojolearn_embedding", mode)
+            cells = {"module": owner}
+            for name in ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download"):  # glue: connect four fixed native ABI entries at import
+                entry = getattr(owner, name, None)
+                if not isinstance(entry, BuiltinFunctionType):
+                    raise TypeError("embedding tensor owner requires compiled " + name)
+                cells[name] = entry
+            extra.append(cells)
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError):
+            pass  # Unavailable optional owners are refused by their public loader.
+    context["sequence_extra_bindings"] = tuple(extra)
     context["sequence_device_io_off"] = device._DEVICE_IO_OFF
     return training._OPT_NATIVE, context
 

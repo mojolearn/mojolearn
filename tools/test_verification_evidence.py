@@ -6,9 +6,32 @@ import verification_matrix as matrix
 import verification_evidence as evidence
 
 
+def test_fragment_changes_invalidate_inventory_without_rebuilding(tmp_path):
+    sources = matrix.load('python/mojolearn/_verification_sources.py', '_test_inventory_sources')
+    main, fragment = tmp_path/'harness.py', tmp_path/'lane.py'
+    main.write_text('# unchanged harness\n')
+    fragment.write_text('value = 1\n')
+    harness = types.SimpleNamespace(__file__=str(main), lane_fragment_paths=lambda: [('x', str(fragment))])
+    before = sources.harness_sources(harness)
+    fragment.write_text('value = 2\n')
+    after = sources.harness_sources(harness)
+    assert before['harness'] == after['harness']
+    assert before['lane/x'] != after['lane/x']
+
+
 def cell(value='a' * 16, part='train'):
     return {('hashes' if part == 'train' else part): [value] * 2,
             ('verdict' if part == 'train' else part + '_verdict'): 'STABLE'}
+
+
+def test_source_fingerprint_survives_packaged_harness_but_detects_new_api(tmp_path):
+    sources = matrix.load('python/mojolearn/_verification_sources.py', '_test_public_sources')
+    (tmp_path/'ops.py').write_text('value = 1\n')
+    before = sources.public_sources(tmp_path)
+    (tmp_path/'_identity_break.py').write_text('# packaged harness\n')
+    assert sources.public_sources(tmp_path) == before
+    (tmp_path/'new_api.py').write_text('def new(): pass\n')
+    assert sources.public_sources(tmp_path) != before
 
 
 @pytest.mark.parametrize('bad', [None, {}, {'verdict': 'REFUSED', 'hashes': ['error'] * 2},

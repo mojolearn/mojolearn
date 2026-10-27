@@ -1099,6 +1099,9 @@ def _cmd_self_test(args, ml):
         result = self_test(harness, ml, table, log=log)
     except (FileNotFoundError, CannotRun) as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
+    from ._verify_public import run as public_checks
+    result['public_api'] = public_checks(self_test=True,scope='neural' if getattr(args,'neural_training',False) else 'all')
+    result['passed'] = result['passed'] and result['public_api']['status'] == 'MATCH'
     if json_out:
         _emit(json.dumps(dict(format="mojolearn.verify-self-test.v1", **result), indent=1, sort_keys=True))
     else:
@@ -3566,6 +3569,16 @@ def harness_note(report):
             "changed since then reads OWED or DIVERGENT until the table is regenerated")
 
 
+def _public_check_verdict(report, code, headline):
+    status=report['public_api']['status']
+    if status!='MATCH':
+        code=EXIT_MISMATCH if code==EXIT_MISMATCH or status=='FAILED' else EXIT_NO_REFERENCE
+        headline='MISMATCH' if code==EXIT_MISMATCH else 'INCOMPLETE'
+        report.update(exit=code,verdict=headline,
+                      detail=report['detail']+'; public endpoint checks did not pass')
+    return code,headline
+
+
 def format_human(report):
     lines = []
     d = report["device"]
@@ -3577,6 +3590,16 @@ def format_human(report):
     lines.append(f"# reference table {t['path']} (sha256 {t['sha256'][:16]}, {t['records']} records)")
     lines.append(f"# depth {report['depth']}: {len(report['lanes'])} lanes x {len(report['fixtures'])} fixtures, "
                  f"{report['repeats']} repeat(s), {report['models_checked']} portable model(s)")
+    if 'public_api' in report:
+        public=report['public_api'];api=public.get('endpoints',{})
+        lines.append(f"# public API {public['status']}: {api.get('executed',0)}/{api.get('expected',0)} endpoint checks, "
+                     f"{len(api.get('failures',{}))} failures; bounded TAPE and fault controls included")
+        for endpoint,error in list(api.get('failures',{}).items())[:10]:
+            lines.append(f"# FAIL {endpoint}: {error}")
+        for name,part in (('endpoints',api),('TAPE',public.get('tape',{}))):
+            for error in part.get('errors',[])[:5]:lines.append('# '+name+': '+error)
+            failed=[key for key,value in part.get('faults',{}).items() if value['status']!='CAUGHT_AND_RESTORED']
+            if failed:lines.append('# '+name+' fault controls failed: '+', '.join(failed))
     note = harness_note(report)
     if note:
         lines.append(note)
@@ -3635,7 +3658,7 @@ def format_human(report):
         lines.append(f"Profile: {profile['name']} — {profile['description']}.")
         excluded = profile['excluded_neural_training']
         if excluded:
-            lines.append(f"Neural training excluded ({len(excluded)} lanes): " + ', '.join(excluded))
+            lines.append(f"Additional neural training lanes excluded ({len(excluded)}): " + ', '.join(excluded))
             lines.append('Run explicitly: ' + profile['neural_training_command'])
     cross = report.get('cross_check', {})
     if cross.get('ran'):
@@ -4217,6 +4240,12 @@ def cmd_verify_all(args):
         code, headline = EXIT_CANNOT_RUN, "INCOMPLETE"
         report.update(exit=code, verdict=headline,
                       detail=report['detail'] + '; loaded native binding provenance incomplete')
+    # Tiny endpoint and tape fixtures are part of the normal verifier. They
+    # are not an opt-in light profile or a separate qualification campaign.
+    if not asked and not models_only and not execution['interrupted']:
+        from ._verify_public import run as public_checks
+        report['public_api'] = public_checks(scope='neural' if getattr(args,'neural_training',False) else 'all')
+        code, headline = _public_check_verdict(report, code, headline)
     report['elapsed_s'] = round(time.time() - started, 2)
 
     progress("finished")

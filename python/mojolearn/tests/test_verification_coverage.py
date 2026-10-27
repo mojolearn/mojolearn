@@ -48,8 +48,32 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
     assert report['lanes']['bpe-trainer']['properties']['batch']['kind'] == 'not_applicable'
     for part in vr.OPTIONAL_PARTS:
         prop = report['lanes']['transformer']['properties'][part]
-        assert prop['command'] == 'verify --all'
-        assert prop['run_by_default']
+        assert prop['command'] == 'verify --neural-training --all'
+        assert not prop['run_by_default']
+
+
+def test_report_commands_match_actual_profile_selection():
+    from mojolearn import _verification_profiles as profiles
+    h = va.load_harness()
+    report = coverage.inventory(h, vr.load_table(), 'apple')
+    neural = profiles.neural_training_lanes(h, va.host_surface())
+    for name, row in report['lanes'].items():
+        execution = row['execution']
+        assert ('--neural-training' in execution['command']) == (name in neural)
+        if name in neural or row['status'] != 'available':
+            assert not execution['run_by_default'], name
+        for prop in row['properties'].values():
+            if 'command' in prop:
+                assert ('--neural-training' in prop['command']) == (name in neural)
+
+
+def test_parameter_reset_reference_is_available():
+    report = coverage.inventory(va.load_harness(), vr.load_table(), 'apple')
+    row = report['lanes']['public-set-params']
+    assert row['status'] == 'available'
+    assert row['reference_support']['train']['numerical_fixtures'] == row['fixtures']
+    for vendor in ('apple', 'nvidia', 'amd'):
+        assert row['reference_support']['train']['agreeing_device_classes'][vendor] == row['fixtures']
 
 
 def test_inspection_and_batch_flags_route_to_suite():
@@ -338,7 +362,8 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
     # or a second fit agreeing); the report must read exactly what the table
     # carries, and the table carries one of the two policies this file knows.
     assert report['reference_admission_policy'] == table['admission_policy']
-    assert table['admission_policy'] in (strict, vr.ADMISSION_POLICY)
+    assert table['admission_policy'] in (strict, vr.ADMISSION_POLICY,
+                                         dict(vr.ADMISSION_POLICY, cpu_host_only_witnesses=1))
     # the lanes the scoped path admitted onto the old legacy base, and one
     # (`ols`) that was legacy at the time: each reads exactly the policy the
     # table carries for it. Those without a lane entry came out of the strict
@@ -353,7 +378,22 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
     # every cell fitted once, a second device class (or a second fit) agreeing
     for name, lane in report['lanes'].items():
         policy = lane['reference_admission']['policy']
-        assert policy in (strict, vr.ADMISSION_POLICY), (name, policy)
+        carried = table.get('lane_admission', {}).get(name, {}).get('policy', table['admission_policy'])
+        assert policy == carried, (name, policy)
+
+
+def test_complete_endpoint_inventory_is_separate_from_execution():
+    report = coverage.inventory(va.load_harness(), vr.load_table(), 'apple')
+    endpoints = report['public_endpoints']
+    assert endpoints['execution'] == 'not run'
+    assert len(endpoints['endpoints']) > 3000
+    assert sum(endpoints['counts'].values()) == len(endpoints['endpoints'])
+    tape = [row for row in endpoints['endpoints'] if row['public'].startswith('mojolearn.ops.')]
+    assert tape and not [row for row in tape if row['status'] == 'unmapped']
+    assert all(row['execution'] == 'not assessed' for row in tape)
+    tiny = report['light_verification']
+    assert tiny['execution'] == 'not run' and not tiny['release_qualified']
+    assert tiny['outputs'] == 118 and tiny['max_input_elements'] == 16
 
 
 def _absence_harness():

@@ -38,8 +38,8 @@ not evidence of cross-vendor agreement. Retained original reports remain availab
 Inspect the installed package's scope before running the checks:
 
 ```sh
-python -m mojolearn verify          # inference + classical training, base fixture
 python -m mojolearn verify --quick  # representative checks, same combined scope
+python -m mojolearn verify  # includes bounded public API checks and fault controls
 python -m mojolearn verify --neural-training  # explicit neural training scope
 python -m mojolearn verify --neural-training --all  # neural scope, all nine fixtures
 python -m mojolearn verify --coverage
@@ -47,8 +47,36 @@ python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
 ```
 
-Default and quick verification combine inference with classical training. Neither
-runs neural training. `--all` (or `--full`) expands this same routine scope to
+The normal command includes bounded public endpoint fixtures and TAPE checks.
+There is no separate light mode. Fixtures use small fixed inputs and bounded
+iterations. Explicit optimizer and trainer fixtures use a single update. Numerical outputs are compared as exact bytes, shapes
+and dtypes. Metadata, availability and refusal checks are reported separately
+from numerical executions. These checks do not measure performance or quality.
+
+The endpoint registry accounts for all 1,275 entries from the gap audit,
+including inherited methods the static census assigned to classes that do not
+expose them. An availability check is not numerical coverage. A missing fixture,
+failed operation or missing current-release reference cannot become a pass.
+The JSON report retains endpoint results and loaded native artifact hashes.
+`verify` and `verify --all` include all additions. `verify --neural-training`
+selects the neural, TAPE, optimizer, training, model and associated metadata
+checks, including their fault controls. An explicit `--lanes` selection retains
+its requested lane scope; `--models-only` retains its inference-only scope.
+
+All devices compare against one current-release reference. Reference availability
+is separate from cross-device validation: the report records how many checks
+actually completed on each device, including failures and untested vendors.
+
+Fault controls also run by default. They alter actual public operations, seeds,
+optimizer settings or restored parameters and consume the resulting outputs.
+Each must change the output and match again after restoration. A crash does
+not count as a numerical catch. These controls do not claim to mutate every
+native kernel's source. The existing native-kernel negative controls retain
+their separate recorded scope.
+
+Default and quick verification combine inference with classical training. The
+bounded endpoint fixtures include tiny neural updates; neither runs a neural
+training campaign. `--all` (or `--full`) expands this same routine scope to
 all nine fixtures; `--neural-training` selects neural training, backward and
 optimizer fixtures separately, and can be combined with `--all`. Quick selects
 one eligible referenced lane per family after excluding neural training.
@@ -68,6 +96,14 @@ the number of fixtures with a numerical reference and matching CPU, Apple,
 NVIDIA and AMD records. Missing/conflicted, stale and inapplicable fixtures
 are counted separately. These counts describe the bundled reference table;
 they do not certify the installed wheel or promote a pending lane.
+
+`public_endpoints` adds the full source API census, including tape methods,
+properties, constructors and configuration/state operations. Each row names
+its mapped lanes or supplemental checks, or an explicit numerical exclusion.
+Unmapped rows remain visible for review. Source mappings do not prove runtime
+execution. Source fingerprints expose a stale census; regenerate it with
+`python tools/verification_endpoints.py --write`, and check it with `--check`.
+Neural training lanes are marked opt-in, matching the command's actual selector.
 
 The appendix is a historical list, not the total number of today's public
 algorithms. `additional_lanes` names registered checks outside that list.

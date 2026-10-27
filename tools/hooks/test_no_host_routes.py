@@ -728,3 +728,25 @@ if __name__ == "__main__":
                 print(f"FAIL {name}\n{e}")
     print(f"{'FAILED' if failed else 'OK'}: {failed} failed")
     sys.exit(1 if failed else 0)
+
+
+def test_bounded_verifier_controllers_are_testing_only():
+    import ast
+    from pathlib import Path
+    package=Path(TOP)/'python/mojolearn'
+    controllers={p.stem for p in package.glob('_verify_api*.py')}
+    controllers.update(('_verify_light','_verify_light_command','_verify_light_faults',
+                        '_verify_public','_verification_sources'))
+    assert {name+'.py' for name in controllers} <= nhr._PY_CPU_SIDE
+    assert '_native_optimizer_bridge.py' not in nhr._PY_CPU_SIDE
+    assert 'linear_model.py' not in nhr._PY_CPU_SIDE
+    for path in package.rglob('*.py'):
+        if 'tests' in path.parts or path.name=='__main__.py' or path.name.startswith(('_verify','_verification')):
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            imported=set()
+            if isinstance(node,ast.Import):imported={alias.name.split('.')[-1] for alias in node.names}
+            if isinstance(node,ast.ImportFrom):
+                imported={alias.name for alias in node.names}
+                if node.module:imported.add(node.module.split('.')[-1])
+            assert not imported & controllers,(path,imported & controllers)

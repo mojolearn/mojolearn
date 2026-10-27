@@ -244,13 +244,13 @@ def build_parser():
 
     v = sub.add_parser(
         "verify",
-        help="verify classical training and inference; neural training is opt-in",
+        help="verify bounded public API identity and classical training/inference",
         description=(
-            "Default: every applicable routine lane on the base fixture, combining "
+            "Default: bounded public API/TAPE checks with fault controls, plus routine lanes on the base fixture, combining "
             "classical training and inference with bundled saved-model inference. "
             "--quick selects representative routine checks. --all or --full runs "
-            "the complete routine scope on every fixture. Neural training and "
-            "backward/optimizer fixtures require --neural-training. Reports name "
+            "the complete routine scope on every fixture. Additional neural training "
+            "lanes are selected with --neural-training. Reports name "
             "the selected scope and every excluded neural lane."),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     v.add_argument("--json", action="store_true",

@@ -26,9 +26,9 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **274** (215 single-device, 59 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **256**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **217** of 256.
+- Lanes: **571** (512 single-device, 59 `par-*` multi-GPU drivers).
+- Source public API entries enumerated from the public API: **269**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **218** of 269.
 - Source public API entries with NO IDENTITY LANE AT ALL: **1**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
@@ -37,30 +37,30 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 255 | 1 |
-| cpu verifier | 222 | 34 |
-| sabotage seen to move a build | 217 | 39 |
-| batch part or named n/a | 255 | 1 |
+| gpu column | 268 | 1 |
+| cpu verifier | 235 | 34 |
+| sabotage seen to move a build | 218 | 51 |
+| batch part or named n/a | 268 | 1 |
 
 Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 274 | 0 |
-| gpu column on all three classes | 274 | 0 |
-| cpu verifier declared | 240 | 34 |
-| sabotage seen to move a build | 231 | 43 |
-| batch part or named n/a | 274 | 0 |
-| ALL FOUR | 231 | 43 |
+| gpu column (any class) | 571 | 0 |
+| gpu column on all three classes | 570 | 1 |
+| cpu verifier declared | 532 | 39 |
+| sabotage seen to move a build | 256 | 315 |
+| batch part or named n/a | 571 | 0 |
+| ALL FOUR | 256 | 315 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 231 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 256 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 3 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 9 | the family declares a define; no committed pair moves this lane |
-| none | 31 | no define reaches the lane and nothing has moved it |
+| declared | 276 | the family declares a define; no committed pair moves this lane |
+| none | 36 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
 
@@ -71,7 +71,7 @@ means a CPU path exists and only the identity lane is missing.
 
 | algorithm | kind | host family | defined in |
 |---|---|---|---|
-| `training.chunked_lm_head_loss` | function | training | `python/mojolearn/_training_impl.py` |
+| `models.verify_catalog_entry` | function | - | `python/mojolearn/models/_catalog.py` |
 
 THE SAVED-MODEL HOST INFERENCE SURFACE used to be listed here with the
 note that it had no lane ON PURPOSE, because `tools/forest_host_gate.py`
@@ -106,117 +106,125 @@ A blank cell means no lane of this algorithm has that kind.
 | algorithm | lanes | gpu | cpu | sabotage | batch | all four |
 |---|---|---|---|---|---|---|
 | `ARIMA` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `AgglomerativeClustering` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Adam` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `AdamW` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `AgglomerativeClustering` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `BpeTokenizer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ByteLanguageModelConfig` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `ConstantKernel` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `DBSCAN` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ConstantKernel` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `DBSCAN` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `DistributedIVFIndex` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ElasticNet` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Embedding` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExperimentalTwoLevelFeatureFreq` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExponentialSmoothing` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `ExtraTreesClassifier` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `ExtraTreesRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ExtraTreesClassifier` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ExtraTreesRegressor` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GPT2Tokenizer` (alias of `BpeTokenizer`) | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GaussianMixture` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GaussianMixture` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GaussianProcessRegressor` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GradientBoosting` | 31 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GaussianProcessRegressor` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GradientBoosting` | 36 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GradientBoostingClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GradientBoostingRegressor` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `HostForest` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GradientBoostingRegressor` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `HDBSCAN` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `HostForest` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `HostGBDT` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `IVFIndex` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `IVFIndex` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `IsolationForest` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `KMeans` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `KNeighborsClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `KNeighborsRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `KMeans` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `KNeighborsClassifier` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `KNeighborsRegressor` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KernelDensity` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `KernelRidge` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `KernelRidge` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LanguageModelConfig` (alias of `ByteLanguageModelConfig`) | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LanguageModelHostTrainer` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `LanguageModelInference` | 19 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `LanguageModelInference` | 21 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LanguageModelTrainer` (alias of `SmallByteLanguageModelTrainer`) | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Lasso` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `LinearRegression` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `LinearRegression` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LinearSVC` | 2 | amd,apple,nvidia | training | declared | part | NO |
 | `LinearSVR` | 2 | amd,apple,nvidia | training | declared | part | NO |
-| `LogisticRegression` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `MLPInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `LogisticRegression` | 8 | amd,apple,nvidia | host-only,training | seen(build) | part | yes |
+| `MLPInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Mamba1Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba1BlockInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba2Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba2BlockInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba3Block` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Mamba3BlockInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Mamba1BlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Mamba2Block` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Mamba2BlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Mamba3Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Mamba3BlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Matern` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `MinMaxScaler` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `NearestNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Nystroem` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `MinMaxScaler` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `NearestNeighbors` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Nystroem` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `OffloadedByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
 | `OrderedRMSE` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `PCA` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `PCA` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ParallelByteLanguageModelTrainer` | 3 | amd,apple,nvidia |  | none | n/a | NO |
-| `ParallelNeuralTrainer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ParallelNeuralTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `PooledByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
 | `QNRegressor` | 2 | amd,apple,nvidia | training | declared | part | NO |
-| `RBF` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `RBFSampler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `RBF` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `RBFSampler` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `RadiusNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `RandomForestClassifier` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `RandomForestRegressor` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `Ridge` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SGD` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SVC` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SVR` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SambaConfig` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SambaInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SambaStack` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `RandomForestClassifier` | 12 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `RandomForestRegressor` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `Ridge` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SGD` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SVC` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SVR` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SambaConfig` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SambaInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SambaStack` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `SmallByteLanguageModelTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SmallMLPTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SpectralClustering` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SpectralEmbedding` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `StandardScaler` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `TransformerBlock` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `TransformerBlockInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `TruncatedSVD` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `WhiteKernel` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SmallMLPTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SpectralClustering` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SpectralEmbedding` | 2 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `StandardScaler` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `TransformerBlock` | 13 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `TransformerBlockInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `TruncatedSVD` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `UMAP` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `WhiteKernel` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `clip_grad_norm_` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `cross_entropy` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `cross_val_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `cross_entropy` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `cross_val_score` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `embedding.Embedding` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `hdbscan.HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `hdbscan.HDBSCAN` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `hdbscan.all_points_membership_vectors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `hdbscan.approximate_predict` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `hdbscan.approximate_predict` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `hdbscan.membership_vector` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `host_model` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `host_predict` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `host_model` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `host_predict` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `host_predict_proba` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `kernel_methods.KernelRidge` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `kernel_methods.Nystroem` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `kernel_methods.RBFSampler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `import_model` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `importers.UnsupportedModel` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `importers.import_model` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `kernel_methods.KernelRidge` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `kernel_methods.Nystroem` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `kernel_methods.RBFSampler` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `kpss_test` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.ByteLanguageModelConfig` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.LanguageModelConfig` (alias of `ByteLanguageModelConfig`) | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.LanguageModelHostTrainer` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `language_model.LanguageModelInference` | 19 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `language_model.LanguageModelInference` | 21 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.LanguageModelTrainer` (alias of `SmallByteLanguageModelTrainer`) | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.SmallByteLanguageModelTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `linalg.Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `linalg.INT15_MAX_K` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
+| `linalg.dequantize_int15` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `linalg.dequantize_int8` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `linalg.eigh` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `linalg.eigh` | 3 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `linalg.from_bf16` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `linalg.matmul` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `linalg.matmul_bf16` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `linalg.matmul_int15` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `linalg.matmul_int8` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `linalg.qr` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `linalg.qr` | 2 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `linalg.quantize_int15` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `linalg.quantize_int8` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `linalg.svd` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `linalg.svdvals` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `linalg.to_bf16` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `lm_corpus.TokenBatches` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
@@ -233,51 +241,55 @@ A blank cell means no lane of this algorithm has that kind.
 | `lowbit.widen_bf16` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `mamba.Mamba1Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `mamba.Mamba1DecodeSession` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `mamba.Mamba2Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `mamba.Mamba3Block` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `manifold.SpectralEmbedding` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `manifold.UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `mamba.Mamba2Block` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `mamba.Mamba3Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `manifold.SpectralEmbedding` | 2 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `manifold.UMAP` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `manifold.spectral_embedding` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `matmul` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.accuracy_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `metrics.accuracy_score` | 2 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.adjusted_rand_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.completeness_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.confusion_matrix` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.confusion_matrix` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.entropy` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.f1_score` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.f1_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.fowlkes_mallows_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.homogeneity_completeness_v_measure` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.homogeneity_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.kl_divergence` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.log_loss` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.mean_absolute_error` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.mean_squared_error` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.log_loss` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.mean_absolute_error` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.mean_squared_error` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.mutual_info_score` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.precision_recall_curve` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.precision_score` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.r2_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `metrics.precision_recall_curve` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.precision_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.r2_score` | 3 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.rand_score` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.recall_score` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.roc_auc_score` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `metrics.root_mean_squared_error` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.recall_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.roc_auc_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `metrics.root_mean_squared_error` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.silhouette_samples` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.silhouette_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.trustworthiness` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.v_measure_score` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `mixture.GaussianMixture` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `mixture.GaussianMixture` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `model_pool_training.PooledByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
-| `model_selection.cross_val_score` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `model_selection.cross_val_score` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `model_selection.split_descriptor` | 1 | amd,apple,nvidia | host-only | seen(build) | n/a | yes |
-| `models.CausalLM` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `models.CausalLM` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `models.Checkpoint` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `models.GenerationStream` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `models.ParallelCausalLM` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `models.SafetensorsFile` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `models.Tokenizer` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `models.plan_for` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `models.plan_for` | 2 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `models.tokenizer.pattern_name` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `models.tokenizer.pretokenize` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `neural_network.SmallMLPTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `models.verify_catalog_entry` | **0** |  |  |  |  | NO |
+| `neural_network.SmallMLPTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `offload_training.OffloadedByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
+| `ops.Program` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
+| `ops.Session` | 2 | amd,apple,nvidia | training | declared | n/a | NO |
 | `parallel_classical.apply_kernel_method` | 2 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_classical.bootstrap` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_classical.fit_arima` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -322,45 +334,46 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_preprocessing.fit_scaler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_preprocessing.transform_scaler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_training.ParallelByteLanguageModelTrainer` | 3 | amd,apple,nvidia |  | none | n/a | NO |
-| `parallel_training.ParallelNeuralTrainer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `parallel_training.ParallelNeuralTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_training.ordered_sum_gradients` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `preprocessing.MinMaxScaler` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `preprocessing.StandardScaler` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `resample.bootstrap` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `resample.monte_carlo_integrate` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `resample.permutation_test` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `preprocessing.MinMaxScaler` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `preprocessing.StandardScaler` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `resample` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `select_d` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `svm.LinearSVC` | 2 | amd,apple,nvidia | training | declared | part | NO |
 | `svm.LinearSVR` | 2 | amd,apple,nvidia | training | declared | part | NO |
-| `svm.SVC` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `svm.SVR` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `svm.SVC` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `svm.SVR` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.BpeTokenizer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.BpeVocabularyTrainer` | 3 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `tokenizer.GPT2Tokenizer` (alias of `BpeTokenizer`) | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.TrainedBpeVocabulary` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `training.Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.ConstantLR` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.Generator` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.SGD` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.SambaConfig` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.SambaStack` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.WarmupCosineLR` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.WarmupLinearLR` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.accumulate_grads` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `training.accumulation_is_aligned` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `training.chunked_lm_head_loss` | **0** |  |  |  |  | NO |
+| `training.Adam` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.AdamW` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.ConstantLR` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.Generator` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.SGD` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.SambaConfig` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.SambaStack` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.WarmupCosineLR` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.WarmupLinearLR` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.accumulate_grads` | 3 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `training.accumulation_is_aligned` | 3 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `training.chunked_lm_head_loss` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `training.clip_grad_norm_` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.cross_entropy` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.cross_entropy` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.embedding_backward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.embedding_forward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.linear_backward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `training.linear_forward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.linear_backward` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.linear_forward` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `training.mlp_inference_sessions` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
+| `training.residual_dropout` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
+| `training.residual_dropout_backward` | 1 | amd,apple,nvidia | training | declared | n/a | NO |
 | `training.rms_norm_backward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.rms_norm_forward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `transformer.TransformerBlock` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `transformer.TransformerBlock` | 13 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `transformer.TransformerDecodeSession` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `umap.UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `umap.UMAP` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 
 ## The lane matrix
 
@@ -381,9 +394,11 @@ A blank cell means no lane of this algorithm has that kind.
 | byte-lm-host-train | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/byte-lm-host-train/byte-lm-host-train/cpu-sabotage.json` | n/a n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it) | yes |
 | byte-lm-resident | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_neural-forward-inference/cpu-amd-epyc-4564p.host-sabotage.json` | part | yes |
 | cholesky | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cholesky-cpu-inference/cpu-apple-m4.sabotage.json` | part | yes |
+| classical-float16-sequences | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | cross-entropy-arms | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/cross-entropy-arms/cross-entropy-arms/cpu-sabotage.json` | part | yes |
 | cross-val | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/cross-val/cross-val/cpu-sabotage.json` | part | yes |
 | cross-val-folds | amd,apple,nvidia | host-only | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/e-python-lanes/cpu-x86.sabotage.json` | n/a n/a:function | yes |
+| cross-vendor-fold | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/tokenizer-1/sab_cpu.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
 | dbscan | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_transductive-predict/cpu-x86.predict-sabotage.json` | part | yes |
 | dbscan-brute-l1 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_transductive-predict/cpu-x86.predict-sabotage.json` | part | yes |
 | dbscan-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_transductive-predict/cpu-x86.predict-sabotage.json` | part | yes |
@@ -393,8 +408,10 @@ A blank cell means no lane of this algorithm has that kind.
 | embedding-sort | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/cpu-x86.sabotage.json` | part | yes |
 | et-clf | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-14_cpu-phase1b/cpu-apple-m4.sabotage.et.json` | part | yes |
 | et-clf-entropy-bestfirst | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/et-clf-entropy-bestfirst/et-clf-entropy-bestfirst/cpu-sabotage.json` | part | yes |
+| et-clf-weighted | amd,apple,nvidia | training | declared | - | part | NO |
 | et-reg | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-14_cpu-phase1b/cpu-apple-m4.sabotage.et.json` | part | yes |
 | et-reg-bootstrap-parallel | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/et-reg-bootstrap-parallel/et-reg-bootstrap-parallel/cpu-sabotage.json` | part | yes |
+| et-reg-weighted | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-adapter-clf | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-adapter-clf/gbdt-adapter-clf/cpu-sabotage.json` | part | yes |
 | gbdt-adapter-reg | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-adapter-reg/gbdt-adapter-reg/cpu-sabotage.json` | part | yes |
 | gbdt-adapter-score-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-adapter-score-weighted/cpu-sabotage.json` | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | yes |
@@ -404,6 +421,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-catboost-defaults | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_gbdt-sabotage-pair/cpu-apple-m4.sabotage.json` | part | yes |
 | gbdt-categorical-ctr | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-gbdt-modes/cpu-x86-forest-sabotage-host-infer.json` | part | yes |
 | gbdt-categorical-ctr-tables | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/x86-runpod/cpu-sab.json` | part | yes |
+| gbdt-class-weights | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-depthwise | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-depthwise/gbdt-depthwise/cpu-sabotage.json` | part | yes |
 | gbdt-exact-mae | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-exact-mae/gbdt-exact-mae/cpu-sabotage.json` | part | yes |
 | gbdt-feature-freq | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-gbdt-modes/cpu-x86-forest-sabotage-host-infer.json` | part | yes |
@@ -411,12 +429,14 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-lossguide-newtoncosine | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-lossguide-newtoncosine/cpu-sabotage.json` | part | yes |
 | gbdt-multiclass | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-multiclass/gbdt-multiclass/cpu-sabotage.json` | part | yes |
 | gbdt-multiclass-defaults | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-multiclass-offgrid | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-nan-modes | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-nan-modes/cpu-sabotage.json` | part | yes |
 | gbdt-onevsall | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-onevsall/gbdt-onevsall/cpu-sabotage.json` | part | yes |
 | gbdt-ordered | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_gbdt-sabotage-pair/cpu-apple-m4.sabotage.json` | part | yes |
 | gbdt-ordered-bayesian-noise | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_gbdt-sabotage-pair/cpu-apple-m4.sabotage.json` | part | yes |
 | gbdt-ordered-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-gbdt-modes/cpu-x86-forest-sabotage-host-infer.json` | part | yes |
 | gbdt-pair-logit | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-pair-logit/confirm-3b1b2d6f6/cpu-x86-64-runpod.sabotage.json` | part | yes |
+| gbdt-pair-logit-pointwise | amd,apple,nvidia | - | none | - | part | NO |
 | gbdt-parametric-losses | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-parametric-losses/cpu-sabotage.json` | part | yes |
 | gbdt-pointwise-l2-bayesian-eval | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-gbdt-modes/cpu-x86-forest-sabotage-host-infer.json` | part | yes |
 | gbdt-query-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-pair-logit/confirm-3b1b2d6f6/cpu-x86-64-runpod.sabotage.json` | part | yes |
@@ -427,7 +447,9 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-symmetric-eval | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/cpu-apple-m4-sabotage.json (clean partner at another commit)` | part | yes |
 | gbdt-tensor-ctr-tables | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/x86-runpod/cpu-sab.json` | part | yes |
 | gbdt-yeti-rank | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-yeti-rank/cpu-apple-m4.sabotage.json` | part | yes |
+| gbdt-yeti-rank-pointwise | amd,apple,nvidia | - | none | - | part | NO |
 | gemm-bf16 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-neural-completion/records/gemm-bf16/cpu-sabotage.json` | n/a n/a:profile lane; the products are hashed whole | yes |
+| gemm-int15 | amd,apple,nvidia | training | declared | - | n/a n/a:profile lane; the products are hashed whole | NO |
 | gemm-int8 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-neural-completion/records/gemm-int8/cpu-sabotage.json` | n/a n/a:profile lane; the products are hashed whole | yes |
 | gemm-pinned | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/r2-sab.json` | part | yes |
 | gemm-transposed | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/r2-sab.json` | part | yes |
@@ -436,6 +458,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gmm-random-init-sample | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/x86-runpod/cpu-sab.json` | n/a n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | yes |
 | gmm-sample | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/x86-runpod/cpu-sab.json` | n/a n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | yes |
 | gp | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
+| gp-lml-theta | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | gp-matern12 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
 | gp-matern32 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
 | gp-matern52-ard | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
@@ -450,7 +473,10 @@ A blank cell means no lane of this algorithm has that kind.
 | hdbscan | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
 | hdbscan-leaf | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
 | hf-causal-lm | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_models-namespace/m4.neural-host.sabotage.json (clean partner at another commit)` | part | yes |
+| hf-causal-lm-stream | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| hf-causal-lm-text | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/tokenizer-3/sab_cpu.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
 | hf-checkpoint | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_models-namespace/m4.linalg-convert.sabotage.json (clean partner at another commit)` | n/a n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer) | yes |
+| hf-model-surface | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/tokenizer-1/sab_cpu.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
 | hf-tokenizer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_models-namespace/m4.tokenizer-encoder.sabotage.json (clean partner at another commit)` | n/a n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class) | yes |
 | holtwinters | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_holtwinters-linesearch-fix/cpu-amd-epyc-9754.sabotage.json` | part | yes |
 | holtwinters-multiplicative | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_holtwinters-linesearch-fix/cpu-amd-epyc-9754.sabotage.json` | part | yes |
@@ -459,6 +485,8 @@ A blank cell means no lane of this algorithm has that kind.
 | ivf | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/cpu-x86.sabotage.json` | part | yes |
 | ivf-euclidean | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/cpu-x86.sabotage.json` | part | yes |
 | ivf-extend | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_ivf-extend/cpu-x86.sabotage.json` | part | yes |
+| ivf-filter | amd,apple,nvidia | training | declared | - | part | NO |
+| ivf-short-fill | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | kde | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
 | kde-cosine-minkowski | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
 | kde-epanechnikov-l1 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
@@ -509,10 +537,12 @@ A blank cell means no lane of this algorithm has that kind.
 | mamba1-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba1-int8w/cpu-sabotage.json` | part | yes |
 | mamba2 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-mamba/cpu-apple-m4.sabotage.json` | part | yes |
 | mamba2-bf16w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba2-bf16w/cpu-sabotage.json` | part | yes |
+| mamba2-decode-session | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/mamba-4-guard-r2/sab_device.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
 | mamba2-dtlimit | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-mamba/cpu-apple-m4.sabotage.json` | part | yes |
 | mamba2-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba2-int8w/cpu-sabotage.json` | part | yes |
 | mamba3 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-mamba/cpu-apple-m4.sabotage.json` | part | yes |
 | mamba3-bf16w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba3-bf16w/cpu-sabotage.json` | part | yes |
+| mamba3-decode-session | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/mamba-4-guard-r2/sab_device.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
 | mamba3-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba3-int8w/cpu-sabotage.json` | part | yes |
 | metrics | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_metrics-sabotage-coverage/cpu-sab-new.json` | n/a n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) | yes |
 | metrics-classification | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_metrics-sabotage-coverage/cpu-sab-new.json` | part | yes |
@@ -524,6 +554,9 @@ A blank cell means no lane of this algorithm has that kind.
 | mlp-bf16w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mlp-bf16w/cpu-sabotage.json` | n/a n/a:weight-format lane; the batch part is measured on its base lane | yes |
 | mlp-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mlp-int8w/cpu-sabotage.json` | n/a n/a:weight-format lane; the batch part is measured on its base lane | yes |
 | monte-carlo | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/r2-sab.json` | n/a n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against) | yes |
+| multioutput-ridge | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| native-schedule-series | amd,apple,nvidia | training | declared | - | n/a n/a:owner-lifecycle (series, checkpoints, buffer IO and release have no prediction batch axis) | NO |
+| neural-trainer-unfused | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | nystroem | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
 | nystroem-laplacian | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-18-cpu-kernel-variants/sabotage-nystroem-laplacian.json` | part | yes |
 | nystroem-poly | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-18-cpu-kernel-variants/sabotage-nystroem-poly.json` | part | yes |
@@ -532,6 +565,10 @@ A blank cell means no lane of this algorithm has that kind.
 | ols-no-intercept | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | ols-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | optim-adam-clip | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/optim-adam-clip/optim-adam-clip/cpu-sabotage.json` | part | yes |
+| optim-io-capability | amd,apple,nvidia | training | declared | - | n/a n/a:owner-lifecycle (series, checkpoints, buffer IO and release have no prediction batch axis) | NO |
+| optim-maximize | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/core-4-guard-r2/sab_cpu.json` | part | yes |
+| optim-owner-lifecycle | amd,apple,nvidia | training | declared | - | n/a n/a:owner-lifecycle (series, checkpoints, buffer IO and release have no prediction batch axis) | NO |
+| optim-resident-io | amd,apple,nvidia | - | none | - | n/a n/a:owner-lifecycle (series, checkpoints, buffer IO and release have no prediction batch axis) | NO |
 | optim-sgd | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/optim-sgd/optim-sgd/cpu-sabotage.json` | part | yes |
 | ordered-gradient-sum | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-ordered-sum-completion/cpu-sabotage.json` | n/a n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | yes |
 | par-arima | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/c-classical/cpu-x86.sabotage.json` | part | yes |
@@ -595,8 +632,20 @@ A blank cell means no lane of this algorithm has that kind.
 | par-svm-svr | amd,apple,nvidia | - | none | - | part | NO |
 | pca | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
 | pca-full-whiten | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/cpu-apple-m4.sabotage.json` | part | yes |
+| pca-inverse | amd,apple,nvidia | training | declared | - | part | NO |
 | pca-whiten | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
+| pca-whiten-inverse | amd,apple,nvidia | training | declared | - | part | NO |
 | permutation-test | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/r2-sab.json` | part | yes |
+| public-cnn-classifier-predict | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-cnn-layer-fit | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-numeric-metadata | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-randomized-search | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-residual-dropout | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-scorer-factories | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-set-params | amd,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/tokenizer-1/sab_cpu.json` | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | yes |
+| public-sparse-encode | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-theta-variants | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| public-validation-learning-curves | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks public call paths the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | qn-absolute | amd,apple,nvidia | training | declared | - | part | NO |
 | qn-squared | amd,apple,nvidia | training | declared | - | part | NO |
 | radius | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
@@ -604,6 +653,10 @@ A blank cell means no lane of this algorithm has that kind.
 | radius-manhattan | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
 | radius-minkowski-p3 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
 | rbf-sampler | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-d-estimators/cpu-apple-m4.sabotage.json` | part | yes |
+| resample-bca | amd,apple,nvidia | training | declared | - | part | NO |
+| resample-perm-samples | amd,apple,nvidia | training | declared | - | part | NO |
+| resample-unpaired | amd,apple,nvidia | training | declared | - | part | NO |
+| resample-utils | amd,apple,nvidia | training | declared | - | part | NO |
 | rf-clf | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-clf/rf-clf/cpu-sabotage.json` | part | yes |
 | rf-clf-balanced-parallel | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-clf-balanced-parallel/rf-clf-balanced-parallel/cpu-sabotage.json` | part | yes |
 | rf-clf-entropy-log2-noboot | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-clf-entropy-log2-noboot/rf-clf-entropy-log2-noboot/cpu-sabotage.json` | part | yes |
@@ -613,12 +666,50 @@ A blank cell means no lane of this algorithm has that kind.
 | rf-score-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/rf-score-weighted/cpu-sabotage.json` | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | yes |
 | ridge | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
 | ridge-no-intercept | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
+| safetensors-widen-f16 | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | samba | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-samba/cpu-apple-m4.sabotage.json` | part | yes |
 | samba-bf16w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/samba-bf16w/cpu-sabotage.json` | n/a n/a:weight-format lane; the batch part is measured on its base lane | yes |
 | samba-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/samba-int8w/cpu-sabotage.json` | n/a n/a:weight-format lane; the batch part is measured on its base lane | yes |
+| samba-optimizer-state | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | samba-untied-dropout-accum | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-samba/cpu-apple-m4.sabotage.json` | part | yes |
 | saved-model-host-infer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_laneless-public-classes/sabotage-forest-own-define.json` | part | yes |
+| saved-model-host-infer-trees | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| scaler-fit-transform | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | select-d | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_tsa-negative-controls/cpu-sabotage.json` | part | yes |
+| sequence-adafactor | amd,apple,nvidia | training | declared | - | n/a n/a:parameter-coupled optimizer (Adafactor factors second moments across tensor rows and columns and scales updates by tensor RMS; splitting parameter rows changes the algorithm) | NO |
+| sequence-adafactor-device | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-adagrad | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-adamax | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-autoarima | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-croston | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-device-release | amd,apple,nvidia | - | none | - | n/a n/a:owner-lifecycle (series, checkpoints, buffer IO and release have no prediction batch axis) | NO |
+| sequence-device-tensor | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-ets | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-export-roundtrip | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-garch | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-gru | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-lamb | amd,apple,nvidia | training | declared | - | n/a n/a:parameter-coupled optimizer (LAMB uses tensor norms for its trust ratio and global gradient clipping; a sliced parameter registry is a different optimization problem) | NO |
+| sequence-lamb-device | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-layernorm | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-layernorm-backward | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-lion | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-lr-schedulers | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-lstm | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-mlp | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-moe | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-moe-backward | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-nadam | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-onnx-import | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_sequence-1/sab_cpu.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
+| sequence-optimizer-state | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-program-save-load | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| sequence-prophet | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-rmsprop | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-rnn | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-stl | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-tape-program | amd,apple,nvidia | training | declared | - | n/a n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole) | NO |
+| sequence-tape-sequential | amd,apple,nvidia | training | declared | - | n/a n/a:training-step (the lane checks one seeded training step through the tape; its forward outputs are train parts, digested whole) | NO |
+| sequence-theta | amd,apple,nvidia | training | declared | - | part | NO |
+| sequence-var | amd,apple,nvidia | training | declared | - | part | NO |
 | spectral | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
 | spectral-embedding | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_spectral-embedding/cpu-x86-sabotage.json` | n/a n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike) | yes |
 | spectral-precomputed | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
@@ -626,20 +717,239 @@ A blank cell means no lane of this algorithm has that kind.
 | standard-scaler-no-mean | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | standard-scaler-no-std | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | svc | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
+| svc-gamma-scale | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | svc-linear | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
 | svc-poly | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
 | svr | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
 | svr-linear | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
 | tokenized-corpus | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-18_bpe-builder-native/m4.trainer.sabotage-build.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | yes |
 | tokenizer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_clean-third-party/m4-owed/cpu-apple-m4.host-sabotage.json` | part | yes |
+| training-chunked-lm-head | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| training-device-cross-entropy | amd,apple,nvidia | - | none | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| training-mlp-sessions | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | training-primitives | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/training-primitives/training-primitives/cpu-sabotage.json` | part | yes |
 | transformer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-transformer/cpu-apple-m4.sabotage.json` | part | yes |
 | transformer-bf16w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/transformer-bf16w/cpu-sabotage.json` | part | yes |
+| transformer-decode-load-state | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | transformer-decode-session | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/sabotage-neural-transformer-session.json` | n/a n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes) | yes |
+| transformer-forward-tape | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
 | transformer-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/transformer-int8w/cpu-sabotage.json` | part | yes |
 | transformer-window | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-transformer/cpu-apple-m4.sabotage.json` | part | yes |
+| trees-adaboost-clf | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/sab_device.json` | part | yes |
+| trees-adaboost-reg | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-bagging-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-bagging-reg | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-calibrated | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-dart-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-dart-options | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-dart-reg | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-dt-clf | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/sab_device.json` | part | yes |
+| trees-dt-random | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-dt-reg | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/sab_device.json` | part | yes |
+| trees-et-deviance | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-gbdt-multirmse | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-multioutput | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-onevsrest | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-oob-cv-link | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/rf-1/sab_device.json` | part | yes |
+| trees-random-embedding | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-rf-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/rf-2-fixed-r2/sab_device.json` | part | yes |
+| trees-shap-kernel | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-shap-permutation | amd,apple,nvidia | training | declared | - | n/a n/a:position-seeded (each explained row draws its permutations from the stream of its position in the call, as shap's sequential RNG does) | NO |
+| trees-shap-tree | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-stacking-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-stacking-reg | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-voting-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| trees-voting-reg | amd,apple,nvidia | training | declared | - | part | NO |
 | tsvd | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
+| tsvd-inverse | amd,apple,nvidia | training | declared | - | part | NO |
 | umap | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/cpu-apple-m4.sabotage.json` | part | yes |
+| x-ann-cagra | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-cagra-filter | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-filter | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-ivf-pq | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-ivf-rabitq | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-ivf-sq | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-refine | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-refine-euclidean | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ann-tsne | amd,apple,nvidia | training | declared | - | n/a n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone) | NO |
+| x-ann-tsne-pca | amd,apple,nvidia | training | declared | - | n/a n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone) | NO |
+| x-ard | amd,apple,nvidia | training | declared | - | part | NO |
+| x-bayes-ridge | amd,apple,nvidia | training | declared | - | part | NO |
+| x-bayes-ridge-sw | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-affinity-propagation | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-agglo-connectivity | amd,apple,nvidia | training | declared | - | n/a n/a:transductive (AgglomerativeClustering labels the fitted rows only) | NO |
+| x-cluster-agglo-linkages | amd,apple,nvidia | training | declared | - | n/a n/a:transductive (AgglomerativeClustering labels the fitted rows only) | NO |
+| x-cluster-ap-precomputed | amd,apple,nvidia | training | declared | - | n/a n/a:precomputed affinity (no predict) | NO |
+| x-cluster-bgmm | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-bgmm-covtypes | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-bgmm-inits | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-bisecting-kmeans | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-bisecting-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-dbscan-metrics | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-gmm-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-hdbscan-epsilon | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-kmeans-init | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-meanshift | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-meanshift-binned | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-minibatch-kmeans | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-minibatch-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-minibatch-partial | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cluster-optics | amd,apple,nvidia | training | declared | - | n/a n/a:transductive (OPTICS labels the fitted rows only) | NO |
+| x-cluster-optics-metrics | amd,apple,nvidia | training | declared | - | n/a n/a:transductive (OPTICS labels the fitted rows only) | NO |
+| x-cluster-spectral-affinities | amd,apple,nvidia | training | declared | - | n/a n/a:transductive (SpectralClustering with rbf labels the fitted rows only) | NO |
+| x-cnn-batchnorm | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-bn-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-conv-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-conv1d | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-conv2d | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-dropout2d | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-gcn | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_cnn-1/sab_cpu.json` | n/a n/a:whole-graph message passing (GCN/SAGE read neighboring nodes through a shared edge index; slicing node rows removes dependencies and is not an independent graph batch) | yes |
+| x-cnn-globalpool | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-gnn-options | amd,apple,nvidia | training | declared | - | n/a n/a:whole-graph message passing (GCN/SAGE read neighboring nodes through a shared edge index; slicing node rows removes dependencies and is not an independent graph batch) | NO |
+| x-cnn-pool | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-pool-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-resnet-block | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-sage | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_cnn-1/sab_cpu.json` | n/a n/a:whole-graph message passing (GCN/SAGE read neighboring nodes through a shared edge index; slicing node rows removes dependencies and is not an independent graph batch) | yes |
+| x-cnn-trainer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-cnn-trainer-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-als | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-dict-learning | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-eigh-wide-factor-analysis | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-eigh-wide-fastica | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-eigh-wide-kpca | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-eigh-wide-linalg | amd,apple,nvidia | training | declared | - | n/a n/a:matrix factorization (each eigh consumes a complete square matrix; there is no row axis whose elements are independent queries) | NO |
+| x-decomp-eigh-wide-mincovdet | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-eigh-wide-rotation | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-factor-analysis | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-fastica | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-grp | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-ipca | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-lda | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-lstsq-rsvd | amd,apple,nvidia | training | declared | - | n/a n/a:matrix factorization (least squares and randomized SVD depend on all matrix rows; this lane has no fitted out-of-sample estimator) | NO |
+| x-decomp-lu | amd,apple,nvidia | training | declared | - | n/a n/a:matrix factorization (LU, triangular solves and eigendecompositions consume complete matrices; removing rows changes the operator rather than batching independent queries) | NO |
+| x-decomp-manifold | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-nmf | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-pca-randomized | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_decomp-1/sab_cpu.json` | part | yes |
+| x-decomp-pls | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-robust-cov | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-rsvd-rank-deficient | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| x-decomp-sparse-pca | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-spectral-rbf | amd,apple,nvidia | training | declared | - | n/a n/a:transductive eigensystem (spectral embedding solves the full affinity matrix; subsetting rows changes the eigenproblem and no transform is exposed) | NO |
+| x-decomp-srp | amd,apple,nvidia | training | declared | - | part | NO |
+| x-decomp-umap-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-enet-cv | amd,apple,nvidia | training | declared | - | part | NO |
+| x-glm-gamma | amd,apple,nvidia | training | declared | - | part | NO |
+| x-glm-poisson | amd,apple,nvidia | training | declared | - | part | NO |
+| x-glm-poisson-sw | amd,apple,nvidia | training | declared | - | part | NO |
+| x-glm-tweedie | amd,apple,nvidia | training | declared | - | part | NO |
+| x-huber | amd,apple,nvidia | training | declared | - | part | NO |
+| x-huber-outliers | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/tokenizer-1/sab_cpu.json` | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | yes |
+| x-huber-sw | amd,apple,nvidia | training | declared | - | part | NO |
+| x-isotonic | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x-linear-spearman/sabotaged.json` | part | yes |
+| x-lars | amd,apple,nvidia | training | declared | - | part | NO |
+| x-lasso-cv | amd,apple,nvidia | training | declared | - | part | NO |
+| x-lasso-cv-pos | amd,apple,nvidia | training | declared | - | part | NO |
+| x-lasso-lars | amd,apple,nvidia | training | declared | - | part | NO |
+| x-lasso-lars-pos | amd,apple,nvidia | training | declared | - | part | NO |
+| x-logistic-cv | amd,apple,nvidia | training | declared | - | part | NO |
+| x-logistic-cv-proba | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| x-logistic-cv-w | amd,apple,nvidia | training | declared | - | part | NO |
+| x-metrics-classification | amd,apple,nvidia | training | declared | - | n/a n/a:dataset reduction (classification, regression, ranking and clustering scores/curves aggregate the supplied observations; a row subset intentionally produces another statistic) | NO |
+| x-metrics-classification-report | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| x-metrics-cluster | amd,apple,nvidia | training | declared | - | n/a n/a:dataset reduction (classification, regression, ranking and clustering scores/curves aggregate the supplied observations; a row subset intentionally produces another statistic) | NO |
+| x-metrics-permutation-test-score | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| x-metrics-ranking | amd,apple,nvidia | training | declared | - | n/a n/a:dataset reduction (classification, regression, ranking and clustering scores/curves aggregate the supplied observations; a row subset intentionally produces another statistic) | NO |
+| x-metrics-regression | amd,apple,nvidia | training | declared | - | n/a n/a:dataset reduction (classification, regression, ranking and clustering scores/curves aggregate the supplied observations; a row subset intentionally produces another statistic) | NO |
+| x-metrics-search | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/core-1-fixed-r2/sab_cpu.json` | part | yes |
+| x-metrics-splitters | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_metrics-1/sab_cpu.json` | n/a n/a:dataset partition (cross-validation splitters assign indices using the full row count, labels or groups; slicing input rows changes the folds) | yes |
+| x-neighbors-additive-chi2 | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-connected-components | amd,apple,nvidia | training | declared | - | n/a n/a:whole-graph partition (connected components requires edges between all nodes; a node subset can disconnect the graph and has no held-out prediction API) | NO |
+| x-neighbors-gamma-scale | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-gp-cov | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-km-kernels | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-knn-imputer | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_neighbors-1/sab_cpu.json` | part | yes |
+| x-neighbors-kpca | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-krr-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-label-propagation | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_neighbors-4/sab_cpu.json` | part | yes |
+| x-neighbors-label-spreading | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_neighbors-4/sab_cpu.json` | part | yes |
+| x-neighbors-lof | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-louvain | amd,apple,nvidia | training | declared | - | n/a n/a:whole-graph partition (Louvain optimizes graph-wide modularity; node subsets change the objective and there is no held-out prediction API) | NO |
+| x-neighbors-metrics | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-nearest-centroid | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/x_neighbors-1/sab_device.json` | part | yes |
+| x-neighbors-ocsvm | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-pagerank | amd,apple,nvidia | training | declared | - | n/a n/a:whole-graph operator (PageRank normalizes transitions and solves over the complete graph; removing query nodes changes both neighborhoods and the stationary distribution) | NO |
+| x-neighbors-poly-sketch | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-skewed-chi2 | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-svc-multiclass | amd,apple,nvidia | training | seen(build) | `bench/results/verification_faults/2026-10-26-0860/svm-1/sab_cpu.json` | part | yes |
+| x-neighbors-svc-probability | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-svc-sigmoid | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-svgp | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-svm-precomputed | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-svm-weights | amd,apple,nvidia | training | declared | - | part | NO |
+| x-neighbors-svr-kernels | amd,apple,nvidia | training | declared | - | part | NO |
+| x-pa-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| x-pa-reg | amd,apple,nvidia | training | declared | - | part | NO |
+| x-perceptron | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-bernoulli-nb | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-binarizer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-categorical-nb | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-complement-nb | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-da-solvers | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-encoder-categories | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-encoder-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-gaussian-nb | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-infrequent | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-inverse-transforms | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-iterative-imputer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-iterative-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-kbins | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-kbins-methods | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-kbins-weights | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-label-binarizer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-label-binarizer-multilabel | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-label-encoder | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-lda | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-maxabs-scaler | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-mi-discrete | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-multilabel-binarizer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-multinomial-nb | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-mutual-info | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-nb-partial | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-nb-weights | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-normalizer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-onehot-encoder | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-ordinal-encoder | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-polynomial-features | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-power-transformer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-priors | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-qda | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-quantile-transformer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-rfe | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-robust-scaler | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-robust-scaler-unit-variance | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-scaler-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-score-edges | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-select-kbest | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-simple-imputer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-simple-imputer-indicator | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-spline-options | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-spline-transformer | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-target-encoder | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-user-objects | amd,apple,nvidia | training | declared | - | part | NO |
+| x-prep-variance-threshold | amd,apple,nvidia | training | declared | - | part | NO |
+| x-quantile | amd,apple,nvidia | training | declared | - | part | NO |
+| x-quantile-sw | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ridge-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ridge-clf-w | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ridge-cv | amd,apple,nvidia | training | declared | - | part | NO |
+| x-ridge-cv-kfold | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| x-ridge-cv-sw | amd,apple,nvidia | training | declared | - | part | NO |
+| x-sgd-clf | amd,apple,nvidia | training | declared | - | part | NO |
+| x-sgd-clf-proba | amd,apple,nvidia | training | declared | - | n/a n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole) | NO |
+| x-sgd-clf-w | amd,apple,nvidia | training | declared | - | part | NO |
+| x-sgd-ocsvm | amd,apple,nvidia | training | declared | - | part | NO |
+| x-sgd-reg | amd,apple,nvidia | training | declared | - | part | NO |
+| x-sgd-reg-sw | amd,apple,nvidia | training | declared | - | part | NO |
 
 ## Lanes missing each kind, by name
 
@@ -678,9 +988,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 0**
+**GPU column on fewer than three classes: 1**
 
-> none
+> public-set-params
 
 > (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
@@ -690,19 +1000,58 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-**Sabotage not seen to move a build: 9**
+> (plus 5 lane(s) with no CPU route at all, held out of this count: their native entry exists only in a GPU binding and the public constructor refuses by name on the host route, so no CPU run can close this. They are listed once below, and they remain in the two GPU-axis counts: gbdt-pair-logit-pointwise, gbdt-yeti-rank-pointwise, optim-resident-io, sequence-device-release, training-device-cross-entropy.)
 
-> gbdt-multiclass-defaults, gbdt-ranking-defaults, gbdt-stochastic-arms, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, qn-absolute, qn-squared
+**Sabotage not seen to move a build: 276**
+
+> classical-float16-sequences, et-clf-weighted, et-reg-weighted, gbdt-class-weights, gbdt-multiclass-defaults, gbdt-multiclass-offgrid, gbdt-ranking-defaults, gbdt-stochastic-arms, gemm-int15, gp-lml-theta, hf-causal-lm-stream, ivf-filter, ivf-short-fill, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, multioutput-ridge, native-schedule-series, neural-trainer-unfused, optim-io-capability, optim-owner-lifecycle, pca-inverse, pca-whiten-inverse, public-cnn-classifier-predict, public-cnn-layer-fit, public-numeric-metadata, public-randomized-search, public-residual-dropout, public-scorer-factories, public-sparse-encode, public-theta-variants, public-validation-learning-curves, qn-absolute, qn-squared, resample-bca, resample-perm-samples, resample-unpaired, resample-utils, safetensors-widen-f16, samba-optimizer-state, saved-model-host-infer-trees, scaler-fit-transform, sequence-adafactor, sequence-adafactor-device, sequence-adagrad, sequence-adamax, sequence-autoarima, sequence-croston, sequence-device-tensor, sequence-ets, sequence-export-roundtrip, sequence-garch, sequence-gru, sequence-lamb, sequence-lamb-device, sequence-layernorm, sequence-layernorm-backward, sequence-lion, sequence-lr-schedulers, sequence-lstm, sequence-mlp, sequence-moe, sequence-moe-backward, sequence-nadam, sequence-optimizer-state, sequence-program-save-load, sequence-prophet, sequence-rmsprop, sequence-rnn, sequence-stl, sequence-tape-program, sequence-tape-sequential, sequence-theta, sequence-var, svc-gamma-scale, training-chunked-lm-head, training-mlp-sessions, transformer-decode-load-state, transformer-forward-tape, trees-adaboost-reg, trees-bagging-clf, trees-bagging-reg, trees-calibrated, trees-dart-clf, trees-dart-options, trees-dart-reg, trees-dt-random, trees-et-deviance, trees-gbdt-multirmse, trees-multioutput, trees-onevsrest, trees-random-embedding, trees-shap-kernel, trees-shap-permutation, trees-shap-tree, trees-stacking-clf, trees-stacking-reg, trees-voting-clf, trees-voting-reg, tsvd-inverse, x-ann-cagra, x-ann-cagra-filter, x-ann-filter, x-ann-ivf-pq, x-ann-ivf-rabitq, x-ann-ivf-sq, x-ann-refine, x-ann-refine-euclidean, x-ann-tsne, x-ann-tsne-pca, x-ard, x-bayes-ridge, x-bayes-ridge-sw, x-cluster-affinity-propagation, x-cluster-agglo-connectivity, x-cluster-agglo-linkages, x-cluster-ap-precomputed, x-cluster-bgmm, x-cluster-bgmm-covtypes, x-cluster-bgmm-inits, x-cluster-bisecting-kmeans, x-cluster-bisecting-options, x-cluster-dbscan-metrics, x-cluster-gmm-options, x-cluster-hdbscan-epsilon, x-cluster-kmeans-init, x-cluster-meanshift, x-cluster-meanshift-binned, x-cluster-minibatch-kmeans, x-cluster-minibatch-options, x-cluster-minibatch-partial, x-cluster-optics, x-cluster-optics-metrics, x-cluster-spectral-affinities, x-cnn-batchnorm, x-cnn-bn-options, x-cnn-conv-options, x-cnn-conv1d, x-cnn-conv2d, x-cnn-dropout2d, x-cnn-globalpool, x-cnn-gnn-options, x-cnn-pool, x-cnn-pool-options, x-cnn-resnet-block, x-cnn-trainer, x-cnn-trainer-options, x-decomp-als, x-decomp-dict-learning, x-decomp-eigh-wide-factor-analysis, x-decomp-eigh-wide-fastica, x-decomp-eigh-wide-kpca, x-decomp-eigh-wide-linalg, x-decomp-eigh-wide-mincovdet, x-decomp-eigh-wide-rotation, x-decomp-factor-analysis, x-decomp-fastica, x-decomp-grp, x-decomp-ipca, x-decomp-lda, x-decomp-lstsq-rsvd, x-decomp-lu, x-decomp-manifold, x-decomp-nmf, x-decomp-pls, x-decomp-robust-cov, x-decomp-rsvd-rank-deficient, x-decomp-sparse-pca, x-decomp-spectral-rbf, x-decomp-srp, x-decomp-umap-options, x-enet-cv, x-glm-gamma, x-glm-poisson, x-glm-poisson-sw, x-glm-tweedie, x-huber, x-huber-sw, x-lars, x-lasso-cv, x-lasso-cv-pos, x-lasso-lars, x-lasso-lars-pos, x-logistic-cv, x-logistic-cv-proba, x-logistic-cv-w, x-metrics-classification, x-metrics-classification-report, x-metrics-cluster, x-metrics-permutation-test-score, x-metrics-ranking, x-metrics-regression, x-neighbors-additive-chi2, x-neighbors-connected-components, x-neighbors-gamma-scale, x-neighbors-gp-cov, x-neighbors-km-kernels, x-neighbors-kpca, x-neighbors-krr-options, x-neighbors-lof, x-neighbors-louvain, x-neighbors-metrics, x-neighbors-ocsvm, x-neighbors-pagerank, x-neighbors-poly-sketch, x-neighbors-skewed-chi2, x-neighbors-svc-probability, x-neighbors-svc-sigmoid, x-neighbors-svgp, x-neighbors-svm-precomputed, x-neighbors-svm-weights, x-neighbors-svr-kernels, x-pa-clf, x-pa-reg, x-perceptron, x-prep-bernoulli-nb, x-prep-binarizer, x-prep-categorical-nb, x-prep-complement-nb, x-prep-da-solvers, x-prep-encoder-categories, x-prep-encoder-options, x-prep-gaussian-nb, x-prep-infrequent, x-prep-inverse-transforms, x-prep-iterative-imputer, x-prep-iterative-options, x-prep-kbins, x-prep-kbins-methods, x-prep-kbins-weights, x-prep-label-binarizer, x-prep-label-binarizer-multilabel, x-prep-label-encoder, x-prep-lda, x-prep-maxabs-scaler, x-prep-mi-discrete, x-prep-multilabel-binarizer, x-prep-multinomial-nb, x-prep-mutual-info, x-prep-nb-partial, x-prep-nb-weights, x-prep-normalizer, x-prep-onehot-encoder, x-prep-ordinal-encoder, x-prep-polynomial-features, x-prep-power-transformer, x-prep-priors, x-prep-qda, x-prep-quantile-transformer, x-prep-rfe, x-prep-robust-scaler, x-prep-robust-scaler-unit-variance, x-prep-scaler-options, x-prep-score-edges, x-prep-select-kbest, x-prep-simple-imputer, x-prep-simple-imputer-indicator, x-prep-spline-options, x-prep-spline-transformer, x-prep-target-encoder, x-prep-user-objects, x-prep-variance-threshold, x-quantile, x-quantile-sw, x-ridge-clf, x-ridge-clf-w, x-ridge-cv, x-ridge-cv-kfold, x-ridge-cv-sw, x-sgd-clf, x-sgd-clf-proba, x-sgd-clf-w, x-sgd-ocsvm, x-sgd-reg, x-sgd-reg-sw
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
+
+> (plus 5 lane(s) with no CPU route at all, held out of this count: their native entry exists only in a GPU binding and the public constructor refuses by name on the host route, so no CPU run can close this. They are listed once below, and they remain in the two GPU-axis counts: gbdt-pair-logit-pointwise, gbdt-yeti-rank-pointwise, optim-resident-io, sequence-device-release, training-device-cross-entropy.)
 
 **Batch undeclared: 0**
 
 > none
 
+## Lanes a CPU column cannot judge at all
+
+5 lane(s) are DEGENERATE on the cpu-host column, and not for the
+`par-*` device-axis reason. Their native entry exists ONLY in a GPU
+binding and the public constructor refuses BY NAME on the host route, so
+a CPU column has no arithmetic of theirs to run: the cell REFUSES rather
+than answering, and a REFUSED cell and a passing cell are the same thing
+in a column total. They are held out of the two CPU-axis counts above
+for the reason `par-*` and the host-routed lanes are held out of theirs:
+no run on any hardware can close a count that is unreachable.
+
+THIS IS THE MIRROR OF THE SECTION BELOW, NOT AN EXCUSE. They stay in
+BOTH GPU-axis counts, because a GPU column is exactly where their
+proposition is stateable and no column carries them yet.
+
+`identity_break.GPU_ONLY_LANES` drops them from a full-column run on a
+CPU-only install and prints the reason per lane, so a CPU record never
+counts a refusal as a cell. `--lanes` is never filtered, so a record
+that wants the refusal text can still take it and commit it verbatim.
+
+BEFORE TRUSTING THIS SECTION, ASK THE QUESTION THE FIRST TWO ENTRIES
+DID NOT GET (lane/cpu-routes-gpu-only-four, 2026-09-20): is the entry
+that is missing the entry the lane HASHES? The two resident decode
+sessions were here on a true reading of a real refusal, and the
+refusal was about residency rather than arithmetic; both now take a
+CPU column and this section is empty.
+
+| lane | the entry that is missing | what it refuses with |
+|---|---|---|
+| gbdt-pair-logit-pointwise | GPU binding only | refuses by name on the host route |
+| gbdt-yeti-rank-pointwise | GPU binding only | refuses by name on the host route |
+| optim-resident-io | GPU binding only | refuses by name on the host route |
+| sequence-device-release | GPU binding only | refuses by name on the host route |
+| training-device-cross-entropy | GPU binding only | refuses by name on the host route |
+
 ## Lanes a GPU column cannot judge at all
 
-6 lanes are DEGENERATE on every GPU column. Their arithmetic is
+17 lanes are DEGENERATE on every GPU column. Their arithmetic is
 the CPU host route, or they stand on no Mojo binding at all, so handed
 a GPU column they run that box's CPU and say nothing whatever about the
 GPU. An NVIDIA and an AMD pod each printed that refusal verbatim on
@@ -745,7 +1094,7 @@ its host restatement changing makes that lane's columns disagree.
 
 Renting a GPU for a lane in this table buys a CPU run at GPU prices.
 
-**RECORDED IS NOT THE SAME AS MEANINGFUL.** 6 of these
+**RECORDED IS NOT THE SAME AS MEANINGFUL.** 17 of these
 carry GPU columns anyway, recorded before this classification existed.
 They are not extra assurance: each is a GPU box that ran its own CPU.
 They are marked below so a reader does not count them as vendor
@@ -753,12 +1102,23 @@ coverage, and they are not evidence for any vendor claim.
 
 | lane | cpu | sabotage | GPU columns recorded |
 |---|---|---|---|
+| bpe-trainer | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| bpe-vocabulary | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | byte-lm-host-infer | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | byte-lm-host-infer-threaded | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | byte-lm-host-train | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | cross-val-folds | host-only | seen(build) | amd,apple,nvidia (assert nothing) |
+| cross-vendor-fold | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| gbdt-categorical-ctr-tables | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| hf-causal-lm | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| hf-causal-lm-stream | training | declared | amd,apple,nvidia (assert nothing) |
+| hf-causal-lm-text | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| hf-model-surface | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | language-model-config | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | saved-model-host-infer | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| saved-model-host-infer-trees | training | declared | amd,apple,nvidia (assert nothing) |
+| tokenized-corpus | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| tokenizer | training | seen(build) | amd,apple,nvidia (assert nothing) |
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 
@@ -836,5 +1196,5 @@ tier switches, result containers, option lists and the caller-owned state
 containers a block returns from `allocate_state`, whose buffers are hashed
 through their block's own lanes.
 
-> `Array`, `Mamba1State`, `Mamba2State`, `Mamba3State`, `TransformerState`, `__version__`, `gpu_arch`, `gpu_arch_how`, `linalg.PROFILE`, `linalg.PROFILE_BF16`, `linalg.PROFILE_FAMILY`, `linalg.PROFILE_INT8`, `linalg.PROFILE_VERSION`, `linalg.numeric_mode`, `linalg.profile`, `linalg.require_identical`, `lowbit.BF16Weight`, `lowbit.FORMATS`, `lowbit.Int8Weight`, `mamba.Mamba1State`, `mamba.Mamba2State`, `mamba.Mamba3State`, `models.CausalLMState`, `models.FAMILIES`, `models.HFConfig`, `models.ModelPlan`, `models.PATTERNS`, `models.UnsupportedModel`, `models.causal_lm.CausalLMState`, `models.config.FAMILIES`, `models.config.FIXED_TODAY`, `models.config.HFConfig`, `models.config.INTERFACE_DEFAULTS`, `models.config.ModelPlan`, `models.config.POSITION_CEILING`, `models.config.UnsupportedModel`, `models.safetensors.DTYPES`, `models.safetensors.INDEX_NAME`, `models.safetensors.SINGLE_NAME`, `models.safetensors.TensorInfo`, `models.tokenizer.PATTERNS`, `numeric_mode`, `resample.ALTERNATIVES`, `resample.BootstrapResult`, `resample.INTEGRANDS`, `resample.METHODS`, `resample.MonteCarloResult`, `resample.PermutationTestResult`, `resample.STATISTICS`, `set_numeric_mode`, `training.numeric_mode_used`, `training.vendor_used`, `transformer.TransformerState`, `vendor`
+> `Array`, `Mamba1State`, `Mamba2State`, `Mamba3State`, `TransformerState`, `__version__`, `gpu_arch`, `gpu_arch_how`, `importers.supported_ops`, `linalg.PROFILE`, `linalg.PROFILE_BF16`, `linalg.PROFILE_FAMILY`, `linalg.PROFILE_INT15`, `linalg.PROFILE_INT8`, `linalg.PROFILE_VERSION`, `linalg.numeric_mode`, `linalg.profile`, `linalg.require_identical`, `lowbit.BF16Weight`, `lowbit.FORMATS`, `lowbit.Int8Weight`, `mamba.Mamba1State`, `mamba.Mamba2State`, `mamba.Mamba3State`, `models.CausalLMState`, `models.FAMILIES`, `models.HFConfig`, `models.ModelPlan`, `models.PATTERNS`, `models.UnsupportedModel`, `models.catalog`, `models.causal_lm.CausalLMState`, `models.config.FAMILIES`, `models.config.FIXED_TODAY`, `models.config.HFConfig`, `models.config.INTERFACE_DEFAULTS`, `models.config.ModelPlan`, `models.config.POSITION_CEILING`, `models.config.UnsupportedModel`, `models.safetensors.DTYPES`, `models.safetensors.INDEX_NAME`, `models.safetensors.SINGLE_NAME`, `models.safetensors.TensorInfo`, `models.tokenizer.PATTERNS`, `numeric_mode`, `numeric_profile`, `numeric_profile_measured`, `numeric_profiles`, `resample.ALTERNATIVES`, `resample.BootstrapResult`, `resample.INTEGRANDS`, `resample.METHODS`, `resample.MonteCarloResult`, `resample.PermutationTestResult`, `resample.STATISTICS`, `set_numeric_mode`, `set_numeric_profile`, `training.numeric_mode_used`, `training.vendor_used`, `transformer.TransformerState`, `vendor`
 

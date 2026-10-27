@@ -84,6 +84,12 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
             entries = candidate
             break
     if entries is None:
+        var extra = py_get(context, "sequence_extra_bindings", Python.tuple())
+        for i in range(len(extra)):  # driver-loop: fixed import-connected buffer owners
+            if py_type(extra[i]) is types[1] and binding is extra[i]["module"]:
+                entries = extra[i]
+                break
+    if entries is None:
         raise Error("TypeError: sequence device/state requires its connected native binding")
     var release = py_get(entries, "seq_tensor_free")
     if py_type(release) is not types[3]:

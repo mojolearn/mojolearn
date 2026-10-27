@@ -80,7 +80,54 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_native_kind", kind_value)
     py_setitem(fields, "_native_route", route)
+    # Public parameter verification (2026-10-27): the constructor previously
+    # retained only its ordered internal tensors, so inherited get_params
+    # could not return the caller's weights and set_params could not rebuild.
+    # Keep the original ordinary dictionary and its object identities.
+    py_setitem(fields, "weights", weights)
     return PythonObject(None)
+
+
+def neural_block_set_params_binding(block: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    if py_type(updates) is not bi.dict:
+        raise Error("TypeError: block parameters require an ordinary dictionary")
+    if len(updates) == 0:
+        return block
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    var kind = String(fields["_native_kind"])
+    var names = Python.list("weights", "numeric_mode")
+    if kind == "mamba2":
+        _ = py_call(names.append, "dt_limit")
+    elif kind == "transformer":
+        _ = py_call(names.append, "numeric_profile")
+        _ = py_call(names.append, "n_heads")
+        _ = py_call(names.extend, context["block_option_names"])
+    var values = bi.dict()
+    for i in range(len(names)):  # driver-loop: fixed constructor configuration, no Python callbacks
+        py_setitem(values, names[i], fields[names[i]])
+    var keys = py_call(bi.list, updates.keys())
+    for i in range(len(keys)):  # driver-loop: validate all keys before constructing replacement
+        if py_type(keys[i]) is not bi.str or not py_contains(values, keys[i]):
+            raise Error("ValueError: Invalid parameter for neural block")
+        py_setitem(values, keys[i], updates[keys[i]])
+    var options = Python.list(PythonObject(None), values["numeric_mode"])
+    if kind == "mamba2":
+        _ = py_call(options.append, values["dt_limit"])
+    elif kind == "transformer":
+        _ = py_call(options.append, values["numeric_profile"])
+        _ = py_call(options.append, values["n_heads"])
+        var option_names = context["block_option_names"]
+        for i in range(len(option_names)):  # driver-loop: native initializer's positional option schema
+            _ = py_call(options.append, values[option_names[i]])
+    var replacement = py_call(bi.object.__new__, py_type(block))
+    _ = neural_block_init_binding(replacement, values["weights"], PythonObject(kind), options, context)
+    # Preserve the established reset semantics and dictionary identity. A
+    # rejected replacement leaves the live block's fields/session untouched.
+    var fresh = py_call(bi.object.__getattribute__, replacement, "__dict__")
+    _ = py_call(fields.clear)
+    _ = py_call(fields.update, fresh)
+    return block
 
 
 def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -451,6 +498,8 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_allocate_binding(args[0], args[1], args[2], args[3])
         elif operation == 2:
             result = neural_block_forward_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+        elif operation == 4:
+            result = neural_block_set_params_binding(args[0], args[1], args[2])
         else:
             result = neural_block_backward_binding(args[0], args[1], args[2], args[3])
         return result.steal_data()

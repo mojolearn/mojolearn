@@ -21,7 +21,12 @@ def forest_construct(model: PythonObject, args: PythonObject, context: PythonObj
         found = found or mro[i] is owner
     if not found:
         raise Error("TypeError: forest constructor requires an instance of its connected class")
-    var hooks = plan[2]
+    # A registered decision-tree constructor may call its registered forest
+    # base initializer. Validate the actual class's connected native slots;
+    # its descriptor intentionally differs from the base's descriptor.
+    # Unregistered subclasses still inherit the base's strict hook identities.
+    var actual_plan = py_get(context["trees_constructors"], cls)
+    var hooks = plan[2] if actual_plan is None else actual_plan[2]
     for i in range(len(hooks)):  # driver-loop: fixed storage hook identities before native dictionary access
         var actual = PythonObject(None)
         for j in range(len(mro)):  # driver-loop: inherited native storage metadata

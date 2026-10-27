@@ -746,6 +746,25 @@ class TransformerBlock(NumericModeMixin):
              qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias,
              qk_norm, attn_softcap), _native_neural_bridge.CONTEXT)
 
+    def set_params(self, **params):
+        """Update constructor parameters and rebuild the block.
+
+        Parameters
+        ----------
+        **params
+            Constructor parameter names and their new values.
+
+        Returns
+        -------
+        self
+            The updated block.
+
+        Examples
+        --------
+        >>> block.set_params(weights=weights)
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_set_params(self, params, _native_neural_bridge.CONTEXT)
+
     def _weight_addrs(self):
         """The nine base weight addresses in the binding's order; the gate
         slot is 0 under an ungated MLP. The arrays are alive on `self`."""

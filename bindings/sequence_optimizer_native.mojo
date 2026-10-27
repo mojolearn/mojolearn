@@ -31,6 +31,10 @@ def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject
             var entry = bindings[PythonObject(name)]
             if py_type(entry) is b.dict and binding is entry["module"]:
                 return entry
+        var extra = py_get(context, "sequence_extra_bindings", Python.tuple())
+        for i in range(len(extra)):  # driver-loop: fixed connected native buffer owners
+            if py_type(extra[i]) is b.dict and binding is extra[i]["module"]:
+                return extra[i]
         raise Error("TypeError: sequence device/state requires its connected native binding")
     var selected = context["backend"]["_DEFAULT_MODE"] if mode is None else mode
     opt_scalar(selected, context)
