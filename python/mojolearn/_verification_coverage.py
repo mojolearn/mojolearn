@@ -1,5 +1,4 @@
 """Installed-package verification scope; inspection never executes a lane."""
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -7,9 +6,12 @@ from pathlib import Path
 from . import host_surface
 from . import _verify_reference as vref
 from . import _verify_small as small_profile
+from . import _verification_profiles as profiles
+from ._verification_sources import harness_sources, public_sources, supplemental_sources
 from ._verification_catalog import ENTRIES, PROVENANCE
 from ._verification_ctr_models import MODEL_SHA256 as CTR_MODELS
 from ._verification_evidence_data import DATA as HISTORICAL_EVIDENCE
+from ._verification_endpoint_data import DATA as ENDPOINTS
 
 
 def declaration(spec):
@@ -53,12 +55,19 @@ def reference_support(table, lane, fixtures, parts, stale=False, vendor_class=No
 
 
 def inventory(harness, table, vendor_class):
+    from . import _verify_light, __version__
+    from ._verify_light_command import reference_errors
+    from ._verification_light_reference import DATA as LIGHT_REFERENCE
+    light_errors = reference_errors(LIGHT_REFERENCE, _verify_light)
+    if LIGHT_REFERENCE.get('witnesses', {}).get('metal', {}).get('version') != __version__:
+        light_errors.append('reference is from another release; --light must confirm unchanged native artifacts before reuse')
     public = set(host_surface.public_reference_lanes())
     covered = set(host_surface.covered_lanes()) | set(host_surface.PUBLIC_HOST_ONLY_LANES)
     pending = host_surface.PUBLIC_PENDING_LANES
     candidates = set(host_surface.PUBLIC_REFERENCE_CANDIDATES)
     stale = set(vref.stale_reference_lanes(table, harness))
     parallel_cpu = {name for name in covered if name.startswith("par-")}
+    neural = profiles.neural_training_lanes(harness, host_surface)
     lanes = {}
     # NOTHING IS HIDDEN, SO NOTHING IS `excluded` (2026-09-20). Every
     # lane is in the public surface; the inventory now says what the verifier
@@ -84,16 +93,18 @@ def inventory(harness, table, vendor_class):
             # A fresh CPU recording can repair the revision before independent
             # GPU qualification closes the explicit hold in host_surface.
             reason = "reference qualification pending"
-        default_execution = (status != "not_applicable" and name not in stale
-                             and (vendor_class != "cpu" or row["comparable"]))
+        applicable = (status == "available" and name not in stale
+                      and (vendor_class != "cpu" or row["comparable"]))
+        default_execution = applicable and name not in neural
+        command = "verify --neural-training" if name in neural else "verify"
         properties = {"batch": declaration(getattr(harness, "BATCH", {}).get(name))}
         for part, (specs, default, *_rest) in getattr(harness, "EXTRA_PARTS", {}).items():
             properties[part] = declaration(specs.get(name, default))
             properties[part]["run_by_default"] = default_execution
-            properties[part]["command"] = "verify --all"
+            properties[part]["command"] = command + " --all"
         properties["batch"]["run_by_default"] = default_execution
         properties["rlpair"] = declaration(getattr(harness, "RLPAIR", {}).get(name, "n/a:no-sampler-trainer-pair"))
-        properties["rlpair"].update(run_by_default=default_execution, command="verify --all")
+        properties["rlpair"].update(run_by_default=default_execution, command=command + " --all")
         refs = {}
         for part in dict.fromkeys((*vref.PARTS, *properties)):
             refs[part] = sum(bool((entry := vref.entry(table, name, fixture, part))
@@ -102,10 +113,11 @@ def inventory(harness, table, vendor_class):
         lanes[name] = dict(status=status, reason=reason, properties=properties,
                            execution=dict(
                                run_by_default=default_execution,
+                               profile="neural-training" if name in neural else "routine",
                                cpu_route_declared=name in covered,
                                cpu_logical_shards=name in parallel_cpu,
-                               command=(f"verify --include-pending --lanes {name}" if name in covered and
-                                        (name not in public or name in stale) else f"verify --lanes {name}"),
+                               command=(f"{command} --include-pending --lanes {name}" if name in covered and
+                                        (name not in public or name in stale) else f"{command} --lanes {name}"),
                                requires_gpu_for_execution=name not in covered,
                                physical_multi_gpu_measured_by_cpu=False),
                            reference_fixtures=refs, fixtures=len(harness.FIXTURES),
@@ -120,8 +132,10 @@ def inventory(harness, table, vendor_class):
                                    else 'no_parallel_lane_declared_here')
         lane['release_qualified'] = False
     harness_path = getattr(harness, '__file__', None)
-    snapshot_matches = bool(harness_path and hashlib.sha256(Path(harness_path).read_bytes()).hexdigest()
-                            == HISTORICAL_EVIDENCE['harness_sha256'])
+    # A fragment can add or change a lane without changing identity_break.py.
+    # Compare the complete fixture source manifest in both wheel and checkout.
+    snapshot_matches = bool(harness_path and HISTORICAL_EVIDENCE.get('harness_sources')
+                            == harness_sources(harness))
     manifest_path = Path(__file__).parent / vref.TABLE_DIR / "models" / "models.json"
     model_keys = set()
     try:
@@ -157,10 +171,19 @@ def inventory(harness, table, vendor_class):
             multi_gpu_lanes=[n for n in entry['lanes'] if n.startswith('par-')])
         entries.append(row)
     return dict(format="mojolearn.verification-coverage.v1", execution="not run",
-                scope="registered harness and the 246-entry algorithm inventory; mapping is not certification",
+                scope="complete source endpoint census, registered harness and historical algorithm inventory; mapping is not certification",
                 vendor_class=vendor_class, provenance=PROVENANCE, entries=entries, lanes=lanes,
                 evidence_provenance={k: v for k, v in HISTORICAL_EVIDENCE.items() if k != 'lanes'},
                 evidence_snapshot_matches_harness=snapshot_matches,
+                public_endpoints=ENDPOINTS,
+                endpoint_snapshot_matches_sources=(ENDPOINTS['sources'] == public_sources(Path(__file__).parent)
+                    and ENDPOINTS['supplemental_sources'] == supplemental_sources(Path(__file__).parent)
+                    and ENDPOINTS['harness_sources'] == harness_sources(harness)),
+                light_verification=dict(command='verify --light', cases=list(_verify_light.EXPECTED_CASES),
+                    outputs=sum(_verify_light.OUTPUT_COUNTS.values()), max_input_elements=_verify_light.MAX_INPUT_ELEMENTS,
+                    execution='not run', reference_admitted=not light_errors, errors=light_errors,
+                    fault_command='verify --light --self-test', fault_kind='public-operation',
+                    release_qualified=False),
                 reference_admission_policy=table.get('admission_policy',
                     dict(status='legacy', reason='predates repeated-value and protocol admission; regenerate before release')),
                 declared_ctr_model_sha256=CTR_MODELS,
@@ -208,6 +231,12 @@ def format_human(report):
               "Use --json for sabotage pairs, backend records and one-versus-multiple GPU comparisons."]
     if not report['evidence_snapshot_matches_harness']:
         lines.append("Historical snapshot was generated from a different harness; newer lanes may lack evidence entries.")
+    endpoints = report['public_endpoints']
+    lines.append('Public endpoint source mapping: ' + ', '.join(f'{v} {k}' for k, v in sorted(endpoints['counts'].items())))
+    lines.append('Unmapped endpoints need review; source mapping is not runtime verification. See public_endpoints in JSON.')
+    if not report['endpoint_snapshot_matches_sources']:
+        lines.append('Endpoint inventory is stale for these package/harness sources; regenerate before claiming coverage.')
+    lines.append('Tiny tape/numerical check: verify --light; optional faults: verify --light --self-test (no timing).')
     policy = report['reference_admission_policy']
     if policy.get('status') == 'legacy':
         lines.append("Bundled reference admission: legacy; regeneration under the stricter policy is still owed.")

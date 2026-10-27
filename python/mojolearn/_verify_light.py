@@ -280,6 +280,9 @@ def compare(actual, expected):
         errors.append('different numerical fixture source')
     if not errors:
         for name in names:
-            if actual['cases'][name]['outputs'] != expected['cases'][name]['outputs']:
+            left, right = actual['cases'][name]['outputs'], expected['cases'][name]['outputs']
+            if any((a['shape'], a['dtype']) != (b['shape'], b['dtype']) for a, b in zip(left, right)):
+                errors.append('output contract differs: ' + name)
+            elif left != right:
                 errors.append('bits differ: ' + name)
     return errors

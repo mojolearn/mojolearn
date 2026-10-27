@@ -68,6 +68,14 @@ def test_source_changes_require_new_fixture_evidence_but_labels_do_not():
     assert 'different numerical fixture source' in light.compare(original, renamed)
 
 
+@pytest.mark.parametrize('field,value', [('shape', [1, 1]), ('dtype', '<i4')])
+def test_metadata_change_is_not_a_caught_numerical_fault(field, value):
+    clean, faulty = record(), record()
+    case = light.EXPECTED_CASES[0]
+    faulty['cases'][case]['outputs'][0][field] = value
+    assert light.compare(faulty, clean) == ['output contract differs: ' + case]
+
+
 def test_fingerprint_ignores_comments_but_catches_changed_arithmetic(monkeypatch):
     monkeypatch.setattr(light.inspect, 'getsource', lambda f: 'def f(x):\n    return x + 1\n')
     baseline = light.case_fingerprint(None)

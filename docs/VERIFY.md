@@ -40,12 +40,33 @@ Inspect the installed package's scope before running the checks:
 ```sh
 python -m mojolearn verify          # inference + classical training, base fixture
 python -m mojolearn verify --quick  # representative checks, same combined scope
+python -m mojolearn verify --light  # eight tiny tape/numerical bitwise fixtures
+python -m mojolearn verify --light --self-test  # also catch and restore numerical faults
 python -m mojolearn verify --neural-training  # explicit neural training scope
 python -m mojolearn verify --neural-training --all  # neural scope, all nine fixtures
 python -m mojolearn verify --coverage
 python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
 ```
+
+`--light` checks 118 outputs using at most sixteen elements per input, one
+execution per fixture and one update per optimizer. It covers tape operations,
+layout, first and second derivatives, optimizer state, checkpoint restoration,
+captured programs, convolution, losses and FP32 edge values. It records and
+compares exact bytes, shapes and dtypes against the same-release Apple, NVIDIA
+and AMD witnesses. There are no timing or quality measurements. Use
+`--light-output DIRECTORY` to retain the actual output bytes and binary hashes.
+This small scope supplements the estimator lanes; it does not certify every
+endpoint or possible input. A release label or packaging change can reuse
+these witnesses when the native bytes and fixtures are unchanged. Changed
+artifacts need current-release witnesses and read `OWED`; outputs are never
+required to remain unchanged across releases.
+
+With `--light --self-test`, nine test-only faults alter the public operation
+executed by native kernels, the backward seed, optimizer rate or restored
+parameter. Every tiny fixture has a fault. Each must change consumed bits and
+then match again after restoration; crashes and missing outputs do not count
+as catches. These controls do not claim to mutate native kernel source.
 
 Default and quick verification combine inference with classical training. Neither
 runs neural training. `--all` (or `--full`) expands this same routine scope to
@@ -68,6 +89,14 @@ the number of fixtures with a numerical reference and matching CPU, Apple,
 NVIDIA and AMD records. Missing/conflicted, stale and inapplicable fixtures
 are counted separately. These counts describe the bundled reference table;
 they do not certify the installed wheel or promote a pending lane.
+
+`public_endpoints` adds the full source API census, including tape methods,
+properties, constructors and configuration/state operations. Each row names
+its mapped lanes or supplemental checks, or an explicit numerical exclusion.
+Unmapped rows remain visible for review. Source mappings do not prove runtime
+execution. Source fingerprints expose a stale census; regenerate it with
+`python tools/verification_endpoints.py --write`, and check it with `--check`.
+Neural training lanes are marked opt-in, matching the command's actual selector.
 
 The appendix is a historical list, not the total number of today's public
 algorithms. `additional_lanes` names registered checks outside that list.

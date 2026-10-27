@@ -125,6 +125,11 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
+    if getattr(args, 'light', False):
+        from ._verify_light_command import command
+        return command(args)
+    if getattr(args, 'light_output', None):
+        raise ValueError('--light-output requires --light')
     if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
         args.no_models = True
     if not _asks_for_card(args):
@@ -277,6 +282,10 @@ def build_parser():
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
     scope = v.add_mutually_exclusive_group()
+    scope.add_argument('--light', action='store_true',
+                       help='eight tiny tape/numerical bitwise checks; --self-test also injects numerical faults')
+    v.add_argument('--light-output', metavar='DIRECTORY',
+                   help='with --light: retain captures in a new directory')
     scope.add_argument("--models-only", "--inference", dest="models_only", action="store_true",
                    help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
     scope.add_argument("--training", dest="training_only", action="store_true",
