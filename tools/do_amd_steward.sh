@@ -53,8 +53,11 @@ DO_SIZES="${MOJOLEARN_STEWARD_DO_SIZES:-gpu-mi300x1-192gb,gpu-mi325x1-256gb}"
 DO_REGIONS="${MOJOLEARN_STEWARD_DO_REGIONS:-}"      # empty: any region the size lists
 DO_IMAGE="${MOJOLEARN_STEWARD_DO_IMAGE:-188571990}"  # ROCm 6.4.1 on Ubuntu 24.04
 DO_SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"   # ~/.ssh/id_ed25519
-DO_TAG=mojolearn-steward
-NAME=mojolearn-steward-do-amd
+# Provision-only campaigns can use the same single-GPU rental/retention
+# machinery with an explicit image/size and an accurately named owned box.
+DO_TAG="${MOJOLEARN_STEWARD_DO_TAG:-mojolearn-steward}"
+NAME="${MOJOLEARN_STEWARD_DO_NAME:-mojolearn-steward-do-amd}"
+case "$DO_TAG:$NAME" in *[!A-Za-z0-9:-]*|:*|*:) echo "invalid rental name/tag" >&2; exit 2 ;; esac
 REPO_URL="${MOJOLEARN_DEVPOD_REPO_URL:-https://github.com/mojolearn/mojolearn.git}"
 G=/root/.mojolearn-steward-guard
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o BatchMode=yes -i $HOME/.ssh/id_ed25519 -o IdentitiesOnly=yes"
