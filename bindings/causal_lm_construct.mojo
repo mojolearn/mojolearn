@@ -379,8 +379,14 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             py_setitem(fields, "_runtime_lock", operation_lock_create())
         else:
             py_setitem(fields, "_runtime_lock", context["rlock"]())
-        py_setitem(fields, "_native_session", PythonObject(None))
-        py_setitem(fields, "_session_binding", PythonObject(None))
+        var session = PythonObject(None)
+        var session_binding = PythonObject(None)
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_session_create")):
+                session = _native_function(bindings[kind], "transformer_session_create")()
+                session_binding = bindings[kind]
+        py_setitem(fields, "_native_session", session)
+        py_setitem(fields, "_session_binding", session_binding)
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
         if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_arithmetic_profile")):
             py_setitem(fields, "_arithmetic_profile", _native_function(bindings[kind], "transformer_arithmetic_profile")())
@@ -505,6 +511,10 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(base[i], bindings["linalg"]))
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            if Bool(py=py_call(bi.hasattr, bindings[kind], "mamba3_prefill_session_create")):
+                py_setitem(fields, "_prefill_session", _native_function(bindings[kind], "mamba3_prefill_session_create")())
+                py_setitem(fields, "_prefill_binding", bindings[kind])
         _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
             String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
     return block

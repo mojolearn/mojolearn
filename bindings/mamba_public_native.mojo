@@ -18,6 +18,7 @@ for other compiled owners. Dictionary insertion retains each report before
 the temporary tuple is released.
 """
 from std.python import Python, PythonObject
+from std.os import getenv
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -271,7 +272,7 @@ def mamba3_getstate(block: PythonObject) raises -> PythonObject:
     return result
 
 
-def mamba3_setstate(block: PythonObject, state: PythonObject) raises -> PythonObject:
+def mamba3_setstate(block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = block.__dict__
     _ = py_call(fields.update, state)
     py_setitem(fields, "_prefill_session", PythonObject(None))
@@ -279,6 +280,10 @@ def mamba3_setstate(block: PythonObject, state: PythonObject) raises -> PythonOb
     py_setitem(fields, "_owned_generation", PythonObject(None))
     py_setitem(fields, "_owned_native_provider", PythonObject(None))
     py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
+    if String(fields["_native_route"]) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        var entries = _m3_entries(block, fields, context)
+        py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+        py_setitem(fields, "_prefill_binding", _m3_canonical(entries))
     return PythonObject(None)
 
 
@@ -765,7 +770,7 @@ def mamba_native_call(operation: String, values: PythonObject, context: PythonOb
     if operation == "getstate":
         return mamba3_getstate(values[0])
     if operation == "setstate":
-        return mamba3_setstate(values[0], values[1])
+        return mamba3_setstate(values[0], values[1], context)
     if operation == "set_input_states":
         return mamba3_set_input_states(values[0], values[1], values[2], values[3], values[4], context)
     if operation == "session_open":

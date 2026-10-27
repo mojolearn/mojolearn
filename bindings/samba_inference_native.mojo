@@ -6,6 +6,7 @@ classes and buffer exporters remain CPython-owned interface records; this
 module does not claim that all public state has native struct ownership.
 """
 from std.python import Python, PythonObject
+from providers.python.samba_execution_pyapi import samba_provider_forward
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import memcpy
@@ -270,6 +271,8 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     var output = PythonObject(None)
     if state is None and resident:
         output = _samba_resident_forward(fields, config, entries, ids)
+    if output is None:
+        output = samba_provider_forward(fields, config, entries, ids, state, step, context["neural"])
     if output is None:
         var native = py_get(fields, "_native_primitives")
         if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):

@@ -632,8 +632,14 @@ def neural_block_setstate_binding(block: PythonObject, state: PythonObject, cont
         py_setitem(fields, "_runtime_lock", operation_lock_create())
     else:
         py_setitem(fields, "_runtime_lock", context["rlock"]())
-    py_setitem(fields, "_native_session", PythonObject(None))
-    py_setitem(fields, "_session_binding", PythonObject(None))
+    var session = PythonObject(None)
+    var binding = PythonObject(None)
+    if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        var bindings = _model_bindings(fields["_native_route"], "transformer", context, mode)
+        binding = bindings["transformer"]
+        session = _native_function(binding, "transformer_session_create")()
+    py_setitem(fields, "_native_session", session)
+    py_setitem(fields, "_session_binding", binding)
     py_setitem(fields, "_native_forward_owner", PythonObject(None))
     py_setitem(fields, "_native_block_provider_cache", PythonObject(None))
     return PythonObject(None)
