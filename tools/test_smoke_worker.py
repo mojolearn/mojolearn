@@ -373,3 +373,29 @@ def test_algos_prep_is_a_function_call_inside_the_smoke_worker(monkeypatch, tmp_
     B.ensure_algos_prep(ctx, races)
     assert [c[0] for c in calls] == ["probe", "sub"] and calls[0][1] == calls[1][1]
     assert calls[0][1][2:4] == [ctx["algos_driver"], "prep"]
+
+
+def test_neural_parameter_smoke_uses_normal_isolated_workers(monkeypatch):
+    monkeypatch.setattr(SI, 'in_process', lambda: True)
+    calls = []
+    cmd = ['python', '/repo/tools/bench_board_neural.py', 'worker', '--arm', 'ours']
+    made = SI.start_worker('ours', cmd, {}, 'arm.log', '/repo', True,
+                           lambda *args: calls.append(args) or 'isolated')
+    assert made == 'isolated' and calls == [('ours', cmd + ['--params-only'], {}, 'arm.log', '/repo')]
+    with pytest.raises(RuntimeError, match='params-only'):
+        SI.start_worker('ours', cmd, {}, 'arm.log', '/repo', False, None)
+
+
+def test_isolated_neural_probe_exits_before_round_protocol():
+    code = '''
+import sys
+from types import SimpleNamespace
+sys.path.insert(0, %r)
+import bench_board_neural as N
+N.worker_ready = lambda args: (None, {'event': 'ready', 'probe_only': N.PARAMS_PROBE})
+raise SystemExit(N.worker(SimpleNamespace(params_only=True)))
+''' % os.path.dirname(SI.__file__)
+    result = subprocess.run([sys.executable, '-c', code], input='round 0\n',
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {'event': 'ready', 'probe_only': True}

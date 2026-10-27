@@ -5289,6 +5289,7 @@ def probe_ready(argv):
 
 
 def worker(args):
+    global PARAMS_PROBE
     import numpy as np
     # fd 1 is the protocol; everything a library prints goes to the log.
     proto = os.fdopen(os.dup(1), "w", buffering=1)
@@ -5298,6 +5299,17 @@ def worker(args):
     def say(obj):
         proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
         proto.flush()
+
+    if getattr(args, "params_only", False):
+        # Isolated smoke workers use exactly the probe constructor path and
+        # exit after readback. They cannot enter the round/fit protocol below.
+        previous, PARAMS_PROBE = PARAMS_PROBE, True
+        try:
+            _, message = worker_ready(args)
+            say(message)
+            return 0 if message.get("event") == "ready" else 1
+        finally:
+            PARAMS_PROBE = previous
 
     # The ready probe returns only its public protocol pair. Timed workers also
     # need its local configuration and preparation clock; neither is a global.
@@ -6341,6 +6353,8 @@ def build_parser():
                         "(y for a forward lane, losses for a train lane): tools/afn_ab.sh's judge "
                         "compares two builds from these")
     w = sub.add_parser("worker")
+    w.add_argument("--params-only", action="store_true",
+                   help="construct/read settings and exit without accepting any rounds")
     w.add_argument("--arm", required=True, choices=ARMS)
     w.add_argument("--lane", required=True, choices=LANES)
     w.add_argument("--shape", required=True, choices=sorted(LM_SHAPES))

@@ -924,5 +924,16 @@ def start_worker(arm, cmd, env, log_path, cwd, params_only, subprocess_worker):
         if not params_only:
             raise RuntimeError("in-process arm workers serve --params-only probes only; a timed race always "
                                "starts worker subprocesses")
+        _, script, _ = split_command(cmd)
+        if Path(script).name == "bench_board_neural.py":
+            # FAIRNESS FIX (2026-10-13 audit), reproduced 2026-10-27: paired
+            # neural probes hang in the shared multi-library process on AMD;
+            # the same five-arm GEMM probe matches in 7s in normal workers.
+            # Keep each neural arm's runtime/settings isolated just as in a
+            # measurement. The params-only controller reads ready and stops
+            # workers without sending any fit/timed round. Internal cause is
+            # unconfirmed; evidence: measurement-smoke-20261027/run2 and the
+            # retained AMD run/neural-isolated/gemm.params.json.
+            return subprocess_worker(arm, list(cmd) + ["--params-only"], env, log_path, cwd)
         return InProcessWorker(arm, cmd, env, log_path, cwd)
     return subprocess_worker(arm, cmd, env, log_path, cwd)
