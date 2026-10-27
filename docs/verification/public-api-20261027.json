@@ -23,6 +23,7 @@
     "apple-final-capture.json": "0374e26d3e3da5234dbdf903c4138f9d5fe8a1e88785bef34057c54ce9e23846",
     "apple-normal-public.json": "c2e6346ec61fa90dc490c4a8e453dcf662425ddd9440ba2a6a902f652ebfa5f5",
     "checker-complete.log": "86c5631446f8ff9c7dd0d6b90210416e456e18c8ade252b90d1751daecf4eaee",
+    "checker-reuse.log": "1614dee92706e3a9a55c10efeef67301b49f74698b39920bb8e6a091037895d0",
     "executed-source-closure.tgz": "e3d81ca47a21513d72efc05b8e17b17eca3bb301e29242c9110b81cd72a64c2a",
     "hotaisle-final-offers.json": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
     "hotaisle-up.log": "cec5ecfd6a146bd74611efcf88a9d96b4298ed01631b70773a2b3fc46f41fd01",
@@ -49,6 +50,12 @@
   ],
   "qualification_run": false,
   "release_qualified": false,
+  "retention": {
+    "archive_artifact_hashes_verified": 6,
+    "delete_verified": "HTTP 204, then GET 404 and absent from listing",
+    "nvidia_pod_deleted": "1ezjplia1wyp1d",
+    "r2_archive": "measurements/box-archive/verifier-api-20261027/verifier-api-20261027-20261027T1739Z.tgz"
+  },
   "runtime": {
     "cuda": {
       "driver": "595.91.07",
@@ -82,7 +89,8 @@
   },
   "separate_light_flag": false,
   "validation": {
-    "checker_tests_passed": 49,
+    "checker_tests_passed": 50,
+    "release_label_reuse": "accepted only for unchanged loaded native hashes and relevant fixture hashes; tested without new numerical execution",
     "source_inventory_endpoints": 3802,
     "source_inventory_is_runtime_evidence": false,
     "source_inventory_unmapped": 0

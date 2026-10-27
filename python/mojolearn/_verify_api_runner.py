@@ -154,6 +154,17 @@ def admit(captures):
         witnesses={v:{k:r[k] for k in ('vendor','version','sources','bindings')} for v,r in captures.items()})
 
 
+def unchanged_reference_inputs(clean, reference):
+    """A release label alone must not invalidate executed identity evidence."""
+    prior=reference.get('witnesses',{}).get(clean['vendor'],{})
+    def binaries(report):
+        return {row.get('module'):row.get('sha256') for row in report.get('bindings',())}
+    actual=binaries(clean)
+    families=set(clean['families'].values())
+    return bool(actual) and actual==binaries(prior) and all(
+        clean['sources'][family]==prior.get('sources',{}).get(family) for family in families)
+
+
 def verify(*,self_test=True,reference=None,retain=None,scope='all'):
     clean=capture(endpoints=selected_endpoints(scope))
     if retain:retain('api-clean',clean)
@@ -170,8 +181,10 @@ def verify(*,self_test=True,reference=None,retain=None,scope='all'):
     result['reference_device_validation']=reference.get('device_validation',{})
     result['reference_untested_vendors']=reference.get('untested_vendors',['metal','cuda','hip'])
     witness=reference.get('witness',{})
-    if witness.get('version')!=clean['version']:
-        result['errors'].append('current-release endpoint reference missing; previous-release bits are not a contract')
+    reuse=witness.get('version')!=clean['version'] and unchanged_reference_inputs(clean,reference)
+    if reuse:result['evidence_reuse']='unchanged loaded native bytes and numerical fixtures'
+    if witness.get('version')!=clean['version'] and not reuse:
+        result['errors'].append('changed or unrecorded native artifacts need current-release endpoint witnesses; previous-release bits are not a contract')
     elif any(witness.get('sources',{}).get(family)!=clean['sources'][family]
              for family in set(clean['families'].values())):
         result['errors'].append('endpoint fixtures changed; current reference is stale')

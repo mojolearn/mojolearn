@@ -200,3 +200,18 @@ def test_inventory_regeneration_cannot_hide_a_new_unmapped_api():
         require_complete_mapping([{'endpoint':'new.call','status':'unmapped'}],old,routes)
     with pytest.raises(ValueError,match='existing.call'):
         require_complete_mapping([],old,{})
+
+
+def test_release_label_reuses_only_unchanged_executed_native_inputs():
+    clean={'vendor':'cuda','version':'new','families':{'example.call':'metadata'},
+        'sources':{'metadata':'fixture'},'bindings':[{'module':'native','sha256':'binary'}]}
+    prior=copy.deepcopy(clean);prior['version']='old'
+    reference={'witnesses':{'cuda':prior}}
+    assert api.unchanged_reference_inputs(clean,reference)
+    changed=copy.deepcopy(clean);changed['bindings'][0]['sha256']='changed'
+    assert not api.unchanged_reference_inputs(changed,reference)
+    changed=copy.deepcopy(clean);changed['sources']['metadata']='changed'
+    assert not api.unchanged_reference_inputs(changed,reference)
+    changed=copy.deepcopy(clean);changed['bindings']=[]
+    assert not api.unchanged_reference_inputs(changed,reference)
+    assert not api.unchanged_reference_inputs(clean,{'witnesses':{}})
