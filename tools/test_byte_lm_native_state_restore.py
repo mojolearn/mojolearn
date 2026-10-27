@@ -39,7 +39,8 @@ def test_buffer_copy_and_state_value_checks_are_native():
 def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
     tree = ast.parse((ROOT / 'python/mojolearn/_byte_lm_impl.py').read_text())
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SmallByteLanguageModelTrainer')
-    for name in ('export_checkpoint_binary', 'from_checkpoint_binary'):
+    for name in ('save_checkpoint', 'export_checkpoint', 'from_checkpoint', 'from_checkpoint_bytes',
+                 'export_checkpoint_binary', 'from_checkpoint_binary'):
         method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
         body = method.body[1:]
         assert len(body) == 1 and isinstance(body[0], ast.Return)
@@ -69,3 +70,15 @@ def test_attention_report_uses_one_native_status_snapshot():
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SmallByteLanguageModelTrainer')
     method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'attention_stage_report')
     assert len(method.body) == 2 and method.body[1].value.func.id == '_LM_TRAINER'
+
+
+def test_json_checkpoint_retains_bounded_format_and_native_codec():
+    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi.mojo').read_text()
+    assert 'BYTE_JSON_LIMIT = 2097152' in source
+    assert 'native_json_parse_unique(encoded)' in source
+    assert 'sha256_hexdigest(_canonical(payload))' in source
+    assert 'py_type(encoded) is not bi.bytes' in source
+    assert 'byte_checkpoint_io(failure, c[].os.replace,' in source
+    assert 'byte_checkpoint_io(failure, c[].os.unlink,' in source
+    assert 'generation_array([cells]' in source
+    assert 'py_call(context[' not in source

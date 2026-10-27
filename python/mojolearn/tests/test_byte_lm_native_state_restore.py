@@ -143,3 +143,45 @@ def test_attention_report_reads_native_metadata_without_computation():
     _same(model.export_state(), before)
     model.close()
     assert model.attention_stage_report() is None
+
+
+def test_json_checkpoint_canonical_bytes_and_public_restores(tmp_path):
+    import hashlib
+    import json
+    from mojolearn import LanguageModelTrainer
+    from mojolearn._verify_native_runtime import audit_native_call
+    model = _model()
+    state = _detached(model.export_state())
+    state['parameters'][0] = np.float32(-0.0)
+    model.load_state_dict(state)
+    path = tmp_path / 'state.json'
+    assert audit_native_call(model.export_checkpoint, path).assert_native() is None
+    encoded = path.read_bytes()
+    envelope = json.loads(encoded)
+    canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                         ensure_ascii=True, allow_nan=False).encode('ascii')
+    assert canonical(envelope) + b'\n' == encoded
+    assert hashlib.sha256(canonical(envelope['payload'])).hexdigest() == envelope['payload_sha256']
+    for name in ('parameters', 'm', 'v', 'flags'):
+        assert bytes.fromhex(envelope['payload'][name]['hex']) == state[name].tobytes()
+    from_file = audit_native_call(LanguageModelTrainer.from_checkpoint, path, resident=True).assert_native()
+    from_bytes = audit_native_call(LanguageModelTrainer.from_checkpoint_bytes, encoded, resident=True).assert_native()
+    _same(from_file.export_state(), state)
+    _same(from_bytes.export_state(), state)
+    alias = tmp_path / 'alias.json'
+    audit_native_call(model.save_checkpoint, alias).assert_native()
+    assert alias.read_bytes() == encoded
+    for bad in (encoded.replace(b'"schema":', b'"schema":null,"schema":', 1),
+                encoded + b'x', b' ' * (2 * 1024 * 1024 + 1)):
+        with pytest.raises(ValueError):
+            LanguageModelTrainer.from_checkpoint_bytes(bad, resident=True)
+    with pytest.raises(TypeError):
+        LanguageModelTrainer.from_checkpoint_bytes(bytearray(encoded), resident=True)
+    with pytest.raises(FileNotFoundError) as failure:
+        model.export_checkpoint(tmp_path / 'missing' / 'state.json')
+    assert failure.value.errno == 2
+    directory = tmp_path / 'directory'
+    directory.mkdir()
+    with pytest.raises(IsADirectoryError):
+        model.export_checkpoint(directory)
+    assert directory.is_dir() and not list(tmp_path.glob('*.tmp-*'))
