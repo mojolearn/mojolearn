@@ -398,4 +398,5 @@ raise SystemExit(N.worker(SimpleNamespace(params_only=True)))
     result = subprocess.run([sys.executable, '-c', code], input='round 0\n',
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {'event': 'ready', 'probe_only': True}
+    assert json.loads(result.stdout) == {'event': 'ready', 'probe_only': True,
+                                       'worker_protocol': {'params_only': True, 'allows_rounds': False}}

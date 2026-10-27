@@ -221,6 +221,22 @@ class NeuralWorkerProtocolTests(unittest.TestCase):
         self.assertEqual(result["rounds_requested"], 1)
         return result, row
 
+    def test_conductor_retains_actual_worker_argv(self):
+        _, row = self.conductor(FAKE_WORKER, "ok")
+        self.assertEqual(row["command"][:4], [sys.executable, "-u", "-c", FAKE_WORKER])
+
+    def test_startup_crash_is_separate_from_parameter_refusal(self):
+        result, row = self.conductor("import sys; sys.exit(9)", "not_ready")
+        self.assertEqual(result["startup_failures"]["ours"]["returncode"], 9)
+        self.assertEqual(result["startup_failures"]["ours"], row["error"])
+        self.assertNotIn("startup_refusals", result)
+
+    def test_explicit_startup_refusal_is_not_process_failure(self):
+        source = "print('{\"event\":\"error\",\"error_kind\":\"refusal\",\"error\":\"REFUSED: unsupported\"}', flush=True)"
+        result, row = self.conductor(source, "not_ready")
+        self.assertEqual(result["startup_refusals"]["ours"], row["error"])
+        self.assertNotIn("startup_failures", result)
+
     def test_conductor_completes_one_scored_round_and_retains_outputs(self):
         result, row = self.conductor(FAKE_WORKER, "ok")
         self.assertEqual(len(row["ms"]), 1)
