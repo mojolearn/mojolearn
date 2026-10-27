@@ -1581,6 +1581,15 @@ def _build_statsmodels(lane, D, rec, S):
                     "insample": np.array([np.asarray(x[2]) for x in r], dtype=np.float64)}
         return {"forecast": np.array([np.asarray(x[0]) for x in r], dtype=np.float64),
                 "insample": np.array([np.asarray(x[1]) for x in r], dtype=np.float64)}
+    # FAIRNESS FIX (2026-10-13 audit): these per-series library calls had
+    # settings but no implementation identity, so smoke could not verify
+    # that the opponent was a real library implementation.
+    if lane == "arima":
+        from statsmodels.tsa.arima.model import ARIMA
+        declared["__implementation__"] = ARIMA
+    else:
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+        declared["__implementation__"] = ExponentialSmoothing
     return Runner(info, call, out, params=declared)
 
 

@@ -1905,6 +1905,10 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
     decomposition.py, density.py, cluster.py and neighbors.py. Reasons below
     apply only to the named recipe, library and resolved settings.
     """
+    from bench_board_forecast_params import semantic_exception as forecast_exception
+    forecast_reason = forecast_exception(lane, param, arm, ours, theirs, library)
+    if forecast_reason:
+        return forecast_reason
     # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
     for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_querywise_pointwise, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18):
         why = _mapping(lane, param, arm, ours, theirs, library)
