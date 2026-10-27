@@ -48,13 +48,13 @@ def test_repair_can_reuse_a_verified_opponent_without_forcing_a_retime(tmp_path)
 
 
 @pytest.mark.parametrize("preflight,returncode,races,expected_calls,expected_exit", [
-    ("MATCHED", 1, {}, 1, 1),
-    ("MATCHED", 0, {}, 1, 1),
-    (None, 1, {}, 1, 1),
+    ("MATCHED", 1, {}, 2, 1),
+    ("MATCHED", 0, {}, 2, 1),
+    (None, 1, {}, 2, 1),
     ("MATCHED", 0, {"r": {"evidence_failure": "R2 retention failed"}}, 1, 1),
     ("REFUSED", 1, {}, 2, 0),
 ])
-def test_campaign_stops_on_unsealed_work_but_continues_explicit_preflight_refusals(
+def test_campaign_records_failures_continues_and_stops_on_retention_failure(
         tmp_path, monkeypatch, preflight, returncode, races, expected_calls, expected_exit):
     ids = ['algos/adam/synthetic/rows=full', 'algos/adamw/synthetic/rows=full']
     manifest = tmp_path / 'manifest.json'
@@ -79,7 +79,7 @@ def test_campaign_stops_on_unsealed_work_but_continues_explicit_preflight_refusa
                  '--wheel-manifest', str(wheel), '--stop-at', str(time.time() + 3600)])
     assert rc == expected_exit and len(calls) == expected_calls
     state = json.loads((out / 'campaign.json').read_text())
-    if expected_exit:
+    if expected_exit and expected_calls == 1:
         assert state['stop_reason']
         assert state['recipes'][ids[1]]['status'] == 'pending'
     assert (out / 'measured' / ids[0].replace('/', '.') / 'scored-output.bin').read_bytes() == b'original scored bytes'
@@ -211,7 +211,7 @@ def test_smoke_cli_selects_identical_only(vendor, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('status,expected', [('MATCHED', 0), ('STARTED', 2),
-    ('REFUSED', 1), ('FAILED', 1), ('UNSUPPORTED', 1)])
+    ('REFUSED', 0), ('FAILED', 1), ('UNSUPPORTED', 1)])
 def test_smoke_exit_requires_completed_matching_pairings(status, expected):
     doc = dict(finished=1, expected=1, checks={'data': {'status': 'ok'}},
                rows={'recipe': {'status': status}})

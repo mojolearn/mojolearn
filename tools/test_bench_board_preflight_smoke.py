@@ -174,3 +174,27 @@ def test_identical_plan_includes_every_neural_fit_lane(vendor):
     lanes = {r['lane']: r for r in races}
     assert set(B.NEURAL.FIT_LANES) <= set(lanes)
     assert all(lanes[lane]['our_arms'] == {'ours': 'identical'} for lane in B.NEURAL.FIT_LANES)
+
+
+def test_preflight_selection_keeps_only_matched_recipes_and_records_errors():
+    races = [dict(id=k, our_arms={'ours': 'identical'}) for k in ('ok', 'different', 'crashed', 'missing')]
+    report = {'races': {
+        'ok': {'audit': {'verdict': 'MATCHED'}},
+        'different': {'audit': {'verdict': 'REFUSED', 'problems': ['solver differs']}},
+        'crashed': {'audit': {'verdict': 'REFUSED', 'startup_failures': {'torch': {'returncode': -11}}}},
+    }}
+    admitted, skipped, failed = B.select_after_preflight(races, report)
+    assert [r['id'] for r in admitted] == ['ok']
+    assert set(skipped) == {'different'}
+    assert set(failed) == {'crashed', 'missing'}
+    assert skipped['different']['problems'] == ['solver differs']
+    admitted, skipped, failed = B.select_after_preflight(races[1:2], report)
+    assert admitted == [] and set(skipped) == {'different'} and not failed
+
+
+def test_opponent_startup_failure_is_error_not_comparison_skip():
+    race = {'our_arms': {'ours': 'identical'}}
+    assert B.preflight_disposition(race, {'verdict': 'REFUSED',
+        'problems': ['parameter probe failed (rc -11): torch']}) == 'FAILED'
+    assert B.preflight_disposition(race, {'verdict': 'REFUSED',
+        'problems': ['tolerance missing from readback']}) == 'REFUSED'

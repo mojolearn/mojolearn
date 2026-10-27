@@ -374,6 +374,9 @@ def smoke_row(race, mode, rc, seconds, directory, log, timeout):
     if entry is not None:
         row.update(status=entry.get("verdict") or "FAILED", problems=list(entry.get("problems") or []),
                    exceptions=entry.get("exceptions"), scorer_preflight=entry.get("scorer_preflight"))
+        if B.preflight_disposition(race, entry) == "FAILED":
+            row["status"] = "FAILED"
+            row["startup_failures"] = entry.get("startup_failures", {})
         mine = own_arm_failures(race, row["problems"])
         if mine:
             row["status"] = "FAILED"
@@ -401,13 +404,13 @@ def problem_kind(text):
 
 
 def smoke_exit_code(doc):
-    """Only a completed, retained smoke with every selected pairing matched passes."""
+    """Completed retained smoke accepts matched recipes and explicit comparison skips."""
     if doc.get("retention_failure") or not doc.get("checks"):
         return 1
     if any(c.get("status") != "ok" for c in doc["checks"].values()):
         return 1
     rows = list(doc.get("rows", {}).values())
-    if any(r.get("status") not in ("MATCHED", "STARTED") for r in rows):
+    if any(r.get("status") not in ("MATCHED", "REFUSED", "STARTED") for r in rows):
         return 1
     if doc.get("retention_pending") or not doc.get("finished") or len(rows) != doc.get("expected") or any(
             r.get("status") == "STARTED" for r in rows):
@@ -1066,9 +1069,11 @@ def main(argv=None):
                     help="PyPI wheel manifest from tools/pypi_wheel_install.py (bench_board.py setup writes "
                          "<out>/wheel-manifest.json); required to measure")
     ap.add_argument("--plan-only", action="store_true")
-    ap.add_argument("--keep-going", action="store_true",
+    ap.add_argument("--keep-going", action="store_true", default=True,
                     help="after a line fails (its evidence retained), record it and start the next line instead "
                          "of stopping; an evidence upload failure still stops (tools/gate_smoke_box.py measure)")
+    ap.add_argument("--stop-on-error", dest="keep_going", action="store_false",
+                    help="stop after a retained recipe failure; default records failures and continues")
     ap.add_argument("--cpu-fallback", action="store_true",
                     help="the board's plan: CPU opponents where this vendor has no GPU library, and recipes with no "
                          "opponent (ours alone); default is the GPU-opponent plan")
@@ -1170,6 +1175,13 @@ def main(argv=None):
                    results={rid: {"status": r.get("status"), "audit": r.get("audit"),
                                   "evidence_failure": r.get("evidence_failure")}
                             for rid, r in board.get("races", {}).items()})
+        if board.get("failed_preflight_recipes"):
+            row["preflight"] = "FAILED"
+        if row["preflight"] == "REFUSED" and not board.get("races") and not board.get("failed_preflight_recipes"):
+            row["status"] = "skipped"
+            state.setdefault("skipped_recipes", []).append(race["id"])
+        elif rc != 0 or not board.get("races"):
+            row["status"] = "failed"
         E.write(path, state)
         # LOG AS WE GO (2026-10-14): every recipe, refused or timed, uploads its log, preflight.json,
         # board.json and campaign row, then campaign.json, before the next recipe starts.
@@ -1187,7 +1199,7 @@ def main(argv=None):
         # scored arrays and logs but no final
         # race record. Preserve that work and stop before another measurement.
         # An explicit preflight refusal has not entered the timed driver.
-        if row["preflight"] != "REFUSED" and (rc != 0 or not board.get("races")):
+        if row["status"] != "skipped" and (rc != 0 or not board.get("races")):
             why = "controller failed or result missing; inspect and retain existing work before continuing"
             if getattr(args, "keep_going", False):
                 # --keep-going (the release gate's whole-plan measurement, 2026-10-22): this line's log,

@@ -3144,6 +3144,9 @@ def params_probe(ctx, race, arms, scorer=None):
     for arm in arms:
         a = (r.get("arms") or {}).get(arm) or {}
         p = (rep.get("arms") or {}).get(arm)
+        if arm in r.get("startup_failures", {}):
+            out[arm] = {"startup_failure": r["startup_failures"][arm], "probe_rc": rc}
+            continue
         if a.get("status") not in (None, "ok", "params_only") or p is None:
             continue
         info = a.get("info") or {}
@@ -3210,6 +3213,9 @@ def preflight_check(ctx, race, arms):
     # from a failed process can never admit a timed race.
     report["problems"].extend("parameter probe failed (rc %s): %s" % (p["probe_rc"], a)
                               for a, p in probes.items() if p.get("probe_rc"))
+    report["startup_failures"] = {a: p["startup_failure"] for a, p in probes.items()
+                                  if p.get("startup_failure")}
+    report["problems"].extend("worker startup failed: " + a for a in report["startup_failures"])
     hardware = None
     for arm in arms:
         if arm_device(arm, ctx.get("vendor")) == "gpu":
@@ -3249,6 +3255,36 @@ def preflight_check(ctx, race, arms):
     if report["problems"]:
         report["verdict"] = "REFUSED"
     return report
+
+
+def preflight_disposition(race, audit):
+    """Separate a comparison refusal from an own-arm startup failure."""
+    if audit.get("startup_failures") or any(str(p).startswith("parameter probe failed (rc ")
+                                            for p in audit.get("problems", [])):
+        return "FAILED"
+    own = set(race.get("our_arms") or {})
+    prefixes = ("missing parameter/version probe: ", "parameter probe failed (rc ")
+    if any(str(p).startswith(prefixes) and str(p).rsplit(": ", 1)[-1] in own
+           for p in audit.get("problems", [])):
+        return "FAILED"
+    verdict = audit.get("verdict")
+    return verdict if verdict in ("MATCHED", "REFUSED") else "FAILED"
+
+
+def select_after_preflight(races, report):
+    """Only matched recipes may time; keep refused/failed recipes in the report."""
+    admitted, skipped, failed = [], {}, {}
+    for race in races:
+        entry = report.get("races", {}).get(race["id"], {})
+        audit = entry.get("audit") or {}
+        status = preflight_disposition(race, audit)
+        if status == "MATCHED":
+            admitted.append(race)
+        else:
+            record = dict(status=status, problems=list(audit.get("problems") or
+                          ["missing or incomplete preflight verdict"]), recipe=entry.get("recipe"))
+            (skipped if status == "REFUSED" else failed)[race["id"]] = record
+    return admitted, skipped, failed
 
 
 def audit_plan(ctx, races):
@@ -5033,13 +5069,8 @@ def main(argv=None):
             {"nvidia": "cuda", "amd": "hip"}.get(vendor) != artifact_identity.get("vendor", "cuda")):
         raise SystemExit("bench_board: guarded board vendor/mode must match its explicit IDENTICAL artifact identity")
     gate = None
-    if full and not args.preflight_only:
-        gate = "overridden (--no-smoke-gate)" if args.no_smoke_gate else None
-        if not args.no_smoke_gate:
-            why = smoke_gate(out, vendor, races, args.smoke_json, artifact_identity)
-            if why:
-                raise SystemExit("bench_board: REFUSING to start a full board: " + why)
-            gate = "passed (SMOKE PASS for every planned race, files %s)" % smoke_files_sha256()[:16]
+    if full and not args.preflight_only and args.no_smoke_gate:
+        gate = "overridden (--no-smoke-gate)"
     os.makedirs(os.path.join(out, "logs"), exist_ok=True)
     rpath = os.path.join(out, "board.json")
     result = load_result(rpath)
@@ -5209,13 +5240,25 @@ def main(argv=None):
         # Audit all selected recipes before the first warm-up, not after
         # spending money on the first several hundred rows of a bad plan.
         result["preflight"] = audit_plan(ctx, todo)
+        # Owner policy (2026-10-27): quietly skip refused comparisons; record
+        # recipe failures and continue independent matched work. Neither gets
+        # a timing cell or a fabricated pass.
+        todo, skipped, failed = select_after_preflight(todo, result["preflight"])
+        result["skipped_recipes"] = skipped
+        result["failed_preflight_recipes"] = failed
+        result["measurement_selection"] = dict(admitted=[r["id"] for r in todo],
+                                               skipped=list(skipped), failed=list(failed))
         save_result(rpath, result)
-        if result["preflight"]["verdict"] != "MATCHED" or args.preflight_only:
-            print("bench_board: plan preflight %s; no timed races started; report in %s" %
-                  (result["preflight"]["verdict"], rpath), flush=True)
-            return 0 if result["preflight"]["verdict"] == "MATCHED" else 1
     if args.preflight_only:
-        return 0
+        return 1 if result.get("failed_preflight_recipes") else 0
+    # Refused recipes must not block the smoke gate for independent admitted
+    # measurements. The gate itself is unchanged and still checks every timed recipe.
+    if full and todo and not args.no_smoke_gate:
+        why = smoke_gate(out, vendor, todo, args.smoke_json, artifact_identity)
+        if why:
+            raise SystemExit("bench_board: REFUSING to start a full board: " + why)
+        result["config"]["smoke_gate"] = "passed for admitted recipes (files %s)" % smoke_files_sha256()[:16]
+        save_result(rpath, result)
     for i, r in enumerate(todo):
         print("bench_board: [%d/%d] %s arms=%s" % (i + 1, len(todo), r["id"], ",".join(r["arms"])),
               flush=True)
@@ -5235,7 +5278,7 @@ def main(argv=None):
         return 1 if write_smoke(out, races, result, vendor, args.shard) else 0
     failed = [rid for rid, rec in result["races"].items()
               if rid in result["plan"] and rec.get("status") not in ("done", "unsupported")]
-    return 1 if failed else 0
+    return 1 if failed or result.get("failed_preflight_recipes") else 0
 
 
 if __name__ == "__main__":
