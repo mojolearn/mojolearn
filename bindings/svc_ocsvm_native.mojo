@@ -8,7 +8,7 @@
 # `xn_matmul`, `xn_unary`, `xn_p2m_sign_label`) with the same buffers and the
 # same int and float parameter lists, in the same order, plus the base
 # binding's `gather_i32` and `cast_elements`: the bits do not move.
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array
@@ -182,6 +182,7 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var q = PythonObject(None)
     var xw = x
     var res_fn = PythonObject(None)
+    var resident_available = False
     var degree = 0
     var coef0 = Float64(0.0)
     if precomputed:
@@ -198,14 +199,18 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         if rows is not None:
             xw = _take_rows(binding, x, rows, m, context)
         # the resident solve: the Gram on the device, solved there
-        var entry = "x_neighbors_ocsvm_resident" if _fast_tier(binding, context) else "x_neighbors_ocsvm_resident_idn"
-        res_fn = py_call(b.getattr, xn_module(binding), PythonObject(entry), PythonObject(None))
-        if res_fn is None:
+        if xn_is_module(binding):
+            var entry = "x_neighbors_ocsvm_resident" if _fast_tier(binding, context) else "x_neighbors_ocsvm_resident_idn"
+            res_fn = py_call(b.getattr, xn_module(binding), PythonObject(entry), PythonObject(None))
+            resident_available = res_fn is not None
+        else:
+            resident_available = (xn_capabilities(binding) & 1) != 0
+        if not resident_available:
             q = _kernel(binding, xw, xw, Int(py=context["family_svc_xn_kernels"][kernel]), gamma, coef0, degree, context)
     # libsvm's start (solve_one_class), three device launches
     var alpha = family_array(Python.tuple(PythonObject(m)), "<f4", context)
-    _ = family_call(family_entry(xn_module(binding), "x_neighbors_ocsvm_alpha_init", context), Python.list(_a(cv), _a(alpha)),
-                    _dims(m), Python.list(PythonObject(nu)))
+    xn_execute(binding, "ocsvm_alpha_init", Python.list(_a(cv), _a(alpha)),
+               _dims(m), Python.list(PythonObject(nu)))
     _ = alpha  # keep the Python object alive through the native call above
     var info = family_array(Python.tuple(PythonObject(1)), "<f4", context)
     var iters = family_array(Python.tuple(PythonObject(1)), "<i4", context)
@@ -213,10 +218,14 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var cap = 10000000 if max_iter < 0 else max_iter
     var tol = _f32_scalar(svc_float(svc_field(fields, "tol")))
     if q is None:
-        _ = family_call(res_fn, Python.list(_a(xw), _a(cv), _a(alpha), _a(info), _a(iters)),
-                        _dims(m, d, Int(py=context["family_svc_xn_kernels"][kernel]), degree, cap),
-                        Python.list(PythonObject(svc_float(svc_field(fields, "_gamma"))), PythonObject(_f32_scalar(coef0)),
-                                    PythonObject(tol)))
+        var addresses = Python.list(_a(xw), _a(cv), _a(alpha), _a(info), _a(iters))
+        var dims = _dims(m, d, Int(py=context["family_svc_xn_kernels"][kernel]), degree, cap)
+        var scalars = Python.list(PythonObject(svc_float(svc_field(fields, "_gamma"))),
+                                  PythonObject(_f32_scalar(coef0)), PythonObject(tol))
+        if xn_is_module(binding):
+            _ = family_call(res_fn, addresses, dims, scalars)
+        else:
+            xn_execute(binding, "ocsvm_resident", addresses, dims, scalars)
         _ = iters  # keep the Python object alive through the native call above
         _ = info  # keep the Python object alive through the native call above
         _ = alpha  # keep the Python object alive through the native call above

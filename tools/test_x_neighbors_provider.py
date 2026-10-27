@@ -27,11 +27,11 @@ def test_generated_tables_preserve_current_wrapper_schemas_and_native_calls():
 def test_existing_provider_is_admitted_outside_packed_operation_loops():
     text = (ROOT / 'providers/python/x_neighbors_descriptor_pyapi.mojo').read_text()
     assert 'struct ' not in text
-    assert 'downcast_value_ptr[NeuralDescriptorProvider]' in text
+    assert 'downcast_value_ptr[CompiledBindingSnapshot]' in text
     assert 'neural_descriptor_connect(factory, String(XN_ABI_NAME), XN_OPERATION_COUNT)' in text
     execute = text[text.index('def xn_execute'):]
     assert 'neural_descriptor_connect' not in execute and 'xn_admit(' not in execute
-    assert 'neural_descriptor_execute(binding, xn_operation_id(name), a, p, f)' in execute
+    assert 'neural_descriptor_execute(snapshot[].provider, xn_operation_id(name), a, p, f)' in execute
     for filename in ('neighbors_local_native','neighbors_semi_native','neighbors_graph_native','svc_ocsvm_native'):
         source = (ROOT / 'bindings' / (filename+'.mojo')).read_text()
         assert source.count('args = xn_admit_arguments(args, context)') == 1
@@ -51,3 +51,13 @@ def test_selected_public_method_bodies_have_no_python_binding_lookup():
             assert isinstance(n.args[2].elts[0],ast.Constant) and n.args[2].elts[0].value is None
             seen += 1
     assert seen >= 30
+
+
+def test_capabilities_are_operation_local_and_do_not_mutate_cached_provider():
+    snapshot = (ROOT/'providers/python/compiled_binding_snapshot.mojo').read_text()
+    assert 'var provider: PythonObject' in snapshot and 'var capabilities: List[Int]' in snapshot
+    assert 'def execute' not in snapshot and 'neural_descriptor_execute' not in snapshot
+    source = (ROOT/'providers/python/x_neighbors_descriptor_pyapi.mojo').read_text()
+    assert 'var capabilities = neural_descriptor_execute(provider, xn_operation_id("capabilities"), [], [], [])' in source
+    assert 'CompiledBindingSnapshot(provider, binding, String(XN_ABI_NAME), mode, [capabilities])' in source
+    assert 'capabilities[0]' in source

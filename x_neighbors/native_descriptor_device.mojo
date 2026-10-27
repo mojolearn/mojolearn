@@ -4,6 +4,7 @@ from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_neighbors.descriptor_schema import XN_ABI_NAME, xn_schema, xn_min_ints
+from x_neighbors.native_descriptor_aux_device import xn_aux_execute
 from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.device_ops import op_softmax64
@@ -1123,6 +1124,14 @@ def xn_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -
         return xn_native_louvain_csr(a, p, f)
     if op == 77:
         return Int(GLOBAL_NUMERIC_MODE)
+    if op == 78:
+        return xn_aux_execute(0, a, p, f)
+    if op == 79:
+        return xn_aux_execute(1, a, p, f)
+    if op == 80:
+        return xn_aux_execute(2, a, p, f)
+    if op == 81:
+        return xn_aux_execute(3, a, p, f)
     raise Error("x_neighbors native ABI: unknown operation")
 
 

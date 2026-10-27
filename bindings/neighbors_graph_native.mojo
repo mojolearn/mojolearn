@@ -17,7 +17,7 @@
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -244,8 +244,14 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
     """`PageRank._unit(v, n, what)`: a caller's length-n non-negative vector
     divided by its sum on the device (`x_neighbors_unit_ff`)."""
     var b = _b()
-    var unit_fn = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_unit_ff"), PythonObject(None))
-    if unit_fn is None:
+    var unit_fn = PythonObject(None)
+    var available = False
+    if xn_is_module(binding):
+        unit_fn = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_unit_ff"), PythonObject(None))
+        available = unit_fn is not None
+    else:
+        available = (xn_capabilities(binding) & 4) != 0
+    if not available:
         raise Error("NotImplementedError: mojolearn PageRank " + what + ": this binary lacks x_neighbors_unit_ff "
                     + "(rebuild without -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)")
     var wv = family_as_f32(v, 1, what, context)
@@ -253,8 +259,12 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
         raise Error(what + " must be n non-negative values, not all zero")
     var out = family_array(Python.tuple(n), "<f4", context)
     var uinfo = family_array(Python.tuple(2), "<i4", context)
-    _ = family_call(unit_fn, Python.list(_addr(wv), _addr(out), _addr(uinfo)), Python.list(PythonObject(n)),
-                    _empty_list())
+    if xn_is_module(binding):
+        _ = family_call(unit_fn, Python.list(_addr(wv), _addr(out), _addr(uinfo)), Python.list(PythonObject(n)),
+                        _empty_list())
+    else:
+        xn_execute(binding, "unit_ff", Python.list(_addr(wv), _addr(out), _addr(uinfo)),
+                   Python.list(PythonObject(n)), _empty_list())
     _ = wv  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = uinfo  # keep the Python object alive through the native call above

@@ -6,10 +6,11 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import (
-    NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect,
+    neural_descriptor_entry, neural_descriptor_connect,
     neural_descriptor_execute,
 )
 from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.compiled_binding_snapshot import CompiledBindingSnapshot
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT, XN_MODE_OPERATION, xn_operation_id
 
 
@@ -20,8 +21,8 @@ def xn_is_module(value: PythonObject) raises -> Bool:
 def xn_module(value: PythonObject) raises -> PythonObject:
     if xn_is_module(value):
         return value
-    var owner = value.downcast_value_ptr[NeuralDescriptorProvider]()
-    if owner[].name != String(XN_ABI_NAME):
+    var owner = value.downcast_value_ptr[CompiledBindingSnapshot]()
+    if owner[].abi != String(XN_ABI_NAME):
         raise Error("x_neighbors requires its admitted shared native provider")
     return owner[].module
 
@@ -35,9 +36,15 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
         return binding
     var factory = neural_descriptor_entry(binding, "x_neighbors_native_api_v1")
     var provider = neural_descriptor_connect(factory, String(XN_ABI_NAME), XN_OPERATION_COUNT)
-    if neural_descriptor_execute(provider, XN_MODE_OPERATION, [], [], []) != 1:
+    var mode = neural_descriptor_execute(provider, XN_MODE_OPERATION, [], [], [])
+    if mode != 1:
         raise Error("x_neighbors native dispatch candidate requires identical mode")
-    return provider
+    var capabilities = neural_descriptor_execute(provider, xn_operation_id("capabilities"), [], [], [])
+    return PythonObject(alloc=CompiledBindingSnapshot(provider, binding, String(XN_ABI_NAME), mode, [capabilities]))
+
+
+def xn_capabilities(binding: PythonObject) raises -> Int:
+    return binding.downcast_value_ptr[CompiledBindingSnapshot]()[].capabilities[0]
 
 
 def xn_admit_arguments(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -57,7 +64,12 @@ def xn_admit_arguments(args: PythonObject, context: PythonObject) raises -> Pyth
 def xn_execute(binding: PythonObject, name: String, addresses: PythonObject,
                 ints: PythonObject, floats: PythonObject) raises:
     if xn_is_module(binding):
-        _ = py_call(neural_descriptor_entry(binding, "xn_" + name), addresses, ints, floats)
+        var export_name = "xn_" + name
+        if name == "ocsvm_alpha_init" or name == "unit_ff":
+            export_name = "x_neighbors_" + name
+        elif name == "ocsvm_resident":
+            export_name = "x_neighbors_ocsvm_resident_idn"
+        _ = py_call(neural_descriptor_entry(binding, export_name), addresses, ints, floats)
         return
     var a = List[Int]()
     var p = List[Int]()
@@ -68,4 +80,5 @@ def xn_execute(binding: PythonObject, name: String, addresses: PythonObject,
         p.append(Int(py=ints[i]))
     for i in range(len(floats)):  # small-loop(named operation's fixed scalar schema)
         f.append(Float64(py=floats[i]))
-    _ = neural_descriptor_execute(binding, xn_operation_id(name), a, p, f)
+    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
+    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id(name), a, p, f)
