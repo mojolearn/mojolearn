@@ -3,10 +3,11 @@
 from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from autograd.ops_api import ops_session_open, ops_session_close, ops_session_registry_token, OPS_DEVICE
+from autograd.program_import_request import program_import_request
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
-from sequence.neural_model_dispatch import PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
@@ -18,6 +19,12 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
     try:
         if result == 0:
             raise Error("native model: null result")
+        if op == PROGRAM_IMPORT:
+            if nf != 0:
+                raise Error("native import: operation takes no scalar descriptors")
+            var value = program_import_request[DeviceExec, OPS_DEVICE](native_descriptor_words(aa, na), native_descriptor_words(pp, np))
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
+            return 0
         if op == PROGRAM_DEVICE_RUN:
             if nf != 0:
                 raise Error("native program: device execution takes no scalar descriptors")
