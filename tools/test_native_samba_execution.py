@@ -84,3 +84,24 @@ def test_optimizer_dispatch_preserves_same_native_functions_and_float_conversion
     for operation in (25,26,27):
         assert f'samba_optimizer_execute(provider, {operation},' in step
     assert 'neural_descriptor_execute(provider, 9,' in step
+
+
+def test_accumulation_reuses_admitted_native_metadata_and_keeps_original_reduction():
+    native=(ROOT/'training/native_samba_execution.mojo').read_text()
+    loop=native.split('def accumulated_gradients(')[1]
+    assert 'for k in range(accumulation)' in loop
+    assert 'losses[k] = Float32(self.gradients(' in loop
+    assert 'src=i32_ptr(ids) + k * self.rows' in loop
+    assert '[n, accumulation, self.rows * accumulation]' in loop
+    assert '[1, accumulation, -1]' in loop
+    assert 'registry_failure.byte_length()' in loop
+    assert 'self.tape and self.tape_started' in native
+    assert 'self.close_endpoint.call(self.reset_operation' in native
+    for file in ('mamba/native_tape_dispatch.mojo','transformer/native_tape_dispatch.mojo'):
+        source=(ROOT/file).read_text()
+        assert 'if op == 5:' in source
+        assert 'or not tape[].consumed:' in source
+    boundary=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text().split('def samba_provider_accumulated_gradients(')[1]
+    assert boundary.count('AdmittedSambaExecution(') == 1
+    assert 'admitted.native.accumulated_gradients(' in boundary
+    assert 'for k in range(accumulation)' not in boundary

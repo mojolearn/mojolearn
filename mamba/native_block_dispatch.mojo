@@ -20,12 +20,16 @@ from mamba.impl.mamba_shell_impl import (
 # 15 owned snapshot install; 16 owned carried-state forward/decode;
 # 17 owned export; 18 close under the admission GIL.
 # Session execution prepends an admitted opaque owner handle to its words.
-comptime MAMBA_BLOCK_OPERATIONS = 19
+comptime MAMBA_BLOCK_OPERATIONS = 20
 
 
 def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
     if op < 0 or op >= MAMBA_BLOCK_OPERATIONS:
         raise Error("Mamba block native ABI: unknown operation")
+    if op == 19:
+        if len(f) != 0:
+            raise Error("mamba3 private tape reset: unexpected floats")
+        return mamba_tape_operation(5, a, words)
     if op == 18:
         if len(words) != 1 or words[0] == 0 or len(a) != 0 or len(f) != 0:
             raise Error("mamba3 prefill session close: invalid native descriptor")

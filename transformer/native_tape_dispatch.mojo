@@ -24,6 +24,14 @@ def transformer_tape_operation(op: Int, a: List[Int], words: List[Int]) raises -
         return 0
     if not tape[].busy:
         raise Error("transformer forward tape: native operation requires a reserved owner")
+    if op == 5:
+        # Private operation-owned tape storage may start the next microbatch
+        # only after the preceding immutable snapshot was consumed/closed.
+        if len(a) != 0 or len(words) != 1 or not tape[].consumed:
+            raise Error("transformer private tape reset requires a consumed snapshot")
+        tape[] = TransformerForwardTape([])
+        tape[].busy = True
+        return 0
     if op == 4:
         tape[].close()
         return 0

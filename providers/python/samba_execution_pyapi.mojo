@@ -362,6 +362,7 @@ struct AdmittedSambaExecution(Movable):
                     layer.operation = base + 2
                     layer.backward_operation = base + 3
                     layer.close_operation = base + 4
+                    layer.reset_operation = 14 if publication.transformer else 19
                     var a: List[Int] = [0]
                     for address in publication.weight_addresses:  # driver-loop: immutable forward snapshot address slots
                         a.append(address)
@@ -519,3 +520,85 @@ def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries
         admitted.native.dropout_scalars = [Float64(p), Float64(scale)]
     return admitted.gradients(ids, targets, 0 if num_items is None else Int(py=num_items), num_items is None,
         Bool(py=config["tie_embeddings"]), fused, chunked, fields["names"])
+
+
+def samba_provider_accumulated_gradients(fields: PythonObject, config: PythonObject, entries: PythonObject,
+                                         primitive: PythonObject, ids: PythonObject, targets: PythonObject,
+                                         stream: PythonObject, accumulation: Int, count: Int,
+                                         context: PythonObject) raises -> PythonObject:
+    if primitive is None or not samba_provider_eligible(fields):
+        return PythonObject(None)
+    var shape = ids.shape
+    var batch = Int(py=shape[0]) // accumulation
+    var length = Int(py=shape[1])
+    var admitted = AdmittedSambaExecution(fields, config, PythonObject(None), primitive, batch, length, False, context)
+    admitted.configure_training()
+    var bi = Python.import_module("builtins")
+    var fused = Bool(py=py_call(bi.hasattr, entries, "samba_head_loss"))
+    var chunked = neural_descriptor_execute(primitive, 28, [], [], [], False) != 0
+    var tied = Bool(py=config["tie_embeddings"])
+    var probability = Float64(py=config["dropout"])
+    if probability > 0.0 and stream is not None:
+        var p = Float32(probability)
+        var scale = Float32(1.0 / (1.0 - Float64(p)))
+        var rng = _samba_native_fields(fields["generator"])
+        var seed = rng["seed"]
+        admitted.native.dropout = True
+        admitted.native.dropout_words = [batch * length * admitted.width, 0,
+            Int(py=seed & PythonObject(0xffffffff)), Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff)), Int(py=stream), 2]
+        admitted.native.dropout_scalars = [Float64(p), Float64(scale)]
+    var offsets = List[Int]()
+    var raw_offsets = fields["offsets"]
+    for i in range(len(raw_offsets)):  # driver-loop: one admitted native parameter-registry offset span
+        offsets.append(Int(py=raw_offsets[i]))
+    var kinds = List[Int]()
+    var layers = List[Int]()
+    var slots = List[Int]()
+    var names = fields["names"]
+    var registry_failure = String("")
+    if len(offsets) != len(names) + 1:
+        registry_failure = "Samba: gradient registry is incomplete"
+    for j in range(len(names)):  # driver-loop: resolve native gradient-registry locations once
+        var name = String(names[j])
+        var kind = -1
+        var layer = 0
+        var slot = 0
+        var size = 0
+        if name == "embed.weight":
+            kind = 0
+            size = admitted.vocab * admitted.width
+        elif name == "norm_f.weight":
+            kind = 1
+            size = admitted.width
+        elif name == "lm_head.weight" and not tied:
+            kind = 2
+            size = admitted.vocab * admitted.width
+        else:
+            for i in range(len(admitted.publications)):  # driver-loop: resolve one admitted named layer gradient
+                ref publication = admitted.publications[i]
+                for k in range(len(publication.gradient_names)):  # driver-loop: fixed model parameter registry
+                    if name == "layers." + String(i) + "." + publication.gradient_names[k]:
+                        kind = 3
+                        layer = i
+                        slot = k
+                        if k < len(admitted.native.layers[i].gradient_sizes):
+                            size = admitted.native.layers[i].gradient_sizes[k]
+        if kind < 0 or j + 1 >= len(offsets) or offsets[j] < 0 or offsets[j + 1] - offsets[j] != size:
+            registry_failure = "Samba: gradient registry is incomplete or has inconsistent offsets"
+        kinds.append(kind)
+        layers.append(layer)
+        slots.append(slot)
+    var n = Int(py=fields["n_total"])
+    if len(offsets) == 0 or offsets[len(offsets) - 1] != n:
+        registry_failure = "Samba: gradient registry total differs"
+    var gradient = generation_array([n])
+    var loss = Float64(0)
+    try:
+        loss = admitted.native.accumulated_gradients(generation_address(ids, admitted.keep),
+            generation_address(targets, admitted.keep), accumulation, count, tied, fused, chunked,
+            offsets, kinds, layers, slots, generation_address(gradient, admitted.keep), registry_failure)
+    except problem:
+        admitted.publish()
+        raise problem
+    admitted.publish()
+    return Python.tuple(PythonObject(loss), gradient)

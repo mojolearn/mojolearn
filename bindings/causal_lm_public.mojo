@@ -149,7 +149,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":
             var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
-                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 14)
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 15)
             py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
             py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
@@ -451,7 +451,7 @@ def causal_transformer_admin(binding: PythonObject, session: PythonObject, opera
     # Administration intentionally holds the GIL, matching the raw public API.
     if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var provider = neural_descriptor_reuse(PythonObject(None),
-            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 14)
+            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 15)
         var handle = neural_descriptor_handle(provider,
             _native_function(binding, "transformer_native_session_handle_v1"), session)
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)

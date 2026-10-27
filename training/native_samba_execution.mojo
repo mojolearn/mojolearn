@@ -6,7 +6,7 @@ from core.native_execution import NativeExecutionEndpoint
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.samba_count_impl import samba_target_count
 from core.host_helpers_impl import all_finite_f32
-from core.hostptr import f32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from std.memory import memcpy
 
 
@@ -16,6 +16,8 @@ struct NativeSambaLayer(Movable):
     var close_endpoint: NativeExecutionEndpoint
     var backward_operation: Int
     var close_operation: Int
+    var reset_operation: Int
+    var tape_started: Bool
     var backward_parameters: List[Int]
     var backward_weights: List[Int]
     var gradient_sizes: List[Int]
@@ -65,6 +67,8 @@ struct NativeSambaLayer(Movable):
         self.gradient_sizes = List[Int]()
         self.gradients = List[List[Float32]]()
         self.tape = False
+        self.reset_operation = -1
+        self.tape_started = False
         self.tape_live = False
         self.owned_backward = False
         self.validate_gradient = False
@@ -100,7 +104,9 @@ struct NativeSambaLayer(Movable):
         self.visited = True
         if self.failure.byte_length() != 0:
             raise Error(self.failure)
-        if self.prepare_operation >= 0:
+        if self.tape and self.tape_started:
+            _ = self.close_endpoint.call(self.reset_operation, [], [], [])
+        if self.prepare_operation >= 0 and not self.prepared:
             self.prepared_result = self.endpoint.call(self.prepare_operation, self.prepare_addresses, self.prepare_parameters, [])
             self.prepared = True
             self.parameters[self.generation_slot] = self.prepared_result
@@ -109,12 +115,15 @@ struct NativeSambaLayer(Movable):
         var output = List[Float32](length=elements, fill=0)
         self.addresses[self.input_slot] = input_address
         self.addresses[self.output_slot] = Int(output.unsafe_ptr())
+        var reports = List[List[Float32]]()
         for i in range(len(self.report_sizes)):  # driver-loop: four optional native Mamba report buffers
-            self.reports.append(List[Float32](length=self.report_sizes[i], fill=0))
-            self.addresses[self.report_slot + i] = Int(self.reports[i].unsafe_ptr()) if self.report_sizes[i] != 0 else 0
+            reports.append(List[Float32](length=self.report_sizes[i], fill=0))
+            self.addresses[self.report_slot + i] = Int(reports[i].unsafe_ptr()) if self.report_sizes[i] != 0 else 0
         self.attempted = True
         self.result = self.endpoint.call(self.operation, self.addresses, self.parameters, self.scalars)
+        self.tape_started = self.tape
         self.tape_live = self.tape
+        self.reports = reports^
         for i in range(len(self.refresh_layouts)):  # driver-loop: publish completed layer state before the next native layer
             self.refresh_layouts[i].copy_from(self.refresh_addresses[i])
         self.completed = True
@@ -297,3 +306,42 @@ struct NativeSambaModel(Movable):
         except problem:
             self.close_tapes()
             raise problem
+
+
+    def gradient_address(self, kind: Int, layer: Int, slot: Int) -> Int:
+        if kind == 0:
+            return Int(self.embedding_gradient.unsafe_ptr())
+        if kind == 1:
+            return Int(self.norm_gradient.unsafe_ptr())
+        if kind == 2:
+            return Int(self.head_gradient.unsafe_ptr())
+        return Int(self.layers[layer].gradients[slot].unsafe_ptr())
+
+    def accumulated_gradients(mut self, ids: Int, targets: Int, accumulation: Int, total_count: Int,
+                              tied: Bool, fused: Bool, chunked: Bool, offsets: List[Int],
+                              kinds: List[Int], layers: List[Int], slots: List[Int], output: Int, registry_failure: String) raises -> Float64:
+        var n = offsets[len(offsets) - 1] if len(offsets) != 0 else 0
+        var stacked = List[Float32](length=accumulation * n, fill=0)
+        var losses = List[Float32](length=accumulation, fill=0)
+        var base_offset = self.dropout_words[1] if self.dropout else 0
+        for k in range(accumulation):  # driver-loop: whole native microbatch/tape/gradient traversal
+            if self.dropout:
+                self.dropout_words[1] = base_offset + k * self.rows * self.width
+            var xpart = List[Int32](length=self.rows, fill=0)
+            var ypart = List[Int32](length=self.rows, fill=0)
+            memcpy(dest=xpart.unsafe_ptr(), src=i32_ptr(ids) + k * self.rows, count=self.rows)
+            memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
+            losses[k] = Float32(self.gradients(Int(xpart.unsafe_ptr()), Int(ypart.unsafe_ptr()),
+                total_count, False, tied, fused, chunked))
+            if registry_failure.byte_length() != 0:
+                raise Error(registry_failure)
+            for j in range(len(kinds)):  # driver-loop: native ordered gradient-registry copies
+                memcpy(dest=stacked.unsafe_ptr() + k * n + offsets[j],
+                    src=f32_ptr(self.gradient_address(kinds[j], layers[j], slots[j])), count=offsets[j + 1] - offsets[j])
+        if accumulation == 1:
+            memcpy(dest=f32_ptr(output), src=stacked.unsafe_ptr(), count=n)
+            return Float64(losses[0])
+        _ = self.primitive.call(9, [output, Int(stacked.unsafe_ptr())], [n, accumulation, self.rows * accumulation], [])
+        var total = List[Float32](length=1, fill=0)
+        _ = self.primitive.call(9, [Int(total.unsafe_ptr()), Int(losses.unsafe_ptr())], [1, accumulation, -1], [])
+        return Float64(total[0])
