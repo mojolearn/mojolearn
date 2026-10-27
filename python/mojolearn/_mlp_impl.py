@@ -462,7 +462,7 @@ _TRAINING_ENTRIES = (
 def _connect():
     # ABI connection at module import only; no trainer operation calls it.
     from types import BuiltinFunctionType
-    from ._native_classical_bridge import _numpy_free_context
+    from ._native_classical_bridge import _state_context
     _backend.default_mode()  # fixes the process mode the native owner reads
     modes = {}
     for mode in ('identical', 'fast'):  # glue: connect native modes at package import
@@ -488,7 +488,7 @@ def _connect():
         except Exception as error:
             modes[mode] = type(error).__name__ + ': ' + str(error)
     return dict(trainer=SmallMLPTrainer, array=Array, modes=modes,
-                backend=vars(_backend), environ=os.environ._data, admission=_numpy_free_context())
+                backend=vars(_backend), environ=os.environ._data, admission=_state_context())
 
 
 from .tokenizer import _binding as _small_mlp_tokenizer_binding
