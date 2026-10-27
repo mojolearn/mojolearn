@@ -174,11 +174,9 @@ def read(path, binding=None):
 
 def _connect_reader():
     # glue: fixed metadata classes and native provider connections at import.
-    from ..ops import Session, Program
-    from . import _native_import_bridge, _graph
-    entry, context = _native_import_bridge.connect(Session, Program, GraphIR, GraphIR, UnsupportedModel)
-    context.update(node=Node, tensor=TensorInfo, resolved=Resolved, dtypes=_DTYPES,
-                   byte_type=ctypes.c_ubyte, providers={}, backend=vars(context['backend']))
+    from ._native_reader_bridge import connect
+    from . import _graph
+    entry, context = connect(GraphIR, _Native, Node, TensorInfo, Resolved, UnsupportedModel)
     _graph._READER_NATIVE, _graph._READER_CONTEXT = entry, context
     return entry, context
 
