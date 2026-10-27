@@ -88,3 +88,17 @@ connect_module('os', os, ('stat', 'urandom', 'getcwd'))
 connect_module('types', types, ('ModuleType', 'MemberDescriptorType', 'MethodDescriptorType',
                                 'MethodType', 'BuiltinFunctionType'))
 connect_module('warnings', warnings, ())  # warning filters are mutable native configuration, validated by their owner
+
+
+# glue: exact standard path identities, connected before any product operation.
+# Python 3.13's split pathlib adds two named stdlib bases; other supported
+# layouts lack that module. Never authorize an arbitrary current __mro__.
+from pathlib import PosixPath, PurePosixPath, Path, PurePath
+try:
+    from pathlib._abc import PathBase, PurePathBase
+except ImportError:
+    PATH_BASES = (PosixPath, PurePosixPath, Path, PurePath, object)
+else:
+    PATH_BASES = (PosixPath, PurePosixPath, Path, PurePath, object, PathBase, PurePathBase)
+PATH_TYPES = (PosixPath, PurePosixPath)
+connect_module('mojolearn._native_loaded_modules', sys.modules[__name__], ('PATH_TYPES', 'PATH_BASES'))

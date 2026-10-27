@@ -140,7 +140,7 @@ def _state_context():
     import os
     import sys
     import zlib
-    from pathlib import PosixPath, PurePosixPath, Path, PurePath
+    from ._native_loaded_modules import PATH_TYPES, PATH_BASES
     from . import _backend
     from .tokenizer import _binding
     from .exceptions import NotFittedError
@@ -206,8 +206,8 @@ def _state_context():
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
                    archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
                    archive_memoryview_type=memoryview, archive_attribute_error=AttributeError,
-                   archive_path_types=(PosixPath, PurePosixPath),
-                   archive_path_bases=(PosixPath, PurePosixPath, Path, PurePath, object),
+                   archive_path_types=PATH_TYPES,
+                   archive_path_bases=PATH_BASES,
                    archive_path_member_type=MemberDescriptorType,
                    archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
                    archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
