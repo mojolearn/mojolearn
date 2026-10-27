@@ -1,0 +1,182 @@
+{
+  "identical|algos/additive-chi2/istella/rows=full": {
+    "lane": "additive-chi2",
+    "family": "algos",
+    "problems": [
+      "sklearn-cpu: sample_interval is unset on ours and unset on sklearn-cpu (a library default is not a matched value; set it explicitly on both)"
+    ],
+    "arms": {
+      "ours": {
+        "__record__": true,
+        "implementation": {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "AdditiveChi2Sampler"
+        },
+        "library": "mojolearn",
+        "params": {
+          "numeric_mode": null,
+          "sample_interval": null,
+          "sample_steps": 2
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "__record__": true,
+        "implementation": {
+          "module": "sklearn.kernel_approximation",
+          "name": "AdditiveChi2Sampler"
+        },
+        "library": "sklearn",
+        "params": {
+          "sample_interval": null,
+          "sample_steps": 2
+        },
+        "source": "get_params"
+      }
+    },
+    "pairing": null
+  },
+  "identical|algos/additive-chi2/taxi/rows=full": {
+    "lane": "additive-chi2",
+    "family": "algos",
+    "problems": [
+      "sklearn-cpu: sample_interval is unset on ours and unset on sklearn-cpu (a library default is not a matched value; set it explicitly on both)"
+    ],
+    "arms": {
+      "ours": {
+        "__record__": true,
+        "implementation": {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "AdditiveChi2Sampler"
+        },
+        "library": "mojolearn",
+        "params": {
+          "numeric_mode": null,
+          "sample_interval": null,
+          "sample_steps": 2
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "__record__": true,
+        "implementation": {
+          "module": "sklearn.kernel_approximation",
+          "name": "AdditiveChi2Sampler"
+        },
+        "library": "sklearn",
+        "params": {
+          "sample_interval": null,
+          "sample_steps": 2
+        },
+        "source": "get_params"
+      }
+    },
+    "pairing": null
+  },
+  "identical|algos/ocsvm/istella/rows=full": {
+    "lane": "ocsvm",
+    "family": "algos",
+    "problems": [
+      "sklearn-cpu: cache_size is 200 (cache_size) on ours and 2000 (cache_size) on sklearn-cpu"
+    ],
+    "arms": {
+      "ours": {
+        "__record__": true,
+        "implementation": {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "OneClassSVM"
+        },
+        "library": "mojolearn",
+        "params": {
+          "cache_size": 200,
+          "coef0": 0.0,
+          "degree": 3,
+          "gamma": 0.004545454545454545,
+          "kernel": "rbf",
+          "max_iter": -1,
+          "nu": 0.1,
+          "numeric_mode": null,
+          "shrinking": true,
+          "tol": 0.001,
+          "verbose": false
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "__record__": true,
+        "implementation": {
+          "module": "sklearn.svm._classes",
+          "name": "OneClassSVM"
+        },
+        "library": "sklearn",
+        "params": {
+          "cache_size": 2000,
+          "coef0": 0.0,
+          "degree": 3,
+          "gamma": 0.004545454545454545,
+          "kernel": "rbf",
+          "max_iter": -1,
+          "nu": 0.1,
+          "shrinking": true,
+          "tol": 0.001,
+          "verbose": false
+        },
+        "source": "get_params"
+      }
+    },
+    "pairing": null
+  },
+  "identical|algos/ocsvm/taxi/rows=full": {
+    "lane": "ocsvm",
+    "family": "algos",
+    "problems": [
+      "sklearn-cpu: cache_size is 200 (cache_size) on ours and 2000 (cache_size) on sklearn-cpu"
+    ],
+    "arms": {
+      "ours": {
+        "__record__": true,
+        "implementation": {
+          "module": "mojolearn._expansion_neighbors",
+          "name": "OneClassSVM"
+        },
+        "library": "mojolearn",
+        "params": {
+          "cache_size": 200,
+          "coef0": 0.0,
+          "degree": 3,
+          "gamma": 0.09090909090909091,
+          "kernel": "rbf",
+          "max_iter": -1,
+          "nu": 0.1,
+          "numeric_mode": null,
+          "shrinking": true,
+          "tol": 0.001,
+          "verbose": false
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "__record__": true,
+        "implementation": {
+          "module": "sklearn.svm._classes",
+          "name": "OneClassSVM"
+        },
+        "library": "sklearn",
+        "params": {
+          "cache_size": 2000,
+          "coef0": 0.0,
+          "degree": 3,
+          "gamma": 0.09090909090909091,
+          "kernel": "rbf",
+          "max_iter": -1,
+          "nu": 0.1,
+          "shrinking": true,
+          "tol": 0.001,
+          "verbose": false
+        },
+        "source": "get_params"
+      }
+    },
+    "pairing": null
+  }
+}
