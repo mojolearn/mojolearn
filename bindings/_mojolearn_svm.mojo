@@ -54,6 +54,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from svm.native_descriptor_dispatch import SVC_NATIVE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from isolation_forest.impl.isolation_forest import (
     IF_DEVICE_TRANSPOSE,
     IDN_IF_QUERY_DEVICE,
@@ -105,6 +107,11 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
     return f64_ptr(addr)
+
+
+def svm_native_api_binding() raises -> PythonObject:
+    var table = SVC_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 def svm_numeric_mode_binding() raises -> PythonObject:
@@ -737,6 +744,7 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svm_vendor_binding]("svm_vendor")
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         m.def_function[svc_fit_binding]("svc_fit")
+        m.def_function[svm_native_api_binding]("svm_binary_api_v1")
         m.def_function[svc_predict_binding]("svc_predict")
         m.def_function[svc_pair_epilogue_device_binding]("svc_pair_epilogue")
         m.def_function[svc_platt_train_device_binding]("svc_platt_train")
