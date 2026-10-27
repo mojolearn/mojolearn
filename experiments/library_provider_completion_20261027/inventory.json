@@ -279,5 +279,6 @@
         "archive/type/protocol callbacks and generic resident lifetime migration"
       ]
     }
-  ]
+  ],
+  "source_census_summary": "experiments/library_provider_completion_20261027/public_boundary_census_summary.json"
 }
