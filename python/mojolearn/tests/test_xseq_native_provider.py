@@ -68,3 +68,27 @@ def test_mlp_native_table_retains_numeric_labels_outputs_and_refit(monkeypatch, 
     audit_native_call(model.fit, x[::-1].copy(), y[::-1].copy()).assert_native()
     assert model.predict(x[:2]).shape == (2,)
     assert not seen
+
+
+def test_recurrent_builtin_schedule_does_not_call_packed_schedule_entries(monkeypatch):
+    from mojolearn._training_impl import _OPT_CONTEXT
+    from mojolearn import StepLR
+
+    schedule = StepLR(0.01, step_size=2, gamma=0.5)
+    expected = np.asarray(schedule.lr_values(4)).copy()
+    seen = poison_packed_entries(monkeypatch)
+
+    def forbidden(*args, **kwargs):
+        seen.append(True)
+        raise AssertionError('schedule reentered a packed CPython engine')
+
+    for name in ('lr_schedule_series', 'lr_schedule_at'):
+        monkeypatch.setitem(_OPT_CONTEXT['schedule_entries'], name, forbidden)
+    actual = audit_native_call(schedule.lr_values, 4).assert_native()
+    assert np.asarray(actual).tobytes() == expected.tobytes()
+    assert audit_native_call(schedule.lr_at, 1).assert_native() == float(expected[0])
+    x = np.arange(48, dtype='f4').reshape(8, 3, 2) / 48
+    model = ml.RNNRegressor(hidden_size=4, max_epochs=1, batch_size=4,
+                            random_state=7, lr_schedule=schedule, numeric_mode='identical')
+    audit_native_call(model.fit, x, x[:, -1, 0].copy()).assert_native()
+    assert not seen
