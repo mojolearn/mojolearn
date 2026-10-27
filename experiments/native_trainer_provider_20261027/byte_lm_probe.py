@@ -37,6 +37,9 @@ def run(output, baseline=None):
         else:
             model=LanguageModelTrainer(params,**kwargs)
         label='resident' if resident else 'stateless'
+        meta=call(model,'run_metadata')
+        assert meta['native_numeric_mode']==1
+        assert len(meta['binding_sha256'])==64
         held=call(model,'logits',ids)
         held_bytes=np.asarray(held).copy()
         values[label+'/initial']=held_bytes
@@ -56,8 +59,16 @@ def run(output, baseline=None):
             result=call(model,'train_step',training)
             for key in (('loss','step','flags') if resident else ('loss','step','flat_gradients')):
                 values[f'{label}/step{repeat}/{key}']=np.asarray(result[key]).copy()
+        if resident:
+            gradient=call(model,'export_gradients')
+            values[label+'/exported_gradient']=np.asarray(gradient['flat_gradients']).copy()
         values[label+'/trained_logits']=np.asarray(call(model,'logits',ids)).copy()
         values[label+'/trained_eval']=np.asarray(call(model,'evaluate',training))
+        snapshot=call(model,'state_dict')
+        for key in ('parameters','m','v','flags'):
+            values[label+'/state/'+key]=np.asarray(snapshot[key]).copy()
+        call(model,'close')
+        values[label+'/reopened']=np.asarray(call(model,'logits',ids)).copy()
         if baseline:
             counts[label]=_byte_lm_impl._LM_TRAINER(model,'native_provider_info',(),_byte_lm_impl._LM_TRAINER_CONTEXT)
             assert counts[label][0]=='mojolearn.training.byte_lm.v1'

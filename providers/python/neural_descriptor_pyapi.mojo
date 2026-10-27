@@ -5,7 +5,7 @@ from std.ffi import c_int
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
@@ -46,6 +46,21 @@ def neural_descriptor_capsule(name: String, entries: List[NativeDescriptorCall])
     if not capsule:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=capsule)
+
+
+def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
+    # Read an exact module dictionary, never its optional Python __getattr__.
+    # Metadata/ownership doors must be compiled entries too; provider execution
+    # alone would not prevent callbacks during admission or readback.
+    var bi = native_loaded_module("builtins")
+    if py_type(module) is not py_type(bi):
+        raise Error("TypeError: native provider requires an exact compiled module")
+    var entry = py_get(py_fields(module), name)
+    if entry is None and not required:
+        return entry
+    if entry is None or py_type(entry) is not py_type(bi.len) or entry.__self__ is not module:
+        raise Error("TypeError: native provider requires compiled entry " + name)
+    return entry
 
 
 def neural_descriptor_connect(factory: PythonObject, var name: String, operation_count: Int = 6) raises -> PythonObject:

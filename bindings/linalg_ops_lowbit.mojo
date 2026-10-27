@@ -12,7 +12,7 @@ from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info, neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance
 from bindings.optimizer_public_door import TensorView, shape_text
@@ -36,6 +36,8 @@ def lin_text(context: PythonObject, name: String) raises -> String:
 
 def lin_attr(binding: PythonObject, name: String) raises -> PythonObject:
     """`getattr(binding, name, None)`."""
+    if py_type(binding) is py_type(native_loaded_module("builtins")):
+        return neural_descriptor_entry(binding, name, False)
     return family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name), PythonObject(None))
 
 

@@ -22,7 +22,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext, HostBuffer
 from core.hostptr import f32_ptr, i32_ptr, copy_f32
 from core.neural_context import neural_ctx
-from core.sha256 import Sha256
+from core.sha256_file import sha256_file
 from core.step_phase import step_count_sync, step_counts_now, step_counts_report
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.checks.optimizer_contract import OptimizerConfig
@@ -44,7 +44,6 @@ from training.byte_lm_binding_impl import (
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime BYTE_LM_NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
 
-comptime _FILE_CHUNK = 1048576
 
 
 # ---------------------------------------------------------------------------
@@ -638,11 +637,4 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
 def byte_file_sha256(path: String) raises -> String:
     """The SHA-256 of the file at `path` (64 lowercase hex digits), read in
     1 MiB chunks into the streamed Mojo SHA-256 (core/sha256.mojo)."""
-    var hasher = Sha256()
-    with open(path, "r") as fh:
-        while True:  # cpu-route: the file read on the host, one chunk per pass
-            var chunk = fh.read_bytes(_FILE_CHUNK)
-            if len(chunk) == 0:
-                break
-            hasher.update_list(chunk)
-    return hasher.hexdigest()
+    return sha256_file(path)
