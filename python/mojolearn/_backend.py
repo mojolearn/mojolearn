@@ -690,6 +690,8 @@ def _check_plugins(pkg, present):
             if vendor in present:
                 raise GpuPluginError(f"mojolearn: {vdir} carries sets but no {row['distribution']} "
                                      f"is installed beside this core; incomplete install; {fix}")
+            if vendor == "cuda" and _check_standalone_ptx(pkg):
+                present.append(vendor)
             continue
         if dist.version != _CORE_VERSION:
             raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and {gpu_plugins.CORE_DISTRIBUTION} "
@@ -719,6 +721,40 @@ def _check_plugins(pkg, present):
                                   "payloads": [row["distribution"]]}
         if bundle is not None:
             _PLUGINS_FOUND[vendor]["bundled_ptx"] = bundle
+
+
+def _check_standalone_ptx(pkg):
+    """Admit the PTX distribution without requiring a native NVIDIA wheel."""
+    # The 0.8.60 PTX-only installed verifier failed before running any cell:
+    # discovery only recognized native vendor directories. The PTX wheel
+    # already carries its own versioned marker binding the manifest digest.
+    # Use that ownership contract; _ptx_base still checks every payload hash,
+    # the installed source, and the device's supported compute capability.
+    row = gpu_plugins.package(gpu_plugins.PTX_PROFILE)
+    dist = _find_distribution(row["distribution"], [_site_dir()])
+    if dist is None:
+        return False
+    fix = gpu_plugins.reinstall_command(_CORE_VERSION, row["distribution"])
+    if dist.version != _CORE_VERSION:
+        raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and "
+                             f"{gpu_plugins.CORE_DISTRIBUTION} {_CORE_VERSION} must be "
+                             f"the same version exactly; {fix}")
+    try:
+        raw_marker = json.loads(dist.read_text(gpu_plugins.PLUGIN_MARKER) or "{}")
+        bundle = raw_marker.get("bundled_ptx") if isinstance(raw_marker, dict) else None
+        expected = gpu_plugins.package_marker(gpu_plugins.PTX_PROFILE, _CORE_VERSION,
+                                              [gpu_plugins.PTX_ARCH], bundled_ptx=bundle)
+        _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER, expected)
+    except (ValueError, TypeError) as exc:
+        raise GpuPluginError(f"mojolearn: invalid {row['distribution']} PTX slot metadata: "
+                             f"{exc}; {fix}") from exc
+    if not _has_binaries(_ptx_directory(pkg)):
+        raise GpuPluginError(f"mojolearn: {row['distribution']} is missing its PTX set "
+                             f"{_ptx_directory(pkg)}; incomplete install; {fix}")
+    _PLUGINS_FOUND["cuda"] = dict(distribution=row["distribution"], version=dist.version,
+                                  location=_site_dir(), code_format="ptx",
+                                  payloads=[row["distribution"]], bundled_ptx=bundle)
+    return True
 
 
 _BASELINE_SELECTION = None

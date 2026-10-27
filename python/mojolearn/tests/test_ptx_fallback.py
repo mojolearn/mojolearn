@@ -27,6 +27,7 @@ import hashlib
 import importlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import types
@@ -150,6 +151,62 @@ class Install(unittest.TestCase):
         self.assertIsNone(self.B._CPU_ONLY)
         self.assertIsNone(self.B.baseline_selection_receipt())
         return str(ctx.exception)
+
+
+class StandalonePTX(Install):
+    def setUp(self):
+        super().setUp()
+        gp = self.B.gpu_plugins
+        shutil.rmtree(self.pkg / gp.native_directory("cuda"))
+        shutil.rmtree(self.marker_path().parent)
+        marker = gp.package_marker(gp.PTX_PROFILE, self.version, [gp.PTX_ARCH],
+                                   bundled_ptx=dict(manifest_sha256=self.manifest_hash))
+        self.dist_info("mojolearn-nvidia-ptx", (gp.PLUGIN_MARKER, json.dumps(marker)))
+        self.payload_info = self.site / f"mojolearn_nvidia_ptx-{self.version}.dist-info"
+
+    def test_ptx_only_selects_without_override_on_supported_devices(self):
+        for device in ("sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120"):
+            with self.subTest(device=device):
+                self.device = device
+                self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
+                self.assertEqual(self.B.gpu_plugin()["distribution"], "mojolearn-nvidia-ptx")
+                self.assertEqual(self.B.baseline_selection_receipt()["selected"], "ptx")
+
+    def test_forced_cuda_vendor_also_finds_ptx_only(self):
+        self.assertEqual(self.layout("identical", MOJOLEARN_VENDOR="cuda"),
+                         ("vendor", str(self.root)))
+
+    def test_old_device_refuses(self):
+        self.device = "sm_75"
+        self.assertIn("older than compute capability 8.0", self.refusal("identical"))
+
+    def test_missing_payload_refuses(self):
+        shutil.rmtree(self.root)
+        self.assertIn("missing its PTX set", self.refusal("identical"))
+
+    def test_wrong_version_refuses(self):
+        path = self.payload_info / "METADATA"
+        path.write_text(path.read_text().replace("Version: " + self.version, "Version: 0.0.1"))
+        self.assertIn("same version exactly", self.refusal("identical"))
+
+    def test_bad_marker_refuses(self):
+        (self.payload_info / self.B.gpu_plugins.PLUGIN_MARKER).write_text("{}")
+        self.assertIn("metadata", self.refusal("identical"))
+
+    def test_changed_manifest_refuses(self):
+        path = self.root / self.B.gpu_plugins.BASELINE_MANIFEST
+        path.write_text(path.read_text() + "\n")
+        self.assertIn("PTX manifest differs", self.refusal("identical"))
+
+    def test_changed_binding_refuses(self):
+        (self.root / "identical" / "_mojolearn_gbdt.so").write_bytes(b"changed")
+        self.assertIn("PTX set refused", self.refusal("identical"))
+
+    def test_orphan_native_files_still_refuse(self):
+        path = self.pkg / self.B.gpu_plugins.native_directory("cuda") / "sm_89" / "identical"
+        path.mkdir(parents=True)
+        (path / "_mojolearn_gbdt.so").write_bytes(b"orphan")
+        self.assertIn("no mojolearn-nvidia", self.refusal("identical"))
 
 
 class Selection(Install):
