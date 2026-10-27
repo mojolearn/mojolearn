@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native byte-preserving admission copy; no arithmetic conversion is performed.
 from std.memory import memcpy
+from core.host_helpers_impl import all_finite_f32
 
 
 def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[Int], name: String) raises:
@@ -29,6 +30,6 @@ def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[
                 index //= shape[axis]
             var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
             dst[i] = UInt32(bytes[0]) | (UInt32(bytes[1]) << 8) | (UInt32(bytes[2]) << 16) | (UInt32(bytes[3]) << 24)
-    for i in range(count):  # cpu-route: existing finite-input admission on copied words
-        if (dst[i] & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            raise Error(name + " must be finite float32")
+    # Same native predicate as the original Array.all_finite boundary.
+    if all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=target), count) == 0:
+        raise Error(name + " must be finite float32")
