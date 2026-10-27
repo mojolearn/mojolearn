@@ -212,3 +212,21 @@ def test_framework_setup_helpers_enter_native_metadata_directly():
     assert 'native_json_parse(raw)' in source
     assert 'native_storage_allocate(layout["class"])' in source
     assert 'Path.__init__' in source  # explanatory prohibition, not an invocation
+
+
+def test_onnx_reader_and_resolver_use_common_native_resource():
+    table = (ROOT / 'autograd/import_reader_dispatch.mojo').read_text()
+    assert 'onnx_read(request[].path)' in table and 'onnx_resolve(addresses[0]' in table
+    assert 'words[0] != onnx_registry_token()' in table
+    assert 'PythonObject' not in table and 'std.python' not in table
+    owner = (ROOT / 'providers/python/autograd_reader_frontend_pyapi.mojo').read_text()
+    assert 'neural_descriptor_adopt(selected[1], handle, 3, scope.copy())' in owner
+    assert 'py_setattr(array, "owner", resource)' in owner
+    assert 'resource.downcast_value_ptr[NativeDescriptorResource]()[].close()' in owner
+    assert 'weakref' not in owner and 'ops_session_initialize' not in owner
+    reader = (ROOT / 'python/mojolearn/importers/onnx.py').read_text()
+    assert 'return _READER_NATIVE("reader_read", path, binding, _READER_CONTEXT)' in reader
+    assert 'return _READER_NATIVE("reader_resolve", self, shapes, _READER_CONTEXT)' in reader
+    graph = (ROOT / 'python/mojolearn/importers/_graph.py').read_text()
+    for name in ('resolve', 'resolve_shapes'):
+        assert f'return _READER_NATIVE("{name}", g, shapes, _READER_CONTEXT)' in graph

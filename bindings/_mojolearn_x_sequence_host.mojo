@@ -59,7 +59,7 @@ from providers.python.autograd_pyapi import ops_shape_py
 from autograd.ops_api import OPS_HOST
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
+from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py, onnx_native_api_py
 from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
 from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
@@ -685,6 +685,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
+        m.def_function[onnx_native_api_py]("onnx_native_api_v1")
         m.def_function[onnx_read_binding]("onnx_read")
         m.def_function[onnx_info_binding]("onnx_info")
         m.def_function[onnx_buffers_binding]("onnx_buffers")
