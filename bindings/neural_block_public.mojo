@@ -381,7 +381,7 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
         var native = PythonObject(None)
         if code == 1 and vendor != "cpu" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
-                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 20)
+                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
         py_setitem(fields, "_native_mamba_block_provider_cache", native)
     return entries
 

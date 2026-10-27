@@ -480,6 +480,18 @@ def mamba1_decode_step_binding(
     return PythonObject(0)
 
 
+def mamba1_decode_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    return PythonObject(Int(session.downcast_value_ptr[Mamba1DecodeSession]()))
+
+
+def mamba2_decode_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    return PythonObject(Int(session.downcast_value_ptr[Mamba2DecodeSession]()))
+
+
+def mamba3_decode_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    return PythonObject(Int(session.downcast_value_ptr[Mamba3DecodeSession]()))
+
+
 def mamba1_session_create_binding() raises -> PythonObject:
     """A closed session. Creation performs no GPU operation."""
     return PythonObject(alloc=Mamba1DecodeSession())
@@ -1533,6 +1545,7 @@ def build__mojolearn_mamba() -> PythonObject:
         # DEVIATION 2941: the Mamba-1 resident decode session.
         _ = m.add_type[Mamba1DecodeSession]("_Mamba1DecodeSession")
         m.def_function[mamba1_session_create_binding]("mamba1_session_create")
+        m.def_function[mamba1_decode_native_handle_binding]("mamba1_decode_native_handle_v1")
         m.def_function[mamba1_session_open_binding]("mamba1_session_open")
         m.def_function[mamba1_session_step_binding]("mamba1_session_step")
         m.def_function[mamba1_session_export_state_binding]("mamba1_session_export_state")
@@ -1545,6 +1558,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         _ = m.add_type[Mamba2DecodeSession]("_Mamba2DecodeSession")
         m.def_function[mamba2_session_create_binding]("mamba2_session_create")
+        m.def_function[mamba2_decode_native_handle_binding]("mamba2_decode_native_handle_v1")
         m.def_function[mamba2_session_open_binding]("mamba2_session_open")
         m.def_function[mamba2_session_step_binding]("mamba2_session_step")
         m.def_function[mamba2_session_export_state_binding]("mamba2_session_export_state")
@@ -1578,6 +1592,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
         m.def_function[mamba3_session_create_binding]("mamba3_session_create")
+        m.def_function[mamba3_decode_native_handle_binding]("mamba3_decode_native_handle_v1")
         m.def_function[mamba3_session_open_binding]("mamba3_session_open")
         m.def_function[mamba3_session_step_binding]("mamba3_session_step")
         m.def_function[mamba3_session_export_state_binding]("mamba3_session_export_state")
