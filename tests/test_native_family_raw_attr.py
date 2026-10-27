@@ -1,4 +1,4 @@
-"""Compile native_family_raw_attr_probe.mojo as raw_attr_probe.so and put it on PYTHONPATH.
+"""Compile native_family_raw_attr_probe_pyapi.mojo as raw_attr_probe.so and put it on PYTHONPATH.
 Test-only descriptors exercise CPython generic lookup and exception preservation;
 this probe does not expand the product's admission of caller protocols.
 """
