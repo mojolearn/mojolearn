@@ -5318,7 +5318,7 @@ def main(argv=None):
         save_result(rpath, result)
         write_board(out, result)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
-        if rec.get("evidence_failure"):
+        if _load_tool("bench_board_evidence").blocks_campaign(rec):
             print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
             return 1
     print("bench_board: board %s" % os.path.join(out, "BOARD.md"), flush=True)

@@ -667,13 +667,22 @@ def seal(ctx, directory, recipe, rec):
     rec["evidence_directory"] = str(directory.relative_to(Path(ctx["out"])))
     if error or changed:
         rec["evidence_failure"] = error or "source changed during measurement"
+        rec["evidence_failure_kind"] = "retention" if error else "source_changed"
     elif state_missing:
         rec["evidence_failure"] = "incomplete scored-byte retention; local results retained, no further races permitted"
+        rec["evidence_failure_kind"] = "retention"
     elif any(c.get("status") == "ok" and (c.get("measurement") or {}).get("completeness") != "complete"
              for c in (rec.get("cells") or []) + (rec.get("infer_cells") or [])
              if not c.get("stored") and c.get("arm") not in rec.get("stored_arms", [])):
-        rec["evidence_failure"] = "incomplete worker evidence; local results retained, no further races permitted"
+        rec["evidence_failure"] = "incomplete worker evidence; recipe excluded, raw evidence retained"
+        rec["evidence_failure_kind"] = "metadata"
+        rec["status"] = "failed"
     return rec
+
+
+def blocks_campaign(record):
+    """Shared retention/source failures stop; retained recipe metadata failures do not."""
+    return bool(record.get("evidence_failure")) and record.get("evidence_failure_kind") != "metadata"
 
 
 def measured_shape(cell, rec):

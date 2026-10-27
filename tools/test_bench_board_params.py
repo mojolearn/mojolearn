@@ -563,3 +563,20 @@ def test_querywise_preflight_records_equivalence_and_refuses_old_false_route(lan
     assert {'data_partition', 'use_pointwise_searcher'} <= {row['param'] for row in result['exceptions']}
     assert BP.check(lane, {'ours': dict(ours, use_pointwise_searcher=False), 'catboost-gpu': theirs})['verdict'] == 'REFUSED'
     assert BP.check(lane, {'ours': ours, 'catboost-gpu': dict(theirs, data_partition='FeatureParallel')})['verdict'] == 'REFUSED'
+
+
+def test_nested_estimators_are_stable_across_instances_but_keep_settings():
+    import bench_board_params as P
+    class Child:
+        def __init__(self, depth=3): self.depth = depth
+        def get_params(self, deep=False): return {'depth': self.depth}
+    a, b = Child(), Child()
+    assert repr(a) != repr(b)
+    assert P._jsonable(a) == P._jsonable(b)
+    assert P._jsonable(a) != P._jsonable(Child(4))
+    class Other(Child): pass
+    assert P._jsonable(a) != P._jsonable(Other())
+    class Cycle:
+        def get_params(self, deep=False): return {'child': self}
+    with pytest.raises(P.ParamsRefused, match='cyclic'):
+        P._jsonable(Cycle())

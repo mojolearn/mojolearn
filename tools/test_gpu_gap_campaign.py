@@ -52,6 +52,8 @@ def test_repair_can_reuse_a_verified_opponent_without_forcing_a_retime(tmp_path)
     ("MATCHED", 0, {}, 2, 1),
     (None, 1, {}, 2, 1),
     ("CORRUPT", 1, {}, 2, 1),
+    ("MATCHED", 1, {"r": {"status": "failed", "evidence_failure": "incomplete worker evidence",
+                           "evidence_failure_kind": "metadata"}}, 2, 1),
     ("MATCHED", 0, {"r": {"evidence_failure": "R2 retention failed"}}, 1, 1),
     ("REFUSED", 1, {}, 2, 0),
 ])

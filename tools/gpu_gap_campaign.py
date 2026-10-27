@@ -1181,7 +1181,8 @@ def main(argv=None):
         row.update(result_error=result_error, status="process finished", returncode=rc, finished=time.time(), board=str(boardpath),
                    preflight=(board.get("preflight") or {}).get("verdict"),
                    results={rid: {"status": r.get("status"), "audit": r.get("audit"),
-                                  "evidence_failure": r.get("evidence_failure")}
+                                  "evidence_failure": r.get("evidence_failure"),
+                                  "evidence_failure_kind": r.get("evidence_failure_kind")}
                             for rid, r in board.get("races", {}).items()})
         if board.get("failed_preflight_recipes"):
             row["preflight"] = "FAILED"
@@ -1201,7 +1202,7 @@ def main(argv=None):
             break
         print("CAMPAIGN_RECIPE_DONE " + json.dumps({"id": race["id"], "directory": str(directory),
               "status": row["status"], "returncode": rc}), flush=True)
-        if any(r.get("evidence_failure") for r in board.get("races", {}).values()):
+        if any(E.blocks_campaign(r) for r in board.get("races", {}).values()):
             state["stop_reason"] = "retention failed; retry upload without rerunning completed measurements"
             controller_failed = True
             break

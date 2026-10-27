@@ -847,7 +847,7 @@ def canonical(lib, params):
     return out
 
 
-def _jsonable(v):
+def _jsonable(v, _seen=frozenset()):
     if v is None or isinstance(v, (bool, str)):
         return v
     if isinstance(v, int):
@@ -855,15 +855,25 @@ def _jsonable(v):
     if isinstance(v, float):
         return v
     if isinstance(v, (tuple, list)):
-        return [_jsonable(x) for x in v]
+        return [_jsonable(x, _seen) for x in v]
     if isinstance(v, dict):
-        return {str(k): _jsonable(x) for k, x in v.items()}
+        return {str(k): _jsonable(x, _seen) for k, x in v.items()}
     try:
         import numpy as np                              # noqa: PLC0415
         if isinstance(v, np.generic):
             return v.item()
     except ImportError:
         pass
+    # FAIRNESS FIX (2026-10-13 audit): nested estimators were repr strings,
+    # so fresh processes appeared to change settings merely by allocating at
+    # different addresses. Read the actual nested implementation and settings;
+    # a different class or work-changing value must still fail comparison.
+    if not isinstance(v, type) and callable(getattr(v, "get_params", None)):
+        if id(v) in _seen:
+            raise ParamsRefused("cyclic nested estimator parameters")
+        lib, source, params = read_params(v)
+        return {"estimator": implementation_of(v), "library": lib,
+                "source": source, "parameters": _jsonable(params, _seen | {id(v)})}
     if callable(v) or isinstance(v, type):
         return getattr(v, "__name__", repr(v))
     return repr(v)
