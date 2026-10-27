@@ -37,6 +37,7 @@ from bindings.native_transport import _transport_json
 from core.sha256_file import sha256_file
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
+from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
 
@@ -1013,10 +1014,18 @@ def byte_lm_load_state(trainer: PythonObject, args: PythonObject, context: Pytho
 def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObject,
                        context: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     classical_connect_numpy(context)
-    if operation == "from_checkpoint_binary":
+    if operation == "from_checkpoint_binary" or operation == "from_checkpoint" or operation == "from_checkpoint_bytes":
         if trainer is not context["byte_lm_trainer_class"]:
             raise Error("TypeError: checkpoint restoration requires the connected native trainer class")
-        var source = byte_checkpoint_load(args[0], io_error)
+        var source = PythonObject(None)
+        if operation == "from_checkpoint_binary":
+            source = byte_checkpoint_load(args[0], io_error)
+        else:
+            var encoded = args[0] if operation == "from_checkpoint_bytes" else byte_json_read(args[0], io_error)
+            source = byte_json_payload(encoded)
+            var described = _shape_of(source)
+            training_byte_shape_validate(described.d, described.chunked)
+            byte_json_arrays(source, described.n_total(), described.n_tensors())
         var state = _validated_state(source, context)
         var shape = _shape_of(state)
         _require_training_profile(context)
@@ -1029,7 +1038,7 @@ def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObj
         var restored = native_storage_allocate(trainer)
         _initialize_state_fields(restored, state, resident, step_result, context)
         return restored
-    if operation != "export_checkpoint_binary":
+    if operation != "export_checkpoint_binary" and operation != "export_checkpoint":
         raise Error("RuntimeError: unknown Byte-LM checkpoint operation")
     if py_type(trainer) is not context["byte_lm_trainer_class"]:
         raise Error("TypeError: checkpoint export requires the connected native trainer class")
@@ -1039,13 +1048,19 @@ def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObj
     var state = PythonObject(None)
     try:
         classical_admit_value(fields["_state"], context)
-        state = _export_snapshot(fields, _shape_of(fields["_state"]), context)
+        var shape = _shape_of(fields["_state"])
+        if operation == "export_checkpoint" and shape.n_total() * 24 + shape.n_tensors() * 8 > BYTE_JSON_LIMIT:
+            raise Error("Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays")
+        state = _export_snapshot(fields, shape, context)
     except problem:
         _ = py_call(lock.release)
         raise problem
     _ = py_call(lock.release)
     # The export owns detached arrays. File I/O follows lock release exactly
     # as before, using the existing atomic codec and original I/O exceptions.
+    if operation == "export_checkpoint":
+        byte_json_write(args[0], byte_json_encode(state), io_error)
+        return PythonObject(None)
     return byte_checkpoint_save(args[0], state, io_error)
 
 
@@ -1526,7 +1541,7 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
-        if operation == "from_checkpoint_binary" or operation == "export_checkpoint_binary":
+        if operation == "from_checkpoint_binary" or operation == "from_checkpoint" or operation == "from_checkpoint_bytes" or operation == "export_checkpoint_binary" or operation == "export_checkpoint":
             return byte_lm_checkpoint(call[0], operation, call[2], call[3], io_error).steal_data()
         if operation == "load_state":
             return byte_lm_load_state(call[0], call[2], call[3]).steal_data()

@@ -1365,7 +1365,7 @@ class SmallByteLanguageModelTrainer:
 
     def save_checkpoint(self, path):
         """Same as :meth:`export_checkpoint`."""
-        return self.export_checkpoint(path)
+        return _LM_TRAINER(self, "export_checkpoint", (path,), _LM_TRAINER_CONTEXT)
 
     def export_checkpoint(self, path):
         """Write the complete state to ``path`` as a JSON checkpoint.
@@ -1379,35 +1379,7 @@ class SmallByteLanguageModelTrainer:
         path : str or path-like
             Destination file.
         """
-        with self._lock:
-            # Refuse guaranteed-oversize saves before copying/hex-encoding state.
-            if state_shape(self._state).n_total * 24 + state_shape(self._state).n_tensors * 8 > _CHECKPOINT_LIMIT:
-                raise ValueError('Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays')
-            payload = self.export_state()
-        for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
-            value = payload[key]
-            integer = key == 'flags'
-            dtype = '<i4' if integer else '<f4'
-            payload[key] = dict(dtype=dtype, shape=list(value.shape),
-                                hex=le_bytes(value, 'i' if integer else 'f').hex())
-        envelope = dict(schema=_CHECKPOINT_SCHEMA, payload=payload,
-                        payload_sha256=_sha256_hex(_canonical(payload)))
-        encoded = _canonical(envelope) + b'\n'
-        if len(encoded) > _CHECKPOINT_LIMIT:
-            raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
-        path = Path(path)
-        temporary = None
-        try:
-            with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.' + path.name + '.', delete=False) as stream:
-                temporary = stream.name
-                stream.write(encoded)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-            temporary = None
-        finally:
-            if temporary is not None:
-                os.unlink(temporary)
+        return _LM_TRAINER(self, "export_checkpoint", (path,), _LM_TRAINER_CONTEXT)
 
     # Atomically write the complete state as a streamed BINARY archive
     # (`_byte_lm_checkpoint`, schema `mojolearn.byte-lm-stream.v1`), from
@@ -1488,9 +1460,7 @@ class SmallByteLanguageModelTrainer:
         -------
         LanguageModelTrainer
         """
-        with Path(path).open('rb') as stream:
-            encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        return cls.from_checkpoint_bytes(encoded, resident=resident)
+        return _LM_TRAINER(cls, "from_checkpoint", (path, resident), _LM_TRAINER_CONTEXT)
 
     @classmethod
     def from_checkpoint_bytes(cls, encoded, *, resident=None):
@@ -1510,12 +1480,7 @@ class SmallByteLanguageModelTrainer:
         -------
         LanguageModelTrainer
         """
-        state, shape = _decode_checkpoint(encoded)
-        cfg = state['config']
-        result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
-                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
-                     shape=shape, resident=resident)
-        return result.load_state_dict(state)
+        return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident), _LM_TRAINER_CONTEXT)
 
 
 def _decode_checkpoint(encoded):
