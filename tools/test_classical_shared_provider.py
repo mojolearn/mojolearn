@@ -39,7 +39,7 @@ def test_common_provider_is_selected_without_new_provider_type():
     src = body('_svc_provider')
     assert 'MOJOLEARN_CLASSICAL_NATIVE_DISPATCH' in src
     assert 'neural_descriptor_entry(binding, "svm_binary_api_v1", False)' in src
-    assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 6)' in src
+    assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 8)' in src
     assert 'return PythonObject(None)' in src
     assert 'unavailable for this binding' in src
     assert 'struct ' not in PUBLIC
@@ -89,3 +89,16 @@ def test_epilogue_typed_bridge_retains_numerical_owners():
     for message in ('svc gather: an identity axis must keep its length', 'svc fold: bad fold range',
                     'svc_pair_epilogue: needs a pair and two classes', 'svc_splitmix_perm: n exceeds int32'):
         assert message in old and message in new
+
+
+def test_svr_uses_same_provider_and_retains_native_solver():
+    source = (ROOT / 'svm/native_svr_dispatch.mojo').read_text()
+    assert 'Python' not in source and 'py=' not in source
+    assert 'svr_fit_host(' in source and 'svr_predict_host(' in source
+    assert 'if kernel != 4:' in source
+    for name in ('_svr_fit', '_svr_predict'):
+        assert 'svr_execute(binding, native,' in body(name)
+        assert 'family_call(_entry(binding, "svr_' not in body(name)
+    assert 'ip.unsafe_store(2, Float64(res.n_iter))' in source
+    assert 'if len(params) != 9 and len(params) != 10 and len(params) != 12:' in source
+    assert 'if len(params) != 7 and len(params) != 9:' in source

@@ -58,7 +58,7 @@ comptime _MAX_POLY_DEGREE = 32
 comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a NaN or inf cannot be fitted; a computed NaN carries a vendor-specific payload and cannot sit in a hashed stage)"
 
 
-from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute
+from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
 from providers.python.neural_descriptor_pyapi import (
@@ -74,7 +74,7 @@ def _svc_provider(binding: PythonObject) raises -> PythonObject:
     var factory = neural_descriptor_entry(binding, "svm_binary_api_v1", False)
     if factory is None:
         raise Error("SVC native dispatch candidate is unavailable for this binding")
-    var native = neural_descriptor_connect(factory, String(SVC_ABI_NAME), 6)
+    var native = neural_descriptor_connect(factory, String(SVC_ABI_NAME), 8)
     if neural_descriptor_execute(native, 5, [], [], []) != 1:
         raise Error("SVC native dispatch candidate requires identical mode")
     return native
@@ -1151,7 +1151,7 @@ def _kernel_tail(fields: PythonObject, params: PythonObject) raises:
         _ = py_call(params.append, family_call(svc_builtins().float, svc_field(fields, "_hp_coef0")))
 
 
-def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, native: PythonObject) raises:
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
     var binding = args[0]
     var fields = py_fields(model)
@@ -1173,7 +1173,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
     var gamma = _resolve_gamma(fields, binding, x, context)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3], PythonObject(None),
-                         PythonObject(None), "SVR", context, PythonObject(None))
+                         PythonObject(None), "SVR", context, native)
     # WORST-CASE OUTPUT BUFFERS: at most n_rows coefficients (DEVIATION 873)
     var dual = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     var support = family_array(Python.tuple(PythonObject(n_rows)), "<i4", context)
@@ -1192,9 +1192,9 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = c_rows  # keep the Python object alive through the native call above
         _kernel_tail(fields, params)
         _ = c_rows  # keep the Python object alive through the native call above
-    var n_support = svc_int(family_call(_entry(binding, "svr_fit", context), classical_address(x), classical_address(targets),
+    var n_support = svc_int(svr_execute(binding, native, True, Python.list(classical_address(x), classical_address(targets),
                                         classical_address(dual), classical_address(support), classical_address(sv),
-                                        classical_address(info), params))
+                                        classical_address(info)), params))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = sv  # keep the Python object alive through the native call above
@@ -1239,7 +1239,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
 
 
 def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObject,
-                 context: PythonObject) raises -> PythonObject:
+                 context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVR.predict`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVR: call fit() first")
@@ -1258,7 +1258,7 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_support > 0:
         # the cross-kernel's columns at the support vectors (SVC's rule)
         held = _i32_array(svc_field(fields, "support_"), context)
-        query = _gather(binding, _addr(q), n_rows, Int(py=q.shape[1]), 0, n_rows, _addr(held), Int(py=held.shape[0]), context, PythonObject(None))
+        query = _gather(binding, _addr(q), n_rows, Int(py=q.shape[1]), 0, n_rows, _addr(held), Int(py=held.shape[0]), context, native)
         _ = held  # keep the Python object alive through the native call above
         _ = q  # keep the Python object alive through the native call above
         n_features = n_support
@@ -1270,10 +1270,10 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
                              PythonObject(_kernel_code(fields, context)), svc_field(fields, "_gamma"),
                              svc_field(fields, "_hp_cache_size"))
     _kernel_tail(fields, params)
-    _ = family_call(_entry(binding, "svr_predict", context), classical_address(query),
+    _ = svr_execute(binding, native, False, Python.list(classical_address(query),
                     classical_address(dual) if n_support > 0 else PythonObject(0),
                     classical_address(sv) if n_support > 0 else PythonObject(0),
-                    classical_address(out), params)
+                    classical_address(out)), params)
     _ = query  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = sv  # keep the Python object alive through the native call above
@@ -1285,9 +1285,9 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
 
 
 def _svr_score(fields: PythonObject, binding: PythonObject, source: PythonObject, y: PythonObject,
-               context: PythonObject) raises -> PythonObject:
+               context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVR.score`: R^2, 1.0 for a perfect constant fit, 0.0 otherwise."""
-    var pred = _svr_predict(fields, binding, source, context)
+    var pred = _svr_predict(fields, binding, source, context, native)
     var shape = svc_shape_of(y)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
@@ -1337,7 +1337,7 @@ def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObj
     """The kernel machines; admit one provider for the complete SVC operation."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
-    var native = _svc_provider(args[0]) if operation.startswith("family_svc_svc_") else PythonObject(None)
+    var native = _svc_provider(args[0])
     var result = _svc_kernel_operation(model, operation, args, context, fields, native)
     _svc_publish_dispatch(fields, native)
     return result
@@ -1362,10 +1362,10 @@ def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonOb
         var pred = _svc_predict(fields, args[0], args[1], context, native)
         return PythonObject(svc_accuracy(args[2], pred, _pred_count(pred), context))
     if operation == "family_svc_svr_fit":
-        _svr_fit(model, args, context)
+        _svr_fit(model, args, context, native)
         return model
     if operation == "family_svc_svr_predict":
-        return _svr_predict(fields, args[0], args[1], context)
+        return _svr_predict(fields, args[0], args[1], context, native)
     if operation == "family_svc_svr_score":
-        return _svr_score(fields, args[0], args[1], args[2], context)
+        return _svr_score(fields, args[0], args[1], args[2], context, native)
     raise Error("RuntimeError: unknown kernel SVM operation " + operation)

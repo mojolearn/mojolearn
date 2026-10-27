@@ -27,15 +27,15 @@
       "source_changes": [
         "SVC binary solver/predict descriptors and operation settings snapshot inherited",
         "Shared import-connected native estimator binding admission for selected SVM/KMeans method bodies",
-        "SVC shared provider now owns pair/fold/gather/weight epilogues, Platt calibration, splitmix, and mode readback"
+        "SVC shared provider now owns pair/fold/gather/weight epilogues, Platt calibration, splitmix, and mode readback",
+        "SVR fit/predict typed descriptors using original native solver and output layout"
       ],
       "remaining": [
-        "pair/fold/gather/calibration/epilogue orchestration",
-        "SVR/OneClassSVM/LinearSVC/LinearSVR",
+        "SVC/SVR Python-owned pair/fold/input/output orchestration and remaining metadata admission",
+        "gamma/class reductions/ovo-layout/coefficients CPython dispatch",
+        "OneClassSVM and linear SVM typed numerical operation tables",
         "CPU native tables",
-        "public mode loader callbacks",
-        "deeper algorithm operation dispatch and public availability/property descriptors remain",
-        "SVC gamma/class reductions/ovo-layout/coefficients and Python-owned orchestration; SVR and OneClassSVM typed tables"
+        "public availability/property descriptors and non-frontdoor loader paths"
       ]
     },
     {
@@ -124,7 +124,7 @@
     },
     {
       "family": "clustering",
-      "status": "pending",
+      "status": "partial_source_only",
       "entry_candidates": [
         {
           "path": "bindings/cluster_fit_a_native.mojo",
@@ -135,9 +135,12 @@
           "present": true
         }
       ],
-      "source_changes": [],
+      "source_changes": [
+        "KMeans selected public method bodies use shared import-connected binding admission"
+      ],
       "remaining": [
-        "all public operations and nested native entry dispatch"
+        "all deeper clustering algorithm tables and operation metadata snapshots",
+        "other clustering public frontdoors"
       ]
     },
     {

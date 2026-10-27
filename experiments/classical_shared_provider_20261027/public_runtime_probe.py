@@ -10,7 +10,7 @@ import traceback
 
 def qualify():
     import numpy as np
-    from mojolearn import SVC, _backend
+    from mojolearn import SVC, SVR, _backend
     from mojolearn._verify_native_runtime import audit_native_call
 
     rng = np.random.default_rng(421)
@@ -26,7 +26,7 @@ def qualify():
             yield
             return
         names = ('svc_fit', 'svc_predict', 'svc_pair_epilogue', 'svc_platt_train',
-                 'svc_splitmix_perm', 'svm_numeric_mode')
+                 'svc_splitmix_perm', 'svm_numeric_mode', 'svr_fit', 'svr_predict')
         saved = {name: getattr(binding, name) for name in names}
         def refused(*args, **kwargs):
             raise AssertionError('candidate redispatched through a legacy Python-facing entry')
@@ -68,7 +68,7 @@ def qualify():
                 name, fit_counts = vars(model)['_native_svc_dispatch']
                 assert name == 'mojolearn.svm.binary.v1'
                 assert fit_counts[0] >= (1 if binary else 3)
-                assert len(fit_counts) == 6 and fit_counts[5] == 1
+                assert len(fit_counts) == 8 and fit_counts[5] == 1
                 assert fit_counts[2] > 0
                 if probability:
                     assert fit_counts[3] > 0 and fit_counts[4] > 0
@@ -101,9 +101,24 @@ def qualify():
             call(arm, model.predict, data)
         results.append(dict(kernel=kernel, binary=binary, probability=probability,
                             fit_calls=fit_counts, runtime_audits=fit_reports, status='passed'))
+    for kernel in ('linear', 'rbf'):
+        y = (x[:, 0] - np.float32(.25) * x[:, 1]).astype('f4')
+        opts = dict(kernel=kernel, gamma=.2, C=1.25, epsilon=.15, tol=1e-3,
+                    max_iter=64, nochange_steps=32, numeric_mode='identical')
+        models = [SVR(**opts), SVR(**opts)]
+        for arm, model in enumerate(models):
+            call(arm, model.fit, x, y, sample_weight=weights)
+        for attr in ('support_', 'support_vectors_', 'dual_coef_', 'intercept_', 'n_iter_'):
+            equal(getattr(models[0], attr), getattr(models[1], attr), 'svr_' + attr)
+        name, counts = vars(models[1])['_native_svc_dispatch']
+        assert len(counts) == 8 and counts[5] == 1 and counts[6] == 1 and counts[2] > 0
+        equal(call(0, models[0].predict, x), call(1, models[1].predict, x), 'svr_predict')
+        name, counts = vars(models[1])['_native_svc_dispatch']
+        assert counts[5] == 1 and counts[7] == 1
+        results.append(dict(estimator='SVR', kernel=kernel, status='passed'))
     return dict(status='passed', cases=results,
                 pending=['all kernels/label types/class weights', 'concurrent input mutation',
-                         'CPU binding candidate', 'SVR and other families', 'performance', 'other targets'])
+                         'CPU binding candidate', 'other SVM surfaces and families', 'performance', 'other targets'])
 
 
 def main():
