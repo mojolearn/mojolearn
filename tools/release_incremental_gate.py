@@ -196,6 +196,9 @@ def validate(document, identity):
     require(document.get('schema') == SCHEMA and document.get('candidate') == identity
             and document.get('verdict') == 'PASS' and document.get('profile') == 'release-light-v1',
             'incremental gate does not identify exact candidate')
+    if 'repair_update' in document:
+        from release_repair_gate import validate as validate_repair
+        return validate_repair(document, identity)
     if 'verifier_update' in document:
         return fixture_repack(document, identity)
     old = reuse.read(document['retained_gate'])
