@@ -715,12 +715,12 @@ def gpu_binding():
             + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
-            + "from x_neighbors.dev_pyapi import kpca_resident_binding\n"
-            + "from x_neighbors.dev_pyapi import lp_fast_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import lp_fast_resident_binding\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
-            + "from x_neighbors.dev_pyapi import ocsvm_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding\n"
             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
-            + "from x_neighbors.dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -761,8 +761,8 @@ def host_binding():
             + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
-            + "from x_neighbors.host_pyapi import kpca_resident_binding\n"
-            + "from x_neighbors.host_pyapi import lp_fast_resident_binding\n"
+            + "from providers.python.x_neighbors_host_pyapi import kpca_resident_binding\n"
+            + "from providers.python.x_neighbors_host_pyapi import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
