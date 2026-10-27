@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # The compiled owner of the classical families' public methods (lane
-# migrate-classical-b): one dispatcher, reached from providers.python.estimator_binding_pyapi import estimator_arguments
-from the classical owner's
+# migrate-classical-b): one dispatcher, reached from the classical owner's
 # door (`classical_native_call`, bindings/classical_native.mojo) for every
 # `family_*` operation. Each family's file holds its operations; the door
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
+from providers.python.estimator_binding_pyapi import estimator_arguments
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common import family_call
