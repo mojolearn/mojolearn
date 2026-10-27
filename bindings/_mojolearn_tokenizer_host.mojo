@@ -142,7 +142,7 @@ from tokenizer.encoding import (
 from tokenizer.impl.byte_unicode import codepoint_to_byte
 from tokenizer.impl.pretokenize import pretokenize_pattern
 from tokenizer.impl.ranks import RankTable
-from tokenizer.impl.unicode_class import builtin_unicode_classes
+from tokenizer.impl.unicode_class import builtin_unicode_classes, UNICODE_VERSION_PINNED
 from tokenizer.impl.vocab_build import (
     MergeCheck,
     check_loose,
@@ -896,7 +896,15 @@ def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
     ref tok = owner[].tok.value()
     var bi = Python.import_module("builtins")
     var tail = List[UInt8]()
-    var settings = [tokenizer.pattern, tokenizer.normalizer, tokenizer.unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]
+    # Pre-tokenization uses our compiled Unicode table, independent of the host
+    # Python. Hashing unicodedata.unidata_version here made identical tokens
+    # and generation checkpoints disagree across Python 3.11/3.12/3.13.
+    # NFC additionally uses the host's native normalizer, so retain its version
+    # only when that operation is enabled. See test_tokenizer_fingerprint.py.
+    var unicode_version = PythonObject(UNICODE_VERSION_PINNED)
+    if tokenizer.normalizer is not None:
+        unicode_version = PythonObject(String(UNICODE_VERSION_PINNED) + "/normalizer:" + String(tokenizer.unicode_version))
+    var settings = [tokenizer.pattern, tokenizer.normalizer, unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]
     for i in range(5):  # small-loop(the five settings words of the fingerprint)
         tokenizer_append_bytes(tail, _py_bytes_list(py_call(py_call(bi.str, settings[i]).encode, "utf-8")))
         tokenizer_append_bytes(tail, _py_bytes_list(py_call(PythonObject("\n").encode, "ascii")))
