@@ -137,7 +137,7 @@ from gemm.checks.gemm_int15 import (
 from gemm.checks.gemm_int15_epilogue import INT15_EPILOGUE_SABOTAGE
 from std.os import abort
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -222,6 +222,7 @@ from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
 
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
 
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_binding_impl import (
@@ -600,20 +601,35 @@ def transformer_session_forward_binding(
     var result = 0
     try:
         with GILReleased(Python()):
-            try:
-                result = _transformer_run_session(owner[], a,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
-            except error:
-                # A failed call must not leave partially written scratch or
-                # queued references for the next caller. Caller arrays are
-                # still owned by its Python frame during this drain.
-                owner[].clear()
-                raise error
+            result = transformer_session_forward_native(owner[], a, p, opts)
     except error:
         owner[].busy = False
         raise error
     owner[].busy = False
     return PythonObject(result)
+
+
+def transformer_native_api_binding() raises -> PythonObject:
+    # Setup-time ABI transport only. The table and name live for the owning
+    # image's lifetime; consumers retain this module and capsule while using
+    # any copied native function pointer. No extension-layout assumptions.
+    ref cpy = Python().cpython()
+    var api = TRANSFORMER_NATIVE_API.get_or_create_ptr()
+    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        api[].entries.unsafe_ptr(), api[].name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
+    if not capsule:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=capsule)
+
+
+def transformer_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
+    # The ONLY conversion from a public session owner to this image's opaque
+    # handle. A caller must retain session; native consumers never inspect its
+    # Python extension layout or reconstruct TransformerSession themselves.
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer: session is busy or closed")
+    return PythonObject(Int(owner))
 
 
 def transformer_session_forward_int15_binding(
@@ -1556,6 +1572,8 @@ def build__mojolearn_transformer() -> PythonObject:
         # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
+        m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
+        m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
