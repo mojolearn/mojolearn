@@ -1,0 +1,69 @@
+# Native whole-operation neural boundary
+
+This source repair removes Sequential's internal CPython calls to the compiled
+`model_n_params`, `model_fit`, `model_fit_labels`, `model_predict` and
+`model_predict_labels` entries. Both public packed compatibility entries and the
+new direct descriptor table use `autograd/model_execution.mojo`, which calls the
+existing native model engine. Parameters, optimizer arithmetic, label sorting,
+validation, resume, seeds and traversal order are retained.
+
+There is one provider implementation: `providers/python/neural_descriptor_pyapi`.
+The model table supplies a named engine schema to that shared provider; it does
+not implement a second provider. Device and host tables differ only in executor
+and existing label-sort implementation. The public Python method remains one
+binding call. Input/model metadata is admitted to native lists and `CastIn`
+records on each public operation. New inputs, replaced weights, refits and
+validation inputs are not cached under object identity. The compiled table may
+be retained while its factory/module/ABI identity matches. Buffer owners remain
+live through synchronous execution; this adds no concurrent mutation guarantee.
+
+## Actual neural recipe ownership
+
+- `sequential-fit`, `sequential-predict`, `tape-user-model`: public Sequential
+  admission -> shared descriptor provider -> model execution -> existing native
+  tape/backward/optimizer/batch/epoch owners. This patch changes dispatch, not
+  arithmetic. The old calls were compiled extension calls, not Python arithmetic.
+- `ops-session-step`: test controller composes public calls. Native Session
+  `backward` directly walks its native tape; `step` directly updates native
+  optimizer state. No extra provider dispatch is added to already-native loops.
+- `program-run`: Program admission constructs `ProgramInput` then directly calls
+  `program_execute_run`. The captured program, replay, buffers and execution
+  plan are native. Program fit directly calls `program_fit_native` and native
+  `train_program_control`. Original external arrays/targets are explicitly kept
+  alive until replay/fit returns.
+- `mlp-fit`, `rnn-fit`, `lstm-fit`, `gru-fit`: xseq whole-model dispatch is still
+  pending in this first commit. It is not qualified by the Sequential repair.
+- Remaining 20 recipes: separate generation/Samba and trainer/GEMM lanes own their
+  execution repair. The complete recipe map remains in
+  `../neural_metadata_once_20261027/inventory.json`.
+
+## Remaining boundary gaps
+
+Program input admission still accepts protocols using `hasattr`, ndarray field
+access and nested scalar conversion. Exact ndarray/builtin scalar routes read
+metadata at admission, outside replay, but subclasses/custom protocol objects
+can invoke hooks. This source patch does not claim that all supported admission
+routes are callback-free. Xseq string/object label sorting also has Python
+comparison/conversion work; numeric measured labels are a different route.
+Sequential mode/vendor validation still calls compiled metadata entries at the
+boundary. Python object metadata/output construction at an admitted edge must
+not be confused with a Python callback inside native training.
+
+## Verification
+
+`tools/test_sequential_native_provider.py` checks the actual native dependency
+closure and the absence of the removed internal dispatch calls. Live native
+folder checks have no exemptions. The historical lossless relocation test reads
+the original relocation commit, allowing later real product repairs without
+rewriting that historical proof.
+
+`python/mojolearn/tests/test_sequential_native_provider.py` is an authored public
+candidate probe: it requires the new compiled factory, poisons the old internal
+entry dictionary, and checks regression/multiclass/binary fit, resume, changed
+prediction inputs and probabilities against the existing packed native engine.
+It also asserts the runtime callback audit. Existing Sequential admission,
+buffer, validation/early-stop, checkpoint and metadata tests remain required.
+The packed oracle shares the native engine: it does not alone prove equivalence
+to an older source freeze. Root owns focused Mac compilation, public execution
+and the cross-freeze bit check. No runtime or performance claim follows from
+source checks. Other vendors remain untested until their actual target builds.

@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 NATIVE_ROOTS = (
     'core.cast_in', 'core.small_mlp_state_impl', 'core.generation_metadata', 'autograd.program_io',
     'autograd.model', 'autograd.program_runtime', 'autograd.ops_api',
+    'autograd.model_execution', 'autograd.model_descriptor',
+    'sequence.model_device_dispatch', 'sequence.model_host_dispatch',
 )
 IMPORT = re.compile(r'^\s*(?:from\s+([\w.]+)\s+import\b|import\s+([\w.]+))', re.M)
 

@@ -190,6 +190,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     var variable_rank = is_integer_input(dynamic_shapes) and Int(py=dynamic_shapes) == 2
     var inputs = program_inputs(plan.program, arrays, Bool(py=dynamic_shapes), variable_rank)
     var r = program_execute_run[E, KIND](sid_i, plan, inputs^, profiled)
+    _ = arrays  # retain original external buffer owners until native replay returns
     var result = host_arrays_py(r.outputs)
     if not profiled:
         return _result(result)
@@ -340,6 +341,9 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         Bool(py=shuffle), seed_word, FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])),
         condition_id, otherwise_id,
     )
+    _ = arrays  # descriptors borrow external inputs through the whole native fit
+    _ = targets
+    _ = curve
     var out = Python.list()
     _ = py_call(out.append, curve)
     _ = py_call(out.append, PythonObject(count))

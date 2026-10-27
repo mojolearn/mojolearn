@@ -12,6 +12,8 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
+from sequence.model_host_dispatch import NATIVE_MODEL_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi import graph_python_error
 from providers.python.autograd_ops_frontend_pyapi import ops_session_call_py
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
@@ -129,6 +131,11 @@ def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) rai
 def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return mlp_predict_py(ex, addrs, ip)
+
+
+def model_native_api_binding() raises -> PythonObject:
+    var api = NATIVE_MODEL_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def model_fit_binding(addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -603,6 +610,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
+        m.def_function[model_native_api_binding]("model_native_api_v1")
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")
