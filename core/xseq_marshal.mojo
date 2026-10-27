@@ -6,7 +6,7 @@ learning-rate tables and the column / block copies the fitted attributes
 are made of. Typed pointers in, no Python; the words are the ones the
 NumPy expressions they replace produced."""
 from std.memory import bitcast
-from bindings.classical_cast import classical_f32_bits
+from core.classical_cast import classical_f32_bits
 from core.cast_in import cast_f32_bits, cast_i32_bits
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]

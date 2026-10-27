@@ -29,7 +29,7 @@ from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
     generation_ids, py_ints,
 )
-from bindings.generation_policy import generation_pick
+from core.generation_policy_impl import generation_pick
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from bindings.sha256_door import sha256_update, sha256_update_text

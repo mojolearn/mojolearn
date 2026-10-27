@@ -5,7 +5,7 @@ classical_f32_bits conversion as core/classical_arrays_impl.mojo, with no
 finiteness refusal, as as_f32_c made none), and the minimum a chi2 kernel's
 negative-input refusal reads."""
 from std.memory import bitcast
-from bindings.classical_cast import classical_f32_bits
+from core.classical_cast import classical_f32_bits
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, cast_w64_bits
 
 

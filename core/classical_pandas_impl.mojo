@@ -2,7 +2,7 @@
 """Typed pandas storage reads moved word for word from bindings/classical_pandas.mojo."""
 from std.memory import bitcast
 from core.cast_in import cast_w64_bits, f64_to_f32_bits
-from bindings.classical_cast import classical_f32_bits
+from core.classical_cast import classical_f32_bits
 
 
 def pd_raw_at(base: Int, offset: Int, size: Int, native: Bool) -> UInt64:
