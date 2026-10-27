@@ -135,18 +135,11 @@ def resolve(g, shapes=None):
     depends on tensor values, inconsistent shapes) are in ``problems`` and
     the nodes with no shape rule in ``no_rule``, so the lowering can report
     them together with its own refusals in one error."""
-    native = getattr(g, "_native", None)
-    if native is None:
-        raise TypeError("resolve takes a graph read by mojolearn.importers.onnx.read")
-    # a graph the Mojo reader holds (importers/onnx.py): resolved on its handle
-    return native.resolve(shapes)
+    return _READER_NATIVE("resolve", g, shapes, _READER_CONTEXT)
 
 
 def resolve_shapes(g, shapes=None):
     """Every value's static shape from the inputs' resolved shapes; integer
     shape subgraphs folded; raises UnsupportedModel on an unresolved axis or
     a data-dependent shape, by node name."""
-    r = resolve(g, shapes)
-    if r.problems:
-        raise UnsupportedModel(g.source, r.problems)
-    return r.shapes
+    return _READER_NATIVE("resolve_shapes", g, shapes, _READER_CONTEXT)

@@ -155,28 +155,7 @@ class _Native:
 
     def resolve(self, shapes=None):
         """importers._graph.resolve of this graph, by the Mojo rules."""
-        given = dict(shapes or {})
-        names, flat = [], []
-        for name, dims in given.items():  # glue: the shapes argument, one entry per named input
-            dims = tuple([int(d) for d in dims])  # glue: one argument check per axis of a given shape
-            names.append(str(name))
-            flat.append(len(dims))
-            flat.extend(dims)
-        words, strings = self.b.onnx_resolve(self.h, names, flat)  # cpu-route: graph handle int and shapes argument read once by onnx_resolve
-        _header(words, strings, "the model graph")
-        c = _Words(words)
-        c.i = 3
-        shapes_out, dtypes = {}, {}
-        for _ in range(c.take()):  # glue: one record per resolved value
-            name, dt, rank = strings[c.take()], _DTYPES[c.take()], c.take()
-            shapes_out[name] = tuple([c.take() for _ in range(rank)])  # glue: one word per axis of a resolved shape
-            dtypes[name] = dt
-        folded = {}
-        for _ in range(c.take()):  # glue: one record per folded value
-            name, count = strings[c.take()], c.take()
-            folded[name] = tuple([c.take() for _ in range(count)])  # glue: the folded words the reader returned
-        no_rule = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node without a rule
-        return Resolved(shapes_out, dtypes, folded, no_rule, tuple(_problems(c, strings)))
+        return _READER_NATIVE("reader_resolve", self, shapes, _READER_CONTEXT)
 
 
 def read(path, binding=None):
@@ -190,42 +169,18 @@ def read(path, binding=None):
     input or output of an unsupported type, a subgraph attribute; raises
     ``ValueError`` when the file is not an ONNX model.
     """
-    # binding: the x_sequence module to read with (import_model passes its
-    # session's, so the graph handle and the session live in one module)
-    path = os.fspath(path)
-    b = _binding(binding)
-    h = int(b.onnx_read(os.fsdecode(path)))  # cpu-route: model path str read once by onnx_read
-    native = _Native(b, h)
-    closer = weakref.finalize(native, b.onnx_close, h)
-    try:
-        words, strings, floats = b.onnx_info(h)  # cpu-route: graph handle int read once by onnx_info
-        status = _header(words, strings, path)
-        c = _Words(words)
-        c.i = 3
-        if status == _PROBLEMS:
-            raise UnsupportedModel(path, _problems(c, strings))
-        opset = c.take()
-        views = _views(b, h, c, native)
-        inputs = tuple([_value(c, strings) for _ in range(c.take())])  # glue: one record per graph input
-        outputs = tuple([_value(c, strings) for _ in range(c.take())])  # glue: one record per graph output
-        nodes = []
-        for _ in range(c.take()):  # glue: one record per graph node
-            op, domain, name = strings[c.take()], strings[c.take()], strings[c.take()]
-            ins = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node input name
-            outs = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node output name
-            attrs = {}
-            for _ in range(c.take()):  # glue: one record per node attribute
-                key = strings[c.take()]
-                attrs[key] = _attr(c, strings, floats, views)
-            nodes.append(Node(op, domain, name, ins, outs, attrs))
-        inits = {}
-        for _ in range(c.take()):  # glue: one record per initializer
-            t = _tensor(c, strings, views)
-            inits[t.name] = t
-    except BaseException:
-        closer()
-        raise
-    g = GraphIR(opset=opset, inputs=inputs, outputs=outputs, nodes=tuple(nodes), initializers=inits, source=path)
-    native.views = tuple(views)
-    g._native = native  # the handle closes when the graph and every view of its bytes are gone
-    return g
+    return _READER_NATIVE("reader_read", path, binding, _READER_CONTEXT)
+
+
+def _connect_reader():
+    # glue: fixed metadata classes and native provider connections at import.
+    from ..ops import Session, Program
+    from . import _native_import_bridge, _graph
+    entry, context = _native_import_bridge.connect(Session, Program, GraphIR, GraphIR, UnsupportedModel)
+    context.update(node=Node, tensor=TensorInfo, resolved=Resolved, dtypes=_DTYPES,
+                   byte_type=ctypes.c_ubyte, providers={}, backend=vars(context['backend']))
+    _graph._READER_NATIVE, _graph._READER_CONTEXT = entry, context
+    return entry, context
+
+
+_READER_NATIVE, _READER_CONTEXT = _connect_reader()
