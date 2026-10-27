@@ -1,6 +1,15 @@
 from run_full_do_measurements import campaign_complete, state_file
 
 
+def test_runpod_transport_and_lease_preserve_owned_port_and_key():
+    from run_full_do_measurements import transport, provider_command
+    assert transport({'SSH_TARGET': '-p 12345 root@192.0.2.1'}) == (
+        'root@192.0.2.1', ['-p', '12345'], ['-P', '12345'], '-p 12345 root@192.0.2.1')
+    assert provider_command({'provider': 'runpod', 'state_key': 'measure-nv'}, 'extend', 480) == [
+        'bash', 'tools/dev_pod.sh', 'extend', 'measure-nv', '480']
+    assert transport({'IP': '192.0.2.2'}) == ('root@192.0.2.2', [], [], 'root@192.0.2.2')
+
+
 def test_failures_do_not_prevent_completion_but_pending_or_unretained_work_does():
     doc = {'finished': 1, 'expected': 3, 'failed_recipes': ['crash'], 'recipes': {
         key: {'status': status, 'retention': {'status': 'verified'}}

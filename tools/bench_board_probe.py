@@ -535,10 +535,14 @@ def library_identity(info):
     device it ran on)."""
     info = info if isinstance(info, dict) else {}
     out = {}
-    if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS") and info.get("device") == "gpu":
+    if os.environ.get("MOJOLEARN_MEASUREMENT_RECEIPTS"):
         import bench_board_evidence
-        out["hardware_receipt"] = bench_board_evidence.hardware_context()
+        # FAIRNESS FIX (2026-10-13 audit): timed CPU workers also record their
+        # runtime environment. Omitting it here falsely excluded matching CPU
+        # opponents after their fits; retain it rather than weakening seal().
         out["runtime_environment"] = bench_board_evidence.runtime_environment()
+        if info.get("device") == "gpu":
+            out["hardware_receipt"] = bench_board_evidence.hardware_context()
     if info.get("device") == "cpu" and info.get("library") != "mojolearn":
         try:
             from threadpoolctl import threadpool_info

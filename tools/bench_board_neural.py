@@ -721,7 +721,11 @@ OPS_SGD = {"lr": 0.05, "momentum": 0.0, "weight_decay": 0.0}
 OPS_PARAMS = ("w1", "b1", "w2", "b2")
 #: Adam on every fit lane and arm (no weight decay, no amsgrad): ours' MLPClassifier (beta_1, beta_2,
 #: epsilon), the recurrent estimators (optimizer_options), torch.optim.Adam and mlx.optimizers.Adam.
-FIT_ADAM = {"lr": 1e-3, "betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0}
+# FAIRNESS FIX (2026-10-13 audit): MLX stores this scalar as FP32. Pass that
+# exact representable value to EVERY fit arm on EVERY vendor, rather than
+# comparing MLX's honest read-back with a different Python float or loosening
+# parameter equality. Apple smoke 20261027 refused six fit recipes for this.
+FIT_ADAM = {"lr": float.fromhex("0x1.0624de0000000p-10"), "betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0}
 #: Where the conductor reads HIGGS: --higgs, else this variable, else the first default that exists
 #: (tools/sequence_speed.py's defaults).
 HIGGS_ENV = "MOJOLEARN_BENCH_HIGGS"

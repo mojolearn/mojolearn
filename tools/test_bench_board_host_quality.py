@@ -13,6 +13,19 @@ def test_float_error_is_reported_not_claimed_identical():
     assert quality.compare({'y': np.array([1., 2.])}, {'y': np.array([1., 2.])}) == {'relative_error_vs_own_host': 0.}
 
 
+def test_installed_host_reference_gets_bundled_libraries_before_import(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    package = tmp_path / 'mojolearn'
+    (package / '.libs').mkdir(parents=True)
+    monkeypatch.setattr(importlib.util, 'find_spec', lambda name: SimpleNamespace(origin=str(package / '__init__.py')))
+    monkeypatch.setattr(quality.sys, 'platform', 'linux')
+    monkeypatch.setenv('LD_LIBRARY_PATH', '/existing/runtime')
+    env = quality._child_env()
+    assert env['MOJOLEARN_VENDOR'] == 'cpu'
+    assert env['PYTHONPATH'] == str(tmp_path)
+    assert env['LD_LIBRARY_PATH'] == str(package / '.libs') + ':/existing/runtime'
+
+
 @pytest.mark.parametrize('actual,reference', [
     ({}, {}), ({'x': np.array([1])}, {'y': np.array([1])}),
     ({'x': np.array([1])}, {'x': np.array([2])}),

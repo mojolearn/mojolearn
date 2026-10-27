@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Active, sequential DigitalOcean measurement controller; no polling service.
+"""Active measurement controller for owned DigitalOcean or RunPod boxes.
 
 Consumes an explicitly prepared JSON run configuration. Each vendor runs the
 whole frozen plan, retains recipe logs locally as completion events arrive,
@@ -36,6 +36,23 @@ def campaign_complete(doc):
                     and not r.get('retention_failure') for r in rows.values()))
 
 
+def provider_command(vendor, action, minutes=None):
+    if vendor.get('provider') == 'runpod':
+        cmd = ['bash', 'tools/dev_pod.sh', action, vendor['state_key']]
+    else:
+        cmd = ['bash', 'tools/do_amd_steward.sh', action]
+    return cmd + ([str(minutes)] if minutes is not None else [])
+
+
+def transport(owned):
+    """Keep RunPod's SSH port in every transfer and retention command."""
+    parts = shlex.split(owned['SSH_TARGET']) if owned.get('SSH_TARGET') else ['root@'+owned['IP']]
+    host = parts[-1]
+    flags = parts[:-1]
+    scp_flags = ['-P' if flag == '-p' else flag for flag in flags]
+    return host, flags, scp_flags, shlex.join(parts)
+
+
 def run(config):
     repo = Path(config['repo'])
     out = Path(config['out'])
@@ -61,22 +78,24 @@ def run(config):
             env = dict(os.environ, **vendor.get('provider_env', {}))
             state = Path(vendor['state_dir']) / 'state.env'
             if not state.exists():
-                command(['bash', 'tools/do_amd_steward.sh', 'up', '180'], name+'-provision.log', env)
+                command(provider_command(vendor, 'up', 180), name+'-provision.log', env)
             owned = state_file(state)
-            if vendor.get('expected_id') and owned['DROPLET_ID'] != vendor['expected_id']:
-                raise RuntimeError('owned droplet identity changed')
-            target = 'root@' + owned['IP']
-            record.update(droplet=owned['DROPLET_ID'], target=target)
+            box_id = owned.get('POD_ID') or owned.get('DROPLET_ID')
+            if vendor.get('expected_id') and box_id != vendor['expected_id']:
+                raise RuntimeError('owned box identity changed')
+            target, ssh_flags, scp_flags, stage_target = transport(owned)
+            record.update(box_id=box_id, target=stage_target, provider=vendor.get('provider', 'digitalocean'))
             save()
             ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15',
-                   '-o', 'ServerAliveCountMax=8', target]
+                   '-o', 'ServerAliveCountMax=8', '-o', 'StrictHostKeyChecking=accept-new', *ssh_flags, target]
+            scp = ['scp', '-o', 'StrictHostKeyChecking=accept-new', *scp_flags]
             remote = vendor['remote_root']
             command(ssh + ['mkdir -p ' + shlex.quote(remote)], name+'-stage.log')
             for source, dest in ((config['source_bundle'], 'source.tar.gz'),
                                  (config['remote_runner'], 'run.py'),
                                  (config['manifest'], 'manifest.json'),
                                  (vendor['opponent_store'], 'opponent-store.jsonl')):
-                command(['scp', source, target+':'+remote+'/'+dest], name+'-stage.log')
+                command(scp + [source, target+':'+remote+'/'+dest], name+'-stage.log')
             # Credentials stay outside every result/source archive.
             command(ssh + ['umask 077; cat > /root/.mojolearn_r2'], name+'-stage.log',
                     input=Path(config['r2_credentials']).read_bytes())
@@ -85,8 +104,8 @@ def run(config):
                     input=json.dumps(remote_config).encode())
             if vendor.get('bootstrap'):
                 command(ssh + ['apt-get update -qq && apt-get install -y -qq python3-venv git'], name+'-bootstrap.log')
-                command(['sh', 'tools/dataset_store.sh', 'stage', target, *config['data_keys']], name+'-data.log')
-            command(['bash', 'tools/do_amd_steward.sh', 'extend', str(config['lease_minutes'])],
+                command(['sh', 'tools/dataset_store.sh', 'stage', stage_target, *config['data_keys']], name+'-data.log')
+            command(provider_command(vendor, 'extend', config['lease_minutes']),
                     name+'-lease.log', env)
             last_lease = time.time()
             record['status'] = 'running'
@@ -105,12 +124,12 @@ def run(config):
                     # scored arrays and source archives are retained once in R2.
                     local = out / name / (rid+'.tar.gz')
                     local.parent.mkdir(parents=True, exist_ok=True)
-                    command(['scp', target+':'+event['local_archive'], str(local)], name+'-retention.log')
+                    command(scp + [target+':'+event['local_archive'], str(local)], name+'-retention.log')
                     with gzip.open(local, 'rb') as f:
                         while f.read(1024*1024):
                             pass
                     if time.time() - last_lease > config['lease_minutes']*30:
-                        command(['bash', 'tools/do_amd_steward.sh', 'extend', str(config['lease_minutes'])],
+                        command(provider_command(vendor, 'extend', config['lease_minutes']),
                                 name+'-lease.log', env)
                         last_lease = time.time()
                     boards = out/name/'boards'
@@ -133,11 +152,11 @@ def run(config):
                     record['completed'] = record.get('completed', 0) + 1
                     save()
                 record['returncode'] = proc.wait()
-            command(['scp', target+':'+remote+'/campaign/campaign.json', str(out/(name+'-campaign.json'))], name+'-retention.log')
+            command(scp + [target+':'+remote+'/campaign/campaign.json', str(out/(name+'-campaign.json'))], name+'-retention.log')
             doc = json.loads((out/(name+'-campaign.json')).read_text())
             record['complete'] = campaign_complete(doc)
             save()
-            command(['bash', 'tools/box_archive.sh', 'full-measure-'+name, target], name+'-archive.log')
+            command(['bash', 'tools/box_archive.sh', 'full-measure-'+name, *ssh_flags, target], name+'-archive.log')
             if not record['complete']:
                 raise RuntimeError(name+' has pending work or a shared failure; box preserved for recovery')
             if config.get('commit_boards'):
@@ -151,8 +170,11 @@ def run(config):
                     if record['board_commit_rc'] == 0:
                         record['board_push_rc'] = command(['git', 'push', 'origin', 'main'], name+'-board-publish.log', check=False)
             # Results are already archived on the Mac and R2. Never release another owner.
-            command(['bash', 'tools/do_amd_steward.sh', 'down'], name+'-down.log',
-                    dict(env, MOJOLEARN_DOWN_NO_ARCHIVE='1'))
+            # Keep the box until large scored/model/binary archives have also
+            # been checked off-box; box_archive intentionally skips >50 MB.
+            if vendor.get('release_after_archive', False):
+                command(provider_command(vendor, 'down'), name+'-down.log',
+                        dict(env, MOJOLEARN_DOWN_NO_ARCHIVE='1'))
             record.update(status='complete', finished=time.time(), failed=doc.get('failed_recipes', []))
             save()
         journal.update(status='complete', finished=time.time())

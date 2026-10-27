@@ -372,7 +372,7 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
         _p=$(cat "$D/deadman.pid"); pkill -P "$_p" 2>/dev/null || true; kill "$_p" 2>/dev/null || true
         rm -rf "$D/deadman" "$D/deadman.pid"
         printf '%s attempt %s: nothing created: %s\n' "$(date -u +%FT%TZ)" "$attempt" "$_body" >> "$attempts_log"
-        if ! printf '%s' "$_body" | grep -qiE 'no (gpu )?instances|currently available|out of stock|insufficient|not enough|no available|unavailable'; then
+        if ! printf '%s' "$_body" | grep -qiE 'no (gpu )?instances|no longer any instances available|currently available|out of stock|insufficient|not enough|no available|unavailable'; then
             rm -rf "$D"
             die "create failed, nothing was created, and not for stock: $_body (full response: $_request_evidence)"
         fi

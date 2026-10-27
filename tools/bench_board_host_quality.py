@@ -108,7 +108,18 @@ def _child_env():
     import importlib.util
     spec = importlib.util.find_spec('mojolearn')
     if spec is not None and spec.origin:
-        env['PYTHONPATH'] = str(Path(spec.origin).resolve().parent.parent)
+        package = Path(spec.origin).resolve().parent
+        env['PYTHONPATH'] = str(package.parent)
+        # The installed Linux wheel's host reference imports a host binding
+        # before the GPU loader opens bundled runtime libraries. On 0.8.62 this
+        # failed with missing libKGENCompilerRTShared.so (AMD full measurement
+        # 20261027-r2, retained host-quality/host.log). Give this untimed testing
+        # subprocess the wheel's own library directory at process startup.
+        libraries = package / '.libs'
+        if sys.platform.startswith('linux') and libraries.is_dir():
+            env['LD_LIBRARY_PATH'] = os.pathsep.join(
+                [str(libraries)] + [p for p in env.get('LD_LIBRARY_PATH', '').split(os.pathsep)
+                                   if p and p != str(libraries)])
     return env
 
 
