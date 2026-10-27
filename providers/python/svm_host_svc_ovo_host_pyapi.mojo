@@ -8,7 +8,7 @@ from std.python._cpython import GILReleased
 
 from svm.host.svc_ovo_host import ovo_dual_gemv_host, ovo_layout_host
 from svm.impl.svc_ovo_layout import ovo_check_result
-from svm.impl.svc_ovo_layout_pyapi import ovo_pairs_from_python
+from providers.python.svm_impl_svc_ovo_layout_pyapi import ovo_pairs_from_python
 
 
 def svc_ovo_layout_host_binding(

@@ -352,7 +352,7 @@ def rbf_sampler_fit_transform_into(
     wa: Int, ba: Int, sa: Int, xa: Int, za: Int,
 ) raises:
     """`RBFSampler.fit_transform(X)` under KM_FAST_RBF_RESIDENT, typed. The
-    Python door is `kernel_methods/rbf_resident_pyapi.mojo`.
+    Python door is `providers/python/kernel_methods_rbf_resident_pyapi.mojo`.
 
     wa weights_out (d*q f32), ba offset_out (q f32), sa scalars_out (2 f64:
     sigma, scale), xa x (m*d f32, read), za out (m*q f32)."""
