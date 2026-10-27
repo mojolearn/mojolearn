@@ -3239,6 +3239,13 @@ def audit_plan(ctx, races):
     for race in races:
         unsupported = unsupported_our_arms(race, ctx)
         arms = [a for a in race["arms"] if a not in unsupported]
+        # FAIRNESS FIX (2026-10-13 audit): the own-only default used to
+        # construct every missing opponent during the plan audit, even though
+        # run_race would skip it. Audit the arms actually scheduled or reused;
+        # an unselected library must not block our measurements.
+        if not (ctx.get("with_opponents") or ctx.get("retime") or ctx.get("opponents_only")):
+            retained = stored_opponents(ctx, race)
+            arms = [a for a in arms if a in race.get("our_arms", {}) or a in retained]
         files = race_data_files(ctx, race)
         data = dict(name=race["dataset"], rows_requested=race.get("rows"),
                     identity=race_data_sha(ctx, race, ctx["box"]),
@@ -3249,7 +3256,7 @@ def audit_plan(ctx, races):
         # smoke-fixes (2026-10-14; neural/gemm-bf16 Apple fast: "no supported own arm"): the verdict was
         # already UNSUPPORTED, but its problem line did not say why; it now names each own arm's capability
         # reason (including the installed native BF16 capability, not a shape rule).
-        entry = (preflight_check(sub, race, arms) if arms and has_ours else
+        entry = (preflight_check(sub, race, arms) if arms and (has_ours or ctx.get("opponents_only")) else
                  dict(verdict="UNSUPPORTED", problems=["no supported own arm (%s); no opponent-only timing" % (
                      "; ".join("%s: %s" % kv for kv in sorted(unsupported.items())) or "no own arm planned")],
                       unsupported_arms=unsupported))
