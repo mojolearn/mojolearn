@@ -12,7 +12,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE_ROOTS = (
-    'core.cast_in', 'core.small_mlp_state_impl', 'autograd.program_io',
+    'core.cast_in', 'core.small_mlp_state_impl', 'core.generation_metadata', 'autograd.program_io',
     'autograd.model', 'autograd.program_runtime', 'autograd.ops_api',
 )
 IMPORT = re.compile(r'^\s*(?:from\s+([\w.]+)\s+import\b|import\s+([\w.]+))', re.M)
