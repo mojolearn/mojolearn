@@ -172,6 +172,15 @@ def validate(document, identity):
     observed = {r['sha256'] for r in full['bindings']}
     installed = None
     compile_only = {}
+    host = reports['host_sequence_compile']
+    require(evidence.read_text(reuse.checked_ref(host['exit'])).strip() == '0',
+            'shared sequence host build failed')
+    host_binary = reuse.checked_ref(host['binary'])
+    require(evidence.read_text(reuse.checked_ref(host['binary_sha256'])).split()[0]
+            == evidence.sha256(host_binary), 'shared sequence host compiled bytes differ')
+    require(reports.get('host_sequence_scope') == 'compiled repair; direct host-module execution not claimed',
+            'shared host repair requires explicit qualification scope')
+    compile_only['mojolearn/host/_mojolearn_x_sequence_host.so'] = host['binary']['sha256']
     if identity['vendor'] == 'nvidia':
         # Owner 2026-10-27: publish with retained verification, then exactly one
         # NVIDIA PTX/Mac comparison. Do not schedule another pre-publication GPU

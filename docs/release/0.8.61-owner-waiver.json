@@ -1,0 +1,35 @@
+{
+  "approved_by": "Andrew: standing lightweight release and evidence-reuse policy (2026-10-25); explicit 0.8.61 publication and one post-publication NVIDIA/Mac comparison requested 2026-10-27",
+  "reason": "Retain the existing legacy-ledger representation exception used for 0.8.60. Reuse actual completed compilation and verification without repeating it for version or packaging changes. Both candidate admissions remain mandatory and independently validate the original evidence, exact wheel delta, repair execution or explicitly scoped compilation, and completed changed-path checks. The owner explicitly limits further work to one NVIDIA PTX/Mac comparison after publication, no other devices or measurements. This does not convert any unexecuted path to a runtime pass or excuse a failed check.",
+  "prefixes": [
+    "identity-",
+    "runtime-",
+    "multi-gpu-",
+    "coverage-source",
+    "compile-apple/",
+    "compile-cpu/",
+    "compile-nvidia/",
+    "compile-amd/",
+    "adapters-"
+  ],
+  "evidence": [
+    "bench/results/release_verification/2026-10-26_pypi_0859/publication.json",
+    "bench/results/verification_faults/2026-10-26-0860/",
+    "bench/results/release_verification/2026-10-26_pypi_0860/",
+    "docs/plans/RELEASE_0860_WORKTREE_RECONCILIATION_20261026.json",
+    "~/mojolearn-evidence/release-0860-verifiers-20261026/",
+    "experiments/verification_0860_ptx/verification.json",
+    "~/mojolearn-evidence/release/0.8.61/",
+    "~/mojolearn-evidence/verify-0860-ptx-20261026/"
+  ],
+  "unqualified": [
+    "Historical optional rlpair fields remain unqualified; they are never counted as equal.",
+    "Retained CPU identity records ran on Apple CPU and are not relabeled as Linux CPU identity.",
+    "The raw source/coverage inventories retain their historical debt and unresolved native installer attribution; source reach is not promoted to runtime success.",
+    "The two-GPU producer exercised comparator, placement, callback, hidden-device and native fold-failure controls. It did not inject a new arithmetic fault into its CV worker; the existing kernel fault lanes qualify that arithmetic.",
+    "The newly compiled native NVIDIA sm_89 sequence repair has a passing build and image audit; no fresh execution of that native image is claimed. PTX repair execution is retained and the requested post-publication comparison uses PTX.",
+    "The shared Linux x_sequence_host replacement is compiled; the selected sequence boundary records do not prove direct execution of that host module.",
+    "No new performance measurement or physical two-GPU run is included."
+  ],
+  "version": "0.8.61"
+}
