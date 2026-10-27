@@ -12,11 +12,12 @@ after it returned. The same entry and argument words as the Python body,
 so the step keeps its bits.
 """
 from std.python import Python, PythonObject
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.linalg_ops_native import linalg_ops_operation
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.native_buffer_owner import native_storage_allocate
@@ -141,11 +142,120 @@ def _host_shape(config: PythonObject, context: PythonObject) raises -> Tuple[_Sh
     return (shape^, object)
 
 
-def _host_profile(fields: PythonObject) raises -> PythonObject:
+def _host_profile_pair(fields: PythonObject) raises -> List[String]:
     var provider = _host_provider(fields)
-    var result = List[String](length=1, fill=String(""))
+    var result = List[String](length=2, fill=String(""))
     _ = neural_descriptor_execute(provider, 4, [Int(result.unsafe_ptr())], _host_words(fields), List[Float64](), False)
+    return result^
+
+
+def _host_profile(fields: PythonObject) raises -> PythonObject:
+    var result = _host_profile_pair(fields)
     return PythonObject(result[0])
+
+
+def _inference_parameters(source: PythonObject, shape: _Shape,
+                          context: PythonObject) raises -> Tuple[PythonObject, String]:
+    var bi = native_loaded_module("builtins")
+    if py_type(source) is not bi.dict:
+        return (training_f32_cast_owned(source, [shape.n_total()], "parameters", context), String("float32"))
+    # Inspect native dictionary keys without invoking mapping/protocol hooks.
+    # Packed classes are storage only; their buffers pass the same admission as
+    # a direct linalg call, and decoding uses that existing provider/kernel.
+    var names = shape.names()
+    var shapes = shape.shapes()
+    var keys = py_call(bi.list, source)
+    var missing = Python.list()
+    var extra = Python.list()
+    for i in range(len(keys)):  # driver-loop: over native key types before any dictionary lookup
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: parameter dictionary names must be exact strings")
+    for i in range(len(names)):  # driver-loop: over immutable parameter registry metadata
+        if not py_contains(source, names[i]):
+            _ = py_call(missing.append, names[i])
+    for i in range(len(keys)):  # driver-loop: over supplied native parameter dictionary keys
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: parameter dictionary names must be exact strings")
+        var known = False
+        for j in range(len(names)):  # driver-loop: over immutable parameter registry names
+            known = known or String(py=keys[i]) == names[j]
+        if not known:
+            _ = py_call(extra.append, keys[i])
+    if len(missing) != 0 or len(extra) != 0:
+        raise Error("mojolearn.LanguageModelInference: parameter dict mismatch; missing "
+            + String(py=py_call(bi.repr, missing)) + ", unknown " + String(py=py_call(bi.repr, extra)))
+    var format = String("float32")
+    var owners = List[PythonObject]()
+    var formats = List[Int]()
+    for i in range(len(names)):  # driver-loop: over packed storage tags before allocating model state
+        var item = source[names[i]]
+        var selected = String("float32")
+        var tag = 0
+        if py_type(item) is context["byte_lm_bf16_class"]:
+            selected = "bfloat16"
+            tag = 1
+            item = Python.tuple(PythonObject(None), py_fields(item)["bits"])
+        elif py_type(item) is context["byte_lm_int8_class"]:
+            selected = "int8"
+            tag = 2
+            var fields = py_fields(item)
+            item = Python.tuple(PythonObject(None), fields["codes"], fields["exponents"])
+        owners.append(item)
+        formats.append(tag)
+        if selected != "float32":
+            if format != "float32" and format != selected:
+                raise Error("mojolearn.lowbit: weights mix formats ['bfloat16', 'int8']; store a model one way")
+            format = selected
+    var result = _f32_array(shape.n_total(), context)
+    var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+    var offset = 0
+    for i in range(len(names)):  # driver-loop: over admitted named tensors, not model arithmetic
+        var item = owners[i]
+        if formats[i] == 1:
+            item = linalg_ops_operation(PythonObject(None), "family_lin_from_bf16", item, context["byte_lm_linalg_context"])
+        elif formats[i] == 2:
+            item = linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8", item, context["byte_lm_linalg_context"])
+        var owned = training_f32_cast_owned(item, shapes[i], names[i], context)
+        var count = 1
+        for j in range(len(shapes[i])):  # driver-loop: over admitted tensor shape metadata
+            count *= shapes[i][j]
+        memcpy(dest=target + offset,
+            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owned))), count=count)
+        offset += count
+        _ = owned
+    return (result, format^)
+
+
+def byte_lm_host_inference_construct(model: PythonObject, args: PythonObject,
+                                     context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    if py_type(model) is not context["byte_lm_host_inference_class"]:
+        raise Error("TypeError: host inference requires the connected native inference class")
+    classical_connect_numpy(context)
+    var captured = _host_shape(args[1], context)
+    var shape = captured[0]
+    if py_type(args[2]) is not bi.bool:
+        raise Error("TypeError: threaded must be a bool")
+    var pending = bi.dict()
+    py_setitem(pending, "_threaded", args[2])
+    py_setitem(pending, "_threads", args[3])
+    _ = _host_threads(pending, PythonObject(None), PythonObject(None))
+    var packed = _inference_parameters(args[0], shape, context)
+    var binding = context["byte_lm_host_binding"]
+    if py_type(binding) is bi.str:
+        raise Error(String(py=binding))
+    py_setitem(pending, "_binding", binding)
+    py_setitem(pending, "_native", shape.native_shape())
+    var profiles = _host_profile_pair(pending)
+    var expected = shape.profile(String(py=context["byte_lm_default_profile"])) + profiles[1]
+    if profiles[0] != expected:
+        raise Error("RuntimeError: byte LM host profile mismatch: " + profiles[0] + " != " + expected)
+    py_setitem(pending, "_shape", captured[1])
+    py_setitem(pending, "_parameters", packed[0])
+    py_setitem(pending, "weight_format", packed[1])
+    # Publish only after admission, allocation, decoding and profile agreement.
+    _ = py_call(py_fields(model).update, pending)
+    return PythonObject(None)
 
 
 def byte_lm_host_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -440,6 +550,8 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
         var operation = String(py=call[1])
         if operation == "logits" or operation == "next_bytes" or operation == "loss_bits" or operation == "inference_loss":
             return byte_lm_host_infer(call[0], operation, call[2], call[3]).steal_data()
+        if operation == "inference_construct":
+            return byte_lm_host_inference_construct(call[0], call[2], call[3]).steal_data()
         if operation == "construct":
             return byte_lm_host_construct(call[0], call[2], call[3]).steal_data()
         if operation == "from_state":

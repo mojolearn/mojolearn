@@ -143,3 +143,15 @@ def test_byte_config_keeps_frozen_dataclass_and_native_public_methods():
     assert 'byte_lm_config_frozen_error' in native and 'stash_python_error()' in native
     assert 'native_storage_allocate(context["byte_lm_config_class"])' in native
     assert 'training_byte_shape_validate(shape.d, shape.chunked)' in native
+
+
+def test_inference_construction_uses_native_registry_and_shared_lowbit_provider():
+    source = (ROOT / 'python/mojolearn/_byte_lm_host.py').read_text()
+    constructor = source.split('class LanguageModelInference:')[1].split('    def __init__(')[1].split('    @classmethod')[0]
+    assert '_HOST_TRAIN(self, "inference_construct"' in constructor
+    assert '_flatten_parameters(' not in constructor and '_load()' not in constructor
+    native = (ROOT / 'bindings/byte_lm_host_trainer_native.mojo').read_text()
+    assert 'linalg_ops_operation(PythonObject(None), "family_lin_from_bf16"' in native
+    assert 'linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8"' in native
+    assert 'List[String](length=2' in native
+    assert 'py_call(py_fields(model).update, pending)' in native
