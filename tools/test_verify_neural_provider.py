@@ -128,6 +128,6 @@ def test_runtime_failure_does_not_cancel_other_independent_probes(tmp_path, monk
         package=tmp_path, binary_root=[], build_record=[], python=Path(sys.executable))
     assert verify.verify(args) == 1
     report = json.loads((args.output / 'result.json').read_text())
-    assert len(calls) == len(verify.RUNTIME_SUITES) + len(verify.RUNTIME_PROBES) == 7
+    assert len(calls) == len(verify.RUNTIME_SUITES) + len(verify.RUNTIME_PROBES) == 8
     assert len(report['failed_checks']) == 1
     assert not report['selected_runtime_checks_passed']

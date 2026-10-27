@@ -97,3 +97,32 @@ has separate metrics dispatch; custom object/string label handling still uses
 Python-compatible comparison/conversion. Program/Session scalar/protocol
 admission and Session construction remain under audit. No all-neural or
 all-supported-input qualification is claimed by this commit.
+
+## Program/Session input admission
+
+The next repair connects the existing common admission registry during `ops`
+module setup, then reuses it before reading input fields or coercing scalar
+values. It does not introduce another provider. Native ndarray/scalar/container
+inputs retain their conversion and shape semantics; `Array` uses the existing
+zero-copy native exporter view. Python subclasses and custom dtype/float/index
+hooks are refused before invocation. The native `ProgramInput` and tape remain
+free of Python owners; public arguments and native scalar storage retain their
+buffers for the synchronous operation. Metadata refreshes on every new call.
+Embedding/gather IDs reuse the captured CastIn kind and width instead of reading
+external dtype metadata again.
+
+Authored candidate probes cover rejected attribute/float/ndarray/list hooks,
+nested scalar hooks, recovery after refusal, native Array and list input,
+changed dtype/layout, and consumed output ownership. Lane validation is source
+only. Existing raw private ABI setup without `ops` import must explicitly connect
+its admission registry before accepting inputs; the public import connects each
+available compiled mode once.
+
+Still pending: Session construction dispatches its selected mode's native
+`open` entry through CPython; this cannot be removed by blindly constructing the
+initializer module's executor because another mode owns a different session
+registry/lifetime. Session creation is outside the current ops-session-step
+measurement clock, but remains product API boundary debt. ImportedProgram and
+distributed/framework admission paths have separate providers and are not
+qualified by the ordinary Program input repair. Optional xseq schedule/scoring
+and object-label routes remain as noted above.
