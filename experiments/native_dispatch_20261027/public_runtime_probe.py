@@ -38,6 +38,9 @@ def qualify():
             b = np.asarray(candidate.forward(ids, states[1])).copy()
             assert np.array_equal(a.view("u4"), b.view("u4"))
             assert states[0].positions == states[1].positions
+            assert [layer.cached_tokens for layer in states[0].layers] == [
+                layer.cached_tokens for layer in states[1].layers
+            ] == [states[1].positions] * len(states[1].layers)
         logits_sha256 = hashlib.sha256(b.tobytes()).hexdigest()
         options = dict(greedy=False, seed=7, top_k=2)
         generated_a = np.asarray(baseline.generate(ids, 5, **options)).copy()
