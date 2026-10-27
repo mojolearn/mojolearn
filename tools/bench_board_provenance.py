@@ -79,6 +79,27 @@ def identity(path):
         out['runtime_files'] = runtime
     if d['code_path'] == 'ptx' and not runtime:
         raise ValueError('Paired PTX board requires pinned common runtime_files')
+    # Incremental verification may reuse released GPU bytes alongside repaired
+    # native host groups. source_commit remains the installed release witness
+    # checked below and in the PTX receipt; do not relabel those GPU bytes with
+    # the repair commit. Each replacement names its own retained source closure.
+    # Binary/runtime hashes still pin every replacement actually loaded.
+    components = d.get('component_sources')
+    if components is not None:
+        if not isinstance(components, dict) or not components:
+            raise ValueError('Empty component source inventory')
+        for name, source in components.items():
+            if name not in files and name not in (runtime or {}):
+                raise ValueError('Component source has no pinned artifact: ' + name)
+            if not isinstance(source, dict):
+                raise ValueError('Invalid component source record')
+            for field, length in [('source_commit', 40), ('source_closure_sha256', 64)]:
+                value = source.get(field)
+                if not isinstance(value, str) or len(value) != length or any(c not in '0123456789abcdef' for c in value):
+                    raise ValueError('Invalid component ' + field)
+            if not isinstance(source.get('source_closure_ref'), str) or not source['source_closure_ref']:
+                raise ValueError('Component source requires its retained closure reference')
+        out['component_sources'] = components
     return out
 
 

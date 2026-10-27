@@ -96,6 +96,32 @@ class Provenance(unittest.TestCase):
         self.assertIsNotNone(B.smoke_gate(str(self.root/'out'),'nvidia',[r],[str(f)],self.native))
         self.assertIsNone(B.smoke_gate(str(self.root/'out'),'nvidia',[r],[str(f)]))
 
+    def test_incremental_component_sources_preserve_release_witness(self):
+        filename = next(iter(self.native['files']))
+        source = dict(source_commit='c'*40, source_closure_sha256='d'*64,
+                      source_closure_ref='measurements/repair/source.tar.gz')
+        doc = dict(self.native, component_sources={filename: source})
+        path = self.root/'manifest.json'
+        path.write_text(json.dumps(doc))
+        with patch.dict(os.environ, {}, clear=True):
+            result = P.identity(path)
+            self.assertEqual(result['source_commit'], 'a'*40)
+            self.assertEqual(result['component_sources'][filename], source)
+            self.assertNotEqual(result, P.identity(self._write_manifest(self.native)))
+            doc['component_sources'] = {'unlisted.so': source}
+            path.write_text(json.dumps(doc))
+            with self.assertRaisesRegex(ValueError, 'no pinned artifact'):
+                P.identity(path)
+            doc['component_sources'] = {filename: dict(source, source_commit='unknown')}
+            path.write_text(json.dumps(doc))
+            with self.assertRaisesRegex(ValueError, 'source_commit'):
+                P.identity(path)
+
+    def _write_manifest(self, doc):
+        path = self.root/'other-manifest.json'
+        path.write_text(json.dumps(doc))
+        return path
+
     def test_resume_identity_includes_path_and_bytes(self):
         old={'gpu':{'vendor':'nvidia'},'artifact_identity':self.native}
         self.assertNotEqual(B.box_key(old),B.box_key(dict(old,artifact_identity=self.ptx)))
