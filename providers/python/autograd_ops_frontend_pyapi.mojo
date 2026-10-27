@@ -9,7 +9,7 @@ from sequence.ops import FP
 from autograd.ops_api import ops_session
 from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
-from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input
+from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
 from providers.python.autograd_pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
 from providers.python.autograd_model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_native_py
@@ -32,6 +32,8 @@ def _int(x: PythonObject, name: String = "integer", low: Int = -9223372036854775
 def _float(x: PythonObject, name: String) raises -> Float32:
     # A real number for the scalar argument `name`; anything else (a str,
     # None, an object without __float__) is refused naming the argument.
+    if not program_numeric_scalar(x):
+        raise Error("TypeError: " + name + " must be a native real scalar without conversion hooks")
     try:
         return Float32(py=x)
     except error:
@@ -216,6 +218,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         else:
             handle = s[].upload_nd(input.src, input.shape, Bool(py=args[1]))
         _ = input^  # keep all scalar-list storage alive across the upload
+        _ = args  # retain original external array exporters through upload
         return PythonObject(handle)
     if name == "shape":
         var sh = s[].shape_nd(_int(args[0], "handle", 1))
@@ -565,10 +568,13 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             ints.append(option)
         else:
             var input = program_input(args[1], True)
-            var b = Python.import_module("builtins")
+            # Native CastIn stores signedness/width, so reuse it rather than
+            # asking the external object for dtype metadata a second time.
             var dtype_num = 9
-            if Bool(py=py_call(b.hasattr, args[1], "dtype")):
-                dtype_num = Int(py=args[1].dtype.num)
+            if input.src.kind == 0:  # CAST_KIND_UNSIGNED
+                dtype_num = 2 if input.src.itemsize == 1 else (4 if input.src.itemsize == 2 else (6 if input.src.itemsize == 4 else 10))
+            else:
+                dtype_num = 1 if input.src.itemsize == 1 else (3 if input.src.itemsize == 2 else (5 if input.src.itemsize == 4 else 9))
             ints = [input.src.addr, dtype_num, input.src.itemsize, input.src.rows,
                     input.src.cols, input.src.s0, input.src.s1, option]
             var out = s[].op(code, hs, ints, fs)

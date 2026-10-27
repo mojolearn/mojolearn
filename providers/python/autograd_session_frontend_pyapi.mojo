@@ -8,7 +8,9 @@ from providers.python.autograd_program_arrays_pyapi import initialize_program_ar
 def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode: PythonObject,
                               connections: PythonObject, backend: PythonObject, program_class: PythonObject) raises -> PythonObject:
     if session is PythonObject(None):
-        initialize_program_arrays()
+        # Import-time setup reuses the sixth slot for the common admission
+        # context; normal Session initialization still receives Program there.
+        initialize_program_arrays(program_class)
         return PythonObject(None)
     var b = Python.import_module("builtins")
     var requested = mode

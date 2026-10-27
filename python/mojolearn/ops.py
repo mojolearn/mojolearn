@@ -1544,7 +1544,8 @@ def _connect_session_mode(mode):
         call=module.ops_session_call, execute=module.ops_program_execute,
         inspect=module.ops_program_inspect, control=module.ops_program_control,
         fit=module.ops_program_fit_native, distributed=distributed)
-    result.initialize(None, None, None, None, None, None)
+    from ._native_family_bridge import shared_context
+    result.initialize(None, None, None, None, None, shared_context())
     return result
 
 

@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SUITES = (
     'test_generation_metadata_boundary.py', 'test_neural_metadata_boundary.py',
     'test_generation_native_abi.py', 'test_neural_native_descriptors.py',
-    'test_neural_provider_layout.py', 'test_sequential_native_provider.py', 'test_xseq_native_provider.py',
+    'test_neural_provider_layout.py', 'test_sequential_native_provider.py', 'test_xseq_native_provider.py', 'test_program_native_admission.py',
     'test_neural_provider_reuse.py', 'test_native_execution_boundary.py',
     'test_native_metadata_snapshot.py', 'test_native_prep_plans.py',
     'test_runtime_fallback_scope.py', 'test_verify_neural_provider.py',
@@ -33,7 +33,8 @@ SOURCE_SUITES = (
 SOURCE_AUDITS = ('check_neural_native_boundary.py', 'check_generation_native_boundary.py',
                  'check_neural_provider_layout.py')
 RUNTIME_SUITES = ('test_neural_metadata_snapshot.py', 'test_generation_metadata_snapshot.py',
-                  'test_sequential_native_provider.py', 'test_xseq_native_provider.py')
+                  'test_sequential_native_provider.py', 'test_xseq_native_provider.py',
+                  'test_program_native_admission.py')
 RUNTIME_PROBES = (
     'experiments/native_dispatch_20261027/public_runtime_probe.py',
     'experiments/neural_native_dispatch_20261027/public_runtime_probe.py',

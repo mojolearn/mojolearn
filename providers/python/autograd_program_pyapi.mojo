@@ -11,7 +11,7 @@ from providers.python.autograd_execution_profile_pyapi import execution_profile_
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
-from providers.python.autograd_program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input
+from providers.python.autograd_program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input, program_native_input, program_admit_value, program_numeric_scalar
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
@@ -81,25 +81,28 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
         for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
             _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth)
     else:
+        if not program_numeric_scalar(a):
+            raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
         if leaf_depth < 0:
             leaf_depth = depth
         if depth != len(dims) or depth != leaf_depth:
             raise Error("ValueError: program input sequences must be rectangular")
         if integer:
-            if Bool(py=py_call(b.isinstance, a, b.bool)) or not Bool(py=py_call(b.hasattr, a, "__index__")):
+            if not is_integer_input(a):
                 raise Error("TypeError: program ids must be integers")
             ids.append(Int64(py=a))
         else:
             values.append(Float64(py=a))
 
 
-def program_input(a: PythonObject, integer: Bool) raises -> ProgramInput:
+def program_input(value: PythonObject, integer: Bool) raises -> ProgramInput:
     """A typed ProgramInput from an array (its descriptor) or a nested
     sequence of Python scalars (converted once, owned by the result)."""
+    var a = program_native_input(value)
     var values = List[Float64]()
     var ids = List[Int64]()
     var b = Python.import_module("builtins")
-    if Bool(py=py_call(b.hasattr, a, "dtype")) and Bool(py=py_call(b.hasattr, a, "strides")):
+    if is_ndarray(a):
         var parsed = array_input(a, "numeric program input")
         if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
             raise Error("TypeError: program input holds ids and must be integers (an integer array)")
@@ -122,8 +125,14 @@ def program_input(a: PythonObject, integer: Bool) raises -> ProgramInput:
 
 
 def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_rank: Bool = False) raises -> List[ProgramInput]:
-    if len(arrays) != p.n_in:
-        raise Error("ValueError: this program takes " + String(p.n_in) + " input arrays, got " + String(len(arrays)))
+    # The public varargs arrive as an exact tuple; raw packed callers must
+    # also use an ordinary container, before length/index protocols are read.
+    var cls = py_type(arrays)
+    if cls is not py_type(Python.tuple()) and cls is not py_type(Python.list()):
+        raise Error("TypeError: program inputs require a native tuple or list")
+    var count = len(arrays)
+    if count != p.n_in:
+        raise Error("ValueError: this program takes " + String(p.n_in) + " input arrays, got " + String(count))
     var out = List[ProgramInput]()
     for k in range(p.n_in):  # driver-loop: over input descriptors, owners retained through replay
         var item = program_input(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)

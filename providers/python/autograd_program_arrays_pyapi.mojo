@@ -5,7 +5,10 @@
 # outside any graph run/fit. No ndarray.ctypes (a Python helper) is invoked.
 from std.ffi import _Global
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call
+from bindings.py_balanced import py_call, py_type
+from bindings.classical_attributes import classical_connect_numpy
+from bindings.sequential_admission import sequential_admit_value, _one_of
+from bindings.native_array_view import native_array_ndarray_view
 from std.memory import memcpy
 from sequence.ops import FP
 from autograd.rankn import ShapeN
@@ -18,6 +21,7 @@ struct _ProgramArrays(Defaultable, Movable):
     var ndarray: PythonObject
     var integer_type: PythonObject
     var mmap_type: PythonObject
+    var admission: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -25,6 +29,7 @@ struct _ProgramArrays(Defaultable, Movable):
         self.ndarray = PythonObject(None)
         self.integer_type = PythonObject(None)
         self.mmap_type = PythonObject(None)
+        self.admission = PythonObject(None)
 
 
 comptime _PROGRAM_ARRAYS = _Global[
@@ -32,8 +37,11 @@ comptime _PROGRAM_ARRAYS = _Global[
 ]
 
 
-def initialize_program_arrays() raises:
+def initialize_program_arrays(admission: PythonObject = None) raises:
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if admission is not None:
+        classical_connect_numpy(admission)
+        state[].admission = admission
     if not state[].ready:
         state[].builtins = Python.import_module("builtins")
         var numpy = Python.import_module("numpy")
@@ -41,6 +49,38 @@ def initialize_program_arrays() raises:
         state[].integer_type = numpy.integer
         state[].mmap_type = Python.import_module("mmap").mmap
         state[].ready = True
+
+
+def program_admit_value(value: PythonObject) raises:
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if state[].admission is None:
+        raise Error("TypeError: program native input admission must be connected during package import")
+    sequential_admit_value(value, state[].admission)
+
+
+def program_numeric_scalar(value: PythonObject) raises -> Bool:
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var cls = py_type(value)
+    if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)):
+        return True
+    return state[].admission is not None and _one_of(cls, state[].admission["scalar_types"])
+
+
+def program_native_input(value: PythonObject) raises -> PythonObject:
+    # Reuse the common boundary's exact-type/protocol guard. It runs before
+    # dtype, shape, scalar conversion or any foreign descriptor could execute.
+    program_admit_value(value)
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if py_type(value) is state[].admission["array_class"]:
+        # This is a zero-copy view over the Array's retained exporter. The
+        # original public argument remains live through synchronous execution;
+        # no copied temporary buffer is introduced or cached across calls.
+        return native_array_ndarray_view(value, state[].admission)
+    var cls = py_type(value)
+    if (cls is not state[].ndarray and cls is not py_type(Python.list()) and cls is not py_type(Python.tuple())
+            and not program_numeric_scalar(value)):
+        raise Error("TypeError: program inputs require native numeric arrays, scalars or rectangular lists/tuples")
+    return value
 
 
 def output_array(shape: ShapeN, dtype: String = "float32") raises -> PythonObject:
@@ -80,12 +120,13 @@ def is_ndarray(value: PythonObject) raises -> Bool:
 
 
 def is_integer_input(value: PythonObject) raises -> Bool:
-    # ndarray exposes __index__ too, but an array is never a tensor handle
-    # or an integer option. Match the public int/np.integer contract exactly.
+    # Exact native integers only: isinstance(int-subclass) can admit a custom
+    # __int__/__index__ callback. The common registry also includes NumPy's
+    # exact native integer scalar types and is connected at package import.
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
-    var b = state[].builtins
-    return not Bool(py=py_call(b.isinstance, value, b.bool)) and (
-        Bool(py=py_call(b.isinstance, value, b.int)) or Bool(py=py_call(b.isinstance, value, state[].integer_type)))
+    if state[].admission is None:
+        return py_type(value) is py_type(PythonObject(0))
+    return _one_of(py_type(value), state[].admission["integer_types"])
 
 
 def uint64_input(value: PythonObject, name: String) raises -> UInt64:
