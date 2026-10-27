@@ -51,12 +51,13 @@ def run(output, baseline=None):
         assert not values[label+'/ragged'][:,2].view('u4').any()
         values[label+'/next']=np.asarray(call(model,'next_bytes',ids))
         values[label+'/ragged_next']=np.asarray(call(model,'next_bytes',ragged,lengths=[2]))
-        if resident:
-            for repeat in range(2):
-                result=call(model,'train_step',training)
-                for key in ('loss','step','flags'):
-                    values[f'{label}/step{repeat}/{key}']=np.asarray(result[key]).copy()
-            values[label+'/trained_logits']=np.asarray(call(model,'logits',ids)).copy()
+        values[label+'/eval']=np.asarray(call(model,'evaluate',training))
+        for repeat in range(2):
+            result=call(model,'train_step',training)
+            for key in (('loss','step','flags') if resident else ('loss','step','flat_gradients')):
+                values[f'{label}/step{repeat}/{key}']=np.asarray(result[key]).copy()
+        values[label+'/trained_logits']=np.asarray(call(model,'logits',ids)).copy()
+        values[label+'/trained_eval']=np.asarray(call(model,'evaluate',training))
         if baseline:
             counts[label]=_byte_lm_impl._LM_TRAINER(model,'native_provider_info',(),_byte_lm_impl._LM_TRAINER_CONTEXT)
             assert counts[label][0]=='mojolearn.training.byte_lm.v1'
@@ -90,7 +91,7 @@ def run(output, baseline=None):
     return dict(status='passed',cells=len(values),baseline=str(baseline) if baseline else None,
                 arrays=str(output.with_suffix('.npz')),provider_counts=counts,runtime_audits=audits,
                 sha256={key:hashlib.sha256(value.tobytes()).hexdigest() for key,value in values.items()},
-                pending=['evaluate/checkpoints','stateless training','CPU binding','other targets','full measurement'])
+                pending=['checkpoints','CPU binding','other targets','full measurement'])
 
 
 def main():

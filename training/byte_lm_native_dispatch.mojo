@@ -7,7 +7,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_binding_impl import ByteLMSession
-from training.byte_lm_session_ops import byte_owner_step, byte_owner_logits, byte_owner_export_state
+from training.byte_lm_session_ops import byte_owner_step, byte_owner_logits, byte_owner_export_state, byte_scatter_named
+from training.byte_lm_binding_impl import _validate_slot_table
+from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
 from checks.vendor import COMPILED_VENDOR
@@ -17,7 +19,7 @@ from training.byte_lm import byte_validate_optimizer
 from training.byte_lm_logits import BYTE_LOGITS_MAX_BATCH, BYTE_LOGITS_MAX_CELLS
 
 comptime BYTE_LM_NATIVE_ABI_NAME = "mojolearn.training.byte_lm.v1"
-comptime BYTE_LM_NATIVE_OPERATION_COUNT = 8
+comptime BYTE_LM_NATIVE_OPERATION_COUNT = 10
 
 
 def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -30,6 +32,9 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
     if op != 7 and (len(a) < 1 or a[0] == 0):
         raise Error("byte LM native ABI: missing admitted session")
     var owner = MutPointer[ByteLMSession, MutUntrackedOrigin](unsafe_from_address=a[0] if len(a) > 0 else 0)
+    if op == 9:
+        byte_lm_run_finalize(owner[])
+        return 0
     if op == 4:
         owner[].close()
         return 0
@@ -69,6 +74,30 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
     var addresses = List[Int]()
     for i in range(1, len(a)):  # small-loop(the admitted operation's buffer descriptors)
         addresses.append(a[i])
+    if op == 8:
+        if len(addresses) < 11:
+            raise Error("byte LM native ABI: missing stateless operation addresses")
+        var admitted = List[Int]()
+        var named = List[Int]()
+        for i in range(11):  # small-loop(the stateless input/output descriptors)
+            admitted.append(addresses[i])
+        for i in range(11, len(addresses)):  # driver-loop: named gradient descriptors
+            named.append(addresses[i])
+        if len(named) > 0:
+            if action != 1:
+                raise Error("byte LM trainer: an evaluation returns no gradient")
+            if len(named) != shape.n_tensors():
+                raise Error("byte LM: expected one named output per parameter tensor")
+            var slots: List[Int] = [admitted[8]]
+            var cells: List[Int] = [shape.n_total()]
+            for i in range(len(named)):  # driver-loop: validate configured tensor spans
+                slots.append(named[i])
+                cells.append(shape.param_count(i))
+            _validate_slot_table(slots, cells, 0)
+        var result = byte_lm_run_native(admitted, action, completed, cfg, shape, owner[], False, p[16] == 1)
+        if len(named) > 0:
+            byte_scatter_named(admitted[8], named, shape)
+        return result
     if op == 1:
         return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1)
     if op == 2 or op == 6:
@@ -95,7 +124,7 @@ def byte_lm_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
             raise Error("byte LM native ABI: null scalar or result span")
         if op == 0 and (na != 0 or np != 0 or nf != 0):
             raise Error("byte LM native ABI: metadata takes no descriptors")
-        if op == 4 and (na != 1 or np != 0 or nf != 0):
+        if (op == 4 or op == 9) and (na != 1 or np != 0 or nf != 0):
             raise Error("byte LM native ABI: close takes one admitted session")
         if op == 5 and (na != 2 or np != 0 or nf != 0):
             raise Error("byte LM native ABI: status takes session and output")

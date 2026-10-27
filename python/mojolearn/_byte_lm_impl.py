@@ -1286,8 +1286,7 @@ class SmallByteLanguageModelTrainer:
         -------
         float
         """
-        with self._lock:
-            return self._run(ids, False)
+        return _LM_TRAINER(self, "evaluate", (ids,), _LM_TRAINER_CONTEXT)
 
     # Float32 logits `[batch, length, vocab]` for int32 ids `[batch,
     # length]` (DEVIATION 2658), for positions 0 to length - 1 of each row,
