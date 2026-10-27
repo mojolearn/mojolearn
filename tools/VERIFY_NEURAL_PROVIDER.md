@@ -79,3 +79,17 @@ together. Loaded binary hashes are linked to matching group/replacement records.
 Unchanged baseline wheel provenance stays in the overlay record. The wrapper does
 not pretend checkout HEAD proves binary origin or upgrade declared build/source
 records into a new release qualification.
+
+The candidate CausalLM probe also applies `audit_native_call(...).assert_native()`
+to first and warmed forwards plus generation for Llama, Mamba1 and Mamba2. Samba
+applies the same assertion to its first and warmed candidate step. Their complete
+`report()` objects are retained even when an assertion fails. Poisoned baseline
+calls stay outside the strict audit, with their independent callback counters.
+
+These reports cover profiler-visible work and the audit's wrapper checks. They
+do not prove that every callback hook is observable or that CPython object and
+native dispatch work has disappeared. An unchanged baseline can already have
+zero Python frames while still invoking compiled native entries through CPython;
+this migration must not be described as replacing Python neural arithmetic on
+that evidence. Dispatch counters/negative controls, architectural checks and
+runtime audits answer different questions. None is a timing result.
