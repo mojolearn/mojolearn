@@ -1,9 +1,11 @@
 {
- "generated": "2026-10-22T19:50:33Z",
+ "generated": "2026-10-27T08:23:02Z",
  "inputs": {
   "branch": "main",
-  "gate_boards": null,
-  "generated": "2026-10-22T19:50:33Z",
+  "gate_boards": [
+   "amd=/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/amd/boards/algos.adaboost-clf.istella.rows=full.json"
+  ],
+  "generated": "2026-10-27T08:23:02Z",
   "grid_logs": [
    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
@@ -28,12 +30,13 @@
   "input file missing: /Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
   "input file missing: /Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
   "input file missing: /Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt",
-  "opponent board missing: nvidia-l40s /Users/andrewhendel/mojolearn-evidence/board-resume-r2/nvidia-l40s/board/board.json",
+  "gate: own cell only, opponents from the stored boards (paired board has incomplete or mixed worker evidence): algos/adaboost-clf/istella/rows=full",
   "opponent board missing: amd-mi325x /Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json"
  ],
  "skipped": {
+  "gate: own cell only, opponents from the stored boards (paired board has incomplete or mixed worker evidence)": 1,
   "input file missing": 8,
-  "opponent board missing": 2
+  "opponent board missing": 1
  },
- "summary": "MAINBOARD column=amd-mi325x label=main@feee1b453 races=230 add=0 change=0 drop=0 failed=6 ledger=6 withheld_opponents=8 identity=MATCH:82,n/a:148"
+ "summary": "MAINBOARD column=amd-mi325x label=main@de429235f races=231 add=1 change=0 drop=0 failed=6 ledger=6 withheld_opponents=8 identity=n/a:231"
 }

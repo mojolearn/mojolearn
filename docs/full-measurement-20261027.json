@@ -1,5 +1,5 @@
 {
-  "source_commit": "de429235f038cd67ce64495d9ae668cbbf3f72cc",
+  "source_commit": "de08766214fcf07935d0b1355aa6450d0f02fc1c",
   "release": "0.8.62",
   "mode": "identical",
   "provider": "DigitalOcean",
@@ -1335,13 +1335,18 @@
   },
   "controller": {
     "entry": "tools/run_full_do_measurements.py",
-    "state": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/controller.json",
-    "config": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/config.json",
-    "local_logs": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027",
+    "state": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/controller.json",
+    "config": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/config.json",
+    "local_logs": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2",
     "rented_output_roots": [
-      "/root/measure-full-20261027-amd",
-      "/root/measure-full-20261027-nvidia"
+      "/root/measure-full-20261027-amd-r2",
+      "/root/measure-full-20261027-nvidia-r2"
     ]
   },
-  "status_at_recording": "AMD campaign launched; NVIDIA queued. No measurement completion claimed."
+  "status_at_recording": "Corrected AMD campaign launched; NVIDIA queued. No campaign completion claimed.",
+  "previous_attempt": {
+    "source_commit": "de429235f038cd67ce64495d9ae668cbbf3f72cc",
+    "state": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/controller.json",
+    "result": "First fit completed; nested-estimator repr addresses made its metadata incomplete. Raw artifacts were retained. Fixed structured readback and nonfatal metadata failure handling before restarting."
+  }
 }
