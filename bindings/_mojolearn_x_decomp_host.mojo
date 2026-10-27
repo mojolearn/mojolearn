@@ -10,25 +10,25 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_decomp.api_pyapi import (
+from providers.python.x_decomp_api_pyapi import (
     colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, mcd_py, gather_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, topn_desc_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
-from x_decomp.tsvd_owner_pyapi import tsvd_randomized_py
+from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py
 from x_decomp.ipca_owner import NoIpcaDev
-from x_decomp.ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
-from x_decomp.decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
-from x_decomp.select_ops_pyapi import order_small_py, reduce_py
-from x_decomp.chi2_pyapi import chi2_quantile_py, consistency_factor_py
-from x_decomp.als_pyapi import als_fit_py
-from x_decomp.mds_pyapi import mds_fit_py
-from x_decomp.lle_iter_pyapi import lle_iterate_py
-from x_decomp.pls_pyapi import pls_fit_py
-from x_decomp.dictl_pyapi import dict_learning_py, minibatch_py
-from x_decomp.lanczos_host_pyapi import lanczos_py
-from x_decomp.graph_host_pyapi import (
+from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
+from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
+from providers.python.x_decomp_chi2_pyapi import chi2_quantile_py, consistency_factor_py
+from providers.python.x_decomp_als_pyapi import als_fit_py
+from providers.python.x_decomp_mds_pyapi import mds_fit_py
+from providers.python.x_decomp_lle_iter_pyapi import lle_iterate_py
+from providers.python.x_decomp_pls_pyapi import pls_fit_py
+from providers.python.x_decomp_dictl_pyapi import dict_learning_py, minibatch_py
+from providers.python.x_decomp_lanczos_host_pyapi import lanczos_py
+from providers.python.x_decomp_graph_host_pyapi import (
     graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
 )
 

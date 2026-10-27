@@ -7,8 +7,8 @@ x_decomp/als_dev.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_decomp.als_dev import als_fit_dev_run
-from x_decomp.als_pyapi import _als_args
-from x_decomp.api_pyapi import _f, _n
+from providers.python.x_decomp_als_pyapi import _als_args
+from providers.python.x_decomp_api_pyapi import _f, _n
 
 
 def als_fit_dev_py(

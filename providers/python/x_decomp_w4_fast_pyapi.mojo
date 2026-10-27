@@ -7,7 +7,7 @@ x_decomp/w4_fast.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.resident_pyapi import _id, _n
+from providers.python.x_decomp_resident_pyapi import _id, _n
 from x_decomp.w4_fast import LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN, RSVD_IDN_DIRECT_IN, dev_lu_aux_run
 
 

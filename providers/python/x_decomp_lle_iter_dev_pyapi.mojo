@@ -7,9 +7,9 @@ calls one typed entry in x_decomp/lle_iter_dev.mojo; no data work happens here."
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _i, _n
+from providers.python.x_decomp_api_pyapi import _f, _i, _n
 from x_decomp.lle_iter_dev import lle_gemm_ordered_run, lle_iterate_dev_run, lle_lu_ordered_run
-from x_decomp.lle_iter_pyapi import _lle_args
+from providers.python.x_decomp_lle_iter_pyapi import _lle_args
 
 
 def lle_iterate_dev_py(

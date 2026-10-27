@@ -7,9 +7,9 @@ calls one typed entry in x_decomp/dictl_dev.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _n
+from providers.python.x_decomp_api_pyapi import _f, _n
 from x_decomp.dictl_dev import dict_learning_dev_run, minibatch_dev_run
-from x_decomp.dictl_pyapi import _dl_args
+from providers.python.x_decomp_dictl_pyapi import _dl_args
 
 
 def dict_learning_dev_py(
