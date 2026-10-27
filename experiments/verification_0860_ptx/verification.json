@@ -1,0 +1,63 @@
+{
+  "status": "PASS",
+  "time": 1793073504.2035258,
+  "published_wheel_unmodified_passes": false,
+  "comparison_counts": {
+    "full": 15695,
+    "neural": 2547,
+    "sequence-boundary": 27
+  },
+  "graph_cases": 31,
+  "graph_output_arrays": 179,
+  "neural_scope": "85 lanes x 9 fixtures, 765 cells; unchanged full neural capture reused",
+  "routine_scope": "427 lanes x 9 fixtures, 3843 cells on each vendor, plus saved-model and all eligible GPU/CPU cross-checks",
+  "exclusions": [
+    "Physical two-GPU verification, explicitly excluded by owner"
+  ],
+  "repair_source_commits": [
+    "0a3755ffffbc65ecd4d12b6db43a0ea3707836de",
+    "c5f4a85b51415f5d5128f2e7fb4fef40563b4f4e",
+    "364ef251bb1accc6703a2997b8dbe94410c6ceee",
+    "2b72153874bf634a9c8f9690391c15d967a30782",
+    "9e4cebdf1d96dc9d96ad8efa6d81bf746f3e089d"
+  ],
+  "evidence_policy": "Preserved original failures. Clean full captures use repaired shared host groups. The subsequent abs NaN repair has fresh CPU/GPU word probes, all public graph cases and selected sequence import/save/load/device-tensor verification; unaffected captures are reused, not relabeled as fresh executions.",
+  "measurement_scope": {
+    "nvidia_races": 266,
+    "amd_races": 230,
+    "provider": "DigitalOcean",
+    "opponents": "reuse supported retained evidence; run missing or invalidated arms only"
+  },
+  "source_and_binary_records": "measurement-kit/inventory.json, native-repair-frozen-source.json, graph-repair-frozen-source.json, native build result receipts; published base wheel identities retained separately",
+  "evidence": {
+    "nvidia-repaired/full.json": "4d580ebdd1212fdcb56defc0c80c82404ddced90580cab4fa6a5300ab1ed7db5",
+    "nvidia-current/neural.json": "3106ff8839645d356d9b6211927dc3af2f45d8f7cfcaf3e779e547d1c119f2e4",
+    "apple-repaired/full.json": "ede2d28a85b323d3e73f3eabe0fb617a12eabc842bfe615c381e760fbb42f2fc",
+    "apple-published/neural.json": "5371a162ee53a5b1e581308f02102ceb35ae3c2570bc7905314a559d2006396c",
+    "nvidia-graph-repaired/graph.json": "31f6cc0560efc4e3a2fceb4be80cebf9b0766e0780d92899098f26bf3c86a6f0",
+    "apple-graph-repaired/graph.json": "19b0a0882a419b254544d6edbf62511f585f3aefc03b5a20cb9dbf068a2a6d5b",
+    "compare/full.json": "49ae78b3c476080ed96ec8ecae99b6585b7c932c890ac64b0333e122486f94bd",
+    "compare/neural.json": "5e96228edaf562a70cbbd8cbf8f362f6a9cabca817d9fd9ff4d1c2963b005918",
+    "compare/graph-repaired.json": "a50d945ea2b6174ddf111aecead59e2fba3b6aaef25bc0dfda1cb587258c5888",
+    "compare/extras.json": "d4c827adb44adeb74fa5a499fbb28826edd43476da06fa344c92e5a1c6bdeb04",
+    "compare/sequence-boundary.json": "fad4355e024ea51e688a6ffa441362be285cd1c5369e448af851db3f8bd8ac52",
+    "measurement-kit.json": "9889f30b548a75e8db0b5f1138bf33b5491abefc6b4fa0d7841113c7c5e6d70e"
+  },
+  "comparison_bundle": {
+    "local": "/Users/andrewhendel/mojolearn-evidence/verify-0860-ptx-20261026/comparison-bundle.tgz",
+    "r2_key": "measurements/verification/0.8.60/ptx-20261026/comparison-bundle.tgz",
+    "sha256": "de985c8951f9c37b6bb59876004c4e3728e996c7192716ab44e196cf2159e482",
+    "bytes": 6922666
+  },
+  "branch": "fix/ptx-verify-0860",
+  "measurement_status": "Pending DigitalOcean AMD runtime qualification and measurements; NVIDIA DigitalOcean measurement pending",
+  "raw_evidence_local": "/Users/andrewhendel/mojolearn-evidence/verify-0860-ptx-20261026",
+  "r2_prefix": "measurements/verification/0.8.60/ptx-20261026/",
+  "original_failures": [
+    "Published standalone PTX import detection",
+    "GMM native missing optional attribute exception and reload solver state",
+    "Tokenizer fingerprint depended on host Unicode version",
+    "Imported abs NaN payload differed across Apple/NVIDIA"
+  ],
+  "comparison_limit": "The compare CLI did not use a separate challenge-response protocol. Actual executions are supported by retained complete command logs, runtime receipts, native provenance, self-tests and corrupted-digest negative controls."
+}
