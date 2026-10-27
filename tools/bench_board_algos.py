@@ -520,10 +520,12 @@ _add("radius-neighbors", xlane="neighbors", ours=("RadiusNeighbors",), task="rad
      mism=["algorithm='auto' on both: ours' auto is its random ball cover (exact, triangle-"
            "inequality pruning), scikit-learn's picks a KD/ball tree or brute force; both return "
            "the exact neighbour set"])
+# FAIRNESS FIX (2026-10-13 audit): the opponent alone received a 2000 MB
+# cache and enabled shrinking, which our SMO implementation does not perform.
+# Set the same cache budget and disable the heuristic on both constructed arms.
 _add("ocsvm", xlane="neighbors", ours="OneClassSVM", task="outlier", block="cls",
      sub={"X": SUB["quad"], "Xq": SUB["quad"]}, gamma=True, sk="sklearn.svm:OneClassSVM",
-     params=dict(kernel="rbf", nu=0.1, tol=1e-3), sk_params=dict(kernel="rbf", nu=0.1, tol=1e-3,
-                                                                 cache_size=2000))
+     params=dict(kernel="rbf", nu=0.1, tol=1e-3, cache_size=2000, shrinking=False))
 _add("kernel-pca", xlane="neighbors", ours="KernelPCA", task="transform", block="cls",
      sub={"X": SUB["quad"], "Xq": SUB["quad"]}, gamma=True, quality="subspace",
      sk="sklearn.decomposition:KernelPCA", params=dict(n_components=8, kernel="rbf", random_state=SEED),
@@ -534,9 +536,12 @@ _add("poly-count-sketch", xlane="neighbors", timed_op="fit_transform", ours="Pol
      block="reg", sub={"X": SUB["mid"], "Xq": 1000}, gamma=True, quality="kernel-poly",
      sk="sklearn.kernel_approximation:PolynomialCountSketch",
      params=dict(degree=2, coef0=0, n_components=256, random_state=SEED))
+# FAIRNESS FIX (2026-10-13 audit): None previously left the interval implicit.
+# sklearn/kernel_approximation.py AdditiveChi2Sampler.transform and our native
+# sampler both select 0.5 for two sample steps; pass that value explicitly.
 _add("additive-chi2", xlane="neighbors", timed_op="fit_transform", ours="AdditiveChi2Sampler", task="transform",
      block="nonneg", sub={"X": SUB["mid"], "Xq": 1000}, quality="kernel-achi2",
-     sk="sklearn.kernel_approximation:AdditiveChi2Sampler", params=dict(sample_steps=2))
+     sk="sklearn.kernel_approximation:AdditiveChi2Sampler", params=dict(sample_steps=2, sample_interval=0.5))
 _add("skewed-chi2", xlane="neighbors", timed_op="fit_transform", ours="SkewedChi2Sampler", task="transform",
      block="nonneg", sub={"X": SUB["mid"], "Xq": 1000}, quality="kernel-schi2",
      sk="sklearn.kernel_approximation:SkewedChi2Sampler",
