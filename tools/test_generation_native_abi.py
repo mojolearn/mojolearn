@@ -37,7 +37,7 @@ def test_guard_rejects_provider_helpers_and_missing_local_dependencies(tmp_path)
 def test_connection_copies_table_once_and_retains_both_owners():
     provider = source("providers/python/generation_session_pyapi.mojo")
     assert '"PyCapsule_IsValid"' in provider and '"PyCapsule_GetPointer"' in provider
-    assert "GenerationNativeProvider(module, capsule, admit_session, table[0])" in provider
+    assert "GenerationNativeProvider(module, capsule, factory, factory.__self__, admit_session, table[0])" in provider
     assert "GenerationNativeSession(provider, session, handle)" in provider
     assert "held[].provider is provider and held[].owner is session" in provider
 

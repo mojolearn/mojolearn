@@ -14,13 +14,15 @@ from core.native_descriptor_call import native_descriptor_call
 struct NeuralDescriptorProvider(Movable, Writable):
     var module: PythonObject
     var capsule: PythonObject
+    var factory: PythonObject
     var name: String
     var entry: NativeDescriptorCall
     var calls: List[Int]
 
-    def __init__(out self, module: PythonObject, capsule: PythonObject, var name: String, entry: NativeDescriptorCall):
+    def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall):
         self.module = module
         self.capsule = capsule
+        self.factory = factory
         self.name = name^
         self.entry = entry
         self.calls = List[Int](length=6, fill=0)
@@ -49,7 +51,18 @@ def neural_descriptor_connect(factory: PythonObject, var name: String) raises ->
     if not raw:
         raise cpy.unsafe_get_error()
     var table = MutPointer[NativeDescriptorCall, MutUntrackedOrigin](unsafe_from_address=Int(raw.value()))
-    return PythonObject(alloc=NeuralDescriptorProvider(module, capsule, name^, table[0]))
+    return PythonObject(alloc=NeuralDescriptorProvider(module, capsule, factory, name^, table[0]))
+
+
+def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name: String) raises -> PythonObject:
+    # Caller admits this exact compiled factory before entering here. Retain
+    # factory identity as well as its module: swapping an ABI entry on the same
+    # module must reconnect, even if the facade/canonical module did not change.
+    if previous is not None:
+        var held = previous.downcast_value_ptr[NeuralDescriptorProvider]()
+        if held[].factory is factory and held[].module is factory.__self__ and held[].name == name:
+            return previous
+    return neural_descriptor_connect(factory, name)
 
 
 def neural_descriptor_cached(
