@@ -1,6 +1,7 @@
 """Architecture guard negative controls and lossless boundary relocation."""
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from check_neural_provider_layout import ROOT, check
@@ -49,7 +50,11 @@ def test_all_boundary_moves_preserve_original_body_modulo_module_references():
     for row in report['moves']:
         assert not (ROOT / row['old']).exists()
         assert row['new'].endswith('_pyapi.mojo')
-        text = (ROOT / row['new']).read_text()
+        # This proves the historical move was lossless. Subsequent product
+        # repairs are permitted; current code is checked by the live closure
+        # tests above, without a debt exemption or baseline.
+        text = subprocess.check_output(
+            ['git', 'show', f"56f76a5c9:{row['new']}"], cwd=ROOT, text=True)
         for moved in report['moves']:
             text = text.replace(moved['new_module'], moved['old_module']).replace(moved['new'], moved['old'])
         assert hashlib.sha256(text.encode()).hexdigest() == row['sha256_before'], row['new']

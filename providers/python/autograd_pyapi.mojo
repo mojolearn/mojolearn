@@ -32,6 +32,7 @@ from core.cast_in import CastIn, cast_in_kind, label_kind_of
 from autograd.cast_ops import gather_labels
 from autograd.weight_import import WI_RECORD, model_import_params, session_load_check, wi_source
 from autograd.session_weights import session_load_weights
+from autograd.model_execution import model_fit_native, model_predict_native, model_counts_native, model_class_count
 
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
@@ -70,6 +71,31 @@ def cast_in_of(desc: PythonObject, what: String) raises -> CastIn:
     return c
 
 
+def model_float64_words(values: PythonObject, count: Int = -1) raises -> List[Float64]:
+    var result = List[Float64]()
+    var n = len(values) if count < 0 else count
+    for i in range(n):  # driver-loop: admit model scalar metadata once
+        result.append(Float64(py=values[i]))
+    return result^
+
+
+def model_admit_addresses(addrs: PythonObject, target: Int, codes_ready: Bool = False,
+                          captured_x: Optional[CastIn] = None) raises -> Tuple[List[Int], List[CastIn]]:
+    var n = len(addrs)
+    var addresses = List[Int](length=n, fill=0)
+    var sources = List[CastIn]()
+    sources.append(captured_x.value() if captured_x else cast_in_of(addrs[0], "X"))
+    sources.append(CastIn.f32_c(0, 1, 1) if codes_ready else cast_in_of(addrs[1], "y"))
+    for i in range(2, n):  # driver-loop: admit stable addresses once, descriptors handled below
+        if i < 8 or i > 10:
+            addresses[i] = Int(py=addrs[i])
+    if n == 13:
+        sources.append(cast_in_of(addrs[8], "validation X"))
+        sources.append(cast_in_of(addrs[9], "validation y"))
+        sources.append(cast_in_of(addrs[10], "training classes") if target != 0 else CastIn.f32_c(0, 1, 1))
+    return (addresses^, sources^)
+
+
 def _seed(ip: PythonObject, at: Int) raises -> UInt64:
     var lo = ival(ip, at)
     var hi = ival(ip, at + 1)
@@ -104,110 +130,38 @@ def _model_fit_run[E: Exec](
     mut ex: E, addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject,
     codes_dev: Int, n_classes: Int,
 ) raises -> PythonObject:
-    """`model_fit_py`'s body; `codes_dev` names class codes already on the
-    executor (0: read addrs[1]) and `n_classes` > 0 cuts the validation
-    classes descriptor to that many classes."""
+    # Packed public compatibility door: admit once, then call the SAME native
+    # whole-model owner as the shared direct descriptor provider.
     var validated = len(addrs) == 13 and len(ip) == 16
     var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
         raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
                     + "training state) and 9 floats plus one per layer")
-    var spec = parse_model(_ints(prog), _floats(fp, FIT_FLOATS))
-    var N = ival(ip, 0)
-    var opt = OptConfig(ival(ip, 3), ival(ip, 4), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4), fval(fp, 5))
-    var cfg = FitConfig(
-        ival(ip, 1), ival(ip, 2), opt, fval(fp, 0), ival(ip, 5), ival(ip, 6), fval(fp, 7),
-        ival(ip, 7), ival(ip, 8), ival(ip, 9) != 0, _seed(ip, 10), ival(ip, 12),
-        Float64(py=fp[6]), fval(fp, 8), ival(ip, 13) != 0,
-    )
-    # MOJOLEARN_AG_PROFILE (lane ag-pass2-kernels): this fit's launch
-    # profile, counted by the executor, printed after it
-    var profile = ag_profile_on()
-    if profile:
-        ag_profile_reset()
-    var n_iter: Int
-    if stateful:
-        var validation = Optional[FitValidation]()
-        if validated:
-            var classes = CastIn.f32_c(0, 1, 1)
-            if cfg.target != 0:
-                classes = cast_in_of(addrs[10], "training classes")
-                if n_classes > 0:
-                    classes.rows = n_classes
-            validation = Optional[FitValidation](FitValidation(
-                cast_in_of(addrs[8], "validation X"), cast_in_of(addrs[9], "validation y"),
-                classes, fptr(addrs[11], "validation curve"), ival(ip, 15) != 0,
-                IP64(unsafe_from_address=Int(py=addrs[12])),
-            ))
-        var sa = Int(py=addrs[6])
-        if sa == 0:
-            raise Error("model_fit: null training-state buffer")
-        var state = IP64(unsafe_from_address=sa)
-        var resume = ival(ip, 14) != 0
-        var prev = fptr(addrs[3], "loss_curve")
-        if resume and Int(state[FS_EPOCH]) > 0:
-            prev = fptr(addrs[7], "earlier loss_curve")
-        var y = CastIn.f32_c(0, 1, 1) if codes_dev != 0 else cast_in_of(addrs[1], "y")
-        _ = model_fit_state(ex, spec, cfg, cast_in_of(addrs[0], "X"), y, N,
-                            fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"),
-                            fptr(addrs[4], "m"), fptr(addrs[5], "v"), state, prev, resume, validation,
-                            codes_dev)
-        n_iter = Int(state[FS_EPOCH])
-    else:
-        if codes_dev != 0:
-            raise Error("model_fit_labels: requires the training-state addresses")
-        n_iter = model_fit(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
-                           fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"))
-    if profile:
-        print("AG_PROFILE fit=model_fit")
-        print(ag_profile_report())
-    return PythonObject(n_iter)
+    var options = _ints(ip)
+    var admitted = model_admit_addresses(addrs, options[2], codes_dev != 0)
+    return PythonObject(model_fit_native(ex, admitted[0], admitted[1], _ints(prog), options,
+                                        model_float64_words(fp), codes_dev, n_classes))
 
 
 def model_predict_py[E: Exec](
     mut ex: E, addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
-    """addrs = [X (N, D) descriptor, params address, out address (N, out)]; ptab = one float per layer;
-    ip = [N, chunk, transform (0 none, 1 softmax, 2 sigmoid, 3 the (N, 2)
-    [1 - p, p] of a one-output sigmoid, 4 the row argmax as N float32
-    codes, 5 one-output sigmoid > 0.5 as N float32 codes)]. Returns the
-    number of values written."""
     if len(addrs) != 3 or len(ip) != 3:
         raise Error("model_predict: requires 3 addresses and 3 integer parameters")
-    var spec = parse_model(_ints(prog), _floats(ptab, 0))
-    var N = ival(ip, 0)
-    model_predict(ex, spec, cast_in_of(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
-                  ival(ip, 1), ival(ip, 2))
-    if ival(ip, 2) == 3:
-        return PythonObject(N * 2)
-    if ival(ip, 2) == 4 or ival(ip, 2) == 5:
-        return PythonObject(N)
-    return PythonObject(N * spec.out_features())
+    var addresses: List[Int] = [0, Int(py=addrs[1]), Int(py=addrs[2])]
+    return PythonObject(model_predict_native(ex, addresses, cast_in_of(addrs[0], "X"),
+                                            _ints(prog), model_float64_words(ptab), _ints(ip)))
 
 
 def model_predict_labels_py[E: Exec](
     mut ex: E, addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
-    """Sequential.predict of a classifier in one call (lane migrate-neural-2):
-    `model_predict`'s argmax (transform 4) or threshold (5) codes stay on the
-    executor and are gathered there into the labels. addrs = [X descriptor,
-    params address, classes address, labels address (n items of the
-    classes' dtype)]; ip = [N, chunk, transform, k, item size]. Returns N.
-    The same launches as `model_predict` then `model_gather_labels`."""
     if len(addrs) != 4 or len(ip) != 5:
         raise Error("model_predict_labels: requires 4 addresses and [N, chunk, transform, k, item size]")
-    var transform = ival(ip, 2)
-    if transform != 4 and transform != 5:
-        raise Error("model_predict_labels: transform must be 4 (argmax) or 5 (threshold)")
-    var spec = parse_model(_ints(prog), _floats(ptab, 0))
-    var N = ival(ip, 0)
-    if ival(addrs, 2) == 0 or ival(addrs, 3) == 0:
-        raise Error("model_gather_labels: null buffer address")
-    model_predict(ex, spec, cast_in_of(addrs[0], "X"), N, fptr(addrs[1], "params"),
-                  FP(unsafe_from_address=ival(addrs, 3)), ival(ip, 1), transform,
-                  ival(addrs, 2), ival(ip, 3), ival(ip, 4))
-    return PythonObject(N)
+    var addresses: List[Int] = [0, Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3])]
+    return PythonObject(model_predict_native(ex, addresses, cast_in_of(addrs[0], "X"),
+                                            _ints(prog), model_float64_words(ptab), _ints(ip), True))
 
 
 def model_fit_labels_check(lab: PythonObject) raises -> Tuple[CastIn, Int, Int, Int, Int]:
@@ -239,11 +193,7 @@ def model_fit_labels_py[E: Exec](
     `model_fit_py`'s resumable fit reading the codes there (addrs[1], the
     target slot, is not read; a validation classes descriptor in addrs[10]
     is cut to the k classes). Returns [k, epochs run]."""
-    var count = Int(py=model_labels_result(k))
-    if target == 1 and count != n_out:
-        raise Error("the labels have " + String(count) + " classes but the model has " + String(n_out) + " outputs")
-    if target == 2 and (count != 2 or n_out != 1):
-        raise Error("bce_with_logits needs two classes and a model with one output")
+    var count = model_class_count(k, n_out, target)
     var n_iter = _model_fit_run(ex, addrs, prog, ip, fp, Int(codes), count)
     var out = Python.list()
     _ = py_call(out.append, PythonObject(count))
@@ -282,10 +232,10 @@ def model_gather_labels_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonOb
 
 def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
     """[parameter count, output width] of a description (validates it)."""
-    var spec = parse_model(_ints(prog), _floats(ptab, 0))
+    var counts = model_counts_native(_ints(prog), model_float64_words(ptab))
     var out = Python.list()
-    _ = py_call(out.append, PythonObject(spec.n_params))
-    _ = py_call(out.append, PythonObject(spec.out_features()))
+    _ = py_call(out.append, PythonObject(counts[0]))
+    _ = py_call(out.append, PythonObject(counts[1]))
     return out
 
 
