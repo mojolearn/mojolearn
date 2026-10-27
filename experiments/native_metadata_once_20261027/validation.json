@@ -1,0 +1,57 @@
+{
+  "schema": "mojolearn.native-metadata-validation.v1",
+  "base_commit": "7d103e556dea894611e883c5b72cd5dd86473993",
+  "source_tests": {
+    "exit_code": 1,
+    "passed": 13,
+    "failed": 2,
+    "subtests_passed": 14,
+    "new_metadata_guards_passed": 5,
+    "failures": [
+      {
+        "class": "tools.test_native_prep_plans",
+        "test": "test_restored_fit_plans_match_public_native_argument_order",
+        "message": "AssertionError: VotingClassifier\nassert 'trees_meta_fit' == 'trees_public_meta_fit'\n  \n  - trees_public_meta_fit\n  ?      -------\n  + trees_meta_fit"
+      },
+      {
+        "class": "tools.test_native_prep_plans",
+        "test": "test_posterior_is_native_prediction_and_existing_draw_algorithm",
+        "message": "assert 'sequential_admit_value(keywords[keys[k]], context)' in '# SPDX-License-Identifier: Apache-2.0\\n# Direct native estimator ABI calls. Python only connects these fixed plans\\n#...(fields.update, values)\\n    py_setitem(fields, \"_has_constructor_parameters\", PythonObject(True))\\n    return model\\n'"
+      }
+    ],
+    "log": "/Users/andrewhendel/mojolearn-evidence/native-metadata-once-20261027/source-tests.log",
+    "junit": "/Users/andrewhendel/mojolearn-evidence/native-metadata-once-20261027/source-tests.xml"
+  },
+  "baseline_reproduction": {
+    "exit_code": 1,
+    "failed": 2,
+    "deselected": 4,
+    "commit": "7d103e556dea894611e883c5b72cd5dd86473993",
+    "log": "/Users/andrewhendel/mojolearn-evidence/native-metadata-once-20261027/base-failures.log",
+    "source": "/Users/andrewhendel/mojolearn-evidence/native-metadata-once-20261027/base-snapshot"
+  },
+  "python_test_syntax": "passed",
+  "diff_whitespace": "passed",
+  "pending": [
+    "Mojo compilation of affected binding groups",
+    "Five new public runtime cases against candidate bindings",
+    "Existing public meta boundary tests and shared gather/scatter caller coverage",
+    "Affected within-release identity coverage on supported vendors",
+    "Full-workload end-to-end A/B before any performance claim"
+  ],
+  "not_run": [
+    "Mojo compilation",
+    "package build",
+    "GPU execution",
+    "public runtime tests",
+    "identity",
+    "performance",
+    "release"
+  ],
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/native-metadata-once-20261027",
+  "final_metadata_guards": {
+    "exit_code": 0,
+    "passed": 5,
+    "log": "/Users/andrewhendel/mojolearn-evidence/native-metadata-once-20261027/metadata-guards-final.log"
+  }
+}

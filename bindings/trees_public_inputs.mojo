@@ -228,9 +228,13 @@ def _view_of_array(value: PythonObject) raises -> TreesView:
     var shape = List[Int]()
     var strides = List[Int]()
     var rank = Int(py=value.ndim)
+    # Capture the immutable tuples once while admitting this Array. This is
+    # operation-local metadata; a later operation admits its current owner anew.
+    var pyshape = value.shape
+    var pystrides = value.strides
     for k in range(rank):  # driver-loop: over array rank metadata
-        shape.append(Int(py=value.shape[k]))
-        strides.append(Int(py=value.strides[k]))
+        shape.append(Int(py=pyshape[k]))
+        strides.append(Int(py=pystrides[k]))
     var typestr = String(value.dtype)
     return TreesView(value, Int(py=value._addr), shape^, strides^, typestr, Int(py=value.itemsize))
 
@@ -257,9 +261,11 @@ def _view_of_buffer(value: PythonObject, name: String, context: PythonObject) ra
     var rank = Int(py=view.ndim)
     var shape = List[Int]()
     var strides = List[Int]()
+    var buffer_shape = view.shape
+    var buffer_strides = view.strides
     for k in range(rank):  # driver-loop: over array rank metadata
-        shape.append(Int(py=view.shape[k]))
-        strides.append(Int(py=view.strides[k]))
+        shape.append(Int(py=buffer_shape[k]))
+        strides.append(Int(py=buffer_strides[k]))
     if rank == 0:
         shape.append(1)
         strides.append(item)
