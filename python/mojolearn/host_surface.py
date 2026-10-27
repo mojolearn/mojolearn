@@ -1502,7 +1502,7 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
-            "byte_lm_host_numeric_mode", "byte_lm_host_vendor",
+            "byte_lm_host_api_v1", "byte_lm_host_numeric_mode", "byte_lm_host_vendor",
             "byte_lm_host_column", "byte_lm_host_sabotage",
             "byte_lm_host_profile", "byte_lm_host_logits", "byte_lm_host_loss",
             "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
@@ -1515,6 +1515,16 @@ FAMILIES = (
             "byte_lm_host_next",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "byte_lm_host_arithmetic_suffix",
+            "byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1",
+            "byte_lm_session_create", "byte_lm_session_close", "byte_lm_session_info",
+            "byte_lm_numeric_mode", "byte_lm_vendor", "byte_lm_profile", "byte_lm_arithmetic_suffix",
+            "byte_lm_config_profile", "sha256_hex", "byte_lm_file_sha256",
+            "byte_lm_run", "byte_lm_run_configured", "byte_lm_trainer_run", "byte_lm_logits",
+            "byte_lm_trainer_step", "byte_lm_trainer_logits", "byte_lm_trainer_next_bytes",
+            "byte_lm_trainer_export_state", "byte_lm_trainer_export_gradients",
+            "byte_lm_session_open", "byte_lm_session_step", "byte_lm_session_eval",
+            "byte_lm_session_rollback", "byte_lm_session_export_state", "byte_lm_session_export_gradients",
+            "byte_lm_session_logits", "byte_lm_session_next_bytes",
         ),
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

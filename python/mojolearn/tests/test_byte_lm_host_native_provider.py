@@ -166,3 +166,41 @@ def test_host_inference_checkpoint_native_integrity_and_file_errors(tmp_path):
     with pytest.raises(ValueError, match='integrity'):
         LanguageModelInference.from_checkpoint(bad)
     trainer.close()
+
+
+@pytest.mark.parametrize('resident', [False, True])
+def test_cpu_language_model_public_provider_matches_host_owner(monkeypatch, tmp_path, resident):
+    from mojolearn import _byte_lm_impl as impl
+    from mojolearn._byte_lm_host import _load
+    from mojolearn._verify_native_runtime import audit_native_call
+    host = _load()
+    context = dict(impl._LM_TRAINER_CONTEXT, byte_lm_bindings={'identical': host}, byte_lm_vendors=('cpu',))
+    monkeypatch.setattr(impl, '_LM_TRAINER_CONTEXT', context)
+    expected = _model()
+    ids = np.array([[1, 3, 5, 7, 9]], dtype='i4')
+    trainer = audit_native_call(impl.SmallByteLanguageModelTrainer, expected.parameters_,
+                               shape=expected.shape, resident=resident).assert_native()
+    baseline_bits = expected.train_step(ids)
+    actual = audit_native_call(trainer.train_step, ids).assert_native()
+    import struct
+    assert struct.pack('<f', actual['loss']) == struct.pack('<I', baseline_bits)
+    state = audit_native_call(trainer.state_dict).assert_native()
+    assert np.asarray(state['parameters']).tobytes() == np.asarray(expected.parameters_).tobytes()
+    assert np.asarray(state['m']).tobytes() == np.asarray(expected.m_).tobytes()
+    assert np.asarray(state['v']).tobytes() == np.asarray(expected.v_).tobytes()
+    snapshot = tuple(np.asarray(state[k]).tobytes() for k in ('parameters', 'm', 'v'))
+    invalid = ids.copy()
+    invalid[0, 0] = expected.shape.vocab_size
+    with pytest.raises(ValueError):
+        trainer.train_step(invalid)
+    after = trainer.state_dict()
+    assert after['completed_steps'] == 1
+    assert tuple(np.asarray(after[k]).tobytes() for k in ('parameters', 'm', 'v')) == snapshot
+    logits = audit_native_call(trainer.logits, ids[:, :-1]).assert_native()
+    assert np.asarray(logits).shape == (1, 4, expected.shape.vocab_size)
+    path = tmp_path / 'cpu.json'
+    audit_native_call(trainer.export_checkpoint, path).assert_native()
+    restored = audit_native_call(impl.SmallByteLanguageModelTrainer.from_checkpoint, path, resident=resident).assert_native()
+    assert np.asarray(restored.state_dict()['parameters']).tobytes() == snapshot[0]
+    audit_native_call(restored.close).assert_native()
+    audit_native_call(trainer.close).assert_native()

@@ -149,11 +149,9 @@ def _mode(context: PythonObject) raises -> PythonObject:
 
 
 def _entry(binding: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
-    if py_type(binding) is py_type(_b()):
-        return neural_descriptor_entry(binding, name, required)
-    # Legacy CPU proxy admission is retained and explicitly outside the GPU
-    # native-provider qualification until its separate host migration lands.
-    return py_call(_b().getattr, binding, name) if required else py_call(_b().getattr, binding, name, PythonObject(None))
+    # CPU and GPU now expose real compiled modules with the same provider
+    # table. A Python proxy is no longer a valid runtime binding.
+    return neural_descriptor_entry(binding, name, required)
 
 
 def _has(binding: PythonObject, name: String) raises -> Bool:
