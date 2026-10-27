@@ -29,7 +29,7 @@ from bindings.native_buffer_owner import native_buffer_view, native_storage_allo
 from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.host_helpers_impl import argmax_rows_f32
-from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of
+from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_config_operation
 from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
 from providers.python.training_buffer_pyapi import training_f32_owned, training_i32_owned
 from core.training_state_validation import training_admit_moments_and_flags, training_byte_shape_validate
@@ -37,6 +37,7 @@ from bindings.native_json import native_json_parse, native_path_exists
 from bindings.native_transport import _transport_json
 from core.sha256_file import sha256_file
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
+from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
 from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native import tsa_array
@@ -1399,6 +1400,8 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
+        if operation.startswith("config_"):
+            return byte_lm_config_operation(call[0], operation, call[2], call[3]).steal_data()
         if operation == "from_checkpoint_binary" or operation == "from_checkpoint" or operation == "from_checkpoint_bytes" or operation == "export_checkpoint_binary" or operation == "export_checkpoint":
             return byte_lm_checkpoint(call[0], operation, call[2], call[3], io_error).steal_data()
         if operation == "load_state":
@@ -1418,6 +1421,8 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     except error:
         if io_error.pending:
             return io_error.restore()
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error)
         var text = String(error)
         if text.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)

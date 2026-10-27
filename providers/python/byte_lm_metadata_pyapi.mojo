@@ -3,9 +3,12 @@
 # registry shapes/names and profile spelling are owned here after admission.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.py_balanced import py_call, py_type, py_contains, py_fields, py_setitem
 from bindings.classical_pandas import classical_admit_value
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.classical_attributes import classical_connect_numpy
+from core.training_state_validation import training_byte_shape_validate
+from bindings.optimizer_public_words import stash_python_error
 
 
 def _b() raises -> PythonObject:
@@ -189,3 +192,147 @@ def byte_lm_lengths(source: PythonObject, batch: Int, length: Int, context: Pyth
             raise Error("lengths must be in [1, L]")
         result.append(Int(py=scalar))
     return result^
+
+
+def _config_names() -> List[String]:
+    return [String("batch"), String("length"), String("d_model"), String("n_heads"), String("n_kv"),
+            String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size")]
+
+
+def _config_store(value: PythonObject, shape: _Shape) raises:
+    var fields = py_fields(value)
+    var names = _config_names()
+    for i in range(9):  # driver-loop: over normalized immutable configuration fields
+        py_setitem(fields, names[i], shape.d[i])
+    py_setitem(fields, "chunked_lm_head_v2", shape.chunked)
+
+
+def _config_new(shape: _Shape, context: PythonObject) raises -> PythonObject:
+    var value = native_storage_allocate(context["byte_lm_config_class"])
+    _config_store(value, shape)
+    return value
+
+
+def _config_capture(value: PythonObject, context: PythonObject) raises -> _Shape:
+    if py_type(value) is not context["byte_lm_config_class"]:
+        raise Error("TypeError: shape requires the connected native ByteLanguageModelConfig class")
+    var fields = py_fields(value)
+    classical_admit_value(fields, context)
+    var state = Python.dict()
+    py_setitem(state, "model_shape", fields)
+    return _shape_of(state)
+
+
+def byte_lm_config_operation(value: PythonObject, operation: String, args: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    var bi = _b()
+    if operation == "config_require":
+        if value is None:
+            return _config_new(_shape_of(Python.dict()), context)
+        if py_type(value) is not context["byte_lm_config_class"]:
+            raise Error("TypeError: shape must be a ByteLanguageModelConfig")
+        return value
+    if operation == "config_state":
+        classical_admit_value(value, context)
+        if py_type(value) is not bi.dict:
+            raise Error("TypeError: state requires native dictionary storage")
+        var shape = _shape_of(value)
+        training_byte_shape_validate(shape.d, shape.chunked)
+        return _config_new(shape, context)
+    if operation == "config_construct":
+        if py_type(value) is not context["byte_lm_config_class"]:
+            raise Error("TypeError: shape requires the connected native ByteLanguageModelConfig class")
+        classical_admit_value(args, context)
+        var fields = Python.dict()
+        var names = _config_names()
+        for i in range(9):  # driver-loop: over public configuration arguments
+            py_setitem(fields, names[i], args[i])
+        py_setitem(fields, "chunked_lm_head_v2", args[9])
+        var state = Python.dict()
+        py_setitem(state, "model_shape", fields)
+        var shape = _shape_of(state)
+        training_byte_shape_validate(shape.d, shape.chunked)
+        _config_store(value, shape)
+        return PythonObject(None)
+    if operation == "config_setattr" or operation == "config_delattr":
+        # Keep FrozenInstanceError rather than weakening the frozen dataclass
+        # contract to a generic AttributeError. No Python exception initializer.
+        if py_type(args[0]) is not bi.str:
+            raise Error("TypeError: attribute name must be an exact native string")
+        var category = context["byte_lm_config_frozen_error"]
+        var verb = String("assign to" if operation == "config_setattr" else "delete")
+        var message = verb + " field " + String(py_call(bi.repr, args[0]))
+        var exception = py_call(bi.BaseException.__new__, category, PythonObject("cannot " + message))
+        ref cpy = Python().cpython()
+        cpy.lib.get_function[NoneType]("PyErr_SetObject")(category._obj_ptr, exception._obj_ptr)
+        var failure = stash_python_error()
+        raise failure^
+    if operation == "config_equal" and py_type(args[0]) is not context["byte_lm_config_class"]:
+        return bi.NotImplemented
+    var shape = _config_capture(value, context)
+    if operation == "config_validate":
+        training_byte_shape_validate(shape.d, shape.chunked)
+        _config_store(value, shape)
+        return PythonObject(None)
+    if operation == "config_native_shape":
+        return py_call(bi.tuple, shape.native_shape())
+    if operation == "config_profile":
+        return PythonObject(shape.profile(String(context["byte_lm_default_profile"])))
+    if operation == "config_n_tensors":
+        return PythonObject(shape.n_tensors())
+    if operation == "config_n_total":
+        return PythonObject(shape.n_total())
+    if operation == "config_equal":
+        var other = _config_capture(args[0], context)
+        var equal = shape.chunked == other.chunked
+        for i in range(9):  # driver-loop: over the nine immutable dimension fields
+            equal = equal and shape.d[i] == other.d[i]
+        return PythonObject(equal)
+    if operation == "config_hash":
+        var words = shape.native_shape()
+        if not shape.chunked:
+            _ = py_call(words.append, False)
+        else:
+            py_setitem(words, 9, True)
+        return py_call(bi.hash, py_call(bi.tuple, words))
+    var names = _config_names()
+    if operation == "config_dict":
+        var result = Python.dict()
+        for i in range(9):  # driver-loop: over completed configuration fields
+            py_setitem(result, names[i], shape.d[i])
+        py_setitem(result, "chunked_lm_head_v2", shape.chunked)
+        return result
+    if operation == "config_repr":
+        var text = String(context["byte_lm_config_class"].__qualname__) + "("
+        for i in range(9):  # driver-loop: over formatted configuration metadata
+            if i > 0:
+                text += ", "
+            text += names[i] + "=" + String(shape.d[i])
+        text += ", chunked_lm_head_v2=" + String("True" if shape.chunked else "False") + ")"
+        return PythonObject(text)
+    if operation == "config_names":
+        var out = Python.list()
+        for name in shape.names():  # driver-loop: over configured parameter names
+            _ = py_call(out.append, name)
+        return py_call(bi.tuple, out)
+    var shapes = shape.shapes()
+    if operation == "config_shapes":
+        var out = Python.list()
+        for dims in shapes:  # driver-loop: over configured parameter shapes
+            var words = Python.list()
+            for width in dims:  # driver-loop: over one parameter tensor's rank metadata
+                _ = py_call(words.append, width)
+            _ = py_call(out.append, py_call(bi.tuple, words))
+        return py_call(bi.tuple, out)
+    if operation == "config_offsets":
+        var out = Python.list(0)
+        var offset = 0
+        for dims in shapes:  # driver-loop: over configured parameter tensor offsets
+            var count = 1
+            for width in dims:  # driver-loop: over one parameter tensor's rank metadata
+                count *= width
+            offset += count
+            _ = py_call(out.append, offset)
+        return py_call(bi.tuple, out)
+    raise Error("RuntimeError: unknown ByteLM configuration operation")
