@@ -50,6 +50,7 @@ def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeyp
     facade.__dict__['_HostBinding__basename']='_mojolearn_x_neighbors_host'
     real=types.ModuleType('fixture._host._mojolearn_x_neighbors_host')
     backend._ModeSet=ModeSet;backend._HostBinding=HostBinding;backend._NoGpuBinding=NoGpuBinding
+    backend._CPU_ONLY="explicit CPU test fixture"
     backend._offers=lambda name,mode: mode=='identical'
     backend._vendor_fn=lambda name:'x_neighbors_vendor'
     backend._host_prefix=lambda basename:'x_neighbors_host'
