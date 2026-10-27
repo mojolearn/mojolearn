@@ -609,6 +609,20 @@ def transformer_session_forward_binding(
     return PythonObject(result)
 
 
+from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
+
+
+def transformer_block_api_binding() raises -> PythonObject:
+    # Same common named-table transport used by other native sibling entries.
+    ref cpy = Python().cpython()
+    var api = NATIVE_TRANSFORMER_BLOCK_API.get_or_create_ptr()
+    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        api[].entries.unsafe_ptr(), api[].name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
+    if not capsule:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=capsule)
+
+
 def transformer_native_api_binding() raises -> PythonObject:
     # Setup-time ABI transport only. The table and name live for the owning
     # image's lifetime; consumers retain this module and capsule while using
@@ -1573,6 +1587,7 @@ def build__mojolearn_transformer() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
+        m.def_function[transformer_block_api_binding]("transformer_block_api_v1")
         m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")

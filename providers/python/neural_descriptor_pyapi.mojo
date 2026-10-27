@@ -174,6 +174,39 @@ def neural_descriptor_execute(
     return result
 
 
+def neural_descriptor_reserved_execute(
+    provider: PythonObject, session_owner: PythonObject, handle: Int,
+    reserve: Int, release: Int, operation: Int,
+    addresses: List[Int], ints: List[Int], floats: List[Float64],
+) raises -> Int:
+    # Common provider ownership/GIL boundary for named tables with native
+    # reservation operations. The caller obtained handle from that table's
+    # checked native admission entry; no Python extension layout is inspected.
+    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    for op in [reserve, release, operation]:  # small-loop(three explicit table operation ids)
+        if op < 0 or op >= len(owner[].calls):
+            raise Error("neural native ABI: unknown operation")
+    var words: List[Int] = [handle]
+    for value in ints:  # small-loop(admitted operation scalar span)
+        words.append(value)
+    owner[].calls[reserve] += 1
+    _ = native_descriptor_call(owner[].entry, reserve, [], [handle], [])
+    var result = 0
+    try:
+        owner[].calls[operation] += 1
+        with GILReleased(Python()):
+            result = native_descriptor_call(owner[].entry, operation, addresses, words, floats)
+    except problem:
+        owner[].calls[release] += 1
+        _ = native_descriptor_call(owner[].entry, release, [], [handle], [])
+        raise problem
+    owner[].calls[release] += 1
+    _ = native_descriptor_call(owner[].entry, release, [], [handle], [])
+    _ = provider
+    _ = session_owner
+    return result
+
+
 def neural_descriptor_info(provider: PythonObject) raises -> PythonObject:
     # Explicit untimed diagnostic for coverage retention; never called by the
     # executor itself. Counts record attempts, including refused native calls.

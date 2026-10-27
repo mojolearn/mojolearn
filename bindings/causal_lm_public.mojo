@@ -14,7 +14,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
-from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
+from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
 from providers.python.generation_session_pyapi import (
     generation_reuse_native_provider, generation_connect_native_session,
@@ -147,6 +147,11 @@ def causal_lm_admit_binding(
             _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME))
         py_setitem(owner_fields, "_native_primitives_provider_cache", primitive_provider)
         py_setitem(entries, "native_primitives", primitive_provider)
+        if kind == "transformer":
+            var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME))
+            py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
+            py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
             var mamba_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_mamba_provider_cache"),
                 _native_function(block_binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
