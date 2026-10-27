@@ -1,0 +1,88 @@
+{
+  "scope": "source-only; local Mac runtime pending; shared vendor-neutral implementation",
+  "candidate_default": "off",
+  "items": [
+    {
+      "family": "SVC",
+      "owner": "bindings/svc_kernel_native.mojo",
+      "native": "svm/estimator.mojo",
+      "priority": 1,
+      "completed": "Capture stable solver/predict settings once per public operation; common2op direct native dispatch replaces repeated compiled-entry CPython solver/predict calls.",
+      "remaining": [
+        "pair/fold row preparation and calibration still use Python containers",
+        "gather/select/epilogue/Platt compiled-entry calls",
+        "label/class-weight input protocols and output processing",
+        "generic provider ownership/GIL admission still entered per binary call"
+      ],
+      "loops": "SMO numerical iterations already native; outer pair/fold driver still mixed"
+    },
+    {
+      "family": "KernelRidge",
+      "owner": "bindings/kernel_methods_native.mojo:_krr_fit/_krr_predict",
+      "native": "kernel_methods/km_binding_impl.mojo; kernel_methods/krr_resident.mojo",
+      "priority": 2,
+      "completed": "Read-only audit",
+      "remaining": [
+        "whole-operation CPython compiled-entry call at fit/predict",
+        "resident prepare/token ownership/release and invalidation",
+        "input/parameter metadata and output publication"
+      ],
+      "loops": "one whole native numerical operation per public fit/predict; no per-iteration provider wrapper needed"
+    },
+    {
+      "family": "Nystroem",
+      "owner": "bindings/kernel_methods_native.mojo:_nys_fit/_nys_transform",
+      "native": "kernel_methods/km_binding_impl.mojo",
+      "priority": 2,
+      "completed": "Read-only audit",
+      "remaining": [
+        "joint fit-transform vs fallback two-call route ownership",
+        "native operation descriptors and stable input/model metadata"
+      ],
+      "loops": "numerical basis/eigensolver/transform loops already native"
+    },
+    {
+      "family": "RBFSampler",
+      "owner": "bindings/kernel_methods_native.mojo:_rbf_fit/_rbf_transform",
+      "native": "kernel_methods/rbf_resident.mojo; providers/python/kernel_methods_rbf_resident_pyapi.mojo",
+      "priority": 2,
+      "completed": "Read-only audit",
+      "remaining": [
+        "gamma scale limb descriptor call",
+        "resident/fused fit-transform route and seed contract",
+        "existing separate sampler fit/transform native doors"
+      ],
+      "loops": "whole native numerical calls; do not replace resident or fused route with different work"
+    },
+    {
+      "family": "SVR",
+      "owner": "bindings/svc_kernel_native.mojo:_svr_fit/_svr_predict",
+      "native": "svm/estimator.mojo",
+      "priority": 3,
+      "completed": "Read-only audit",
+      "remaining": [
+        "add same common descriptor table operations using exact SVR scalar/result layouts",
+        "stable metadata admission"
+      ],
+      "loops": "whole solver/predict native; no repeated probability/class pairs"
+    },
+    {
+      "family": "OneClassSVM/LinearSVC/LinearSVR",
+      "owner": "bindings/svc_ocsvm_native.mojo; bindings/svc_linear_native.mojo",
+      "priority": 3,
+      "completed": "No source changes",
+      "remaining": [
+        "trace exact selected public routes before design; no completion inferred from common SVC name"
+      ]
+    },
+    {
+      "family": "broader40outside-familyinventory",
+      "owner": "experiments/library_provider_layout_20261027",
+      "priority": 4,
+      "completed": "43boundary relocations previously committed; not execution migration",
+      "remaining": [
+        "runtime caller/provider edges and operation-local metadata require per-family tracing; folder guard is source architecture only"
+      ]
+    }
+  ]
+}
