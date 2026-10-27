@@ -63,3 +63,21 @@ def tables(**fixed):
     shared context, once, at that module's import."""
     context = shared_context()
     context.update(fixed)
+
+
+def connect_bindings(*names):
+    """Connect estimator bindings during module import, never during execution."""
+    from . import _backend
+    context = shared_context()
+    connections = context.setdefault('family_binding_connections', {})
+    context['family_mode_set_type'] = _backend._ModeSet
+    context['family_mode_set_fields'] = vars(_backend._ModeSet)['__dict__'].__get__
+    for name in names:
+        modes = {}
+        for mode in ('identical', 'fast'):
+            try:
+                binding = _backend.binding(name, mode)
+                modes[mode] = (binding,)
+            except (ImportError, ValueError, RuntimeError) as error:
+                modes[mode] = (type(error).__name__ + ': ' + str(error),)
+        connections[name] = modes

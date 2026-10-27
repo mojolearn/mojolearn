@@ -234,7 +234,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         self : KernelRidge
             The fitted estimator.
         """
-        return _NATIVE(self, "family_km_krr_fit", (self._bind(), X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_krr_fit", (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
     # Maintainer note: `K(X, X_fit_) . dual_coef_` through the identical GEMM
     # (DEVIATION 1680).
@@ -252,7 +252,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         Array of shape (n_queries,) or (n_queries, n_targets), float32
             Predictions, 1-D when the fitted `y` was 1-D.
         """
-        return _NATIVE(self, "family_km_krr_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_krr_predict", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -418,7 +418,7 @@ class Nystroem(_KernelMethodBase):
         self : Nystroem
             The fitted transformer.
         """
-        return _NATIVE(self, "family_km_nys_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_nys_fit", (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map `X` to the approximate kernel feature space.
@@ -433,7 +433,7 @@ class Nystroem(_KernelMethodBase):
         Array of shape (n_rows, n_components), float32
             `K(X, components_) @ normalization_.T`.
         """
-        return _NATIVE(self, "family_km_nys_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_nys_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
@@ -450,7 +450,7 @@ class Nystroem(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        return _NATIVE(self, "family_km_nys_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_nys_fit_transform", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: every model array as fitted, `hyper` `<f8`
     # [gamma, coef0] as the fit resolved them, `meta` `<i8` [n_components,
@@ -567,7 +567,7 @@ class RBFSampler(_KernelMethodBase):
         self : RBFSampler
             The fitted transformer.
         """
-        return _NATIVE(self, "family_km_rbf_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_rbf_fit", (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map `X` to the random Fourier feature space.
@@ -582,7 +582,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_rows, n_components), float32
             `scale_ * cos(X @ random_weights_ + random_offset_)`.
         """
-        return _NATIVE(self, "family_km_rbf_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_rbf_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
@@ -599,7 +599,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        return _NATIVE(self, "family_km_rbf_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_rbf_fit_transform", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: the weights and offsets as drawn, `hyper`
     # `<f8` [gamma, sigma_, scale_], `meta` `<i8` [n_features, n_components,
@@ -691,3 +691,6 @@ _native_family_bridge.tables(family_km_par_classes=(KernelRidge, Nystroem))
 
 
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]
+
+# Resolve optional mode images at import; public methods enter native admission once.
+_native_family_bridge.connect_bindings("_mojolearn_kernel_methods")

@@ -1,0 +1,271 @@
+{
+  "schema": "mojolearn.provider-migration.inventory.v1",
+  "scope": "non-neural library; source status never implies runtime qualification",
+  "runtime_qualified": false,
+  "rows": [
+    {
+      "family": "svm",
+      "status": "partial_source",
+      "entry_candidates": [
+        {
+          "path": "bindings/svc_kernel_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/svc_linear_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/svc_ocsvm_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/host_svc_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [
+        "SVC binary solver/predict descriptors and operation settings snapshot inherited"
+      ],
+      "remaining": [
+        "pair/fold/gather/calibration/epilogue orchestration",
+        "SVR/OneClassSVM/LinearSVC/LinearSVR",
+        "CPU native tables",
+        "public mode loader callbacks"
+      ]
+    },
+    {
+      "family": "kernel_methods",
+      "status": "partial_source",
+      "entry_candidates": [
+        {
+          "path": "bindings/kernel_methods_native.mojo",
+          "present": true
+        },
+        {
+          "path": "python/mojolearn/kernel_methods.py",
+          "present": true
+        }
+      ],
+      "source_changes": [
+        "GPU fit/predict/transform shared descriptors",
+        "generic resident owner",
+        "import-connected public binding admission",
+        "compound transform input reuse"
+      ],
+      "remaining": [
+        "shared input validation snapshot",
+        "score/parallel wrappers",
+        "CPU native table",
+        "serialization and foreign-buffer transitive audit"
+      ]
+    },
+    {
+      "family": "linear_estimators",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/classical_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/x_linear_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "public-to-native source audit and metadata/dispatch migration"
+      ]
+    },
+    {
+      "family": "trees_ensembles",
+      "status": "partial_source",
+      "entry_candidates": [
+        {
+          "path": "bindings/trees_public_meta.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/trees_public_meta.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [
+        "prior metadata-once tree view repair and provider file relocation"
+      ],
+      "remaining": [
+        "whole public fit/predict and meta-estimator execution dispatch audit"
+      ]
+    },
+    {
+      "family": "neighbors_ann",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/neighbors_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/neighbors_ann_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "ordinary/resident prediction and index ownership/dispatch"
+      ]
+    },
+    {
+      "family": "clustering",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/cluster_fit_a_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/cluster_fit_b_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "all public operations and nested native entry dispatch"
+      ]
+    },
+    {
+      "family": "decomposition",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/decomp_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "all decompositions and fit_transform admission reuse"
+      ]
+    },
+    {
+      "family": "preprocessing",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/prep_owner_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "fit/transform/inverse_transform metadata and computation dispatch"
+      ]
+    },
+    {
+      "family": "metrics",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/metrics_cls_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/metrics_exp_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "metrics and consumed-output public routes"
+      ]
+    },
+    {
+      "family": "model_selection",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/model_selection_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "pipeline/grid/cross-validation ownership and callable admission"
+      ]
+    },
+    {
+      "family": "gaussian_process_mixture",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/gp_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/mixture_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "fit/predict/kernel metadata and ownership"
+      ]
+    },
+    {
+      "family": "time_series",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/tsa_public_native.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/xseq_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "non-neural forecasting estimators and public wrappers"
+      ]
+    },
+    {
+      "family": "resampling_embedding_manifold",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/mani_umap_native.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "remaining algorithms and nested dispatch"
+      ]
+    },
+    {
+      "family": "shared_arrays_archives",
+      "status": "pending",
+      "entry_candidates": [
+        {
+          "path": "bindings/family_common.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/classical_arrays.mojo",
+          "present": true
+        },
+        {
+          "path": "bindings/host_archive_lifetime.mojo",
+          "present": true
+        }
+      ],
+      "source_changes": [],
+      "remaining": [
+        "single native metadata snapshot shared across families",
+        "archive/type/protocol callbacks and generic resident lifetime migration"
+      ]
+    }
+  ]
+}
