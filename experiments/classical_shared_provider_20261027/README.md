@@ -12,9 +12,9 @@ loop. Each later public call admits fresh model fields. No global metadata cache
 or new guarantee for concurrent mutation is introduced.
 
 `MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1` selects the existing common
-`NativeDescriptorCall` / `NeuralDescriptorProvider` machinery with six named
+`NativeDescriptorCall` / `NeuralDescriptorProvider` machinery with eight named
 operations: binary fit0, binary predict1, pair/fold/gather/weight/epilogue2,
-Platt calibration3, splitmix shuffle4 and compile-time mode5. Provider admission occurs once per
+Platt calibration3, splitmix shuffle4, compile-time mode5, SVR fit6 and SVR predict7. Provider admission occurs once per
 public operation, holds the exact module/capsule, and is not repeated per pair or
 fold. No per-estimator provider class or public per-op adapter is added. The
 checked identical GPU module supplies its own table. Candidate selection refuses
@@ -36,7 +36,9 @@ one-vs-one layout and coefficient paths still use checked compiled-entry CPython
 calls and require further work. The shared
 provider itself is entered once per binary compute call to handle ownership and
 GIL transitions; this tranche does not claim a Python-object-free outer pair loop.
-SVR and OneClassSVM execution remain pending. Separate source tranches connect
+SVR solver/predict dispatch now uses the same provider and original numerical
+owners. Its surrounding input/output paths remain partial; OneClassSVM execution
+remains pending. Separate source tranches connect
 linear SVM and KMeans frontdoors and kernel methods through the common provider.
 The whole-library scope remains recorded in
 `experiments/library_provider_completion_20261027/inventory.json`.
@@ -63,3 +65,7 @@ The probe now poisons legacy binary/epilogue/calibration/shuffle/mode entries on
 candidate calls, proving the corresponding operations do not redispatch through
 those Python-facing bindings when executed. It checks each public call admits
 mode metadata once. Source-only validation is not a passing runtime probe.
+
+The same public probe includes bounded linear/RBF SVR with sample weights,
+bitwise fitted-state/prediction comparison, mode and fit/predict counters, and
+legacy SVR entry poisoning. No kernel arithmetic or solver choices changed.

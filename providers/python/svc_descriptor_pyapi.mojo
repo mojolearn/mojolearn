@@ -39,3 +39,32 @@ def svc_splitmix_execute(binding: PythonObject, native: PythonObject, out: Pytho
     if native is None:
         return py_call(neural_descriptor_entry(binding, "svc_splitmix_perm"), out, n, lo, hi)
     return PythonObject(neural_descriptor_execute(native, 4, [Int(py=out)], [Int(py=n), Int(py=lo), Int(py=hi)], []))
+
+
+def svr_execute(binding: PythonObject, native: PythonObject, fit: Bool,
+                addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    if native is None:
+        if fit:
+            return py_call(neural_descriptor_entry(binding, "svr_fit"), addresses[0], addresses[1],
+                addresses[2], addresses[3], addresses[4], addresses[5], params)
+        return py_call(neural_descriptor_entry(binding, "svr_predict"), addresses[0], addresses[1],
+            addresses[2], addresses[3], params)
+    var n = len(params)
+    if fit and n != 9 and n != 10 and n != 12:
+        raise Error("svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with degree and coef0), got " + String(n))
+    if not fit and n != 7 and n != 9:
+        raise Error("svr_predict: params must contain 7 values (9 with degree and coef0), got " + String(n))
+    if len(addresses) != (6 if fit else 4):
+        raise Error("SVR native ABI: wrong address count")
+    var a = List[Int]()
+    for i in range(len(addresses)):  # small-loop(six fit or four predict buffer addresses)
+        a.append(Int(py=addresses[i]))
+    var p = List[Int](length=n, fill=0)
+    var f = List[Float64](length=n, fill=0.0)
+    for i in range(n):  # small-loop(up to twelve stable scalar words)
+        var floating = ((i >= 3 and i <= 6) or i == 11) if fit else (i == 3 or i == 5 or i == 6 or i == 8)
+        if floating:
+            f[i] = Float64(py=params[i])
+        else:
+            p[i] = Int(py=params[i])
+    return PythonObject(neural_descriptor_execute(native, 6 if fit else 7, a, p, f))
