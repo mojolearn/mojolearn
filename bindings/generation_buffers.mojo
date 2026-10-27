@@ -160,3 +160,49 @@ def generation_copy(value: PythonObject) raises -> PythonObject:
     var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
     memcpy(dest=dst, src=src, count=Int(py=value.nbytes))
     return out
+
+
+def generation_mutable(
+    value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
+    name: String = "",
+) raises -> Int:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var label = String("state buffer")
+    if name != "":
+        label = "state buffer " + name
+    var view = PythonObject(None)
+    var shape = PythonObject(None)
+    if value is None:
+        raise Error("CausalLM: " + label + " is missing; allocate_state() makes a complete state")
+    if py_type(value) is g[].array_cls:
+        if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
+            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
+        view = value._mv
+        shape = value.shape
+    else:
+        view = py_call(g[].bi.memoryview, value)
+        shape = view.shape
+        if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
+            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
+    var want = String("(")
+    for i in range(len(expected)):  # small-loop(state buffer shape dims)
+        if i > 0:
+            want += ", "
+        want += String(expected[i])
+    want += ")"
+    if len(shape) != len(expected):
+        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
+    var size = 1
+    for i in range(len(expected)):  # small-loop(state buffer shape dims)
+        if Int(py=shape[i]) != expected[i]:
+            raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
+        size *= expected[i]
+    if Int(py=view.nbytes) != size * 4:
+        raise Error("CausalLM: " + label + " span differs from its shape")
+    var address = generation_address(value, keep)
+    if py_type(value) is not g[].array_cls:
+        var pair = g[].bi.list()
+        _ = py_call(pair.append, view)
+        _ = py_call(pair.append, keep[len(keep) - 1])
+        copies.append(pair)
+    return address
