@@ -13,13 +13,17 @@ from transformer.session_abi import GENERATION_SESSION_ABI_NAME, GenerationSessi
 struct GenerationNativeProvider(Movable, Writable):
     var module: PythonObject
     var capsule: PythonObject
+    var factory: PythonObject
+    var image: PythonObject
     var admit_session: PythonObject
     var forward: GenerationSessionForward
 
     def __init__(out self, module: PythonObject, capsule: PythonObject,
-                 admit_session: PythonObject, forward: GenerationSessionForward):
+                 factory: PythonObject, image: PythonObject, admit_session: PythonObject, forward: GenerationSessionForward):
         self.module = module
         self.capsule = capsule
+        self.factory = factory
+        self.image = image
         self.admit_session = admit_session
         self.forward = forward
 
@@ -65,7 +69,19 @@ def generation_connect_native_provider(
     # This is our documented native table, not a CPython type/object layout.
     # Copy the sole typed function slot once; retain its capsule and image.
     var table = MutPointer[GenerationSessionForward, MutUntrackedOrigin](unsafe_from_address=Int(pointer.value()))
-    return PythonObject(alloc=GenerationNativeProvider(module, capsule, admit_session, table[0]))
+    return PythonObject(alloc=GenerationNativeProvider(module, capsule, factory, factory.__self__, admit_session, table[0]))
+
+
+def generation_reuse_native_provider(
+    previous: PythonObject, module: PythonObject, factory: PythonObject, admit_session: PythonObject,
+) raises -> PythonObject:
+    # Admission has already rechecked mode/vendor and both native setup entries.
+    # Reuse only the immutable typed table, never block dimensions or buffers.
+    if previous is not None:
+        var held = previous.downcast_value_ptr[GenerationNativeProvider]()
+        if held[].module is module and held[].factory is factory and held[].image is factory.__self__ and held[].admit_session is admit_session:
+            return previous
+    return generation_connect_native_provider(module, factory, admit_session)
 
 
 def generation_connect_native_session(provider: PythonObject, session: PythonObject) raises -> PythonObject:

@@ -15,9 +15,9 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
 from providers.python.generation_session_pyapi import (
-    generation_connect_native_provider, generation_connect_native_session,
+    generation_reuse_native_provider, generation_connect_native_session,
     generation_native_session_matches, generation_native_forward,
 )
 from std.memory import memcpy
@@ -130,16 +130,23 @@ def causal_lm_admit_binding(
     if requested_gpu and kind == "transformer" and mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1" or String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1"):
         if not py_contains(entries, "forward_session"):
             raise Error("CausalLM: native session candidate requires transformer_session_forward")
-        var provider = generation_connect_native_provider(block_binding,
+        var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
+        var provider = generation_reuse_native_provider(py_get(owner_fields, "_native_session_provider_cache"), block_binding,
             _native_function(block_binding, "transformer_native_api_v1"),
             _native_function(block_binding, "transformer_native_session_handle_v1"))
+        py_setitem(owner_fields, "_native_session_provider_cache", provider)
         py_setitem(entries, "native_session_provider", provider)
     if requested_gpu and mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
-        py_setitem(entries, "native_primitives", neural_descriptor_connect(
-            _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME)))
+        var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
+        var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
+            _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME))
+        py_setitem(owner_fields, "_native_primitives_provider_cache", primitive_provider)
+        py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "mamba1" or kind == "mamba2":
-            py_setitem(entries, "native_mamba", neural_descriptor_connect(
-                _native_function(block_binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME)))
+            var mamba_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_mamba_provider_cache"),
+                _native_function(block_binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
+            py_setitem(owner_fields, "_native_mamba_provider_cache", mamba_provider)
+            py_setitem(entries, "native_mamba", mamba_provider)
     py_setattr(model, "_native_entries", entries)
     return PythonObject(None)
 

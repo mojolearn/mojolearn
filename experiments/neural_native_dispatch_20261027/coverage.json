@@ -35,7 +35,7 @@
       "lane": "transformer-forward",
       "status": "public_boundary_native_core",
       "source": "bindings/neural_block_public.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -44,7 +44,7 @@
       "lane": "mamba1-forward",
       "status": "public_boundary_native_core",
       "source": "bindings/neural_block_public.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -53,7 +53,7 @@
       "lane": "mamba2-forward",
       "status": "public_boundary_native_core",
       "source": "bindings/neural_block_public.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -62,7 +62,7 @@
       "lane": "mamba3-forward",
       "status": "public_boundary_native_core",
       "source": "bindings/mamba_public_native.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -98,7 +98,7 @@
       "lane": "transformer-decode",
       "status": "public_boundary_native_core",
       "source": "bindings/neural_block_public.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -107,7 +107,7 @@
       "lane": "mamba1-decode",
       "status": "public_boundary_native_core",
       "source": "bindings/neural_block_public.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -116,7 +116,7 @@
       "lane": "mamba2-decode",
       "status": "public_boundary_native_core",
       "source": "bindings/neural_block_public.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
@@ -125,7 +125,7 @@
       "lane": "mamba3-decode",
       "status": "public_boundary_native_core",
       "source": "bindings/mamba_public_native.mojo",
-      "detail": "One public block call; decode repetitions belong to benchmark controller. Shared Mamba numerical door now uses native core, but standalone block admission does not connect the new private provider; no whole-recipe conversion claimed.",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"
     },
