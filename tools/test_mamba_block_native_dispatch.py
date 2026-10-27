@@ -59,3 +59,25 @@ def test_owned_snapshot_execution_and_publication_remain_atomic():
     assert 'String("_owned_native_provider")' in source.split('def mamba3_getstate')[1]
     owned_state = (ROOT/'bindings/samba_inference_native.mojo').read_text()
     assert 'neural_mamba_session_call(owned_native, fields, entries, 16,' in owned_state
+
+
+def test_resident_decode_families_use_existing_native_owners():
+    from check_generation_native_boundary import audit
+    _, failures = audit(ROOT, ('mamba.native_decode_dispatch',))
+    assert not failures, failures
+    native=(ROOT/'mamba/native_decode_dispatch.mojo').read_text()
+    for family in (1,2,3):
+        assert f'Mamba{family}DecodeSession' in native
+        for stage in ('open','step','export'):
+            assert f'_m{family}_session_{stage}_run(owner[]' in native
+    assert '_m1_session_load_run(owner[]' in native
+    assert '_m2_session_load_run(owner[]' in native
+    assert '_m3_session_copy_in(owner[]' in native
+    assert 'owner[].usable = False' in native
+    assert 'owner[].release()' in native
+    boundary=(ROOT/'bindings/mamba_public_native.mojo').read_text()
+    assert 'var provider: PythonObject' in boundary
+    assert 'var device_address: Int' in boundary
+    for operation in (3,4,5,6):
+        assert f'base + {operation},' in boundary
+    assert 'neural_descriptor_execute(h[].provider, 27 + 8 * (h[].kind - 1)' in boundary
