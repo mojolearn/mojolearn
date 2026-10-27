@@ -146,7 +146,7 @@ comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA
 #: fewer. Same buffers, same kernels after: no bit moves. Source
 #: lane/apple-fast-shap@13343dd51 (commit 2f0029ac5), recovered 2026-10-04.
 #: Prior: never compiled on M3 (the branch failed to parse at
-#: xtrees/api_pyapi.mojo:715, a parameter named `out`, and :811); never timed;
+#: providers/python/xtrees_api_pyapi.mojo:715, a parameter named `out`, and :811); never timed;
 #: board context permutation-shap istella ratio 1.20. Fixed: the old
 #: candidate cached the four buffers of `perm_device.perm_synthetic`, a
 #: per-row host-permutation path main has since replaced with PSHAP_DELTA

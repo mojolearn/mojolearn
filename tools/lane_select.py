@@ -2430,7 +2430,7 @@ def _binding_exports(rel):
 def _delegated_exports(rel):
     """export name -> (file, impl) for the exports a binding registers through
     a function it IMPORTS: `bindings/_mojolearn_x_trees.mojo` calls
-    `xtrees.api_pyapi.register(module)`, which holds 87
+    `providers.python.xtrees_api_pyapi.register(module)`, which holds 87
     `m.def_function[impl]("name")` lines. `_binding_exports` reads the
     binding's own file only, so those exports were invisible to the per-export
     scan and reached a lane only through the whole closure of whatever else

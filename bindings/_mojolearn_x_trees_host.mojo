@@ -3,7 +3,7 @@
 """CPU binding of the trees expansion lane (`x_trees` family).
 
 HOST ONLY: no DeviceContext, no kernel. It exports the GPU binding's names
-(`xtrees/api_pyapi.mojo::register`, called here as the GPU binding calls it)
+(`providers/python/xtrees_api_pyapi.mojo::register`, called here as the GPU binding calls it)
 plus `x_trees_numeric_mode` (1) and `x_trees_vendor` ("cpu"), and the four
 host read-backs `x_trees_host_{numeric_mode,vendor,column,sabotage}`, so
 `_expansion_trees.py` runs unchanged on a CPU-only install through
@@ -13,7 +13,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from xtrees.api_pyapi import register, tree_shap_cache_create_args, tree_shap_cache_values_args
+from providers.python.xtrees_api_pyapi import register, tree_shap_cache_create_args, tree_shap_cache_values_args
 from xtrees import shap_host as shap_cpu
 from xtrees.shap_host import shap_prepare, tree_shap_values
 from xtrees.ops import XTREES_HOST_SABOTAGE

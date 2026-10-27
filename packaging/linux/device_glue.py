@@ -1,6 +1,6 @@
 """Explicit device-free dispatch bindings; never a general missing-image waiver.
 
-bindings/_mojolearn_x_trees.mojo registers xtrees/api_pyapi.mojo ensemble glue.
+bindings/_mojolearn_x_trees.mojo registers providers/python/xtrees_api_pyapi.mojo ensemble glue.
 Tree fits are delegated by the Python API to _mojolearn_rf/_mojolearn_gbdt.
 Both delegates must carry the requested image in the same numerical tier.
 
