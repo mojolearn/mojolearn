@@ -125,11 +125,6 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
-    if getattr(args, 'light', False):
-        from ._verify_light_command import command
-        return command(args)
-    if getattr(args, 'light_output', None):
-        raise ValueError('--light-output requires --light')
     if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
         args.no_models = True
     if not _asks_for_card(args):
@@ -249,13 +244,13 @@ def build_parser():
 
     v = sub.add_parser(
         "verify",
-        help="verify classical training and inference; neural training is opt-in",
+        help="verify bounded public API identity and classical training/inference",
         description=(
-            "Default: every applicable routine lane on the base fixture, combining "
+            "Default: bounded public API/TAPE checks with fault controls, plus routine lanes on the base fixture, combining "
             "classical training and inference with bundled saved-model inference. "
             "--quick selects representative routine checks. --all or --full runs "
-            "the complete routine scope on every fixture. Neural training and "
-            "backward/optimizer fixtures require --neural-training. Reports name "
+            "the complete routine scope on every fixture. Additional neural training "
+            "lanes are selected with --neural-training. Reports name "
             "the selected scope and every excluded neural lane."),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     v.add_argument("--json", action="store_true",
@@ -282,10 +277,6 @@ def build_parser():
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
     scope = v.add_mutually_exclusive_group()
-    scope.add_argument('--light', action='store_true',
-                       help='eight tiny tape/numerical bitwise checks; --self-test also injects numerical faults')
-    v.add_argument('--light-output', metavar='DIRECTORY',
-                   help='with --light: retain captures in a new directory')
     scope.add_argument("--models-only", "--inference", dest="models_only", action="store_true",
                    help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
     scope.add_argument("--training", dest="training_only", action="store_true",

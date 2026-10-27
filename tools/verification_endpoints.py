@@ -17,12 +17,36 @@ from light_verifier_reference import load, ROOT
 OUTPUT = ROOT/'python/mojolearn/_verification_endpoint_data.py'
 
 
+def require_complete_mapping(rows, targets, routes):
+    missing={row['endpoint'] for row in targets}-routes.keys()
+    missing.update(row['endpoint'] for row in rows if row['status']=='unmapped')
+    if missing:
+        raise ValueError('unimplemented endpoint fixtures: '+', '.join(sorted(missing)))
+
+
 def build():
     import lane_select as lanes
     from verify_coverage_audit import Walker, NameClosure, lane_reach, endpoint_rows
     walker = Walker()
     reach = lane_reach(lanes, walker, NameClosure(walker))
     rows = endpoint_rows(walker, reach)
+    # Load test controllers without importing an unbuilt product package.
+    import importlib, sys, types
+    package = types.ModuleType('_endpoint_fixture_sources')
+    package.__path__ = [str(ROOT/'python/mojolearn')]
+    sys.modules[package.__name__] = package
+    runner = importlib.import_module(package.__name__+'._verify_api_runner')
+    availability = importlib.import_module(package.__name__+'._verify_api_availability')
+    routes = runner.registry()
+    for row in rows:
+        route = routes.get(row['endpoint'])
+        if route:
+            row['checks'] = sorted(set(row['checks']) | {'_verify_api_runner:'+route[0]})
+            if row['status'] != 'not_numerical': row['status'] = 'mapped'
+            row['fixture_scope'] = ('availability contract, not numerical execution'
+                if row['endpoint'] in availability.ABSENT | availability.CONDITIONAL
+                else 'bounded public endpoint fixture')
+    require_complete_mapping(rows,runner.TARGETS,routes)
     source = load('_verification_sources')
     return dict(format='mojolearn.endpoint-coverage.v1', execution='not run',
                 sources=source.public_sources(ROOT/'python/mojolearn'),

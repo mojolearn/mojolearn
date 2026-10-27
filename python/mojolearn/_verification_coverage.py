@@ -58,9 +58,12 @@ def inventory(harness, table, vendor_class):
     from . import _verify_light, __version__
     from ._verify_light_command import reference_errors
     from ._verification_light_reference import DATA as LIGHT_REFERENCE
+    from ._verification_api_reference import DATA as API_REFERENCE
+    from ._verify_api_runner import selected_endpoints
+    from ._verify_api_faults import FAULTS as API_FAULTS
     light_errors = reference_errors(LIGHT_REFERENCE, _verify_light)
     if LIGHT_REFERENCE.get('witnesses', {}).get('metal', {}).get('version') != __version__:
-        light_errors.append('reference is from another release; --light must confirm unchanged native artifacts before reuse')
+        light_errors.append('reference is from another release; normal verification must confirm unchanged native artifacts before reuse')
     public = set(host_surface.public_reference_lanes())
     covered = set(host_surface.covered_lanes()) | set(host_surface.PUBLIC_HOST_ONLY_LANES)
     pending = host_surface.PUBLIC_PENDING_LANES
@@ -179,10 +182,16 @@ def inventory(harness, table, vendor_class):
                 endpoint_snapshot_matches_sources=(ENDPOINTS['sources'] == public_sources(Path(__file__).parent)
                     and ENDPOINTS['supplemental_sources'] == supplemental_sources(Path(__file__).parent)
                     and ENDPOINTS['harness_sources'] == harness_sources(harness)),
-                light_verification=dict(command='verify --light', cases=list(_verify_light.EXPECTED_CASES),
+                public_endpoint_verification=dict(command='verify', expected=len(selected_endpoints('all')),
+                    neural_command='verify --neural-training', neural_expected=len(selected_endpoints('neural')),
+                    reference_device_validation=API_REFERENCE.get('device_validation',{}),
+                    reference_untested_vendors=API_REFERENCE.get('untested_vendors',[]),
+                    execution='not run', fault_controls=len(API_FAULTS), faults_in_normal_run=True,
+                    scope='bounded endpoint fixtures; availability is not numerical execution'),
+                light_verification=dict(command='verify', cases=list(_verify_light.EXPECTED_CASES),
                     outputs=sum(_verify_light.OUTPUT_COUNTS.values()), max_input_elements=_verify_light.MAX_INPUT_ELEMENTS,
                     execution='not run', reference_admitted=not light_errors, errors=light_errors,
-                    fault_command='verify --light --self-test', fault_kind='public-operation',
+                    fault_command='verify', fault_kind='public-operation',
                     release_qualified=False),
                 reference_admission_policy=table.get('admission_policy',
                     dict(status='legacy', reason='predates repeated-value and protocol admission; regenerate before release')),
@@ -236,7 +245,7 @@ def format_human(report):
     lines.append('Unmapped endpoints need review; source mapping is not runtime verification. See public_endpoints in JSON.')
     if not report['endpoint_snapshot_matches_sources']:
         lines.append('Endpoint inventory is stale for these package/harness sources; regenerate before claiming coverage.')
-    lines.append('Tiny tape/numerical check: verify --light; optional faults: verify --light --self-test (no timing).')
+    lines.append('Tiny tape/numerical check: verify (includes fault controls; no timing).')
     policy = report['reference_admission_policy']
     if policy.get('status') == 'legacy':
         lines.append("Bundled reference admission: legacy; regeneration under the stricter policy is still owed.")

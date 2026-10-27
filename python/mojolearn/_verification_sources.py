@@ -2,7 +2,11 @@
 import hashlib
 from pathlib import Path
 
-SUPPLEMENTAL_CHECKS = ('_verify_graph', '_verify_light', '_verify_partitioned_program', '_verify_distributed_program')
+SUPPLEMENTAL_CHECKS = ('_verify_graph', '_verify_light', '_verify_partitioned_program', '_verify_distributed_program',
+    '_verify_public', '_verify_api_runner', '_verify_api', '_verify_api_metadata',
+    '_verify_api_estimators', '_verify_api_availability', '_verify_api_utilities',
+    '_verify_api_optimizers', '_verify_api_neural', '_verify_api_training',
+    '_verify_api_programs', '_verify_api_models', '_verify_api_misc', '_verify_api_faults')
 
 
 def supplemental_sources(package):

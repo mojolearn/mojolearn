@@ -69,8 +69,8 @@ def verify(reference, *, self_test=False, retain=None):
         for name, (case, _) in FAULTS.items():
             baseline = subset(clean, [case])
             with inject(name):
-                faulty = verifier.capture([case])
-            restored = verifier.capture([case])
+                faulty = verifier.capture([case], artifacts=clean['bindings'])
+            restored = verifier.capture([case], artifacts=clean['bindings'])
             if retain:
                 retain(name + '-faulty', faulty)
                 retain(name + '-restored', restored)
@@ -85,35 +85,3 @@ def verify(reference, *, self_test=False, retain=None):
                 result['errors'].append('fault not caught and restored: ' + name)
     result['status'] = 'MATCH' if not result['errors'] else 'FAILED'
     return result
-
-
-def command(args):
-    conflicts = ('all', 'full', 'quick', 'coverage', 'lanes', 'fixtures', 'include_pending',
-                 'smoke', 'batch_checks', 'compare', 'models_only', 'training_only', 'neural_training')
-    if any(getattr(args, key, False) for key in conflicts) or getattr(args, 'repeats', 1) != 1:
-        raise ValueError('--light has a fixed tiny scope; use it alone or with --self-test/--json/--light-output')
-    directory = getattr(args, 'light_output', None)
-    if directory:
-        directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=False)
-
-    def retain(name, report):
-        if directory:
-            (directory / (name + '.json')).write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
-
-    from ._verification_light_reference import DATA
-    result = verify(DATA, self_test=getattr(args, 'self_test', False), retain=retain)
-    retain('result', result)
-    if getattr(args, 'json_out', None):
-        with Path(args.json_out).open('x') as output:
-            output.write(json.dumps(result, indent=2, sort_keys=True) + '\n')
-    if getattr(args, 'json', False):
-        print(json.dumps(result, sort_keys=True))
-    else:
-        print('Light identity: ' + result['status'] + ' (8 tiny tape/numerical cases)')
-        for name, fault in result['faults'].items():
-            print('  ' + name + ': ' + fault['status'])
-        for error in result['errors']:
-            print('  ' + error)
-        print('Scope: listed fixtures only; no timing or whole-library qualification.')
-    return 0 if result['status'] == 'MATCH' else 5 if result['status'] == 'OWED' else 1

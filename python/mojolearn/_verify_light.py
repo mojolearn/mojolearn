@@ -197,15 +197,15 @@ def tape_losses():
 
 def digest(value):
     import numpy as np
-    a = np.ascontiguousarray(value)
+    a = np.asarray(value)
     if a.dtype.kind not in 'biuf' or a.size > 64:
         raise ValueError('light fixture produced an unexpected dtype or size')
-    raw = a.tobytes()
+    raw = a.tobytes(order="C")
     return dict(shape=list(a.shape), dtype=a.dtype.str,
                 sha256=hashlib.sha256(raw).hexdigest(), bytes_hex=raw.hex())
 
 
-def capture(cases=EXPECTED_CASES):
+def capture(cases=EXPECTED_CASES, *, artifacts=None):
     from . import _backend, _verify, __version__
     cases = tuple(cases)
     if not cases or len(set(cases)) != len(cases) or set(cases) - set(EXPECTED_CASES):
@@ -229,7 +229,7 @@ def capture(cases=EXPECTED_CASES):
             report['cases'][name] = dict(status='captured', outputs=[digest(x) for x in values])
         except Exception as exc:
             report['cases'][name] = dict(status='failed', error=str(exc), outputs=[])
-    report['bindings'] = _verify.binding_artifacts()
+    report['bindings'] = _verify.binding_artifacts() if artifacts is None else artifacts
     report['status'] = 'CAPTURED' if all(r['status'] == 'captured' for r in report['cases'].values()) else 'FAILED'
     return report
 

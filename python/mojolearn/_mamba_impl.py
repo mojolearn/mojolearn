@@ -345,6 +345,25 @@ class Mamba2State:
 class _MambaBase(NumericModeMixin):
     _BINDING = "_mojolearn_mamba"
 
+    def set_params(self, **params):
+        """Update constructor parameters and rebuild the block.
+
+        Parameters
+        ----------
+        **params
+            Constructor parameter names and their new values.
+
+        Returns
+        -------
+        self
+            The updated block.
+
+        Examples
+        --------
+        >>> block.set_params(weights=weights)
+        """
+        return _native_neural_bridge.RUNTIME.neural_block_set_params(self, params, _native_neural_bridge.CONTEXT)
+
     def _extension(self):
         """The `_mojolearn_mamba` binding for THIS block's tier, with the
         binary's own compile-time answer cross-checked against it --

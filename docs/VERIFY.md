@@ -38,10 +38,8 @@ not evidence of cross-vendor agreement. Retained original reports remain availab
 Inspect the installed package's scope before running the checks:
 
 ```sh
-python -m mojolearn verify          # inference + classical training, base fixture
 python -m mojolearn verify --quick  # representative checks, same combined scope
-python -m mojolearn verify --light  # eight tiny tape/numerical bitwise fixtures
-python -m mojolearn verify --light --self-test  # also catch and restore numerical faults
+python -m mojolearn verify  # includes bounded public API checks and fault controls
 python -m mojolearn verify --neural-training  # explicit neural training scope
 python -m mojolearn verify --neural-training --all  # neural scope, all nine fixtures
 python -m mojolearn verify --coverage
@@ -49,27 +47,36 @@ python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
 ```
 
-`--light` checks 118 outputs using at most sixteen elements per input, one
-execution per fixture and one update per optimizer. It covers tape operations,
-layout, first and second derivatives, optimizer state, checkpoint restoration,
-captured programs, convolution, losses and FP32 edge values. It records and
-compares exact bytes, shapes and dtypes against the same-release Apple, NVIDIA
-and AMD witnesses. There are no timing or quality measurements. Use
-`--light-output DIRECTORY` to retain the actual output bytes and binary hashes.
-This small scope supplements the estimator lanes; it does not certify every
-endpoint or possible input. A release label or packaging change can reuse
-these witnesses when the native bytes and fixtures are unchanged. Changed
-artifacts need current-release witnesses and read `OWED`; outputs are never
-required to remain unchanged across releases.
+The normal command includes bounded public endpoint fixtures and TAPE checks.
+There is no separate light mode. Fixtures use small fixed inputs and bounded
+iterations. Explicit optimizer and trainer fixtures use a single update. Numerical outputs are compared as exact bytes, shapes
+and dtypes. Metadata, availability and refusal checks are reported separately
+from numerical executions. These checks do not measure performance or quality.
 
-With `--light --self-test`, nine test-only faults alter the public operation
-executed by native kernels, the backward seed, optimizer rate or restored
-parameter. Every tiny fixture has a fault. Each must change consumed bits and
-then match again after restoration; crashes and missing outputs do not count
-as catches. These controls do not claim to mutate native kernel source.
+The endpoint registry accounts for all 1,275 entries from the gap audit,
+including inherited methods the static census assigned to classes that do not
+expose them. An availability check is not numerical coverage. A missing fixture,
+failed operation or missing current-release reference cannot become a pass.
+The JSON report retains endpoint results and loaded native artifact hashes.
+`verify` and `verify --all` include all additions. `verify --neural-training`
+selects the neural, TAPE, optimizer, training, model and associated metadata
+checks, including their fault controls. An explicit `--lanes` selection retains
+its requested lane scope; `--models-only` retains its inference-only scope.
 
-Default and quick verification combine inference with classical training. Neither
-runs neural training. `--all` (or `--full`) expands this same routine scope to
+All devices compare against one current-release reference. Reference availability
+is separate from cross-device validation: the report records how many checks
+actually completed on each device, including failures and untested vendors.
+
+Fault controls also run by default. They alter actual public operations, seeds,
+optimizer settings or restored parameters and consume the resulting outputs.
+Each must change the output and match again after restoration. A crash does
+not count as a numerical catch. These controls do not claim to mutate every
+native kernel's source. The existing native-kernel negative controls retain
+their separate recorded scope.
+
+Default and quick verification combine inference with classical training. The
+bounded endpoint fixtures include tiny neural updates; neither runs a neural
+training campaign. `--all` (or `--full`) expands this same routine scope to
 all nine fixtures; `--neural-training` selects neural training, backward and
 optimizer fixtures separately, and can be combined with `--all`. Quick selects
 one eligible referenced lane per family after excluding neural training.
