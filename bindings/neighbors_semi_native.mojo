@@ -13,7 +13,8 @@
 # `_lazy_out._empty_out` made them (the opt-in MOJOLEARN_XN_LAZY_OUT
 # anonymous-map backing is a memory placement only: the same zeros, the
 # same bits). Import-time switches the Python module read once
-# (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
+# (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
+from the
 # context, where the module put them at its import.
 from std.memory import bitcast
 from std.python import Python, PythonObject
@@ -85,20 +86,21 @@ def _semi_addr(value: PythonObject) raises -> PythonObject:
 def _semi_op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,
              context: PythonObject) raises:
     """`_XNeighbors._op`: the binding's `xn_<name>(addrs, ints, floats)`."""
-    var entry = family_entry(binding, "xn_" + name, context)
-    _ = family_call(entry, addrs, ints, floats)
+    xn_execute(binding, name, addrs, ints, floats)
 
 
 def _semi_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     """`NumericModeMixin.numeric_mode_used` on the resolved binding."""
+    if not xn_is_module(binding):
+        return PythonObject("identical")
     var b = _semi_b()
-    var full = String(py_call(b.getattr, binding, PythonObject("__name__")))
+    var full = String(py_call(b.getattr, xn_module(binding), PythonObject("__name__")))
     var dotted = full.split(".")
     var name = String(dotted[len(dotted) - 1])
     var stem = String("mojolearn")
     if name != "_mojolearn":
         stem = String(name.removeprefix("_mojolearn_"))
-    var getter = family_call(b.getattr, binding, PythonObject(stem + "_numeric_mode"), PythonObject(None))
+    var getter = family_call(b.getattr, xn_module(binding), PythonObject(stem + "_numeric_mode"), PythonObject(None))
     if getter is not None:
         var code = family_call(getter)
         var table = context["backend_fields"]["_CODE_MODE"]
@@ -125,7 +127,7 @@ def _semi_kfeat_flags(binding: PythonObject, context: PythonObject) raises -> In
     if not _semi_fast_tier(binding, context):
         return 0
     var b = _semi_b()
-    var fn_obj = family_call(b.getattr, binding, PythonObject("x_neighbors_kfeat_flags"), PythonObject(None))
+    var fn_obj = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_kfeat_flags"), PythonObject(None))
     if fn_obj is None:
         return 0
     return _semi_int(family_call(fn_obj))
@@ -262,7 +264,7 @@ def _schi2_weights(fields: PythonObject, binding: PythonObject, context: PythonO
     var z = py_get(fields, PythonObject("_schi2_z"), PythonObject(None))
     if z is not None:
         var w = _semi_out(py_call(b.tuple, z.shape), "<f4", context)
-        var entry = family_call(b.getattr, binding, PythonObject("x_neighbors_kfeat_schi2_weights"))
+        var entry = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_kfeat_schi2_weights"))
         _ = family_call(entry, _semi_addr(z), _semi_addr(w), PythonObject(Int(py=z.size)))
         _ = z  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
@@ -340,7 +342,7 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
         else:
             w = _schi2_weights(fields, binding, context)
         var out = _semi_out(Python.tuple(n, nc), "<f4", context)
-        var entry = family_call(b.getattr, binding, PythonObject("x_neighbors_kfeat_schi2_transform"))
+        var entry = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_kfeat_schi2_transform"))
         var pending = 0 if z is None else 1
         var weights_in = w if z is None else z
         var weights_out = PythonObject(0) if z is None else _semi_addr(w)
@@ -538,7 +540,7 @@ def _lp_alpha_f32(fields: PythonObject, spreading: Bool) raises -> Float64:
 def _lp_fast_resident(binding: PythonObject) raises -> Bool:
     """`_lp_fast_resident`: the resident kNN-graph loop compiled in."""
     var b = _semi_b()
-    var fn_obj = family_call(b.getattr, binding, PythonObject("x_neighbors_lp_fast_resident"), PythonObject(None))
+    var fn_obj = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_lp_fast_resident"), PythonObject(None))
     return fn_obj is not None and _semi_int(family_call(fn_obj)) != 0
 
 
@@ -554,7 +556,7 @@ def _lp_build_graph(model: PythonObject, fields: PythonObject, binding: PythonOb
         raise Error("NotImplementedError: " + String(py_type(model).__name__) + ": kernel=" + family_repr(kernel)
                     + " is not implemented ('rbf' or 'knn')")
     var a = _semi_rbf(binding, x, x, family_field(fields, "gamma"), context)
-    var flag = family_call(b.getattr, binding, PythonObject("x_neighbors_classical_graph_normalization"), PythonObject(None))
+    var flag = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_classical_graph_normalization"), PythonObject(None))
     var raw = flag is not None and _semi_truth(family_call(flag))
     py_setitem(fields, "_classical_raw_graph", PythonObject(raw))
     if raw:
@@ -757,8 +759,9 @@ def _lp_predict(model: PythonObject, binding: PythonObject, source: PythonObject
 # ---------------------------------------------------------------- dispatch
 
 
-def neighbors_semi_operation(model: PythonObject, operation: String, args: PythonObject,
+def neighbors_semi_operation(model: PythonObject, operation: String, var args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
+    args = xn_admit_arguments(args)
     classical_connect_numpy(context)
     if operation == "family_xn_semi_achi2_fit":
         _achi2_fit(model, args, context)

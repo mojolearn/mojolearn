@@ -8,6 +8,7 @@
 # `xn_matmul`, `xn_unary`, `xn_p2m_sign_label`) with the same buffers and the
 # same int and float parameter lists, in the same order, plus the base
 # binding's `gather_i32` and `cast_elements`: the bits do not move.
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array
@@ -32,7 +33,7 @@ def _a(value: PythonObject) raises -> PythonObject:
 def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,
         context: PythonObject) raises:
     """`_XNeighbors._op`: the binding's `xn_<name>(addresses, ints, floats)`."""
-    _ = family_call(family_entry(binding, "xn_" + name, context), addrs, ints, floats)
+    xn_execute(binding, name, addrs, ints, floats)
 
 
 def _f32_scalar(value: Float64) -> Float64:
@@ -93,13 +94,18 @@ def _fast_tier(binding: PythonObject, context: PythonObject) -> Bool:
     """`_XNeighbors._fast_tier`: the bound binary's compile-time numeric
     mode (`numeric_mode_used`) is 'fast'; False when it cannot be read."""
     try:
+        if not xn_is_module(binding):
+            return False
+    except:
+        pass
+    try:
         var b = svc_builtins()
-        var full = String(binding.__name__)
+        var full = String(xn_module(binding).__name__)
         var parts = family_call(PythonObject(full).split, PythonObject("."))
         var name = String(parts[len(parts) - 1])
         var prefix = String("mojolearn") if name == "_mojolearn" else String(
             py_call(PythonObject(name).removeprefix, PythonObject("_mojolearn_")))
-        var getter = py_call(b.getattr, binding, PythonObject(prefix + "_numeric_mode"), PythonObject(None))
+        var getter = py_call(b.getattr, xn_module(binding), PythonObject(prefix + "_numeric_mode"), PythonObject(None))
         if getter is not None:
             var mode = py_get(context["backend_fields"]["_CODE_MODE"], py_call(getter), PythonObject(None))
             return mode is not None and String(mode) == "fast"
@@ -193,12 +199,12 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
             xw = _take_rows(binding, x, rows, m, context)
         # the resident solve: the Gram on the device, solved there
         var entry = "x_neighbors_ocsvm_resident" if _fast_tier(binding, context) else "x_neighbors_ocsvm_resident_idn"
-        res_fn = py_call(b.getattr, binding, PythonObject(entry), PythonObject(None))
+        res_fn = py_call(b.getattr, xn_module(binding), PythonObject(entry), PythonObject(None))
         if res_fn is None:
             q = _kernel(binding, xw, xw, Int(py=context["family_svc_xn_kernels"][kernel]), gamma, coef0, degree, context)
     # libsvm's start (solve_one_class), three device launches
     var alpha = family_array(Python.tuple(PythonObject(m)), "<f4", context)
-    _ = family_call(family_entry(binding, "x_neighbors_ocsvm_alpha_init", context), Python.list(_a(cv), _a(alpha)),
+    _ = family_call(family_entry(xn_module(binding), "x_neighbors_ocsvm_alpha_init", context), Python.list(_a(cv), _a(alpha)),
                     _dims(m), Python.list(PythonObject(nu)))
     _ = alpha  # keep the Python object alive through the native call above
     var info = family_array(Python.tuple(PythonObject(1)), "<f4", context)
@@ -347,9 +353,10 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     return out
 
 
-def svc_ocsvm_operation(model: PythonObject, operation: String, args: PythonObject,
+def svc_ocsvm_operation(model: PythonObject, operation: String, var args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """OneClassSVM; args[0] is the resolved `_mojolearn_x_neighbors` binding."""
+    args = xn_admit_arguments(args)
     classical_connect_numpy(context)
     if operation == "family_svc_ocsvm_fit":
         _ocsvm_fit(model, args[0], args[1], args[2], context)

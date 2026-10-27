@@ -80,6 +80,9 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
         args = estimator_arguments(model, "_mojolearn_svm", args, context)
     elif operation.startswith("family_kmeans_"):
         args = estimator_arguments(model, "_mojolearn", args, context)
+    if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
+            or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
+        args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
