@@ -27,8 +27,12 @@ from bindings.generation_buffers import (
 )
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block, _model_f32
-from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths
+from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words
 from bindings.neural_prefill_native import _prefill_mamba3_reports
+from providers.python.neural_descriptor_pyapi import (
+    neural_descriptor_handle, neural_descriptor_reserved_execute,
+    neural_descriptor_execute, neural_descriptor_matches,
+)
 from bindings.samba_inference_native import _m3_shapes, _m3_names, _m3_state_call
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
@@ -130,7 +134,7 @@ def _m3_checked_weights(block: PythonObject, fields: PythonObject, context: Pyth
 
 
 def mamba3_install_owned(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(prefill session, binding, generation)`; the glue assigns all three."""
+    # Publish session, binding and generation together after successful upload.
     var bi = Python.import_module("builtins")
     var fields = block.__dict__
     var entries = _m3_entries(block, fields, context)
@@ -145,9 +149,23 @@ def mamba3_install_owned(block: PythonObject, context: PythonObject) raises -> P
     var addresses = py_ints([])
     for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
         _ = py_call(addresses.append, generation_address(weights[i], keep))
-    var generation = py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), session, addresses, fields["d_model"])
+    var generation = PythonObject(None)
+    var native = py_get(fields, "_native_mamba_block_provider_cache")
+    if neural_descriptor_matches(native, canonical):
+        var handle = neural_descriptor_handle(native,
+            _native_function(entries, "mamba_prefill_native_handle_v1"), session)
+        generation = PythonObject(neural_descriptor_reserved_execute(native, session, handle, 0, 1, 15,
+            _neural_int_words(addresses), [Int(py=fields["d_model"])], []))
+    else:
+        native = PythonObject(None)
+        generation = py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), session, addresses, fields["d_model"])
+    py_setitem(fields, "_prefill_session", session)
+    py_setitem(fields, "_prefill_binding", canonical)
+    py_setitem(fields, "_owned_generation", generation)
+    py_setitem(fields, "_owned_native_provider", native)
+    py_setitem(fields, "_owned_restore_pending", False)
     _ = keep^
-    return Python.tuple(session, canonical, generation)
+    return generation
 
 
 def mamba3_release_owned(block: PythonObject) raises -> PythonObject:
@@ -155,10 +173,17 @@ def mamba3_release_owned(block: PythonObject) raises -> PythonObject:
     var session = py_get(fields, "_prefill_session")
     var binding = py_get(fields, "_prefill_binding")
     if session is not None and binding is not None:
-        _ = py_call(_native_function(binding, "mamba3_prefill_session_close"), session)
+        var native = py_get(fields, "_owned_native_provider")
+        if neural_descriptor_matches(native, binding):
+            var handle = neural_descriptor_handle(native,
+                _native_function(binding, "mamba_prefill_native_handle_v1"), session)
+            _ = neural_descriptor_execute(native, 18, [], [handle], [], False)
+        else:
+            _ = py_call(_native_function(binding, "mamba3_prefill_session_close"), session)
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_prefill_binding", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
+    py_setitem(fields, "_owned_native_provider", PythonObject(None))
     py_setitem(fields, "_owned_restore_pending", PythonObject(False))
     return PythonObject(None)
 
@@ -206,7 +231,16 @@ def mamba3_export_owned(block: PythonObject) raises -> PythonObject:
         var array = generation_array(shapes[i])
         _ = py_call(arrays.append, array)
         _ = py_call(addresses.append, generation_address(array, keep))
-    _ = py_call(_native_function(fields["_prefill_binding"], "mamba3_prefill_session_export_weights"), fields["_prefill_session"], addresses, generation)
+    var binding = fields["_prefill_binding"]
+    var session = fields["_prefill_session"]
+    var native = py_get(fields, "_owned_native_provider")
+    if neural_descriptor_matches(native, binding):
+        var handle = neural_descriptor_handle(native,
+            _native_function(binding, "mamba_prefill_native_handle_v1"), session)
+        _ = neural_descriptor_reserved_execute(native, session, handle, 0, 1, 17,
+            _neural_int_words(addresses), [Int(py=generation)], [])
+    else:
+        _ = py_call(_native_function(binding, "mamba3_prefill_session_export_weights"), session, addresses, generation)
     var result = bi.dict()
     var names = block._W_NAMES
     for i in range(len(names)):  # driver-loop: over named parameter slots
@@ -230,6 +264,10 @@ def mamba3_getstate(block: PythonObject) raises -> PythonObject:
     py_setitem(result, "_owned_generation", PythonObject(None))
     _ = py_call(result.pop, "_prefill_session", PythonObject(None))
     _ = py_call(result.pop, "_prefill_binding", PythonObject(None))
+    var transient_names = [String("_owned_native_provider"), String("_native_mamba_block_provider_cache"),
+                           String("_native_mamba_state"), String("_native_forward_owner")]
+    for name in transient_names:  # driver-loop: over ephemeral native owners excluded from serialized model state
+        _ = py_call(result.pop, name, PythonObject(None))
     return result
 
 
@@ -239,6 +277,8 @@ def mamba3_setstate(block: PythonObject, state: PythonObject) raises -> PythonOb
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_prefill_binding", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
+    py_setitem(fields, "_owned_native_provider", PythonObject(None))
+    py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
     return PythonObject(None)
 
 

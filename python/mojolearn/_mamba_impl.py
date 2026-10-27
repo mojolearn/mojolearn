@@ -1235,10 +1235,8 @@ class Mamba3Block(_MambaBase):
         unaffected. Needs a binding that provides owned weights; otherwise
         `RuntimeError`.
         """
-        self._prefill_session, self._prefill_binding, self._owned_generation = _native_neural_bridge.RUNTIME.mamba_native_call(
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
             "install_owned", (self,), _native_neural_bridge.CONTEXT)
-        self._owned_restore_pending = False
-        return self._owned_generation
 
     def release_owned_weights(self):
         """Drop the weight snapshot; later calls read your weight arrays again."""

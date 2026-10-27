@@ -12,7 +12,7 @@ from std.memory import memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries
 from bindings.samba_training_native import samba_ids
-from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths
+from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings
@@ -146,8 +146,13 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
         if neural_descriptor_matches(admitted, canonical):
             native = admitted
     if on_session:
-        updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], py_ints(addresses),
-                          Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
+        var owned_native = py_get(fields, "_native_mamba_block_provider_cache")
+        if neural_descriptor_matches(owned_native, canonical):
+            updated = PythonObject(neural_mamba_session_call(owned_native, fields, entries, 16,
+                addresses, [b, 1 if step else l, d, q, pending, Int(py=owned), 1 if step else 0]))
+        else:
+            updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], py_ints(addresses),
+                              Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
         _ = output  # keep the Python object alive through the native call above
     elif native is not None:
         var ints: List[Int] = [b, d, q, pending] if step else [b, l, d, q, pending]

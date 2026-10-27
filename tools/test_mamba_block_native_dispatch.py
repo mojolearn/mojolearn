@@ -44,3 +44,18 @@ def test_all_backward_and_prefill_dispatch_modes_reach_native_table():
         assert f'neural_mamba_session_call(native, fields, entries, {operation},' in PREFILL
     assert 'neural_descriptor_execute(native, 5,' in PREFILL
     assert 'py_call_typed(selected["all_finite_f32"]' not in PUBLIC
+
+
+def test_owned_snapshot_execution_and_publication_remain_atomic():
+    source = (ROOT/'bindings/mamba_public_native.mojo').read_text()
+    install = source.split('def mamba3_install_owned(')[1].split('def mamba3_release_owned')[0]
+    assert install.index('neural_descriptor_reserved_execute') < install.index('py_setitem(fields, "_prefill_session"')
+    assert 'return generation' in install
+    for owner in ('_m3_install_weights_run', '_m3_export_weights_run', '_mamba3_run_owned'):
+        assert owner in NATIVE
+    dispatch = NATIVE.split('if op == 15:')[1].split('if op == 17:')[0]
+    assert 'owner[].usable = False' not in dispatch
+    assert 'py_setitem(fields, "_owned_native_provider", native)' in source
+    assert 'String("_owned_native_provider")' in source.split('def mamba3_getstate')[1]
+    owned_state = (ROOT/'bindings/samba_inference_native.mojo').read_text()
+    assert 'neural_mamba_session_call(owned_native, fields, entries, 16,' in owned_state
