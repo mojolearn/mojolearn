@@ -222,10 +222,19 @@ def sequential_layers(model: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def sequential_sample(model: PythonObject, value: PythonObject) raises -> PythonObject:
+    # The public sample-inspection operation admits current shape metadata.
+    var shape = value.shape
+    var dims = List[Int]()
+    for k in range(Int(py=value.ndim)):  # driver-loop: over input rank metadata
+        dims.append(Int(py=shape[k]))
+    return sequential_sample_shape(model, dims)
+
+
+def sequential_sample_shape(model: PythonObject, dims: List[Int]) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     var shape = fields["input_shape"]
-    var nd = Int(py=value.ndim)
+    var nd = len(dims)
     var needed = shape is not None or nd > 2
     var layers = fields["_layers"]
     for k in range(len(layers)):  # driver-loop: over shape-changing layer kinds
@@ -234,7 +243,7 @@ def sequential_sample(model: PythonObject, value: PythonObject) raises -> Python
         return PythonObject(None)
     var actual = Python.list()
     for k in range(1, nd):  # driver-loop: over the input sample rank
-        _ = py_call(actual.append, py_call(b.int, value.shape[k]))
+        _ = py_call(actual.append, PythonObject(dims[k]))
     if shape is None:
         if nd - 1 > 7:
             raise Error("a sample has at most 7 dimensions")

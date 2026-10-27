@@ -548,8 +548,11 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     """`_BaseMLP._forward(X, proba2)`."""
     var b = Python.import_module("builtins")
     var x = xseq_as_f32_c(source, 2, "X", context)
-    if not Bool(py=x.shape[1] == fields["n_features_in_"]):
-        raise Error("X has " + String(py=py_call(b.str, x.shape[1])) + " features, the model was fitted on "
+    var x_shape = x.shape
+    var rows = Int(py=x_shape[0])
+    var columns = Int(py=x_shape[1])
+    if not Bool(py=PythonObject(columns) == fields["n_features_in_"]):
+        raise Error("X has " + String(columns) + " features, the model was fitted on "
                     + String(py=py_call(b.str, fields["n_features_in_"])))
     var coefs = fields["coefs_"]
     var intercepts = fields["intercepts_"]
@@ -557,32 +560,34 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     var hidden = Python.list()
     var total = 0
     for l in range(layers):  # driver-loop: over network layers
-        total += Int(py=coefs[l].size) + Int(py=intercepts[l].size)
+        var weights = coefs[l]
+        var bias = intercepts[l]
+        total += Int(py=weights.size) + Int(py=bias.size)
         if l < layers - 1:
-            _ = py_call(_method(hidden, "append"), coefs[l].shape[1])
-    var rows = Int(py=x.shape[0])
+            _ = py_call(_method(hidden, "append"), weights.shape[1])
     var width = 2 if proba2 else Int(py=fields["n_outputs_"])
     var out = xseq_zeros(Python.tuple(rows, width), context)
     # the packed layout of the fitted weights, w then b of each layer
     var params = xseq_zeros(Python.tuple(total), context)
     var offset = 0
+    var destination = xseq_f32p(params)
     for l in range(layers):  # driver-loop: over network layers
         var w = xseq_f32(coefs[l], "coefs_", False, context)
         var count = Int(py=w.size)
         if count:
-            memcpy(dest=xseq_f32p(params) + offset, src=xseq_f32p(w), count=count)
+            memcpy(dest=destination + offset, src=xseq_f32p(w), count=count)
             _ = w  # keep the Python object alive through the native call above
             _ = params  # keep the Python object alive through the native call above
         offset += count
         var bias = xseq_f32(intercepts[l], "intercepts_", False, context)
         count = Int(py=bias.size)
         if count:
-            memcpy(dest=xseq_f32p(params) + offset, src=xseq_f32p(bias), count=count)
+            memcpy(dest=destination + offset, src=xseq_f32p(bias), count=count)
             _ = bias  # keep the Python object alive through the native call above
             _ = params  # keep the Python object alive through the native call above
         offset += count
     var out_act = Int(py=context["xseq_mlp_outputs"][fields["out_activation_"]])
-    var ip = Python.list(rows, x.shape[1], fields["n_outputs_"], context["xseq_mlp_activations"][fields["activation"]],
+    var ip = Python.list(rows, columns, fields["n_outputs_"], context["xseq_mlp_activations"][fields["activation"]],
                          out_act, 4096, len(hidden))
     _ = py_call(_method(ip, "extend"), hidden)
     if proba2:
