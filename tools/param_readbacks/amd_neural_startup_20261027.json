@@ -1,0 +1,748 @@
+{
+  "scope": "Startup readbacks only; no performance or correctness claim. MATCHED nested parity does not qualify failed or missing opponents.",
+  "remote_root": "/root/measure-smoke-20261027/run/campaign-loader-repair-0862",
+  "representatives": [
+    "gemm",
+    "sequential-fit",
+    "lm-forward",
+    "sequential-predict"
+  ],
+  "additional_all_torch_failure": "transformer-forward",
+  "rows": [
+    {
+      "recipe": "identical.neural.causal-lm-generate-smollm2.smollm2-135m.shape=full",
+      "lane": "causal-lm-generate-smollm2",
+      "dataset": "smollm2-135m",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.causal-lm-generate-smollm2.smollm2-135m.shape=full/raw/params-only/neural.causal-lm-generate-smollm2.smollm2-135m.shape=full/causal-lm-generate-smollm2.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "not_ready",
+          "failure": "KeyError('w:w1')",
+          "stage": "ready"
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.causal-lm-generate.mojolearn-162m.shape=full",
+      "lane": "causal-lm-generate",
+      "dataset": "mojolearn-162m",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.causal-lm-generate.mojolearn-162m.shape=full/raw/params-only/neural.causal-lm-generate.mojolearn-162m.shape=full/causal-lm-generate.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "not_ready",
+          "failure": "KeyError('w:w1')",
+          "stage": "ready"
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.gemm-bf16.gaussian.shape=full",
+      "lane": "gemm-bf16",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.gemm-bf16.gaussian.shape=full/raw/params-only/neural.gemm-bf16.gaussian.shape=full/gemm-bf16.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.gemm.gaussian.shape=full",
+      "lane": "gemm",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.gemm.gaussian.shape=full/raw/params-only/neural.gemm.gaussian.shape=full/gemm.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.gru-fit.higgs.shape=full",
+      "lane": "gru-fit",
+      "dataset": "higgs",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.gru-fit.higgs.shape=full/raw/params-only/neural.gru-fit.higgs.shape=full/gru-fit.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.lm-forward.bytes.shape=full",
+      "lane": "lm-forward",
+      "dataset": "bytes",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.lm-forward.bytes.shape=full/raw/params-only/neural.lm-forward.bytes.shape=full/lm-forward.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.lm-train-step.bytes.shape=full",
+      "lane": "lm-train-step",
+      "dataset": "bytes",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.lm-train-step.bytes.shape=full/raw/params-only/neural.lm-train-step.bytes.shape=full/lm-train-step.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.lstm-fit.higgs.shape=full",
+      "lane": "lstm-fit",
+      "dataset": "higgs",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.lstm-fit.higgs.shape=full/raw/params-only/neural.lstm-fit.higgs.shape=full/lstm-fit.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.mlp-fit.higgs.shape=full",
+      "lane": "mlp-fit",
+      "dataset": "higgs",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.mlp-fit.higgs.shape=full/raw/params-only/neural.mlp-fit.higgs.shape=full/mlp-fit.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.mlp-predict.gaussian.shape=full",
+      "lane": "mlp-predict",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.mlp-predict.gaussian.shape=full/raw/params-only/neural.mlp-predict.gaussian.shape=full/mlp-predict.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.mlp-train-step.gaussian.shape=full",
+      "lane": "mlp-train-step",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.mlp-train-step.gaussian.shape=full/raw/params-only/neural.mlp-train-step.gaussian.shape=full/mlp-train-step.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.ops-session-step.gaussian.shape=full",
+      "lane": "ops-session-step",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.ops-session-step.gaussian.shape=full/raw/params-only/neural.ops-session-step.gaussian.shape=full/ops-session-step.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.program-run.gaussian.shape=full",
+      "lane": "program-run",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.program-run.gaussian.shape=full/raw/params-only/neural.program-run.gaussian.shape=full/program-run.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.rnn-fit.higgs.shape=full",
+      "lane": "rnn-fit",
+      "dataset": "higgs",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.rnn-fit.higgs.shape=full/raw/params-only/neural.rnn-fit.higgs.shape=full/rnn-fit.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.sequential-fit.synthetic.shape=full",
+      "lane": "sequential-fit",
+      "dataset": "synthetic",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.sequential-fit.synthetic.shape=full/raw/params-only/neural.sequential-fit.synthetic.shape=full/sequential-fit.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.sequential-predict.synthetic.shape=full",
+      "lane": "sequential-predict",
+      "dataset": "synthetic",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.sequential-predict.synthetic.shape=full/raw/params-only/neural.sequential-predict.synthetic.shape=full/sequential-predict.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.tape-user-model.higgs.shape=full",
+      "lane": "tape-user-model",
+      "dataset": "higgs",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.tape-user-model.higgs.shape=full/raw/params-only/neural.tape-user-model.higgs.shape=full/tape-user-model.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.transformer-decode.gaussian.shape=full",
+      "lane": "transformer-decode",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.transformer-decode.gaussian.shape=full/raw/params-only/neural.transformer-decode.gaussian.shape=full/transformer-decode.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        }
+      ]
+    },
+    {
+      "recipe": "identical.neural.transformer-forward.gaussian.shape=full",
+      "lane": "transformer-forward",
+      "dataset": "gaussian",
+      "record": "campaign-loader-repair-0862/smoke/recipes/identical.neural.transformer-forward.gaussian.shape=full/raw/params-only/neural.transformer-forward.gaussian.shape=full/transformer-forward.params.json",
+      "nested_parity": "MATCHED",
+      "problems": [],
+      "arms": [
+        {
+          "arm": "ours",
+          "status": "ok",
+          "failure": null,
+          "stage": null
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        },
+        {
+          "arm": "torch-eager-fp32",
+          "status": "not_ready",
+          "failure": "SIGSEGV",
+          "stage": "ready"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "recipes": 19,
+    "intended_workers": 87,
+    "ready_workers": 47,
+    "failed_workers": 40,
+    "sigsegv": 38,
+    "generation_constructor_keyerror": 2,
+    "proven_parameter_mismatches": 0
+  },
+  "acceptance": {
+    "checker": "check_neural_startup_readbacks.py",
+    "expected_arms": [
+      "ours",
+      "torch-eager-fp32",
+      "torch-compile-fp32",
+      "torch-eager-bf16",
+      "torch-compile-bf16"
+    ],
+    "scope": "Requires complete worker records, explicit no pre-clock fit, no recorded rounds, and all-arm nested parity. Retain source params-only early-return guard separately; no recorded rounds alone cannot exclude hidden constructor work.",
+    "cpu_tests": 7,
+    "historical_replays_rejected": 19,
+    "standalone_gemm_accepted": true
+  }
+}
