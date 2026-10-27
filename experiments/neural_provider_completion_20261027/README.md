@@ -32,7 +32,7 @@ runtime coverage. The source dependency guard is separate evidence.
 - Samba mixed-layer forward/decode still traverses Python-held layer/state
   objects. Move descriptors/counters into native operation-local state.
 - Shared native operation locks are implemented for candidate construction,
-  but shared mixed-layer orchestration and restored Transformer locks remain
+  but shared mixed-layer orchestration remains
   to migrate; preserve per-layer wait order and never pre-acquire all locks.
 - Immutable Transformer/Mamba tape computation is now descriptor-driven on
   the candidate route; focused runtime consumption/concurrency coverage is pending.
@@ -59,8 +59,9 @@ there are no Python acquire/release/context-manager implementations.
 Candidate identical Transformer construction creates this lock when the native
 dispatch switch is enabled. Standalone fresh/carried forward, backward and tape
 boundary calls use its lease directly. Legacy exact `_thread.RLock` instances
-remain compatible under an explicitly separate legacy path; serialized objects
-whose old `__setstate__` recreates those locks are not claimed migrated yet.
+remain compatible under an explicitly separate legacy path. Transformer
+serialization now calls one native boundary and reconstructs the native lock
+for the candidate, excluding session/provider owners from saved model state.
 
 `native_lock_probe.py` is authored, not executed: recursion, contended waiting,
 timeout, wrong-thread release, exception cleanup, public forward byte equality,
@@ -95,3 +96,9 @@ later bindings change. Serialization drops the native provider references and
 lazily restores owned snapshots as before. Arithmetic helpers, generation checks
 and copy-on-install failure behavior are unchanged; the NN40 compile arm remains
 opt-in. Source checks pass, but owned-weight runtime coverage remains pending.
+
+Transformer serialization now preserves arithmetic-profile validation without
+calling its Python `_extension` helper. Both pickle methods are single native
+calls; restore creates the candidate native lock and clears ephemeral session
+owners. `native_lock_probe.py` additionally checks restored lock type and public
+forward bytes. This probe is still authored-only, not runtime evidence.

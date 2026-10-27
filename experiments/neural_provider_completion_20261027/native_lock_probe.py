@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import pickle
 from pathlib import Path
 import tempfile
 import threading
@@ -63,6 +64,12 @@ def qualify():
         block = TransformerBlock(weights, numeric_mode='identical', **options)
         assert type(block._runtime_lock) is _OperationLock
         expected = np.asarray(block.forward(x)).copy()
+        state_audit = audit_native_call(block.__getstate__)
+        state = state_audit.assert_native()
+        assert '_runtime_lock' not in state and '_native_forward_owner' not in state
+        restored = pickle.loads(pickle.dumps(block))
+        assert type(restored._runtime_lock) is _OperationLock
+        assert np.asarray(restored.forward(x)).tobytes() == expected.tobytes()
         calls = []
         def poison(*args, **kwargs):
             calls.append('Python lock callback')

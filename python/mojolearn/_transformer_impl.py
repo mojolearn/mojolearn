@@ -784,19 +784,12 @@ class TransformerBlock(NumericModeMixin):
         return addrs + self._tail_addrs(), params + list(self._opts_tail)
 
     def __getstate__(self):
-        # Device contexts and thread locks cannot cross serialization/copy.
-        # Only ordinary model state is saved; GPU ownership is recreated lazily.
-        self._extension()  # admit and save the binding's arithmetic version
-        state = self.__dict__.copy()
-        for name in ("_runtime_lock", "_native_session", "_session_binding"):  # glue: drops three cached attributes
-            state.pop(name, None)
-        return state
+        return _native_neural_bridge.RUNTIME.neural_block_getstate(
+            self, _native_neural_bridge.CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._runtime_lock = threading.RLock()
-        self._native_session = None
-        self._session_binding = None
+        return _native_neural_bridge.RUNTIME.neural_block_setstate(
+            self, state, _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size, max_tokens):
         """A zero `TransformerState` for `batch_size` sequences of up to `max_tokens` positions each.
