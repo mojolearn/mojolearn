@@ -32,6 +32,7 @@ from bindings.py_typed_call import py_call_typed
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value
+from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
 from bindings.native_json import native_json_parse, native_json_parse_unique, native_path
 from bindings.native_transport import _transport_json
 from core.parallel_mlp_native_impl import mlp_targets_into
@@ -390,17 +391,8 @@ def _targets_in(value: PythonObject, rows: Int) raises -> List[Int32]:
 
 
 def _scalar(value: PythonObject, name: String) raises -> Float64:
-    if _is_bool(value):
-        raise Error("SmallMLPTrainer " + name + " must be a finite float32 scalar")
-    var number: Float64
-    try:
-        number = Float64(py=value.__getattr__("__float__")())
-    except:
-        raise Error("SmallMLPTrainer " + name + " must be a scalar")
-    if not isfinite(number) or abs(number) > Float64(3.4028234663852886e38):
-        raise Error("SmallMLPTrainer " + name + " must be finite float32")
-    # One round-to-nearest-even to binary32 and back.
-    return Float64(Float32(number))
+    return training_f32_scalar(value, "SmallMLPTrainer " + name,
+        SMALL_MLP_BOUNDARY.get_or_create_ptr()[].admission)
 
 
 def _config_into(mut state: MlpState, lr: PythonObject, betas: PythonObject,
@@ -431,58 +423,10 @@ def _config_into(mut state: MlpState, lr: PythonObject, betas: PythonObject,
         raise Error("SmallMLPTrainer betas must remain in [0, 1) in float32")
 
 
-def _schedule_walk(value: PythonObject, depth: Int, mut budget: Int) raises:
-    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    budget -= 1
-    if depth > 8 or budget < 0:
-        raise Error("SmallMLPTrainer data_schedule is too complex")
-    var cls = value.__class__
-    if cls is bi.dict:
-        var count = len(value)
-        var keys = List[PythonObject]()
-        var items = value.__getattr__("__iter__")()
-        for _ in range(min(count, 129)):  # small-loop(keys: schedule JSON keys, at most 128)
-            var key = items.__getattr__("__next__")()
-            if key.__class__ is not bi.str:
-                raise Error("SmallMLPTrainer data_schedule keys must be strings")
-            keys.append(key)
-        if count > 128:
-            raise Error("SmallMLPTrainer data_schedule object is too large")
-        for i in range(len(keys)):  # small-loop(keys: schedule JSON keys, at most 128)
-            if len(keys[i]) > 2048:
-                raise Error("SmallMLPTrainer data_schedule object is too large")
-        for i in range(len(keys)):  # small-loop(keys: schedule JSON members, at most 128)
-            _schedule_walk(value[keys[i]], depth + 1, budget)
-    elif cls is bi.list:
-        if len(value) > 128:
-            raise Error("SmallMLPTrainer data_schedule list is too large")
-        for i in range(len(value)):  # small-loop(value: schedule JSON list, at most 128)
-            _schedule_walk(value[i], depth + 1, budget)
-    elif cls is bi.str:
-        if len(value) > 2048:
-            raise Error("SmallMLPTrainer data_schedule string is too large")
-    elif cls is bi.int:
-        if Int(py=value.bit_length()) > 4096:
-            raise Error("SmallMLPTrainer data_schedule integer is too large")
-    elif value is not None and cls is not bi.float and cls is not bi.bool:
-        raise Error("SmallMLPTrainer data_schedule must contain JSON values")
-
-
 def _schedule_text(value: PythonObject) raises -> String:
     """The schedule's canonical JSON (sorted keys, compact, ASCII), bounded."""
-    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    if not _is_dict(value) or len(value) == 0:
-        raise Error("SmallMLPTrainer data_schedule must be a nonempty JSON object")
-    var budget = 128
-    _schedule_walk(value, 0, budget)
-    var text: String
-    try:
-        text = _transport_json(value)
-    except:
-        raise Error("SmallMLPTrainer data_schedule must be finite JSON")
-    if text.byte_length() > 2048:
-        raise Error("SmallMLPTrainer data_schedule exceeds 2048 bytes")
-    return text
+    return training_schedule_json(value, 128, 2048, "SmallMLPTrainer data_schedule",
+        SMALL_MLP_BOUNDARY.get_or_create_ptr()[].admission)
 
 
 def _is_dict(value: PythonObject) raises -> Bool:

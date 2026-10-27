@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded Apple ByteLM comparison. Constructors/legacy CPU are not qualified here."""
+"""Bounded Apple ByteLM comparison. Legacy CPU is not qualified here."""
 import argparse
 import gc
 import hashlib
@@ -28,10 +28,14 @@ def run(output, baseline=None):
     ids=np.array([[1,3,5]],dtype='i4')
     training=np.array([[1,3,5,7,9]],dtype='i4')
     for resident in (True,False):
-        # Construction is deliberately outside this probe's claimed runtime
-        # coverage until the independent public-constructor migration completes.
-        model=LanguageModelTrainer(params,data_schedule={'batch_size':1,'vocab_size':32},
-                                   shape=shape,resident=resident,step_result='lean' if resident else 'full')
+        kwargs=dict(data_schedule={'batch_size':1,'vocab_size':32}, shape=shape,
+                    resident=resident, step_result='lean' if resident else 'full')
+        if baseline:
+            audit=audit_native_call(LanguageModelTrainer,params,**kwargs)
+            audits.append(dict(operation='constructor',report=audit.report()))
+            model=audit.assert_native()
+        else:
+            model=LanguageModelTrainer(params,**kwargs)
         label='resident' if resident else 'stateless'
         held=call(model,'logits',ids)
         held_bytes=np.asarray(held).copy()
@@ -86,7 +90,7 @@ def run(output, baseline=None):
     return dict(status='passed',cells=len(values),baseline=str(baseline) if baseline else None,
                 arrays=str(output.with_suffix('.npz')),provider_counts=counts,runtime_audits=audits,
                 sha256={key:hashlib.sha256(value.tobytes()).hexdigest() for key,value in values.items()},
-                pending=['public constructor/evaluate/checkpoints','stateless training','CPU binding','other targets','full measurement'])
+                pending=['evaluate/checkpoints','stateless training','CPU binding','other targets','full measurement'])
 
 
 def main():
