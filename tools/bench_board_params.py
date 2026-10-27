@@ -694,7 +694,15 @@ def _read_params_object(obj):
                 # `_validate_params` derives `_cfg` at fit; derive it here the same way, on a fresh
                 # copy, so an unfitted estimator reads back what its fit would use. Nothing is fitted.
                 fresh = type(obj)(**obj.get_params())
-                fresh._validate_params()
+                # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: the old
+                # Python validation helper re-entered the parent constructor
+                # with the subclass's native storage hooks and was refused.
+                # Derive the actual fit configuration through the existing
+                # compiled initializer; this validates settings but never fits.
+                from mojolearn._forest_protocol import _TREES, _TREES_CONTEXT
+                kind = ("dt_classifier" if type(obj).__name__ == "DecisionTreeClassifier"
+                        else "dt_regressor")
+                _TREES(fresh, "trees_forest_initialize", (kind,), _TREES_CONTEXT)
                 cfg = getattr(fresh, "_cfg", None) or {}
             names = ("n_estimators", "bootstrap", "max_samples", "oob_score", "n_streams", "max_batch_size")
             got = dict(got)
