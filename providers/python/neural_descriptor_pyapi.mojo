@@ -4,7 +4,7 @@
 from std.ffi import c_int
 from std.os import getenv
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -32,6 +32,20 @@ struct NeuralDescriptorProvider(Movable, Writable):
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
+
+
+def neural_descriptor_capsule(name: String, entries: List[NativeDescriptorCall]) raises -> PythonObject:
+    # Shared table export for every engine. The caller MUST retain the name
+    # and entries in module-global native storage for the entire image lifetime;
+    # PyCapsule borrows both addresses and does not own or free either allocation.
+    if len(entries) != 1:
+        raise Error("native provider: a v1 descriptor table has one dispatch entry")
+    ref cpy = Python().cpython()
+    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        entries.unsafe_ptr(), name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
+    if not capsule:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=capsule)
 
 
 def neural_descriptor_connect(factory: PythonObject, var name: String, operation_count: Int = 6) raises -> PythonObject:
