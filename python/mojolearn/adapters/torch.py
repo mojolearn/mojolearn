@@ -120,7 +120,7 @@ def library_path():
         The installed ``mojolearn_torch.so``, usable with
         ``torch.ops.load_library`` in another process.
     """
-    return _shipped.path("torch")
+    return _shipped._NATIVE("path", ("torch",), _shipped._CONTEXT)
 
 
 def native_library_path():
@@ -131,4 +131,4 @@ def native_library_path():
     str
         The installed ``libmojolearn_adapter.so``.
     """
-    return _shipped.path("native")
+    return _shipped._NATIVE("path", ("native",), _shipped._CONTEXT)

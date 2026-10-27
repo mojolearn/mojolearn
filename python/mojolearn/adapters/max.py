@@ -84,8 +84,7 @@ def custom_extensions():
     list of pathlib.Path
         The installed ``mojolearn_ops.mojoc``.
     """
-    import pathlib
-    return [pathlib.Path(_shipped.path("max"))]
+    return _shipped._NATIVE("custom_extensions", (), _shipped._CONTEXT)
 
 
 def native_library_path():
@@ -96,7 +95,7 @@ def native_library_path():
     str
         The installed ``libmojolearn_adapter.so``.
     """
-    return _shipped.path("native")
+    return _shipped._NATIVE("path", ("native",), _shipped._CONTEXT)
 
 
 def parameters(**extra):
@@ -113,4 +112,4 @@ def parameters(**extra):
     dict
         ``{"library": <the native library path>, **extra}``.
     """
-    return dict(extra, library=native_library_path())
+    return _shipped._NATIVE("parameters", (extra,), _shipped._CONTEXT)
