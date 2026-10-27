@@ -10,7 +10,7 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape
-from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function, causal_transformer_admin
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
@@ -219,7 +219,7 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
         lock_lease.acquire()
     try:
         if transformer and fields["_native_session"] is not None and (not reuse or fields["_session_binding"] is not e["block_binding"]):
-            _ = py_call(_native_function(fields["_session_binding"], "transformer_session_close"), fields["_native_session"])
+            causal_transformer_admin(fields["_session_binding"], fields["_native_session"], 13)
             py_setitem(fields, "_native_session", PythonObject(None))
             py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
@@ -375,7 +375,7 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
         var native = PythonObject(None)
         if code == 1 and vendor != "cpu" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _native_function(entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 11)
+                _native_function(entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 14)
         py_setitem(fields, "_native_block_provider_cache", native)
     else:
         var native = PythonObject(None)
@@ -505,7 +505,7 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
             var session = Bool(py=py_call(bi.hasattr, entries, "transformer_session_backward")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
-                    _ = py_call(_native_function(fields["_session_binding"], "transformer_session_close"), fields["_native_session"])
+                    causal_transformer_admin(fields["_session_binding"], fields["_native_session"], 13)
                     py_setitem(fields, "_native_session", PythonObject(None))
                     py_setitem(fields, "_session_binding", PythonObject(None))
                 if fields["_native_session"] is None:
@@ -521,7 +521,7 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
                     _ = py_call(_native_function(entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
             else:
                 if fields["_native_session"] is not None and Bool(py=py_call(bi.hasattr, entries, "transformer_session_invalidate_tape")):
-                    _ = py_call(_native_function(entries, "transformer_session_invalidate_tape"), fields["_native_session"])
+                    causal_transformer_admin(entries, fields["_native_session"], 12)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
