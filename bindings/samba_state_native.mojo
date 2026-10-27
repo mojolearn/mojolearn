@@ -7,6 +7,8 @@ refused before execution under the native-only public runtime contract.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
+from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from std.memory import memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv
@@ -296,6 +298,9 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
     py_setattr(model, "_blocks", bi.list())
     var route = PythonObject("cpu" if context["vendor"] is None or String(context["vendor"]) == "cpu" else "gpu")
     var nc = context["neural"]
+    # Immutable ABI connection occurs once at model construction/restoration.
+    _ = neural_descriptor_cached(samba_fields(model), samba_entries(context, model.numeric_mode),
+        "_native_primitives", "neural_primitives_api_v1", String(PRIMITIVE_ABI_NAME), String(route) == "gpu")
     # Samba preserves its training block interfaces on CPU-only installs too.
     # The execution route still selects the installed native CPU kernels; only
     # the Python-facing class differs from checkpoint inference construction.

@@ -67,7 +67,7 @@ def test_old_and_direct_doors_share_the_exact_numerical_execution_function():
 def test_candidate_stays_opt_in_and_uses_native_vectors():
     public = source("bindings/causal_lm_public.mojo")
     assert public.count('getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")') == 1
-    assert 'mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1"' in public
+    assert 'mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1"' in public
     branch = public.split('if native_provider is not None and not profile')[1].split("        else:\n", 1)[0]
     assert "generation_native_forward(linked, a_words, p_words)" in branch
     assert "py_ints(" not in branch
