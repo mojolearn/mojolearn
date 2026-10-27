@@ -1,0 +1,176 @@
+{
+  "schema": "mojolearn.release.publication-summary.v1",
+  "version": "0.8.61",
+  "source_commit": "24de487667cb2a6085cad686cd07b4824aec6593",
+  "tool_commit": "7e3d95b9f626fe24ed622bbaab0b8148426a8b12",
+  "publication": {
+    "status": "PUBLISHED",
+    "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/40455587983",
+    "release": "https://github.com/mojolearn/mojolearn/releases/tag/alpha-api-0.8.61-20261027",
+    "artifacts": [
+      {
+        "distribution": "mojolearn",
+        "file": "mojolearn-0.8.61-py3-none-macosx_26_0_arm64.whl",
+        "scope": "qualified artifact bytes",
+        "sha256": "7f039b0541ce17c299acb2f70b9f511c9a33cc3083ceb90d63ebf0d31f68ba37",
+        "source_revision": "24de487667cb2a6085cad686cd07b4824aec6593",
+        "version": "0.8.61"
+      },
+      {
+        "distribution": "mojolearn",
+        "file": "mojolearn-0.8.61-py3-none-manylinux_2_35_x86_64.whl",
+        "scope": "file-free pinned dependencies",
+        "sha256": "acad2b07a6aa7ecd07ac0c689f477de052db9b362f9c46f8885be455336bfe37",
+        "source_revision": "24de487667cb2a6085cad686cd07b4824aec6593",
+        "version": "0.8.61"
+      },
+      {
+        "distribution": "mojolearn-amd",
+        "file": "mojolearn_amd-0.8.61-py3-none-manylinux_2_35_x86_64.whl",
+        "scope": "qualified artifact bytes",
+        "sha256": "b561aa62fda74dd82e93fb37735cabc2bbd3e63952214b336a83485ab4d28785",
+        "source_revision": "24de487667cb2a6085cad686cd07b4824aec6593",
+        "version": "0.8.61"
+      },
+      {
+        "distribution": "mojolearn-core",
+        "file": "mojolearn_core-0.8.61-py3-none-manylinux_2_35_x86_64.whl",
+        "scope": "qualified artifact bytes",
+        "sha256": "9c71348a7e1994eb891ec6348f14b76338c3ad8e4c74155ac774800daf176f80",
+        "source_revision": "24de487667cb2a6085cad686cd07b4824aec6593",
+        "version": "0.8.61"
+      },
+      {
+        "distribution": "mojolearn-nvidia",
+        "file": "mojolearn_nvidia-0.8.61-py3-none-manylinux_2_35_x86_64.whl",
+        "scope": "qualified artifact bytes",
+        "sha256": "f95f04ca52d50437fca22a5e8458bfa65f7172eb039e0606ef68cd5f054e9c11",
+        "source_revision": "24de487667cb2a6085cad686cd07b4824aec6593",
+        "version": "0.8.61"
+      },
+      {
+        "distribution": "mojolearn-nvidia-ptx",
+        "file": "mojolearn_nvidia_ptx-0.8.61-py3-none-manylinux_2_35_x86_64.whl",
+        "scope": "qualified artifact bytes",
+        "sha256": "ba7c2db0ce97f05980916f8c7d6556b11662b67c7a31818bc11595417eea5914",
+        "source_revision": "24de487667cb2a6085cad686cd07b4824aec6593",
+        "version": "0.8.61"
+      }
+    ]
+  },
+  "comparison": {
+    "verdict": "AGREE",
+    "exit": 0,
+    "agree": 306,
+    "differ": 0,
+    "incomparable": 0,
+    "uncomputed": 0,
+    "lanes": [
+      "gmm",
+      "gmm-random-init",
+      "gmm-sample",
+      "gmm-random-init-sample",
+      "x-cluster-bgmm",
+      "x-cluster-gmm-options",
+      "hf-causal-lm-text",
+      "sequence-tape-program"
+    ],
+    "fixtures": [
+      "base",
+      "ties",
+      "hashed",
+      "wide",
+      "denormal",
+      "denormal_ftz",
+      "dupes",
+      "odd",
+      "negative"
+    ],
+    "nvidia": {
+      "commit": "24de487667cb2a6085cad686cd07b4824aec6593",
+      "commit_source": "wheel COMMIT witness",
+      "cpu_model": "AMD EPYC 9554 64-Core Processor",
+      "device": "NVIDIA NVIDIA L40S, 595.91.07",
+      "device_class": "nvidia",
+      "mojolearn_version": "0.8.61",
+      "numeric_mode": "identical",
+      "numpy": "2.4.6",
+      "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.35",
+      "python": "3.11.10",
+      "requested_parallel_devices": [
+        0
+      ],
+      "vendor": "cuda",
+      "verifier_cpu_threads": "1"
+    },
+    "mac": {
+      "commit": "24de487667cb2a6085cad686cd07b4824aec6593",
+      "commit_source": "wheel COMMIT witness",
+      "cpu_model": "Apple M4",
+      "device": "Apple M4 / Mac16,12",
+      "device_class": "apple",
+      "mojolearn_version": "0.8.61",
+      "numeric_mode": "identical",
+      "numpy": "2.4.6",
+      "platform": "macOS-26.5.2-arm64-arm-64bit",
+      "python": "3.12.11",
+      "requested_parallel_devices": [
+        0
+      ],
+      "vendor": "metal",
+      "verifier_cpu_threads": "1"
+    },
+    "captures": {
+      "nvidia": {
+        "exit": 0,
+        "counts": {
+          "DIVERGENT": 0,
+          "IDENTICAL": 198,
+          "N/A": 450,
+          "OWED": 0,
+          "REFUSED": 0
+        },
+        "native_provenance_complete": true
+      },
+      "mac": {
+        "exit": 0,
+        "counts": {
+          "DIVERGENT": 0,
+          "IDENTICAL": 198,
+          "N/A": 450,
+          "OWED": 0,
+          "REFUSED": 0
+        },
+        "native_provenance_complete": true
+      }
+    },
+    "report": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.61/post-compare/comparison.json",
+      "sha256": "9a1b226c1ade9e73c4e1a0654f799b3a575f2be4fee5881a23245bc79b674bcb",
+      "bytes": 77126
+    },
+    "archive": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.61/comparison-0.8.61-ptx-mac.tgz",
+      "sha256": "ffe66dbb5fabafbffc22e24020a738bb0b11b16e7853d173ba62a0fd6d6d01f5",
+      "bytes": 928298,
+      "r2_key": "measurements/releases/0.8.61/comparison-0.8.61-ptx-mac.tgz"
+    }
+  },
+  "scope": {
+    "postpublication_comparisons": 1,
+    "additional_rentals": 0,
+    "changed_paths": "GMM state, tokenizer fingerprint, sequence runtime/loader boundary",
+    "reused_evidence": "Earlier full, neural and graph runtime qualification of unchanged or exactly retained repaired components; original execution versions and sources remain in the evidence",
+    "limitations": [
+      "Fresh native NVIDIA sm_89 repair execution not claimed: compilation/image audit only; this comparison executes PTX.",
+      "Repaired Linux x_sequence_host binding has compilation evidence, not direct host-module runtime execution.",
+      "This postpublication comparison covers eight selected lanes; it is not a fresh full verification run."
+    ],
+    "measurements": "not run by this release task"
+  },
+  "evidence": {
+    "local": "/Users/andrewhendel/mojolearn-evidence/release/0.8.61",
+    "r2_prefix": "measurements/releases/0.8.61/",
+    "requirements_bundle": "release-readiness/v1/10f5030de543a5527ef4cb08abfd0e8ab5245e793e115e057b510ab373227cca.tar.gz"
+  }
+}
