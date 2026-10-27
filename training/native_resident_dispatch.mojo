@@ -57,7 +57,7 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
     else:
         if op == 12:
             var kinds = List[Int]()
-            for i in range(8, len(p)):  # small-loop(model layer kind descriptors)
+            for i in range(8, len(p)):  # driver-loop: over admitted model layer kind descriptors
                 kinds.append(p[i])
             var session = SambaResidentSession(ctx, kinds, p[0], p[1], p[2], p[3], p[4], p[5], p[6] != 0, Float32(f[0]), p[7], f32_ptr(a[0]))
             var owner = alloc[SambaResidentSession](1)
