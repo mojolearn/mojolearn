@@ -35,6 +35,8 @@ from core.training_state_validation import training_admit_moments_and_flags, tra
 from bindings.native_json import native_json_parse, native_path_exists
 from bindings.native_transport import _transport_json
 from core.sha256_file import sha256_file
+from bindings.byte_checkpoint_io import ByteCheckpointIOError
+from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
 
@@ -744,27 +746,61 @@ def _optimizer_configuration(lr: PythonObject, beta_values: PythonObject, eps: P
     return config
 
 
-def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    classical_connect_numpy(context)
+def _require_training_profile(context: PythonObject) raises:
     var bi = _b()
-    if py_type(trainer) is not context["byte_lm_trainer_class"]:
-        raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
     var profile = py_get(context["byte_lm_profile_defaults"], "training", PythonObject("fp32_v1"))
     if py_type(profile) is not bi.str or not Bool(py=context["byte_lm_profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for Byte-LM training")
-    # Every external value is admitted before scalar, buffer or JSON protocols.
-    for i in range(6):  # small-loop(parameter data, schedule and five optimizer arguments)
-        classical_admit_value(args[i], context)
-    var resident = args[7]
+
+
+def _construction_options(resident: PythonObject, var step_result: PythonObject) raises -> PythonObject:
+    var bi = _b()
     if resident is not None and py_type(resident) is not bi.bool:
         raise Error("TypeError: resident must be a bool")
-    var step_result = args[8]
     if step_result is None:
         step_result = PythonObject("lean" if resident is not None and Bool(py=resident) else "full")
     if py_type(step_result) is not bi.str or (String(py=step_result) != "full" and String(py=step_result) != "lean"):
         raise Error("ValueError: step_result must be 'full' or 'lean'")
     if String(py=step_result) == "lean" and (resident is None or not Bool(py=resident)):
         raise Error("ValueError: step_result='lean' requires resident=True: the stateless path destroys its context before returning, so there is nothing to export from")
+    return step_result
+
+
+def _schedule_vocabulary(schedule: PythonObject, shape: _Shape) raises:
+    var bi = _b()
+    var vocabulary = py_get(schedule, "vocabulary")
+    if vocabulary is not None:
+        if py_type(vocabulary) is not bi.dict or py_type(py_get(vocabulary, "n_vocab")) is not bi.int or py_type(py_get(vocabulary, "sha256")) is not bi.str:
+            raise Error("ValueError: Byte-LM data_schedule vocabulary must carry an int n_vocab and a str sha256")
+        if Int(py=vocabulary["n_vocab"]) != shape.vocab():
+            raise Error("ValueError: Byte-LM data_schedule vocabulary does not match the configured vocabulary")
+
+
+def _initialize_state_fields(trainer: PythonObject, state: PythonObject, resident: PythonObject,
+                             step_result: PythonObject, context: PythonObject) raises:
+    var fields = py_fields(trainer)
+    py_setitem(fields, "_resident", resident)
+    py_setitem(fields, "_step_result", step_result)
+    py_setitem(fields, "_lock", py_call(context["byte_lm_lock"]))
+    py_setitem(fields, "_runtime", PythonObject(None))
+    py_setitem(fields, "_runtime_binding", PythonObject(None))
+    py_setitem(fields, "_last_export_step", state["completed_steps"])
+    py_setitem(fields, "_lost_at", PythonObject(None))
+    py_setitem(fields, "_state", state)
+    _forget(fields, context)
+
+
+def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    var bi = _b()
+    if py_type(trainer) is not context["byte_lm_trainer_class"]:
+        raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
+    _require_training_profile(context)
+    # Every external value is admitted before scalar, buffer or JSON protocols.
+    for i in range(6):  # small-loop(parameter data, schedule and five optimizer arguments)
+        classical_admit_value(args[i], context)
+    var resident = args[7]
+    var step_result = _construction_options(resident, args[8])
     var config_value = args[6]
     var shape_state = bi.dict()
     if config_value is not None:
@@ -803,12 +839,7 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
     var config = _optimizer_configuration(args[2], args[3], args[4], args[5], context)
     var schedule_text = training_schedule_json(args[1], 256, 16384, "Byte-LM data_schedule", context)
     var schedule = native_json_parse(PythonObject(schedule_text))
-    var vocabulary = py_get(schedule, "vocabulary")
-    if vocabulary is not None:
-        if py_type(vocabulary) is not bi.dict or py_type(py_get(vocabulary, "n_vocab")) is not bi.int or py_type(py_get(vocabulary, "sha256")) is not bi.str:
-            raise Error("ValueError: Byte-LM data_schedule vocabulary must carry an int n_vocab and a str sha256")
-        if Int(py=vocabulary["n_vocab"]) != shape.vocab():
-            raise Error("ValueError: Byte-LM data_schedule vocabulary does not match the configured vocabulary")
+    _schedule_vocabulary(schedule, shape)
     var binding = loaded[0]
     var mode = loaded[1]
     var state = bi.dict()
@@ -842,16 +873,7 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
     py_setitem(state, "data_schedule", schedule)
     if shape.profile(String(py=context["byte_lm_profile"])) != String(py=context["byte_lm_profile"]):
         py_setitem(state, "model_shape", py_call(bi.dict, shape_state["model_shape"]))
-    var fields = py_fields(trainer)
-    py_setitem(fields, "_resident", resident)
-    py_setitem(fields, "_step_result", step_result)
-    py_setitem(fields, "_lock", py_call(context["byte_lm_lock"]))
-    py_setitem(fields, "_runtime", PythonObject(None))
-    py_setitem(fields, "_runtime_binding", PythonObject(None))
-    py_setitem(fields, "_last_export_step", 0)
-    py_setitem(fields, "_lost_at", PythonObject(None))
-    py_setitem(fields, "_state", state)
-    _forget(fields, context)
+    _initialize_state_fields(trainer, state, resident, step_result, context)
     _ = binding
     return PythonObject(None)
 
@@ -986,6 +1008,45 @@ def byte_lm_load_state(trainer: PythonObject, args: PythonObject, context: Pytho
         raise problem
     _ = py_call(lock.release)
     return trainer
+
+
+def byte_lm_checkpoint(trainer: PythonObject, operation: String, args: PythonObject,
+                       context: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
+    classical_connect_numpy(context)
+    if operation == "from_checkpoint_binary":
+        if trainer is not context["byte_lm_trainer_class"]:
+            raise Error("TypeError: checkpoint restoration requires the connected native trainer class")
+        var source = byte_checkpoint_load(args[0], io_error)
+        var state = _validated_state(source, context)
+        var shape = _shape_of(state)
+        _require_training_profile(context)
+        var resident = args[1]
+        var step_result = _construction_options(resident, PythonObject(None))
+        _schedule_vocabulary(state["data_schedule"], shape)
+        # Preserve constructor binding/profile admission without constructing
+        # temporary parameter arrays or invoking a Python class constructor.
+        _ = _load_snapshot(shape, context)
+        var restored = native_storage_allocate(trainer)
+        _initialize_state_fields(restored, state, resident, step_result, context)
+        return restored
+    if operation != "export_checkpoint_binary":
+        raise Error("RuntimeError: unknown Byte-LM checkpoint operation")
+    if py_type(trainer) is not context["byte_lm_trainer_class"]:
+        raise Error("TypeError: checkpoint export requires the connected native trainer class")
+    var fields = py_fields(trainer)
+    var lock = fields["_lock"]
+    _ = py_call(lock.acquire)
+    var state = PythonObject(None)
+    try:
+        classical_admit_value(fields["_state"], context)
+        state = _export_snapshot(fields, _shape_of(fields["_state"]), context)
+    except problem:
+        _ = py_call(lock.release)
+        raise problem
+    _ = py_call(lock.release)
+    # The export owns detached arrays. File I/O follows lock release exactly
+    # as before, using the existing atomic codec and original I/O exceptions.
+    return byte_checkpoint_save(args[0], state, io_error)
 
 
 def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject, train: Bool = True) raises -> PythonObject:
@@ -1375,9 +1436,12 @@ def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject
 
 
 def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var io_error = ByteCheckpointIOError()
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
+        if operation == "from_checkpoint_binary" or operation == "export_checkpoint_binary":
+            return byte_lm_checkpoint(call[0], operation, call[2], call[3], io_error).steal_data()
         if operation == "load_state":
             return byte_lm_load_state(call[0], call[2], call[3]).steal_data()
         if operation == "construct":
@@ -1393,6 +1457,8 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return neural_descriptor_info(fields["_native_provider"]).steal_data()
         raise Error("RuntimeError: unknown byte LM trainer operation " + operation)
     except error:
+        if io_error.pending:
+            return io_error.restore()
         var text = String(error)
         if text.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)

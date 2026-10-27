@@ -34,3 +34,21 @@ def test_buffer_copy_and_state_value_checks_are_native():
     assert boundary.count('var shape = value.shape') == 1
     assert boundary.count('var strides = value.strides') == 1
     assert 'training_copy_words32(' in boundary
+
+
+def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
+    tree = ast.parse((ROOT / 'python/mojolearn/_byte_lm_impl.py').read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SmallByteLanguageModelTrainer')
+    for name in ('export_checkpoint_binary', 'from_checkpoint_binary'):
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
+        body = method.body[1:]
+        assert len(body) == 1 and isinstance(body[0], ast.Return)
+        assert body[0].value.func.id == '_LM_TRAINER'
+    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    checkpoint = source.split('def byte_lm_checkpoint(')[1].split('def byte_lm_train_step(')[0]
+    assert 'byte_checkpoint_load(args[0], io_error)' in checkpoint
+    assert 'byte_checkpoint_save(args[0], state, io_error)' in checkpoint
+    assert checkpoint.index('_validated_state(source, context)') < checkpoint.index('native_storage_allocate(trainer)')
+    assert 'return io_error.restore()' in source
+    assert '_initialize_state_fields(restored, state,' in checkpoint
+    assert 'py_call(trainer' not in checkpoint
