@@ -1480,9 +1480,9 @@ def _proven_arms():
 
 _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "the CPU column routes _mojolearn_byte_lm through _byte_lm_trainer_host "
-                 "(host_surface ADAPTED_MODULES), whose TrainerOwnerEntries call it for every "
-                 "SmallByteLanguageModelTrainer step; on a GPU install byte_lm_trainer_step runs the "
-                 "same session ops inside Mojo")
+                 "(host_surface ADAPTED_MODULES) to ByteHostSession and the shared native descriptor "
+                 "table for every SmallByteLanguageModelTrainer step; on a GPU install "
+                 "byte_lm_trainer_step runs the native GPU session owner")
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
 _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "

@@ -177,3 +177,21 @@ def test_imported_program_constructor_enters_native_metadata_boundary():
     assert 'program_admit_value(info)' in native
     assert 'neural_descriptor_entry(binding, "ops_imported_run")' in native
     assert '_initialize(pending, session, info, inputs, outputs, entries, context)' in native
+
+
+def test_cpu_byte_lm_owner_uses_same_native_transport_without_python_proxy():
+    for name in ('training/byte_lm_host_session.mojo', 'training/byte_lm_host_trainer_dispatch.mojo'):
+        source = (ROOT / name).read_text()
+        for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
+            assert forbidden not in source
+    table = (ROOT / 'training/byte_lm_host_trainer_dispatch.mojo').read_text()
+    assert '"mojolearn.training.byte_lm.v1"' in table
+    assert 'BYTE_HOST_TRAINER_COUNT = 12' in table
+    assert 'host_trainer_recover(owner, completed)' in table
+    bridge = (ROOT / 'python/mojolearn/_byte_lm_trainer_host.py').read_text()
+    assert 'class _HostTrainerBinding' not in bridge and 'class _Session' not in bridge
+    assert 'return host' in bridge
+    owner = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    entry = owner.split('def _entry(')[1].split('def _has(')[0]
+    assert 'return neural_descriptor_entry(binding, name, required)' in entry
+    assert 'getattr' not in entry
