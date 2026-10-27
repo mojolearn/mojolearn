@@ -1514,6 +1514,9 @@ class Program:
 # attributes while importing this connector. Session construction and every
 # later operation use cached native entries; no backend Python is called.
 def _connect_session_mode(mode):
+    # Import-time registration of common native provider/resource owner types.
+    from .tokenizer import _binding
+    _binding()
     module = _backend.binding("_mojolearn_x_sequence", mode)
     distributed = SimpleNamespace(
         ops_distributed_open=getattr(module, "ops_distributed_open", None),
@@ -1545,7 +1548,13 @@ def _connect_session_mode(mode):
         inspect=module.ops_program_inspect, control=module.ops_program_control,
         fit=module.ops_program_fit_native, distributed=distributed)
     from ._native_family_bridge import shared_context
-    result.initialize(None, None, None, None, None, shared_context())
+    admission = shared_context()
+    names = ("__dict__", "__getattribute__", "__getattr__", "__setattr__", "__delattr__")
+    layout = tuple((name, vars(Session).get(name)) for name in names)  # glue: connect exact Session storage and attribute identities at import
+    admission.update(ops_session_class=Session, ops_program_class=Program,
+                     ops_connection_type=SimpleNamespace, ops_session_layout=layout)
+    result.native_module = module.model_native_api_v1.__self__
+    result.native_provider = result.initialize(None, None, None, result.native_module, None, admission)
     return result
 
 

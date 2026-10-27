@@ -51,6 +51,13 @@ def initialize_program_arrays(admission: PythonObject = None) raises:
         state[].ready = True
 
 
+def program_admission_context() raises -> PythonObject:
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if state[].admission is None:
+        raise Error("TypeError: program native input admission must be connected during package import")
+    return state[].admission
+
+
 def program_admit_value(value: PythonObject) raises:
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     if state[].admission is None:

@@ -2091,6 +2091,12 @@ comptime _OPS_NAME = "MojoAutogradOpsSessionsIdentical" if GLOBAL_NUMERIC_MODE =
 comptime _OPS_SESSIONS = _Global[StorageType=_OpsStore, name=_OPS_NAME, init_fn=_OpsStore.__init__]
 
 
+def ops_session_registry_token() -> Int:
+    # Identity of this native registry image, never an external object cache.
+    # A frontend may retain/compare it, but must not dereference it.
+    return Int(_OPS_SESSIONS.get_or_create_ptr())
+
+
 def ops_session_open[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: Bool) raises -> Int:
     """A new session on `ex`; returns its id (>= 1)."""
     var p = alloc[OpsSession[E]](1)

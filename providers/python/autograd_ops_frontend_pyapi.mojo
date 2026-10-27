@@ -6,7 +6,7 @@ from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
 from providers.python.autograd_python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from autograd.ops_api import ops_session
+from autograd.ops_api import ops_session, ops_session_registry_token
 from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
@@ -15,7 +15,8 @@ from providers.python.autograd_model_checkpoint_pyapi import ops_load_program_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_native_py
 from bindings.native_json import native_path
 from providers.python.autograd_weight_frontend_pyapi import ops_weights_native_py
-from autograd.session_lifetime import SessionLifetime
+from providers.python.autograd_session_frontend_pyapi import ops_session_fields
+from providers.python.neural_descriptor_pyapi import neural_descriptor_resource_handle, neural_descriptor_resource_close
 from providers.python.autograd_execution_profile_pyapi import execution_profile_object
 from providers.python.autograd_control_checkpoint_pyapi import control_save_py, control_load_py
 from providers.python.autograd_gradient_diagnostics_pyapi import gradient_report_py
@@ -140,6 +141,14 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
     var name = String(operation)
+    var fields = ops_session_fields(session)
+    var resource_scope: List[Int] = [ops_session_registry_token(), KIND]
+    if not _nil(fields["_id"]):
+        if py_type(fields["_id"]) is not py_type(PythonObject(0)):
+            raise Error("TypeError: Session handle must be a native integer")
+        var admitted_id = neural_descriptor_resource_handle(fields["_lifetime"], resource_scope)
+        if admitted_id == 0 or admitted_id != Int(py=fields["_id"]):
+            raise Error("TypeError: Session handle differs from its native registry owner")
     if name == "program_init":
         var out = args[0]
         _program_initialize(out, session, args[1])
@@ -147,27 +156,25 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "enter":
         return session
     if name == "free_program":
-        if not _nil(session._id) and not _nil(args[0]._id):
-            var owner = ops_session[E, KIND](Int(py=session._id))
+        if not _nil(fields["_id"]) and not _nil(args[0]._id):
+            var owner = ops_session[E, KIND](Int(py=fields["_id"]))
             owner[].program_free(Int(py=args[0]._id))
         var program = args[0]
         py_setattr(program, "_id", PythonObject(None))
         return PythonObject(None)
     if name == "close" or name == "exit":
-        if not _nil(session._id):
-            var owner = session._lifetime.downcast_value_ptr[SessionLifetime[E, KIND]]()
-            owner[].close()
-            var target = session
-            py_setattr(target, "_id", PythonObject(None))
+        if not _nil(fields["_id"]):
+            neural_descriptor_resource_close(fields["_lifetime"], resource_scope)
+            py_setitem(fields, "_id", PythonObject(None))
         return PythonObject(False) if name == "exit" else PythonObject(None)
     if name == "profile_reset":
         _ = ops_profile_reset_py()
         return PythonObject(None)
     if name == "profile_report":
         return ops_profile_report_py()
-    if _nil(session._id):
+    if _nil(fields["_id"]):
         raise Error("ValueError: this session is closed")
-    var sid = session._id
+    var sid = fields["_id"]
     var s = ops_session[E, KIND](Int(py=sid))
     if name == "fit" or name == "fit_if":
         var program = args[0]
