@@ -22,6 +22,9 @@ detects after native success.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
+from training.byte_lm_native_dispatch import BYTE_LM_NATIVE_TABLE
+from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.ffi import _Global
@@ -160,6 +163,17 @@ def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> Pyth
     out.append(PythonObject(attention_v1_backward_memory_profile()))
     out.append(PythonObject(attention_v1_retained_exp_bytes(cfg.batch,cfg.length,cfg.n_heads,cfg.length)))
     return out
+
+
+def byte_lm_native_api_binding() raises -> PythonObject:
+    var api = BYTE_LM_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def byte_lm_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
+    # Only the extension that minted this exact native value may unwrap it.
+    # The Python provider retains session and module for every use of this handle.
+    return PythonObject(Int(session.downcast_value_ptr[ByteLMSession]()))
 
 
 def byte_lm_session_create_binding() raises -> PythonObject:
@@ -741,38 +755,11 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
     _require_binding_profile()
     var cfg = _byte_config(shape)
     var bl = _logits_dims(dims, cfg)
-    var m = bl[0] * bl[1]
-    var cells_out = m * cfg.vocab_size
-    var n = cfg.n_total()
     var addr = _read_addresses(addresses, 3)
-    var cells: List[Int] = [n, m, cells_out]
-    _validate_slot_table(addr, cells, 2)
-    var params = _read_f32(addr[0], n)
-    var ids = _read_ids(addr[1], m)
-    byte_logits_validate(ids, bl[0], bl[1], cfg)
-    byte_logits_validate_params(params, cfg)
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
-    # lane/neural-net-experiment: the logits land in the caller's array by
-    # one device-to-host copy (`byte_logits_from_params_into`), no host
-    # List, no second copy; the caller's array is alive for the whole call.
-    var out = f32_ptr(addr[2])
-    var session = ByteLMSession()
-    session.busy = True
-    try:
-        with GILReleased(Python()):
-            if keep_context:
-                # DEVIATION 2513: the same keeper the other per-call path uses.
-                BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-            session.ctx = neural_ctx[_NEURAL_CTX]()
-            byte_logits_from_params_into(session.ctx.value(), params, ids, bl[0], bl[1], cfg, out)
-            session.ctx.value().synchronize()
-            session.ctx = None
-    except error:
-        session.busy = False
-        raise error
-    session.busy = False
-    session.usable = False
-    return PythonObject(cells_out)
+    var written = 0
+    with GILReleased(Python()):
+        written = byte_lm_stateless_logits_native(addr, bl[0], bl[1], cfg)
+    return PythonObject(written)
 
 
 def _claimed_step(completed: PythonObject) raises -> Int:
@@ -1475,6 +1462,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_run_configured_binding]("byte_lm_run_configured")
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
+        module.def_function[byte_lm_native_api_binding]("byte_lm_trainer_api_v1")
+        module.def_function[byte_lm_native_session_handle_binding]("byte_lm_native_session_handle_v1")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/byte_lm_launch_probe.patch

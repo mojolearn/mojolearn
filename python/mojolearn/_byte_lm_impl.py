@@ -1393,16 +1393,7 @@ class SmallByteLanguageModelTrainer:
         RuntimeError
             If a logit is not finite.
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            return _ragged.ragged_forward(self.logits, raw, None, lengths, '<i4',
-                                          'SmallByteLanguageModelTrainer.logits')[0]
-        with self._lock:
-            shape = state_shape(self._state)
-            tokens, batch, length = _gpu_logits_ids(ids, shape)
-            if self._is_resident():
-                return self._logits_resident(tokens, batch, length, shape)
-            return self._logits_stateless(tokens, batch, length, shape)
+        return _LM_TRAINER(self, "logits", (ids, lengths), _LM_TRAINER_CONTEXT)
 
     # The greedy next byte after each row of ids `[batch, length]`, ties
     # to the lowest byte value, picked from `logits(ids)` by the helper
@@ -1427,21 +1418,7 @@ class SmallByteLanguageModelTrainer:
         list of int
             One token id per row.
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            logits, lens = _ragged.ragged_forward(self.logits, raw, None, lengths, '<i4',
-                                                  'SmallByteLanguageModelTrainer.next_bytes')
-            return _greedy_next_bytes(_ragged.last_real_rows(logits, lens,
-                                                             'SmallByteLanguageModelTrainer.next_bytes'))
-        with self._lock:
-            if self._is_resident():
-                # cpu3-seq: on a resident session the forward, the refusal
-                # and the per-row argmax run on the device and only `batch`
-                # int32 come back (the logits never cross the bus).
-                shape = state_shape(self._state)
-                tokens, batch, length = _gpu_logits_ids(ids, shape)
-                return self._next_bytes_resident(tokens, batch, length, shape)
-        return _greedy_next_bytes(self.logits(ids))
+        return _LM_TRAINER(self, "next_bytes", (ids, lengths), _LM_TRAINER_CONTEXT)
 
     def _logits_call(self, entry_name, tokens, out, batch, length, shape):
         """Lock held, resident. ONE native call (`byte_lm_trainer_logits` or
@@ -1729,7 +1706,9 @@ def _connect_trainer():
     # metadata once, at package import
     from .tokenizer import _binding as _tokenizer_binding
     from ._native_classical_bridge import _state_context
+    from types import MethodType
     context = _state_context()
+    _backend.default_mode()  # glue: resolve mode before any native product operation
     bindings = {}
     for mode in _NATIVE_MODE_CODE:  # glue: the two numeric modes, connected once
         try:
@@ -1740,7 +1719,13 @@ def _connect_trainer():
                    byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
                    byte_lm_profile=PROFILE, byte_lm_session_entries=_SESSION_ENTRIES,
                    byte_lm_run_entry=_RUN_ENTRY, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
-    return _tokenizer_binding()._module.byte_lm_trainer_call, context
+    module = _tokenizer_binding()._module
+    pooled_context = dict(context, array_class=_PooledLogits)
+    context.update(byte_lm_pooled_class=_PooledLogits, byte_lm_pooled_context=pooled_context,
+                   byte_lm_store_getter=vars(_Array)["_store"].__get__)
+    _PooledLogits.__del__ = module.classical_attribute_descriptor(
+        MethodType(module.byte_lm_pooled_finalize_call, context))
+    return module.byte_lm_trainer_call, context
 
 
 _LM_TRAINER, _LM_TRAINER_CONTEXT = _connect_trainer()

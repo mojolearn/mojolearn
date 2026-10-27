@@ -34,3 +34,31 @@ def test_neural_gemm_both_doors_share_native_transport():
 def test_small_mlp_rejects_hooks_before_admission():
     src=(ROOT/'bindings/small_mlp_native.mojo').read_text().split('def small_mlp_call(')[1]
     assert src.index('sequential_admit_value(args,') < src.index('return small_mlp_create(args)')
+
+
+def test_byte_lm_frontdoors_and_native_state_share_provider():
+    import ast
+    source=(ROOT/'python/mojolearn/_byte_lm_impl.py').read_text()
+    cls=next(node for node in ast.parse(source).body if isinstance(node,ast.ClassDef) and node.name=='SmallByteLanguageModelTrainer')
+    for name in ('logits','next_bytes','train_step'):
+        method=next(node for node in cls.body if isinstance(node,ast.FunctionDef) and node.name==name)
+        body=method.body[1:] if isinstance(method.body[0],ast.Expr) and isinstance(method.body[0].value,ast.Constant) else method.body
+        assert len(body)==1 and isinstance(body[0],ast.Return)
+        assert isinstance(body[0].value.func,ast.Name) and body[0].value.func.id=='_LM_TRAINER'
+    assert 'MethodType(module.byte_lm_pooled_finalize_call, context)' in source
+    door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
+    mode=door.split('def _mode(')[1].split('def _has(')[0]
+    assert 'backend["_DEFAULT_MODE"]' in mode
+    assert 'py_call_typed' not in mode
+    assert 'neural_descriptor_handle(provider, factory, session)' in door
+    assert 'neural_descriptor_reuse' in door
+    table=(ROOT/'training/byte_lm_native_dispatch.mojo').read_text()
+    for forbidden in ('PythonObject','std.python','bindings.','providers.'):
+        assert forbidden not in table
+    for owner in ('byte_owner_step(', 'byte_owner_logits(', 'byte_owner_export_state(', 'byte_lm_stateless_logits_native('):
+        assert owner in table
+
+
+def test_byte_lm_input_admission_precedes_buffer_export():
+    door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text().split('def _ids(')[1].split('def _f32(')[0]
+    assert door.index('classical_admit_value(source, context)') < door.index('native_buffer_view(source)')
