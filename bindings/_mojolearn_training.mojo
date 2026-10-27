@@ -76,6 +76,8 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
+from training.small_mlp_dispatch import SMALL_MLP_NATIVE_TABLE
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
 from checks.vendor import COMPILED_VENDOR
@@ -844,6 +846,11 @@ def _params(params: PythonObject, want: Int, name: String) raises:
         )
 
 
+def small_mlp_api_binding() raises -> PythonObject:
+    var api = SMALL_MLP_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def neural_primitives_api_binding() raises -> PythonObject:
     ref cpy = Python().cpython()
     var api = NATIVE_PRIMITIVE_API.get_or_create_ptr()
@@ -1453,6 +1460,7 @@ def build__mojolearn_training() -> PythonObject:
         comptime if MLP_MULTISTEP:
             m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
+        m.def_function[small_mlp_api_binding]("small_mlp_api_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
