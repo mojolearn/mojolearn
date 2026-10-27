@@ -47,7 +47,7 @@ def svc_pair_epilogue_binding(
     out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """The host twin of `svc_pair_epilogue_device_binding`
-    (svm/impl/svc_epilogue_pyapi.mojo), same modes and params."""
+    (providers/python/svm_impl_svc_epilogue_pyapi.mojo), same modes and params."""
     if len(params) != 5:
         raise Error("svc_pair_epilogue: params must contain 5 values")
     var mode = _ix(params[0])

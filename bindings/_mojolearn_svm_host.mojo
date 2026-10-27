@@ -81,7 +81,7 @@ from isolation_forest.impl.rng.xorwow import (
     XORWOW_HOST_SABOTAGE,
     build_xorwow_tables,
 )
-from svm.host.svc_proba_pyapi import (
+from providers.python.svm_host_svc_proba_pyapi import (
     svc_pair_epilogue_binding,
     svc_platt_train_binding,
     svc_splitmix_perm_binding,
@@ -118,8 +118,8 @@ from svm.host.svm_host_impl import (
 )
 
 
-from svm.host.scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
-from svm.host.svc_ovo_host_pyapi import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
+from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from providers.python.svm_host_svc_ovo_host_pyapi import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
 
 def _index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
