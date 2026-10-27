@@ -70,11 +70,12 @@ from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from bindings.sha256_door import sha256_hexdigest
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
+from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
 from checks.vendor import COMPILED_VENDOR
@@ -843,6 +844,16 @@ def _params(params: PythonObject, want: Int, name: String) raises:
         )
 
 
+def neural_primitives_api_binding() raises -> PythonObject:
+    ref cpy = Python().cpython()
+    var api = NATIVE_PRIMITIVE_API.get_or_create_ptr()
+    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        api[].entries.unsafe_ptr(), api[].name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
+    if not capsule:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=capsule)
+
+
 def embedding_forward_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -855,11 +866,7 @@ def embedding_forward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = samba_embedding_forward_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
-            n_positions, vocab, width,
-        )
+        count = native_primitive_operation(0, a, [n_positions, vocab, width], [])
     return PythonObject(count)
 
 
@@ -875,11 +882,7 @@ def embedding_backward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = samba_embedding_backward_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
-            n_positions, vocab, width,
-        )
+        count = native_primitive_operation(1, a, [n_positions, vocab, width], [])
     return PythonObject(count)
 
 
@@ -892,13 +895,10 @@ def rms_norm_forward_binding(
     _params(params, 3, "rms_norm_forward")
     var m = Int(py=params[0])
     var dm = Int(py=params[1])
-    var eps = Float32(Float64(py=params[2]))
+    var eps = Float64(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = samba_rms_norm_forward_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, dm, eps,
-        )
+        count = native_primitive_operation(2, a, [m, dm], [Float64(eps)])
     return PythonObject(count)
 
 
@@ -911,14 +911,10 @@ def rms_norm_backward_binding(
     _params(params, 3, "rms_norm_backward")
     var m = Int(py=params[0])
     var dm = Int(py=params[1])
-    var eps = Float32(Float64(py=params[2]))
+    var eps = Float64(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = samba_rms_norm_backward_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
-            _f32_ptr(a[3]), _f32_ptr(a[4]), m, dm, eps,
-        )
+        count = native_primitive_operation(3, a, [m, dm], [Float64(eps)])
     return PythonObject(count)
 
 
@@ -1011,10 +1007,7 @@ def linear_forward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = samba_linear_forward_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, n, k,
-        )
+        count = native_primitive_operation(4, a, [m, n, k], [])
     return PythonObject(count)
 
 
@@ -1030,11 +1023,7 @@ def linear_backward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = samba_linear_backward_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
-            _f32_ptr(a[3]), _f32_ptr(a[4]), m, n, k,
-        )
+        count = native_primitive_operation(5, a, [m, n, k], [])
     return PythonObject(count)
 
 
@@ -1463,6 +1452,7 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[mlp_sessions_resident_binding]("mlp_sessions_resident")
         comptime if MLP_MULTISTEP:
             m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
+        m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")

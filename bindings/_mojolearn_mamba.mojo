@@ -144,7 +144,7 @@ from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -235,6 +235,8 @@ from autograd.kernels.mamba1 import ANY_BWD_BLOCK_SABOTAGE
 from autograd.kernels.mamba1_scan import ANY_BWD_SCAN_SABOTAGE
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
+
+from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_operation
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -346,6 +348,16 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     return PythonObject(0)
 
 
+def mamba_state_api_binding() raises -> PythonObject:
+    ref cpy = Python().cpython()
+    var api = NATIVE_MAMBA_STATE_API.get_or_create_ptr()
+    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        api[].entries.unsafe_ptr(), api[].name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
+    if not capsule:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=capsule)
+
+
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
     comptime count = 14
     if len(addrs) != count:
@@ -414,7 +426,7 @@ def mamba1_forward_binding(
     var dm = Int(py=params[2])
     var position = 0
     with GILReleased(Python()):
-        _mamba1_run(a, b, l, dm, False, position)
+        _ = mamba_state_operation(0, a, [b, l, dm], [])
     return PythonObject(0)
 
 
@@ -442,7 +454,7 @@ def mamba1_decode_step_binding(
     var dm = Int(py=params[1])
     var position = 0
     with GILReleased(Python()):
-        _mamba1_run(a, b, 1, dm, True, position)
+        _ = mamba_state_operation(1, a, [b, dm], [])
     return PythonObject(0)
 
 
@@ -657,11 +669,11 @@ def mamba2_forward_binding(
     var l = Int(py=params[1])
     var dm = Int(py=params[2])
     var q0 = Int(py=params[3])
-    var dt_lo = Float32(Float64(py=params[4]))
-    var dt_hi = Float32(Float64(py=params[5]))
+    var dt_lo = Float64(py=params[4])
+    var dt_hi = Float64(py=params[5])
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _mamba2_run(a, b, l, dm, q0, dt_lo, dt_hi)
+        out_len = mamba_state_operation(2, a, [b, l, dm, q0], [dt_lo, dt_hi])
     return PythonObject(out_len)
 
 
@@ -689,11 +701,11 @@ def mamba2_decode_step_binding(
     var b = Int(py=params[0])
     var dm = Int(py=params[1])
     var q0 = Int(py=params[2])
-    var dt_lo = Float32(Float64(py=params[3]))
-    var dt_hi = Float32(Float64(py=params[4]))
+    var dt_lo = Float64(py=params[3])
+    var dt_hi = Float64(py=params[4])
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _mamba2_run(a, b, 1, dm, q0, dt_lo, dt_hi)
+        out_len = mamba_state_operation(3, a, [b, dm, q0], [dt_lo, dt_hi])
     return PythonObject(out_len)
 
 
@@ -902,7 +914,7 @@ def mamba3_forward_binding(
     var pend = Int(py=params[4])
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, l, dm, q0, pend)
+        out_len = mamba_state_operation(4, a, [b, l, dm, q0, pend], [])
     return PythonObject(out_len)
 
 
@@ -960,7 +972,7 @@ def mamba3_decode_step_binding(
     var pend = Int(py=params[3])
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, 1, dm, q0, pend)
+        out_len = mamba_state_operation(5, a, [b, dm, q0, pend], [])
     return PythonObject(out_len)
 
 
@@ -1488,6 +1500,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba_vendor_binding]("mamba_vendor")
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
         m.def_function[mamba1_profile_binding]("mamba1_profile")
+        m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         m.def_function[mamba1_forward_binding]("mamba1_forward")
         m.def_function[mamba1_backward_binding]("mamba1_backward")
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")

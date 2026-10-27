@@ -18,6 +18,8 @@ from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding
 from bindings.native_json import native_path, native_path_exists
+from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
+from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 
@@ -498,6 +500,9 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         for i in range(2, 9):  # driver-loop: over the seven transformer projections
             _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(base[i], bindings["linalg"]))
         py_setitem(fields, "_int15", planes)
+    if kind == "mamba3":
+        _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
+            String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
     return block
 
 
