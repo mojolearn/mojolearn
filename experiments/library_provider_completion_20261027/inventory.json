@@ -51,13 +51,15 @@
         "GPU fit/predict/transform shared descriptors",
         "generic resident owner",
         "import-connected public binding admission",
-        "compound transform input reuse"
+        "compound transform input reuse",
+        "operation-local common ArrayMetadata used by X and fitted f32 inputs; native cast retained"
       ],
       "remaining": [
         "shared input validation snapshot",
         "score/parallel wrappers",
         "CPU native table",
-        "serialization and foreign-buffer transitive audit"
+        "serialization and foreign-buffer transitive audit",
+        "target/sample-weight, direct index/offset and output address admission remain; no global metadata-once claim"
       ]
     },
     {
@@ -246,7 +248,7 @@
     },
     {
       "family": "shared_arrays_archives",
-      "status": "pending",
+      "status": "partial_source_only",
       "entry_candidates": [
         {
           "path": "bindings/family_common.mojo",
@@ -261,9 +263,12 @@
           "present": true
         }
       ],
-      "source_changes": [],
+      "source_changes": [
+        "providers/python/array_metadata_pyapi.mojo",
+        "bindings/family_common.mojo"
+      ],
       "remaining": [
-        "single native metadata snapshot shared across families",
+        "f64/finite-only/target/sample-weight admission and other family consumers; input admission before captured array may still read foreign metadata",
         "archive/type/protocol callbacks and generic resident lifetime migration"
       ]
     }

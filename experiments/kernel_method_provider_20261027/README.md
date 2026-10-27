@@ -42,3 +42,13 @@ factories and native resource finalization. It records audits and exact coverage
 The lane has not run that probe, compiled code, measured performance or qualified
 another device. Source tests and logs live under
 `~/mojolearn-evidence/library-provider-completion-20261027/`.
+
+The subsequent metadata tranche introduces `ArrayMetadata` in the common provider
+boundary, retaining the input owner, native `CastIn`, shape/count and dtype/order.
+The shared family f32 admission uses the existing cast implementation and those
+snapshots; kernel X and fitted f32 consumers reuse them for validation, gamma,
+resident preparation and copying. The authored public probe includes strided,
+Fortran, f64, integer and bool input conversion. It has NOT been run by this lane.
+Targets, sample weights, direct index/offset arrays, finite-only/f64 admission,
+foreign input preparation and other family consumers still need further work;
+this is not a claim of exactly one metadata read across every public call.
