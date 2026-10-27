@@ -23,7 +23,8 @@ def test_native_execution_closures_have_no_provider_dependencies():
 
 
 @pytest.mark.parametrize('dependency', ['std.python', 'bindings.py_balanced',
-                                       'autograd.program_arrays_pyapi', 'adapters.torch'])
+                                       'autograd.program_arrays_pyapi', 'adapters.torch',
+                                       'providers.python.buffers'])
 def test_transitive_provider_dependency_is_rejected(tmp_path, dependency):
     (tmp_path / 'core').mkdir()
     (tmp_path / 'core/entry.mojo').write_text('from core.inner import run\n')

@@ -52,5 +52,14 @@
     "release"
   ],
   "stale_source_guards": "Fixed explicit public/internal meta lifecycle bridge and current classical keyword admission assertions; runtime dispatch unchanged",
-  "evidence": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027"
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027",
+  "provider_dependency_guard_followup": {
+    "exit_code": 0,
+    "passed": 27,
+    "subtests_passed": 14,
+    "failed": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/source-tests-provider-followup.log",
+    "junit": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/source-tests-provider-followup.xml",
+    "purpose": "Guard existing providers/python edge transitively; fifth negative control"
+  }
 }
