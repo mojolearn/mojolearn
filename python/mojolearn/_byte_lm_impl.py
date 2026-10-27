@@ -716,51 +716,8 @@ class SmallByteLanguageModelTrainer:
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
                  eps=1e-8, weight_decay=.01, shape=None, resident=None, step_result=None):
-        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
-        _numeric_profile.require_training("mojolearn.SmallByteLanguageModelTrainer")
-        # cpu2-l11-neural (2026-10-04): `resident=None` (the default) is
-        # AUTO: the device-owned session whenever the loaded binding carries
-        # the session entries (every current GPU build), so no step mirrors,
-        # copies or re-scans the parameters and moments on the host. It is
-        # resolved at the first call that needs the binding (`_is_resident`).
-        # `resident=False` keeps the stateless path as an explicit opt-out.
-        if resident is not None and type(resident) is not bool:
-            raise TypeError("resident must be a bool")
-        if step_result is None:
-            # AUTO keeps the stateless return shape ('full').
-            step_result = 'lean' if resident is True else 'full'
-        if type(step_result) is not str or step_result not in ('full', 'lean'):
-            raise ValueError("step_result must be 'full' or 'lean'")
-        if step_result == 'lean' and resident is not True:
-            raise ValueError("step_result='lean' requires resident=True: the stateless path "
-                             "destroys its context before returning, so there is nothing to export from")
-        self._resident = resident
-        self._step_result = step_result
-        self._native_session = None
-        self._session_binding = None
-        self._session_open = False
-        self._logits_pool = _LogitsPool()
-        self._grad_step = -1
-        self._last_export_step = 0
-        self._lost_at = None
-        shape = require_shape(shape)
-        flat = _parameters(parameters, shape)
-        config = _configuration(lr, betas, eps, weight_decay)
-        descriptor = _schedule(data_schedule)
-        _require_schedule_vocabulary(descriptor, shape)
-        mode = _mode()
-        self._lock = threading.RLock()
-        self._runtime = None
-        self._runtime_binding = None
-        self._state = dict(schema=_SCHEMA, profile=_runtime_profile(shape, mode), numeric_mode=mode,
-                           parameter_names=list(shape.parameter_names),
-                           parameter_shapes=[list(shape) for shape in shape.parameter_shapes],  # glue: lists the model parameter shapes
-                           parameter_offsets=list(shape.offsets), parameters=flat,
-                           m=_buffers.zeros(shape.n_total, '<f4'), v=_buffers.zeros(shape.n_total, '<f4'),
-                           flags=_buffers.zeros(shape.n_tensors, '<i4'), completed_steps=0, next_batch_index=0,
-                           config=config, data_schedule=descriptor)
-        if shape.profile != PROFILE:
-            self._state['model_shape'] = shape.to_dict()
+        _LM_TRAINER(self, "construct", (parameters, data_schedule, lr, betas, eps,
+                    weight_decay, shape, resident, step_result), _LM_TRAINER_CONTEXT)
 
     @property
     def data_schedule(self):
@@ -1708,6 +1665,10 @@ def _connect_trainer():
     from ._native_classical_bridge import _state_context
     from types import MethodType
     context = _state_context()
+    _numeric_profile.default_profile("training")  # glue: connect the training profile before public construction
+    context.update(byte_lm_trainer_class=SmallByteLanguageModelTrainer, byte_lm_config_class=ByteLanguageModelConfig,
+                   byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES,
+                   byte_lm_lock=type(threading.RLock()))
     _backend.default_mode()  # glue: resolve mode before any native product operation
     bindings = {}
     for mode in _NATIVE_MODE_CODE:  # glue: the two numeric modes, connected once

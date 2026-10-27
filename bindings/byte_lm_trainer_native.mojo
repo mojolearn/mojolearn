@@ -28,6 +28,9 @@ from bindings.native_buffer_owner import native_buffer_view, native_storage_allo
 from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.host_helpers_impl import argmax_rows_f32
+from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
+from providers.python.training_buffer_pyapi import training_f32_owned
+from bindings.native_json import native_json_parse
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
 
@@ -283,7 +286,7 @@ def _has(binding: PythonObject, name: String) raises -> Bool:
     return Bool(py=py_call(_b().callable, py_call(_b().getattr, binding, name, PythonObject(None))))
 
 
-def _load(shape: _Shape, context: PythonObject) raises -> PythonObject:
+def _load_snapshot(shape: _Shape, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, String]:
     """`_load(shape)`: the byte LM binding of the process tier, its profile,
     mode and vendor read back."""
     var mode = _mode(context)
@@ -310,7 +313,12 @@ def _load(shape: _Shape, context: PythonObject) raises -> PythonObject:
             raise Error("ImportError: Byte-LM binding lacks runtime shapes; rebuild bindings/build_byte_lm.sh")
         if String(py=py_call(_b().str, py_call(binding.byte_lm_config_profile, shape.native_shape()))) != shape_profile + suffix:
             raise Error("RuntimeError: Byte-LM native runtime shape/profile mismatch")
-    return binding
+    return (binding, mode, suffix)
+
+
+def _load(shape: _Shape, context: PythonObject) raises -> PythonObject:
+    var snapshot = _load_snapshot(shape, context)
+    return snapshot[0]
 
 
 def _provider(fields: PythonObject, binding: PythonObject) raises -> PythonObject:
@@ -667,6 +675,141 @@ def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, bi
     return result
 
 
+def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    var bi = _b()
+    if py_type(trainer) is not context["byte_lm_trainer_class"]:
+        raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
+    var profile = py_get(context["byte_lm_profile_defaults"], "training", PythonObject("fp32_v1"))
+    if py_type(profile) is not bi.str or not Bool(py=context["byte_lm_profiles"][profile]["training"]):
+        raise Error("NotImplementedError: the selected numeric profile is unavailable for Byte-LM training")
+    # Every external value is admitted before scalar, buffer or JSON protocols.
+    for i in range(6):  # small-loop(parameter data, schedule and five optimizer arguments)
+        classical_admit_value(args[i], context)
+    var resident = args[7]
+    if resident is not None and py_type(resident) is not bi.bool:
+        raise Error("TypeError: resident must be a bool")
+    var step_result = args[8]
+    if step_result is None:
+        step_result = PythonObject("lean" if resident is not None and Bool(py=resident) else "full")
+    if py_type(step_result) is not bi.str or (String(py=step_result) != "full" and String(py=step_result) != "lean"):
+        raise Error("ValueError: step_result must be 'full' or 'lean'")
+    if String(py=step_result) == "lean" and (resident is None or not Bool(py=resident)):
+        raise Error("ValueError: step_result='lean' requires resident=True: the stateless path destroys its context before returning, so there is nothing to export from")
+    var config_value = args[6]
+    var shape_state = bi.dict()
+    if config_value is not None:
+        if py_type(config_value) is not context["byte_lm_config_class"]:
+            raise Error("TypeError: shape must be a ByteLanguageModelConfig")
+        var config_fields = py_fields(config_value)
+        classical_admit_value(config_fields, context)
+        py_setitem(shape_state, "model_shape", config_fields)
+    var shape = _shape_of(shape_state)
+    # The selected native binding validates configured dimensions before any
+    # allocation; a host-only glue binary must not impose its own numeric mode.
+    var loaded = _load_snapshot(shape, context)
+    var names = shape.names()
+    var shapes = shape.shapes()
+    var total = shape.n_total()
+    var parameters = args[0]
+    var flat: PythonObject
+    if py_type(parameters) is bi.dict:
+        if len(parameters) != len(names):
+            raise Error("ValueError: Byte-LM named parameters must contain the exact configured tensor registry")
+        flat = _f32(total, context)
+        var dest = _F32P(unsafe_from_address=Int(py=classical_address(flat)))
+        var offset = 0
+        for i in range(len(names)):  # driver-loop: admit each configured parameter tensor once
+            if not py_contains(parameters, names[i]):
+                raise Error("ValueError: Byte-LM named parameters must contain the exact configured tensor registry")
+            var owned = training_f32_owned(parameters[names[i]], shapes[i], "Byte-LM " + names[i], context)
+            var count = 1
+            for width in shapes[i]:  # small-loop(parameter rank)
+                count *= width
+            memcpy(dest=dest + offset, src=_F32P(unsafe_from_address=Int(py=classical_address(owned))), count=count)
+            _ = owned^
+            offset += count
+    else:
+        flat = training_f32_owned(parameters, [total], "Byte-LM parameters", context)
+    var betas: PythonObject
+    try:
+        # Only already-admitted native containers/buffers reach iteration.
+        betas = py_call(bi.tuple, args[3])
+    except:
+        raise Error("ValueError: Byte-LM betas must contain two scalars")
+    if len(betas) != 2:
+        raise Error("ValueError: Byte-LM betas must contain two scalars")
+    var config = bi.dict()
+    var keys = [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]
+    var scalars: List[PythonObject] = [args[2], betas[0], betas[1], args[4], args[5]]
+    var numeric = List[Float64]()
+    for i in range(5):  # small-loop(the five optimizer configuration scalars)
+        numeric.append(training_f32_scalar(scalars[i], "Byte-LM " + keys[i], context, True))
+        py_setitem(config, keys[i], numeric[i])
+    if numeric[0] <= 0 or numeric[3] <= 0 or numeric[4] < 0:
+        raise Error("ValueError: Byte-LM requires lr > 0, eps > 0 and weight_decay >= 0")
+    if numeric[1] < 0 or numeric[1] >= 1 or numeric[2] < 0 or numeric[2] >= 1:
+        raise Error("ValueError: Byte-LM betas must remain in [0, 1) in float32")
+    py_setitem(config, "kind", 2)
+    py_setitem(config, "momentum", 0.0)
+    py_setitem(config, "dampening", 0.0)
+    py_setitem(config, "nesterov", False)
+    py_setitem(config, "max_norm", 0.0)
+    var schedule_text = training_schedule_json(args[1], 256, 16384, "Byte-LM data_schedule", context)
+    var schedule = native_json_parse(PythonObject(schedule_text))
+    var vocabulary = py_get(schedule, "vocabulary")
+    if vocabulary is not None:
+        if py_type(vocabulary) is not bi.dict or py_type(py_get(vocabulary, "n_vocab")) is not bi.int or py_type(py_get(vocabulary, "sha256")) is not bi.str:
+            raise Error("ValueError: Byte-LM data_schedule vocabulary must carry an int n_vocab and a str sha256")
+        if Int(py=vocabulary["n_vocab"]) != shape.vocab():
+            raise Error("ValueError: Byte-LM data_schedule vocabulary does not match the configured vocabulary")
+    var binding = loaded[0]
+    var mode = loaded[1]
+    var state = bi.dict()
+    py_setitem(state, "schema", "mojolearn.small-byte-lm-state.v1")
+    py_setitem(state, "profile", PythonObject(shape.profile(String(py=context["byte_lm_profile"])) + loaded[2]))
+    py_setitem(state, "numeric_mode", mode)
+    var named = Python.list()
+    var shaped = Python.list()
+    var offsets = Python.list(0)
+    var offset = 0
+    for i in range(len(names)):  # driver-loop: publish native registry metadata once
+        _ = py_call(named.append, names[i])
+        var dims = Python.list()
+        var count = 1
+        for width in shapes[i]:  # small-loop(parameter rank)
+            _ = py_call(dims.append, width)
+            count *= width
+        _ = py_call(shaped.append, dims)
+        offset += count
+        _ = py_call(offsets.append, offset)
+    py_setitem(state, "parameter_names", named)
+    py_setitem(state, "parameter_shapes", shaped)
+    py_setitem(state, "parameter_offsets", offsets)
+    py_setitem(state, "parameters", flat)
+    py_setitem(state, "m", _f32(total, context))
+    py_setitem(state, "v", _f32(total, context))
+    py_setitem(state, "flags", _i32(shape.n_tensors(), context))
+    py_setitem(state, "completed_steps", 0)
+    py_setitem(state, "next_batch_index", 0)
+    py_setitem(state, "config", config)
+    py_setitem(state, "data_schedule", schedule)
+    if shape.profile(String(py=context["byte_lm_profile"])) != String(py=context["byte_lm_profile"]):
+        py_setitem(state, "model_shape", py_call(bi.dict, shape_state["model_shape"]))
+    var fields = py_fields(trainer)
+    py_setitem(fields, "_resident", resident)
+    py_setitem(fields, "_step_result", step_result)
+    py_setitem(fields, "_lock", py_call(context["byte_lm_lock"]))
+    py_setitem(fields, "_runtime", PythonObject(None))
+    py_setitem(fields, "_runtime_binding", PythonObject(None))
+    py_setitem(fields, "_last_export_step", 0)
+    py_setitem(fields, "_lost_at", PythonObject(None))
+    py_setitem(fields, "_state", state)
+    _forget(fields, context)
+    _ = binding
+    return PythonObject(None)
+
+
 def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`train_step(ids)`: `with self._lock: return self._run(ids, True)`."""
     classical_connect_numpy(context)
@@ -875,6 +1018,8 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
+        if operation == "construct":
+            return byte_lm_construct(call[0], call[2], call[3]).steal_data()
         if operation == "train_step":
             return byte_lm_train_step(call[0], call[2], call[3]).steal_data()
         if operation == "logits" or operation == "next_bytes":
@@ -891,4 +1036,6 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if text.startswith("ImportError:"):
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        if text.startswith("NotImplementedError:"):
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

@@ -62,3 +62,23 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
 def test_byte_lm_input_admission_precedes_buffer_export():
     door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text().split('def _ids(')[1].split('def _f32(')[0]
     assert door.index('classical_admit_value(source, context)') < door.index('native_buffer_view(source)')
+
+
+def test_training_constructors_share_admission_helpers():
+    import ast
+    source=(ROOT/'python/mojolearn/_byte_lm_impl.py').read_text()
+    cls=next(node for node in ast.parse(source).body if isinstance(node,ast.ClassDef) and node.name=='SmallByteLanguageModelTrainer')
+    constructor=next(node for node in cls.body if isinstance(node,ast.FunctionDef) and node.name=='__init__')
+    assert len(constructor.body)==1
+    assert constructor.body[0].value.func.id=='_LM_TRAINER'
+    assert 'byte_lm_lock=type(threading.RLock())' in source
+    byte=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
+    small=(ROOT/'bindings/small_mlp_native.mojo').read_text()
+    for src in (byte,small):
+        assert 'training_f32_scalar(' in src
+        assert 'training_schedule_json(' in src
+    construct=byte.split('def byte_lm_construct(')[1].split('def byte_lm_logits(')[0]
+    assert construct.index('_load_snapshot(shape, context)') < construct.index('training_f32_owned(')
+    assert 'training_f32_owned(' in construct
+    copy=(ROOT/'core/training_input_copy.mojo').read_text()
+    assert 'std.python' not in copy and 'PythonObject' not in copy
