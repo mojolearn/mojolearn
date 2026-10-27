@@ -216,11 +216,13 @@ def native_path(value: PythonObject) raises -> PythonObject:
     if py_type(value) is bi.bytes:
         return py_call(value.decode, "utf-8", "surrogateescape")
     var cls = py_type(value)
-    var pathlib = Python.import_module("pathlib")
+    var path_connection = native_loaded_module("mojolearn._native_loaded_modules")
+    var paths = path_connection.PATH_TYPES
+    var bases = path_connection.PATH_BASES
     # Exact native storage types only. Names/modules and isinstance admit
     # subclasses whose descriptors or __fspath__ can execute Python. Never
     # invoke that protocol from product execution, even through a C builtin.
-    if cls is not pathlib.PosixPath and cls is not pathlib.PurePosixPath:
+    if cls is not paths[0] and cls is not paths[1]:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
     var parts = PythonObject(None)
     var member_type = native_loaded_module("types").MemberDescriptorType
@@ -232,7 +234,10 @@ def native_path(value: PythonObject) raises -> PythonObject:
         var field = PythonObject("_raw_paths") if storage == 0 else PythonObject("_parts")
         for i in range(len(mro)):  # driver-loop: over admitted native path class metadata
             var base = mro[i]
-            if base is not pathlib.PosixPath and base is not pathlib.PurePosixPath and base is not pathlib.Path and base is not pathlib.PurePath and base is not bi.object:
+            var known = False
+            for j in range(len(bases)):  # driver-loop: fixed import-time standard path identities
+                known = known or base is bases[j]
+            if not known:
                 raise Error("TypeError: Python path inheritance callbacks are unsupported")
             var namespace = py_call(bi.type.__getattribute__, base, "__dict__")
             if py_contains(namespace, field):
