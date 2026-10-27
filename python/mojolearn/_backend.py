@@ -844,6 +844,8 @@ def _ptx_base(pkg, why, how):
         fallback="ptx", code_format=gpu_plugins.PTX_CODE_FORMAT, arch=gpu_plugins.PTX_ARCH,
         how=how, numeric_mode=requested_mode(), manifest_sha256=manifest_hash,
         source_commit=source, loaded_files=[])
+    if "component_sources" in doc:
+        _BASELINE_SELECTION["component_sources"] = doc["component_sources"]
     _ARCH_SELECTED = gpu_plugins.PTX_ARCH
     _ARCH_HOW = how
     info = _PLUGINS_FOUND.get("cuda")

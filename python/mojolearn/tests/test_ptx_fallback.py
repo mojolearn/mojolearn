@@ -289,6 +289,34 @@ class Selection(Install):
 
 
 class Provenance(Install):
+    def test_incremental_component_source_is_pinned_and_retained(self):
+        gp = self.B.gpu_plugins
+        path = self.root / gp.BASELINE_MANIFEST
+        doc = json.loads(path.read_text())
+        name = "identical/_mojolearn_gbdt.so"
+        files = {r["file"]: r["sha256"] for r in doc["files"]}
+        source = dict(binary_sha256=files[name], source_commit="c" * 40,
+                      source_closure_sha256="d" * 64,
+                      source_closure_ref="measurements/repair/source.tgz")
+        doc["component_sources"] = {name: source}
+        gp.validate_baseline_manifest(doc, files)
+        path.write_text(json.dumps(doc))
+        self.write_marker(dict(manifest_sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
+        self.layout("identical")
+        receipt = self.B.baseline_selection_receipt()
+        self.assertEqual(receipt["source_commit"], SOURCE)
+        self.assertEqual(receipt["component_sources"], {name: source})
+        for field, value in (("binary_sha256", "e" * 64), ("source_commit", "short"),
+                             ("source_closure_sha256", "short"), ("source_closure_ref", "")):
+            with self.subTest(field=field):
+                bad = json.loads(json.dumps(doc))
+                bad["component_sources"][name][field] = value
+                with self.assertRaisesRegex(ValueError, "component source"):
+                    gp.validate_baseline_manifest(bad, files)
+        doc["component_sources"] = {"identical/missing.so": source}
+        with self.assertRaisesRegex(ValueError, "component source"):
+            gp.validate_baseline_manifest(doc, files)
+
     def test_loaded_ptx_bindings_are_recorded_and_checked(self):
         self.layout("identical")
         binary = self.root / "identical" / "_mojolearn_gbdt.so"

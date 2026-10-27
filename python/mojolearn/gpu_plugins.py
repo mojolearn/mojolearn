@@ -388,6 +388,23 @@ def validate_baseline_manifest(doc, files, indexes=None):
         declared[name] = row.get("sha256")
     if not declared or declared != files:
         raise ValueError("PTX manifest does not match the complete GPU binding bytes")
+    # Incremental development assemblies retain the base installed source
+    # above and name rebuilt components separately. Never relabel reused GPU
+    # bytes as a later repair commit. This is provenance, not runtime proof.
+    if "component_sources" in doc:
+        components = doc["component_sources"]
+        if not isinstance(components, dict) or not components:
+            raise ValueError("invalid PTX component source records")
+        for name, source in components.items():  # glue: validate component manifest metadata
+            if (name not in declared or not isinstance(source, dict)
+                    or source.get("binary_sha256") != declared[name]
+                    or not isinstance(source.get("source_commit"), str)
+                    or not re.fullmatch(r"[0-9a-f]{40}", source["source_commit"])
+                    or not isinstance(source.get("source_closure_sha256"), str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", source["source_closure_sha256"])
+                    or not isinstance(source.get("source_closure_ref"), str)
+                    or not source["source_closure_ref"]):
+                raise ValueError("invalid PTX component source evidence for " + str(name))
     for row in rows:  # glue: a binding file must not shadow a member of its directory's merged file
         name = row.get("file", "")
         prefix = name.rsplit("/", 1)[0] + "/" if "/" in name else ""
