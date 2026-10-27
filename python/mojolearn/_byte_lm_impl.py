@@ -1494,9 +1494,7 @@ class SmallByteLanguageModelTrainer:
         str
             The file's SHA-256.
         """
-        with self._lock:
-            payload = self.export_state()
-        return _byte_lm_checkpoint.save(path, payload)
+        return _LM_TRAINER(self, "export_checkpoint_binary", (path,), _LM_TRAINER_CONTEXT)
 
     @classmethod
     def from_checkpoint_binary(cls, path, *, resident=None):
@@ -1517,13 +1515,7 @@ class SmallByteLanguageModelTrainer:
         -------
         LanguageModelTrainer
         """
-        state = _byte_lm_checkpoint.load(path)
-        shape = state_shape(state)
-        cfg = state['config']
-        result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
-                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
-                     shape=shape, resident=resident)
-        return result.load_state_dict(state)
+        return _LM_TRAINER(cls, "from_checkpoint_binary", (path, resident), _LM_TRAINER_CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, *, resident=None):

@@ -92,3 +92,30 @@ def test_restore_strided_int32_flags_and_rejects_python_hooks():
     with pytest.raises(TypeError):
         model.load_state_dict(bad)
     assert calls == []
+
+
+def test_binary_checkpoint_public_roundtrip_and_original_io_errors(tmp_path):
+    from mojolearn import LanguageModelTrainer
+    from mojolearn._verify_native_runtime import audit_native_call
+    model = _model()
+    ids = np.array([[1, 3, 5, 7, 9]], dtype='i4')
+    model.train_step(ids)
+    expected = _detached(model.export_state())
+    path = tmp_path / 'state.bin'
+    digest = audit_native_call(model.export_checkpoint_binary, path).assert_native()
+    import hashlib
+    assert digest == hashlib.sha256(path.read_bytes()).hexdigest()
+    restored = audit_native_call(LanguageModelTrainer.from_checkpoint_binary, path, resident=True).assert_native()
+    _same(restored.export_state(), expected)
+    model.train_step(ids)
+    restored.train_step(ids)
+    _same(model.export_state(), restored.export_state())
+    missing = tmp_path / 'missing' / 'state.bin'
+    with pytest.raises(FileNotFoundError) as failure:
+        LanguageModelTrainer.from_checkpoint_binary(missing, resident=True)
+    assert failure.value.errno == 2 and str(missing) in str(failure.value.filename)
+    original = path.read_bytes()
+    path.write_bytes(original[:-1])
+    with pytest.raises(ValueError):
+        LanguageModelTrainer.from_checkpoint_binary(path, resident=True)
+    assert path.read_bytes() == original[:-1]
