@@ -98,7 +98,7 @@ def connect(config_cls, model_cls, training, neural, state_cls):
         # refuses at use, as parallel_training does for a missing byte LM.
         binding, unavailable = None, str(exc)
     names = (
-        "training_vendor", "training_numeric_mode", "training_experiment_profile",
+        "training_vendor", "training_numeric_mode", "training_experiment_profile", "neural_primitives_api_v1",
         "embedding_forward", "embedding_backward", "rms_norm_forward", "rms_norm_backward",
         "linear_forward", "linear_backward", "ce_loss", "accumulate", "neural_rng",
         "optimizer_step", "optimizer_resident_download", "optimizer_resident_upload",
@@ -162,7 +162,7 @@ def connect(config_cls, model_cls, training, neural, state_cls):
         "generator_bindings": generator_bindings, "generator_backend": _backend,
         "generator_index": _operator.index,
         "generator_sqrt": generator_sqrt, "generator_sqrt_type": generator_sqrt_type,
-        "neural": neural.CONTEXT, "entries": SimpleNamespace(**entries),
+        "neural": neural.CONTEXT, "entries": SimpleNamespace(canonical=binding, **entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
         "model_class": model_cls, "state_class": state_cls, "mamba3_state_class": Mamba3State,
         "optimizer_class": training.AdamW,
