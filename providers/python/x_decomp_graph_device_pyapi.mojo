@@ -16,7 +16,7 @@ from x_decomp.graph_device import (
     dev_graph_radius_geo_run,
     dev_graph_radius_run,
 )
-from x_decomp.resident_pyapi import _id, _n
+from providers.python.x_decomp_resident_pyapi import _id, _n
 
 
 def dev_graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

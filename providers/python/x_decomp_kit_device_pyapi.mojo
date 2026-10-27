@@ -9,7 +9,7 @@ host buffer the caller owns."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _i, _n
+from providers.python.x_decomp_api_pyapi import _f, _i, _n
 from x_decomp.kit_device import mcd_dev_check, mcd_dev_run
 
 

@@ -8,7 +8,7 @@ entry in x_decomp/dictl.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _n
+from providers.python.x_decomp_api_pyapi import _f, _n
 from x_decomp.dictl import DlArgs, dict_learning_run, minibatch_run
 from x_decomp.exec_trait import Exec
 

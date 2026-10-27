@@ -7,10 +7,10 @@ entry in x_decomp/mds_dev.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _n
+from providers.python.x_decomp_api_pyapi import _f, _n
 from x_decomp.mds import mds_fit_check
 from x_decomp.mds_dev import mds_fit_dev_run
-from x_decomp.mds_pyapi import _mds_args
+from providers.python.x_decomp_mds_pyapi import _mds_args
 
 
 def mds_fit_dev_py(

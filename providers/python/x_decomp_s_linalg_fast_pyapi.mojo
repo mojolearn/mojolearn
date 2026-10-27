@@ -9,7 +9,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from x_decomp.cells import F32Ptr
-from x_decomp.resident_pyapi import _id, _n
+from providers.python.x_decomp_resident_pyapi import _id, _n
 from x_decomp.s_linalg_fast import (
     dev_lu_factor_run,
     dev_lu_solve_run,
