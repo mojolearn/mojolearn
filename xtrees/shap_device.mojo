@@ -74,7 +74,7 @@ comptime TABLE_BYTES = 256 * 1024 * 1024
 #: and compare per internal node) instead of walking every leaf's root path
 #: (xtrees/shap_tab.mojo). Source lane/apple-fast-shap@13343dd51 (commit
 #: 73ceaa451), recovered 2026-10-04. Prior: never compiled on M3 (the
-#: branch failed to parse at xtrees/api_pyapi.mojo:715, a parameter named `out`,
+#: branch failed to parse at providers/python/xtrees_api_pyapi.mojo:715, a parameter named `out`,
 #: and :811); the "21.4 ms vs board 25.1" lead in LOST_CANDIDATES is the
 #: pre-table taxi number of ab-tshap-table-taxi, not a measurement of this.
 #: Fixed: the old branch tabulated per leaf and pattern itself; main's

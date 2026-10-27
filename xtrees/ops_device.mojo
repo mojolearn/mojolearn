@@ -5,7 +5,7 @@
 `xtrees/ops.mojo`'s row gather, tree apply and transpose ran on the host
 thread pool in the GPU binding (DEVIATIONS 5606, 5608). A GPU install now
 runs them here: the caller's arrays go up once, one grid-wide kernel does
-the work, the result comes back once. `xtrees/api_pyapi.mojo` picks these on every
+the work, the result comes back once. `providers/python/xtrees_api_pyapi.mojo` picks these on every
 GPU build and the serial host loops of `ops.mojo` on the CPU column
 (`TARGET_COLUMN == COLUMN_CPU`), so no GPU install reaches a host walk.
 
