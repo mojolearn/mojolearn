@@ -46,3 +46,13 @@ def test_public_candidate_probe_has_all_recurrent_cells_and_two_label_shapes():
         assert name in source
     assert 'monkeypatch.setitem' in source and 'assert_native()' in source
     assert 'pytest.skip' not in source
+
+
+def test_builtin_schedule_reuses_native_spec_and_kernel_directly():
+    source = (ROOT / 'bindings/optimizer_schedule_native.mojo').read_text()
+    operation = source.split('def schedule_operation(', 1)[1]
+    assert 'entries["lr_schedule_series"]' not in operation
+    assert 'entries["lr_schedule_at"]' not in operation
+    assert 'lr_spec_fill(spec, 1, count,' in operation
+    assert 'lr_spec_fill(spec, requested, 1,' in operation
+    assert '_lr_refusal(status[0]' in operation

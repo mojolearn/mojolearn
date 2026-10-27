@@ -126,3 +126,15 @@ measurement clock, but remains product API boundary debt. ImportedProgram and
 distributed/framework admission paths have separate providers and are not
 qualified by the ordinary Program input repair. Optional xseq schedule/scoring
 and object-label routes remain as noted above.
+
+## Built-in schedule continuation
+
+Optional recurrent learning-rate schedules now call the already-linked native
+`lr_spec_fill` directly with their admitted `LrSpec`. Their numerical engine,
+first failing step/error text, float32 decisions, array/list output and step
+conversion semantics remain unchanged. The discarded CPython round trip no
+longer boxes and re-reads the same spec. The common public optimizer schedule
+owner also benefits from this repair; no provider table is added to a function
+that is already directly linked. An authored public probe poisons the packed
+schedule entries, then checks values, scalar lookup and recurrent fitting with
+StepLR. Schedule source checks passed; compiled validation remains pending.
