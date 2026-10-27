@@ -28,20 +28,25 @@ def sha(path):
 
 
 def requested_path():
-    """'ptx' when the worker selects the PTX set by name (MOJOLEARN_GPU_ARCH=sm_80;
-    Andrew 2026-10-10: PTX is a normal target; no flag), else 'native'."""
-    return 'ptx' if os.environ.get('MOJOLEARN_GPU_ARCH', '').strip().lower() == 'sm_80' else 'native'
+    """Explicit route constraint, or auto when the installed loader selects it.
+
+    A standalone mojolearn-nvidia-ptx install needs no architecture override.
+    The controller may use a different interpreter from the timed worker;
+    collect() verifies that worker's actual plugin and PTX selection receipt.
+    """
+    architecture = os.environ.get('MOJOLEARN_GPU_ARCH', '').strip().lower()
+    return ('ptx' if architecture == 'sm_80' else 'native') if architecture else 'auto'
 
 
 def identity(path):
     if not path:
-        if requested_path() != 'native':
+        if requested_path() == 'ptx':
             raise ValueError('Forced PTX boards require --artifact-manifest; legacy smoke is not path evidence')
         return None
     d = json.loads(Path(path).read_text())
     if d.get('schema') != SCHEMA or d.get('code_path') not in ('native', 'ptx'):
         raise ValueError('Invalid board artifact manifest schema/code_path')
-    if d['code_path'] != requested_path():
+    if requested_path() != 'auto' and d['code_path'] != requested_path():
         raise ValueError('Artifact manifest code path differs from requested loader path')
     if len(d.get('source_commit', '')) != 40 or d.get('numeric_mode') != 'identical':
         raise ValueError('Guarded board requires full source SHA and IDENTICAL numeric mode')

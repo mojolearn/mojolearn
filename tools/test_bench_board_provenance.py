@@ -69,6 +69,20 @@ class Provenance(unittest.TestCase):
         binary.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'bytes differ'):P.installed_check(doc,self.root)
 
+    def test_automatic_ptx_manifest_needs_no_architecture_override(self):
+        manifest = dict(self.ptx, runtime_files={str(self.root/'libMojo.so'): 'c'*64})
+        path = self.root/'manifest.json'
+        path.write_text(json.dumps(manifest))
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(P.requested_path(), 'auto')
+            self.assertEqual(P.identity(path)['code_path'], 'ptx')
+        # Explicit native requests still cannot admit PTX evidence. Actual
+        # automatic worker selection remains checked by collect(), not inferred
+        # from the controller's environment or this manifest alone.
+        with patch.dict(os.environ, {'MOJOLEARN_GPU_ARCH': 'sm_89'}, clear=True):
+            with self.assertRaisesRegex(ValueError, 'differs'):
+                P.identity(path)
+
     def test_wrong_path_and_legacy_smoke_cannot_qualify_guarded_run(self):
         r=dict(family='algos',lane='pca',dataset='taxi')
         doc=dict(schema=B.SMOKE_SCHEMA,vendor='nvidia',files_sha256=B.smoke_files_sha256(),
