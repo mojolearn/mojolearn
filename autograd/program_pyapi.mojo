@@ -31,32 +31,35 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
         raise Error("ValueError: tensor rank must be at most 8")
     if Int(py=a.size) == 0:
         raise Error("ValueError: input must not be empty")
+    var shape = a.shape
+    var strides = a.strides
+    var dtype = a.dtype
     var dims = List[Int]()
     if nd == 0:
         dims.append(1)
         dims.append(1)
     elif nd == 1:
-        dims.append(Int(py=a.shape[0]))
+        dims.append(Int(py=shape[0]))
         dims.append(1)
     else:
         for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
-            dims.append(Int(py=a.shape[k]))
+            dims.append(Int(py=shape[k]))
     var sh = ShapeN.of(dims)
     var size = Int(py=a.itemsize)
-    if not Bool(py=a.dtype.isnative):
+    if not Bool(py=dtype.isnative):
         raise Error("TypeError: " + what + " must be in native byte order")
     var kind: Int
     try:
-        kind = cast_in_kind(Int(py=a.dtype.num), size, what)
+        kind = cast_in_kind(Int(py=dtype.num), size, what)
     except error:
         raise Error("TypeError: " + String(error))
     var s0 = sh.cols() * size
     var s1 = size
     if nd == 1:
-        s0 = Int(py=a.strides[0])
+        s0 = Int(py=strides[0])
     elif nd == 2:
-        s0 = Int(py=a.strides[0])
-        s1 = Int(py=a.strides[1])
+        s0 = Int(py=strides[0])
+        s1 = Int(py=strides[1])
     elif nd > 2 and not Bool(py=a.flags.c_contiguous):
         raise Error("ValueError: " + what + ": tensors above rank two must be C-contiguous")
     var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, sh.rows(), sh.cols(), s0, s1)

@@ -97,7 +97,20 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
                       if isinstance(node, ast.Return) and isinstance(node.value, ast.Call))
         assert isinstance(native.args[1], ast.Constant), name
         operation, recipe = plan["methods"]["fit"]
-        assert operation == native.args[1].value, name
+        public_operation = native.args[1].value
+        if public_operation == 'trees_public_meta_fit':
+            # Public doors own lifecycle/output conversion; composed estimators
+            # intentionally target the internal Array ABI. Verify the bridge
+            # explicitly rather than demanding two distinct doors have one name.
+            assert name in {'VotingClassifier', 'VotingRegressor', 'StackingClassifier',
+                            'StackingRegressor', 'MultiOutputRegressor', 'MultiOutputClassifier',
+                            'OneVsRestClassifier', 'CalibratedClassifierCV'}
+            assert operation == 'trees_meta_fit', name
+            lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle.mojo').read_text()
+            assert 'if operation == "trees_public_meta_fit":\n        method = "fit"' in lifecycle
+            assert 'meta_operation(model, "trees_meta_" + method, call_args, context)' in lifecycle
+        else:
+            assert operation == public_operation, name
         expected = native.args[2].elts
         assert len(recipe) == len(expected), name
         for source, item in zip(expected, recipe):
@@ -145,7 +158,16 @@ def test_posterior_is_native_prediction_and_existing_draw_algorithm():
     assert 'inspect.signature' not in source
     assert '_method(est' not in source
     dispatch = (ROOT / "bindings/msel_estimator_native.mojo").read_text()
-    assert 'sequential_admit_value(keywords[keys[k]], context)' in dispatch
+    # The native dispatch context now admits the full classical buffer/pandas
+    # surface. NumPy must be connected before first-call keyword admission;
+    # key/type checks still precede the exact compiled entry invocation.
+    admission = 'classical_admit_value(keywords[keys[k]], context)'
+    assert admission in dispatch
+    assert dispatch.index('classical_connect_numpy(context)') < dispatch.index(admission)
+    assert dispatch.index('if py_type(keywords) is not b.dict:') < dispatch.index(admission)
+    assert dispatch.index('if py_type(keys[k]) is not b.str:') < dispatch.index(admission)
+    assert dispatch.index('if not py_contains(allowed, keys[k]):') < dispatch.index(admission)
+    assert dispatch.index(admission) < dispatch.index('return family_call(')
     assert 'kind == "keyword"' in dispatch and 'kind == "binding"' in dispatch
 
 
