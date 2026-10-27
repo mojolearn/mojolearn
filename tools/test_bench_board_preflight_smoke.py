@@ -166,3 +166,11 @@ def test_neural_higgs_accepts_pinned_unsplit_arrays_without_overlapping_rows(tmp
                 x[:4].astype(np.float64).std(0)).astype(np.float32)
     np.testing.assert_array_equal(arrays['X_test'], expected)
     assert record['higgs']['held_out'].startswith('x[4:6]')
+
+
+@pytest.mark.parametrize('vendor', ['apple', 'amd', 'nvidia'])
+def test_identical_plan_includes_every_neural_fit_lane(vendor):
+    races = B.plan_races(vendor, ['identical'], ['neural'])
+    lanes = {r['lane']: r for r in races}
+    assert set(B.NEURAL.FIT_LANES) <= set(lanes)
+    assert all(lanes[lane]['our_arms'] == {'ours': 'identical'} for lane in B.NEURAL.FIT_LANES)

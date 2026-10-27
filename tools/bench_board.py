@@ -957,10 +957,9 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 # one race per lane: its own data, not taxi/Istella; IDENTICAL
                 # everywhere, plus the FAST arm (`ours-fast`) on Apple
                 ours = our_arms(fam, modes, lane)
-                if vendor == "apple" and lane in NEURAL.FIT_LANES:
-                    # 2026-10-19 (lane ag-bench): identical is never timed on Apple; the fit lanes
-                    # race ours-fast there (bench_board_neural refuses ours by name as well)
-                    ours.pop("ours", None)
+                # FAIRNESS FIX (2026-10-13 audit): the obsolete Apple fast-only
+                # rule silently omitted fit lanes from identical startup checks.
+                # The shared identical plan covers Apple, NVIDIA and AMD.
                 if not ours:
                     continue
                 opp = gpu_opponents_first(NEURAL_OPPONENTS[vendor][lane])

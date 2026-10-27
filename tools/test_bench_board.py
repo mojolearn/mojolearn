@@ -518,19 +518,15 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # six GPU inference lanes *-decode and mlp-predict joined Oct 7 2026), each `ours` plus
     # its torch GPU arms: 64 cells identical only, 82 with the Apple FAST arm `ours-fast`
     # (see test_plan_neural_fast_on_apple_only)
-    # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
-    # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
+    # The shared identical plan includes every GPU fit lane on Apple too.
     neural = bb.plan_races("apple", ["identical"], ["neural"])
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    # DERIVED (2026-10-24): the identical-only Apple plan is the full plan minus the fit
-    # lanes (bench_board_neural.FIT_LANES race ours-fast only on Apple), each race once;
-    # name-level pins: ops-session-step is identical-timed, mlp-fit never is.
     fit = set(bb.NEURAL.FIT_LANES)
     assert len({r["id"] for r in both}) == len(both), "a neural race is planned twice"
-    assert {r["lane"] for r in neural} == {r["lane"] for r in both} - fit
+    assert {r["lane"] for r in neural} == {r["lane"] for r in both}
     assert fit <= {r["lane"] for r in both}
     assert "ops-session-step" in {r["lane"] for r in neural}
-    assert "mlp-fit" not in {r["lane"] for r in neural}
+    assert "mlp-fit" in {r["lane"] for r in neural}
     assert "family neural     races=%d cells=%d" % (len(both), sum(len(r["arms"]) for r in both)) in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
@@ -848,10 +844,10 @@ def test_plan_neural_fast_on_apple_only(vendor):
     for r in races:
         fit = r["lane"] in bb.NEURAL.FIT_LANES
         if fit and vendor == "apple":
-            assert r["our_arms"] == {"ours-fast": "fast"} and r["modes"] == ["fast"], r["id"]
+            assert r["our_arms"] == {"ours": "identical", "ours-fast": "fast"} and r["modes"] == ["fast", "identical"], r["id"]
             mlx = [] if r["lane"] in bb.NEURAL.PREDICT_LANES else ["mlx-fp32"]
             assert r["opponents"] == GPU_ARMS[vendor] + mlx, r["id"]
-            assert r["arms"] == ["ours-fast"] + GPU_ARMS[vendor] + mlx
+            assert r["arms"] == ours + GPU_ARMS[vendor] + mlx
             continue
         assert r["our_arms"] == ({"ours": "identical", "ours-fast": "fast"} if vendor == "apple"
                                  else {"ours": "identical"})

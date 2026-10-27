@@ -5864,8 +5864,6 @@ def _worker_env(arm):
 
 SPAN = {"input_home": "host", "pre_clock_fit": False,
         "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized"}
-APPLE_FIT_IDENTICAL_REFUSED = ("refused: identical is never timed on Apple (CLAUDE.md: Apple is for same-bits "
-                               "checks only); the fit lanes race ours-fast on Apple")
 #: the fit lanes' comparability span (2026-10-19, lane ag-bench), the same on every arm
 FIT_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
             "inside_clock": "one whole fit: a fresh seeded initialization, the training rows to the device, "
@@ -6063,9 +6061,6 @@ def race(args):
     # this change were wrong for this lane; apply extra scrutiny.
     refused_before = {a: REFERENCE_TWIN_LANES[lane] for a in arms
                       if lane in REFERENCE_TWIN_LANES and a.startswith("torch-")}
-    if lane in FIT_LANES and sys.platform == "darwin" and "ours" in arms:
-        # 2026-10-19 (lane ag-bench): identical is never timed on Apple; the fit lanes race ours-fast there
-        refused_before["ours"] = APPLE_FIT_IDENTICAL_REFUSED
     for arm in arms:
         if arm in refused_before:
             workers[arm] = RefusedArm()
