@@ -186,6 +186,15 @@ def _round_even(x: Float32) -> Float32:
 
 @always_inline
 def _abs(x: Float32) -> Float32:
+    # 0.8.60 PTX/Apple graph verification reproduced different NaN words
+    # after abs: NVIDIA 0x7fffffff, Apple the sign-cleared input payload.
+    # The compiler can recognize the integer sign mask as floating abs.
+    # Give NaNs the shared canonical word before that operation; ordinary
+    # values, infinities and signed zero still use the exact sign mask.
+    # Reproduction: verify-graph / broadcast_relu_words_and_cost; retained
+    # measurements/verification/0.8.60/ptx-20261026/ (graph-word-probe.py).
+    if (bitcast[DType.uint32](x) & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+        return bitcast[DType.float32](UInt32(0x7FC00000))
     return bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x7FFFFFFF))
 
 

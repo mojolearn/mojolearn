@@ -906,10 +906,20 @@ def broadcast_relu_words_and_cost():
         # An observable expand or second consumer makes the rewrite illegal.
         observable = s.capture(x, [expanded, activated])
         second_user = s.capture(x, [activated, s.abs(expanded)])
+        # Independent integer oracle for abs, including payload/signaling
+        # NaNs. Comparing optimized with unoptimized alone hid a shared
+        # vendor-specific NaN word in the 0.8.60 captures.
+        abs_words = words & np.uint32(0x7fffffff)
+        abs_words = np.where(abs_words < 0x00800000, 0, abs_words)
+        abs_words = np.where(abs_words > 0x7f800000, 0x7fc00000, abs_words).astype(np.uint32)
+        abs_expected = np.broadcast_to(abs_words.view(np.float32), (3, 16)).copy()
         for model in (observable, second_user):
             assert _hoist_count(_invoke(model.inspect, optimize=True)) == 0
             before = _invoke(model.run, a)
             after = _invoke(model.run, a, optimize=True)
+            if model is second_user:
+                _equal(before[1], abs_expected)
+                _equal(after[1], abs_expected)
             for actual, wanted in zip(after, before):
                 _equal(actual, wanted)
                 outputs.append(actual)
