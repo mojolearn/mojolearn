@@ -8,6 +8,8 @@ runtime edits.
 import hashlib
 import io
 import json
+from pathlib import Path
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -141,9 +143,17 @@ def verifier_update(reference):
         snapshot = reuse.read(proof['source'])
         require(all(snapshot[source] == qualified[name] for name, source in FIXTURE_FILES.items()),
                 'fault proof used different verifier bytes')
-        paths = [reuse.checked_ref(proof[key]) for key in ('clean', 'sabotaged', 'restored', 'review')]
-        failures = coverage_sabotage.check(coverage_sabotage.arms()[arm], *paths,
-                                           batch_bindings=proof['batch_bindings'])
+        # The original checker reads ordinary files. Materialize its inputs
+        # through the evidence resolver so the same proof works in the private
+        # publication bundle without rewriting historical paths or records.
+        with tempfile.TemporaryDirectory(prefix='release-fixture-proof-') as directory:
+            paths = []
+            for key in ('clean', 'sabotaged', 'restored', 'review'):
+                path = Path(directory) / (key + '.json')
+                path.write_bytes(evidence.read_bytes(reuse.checked_ref(proof[key])))
+                paths.append(path)
+            failures = coverage_sabotage.check(coverage_sabotage.arms()[arm], *paths,
+                                               batch_bindings=proof['batch_bindings'])
         require(not failures, 'verifier fault proof failed: ' + str(failures))
         previous, clean = reuse.read(proof['previous_clean']), reuse.read(proof['clean'])
         require(previous['cells'][cell]['hashes'] == clean['cells'][cell]['hashes'],

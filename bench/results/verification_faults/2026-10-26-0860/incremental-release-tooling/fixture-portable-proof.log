@@ -1,0 +1,9 @@
+knn-clf/base: independent byte oracle caught the reviewed fault
+ARM coverage-precise-x_neighbors-p2m_transpose_i CAUGHT
+x-neighbors-nearest-centroid/base: REFUSED by the reviewed product check
+ARM coverage-precise-x_neighbors-p2m_const_cols CAUGHT
+knn-clf/base: independent byte oracle caught the reviewed fault
+ARM coverage-precise-x_neighbors-p2m_transpose_i CAUGHT
+x-neighbors-nearest-centroid/base: REFUSED by the reviewed product check
+ARM coverage-precise-x_neighbors-p2m_const_cols CAUGHT
+PASS: portable proof replay from 16 content-addressed evidence objects
