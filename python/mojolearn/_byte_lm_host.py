@@ -565,7 +565,7 @@ class LanguageModelHostTrainer:
     def loss(self, ids):
         """`train_step`'s loss as a float. The bits are the comparable value;
         this is for reading."""
-        return struct.unpack('<f', struct.pack('<I', self.train_step(ids)))[0]
+        return _HOST_TRAIN(self, "loss", (ids,), _HOST_TRAIN_CONTEXT)
 
 
 def _connect_host_trainer():

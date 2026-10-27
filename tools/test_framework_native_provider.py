@@ -59,3 +59,20 @@ def test_import_and_cleanup_use_the_same_session_provider():
         assert forbidden not in owner
     for filename in ('sequence/model_host_dispatch.mojo', 'sequence/model_device_dispatch.mojo'):
         assert 'if op == PROGRAM_IMPORT:' in (ROOT / filename).read_text()
+
+
+def test_host_byte_lm_uses_common_provider_and_shared_native_execution():
+    frontend = (ROOT / 'bindings/byte_lm_host_trainer_native.mojo').read_text()
+    assert 'py_call_typed' not in frontend
+    assert 'neural_descriptor_execute(provider, 3,' in frontend
+    assert 'neural_descriptor_reuse(' in frontend
+    for filename in ('training/byte_lm_host_execution.mojo', 'training/byte_lm_host_dispatch.mojo'):
+        source = (ROOT / filename).read_text()
+        for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
+            assert forbidden not in source
+    binding = (ROOT / 'bindings/_mojolearn_byte_lm_host.mojo').read_text()
+    for name in ('logits', 'next', 'loss', 'train'):
+        assert f'byte_host_{name}_native(' in binding
+    assert 'byte_lm_host_api_v1' in binding
+    ids = frontend.split('def _ids_i32(')[1].split('def _f32_array(')[0]
+    assert ids.count('value.shape') == 1 and ids.count('value.strides') == 1
