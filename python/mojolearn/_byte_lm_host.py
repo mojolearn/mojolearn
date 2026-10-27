@@ -227,34 +227,7 @@ class LanguageModelInference:
     """
 
     def __init__(self, parameters, *, shape=None, threaded=True, threads=None):
-        shape = ByteLanguageModelConfig() if shape is None else shape
-        if not isinstance(shape, ByteLanguageModelConfig):
-            raise TypeError('shape must be a ByteLanguageModelConfig')
-        if not isinstance(threaded, bool):
-            raise TypeError('threaded must be a bool')
-        _thread_count(threads)
-        self._threaded = threaded
-        self._threads = threads
-        # lane/identical-lowbit-inference (2026-09-17): a dict keyed by
-        # `shape.parameter_names` whose matrices may be packed
-        # (mojolearn.lowbit) is materialized exactly and flattened; the
-        # host forward runs unchanged on the float32 vector.
-        self.weight_format = "float32"
-        if hasattr(parameters, "keys"):
-            parameters, self.weight_format = _flatten_parameters(parameters, shape)
-        array, _ = as_f32_c(parameters, ndim=1, name='parameters')
-        if tuple(array.shape) != (shape.n_total,):
-            raise ValueError(f'parameters must be float32 [{shape.n_total}]')
-        if not all_finite(array):
-            raise ValueError('parameters must be finite')
-        self._parameters = frombytes(le_bytes(array, 'f'), '<f4', (shape.n_total,))
-        self._shape = shape
-        self._native = _native_shape(shape)
-        self._binding = _load()
-        compiled = str(self._binding.byte_lm_host_profile(self._native))
-        expected = shape.profile + str(self._binding.byte_lm_host_arithmetic_suffix())
-        if compiled != expected:
-            raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {expected}')
+        _HOST_TRAIN(self, "inference_construct", (parameters, shape, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, *, threaded=True, threads=None):
@@ -482,6 +455,8 @@ def _connect_host_trainer():
     # (bindings/byte_lm_host_trainer_native.mojo); the compiled step it runs
     # is the trainer's own binding entry, retained at construction
     from .tokenizer import _binding
+    from . import lowbit, _linalg_impl
+    from ._byte_lm_config import _DEFAULT_PROFILE
     from ._native_classical_bridge import _state_context
     context = _state_context()
     _numeric_profile.default_profile("training")  # glue: connect profile metadata at import
@@ -489,7 +464,9 @@ def _connect_host_trainer():
         binding = _load()
     except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
         binding = type(error).__name__ + ": " + str(error)
-    context.update(byte_lm_host_trainer_class=LanguageModelHostTrainer,
+    context.update(byte_lm_bf16_class=lowbit.BF16Weight, byte_lm_int8_class=lowbit.Int8Weight,
+                   byte_lm_linalg_context=_linalg_impl._NATIVE_CONTEXT, byte_lm_default_profile=_DEFAULT_PROFILE,
+                   byte_lm_host_trainer_class=LanguageModelHostTrainer,
                    byte_lm_host_inference_class=LanguageModelInference,
                    byte_lm_config_class=ByteLanguageModelConfig, byte_lm_host_binding=binding,
                    byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES)
