@@ -7,8 +7,8 @@ from sequence.neural_model_dispatch import NeuralModelRequest, MODEL_MIN, MODEL_
 
 
 def model_output_fallback(op: Int, r: NeuralModelRequest) raises -> Int:
-    var a = r.addresses
-    var p = r.options
+    ref a = r.addresses
+    ref p = r.options
     if op == MODEL_MIN:
         if a[1] == 0:
             raise Error("native model: null minimum output")

@@ -37,7 +37,11 @@ comptime _PROGRAM_ARRAYS = _Global[
 ]
 
 
-def initialize_program_arrays(admission: PythonObject = None) raises:
+def initialize_program_arrays() raises:
+    initialize_program_arrays(PythonObject(None))
+
+
+def initialize_program_arrays(admission: PythonObject) raises:
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     if admission is not None:
         classical_connect_numpy(admission)

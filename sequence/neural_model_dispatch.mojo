@@ -44,7 +44,7 @@ struct NeuralModelRequest(Movable):
             raise Error("native model: invalid consumed-output descriptor")
 
     def labels(self) raises -> Tuple[CastIn, Int]:
-        var p = self.options
+        ref p = self.options
         var src = CastIn(p[0], p[1], p[2], p[3], p[4], p[5], p[6])
         src.check("y")
         if src.cols != 1:

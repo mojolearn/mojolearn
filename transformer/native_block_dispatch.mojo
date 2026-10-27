@@ -51,7 +51,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
             raw.append(0)
         var expanded = List[Int]()
         if op == 2:
-            expanded = raw^
+            expanded = raw.copy()
             _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
         if len(p) != base_p and len(p) != base_p + BLOCK_OPTION_PARAMS:
             raise Error(name + ": params must contain " + String(base_p) + " values, or "

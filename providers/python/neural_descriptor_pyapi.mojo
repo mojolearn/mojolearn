@@ -34,7 +34,7 @@ struct NeuralDescriptorProvider(Movable, Writable):
         self.write_to(writer)
 
 
-def neural_descriptor_capsule(name: String, entries: List[NativeDescriptorCall]) raises -> PythonObject:
+def neural_descriptor_capsule(mut name: String, entries: List[NativeDescriptorCall]) raises -> PythonObject:
     # Shared table export for every engine. The caller MUST retain the name
     # and entries in module-global native storage for the entire image lifetime;
     # PyCapsule borrows both addresses and does not own or free either allocation.

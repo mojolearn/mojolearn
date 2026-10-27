@@ -20,8 +20,8 @@ comptime _OUTPUT_INIT = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_I
 
 
 def model_output_device(mut ex: DeviceExec, op: Int, r: NeuralModelRequest) raises -> Int:
-    var a = r.addresses
-    var p = r.options
+    ref a = r.addresses
+    ref p = r.options
     var n = p[0]
     if op == MODEL_ARGMAX:
         if n < 0 or p[1] < 1:

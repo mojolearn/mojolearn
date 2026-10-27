@@ -6,8 +6,8 @@ from sequence.neural_model_dispatch import NeuralModelRequest, MODEL_ARGMAX, MOD
 
 
 def model_output_host(op: Int, r: NeuralModelRequest) raises -> Int:
-    var a = r.addresses
-    var p = r.options
+    ref a = r.addresses
+    ref p = r.options
     if op == MODEL_ARGMAX:
         if p[0] < 0 or p[1] < 1:
             raise Error("argmax_rows_f32: n_rows must be non-negative and n_cols positive")
