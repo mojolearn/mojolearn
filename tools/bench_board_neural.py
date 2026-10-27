@@ -1522,6 +1522,11 @@ def fit_arrays(lane, shape, rec):
     path = higgs_path()
     with np.load(path) as z:
         kx, ky = _npz_pick(z, "X_train"), _npz_pick(z, "y_train")
+        # FAIRNESS FIX (2026-10-13 audit): the pinned dataset-store HIGGS
+        # archive names its unsplit arrays x/y. Apply the same declared
+        # contiguous train/held-out slices on both arms, without reducing rows.
+        if kx is None and ky is None and "x" in z and "y" in z:
+            kx, ky = "x", "y"
         if kx is None or ky is None:
             raise SystemExit("bench_board_neural: %s holds no X_train / y_train (keys %s)" % (path, list(z.keys())))
         X, y = z[kx], z[ky]

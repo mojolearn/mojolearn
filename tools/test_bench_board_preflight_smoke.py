@@ -148,3 +148,21 @@ def test_neural_higgs_smoke_records_actual_data_and_refuses_missing_file(tmp_pat
     monkeypatch.setenv('MOJOLEARN_BENCH_HIGGS', str(other))
     assert B.NEURAL.higgs_path() == str(other)
     assert B.race_data_files({'data_root': str(tmp_path)}, race) == [('higgs', str(other))]
+
+
+def test_neural_higgs_accepts_pinned_unsplit_arrays_without_overlapping_rows(tmp_path, monkeypatch):
+    import numpy as np
+    path = tmp_path / 'higgs.npz'
+    x = np.arange(18, dtype=np.float32).reshape(6, 3)
+    y = np.array([0, 1, 0, 1, 0, 1], dtype=np.float32)
+    np.savez(path, x=x, y=y)
+    monkeypatch.setenv('MOJOLEARN_BENCH_HIGGS', str(path))
+    monkeypatch.setitem(B.NEURAL.FIT_ROWS, 'fixture', {'train': 4, 'test': 2})
+    record = {}
+    arrays = B.NEURAL.fit_arrays('mlp-fit', 'fixture', record)
+    np.testing.assert_array_equal(arrays['y_train'], y[:4])
+    np.testing.assert_array_equal(arrays['y_test'], y[4:])
+    expected = ((x[4:].astype(np.float64) - x[:4].astype(np.float64).mean(0)) /
+                x[:4].astype(np.float64).std(0)).astype(np.float32)
+    np.testing.assert_array_equal(arrays['X_test'], expected)
+    assert record['higgs']['held_out'].startswith('x[4:6]')
