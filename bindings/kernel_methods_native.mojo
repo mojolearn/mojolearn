@@ -19,7 +19,7 @@
 # integer math (core/scale_gamma_exact.mojo). A binding without a door
 # takes the entries it has, as before.
 from std.python import Python, PythonObject
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.kernel_method_descriptor_pyapi import kernel_method_provider, kernel_method_execute, kernel_method_metadata
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
@@ -800,13 +800,7 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """The kernel methods' public operations: admit an import-connected binding."""
-    var admitted_args = args
-    if len(args) > 0 and args[0] is None:
-        var selected = estimator_binding(model, "_mojolearn_kernel_methods", context)
-        var values = Python.list(selected)
-        for i in range(1, len(args)):  # small-loop(at most five public operation arguments)
-            _ = py_call(values.append, args[i])
-        admitted_args = py_call(Python.import_module("builtins").tuple, values)
+    var admitted_args = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
     return _kernel_methods_operation(model, operation, admitted_args, context)
 
 

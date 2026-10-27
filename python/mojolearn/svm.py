@@ -39,7 +39,7 @@ __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
 # the two linear machines is one native call (bindings/svm_mixture_native.mojo
 # for LinearSVC.decision_function and LinearSVR.predict,
 # bindings/svc_linear_native.mojo for fit, predict and score), handed the
-# estimators binding `_bind` resolves.
+# estimators binding admitted by the shared provider after native entry.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 class _LinearSVMBase(NumericModeMixin):
@@ -178,7 +178,7 @@ class LinearSVC(_LinearSVMBase):
         self : LinearSVC
             The fitted estimator.
         """
-        return _NATIVE(self, "family_svc_linear_svc_fit", (self._bind("_mojolearn_estimators"), X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_linear_svc_fit", (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Return the linear scores ``X @ coef_.T + intercept_``.
@@ -200,7 +200,7 @@ class LinearSVC(_LinearSVMBase):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        return _NATIVE(self, "family_svm_linear_svc_decision", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svm_linear_svc_decision", (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict class labels.
@@ -221,7 +221,7 @@ class LinearSVC(_LinearSVMBase):
             An int64 array for integer labels, a float64 array for float
             labels, and a Python list for any other label type.
         """
-        return _NATIVE(self, "family_svc_linear_svc_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_linear_svc_predict", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y):
         """Return the mean accuracy on the given data.
@@ -238,7 +238,7 @@ class LinearSVC(_LinearSVMBase):
         score : float
             The fraction of rows where ``predict(X) == y``.
         """
-        return _NATIVE(self, "family_svc_linear_svc_score", (self._bind("_mojolearn_estimators"), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_linear_svc_score", (None, X, y), _NATIVE_CONTEXT)
 
 
 class LinearSVR(_LinearSVMBase):
@@ -342,7 +342,7 @@ class LinearSVR(_LinearSVMBase):
         self : LinearSVR
             The fitted estimator.
         """
-        return _NATIVE(self, "family_svc_linear_svr_fit", (self._bind("_mojolearn_estimators"), X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_linear_svr_fit", (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict with the fitted model.
@@ -363,7 +363,7 @@ class LinearSVR(_LinearSVMBase):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        return _NATIVE(self, "family_svm_linear_svr_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svm_linear_svr_predict", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y):
         """Return the coefficient of determination R^2 of the prediction.
@@ -381,7 +381,7 @@ class LinearSVR(_LinearSVMBase):
             ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
             scores 0.0.
         """
-        return _NATIVE(self, "family_svc_linear_svr_score", (self._bind("_mojolearn_estimators"), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_linear_svr_score", (None, X, y), _NATIVE_CONTEXT)
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
@@ -390,3 +390,6 @@ class LinearSVR(_LinearSVMBase):
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("svm")
 __all__ += _SKLEARN_LAYOUT["svm"]
+
+# Import connection only; each native public operation admits the live registry.
+_native_family_bridge.connect_bindings("_mojolearn_estimators")

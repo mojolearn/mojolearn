@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The compiled owner of the classical families' public methods (lane
-# migrate-classical-b): one dispatcher, reached from the classical owner's
+# migrate-classical-b): one dispatcher, reached from providers.python.estimator_binding_pyapi import estimator_arguments
+from the classical owner's
 # door (`classical_native_call`, bindings/classical_native.mojo) for every
 # `family_*` operation. Each family's file holds its operations; the door
 # maps their `<Class>: ` error prefixes and restores a stashed Python
@@ -67,8 +68,18 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     return result
 
 
-def family_operation(model: PythonObject, operation: String, args: PythonObject,
+
+def family_operation(model: PythonObject, operation: String, var args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    # These public frontdoors share one import-connected binding provider.
+    # Deeper algorithm dispatch is migrated separately; do not equate this
+    # boundary repair with completion of every transitive runtime path.
+    if operation.startswith("family_svc_linear_") or operation.startswith("family_svm_linear_"):
+        args = estimator_arguments(model, "_mojolearn_estimators", args, context)
+    elif operation.startswith("family_svc_svc_") or operation.startswith("family_svc_svr_"):
+        args = estimator_arguments(model, "_mojolearn_svm", args, context)
+    elif operation.startswith("family_kmeans_"):
+        args = estimator_arguments(model, "_mojolearn", args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
