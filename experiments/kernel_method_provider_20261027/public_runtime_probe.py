@@ -36,6 +36,19 @@ def qualify():
         name, calls = api._NATIVE(model, 'family_km_provider_info', (), api._NATIVE_CONTEXT)
         assert name == 'mojolearn.kernel_methods.native.v1'
         return list(calls)
+    # Boundary conversion coverage: snapshots retain strided inputs, then
+    # reuse the same existing native cast and numerical path. No measurement.
+    for label, source in [('f64', x.astype('f8')), ('fortran', np.asfortranarray(x)),
+                          ('reversed', x[:, ::-1]), ('int32', (x * 3).astype('i4')),
+                          ('bool', x > 0)]:
+        expected = np.ascontiguousarray(source, dtype='f4')
+        models = [KernelRidge(alpha=.7, kernel='linear', numeric_mode='identical') for _ in range(2)]
+        call(1, models[0], 'fit', source, y)
+        call(1, models[1], 'fit', expected, y)
+        same(models[0].X_fit_, expected)
+        same(models[0].dual_coef_, models[1].dual_coef_)
+        same(call(1, models[0], 'predict', source), call(1, models[1], 'predict', expected))
+        records.append({'case': 'metadata_conversion_' + label, 'bits': 'pass'})
     for kernel in ('linear', 'rbf', 'precomputed'):
         data = (x @ x.T).astype('f4') if kernel == 'precomputed' else x
         q = (query @ x.T).astype('f4') if kernel == 'precomputed' else query

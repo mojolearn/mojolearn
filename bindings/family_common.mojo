@@ -7,6 +7,7 @@
 # a CPU-only install's by-name refusal, a user callable's own exception) is
 # stashed and restored unchanged at the door (`stash_python_error`), so the
 # caller sees the class and message it saw before the migration.
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
@@ -228,26 +229,78 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     return result
 
 
-def family_as_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
-    """`_buffer.as_f32_c(source, ndim=ndim, name=name)`: its rank and
-    emptiness refusals, then its cast (no finiteness refusal)."""
-    var view = family_view(source, ndim, name, context)
-    var result = family_cast_view(view, name, context)
+def family_f32_snapshot(source: PythonObject, ndim: Int, name: String,
+                        context: PythonObject, dense: Bool = False) raises -> ArrayMetadata:
+    # Common provider metadata admission for classical algorithms. Preserve
+    # family_view's rank/empty refusals before casting or numerical execution.
+    var prepared = source
+    if dense:
+        var sparse = host_sparse_format(source)
+        if sparse.byte_length() > 0:
+            if not py_contains(context, PythonObject("output_context")):
+                py_setitem(context, "output_context", context)
+            prepared = host_sparse_dense(source, sparse, context)
+    var view = classical_view(prepared, context, name)
+    var shape = array_shape_once(view)
+    var nd = len(shape)
+    var shape_words = Python.list()
+    var count = 1
+    for word in shape:  # driver-loop: over captured native array rank metadata
+        _ = py_call(shape_words.append, word)
+        count *= word
+    var pyshape = py_call(native_loaded_module("builtins").tuple, shape_words)
+    if ndim >= 0 and nd != ndim:
+        var hint = String("")
+        if ndim == 2 and nd < 2:
+            hint = ". " + String(RESHAPE_HINT)
+        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
+                    + "-D shape " + family_repr(pyshape) + hint)
+    if count == 0:
+        var what = String("sample(s)")
+        if nd == 2 and shape[0] != 0:
+            what = "feature(s)"
+        var text = family_repr(pyshape)
+        raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
+                    + " (shape=" + text + ") while a minimum of 1 is required.")
+    if nd > 2:
+        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
+    var snapshot = array_metadata_once(view, shape^, name, context)
+    if not snapshot.f32_c():
+        var result = family_array(pyshape, "<f4", context)
+        var address = Int(py=classical_address(result))
+        var src = snapshot.source
+        family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
+                         FAMILY_F32P(unsafe_from_address=address))
+        snapshot.replace_f32(result, address)
     _ = view^
-    return result
+    _ = prepared^
+    return snapshot^
+
+
+def family_as_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
+    var snapshot = family_f32_snapshot(source, ndim, name, context)
+    return snapshot.keep
 
 
 def family_as_f32_dense(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
-    """`_buffer.as_f32_dense_c`: a scipy.sparse matrix densified exactly
-    (its implicit entries are zeros), read natively from its storage, then
-    `family_as_f32`."""
-    var sparse = host_sparse_format(source)
-    if sparse.byte_length() > 0:
-        if not py_contains(context, PythonObject("output_context")):
-            py_setitem(context, "output_context", context)
-        var dense = host_sparse_dense(source, sparse, context)
-        return family_as_f32(dense, ndim, name, context)
-    return family_as_f32(source, ndim, name, context)
+    var snapshot = family_f32_snapshot(source, ndim, name, context, True)
+    return snapshot.keep
+
+
+def family_owned_snapshot(value: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+    # Ownership is inspected once at the boundary; shape, count and address
+    # are already admitted and must not be fetched again during the copy.
+    if value.is_array and value.keep._base is None and not Bool(py=value.keep._readonly):
+        return value.keep
+    var result = family_array(value.python_shape(), "<f4", context)
+    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
+           src=FAMILY_F32P(unsafe_from_address=value.source.addr), count=value.count)
+    _ = result
+    return result
+
+
+def family_snapshot_min(value: ArrayMetadata) raises -> Float32:
+    return family_min_f32(FAMILY_F32P(unsafe_from_address=value.source.addr), value.count)
 
 
 def family_owned(value: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -53,7 +53,7 @@ def test_compound_transform_reuses_admitted_x_and_provider():
     source = read('bindings/kernel_methods_native.mojo')
     for name, operation in [('_nys_fit', 'nystroem_transform'), ('_rbf_fit', 'rbf_sampler_transform')]:
         part = body(source, name)
-        assert part.count('family_as_f32_dense(args[1]') == 1
+        assert part.count('family_f32_snapshot(args[1]') == 1
         assert f'kernel_method_execute(native, "{operation}"' in part
 
 def test_native_transport_preserves_existing_numerical_owners_and_route_defines():
@@ -77,3 +77,22 @@ def test_private_span_bounds_and_scalar_schemas_are_checked_before_dispatch():
     assert 'operation == 5 and (na != 1 or np != 0)' in source
     source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
     assert source.index('len(params) != schema[0]') < source.index('params[i]')
+
+
+def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
+    source = read('providers/python/array_metadata_pyapi.mojo')
+    assert 'var keep: PythonObject' in source and 'var source: CastIn' in source
+    for field in ('value.shape', 'value.dtype', 'value.itemsize', 'value.strides'):
+        assert source.count(field) == 1, field
+    conversion = body(read('bindings/family_common.mojo'), 'family_f32_snapshot')
+    assert conversion.count('array_shape_once(view)') == 1
+    assert 'family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in conversion
+    assert 'snapshot.replace_f32(result, address)' in conversion
+    source = read('bindings/kernel_methods_native.mojo')
+    for name in ('_krr_fit', '_krr_predict', '_nys_fit', '_nys_transform', '_rbf_fit', '_rbf_transform'):
+        part = body(source, name)
+        assert part.count('family_f32_snapshot(args[1]') == 1, name
+        for text in ('x.shape', 'xq.shape', 'x.size', 'xq.size', 'classical_address(x)', 'classical_address(xq)'):
+            assert text not in part, (name, text)
+    assert 'family_owned_snapshot(x_meta, context)' in source
+    assert '_km_scale_gamma(extension, x_meta, d, context, native)' in source
