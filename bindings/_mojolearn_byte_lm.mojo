@@ -22,6 +22,7 @@ detects after native success.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
+from training.byte_lm_native_status import byte_lm_status
 from training.byte_lm_native_dispatch import BYTE_LM_NATIVE_TABLE
 from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -447,24 +448,10 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     Policy flags, released cells and repair-site masks follow these triples;
     byte_attention_eager_cells documents their append-only ordering."""
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var completed = -1
-    var grad_step = -1
-    var is_open = 0
-    var eager = List[Int]()
-    for _ in range(6):  # small-loop(eager: six zero counters when no trainer is open)
-        eager.append(0)
-    if owner[].trainer:
-        completed = owner[].trainer.value().completed_steps
-        grad_step = owner[].trainer.value().grad_step
-        is_open = 1
-        eager = byte_attention_eager_cells(owner[].trainer.value())
+    var values = byte_lm_status(owner[])
     var out = Python.list()
-    out.append(PythonObject(completed))
-    out.append(PythonObject(grad_step))
-    out.append(PythonObject(1 if owner[].usable else 0))
-    out.append(PythonObject(is_open))
-    for i in range(len(eager)):  # small-loop(eager: one entry per layer): reports per layer cell counts, no data
-        out.append(PythonObject(eager[i]))
+    for value in values:  # driver-loop: over completed native session metadata
+        out.append(PythonObject(value))
     return out
 
 

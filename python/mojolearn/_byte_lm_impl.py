@@ -872,51 +872,7 @@ class SmallByteLanguageModelTrainer:
             None when no resident session is open or the loaded binaries do not
             report it.
         """
-        with self._lock:
-            if not self._session_open or self._native_session is None:
-                return None
-            info = self._session_binding.byte_lm_session_info(self._native_session)
-            if len(info) < 10:
-                return None
-            fwd, aexp, bwd = int(info[4]), int(info[5]), int(info[6])
-            report = dict(forward_eager_cells=fwd, forward_aexp_cells=aexp,
-                        backward_eager_cells=bwd,
-                        forward_eager_bytes=fwd * 4, forward_aexp_bytes=aexp * 4,
-                        backward_eager_bytes=bwd * 4,
-                        eager_bytes=(fwd + bwd) * 4,
-                        total_bytes=(fwd + aexp + bwd) * 4,
-                        layers_grown_forward=int(info[7]),
-                        layers_grown_backward=int(info[8]),
-                        layers_full_aexp=int(info[9]),
-                        layers=state_shape(self._state).n_layers)
-            n_layers = report['layers']
-            if len(info) >= 12:
-                report['stage_lists'] = (int(info[10]), int(info[11]))
-                n_layers = min(n_layers, int(info[10]), int(info[11]))
-            if len(info) >= 12 + 3 * n_layers:
-                names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
-                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER', 3: 'FUSED_SKIPPED_STICKY'}
-                for offset, key in ((0, 'forward_status'), (1, 'backward_status')):  # glue: two status keys of the stage report
-                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n_layers)]  # glue: reads per-layer status codes from the binding (n_layers-sized: model layers)
-                    report[key] = values
-                    report[key + '_counts'] = {name: values.count(code)
-                                              for code, name in names.items()}  # glue: maps status code names
-                report['attn_materialized'] = [bool(info[14 + 3 * layer])
-                                             for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
-            if len(info) > 12 + 3 * n_layers:
-                report['exact_tail_guard'] = bool(info[12 + 3 * n_layers])
-            if len(info) > 14 + 3 * n_layers:
-                report['release_eager'] = bool(info[13 + 3 * n_layers])
-                report['released_eager_bytes'] = int(info[14 + 3 * n_layers]) * 4
-            if len(info) >= 16 + 4 * n_layers:
-                report['sticky_eager'] = bool(info[15 + 3 * n_layers])
-                report['layers_prefer_eager'] = [bool(info[16 + 3 * n_layers + layer])
-                                               for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
-            if len(info) >= 17 + 5 * n_layers:
-                report['repair_masked_tail'] = bool(info[16 + 4 * n_layers])
-                report['backward_repair_sites'] = [int(info[17 + 4 * n_layers + layer])
-                                                  for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
-            return report
+        return _LM_TRAINER(self, "attention_stage_report", (), _LM_TRAINER_CONTEXT)
 
     def _export_state_impl(self, release=False):
         """Lock held, session open. ONE native call

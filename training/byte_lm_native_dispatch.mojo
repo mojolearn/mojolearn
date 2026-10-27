@@ -7,6 +7,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_binding_impl import ByteLMSession
+from training.byte_lm_native_status import byte_lm_status
 from training.byte_lm_session_ops import byte_owner_step, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
 from training.byte_lm_binding_impl import _validate_slot_table
 from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
@@ -19,7 +20,7 @@ from training.byte_lm import byte_validate_optimizer
 from training.byte_lm_logits import BYTE_LOGITS_MAX_BATCH, BYTE_LOGITS_MAX_CELLS
 
 comptime BYTE_LM_NATIVE_ABI_NAME = "mojolearn.training.byte_lm.v1"
-comptime BYTE_LM_NATIVE_OPERATION_COUNT = 11
+comptime BYTE_LM_NATIVE_OPERATION_COUNT = 12
 
 
 def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -38,6 +39,16 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
     if op == 4:
         owner[].close()
         return 0
+    if op == 11:
+        if len(a) != 2 or a[1] == 0 or len(p) != 1 or len(f) != 0:
+            raise Error("byte LM native ABI: invalid attention status descriptor")
+        var values = byte_lm_status(owner[])
+        if p[0] < len(values):
+            raise Error("byte LM native ABI: attention status output is too short")
+        var out = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[1])
+        for i in range(len(values)):  # driver-loop: over one captured native stage metadata snapshot
+            out[i] = values[i]
+        return len(values)
     if op == 5:
         if len(a) != 2 or a[1] == 0:
             raise Error("byte LM native ABI: missing native status output")
