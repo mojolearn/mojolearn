@@ -13,6 +13,11 @@ from bindings.generation_buffers import generation_initialize_binding, generatio
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function
 from core.hostptr import f32_ptr
+from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
+from providers.python.neural_descriptor_pyapi import (
+    neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_reserved_execute,
+)
+
 
 
 def neural_block_owner(block: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -219,28 +224,40 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
             if fresh_session or py_contains(e, "transformer_forward_fresh"):
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
-                var addresses = py_ints([_addr(x, keep)])
-                for i in range(len(fields["_w"])):  # driver-loop: over fixed transformer weight slots
-                    _ = py_call(addresses.append, _addr(fields["_w"][i], keep))
-                var params = py_ints([b, l, d, Int(py=fields["n_heads"]), Int(py=fields["n_kv_heads"]), Int(py=fields["head_dim"]), Int(py=fields["intermediate"])])
+                var addresses: List[Int] = [_addr(x, keep)]
+                var weights = fields["_w"]
+                for i in range(len(weights)):  # driver-loop: admit transformer weight slots once
+                    addresses.append(_addr(weights[i], keep))
+                var params: List[Int] = [b, l, d, Int(py=fields["n_heads"]), Int(py=fields["n_kv_heads"]), Int(py=fields["head_dim"]), Int(py=fields["intermediate"])]
                 if fresh_session:
-                    _ = py_call(addresses.append, 0)
-                    _ = py_call(addresses.append, 0)
-                    _ = py_call(params.append, l)
-                    _ = py_call(params.append, 0)
-                _ = py_call(addresses.append, _addr(y, keep))
-                _ = py_call(params.append, fields["window"])
+                    addresses.append(0)
+                    addresses.append(0)
+                    params.append(l)
+                    params.append(0)
+                addresses.append(_addr(y, keep))
+                params.append(Int(py=fields["window"]))
                 if Bool(py=fields["_extended"]):
-                    for i in range(len(fields["_wopt"])):  # driver-loop: over optional transformer weight slots
-                        _ = py_call(addresses.append, _addr(fields["_wopt"][i], keep))
-                    _ = py_call(params.extend, fields["_opts_tail"])
+                    var optional = fields["_wopt"]
+                    for i in range(len(optional)):  # driver-loop: admit optional transformer weight slots once
+                        addresses.append(_addr(optional[i], keep))
+                    var options = fields["_opts_tail"]
+                    for i in range(len(options)):  # small-loop(block options integer span)
+                        params.append(Int(py=options[i]))
+                var native = py_get(e, "native_block_operations")
                 if fresh_session:
                     if fields["_native_session"] is None:
                         py_setitem(fields, "_native_session", e["create"]())
                         py_setitem(fields, "_session_binding", e["block_binding"])
-                    _ = py_call(e["transformer_session_forward_fresh"], fields["_native_session"], addresses, params)
+                    if native is not None:
+                        var session_owner = fields["_native_session"]
+                        var handle = Int(py=py_call(_native_function(e["block_binding"], "transformer_native_session_handle_v1"), session_owner))
+                        _ = neural_descriptor_reserved_execute(native, session_owner, handle, 0, 1, 2, addresses, params, [])
+                    else:
+                        _ = py_call(e["transformer_session_forward_fresh"], fields["_native_session"], py_ints(addresses), py_ints(params))
+                elif native is not None:
+                    _ = neural_descriptor_execute(native, 4, addresses, params, [])
                 else:
-                    _ = py_call(e["transformer_forward_fresh"], addresses, params)
+                    _ = py_call(e["transformer_forward_fresh"], py_ints(addresses), py_ints(params))
                 if locked:
                     lock.release()
                 _ = keep^
@@ -351,7 +368,21 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
         py_setitem(fields, "_arithmetic_profile_changed", _native_function(entries, "transformer_arithmetic_profile_changed")())
+    if family == "transformer":
+        var native = PythonObject(None)
+        if code == 1 and vendor != "cpu" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
+                _native_function(entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME))
+        py_setitem(fields, "_native_block_provider_cache", native)
     return entries
+
+
+def _neural_int_words(values: PythonObject) raises -> List[Int]:
+    # Internal boundary vectors already contain admitted scalar/address words.
+    var result = List[Int]()
+    for i in range(len(values)):  # small-loop(public operation descriptor words)
+        result.append(Int(py=values[i]))
+    return result^
 
 
 def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
@@ -448,11 +479,22 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
                 if fields["_native_session"] is None:
                     py_setitem(fields, "_native_session", _native_function(entries, "transformer_session_create")())
                     py_setitem(fields, "_session_binding", entries.canonical)
-                _ = py_call(_native_function(entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
+                var native = py_get(fields, "_native_block_provider_cache")
+                if native is not None:
+                    var session_owner = fields["_native_session"]
+                    var handle = Int(py=py_call(_native_function(entries, "transformer_native_session_handle_v1"), session_owner))
+                    _ = neural_descriptor_reserved_execute(native, session_owner, handle, 0, 1, 3,
+                        _neural_int_words(addresses), _neural_int_words(params), [])
+                else:
+                    _ = py_call(_native_function(entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
             else:
                 if fields["_native_session"] is not None and Bool(py=py_call(bi.hasattr, entries, "transformer_session_invalidate_tape")):
                     _ = py_call(_native_function(entries, "transformer_session_invalidate_tape"), fields["_native_session"])
-                _ = py_call(_native_function(entries, name), addresses, params)
+                var native = py_get(fields, "_native_block_provider_cache")
+                if native is not None:
+                    _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
+                else:
+                    _ = py_call(_native_function(entries, name), addresses, params)
             lock.release()
         except error:
             lock.release()

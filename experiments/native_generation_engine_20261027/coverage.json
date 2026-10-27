@@ -27,8 +27,8 @@
     {
       "id": "neural/transformer-forward/gaussian/shape=full",
       "lane": "transformer-forward",
-      "status": "pending_fresh_backward_and_boundary",
-      "detail": "Carried-state session direct ABI exists. Fresh forward and backward still use CPython compiled-entry dispatch; no whole-recipe native claim.",
+      "status": "candidate_fresh_backward_direct_dispatch",
+      "detail": "Common native table now covers session/ephemeral fresh and backward; carried-state direct ABI already exists. Public metadata/state admission and taped paths remain; runtime pending.",
       "whole_recipe_native_qualified": false
     },
     {
@@ -76,8 +76,8 @@
     {
       "id": "neural/transformer-decode/gaussian/shape=full",
       "lane": "transformer-decode",
-      "status": "pending_fresh_backward_and_boundary",
-      "detail": "Carried-state session direct ABI exists. Fresh forward and backward still use CPython compiled-entry dispatch; no whole-recipe native claim.",
+      "status": "candidate_fresh_backward_direct_dispatch",
+      "detail": "Common native table now covers session/ephemeral fresh and backward; carried-state direct ABI already exists. Public metadata/state admission and taped paths remain; runtime pending.",
       "whole_recipe_native_qualified": false
     },
     {
@@ -255,8 +255,8 @@
     },
     {
       "route": "transformer-fresh-backward",
-      "status": "pending",
-      "detail": "Must add checked native operations preserving exact fresh/backward math."
+      "status": "candidate",
+      "detail": "Common checked descriptor table preserves exact fresh/session/ephemeral math; public runtime and taped paths pending."
     },
     {
       "route": "text-stream-tokenizer",

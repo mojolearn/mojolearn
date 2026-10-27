@@ -10,6 +10,7 @@ comptime NativeDescriptorCall = def(
 ) thin abi("C") -> Int
 
 comptime PRIMITIVE_ABI_NAME = "mojolearn.training.primitives.v1"
+comptime TRANSFORMER_BLOCK_ABI_NAME = "mojolearn.transformer.block.v1"
 comptime MAMBA_STATE_ABI_NAME = "mojolearn.mamba.state.v1"
 comptime PRIM_EMBED_FORWARD = 0
 comptime PRIM_EMBED_BACKWARD = 1
