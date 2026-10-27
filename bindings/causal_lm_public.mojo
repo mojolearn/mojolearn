@@ -15,7 +15,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle
 from providers.python.generation_session_pyapi import (
     generation_reuse_native_provider, generation_connect_native_session,
     generation_native_session_matches, generation_native_forward,
@@ -149,7 +149,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":
             var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
-                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME))
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 14)
             py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
             py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
@@ -444,6 +444,20 @@ def _transformer_args(
 def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) raises -> PythonObject:
     return py_ints(_transformer_param_words(blk, st, b, l))
 
+
+
+def causal_transformer_admin(binding: PythonObject, session: PythonObject, operation: Int) raises:
+    # Boundary-only lifetime admission against the session's original image.
+    # Administration intentionally holds the GIL, matching the raw public API.
+    if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
+        var provider = neural_descriptor_reuse(PythonObject(None),
+            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 14)
+        var handle = neural_descriptor_handle(provider,
+            _native_function(binding, "transformer_native_session_handle_v1"), session)
+        _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
+    else:
+        var name = "transformer_session_invalidate_tape" if operation == 12 else "transformer_session_close"
+        _ = py_call(_native_function(binding, name), session)
 
 def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
     # Standalone public block calls retain their existing ABI and admit anew.

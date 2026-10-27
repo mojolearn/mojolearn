@@ -3,6 +3,7 @@
 # Common descriptor transport; no Python/provider imports or changed kernels.
 from std.ffi import _Global
 from transformer.native_tape_dispatch import transformer_tape_operation
+from transformer.session_native_dispatch import transformer_session_forward_native
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
@@ -18,11 +19,24 @@ from transformer.transformer_binding_impl import (
 
 
 def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
-    if op >= 6:
+    if op == 12 or op == 13:
+        if len(words) != 1 or words[0] == 0 or len(a) != 0:
+            raise Error("transformer session administration: invalid native descriptor")
+        var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=words[0])
+        if owner[].busy or (op == 12 and owner[].closed):
+            raise Error("transformer: session is busy or closed")
+        if op == 12:
+            owner[].invalidate_tape()
+        else:
+            owner[].closed = True
+            owner[].clear()
+            owner[].ctx = None
+        return 0
+    if op >= 6 and op < 11:
         return transformer_tape_operation(op - 6, a, words)
     var p = List[Int]()
     var session = 0
-    if op < 4:
+    if op < 4 or op == 11:
         if len(words) == 0 or words[0] == 0:
             raise Error("transformer block native ABI: null session")
         session = words[0]
@@ -41,6 +55,18 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
             p.append(words[i])
     else:
         p = words.copy()
+    if op == 11:
+        if len(a) != 13 and len(a) != 13 + BLOCK_OPTION_ADDRS:
+            raise Error("transformer_forward: invalid native address span")
+        var expanded = a.copy()
+        while len(expanded) < 13 + BLOCK_OPTION_ADDRS:  # small-loop(pad absent optional address words)
+            expanded.append(0)
+        _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_forward"))
+        if len(p) != 10 and len(p) != 10 + BLOCK_OPTION_PARAMS:
+            raise Error("transformer_forward: invalid native scalar span")
+        var opts = BlockOptions.from_params(p, 10)
+        var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
+        return transformer_session_forward_native(owner[], expanded, p, opts)
     var result = 0
     if op == 2 or op == 4:
         var base_a = 13 if op == 2 else 11
@@ -112,7 +138,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 11 or nf != 0 or na < 0 or na > 24 or np < 0 or np > 28:
+        if op < 0 or op >= 14 or nf != 0 or na < 0 or na > 24 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")
