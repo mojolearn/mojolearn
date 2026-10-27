@@ -4311,11 +4311,10 @@ class TorchGenerateArm:
     def __init__(self, lane, shape, data, arm):
         import numpy as np
         self.np, self.lane, self.shape, self.arm = np, lane, shape, arm
-        where, setting = arm_setting(arm)
-        if where != "gpu":
-            raise RuntimeError("REFUSED: %s: program-run races torch on the GPU only" % arm)
-        twin = _load("torch_lm_step_opponent")
-        col = twin.COLUMNS[setting.replace("-", "_")]
+        # FAIRNESS FIX (2026-10-13 audit), reproduced 2026-10-27: stray program-run
+        # setup required MLP weights from generation inputs and hid checkpoint
+        # initialization in a shadowed method. Restore the generation constructor;
+        # parameter probes still load/read the real model without generating tokens.
         self.dm = DeviceMemory()
         where, setting = arm_setting(arm)
         if where != "gpu":
@@ -4333,47 +4332,6 @@ class TorchGenerateArm:
             raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
                                "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
         precision = twin.set_precision(torch, col["tf32"])
-        self.autocast, probe = None, None
-        if col["autocast"]:
-            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
-            if not probe.get("applicable"):
-                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
-                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
-            self.autocast = getattr(torch, col["autocast"])
-        self.compile = bool(col["compile"])
-        self.ws = [torch.from_numpy(np.ascontiguousarray(data["w:" + n], dtype=np.float32)).to(dev)
-                   for n in OPS_PARAMS]
-        self.X = torch.from_numpy(np.ascontiguousarray(data["X"], dtype=np.float32))
-
-        def forward(x, w1, b1, w2, b2):
-            h = torch.relu(x @ w1 + b1)
-            return torch.softmax((h @ w2 + b2).float(), dim=-1)
-        self.fn = torch.compile(forward) if self.compile else forward
-        d_in, hidden = (int(v) for v in self.ws[0].shape)
-        classes = int(self.ws[2].shape[1])
-        self.record = program_record("torch", torch.nn.functional.softmax, shape, batch_size=int(self.X.shape[0]),
-                                     layers=program_layers(d_in, hidden, classes))
-        self.info = {"library": "torch", "version": torch.__version__,
-                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
-                     "torch_backend": kind, "device": "gpu", "device_name": name,
-                     "setting": setting, "precision": precision_text(setting),
-                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
-                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager", precision_text(setting)),
-                     "precision_readback": precision, "autocast_probe": probe,
-                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
-                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
-                     "call": LANE_TEXT[lane][1]}
-        self.out = None
-        sync()
-
-    def call(self):
-        import contextlib
-        torch = self.torch
-        with torch.no_grad(), contextlib.ExitStack() as stack:
-            if self.autocast is not None:
-                stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
-            y = self.fn(self.X.to(self.dev), *self.ws)
-        self.out = y.float().cpu().numpy()
         self.bf16 = bool(col["autocast"])
         transformers, LlamaConfig, modeling_llama = _transformers(arm)
         from transformers import GenerationConfig
@@ -4478,10 +4436,6 @@ class TorchGenerateArm:
         self._sync()
 
     def outputs(self):
-        return {"y": self.np.asarray(self.out)}
-
-    def digest(self):
-        return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
         return {"ids": self.out, "first": self.first}
 
     def digest(self):
@@ -5250,7 +5204,8 @@ def _prepare_worker(args):
     except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
         import traceback
         traceback.print_exc()
-        return None, {"event": "error", "stage": "ready", "error": repr(exc)[:2000]}, None
+        return None, {"event": "error", "stage": "ready", "error": repr(exc)[:2000],
+                      "error_kind": "refusal" if str(exc).startswith("REFUSED:") else "exception"}, None
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_load("bench_board_probe").library_identity(runner.info))
     record = getattr(runner, "record", None)
@@ -5306,6 +5261,7 @@ def worker(args):
         previous, PARAMS_PROBE = PARAMS_PROBE, True
         try:
             _, message = worker_ready(args)
+            message["worker_protocol"] = {"params_only": True, "allows_rounds": False}
             say(message)
             return 0 if message.get("event") == "ready" else 1
         finally:
@@ -6089,7 +6045,11 @@ def race(args):
         workers[arm] = ctd.start_worker(arm, cmd, _worker_env(arm),
                                         os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO,
                                         params_only=getattr(args, "params_only", False))
-        result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
+        # The smoke factory may append --params-only. Retain the actual child
+        # argv rather than the pre-factory command when a subprocess exists.
+        process = getattr(workers[arm], "proc", None)
+        actual_command = getattr(process, "args", cmd)
+        result["arms"][arm] = {"command": actual_command, "warmup_ms": None, "ms": [], "digests": [],
                                "mem": [], "status": "ok"}
     for arm, w in workers.items():
         if arm in refused_before:
@@ -6098,6 +6058,10 @@ def race(args):
         if msg.get("event") != "ready":
             row = result["arms"][arm]
             row.update(status="not_ready", error=msg)
+            # Preserve startup failures independently of the parameter matcher:
+            # missing readback after a crash is not a parameter-comparison refusal.
+            category = "startup_refusals" if msg.get("error_kind") == "refusal" else "startup_failures"
+            result.setdefault(category, {})[arm] = msg
             _stop_failed_worker(w, "not_ready", msg, row)
             print("NEURAL-REFUSED lane=%s arm=%s stage=ready detail=%s" % (lane, arm, json.dumps(msg)),
                   flush=True)
@@ -6106,6 +6070,8 @@ def race(args):
         result["arms"][arm]["info"] = msg["info"]
         result["arms"][arm]["params_record"] = msg.get("params_record")
         result["arms"][arm]["neural_ab_preparation"] = msg.get("neural_ab")
+        if "worker_protocol" in msg:
+            result["arms"][arm]["worker_protocol"] = msg["worker_protocol"]
     # THE PARAMETER CHECK (tools/bench_board_params.py), before the first
     # timed round: same seed, same tuning parameters on every arm, read back
     # from what each worker constructed. A refusal fails the race by name.
