@@ -3,6 +3,8 @@
 # export is deliberately absent: a native call to that exporter still runs
 # Python forward. The public source-kind/export dispatcher remains separate debt.
 from std.python import Python, PythonObject
+from bindings.byte_checkpoint_io import ByteCheckpointIOError
+from providers.python.framework_metadata_pyapi import framework_metadata_operation
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.native_loaded_module import native_loaded_module
@@ -290,14 +292,19 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
 
 
 def ops_import_model_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var io_error = ByteCheckpointIOError()
     try:
         var args = PythonObject(from_borrowed=packed)
+        if len(args) == 3:
+            return framework_metadata_operation(args[0], args[1], args[2], io_error).steal_data()
         if len(args) == 6:
             return _construct(args[0], args[1], args[2], args[3], args[4], args[5]).steal_data()
         if len(args) != 5:
             raise Error("TypeError: ops_import_model expects source, label, shapes, numeric_mode and context")
         return _import(args[0], args[1], args[2], args[3], args[4]).steal_data()
     except error:
+        if io_error.pending:
+            return io_error.restore()
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
         return graph_python_error(error)

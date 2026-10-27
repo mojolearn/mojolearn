@@ -195,3 +195,20 @@ def test_cpu_byte_lm_owner_uses_same_native_transport_without_python_proxy():
     entry = owner.split('def _entry(')[1].split('def _has(')[0]
     assert 'return neural_descriptor_entry(binding, name, required)' in entry
     assert 'getattr' not in entry
+
+
+def test_framework_setup_helpers_enter_native_metadata_directly():
+    import ast
+    for filename, names in (('max.py', ('custom_extensions', 'native_library_path', 'parameters')),
+                            ('torch.py', ('library_path', 'native_library_path')),
+                            ('_shipped.py', ('directory', 'manifest', 'path', 'series'))):
+        parsed = ast.parse((ROOT / 'python/mojolearn/adapters' / filename).read_text())
+        for node in parsed.body:
+            if isinstance(node, ast.FunctionDef) and node.name in names:
+                statements = [s for s in node.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
+                assert len(statements) == 1 and isinstance(statements[0], ast.Return)
+                assert ast.unparse(statements[0].value.func).endswith('_NATIVE')
+    source = (ROOT / 'providers/python/framework_metadata_pyapi.mojo').read_text()
+    assert 'native_json_parse(raw)' in source
+    assert 'native_storage_allocate(layout["class"])' in source
+    assert 'Path.__init__' in source  # explanatory prohibition, not an invocation
