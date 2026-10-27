@@ -31,11 +31,11 @@ runtime coverage. The source dependency guard is separate evidence.
 
 - Samba mixed-layer forward/decode still traverses Python-held layer/state
   objects. Move descriptors/counters into native operation-local state.
-- Attention currently waits on the block's recursive Python lock per layer.
-  Preserve blocking, reentrancy and ordering with a shared native owner; never
-  pre-acquire all model locks or inspect a Python lock object's private layout.
-- Transformer/Mamba immutable forward-tape creation, backward and close still
-  include compiled-entry CPython dispatch at the provider boundary.
+- Shared native operation locks are implemented for candidate construction,
+  but shared mixed-layer orchestration and restored Transformer locks remain
+  to migrate; preserve per-layer wait order and never pre-acquire all locks.
+- Immutable Transformer/Mamba tape computation is now descriptor-driven on
+  the candidate route; focused runtime consumption/concurrency coverage is pending.
 - Samba resident and nonresident training/loss/optimizer routes need complete
   descriptor and transitive ownership coverage, including optional routes.
 - Generation distributed/packed/foreign-buffer routes and CPU owners are not
@@ -86,3 +86,12 @@ it compares a public mixed-layer dropout training step's loss/parameter bytes
 and requires table counters to prove the tape route was reached. Root owns
 compilation and focused Mac runtime; tape consumption/failure/concurrency probes
 and any unsupported compile branches remain pending, with no performance claim.
+
+Owned Mamba3 snapshot tranche: the existing shared table also dispatches install,
+export, carried-state forward/decode and close. Public `install_owned_weights`
+now returns one native call; state publication happens after a successful native
+upload. The installed snapshot retains its provider for export/close even if
+later bindings change. Serialization drops the native provider references and
+lazily restores owned snapshots as before. Arithmetic helpers, generation checks
+and copy-on-install failure behavior are unchanged; the NN40 compile arm remains
+opt-in. Source checks pass, but owned-weight runtime coverage remains pending.

@@ -381,7 +381,7 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
         var native = PythonObject(None)
         if code == 1 and vendor != "cpu" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
-                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 15)
+                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 19)
         py_setitem(fields, "_native_mamba_block_provider_cache", native)
     return entries
 
@@ -416,7 +416,14 @@ def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: 
         var addresses = bi.list()
         for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
             _ = py_call(addresses.append, weights[i]._addr)
-        py_setitem(fields, "_owned_generation", py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), fields["_prefill_session"], addresses, fields["d_model"]))
+        var native = py_get(fields, "_native_mamba_block_provider_cache")
+        if native is not None:
+            var generation = neural_mamba_session_call(native, fields, entries, 15,
+                _neural_int_words(addresses), [Int(py=fields["d_model"])])
+            py_setitem(fields, "_owned_generation", PythonObject(generation))
+        else:
+            py_setitem(fields, "_owned_generation", py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), fields["_prefill_session"], addresses, fields["d_model"]))
+        py_setitem(fields, "_owned_native_provider", native)
         py_setitem(fields, "_owned_restore_pending", False)
     if py_get(fields, "_owned_generation") is not None:
         if py_get(fields, "_prefill_binding") is not entries.canonical or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":

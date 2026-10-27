@@ -6,23 +6,36 @@ from mamba.native_tape_dispatch import mamba_tape_operation
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
+from mamba.checks.mamba3_fixture import Mamba3Dims
 from mamba.impl.mamba_shell_impl import (
     Mamba3PrefillSession, _mamba1_backward_run, _mamba2_backward_run,
     _mamba3_backward_run, _mamba3_run, _m3_prefill_run,
-    _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY,
+    _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY, NN40_OWNED_WEIGHTS,
+    _m3_install_weights_run, _m3_export_weights_run, _mamba3_run_owned,
 )
 
 # 0/1 reserve/release under the provider GIL; 2/3/4 Mamba1/2/3 VJP;
 # 5 fresh Mamba3 prefill; 6/7 session prefill/VJP; 8/9 owned prefill/VJP.
 # 10..14 immutable tape reserve/release/forward/backward/close.
+# 15 owned snapshot install; 16 owned carried-state forward/decode;
+# 17 owned export; 18 close under the admission GIL.
 # Session execution prepends an admitted opaque owner handle to its words.
-comptime MAMBA_BLOCK_OPERATIONS = 15
+comptime MAMBA_BLOCK_OPERATIONS = 19
 
 
 def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
     if op < 0 or op >= MAMBA_BLOCK_OPERATIONS:
         raise Error("Mamba block native ABI: unknown operation")
-    if op >= 10:
+    if op == 18:
+        if len(words) != 1 or words[0] == 0 or len(a) != 0 or len(f) != 0:
+            raise Error("mamba3 prefill session close: invalid native descriptor")
+        var closing = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=words[0])
+        if closing[].busy:
+            raise Error("mamba3 prefill session: busy")
+        closing[].usable = False
+        closing[].release()
+        return 0
+    if op >= 10 and op < 15:
         if len(f) != 0:
             raise Error("mamba3 forward tape: unexpected float scalars")
         return mamba_tape_operation(op - 10, a, words)
@@ -49,6 +62,47 @@ def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float
             p.append(words[i])
     else:
         p = words.copy()
+    if op == 15:
+        comptime if not NN40_OWNED_WEIGHTS:
+            raise Error("mamba3 owned weights: NN40 arm is disabled")
+        if len(a) != 9 or len(p) != 1 or len(f) != 0:
+            raise Error("mamba3 owned weights: expected nine weight addresses and d_model")
+        var dims = Mamba3Dims.of(p[0])
+        var expanded: List[Int] = [0]
+        for i in range(9):  # small-loop(nine admitted owned weight addresses)
+            if a[i] == 0:
+                raise Error("mamba3 owned weights: null weight address")
+            expanded.append(a[i])
+        var owner = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=handle)
+        # Original copy-on-install helper commits the generation only after a
+        # complete upload. A failure preserves the previous usable snapshot.
+        _m3_install_weights_run(owner[], expanded, dims, p[0])
+        return owner[].weight_generation
+    if op == 17:
+        if len(a) != 9 or len(p) != 1 or len(f) != 0:
+            raise Error("mamba3 owned export: expected nine writable buffers and generation")
+        var owner = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=handle)
+        if not owner[].owned_weights or not owner[].w or p[0] != owner[].weight_generation:
+            raise Error("mamba3 owned export: missing, unusable or stale generation")
+        for i in range(9):  # small-loop(nine admitted owned export addresses)
+            if a[i] == 0:
+                raise Error("mamba3 owned export: null output address")
+        var dm = owner[].dm
+        _m3_export_weights_run(owner[], a, dm, Mamba3Dims.of(dm))
+        return p[0]
+    if op == 16:
+        if len(a) != 25 or len(p) != 7 or len(f) != 0:
+            raise Error("mamba3_state_owned: expected 25 addresses and seven scalars")
+        var owner = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=handle)
+        if not owner[].owned_weights or p[5] != owner[].weight_generation:
+            raise Error("mamba3 owned forward: stale or unavailable weight generation")
+        if p[6] != 0 and p[6] != 1:
+            raise Error("mamba3_state_owned: step must be 0 or 1")
+        if p[6] == 1 and p[1] != 1:
+            raise Error("mamba3_state_owned: a decode step is one token (L = 1)")
+        # The existing owner validates counters and dimensions and preserves
+        # partial-state/error behavior. No second implementation of recurrence.
+        return _mamba3_run_owned(owner[], a, p[0], p[1], p[2], p[3], p[4])
     if op >= 2 and op <= 4:
         var family = op - 1
         var count = 23 if family == 1 else 21
@@ -139,7 +193,7 @@ def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float
 def mamba_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                    result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= MAMBA_BLOCK_OPERATIONS or na < 0 or na > 23 or np < 0 or np > 5 or nf < 0 or nf > 2:
+        if op < 0 or op >= MAMBA_BLOCK_OPERATIONS or na < 0 or na > 25 or np < 0 or np > 8 or nf < 0 or nf > 2:
             raise Error("Mamba block native ABI: invalid operation or descriptor span")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)
