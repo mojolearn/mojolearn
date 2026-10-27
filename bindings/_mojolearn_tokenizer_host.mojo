@@ -207,7 +207,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from providers.python.generation_session_pyapi import GenerationNativeProvider, GenerationNativeSession
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_info
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info
 from bindings.causal_lm_public import (
     GenerationHandle, causal_public_c, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
@@ -1447,6 +1447,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
+        _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
         module.def_function[neural_descriptor_info]("neural_native_dispatch_info")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.

@@ -15,7 +15,9 @@ comptime MODEL_ARGMAX = 9
 comptime MODEL_MIN = 10
 comptime MODEL_THRESHOLD = 11
 comptime MODEL_UNIFORM = 12
-comptime MODEL_OPERATION_COUNT = 13
+comptime SESSION_OPEN = 13
+comptime SESSION_CLOSE = 14
+comptime MODEL_OPERATION_COUNT = 15
 
 
 struct NeuralModelRequest(Movable):
@@ -24,7 +26,7 @@ struct NeuralModelRequest(Movable):
     var floats: List[Float64]
 
     def __init__(out self, op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises:
-        if op < RNN_FIT or op >= MODEL_OPERATION_COUNT:
+        if op < RNN_FIT or op >= SESSION_OPEN:
             raise Error("native model: unknown operation")
         self.addresses = native_descriptor_words(aa, na)
         self.options = native_descriptor_words(pp, np)

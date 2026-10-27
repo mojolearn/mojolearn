@@ -167,8 +167,8 @@ def neural_descriptor_execute(
         with GILReleased(Python()):
             result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
     else:
-        # Only resource finalization whose existing ownership contract requires
-        # the admission lock uses this branch; native computation keeps True.
+        # Native resource registry admission/finalization whose ownership
+        # requires the admission lock uses this branch; computation keeps True.
         result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
     _ = provider
     return result
@@ -215,3 +215,64 @@ def neural_descriptor_info(provider: PythonObject) raises -> PythonObject:
     for value in owner[].calls:  # small-loop(the admitted table's named native operations)
         _ = py_call(counts.append, value)
     return Python.tuple(PythonObject(owner[].name), counts)
+
+
+struct NativeDescriptorResource(Movable, Writable):
+    # Generic native registry resource. This provider and its compiled image
+    # outlive the handle; context is opaque native metadata for that engine's
+    # close operation, not a guessed extension object layout.
+    var provider: PythonObject
+    var handle: Int
+    var close_operation: Int
+    var context: List[Int]
+
+    def __init__(out self, provider: PythonObject, handle: Int, close_operation: Int, var context: List[Int]):
+        self.provider = provider
+        self.handle = handle
+        self.close_operation = close_operation
+        self.context = context^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("NativeDescriptorResource(open=", self.handle != 0, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+    def close(mut self) raises:
+        var handle = self.handle
+        self.handle = 0
+        if handle != 0:
+            var addresses: List[Int] = [handle]
+            _ = neural_descriptor_execute(self.provider, self.close_operation, addresses,
+                self.context, List[Float64](), False)
+
+    def __deinit__(deinit self):
+        if self.handle != 0:
+            try:
+                var addresses: List[Int] = [self.handle]
+                _ = neural_descriptor_execute(self.provider, self.close_operation, addresses,
+                    self.context, List[Float64](), False)
+            except:
+                pass
+
+
+def neural_descriptor_adopt(provider: PythonObject, handle: Int, close_operation: Int,
+                             var context: List[Int]) raises -> PythonObject:
+    var owner = NativeDescriptorResource(provider, handle, close_operation, context^)
+    # RAII closes the native resource if boxing/registration fails.
+    return PythonObject(alloc=owner^)
+
+
+def neural_descriptor_resource_handle(value: PythonObject, context: List[Int]) raises -> Int:
+    var owner = value.downcast_value_ptr[NativeDescriptorResource]()
+    if len(owner[].context) != len(context):
+        raise Error("TypeError: native resource belongs to another registry")
+    for i in range(len(context)):  # driver-loop: over retained native resource identity words
+        if owner[].context[i] != context[i]:
+            raise Error("TypeError: native resource belongs to another registry")
+    return owner[].handle
+
+
+def neural_descriptor_resource_close(value: PythonObject, context: List[Int]) raises:
+    _ = neural_descriptor_resource_handle(value, context)
+    value.downcast_value_ptr[NativeDescriptorResource]()[].close()

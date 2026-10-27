@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Target-specific ownership only; both doors share the same whole-model engine.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from autograd.ops_api import ops_session_open, ops_session_close, ops_session_registry_token, OPS_DEVICE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_report
+from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
-from sequence.neural_model_dispatch import RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
 from sequence.model_outputs_device import model_output_device
 from sequence.exec_device import DeviceExec
 from core.label_cast_device import device_unique_inverse_cast
@@ -15,6 +17,29 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
     try:
         if result == 0:
             raise Error("native model: null result")
+        if op == SESSION_OPEN:
+            var addresses = native_descriptor_words(aa, na)
+            var options = native_descriptor_words(pp, np)
+            if na != 1 or np != 2 or nf != 0 or addresses[0] == 0:
+                raise Error("native session: invalid open descriptor")
+            if options[1] != Int(GLOBAL_NUMERIC_MODE):
+                raise Error("ValueError: selected session binding does not implement the requested numeric mode")
+            var scope = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=addresses[0])
+            scope[0] = ops_session_registry_token()
+            scope[1] = OPS_DEVICE
+            var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), options[0] != 0)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = sid
+            return 0
+        if op == SESSION_CLOSE:
+            var addresses = native_descriptor_words(aa, na)
+            var options = native_descriptor_words(pp, np)
+            if na != 1 or np != 2 or nf != 0:
+                raise Error("native session: invalid close descriptor")
+            if options[0] != ops_session_registry_token() or options[1] != OPS_DEVICE:
+                raise Error("native session: resource belongs to another registry or executor")
+            ops_session_close[DeviceExec, OPS_DEVICE](addresses[0])
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
+            return 0
         var ex = DeviceExec()
         var value = 0
         if op >= RNN_FIT:

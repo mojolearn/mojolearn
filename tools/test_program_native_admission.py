@@ -32,7 +32,8 @@ def test_common_context_is_connected_at_import_not_per_operation():
     connect = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == '_connect_session_mode')
     text = ast.get_source_segment(source, connect)
     assert 'shared_context()' in text
-    assert 'result.initialize(None, None, None, None, None, shared_context())' in text
+    assert 'admission = shared_context()' in text
+    assert 'result.initialize(None, None, None, result.native_module, None, admission)' in text
     for node in module.body:
         if isinstance(node, ast.ClassDef) and node.name in {'Session', 'Program'}:
             assert 'shared_context' not in ast.get_source_segment(source, node)
