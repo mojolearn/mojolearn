@@ -24,7 +24,7 @@ def _type_mro(cls: PythonObject) raises -> PythonObject:
 
 def _descriptor_slot(cls: PythonObject, name: String) raises -> Bool:
     var mro = _type_mro(cls)
-    for k in range(len(mro)):  # driver-loop: native descriptor class metadata
+    for k in range(len(mro)):  # driver-loop: over native descriptor class metadata
         if py_contains(_type_fields(mro[k]), name):
             return True
     return False
@@ -60,7 +60,7 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: native public model class layout changed")
     var found_fields = False
     var found_finalizer = False
-    for k in range(len(mro)):  # driver-loop: exact connected class ancestry
+    for k in range(len(mro)):  # driver-loop: over exact connected class ancestry
         if mro[k] is not connected[k]:
             raise Error("TypeError: native public model class ancestry changed")
         if py_contains(_type_fields(mro[k]), "__getattr__"):
@@ -94,7 +94,7 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     if py_type(model) is not b.type:
         var fields = py_call(plan["fields_get"], model, cls)
         var keys = py_call(py_type(Python.list()), fields.keys())
-        for k in range(len(keys)):  # driver-loop: native instance attribute names
+        for k in range(len(keys)):  # driver-loop: over native instance attribute names
             if py_type(keys[k]) is not b.str:
                 # Refuse before a dict lookup can compare a malicious key
                 # against one of the native implementation's string names.
@@ -131,7 +131,7 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     var member = PythonObject(None)
     var present = False
     var mro = plan["mro"]
-    for k in range(len(mro)):  # driver-loop: native class attribute lookup order
+    for k in range(len(mro)):  # driver-loop: over native class attribute lookup order
         var fields = _type_fields(mro[k])
         if py_contains(fields, name):
             member = fields[name]
@@ -197,8 +197,8 @@ def classical_connect_numpy(context: PythonObject) raises:
     var integers = py_call(list_type, Python.tuple(int_type))
     var kinds = Python.tuple("u", "i", "f", "b")
     var sizes = Python.tuple(1, 2, 4, 8)
-    for kind in range(4):  # driver-loop: fixed native scalar ABI metadata
-        for index in range(4):  # driver-loop: supported scalar widths
+    for kind in range(4):  # driver-loop: over fixed native scalar ABI metadata
+        for index in range(4):  # driver-loop: over supported scalar widths
             var size = Int(py=sizes[index])
             if (kind == 2 and size == 1) or (kind == 3 and size != 1):
                 continue
@@ -216,7 +216,7 @@ def classical_connect_numpy(context: PythonObject) raises:
     # with no Python protocol hooks; label lists built from a NumPy string
     # array hold them (scikit-learn accepts such labels).
     var text_names = Python.tuple("str_", "bytes_")
-    for i in range(len(text_names)):  # driver-loop: two fixed NumPy scalar type names
+    for i in range(len(text_names)):  # driver-loop: over two fixed NumPy scalar type names
         var text_type = py_get(fields, text_names[i])
         if text_type is not None and py_type(text_type) is py_type(int_type):
             _ = py_call(values.append, text_type)
@@ -224,7 +224,7 @@ def classical_connect_numpy(context: PythonObject) raises:
     var archive = Python.dict()
     var archive_codes = Python.tuple("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2",
                                      "=f4", "=f8", "=i4", "=i8", "=u4", "|u1", "|b1")
-    for i in range(len(archive_codes)):  # driver-loop: supported NPY header dtype metadata
+    for i in range(len(archive_codes)):  # driver-loop: over supported NPY header dtype metadata
         var code = archive_codes[i]
         # The archive's Boolean payload is represented by byte storage.
         var dtype = py_call(dtype_class, "u1" if String(code) == "|b1" else String(code))

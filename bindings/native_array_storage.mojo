@@ -55,7 +55,7 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
     # raw byte to be zero, including the IEEE sign bit in float prototypes.
     var address = native_buffer_address(seed)
     var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
-    for i in range(Int(py=seed.itemsize)):  # small-loop(storage scalar width: at most eight bytes)
+    for i in range(Int(py=seed.itemsize)):  # small-loop(seed.itemsize: scalar storage byte width): at most eight native storage bytes
         if bytes[i] != 0:
             raise Error("TypeError: native array storage seed changed")
     ref cpy = Python().cpython()
@@ -90,7 +90,7 @@ def native_array_from_values(code: String, source: PythonObject) raises -> Pytho
     # Callers normalize NumPy/buffer leaves through their existing native input
     # paths. Reject Python scalar conversion protocols before native append can
     # invoke them. array.array iteration itself yields exact Python primitives.
-    for i in range(len(source)):  # cpu-route: admit the explicit numeric input leaves
+    for i in range(len(source)):  # driver-loop: over caller-provided scalar ABI types before native conversion
         var item_type = py_type(source[i])
         if item_type is not b.int and item_type is not b.float and item_type is not b.bool:
             raise Error("TypeError: native array values cannot invoke scalar conversion hooks")
