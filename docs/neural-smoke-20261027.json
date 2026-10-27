@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-27",
+  "policy": "All 29 neural recipes must pass startup and settings smoke on AMD, NVIDIA and Apple. Other smoke failures are logged and skipped; they do not block measurement progress. No peer coordination requested.",
+  "scope": "Startup and effective algorithm/settings checks only; smoke does not fit, train, generate or qualify all tape operations.",
+  "fixes": {
+    "shared_fit_learning_rate": "Supply exactly FP32-representable 0.0010000000474974513 on every fit arm; keep strict equality.",
+    "cpu_probe": "Record the CPU runtime environment before timing, as already required of the timed worker.",
+    "host_reference": "Give the untimed installed-wheel host child its bundled .libs path before import.",
+    "checkpoints": "Default generation checkpoint storage to the campaign cache, preserving explicit overrides."
+  },
+  "vendors": {
+    "apple": {
+      "expected": 29,
+      "counts": {
+        "MATCHED": 29
+      },
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/apple-neural-summary.json",
+      "retention": {
+        "local_archive": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/apple-neural-smoke-evidence.tar.gz",
+        "r2_key": "measurements/neural-smoke-20261027/apple-neural-smoke-evidence.tar.gz",
+        "upload": "ok"
+      }
+    },
+    "amd": {
+      "expected": 29,
+      "counts": {
+        "MATCHED": 29
+      },
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/amd-neural-summary.json",
+      "retention": {
+        "bytes": 31479074,
+        "r2_bucket": "mojolearn-data",
+        "r2_key": "measurements/records/v1/3aa6389ea53d6cebcc8557a806a155b8208b30ecc459afd1524799c6466dc1e5.tar.gz",
+        "sha256": "3aa6389ea53d6cebcc8557a806a155b8208b30ecc459afd1524799c6466dc1e5",
+        "status": "verified",
+        "verification": "GET sha256",
+        "local_archive": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/amd-neural-smoke-evidence.tar.gz"
+      }
+    },
+    "nvidia": {
+      "expected": 29,
+      "status": "pending current-box smoke; previous L40S smoke passed 29/29"
+    }
+  },
+  "measurement_run": {
+    "vendor": "nvidia",
+    "provider": "RunPod",
+    "gpu": "NVIDIA RTX 6000 Ada Generation",
+    "source_freeze": "7d881805f7f9173934a062ba8006e663ebf68c8a",
+    "status": "setup",
+    "neural_first": true,
+    "amd_box": "kept running; not released",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027"
+  },
+  "prior_amd_measurements": {
+    "attempted": 326,
+    "finished_without_recipe_failure": 45,
+    "failed": 195,
+    "skipped": 86,
+    "pending": 327,
+    "admitted_fit_recipes": 29,
+    "wins_vs_fastest_admitted": 11,
+    "losses_vs_fastest_admitted": 18,
+    "scored_samples_per_arm": 1,
+    "state": "interrupted by Mac ENOSPC; raw evidence retained; no claim of full completion"
+  }
+}
