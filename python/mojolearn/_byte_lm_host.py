@@ -453,54 +453,8 @@ class LanguageModelHostTrainer:
     def __init__(self, parameters, *, m=None, v=None, shape=None,
                  completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
                  weight_decay=.01):
-        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
-        _numeric_profile.require_training("mojolearn.LanguageModelHostTrainer")
-        shape = ByteLanguageModelConfig() if shape is None else shape
-        self._shape = shape
-        self._native = _native_shape(shape)
-        self._binding = _load()
-        # A host binding built before DEVIATION 2680 loads fine and runs
-        # inference fine; it simply has no training entry. Say so by name at
-        # construction rather than letting the call fail later, which is what
-        # the GPU surface does for its own missing entries.
-        if not callable(getattr(self._binding, 'byte_lm_host_train_step', None)):
-            raise ImportError(
-                'byte LM host binding is missing byte_lm_host_train_step; '
-                'rebuild bindings/build_byte_lm_host.sh')
-        self._train_entry = self._binding.byte_lm_host_train_step
-        n = shape.n_total
-        array, _ = as_f32_c(parameters, ndim=1, name='parameters')
-        if array.size != n:
-            raise ValueError(f'parameters must hold {n} float32 values')
-        if not all_finite(array):
-            raise ValueError('parameters must be finite')
-        self._parameters = frombytes(le_bytes(array, 'f'), '<f4', (n,))
-        self._m = self._moment(m, 'm', n)
-        self._v = self._moment(v, 'v', n)
-        if not isinstance(completed_steps, int) or isinstance(completed_steps, bool):
-            raise ValueError('completed_steps must be an int')
-        if completed_steps < 0:
-            raise ValueError('completed_steps must not be negative')
-        self._completed = completed_steps
-        beta1, beta2 = betas
-        # The byte LM trainer's own validator admits positive-lr AdamW only,
-        # with no clipping and no SGD options, so this refuses the same set
-        # rather than passing a configuration the native side would reject.
-        for name, value in (('lr', lr), ('beta1', beta1), ('beta2', beta2),
-                            ('eps', eps), ('weight_decay', weight_decay)):
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ValueError(f'{name} must be a real number')
-        if not lr > 0 or not eps > 0:
-            raise ValueError('lr and eps must be positive')
-        if not 0 <= beta1 < 1 or not 0 <= beta2 < 1:
-            raise ValueError('betas must be in [0, 1)')
-        if weight_decay < 0:
-            raise ValueError('weight_decay must not be negative')
-        self._scalars = [float(lr), float(beta1), float(beta2), float(eps),
-                         float(weight_decay)]
-        # the shape words the native train_step reads (bindings/byte_lm_host_trainer_native.mojo)
-        self._step_words = (shape.batch, shape.length + 1, shape.vocab_size, shape.n_total)
-        self._gradient = None
+        return _HOST_TRAIN(self, "construct", (parameters, m, v, shape, completed_steps,
+                                               lr, betas, eps, weight_decay), _HOST_TRAIN_CONTEXT)
 
     def _moment(self, given, name, n):
         if given is None:
@@ -516,40 +470,40 @@ class LanguageModelHostTrainer:
     def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):
         """A trainer resuming a recorded step's starting state, which is how
         the gate replays one step of the retained capture in isolation."""
-        return cls(parameters, m=m, v=v, completed_steps=completed_steps, **kwargs)
+        return _HOST_TRAIN(cls, "from_state", (parameters, m, v, completed_steps, kwargs), _HOST_TRAIN_CONTEXT)
 
     @property
     def shape(self):
-        return self._shape
+        return _HOST_TRAIN(self, "shape", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def profile(self):
-        return str(self._binding.byte_lm_host_profile(self._native))
+        return _HOST_TRAIN(self, "profile", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def completed_steps(self):
-        return self._completed
+        return _HOST_TRAIN(self, "completed_steps", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def parameters_(self):
-        return self._parameters
+        return _HOST_TRAIN(self, "parameters", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def m_(self):
-        return self._m
+        return _HOST_TRAIN(self, "m", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def v_(self):
-        return self._v
+        return _HOST_TRAIN(self, "v", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def gradient_(self):
         """The last step's gradient, or None before any step. A failed step
         leaves this None rather than a stale value."""
-        return self._gradient
+        return _HOST_TRAIN(self, "gradient", (), _HOST_TRAIN_CONTEXT)
 
     def parameters_sha256(self):
-        return _parameters_sha256(self._parameters)
+        return _HOST_TRAIN(self, "parameters_sha256", (), _HOST_TRAIN_CONTEXT)
 
     def train_step(self, ids):
         """One step on int32 ids `[shape.batch, shape.length + 1]`, the
@@ -574,7 +528,16 @@ def _connect_host_trainer():
     # is the trainer's own binding entry, retained at construction
     from .tokenizer import _binding
     from ._native_classical_bridge import _state_context
-    return _binding()._module.byte_lm_host_trainer_call, _state_context()
+    context = _state_context()
+    _numeric_profile.default_profile("training")  # glue: connect profile metadata at import
+    try:
+        binding = _load()
+    except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+        binding = type(error).__name__ + ": " + str(error)
+    context.update(byte_lm_host_trainer_class=LanguageModelHostTrainer,
+                   byte_lm_config_class=ByteLanguageModelConfig, byte_lm_host_binding=binding,
+                   byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES)
+    return _binding()._module.byte_lm_host_trainer_call, context
 
 
 _HOST_TRAIN, _HOST_TRAIN_CONTEXT = _connect_host_trainer()

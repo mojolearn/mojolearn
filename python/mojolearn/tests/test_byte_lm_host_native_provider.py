@@ -47,3 +47,33 @@ def test_host_native_provider_reuse_and_transactional_outputs():
         model._binding.byte_lm_host_api_v1 = factory
     assert not calls and model.gradient_ is None and model.completed_steps == completed
     assert tuple(np.asarray(x).tobytes() for x in (model.parameters_, model.m_, model.v_)) == before
+
+
+def test_host_public_constructor_restore_and_consumed_metadata():
+    import hashlib
+    from mojolearn._byte_lm_host import LanguageModelHostTrainer
+    from mojolearn._verify_native_runtime import audit_native_call
+    template = _model()
+    expected = np.asarray(template.parameters_).copy()
+    storage = np.zeros(expected.size * 2, dtype='f8')
+    source = storage[::2]
+    source[:] = expected
+    model = audit_native_call(LanguageModelHostTrainer, source, shape=template.shape,
+                              betas=np.array([.9, .999], dtype='f8')).assert_native()
+    assert np.asarray(model.parameters_).tobytes() == expected.tobytes()
+    source.fill(0)
+    assert np.asarray(model.parameters_).tobytes() == expected.tobytes()
+    assert audit_native_call(model.parameters_sha256).assert_native() == hashlib.sha256(expected.tobytes()).hexdigest()
+    assert model.profile == model._binding.byte_lm_host_profile(model._native)
+    restored = audit_native_call(LanguageModelHostTrainer.from_state, model.parameters_, model.m_, model.v_,
+                                 completed_steps=3, shape=model.shape).assert_native()
+    assert restored.completed_steps == 3 and restored.gradient_ is None
+    assert np.asarray(restored.parameters_).tobytes() == expected.tobytes()
+    calls = []
+    class Hook:
+        def __float__(self):
+            calls.append('float')
+            return .1
+    with pytest.raises((TypeError, ValueError)):
+        LanguageModelHostTrainer(expected, shape=model.shape, lr=Hook())
+    assert calls == []

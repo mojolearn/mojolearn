@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Host ByteLM uses the same native descriptor transport and ownership interface
-# as GPU models. This table owns only its existing four whole-model operations.
+# as GPU models. This table owns four existing model operations and profile readback.
 from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -8,7 +8,7 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
 
 comptime BYTE_HOST_NATIVE_ABI = "mojolearn.training.byte_lm_host.v1"
-comptime BYTE_HOST_NATIVE_OPERATION_COUNT = 4
+comptime BYTE_HOST_NATIVE_OPERATION_COUNT = 5
 
 
 def byte_host_operation(op: Int, addresses: List[Int], words: List[Int], scalars: List[Float64]) raises -> Int:
@@ -23,6 +23,11 @@ def byte_host_operation(op: Int, addresses: List[Int], words: List[Int], scalars
         raise Error("byte LM host: threaded must be 0 or 1")
     if thread_count < 0 or thread_count > 1024:
         raise Error("byte LM host: threads must be in [0, 1024] (0: one per physical core)")
+    if op == 4:
+        if len(addresses) != 1 or addresses[0] == 0 or len(scalars) != 0:
+            raise Error("byte LM host: invalid native profile output")
+        MutPointer[String, MutUntrackedOrigin](unsafe_from_address=addresses[0])[0] = cfg.profile()
+        return 0
     if op == 3:
         if len(addresses) != 8 or len(scalars) != 5:
             raise Error("byte LM host: train step expects eight buffers and five optimizer scalars")
