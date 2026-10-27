@@ -63,6 +63,9 @@ from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from gemm.linalg_dispatch import LINALG_NATIVE_TABLE
+from gemm.linalg_native import _f32_ptr, _dev_f32, _dev_u16, _dev_i8, _dev_i32, _refuse_lowbit_shape, _LowbitSlot, _LOWBIT_POOL, _lowbit_run, _lowbit_tick, gemm_native, gemm_bf16_native, gemm_int8_native, quantize_int8_native, dequantize_int8_native, gemm_int15_native, quantize_int15_native, dequantize_int15_native, to_bf16_native, from_bf16_native, from_f16_native
 
 from checks.vendor import COMPILED_VENDOR
 
@@ -137,9 +140,6 @@ from bindings.apple_fast_bf16_public import (
 )
 
 
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
 
 def linalg_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST,
@@ -192,29 +192,17 @@ def gemm_binding(
     float32, row-major and fully contiguous (contract section 2); no leading
     dimension, no stride, no sub-view. `gemm/host_entry.mojo` refuses a
     non-positive extent and an unknown `op` by name."""
-    if len(params) != 4:
-        raise Error(
-            "gemm: params must contain 4 values (m, n, k, op), got "
-            + String(len(params))
-        )
-    var cp = _f32_ptr(Int(py=c_addr))
-    var ap = _f32_ptr(Int(py=a_addr))
-    var bp = _f32_ptr(Int(py=b_addr))
-    var m = Int(py=params[0])
-    var n = Int(py=params[1])
-    var k = Int(py=params[2])
-    var op = Int(py=params[3])
+
+    var native_c_addr = Int(py=c_addr)
+    var native_a_addr = Int(py=a_addr)
+    var native_b_addr = Int(py=b_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        identical_gemm_host(ctx, cp, ap, bp, m, n, k, op)
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-    return PythonObject(m * n)
+        result = gemm_native(native_c_addr, native_a_addr, native_b_addr, native_params)
+    return PythonObject(result)
 
 
 def linalg_vendor_binding() raises -> PythonObject:
@@ -237,54 +225,9 @@ def linalg_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 
 
-def _dev_f32(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
-    var n = count
-    if n < 1:
-        n = 1
-    var d = ctx.enqueue_create_buffer[DType.float32](n)
-    if count > 0:
-        ctx.enqueue_copy(dst_buf=d, src_ptr=f32_ptr(addr))
-    return d^
 
 
-def _dev_u16(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.uint16]:
-    var n = count
-    if n < 1:
-        n = 1
-    var d = ctx.enqueue_create_buffer[DType.uint16](n)
-    if count > 0:
-        ctx.enqueue_copy(dst_buf=d, src_ptr=u16_ptr(addr))
-    return d^
 
-
-def _dev_i8(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.int8]:
-    var n = count
-    if n < 1:
-        n = 1
-    var d = ctx.enqueue_create_buffer[DType.int8](n)
-    if count > 0:
-        ctx.enqueue_copy(dst_buf=d, src_ptr=i8_ptr(addr))
-    return d^
-
-
-def _dev_i32(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.int32]:
-    var n = count
-    if n < 1:
-        n = 1
-    var d = ctx.enqueue_create_buffer[DType.int32](n)
-    if count > 0:
-        ctx.enqueue_copy(dst_buf=d, src_ptr=i32_ptr(addr))
-    return d^
-
-
-def _refuse_lowbit_shape(m: Int, n: Int, k: Int, op: Int, who: String) raises:
-    if m <= 0 or n <= 0 or k <= 0:
-        raise Error(
-            who + ": m, n and k must all be positive, got m=" + String(m)
-            + " n=" + String(n) + " k=" + String(k)
-        )
-    if op != OP_NN and op != OP_NT and op != OP_TN:
-        raise Error(who + ": op must be 0 (OP_NN), 1 (OP_NT) or 2 (OP_TN), got " + String(op))
 
 
 def lowbit_profile_version_binding() raises -> PythonObject:
@@ -294,37 +237,7 @@ def lowbit_profile_version_binding() raises -> PythonObject:
     return PythonObject(LOWBIT_PROFILE_VERSION)
 
 
-struct _LowbitSlot(Defaultable, Movable):
-    var work: Optional[LowbitWorkspace]
 
-    def __init__(out self):
-        self.work = Optional[LowbitWorkspace]()
-
-
-comptime _LOWBIT_POOL = _Global[StorageType=_LowbitSlot, name="MojoGemmLowbitPool", init_fn=_LowbitSlot.__init__]
-
-
-def _lowbit_run(
-    ctx: DeviceContext,
-    lease: GemmHostLease,
-    mut dc: DeviceBuffer[DType.float32],
-    mut da: DeviceBuffer[DType.float32],
-    mut db: DeviceBuffer[DType.uint16],
-    m: Int, n: Int, k: Int, op: Int,
-) raises:
-    """`identical_gemm_bf16w_into` then a wait, on the pooled workspace when
-    the lease holds the pool (only the lease holder touches the slot)."""
-    if lease.held:
-        var slot = _LOWBIT_POOL.get_or_create_ptr()
-        if not slot[].work:
-            slot[].work = LowbitWorkspace(ctx)
-        identical_gemm_bf16w_into(ctx, dc, da, db, slot[].work.value(), m, n, k, op)
-        ctx.synchronize()
-        return
-    var work = LowbitWorkspace(ctx)
-    identical_gemm_bf16w_into(ctx, dc, da, db, work, m, n, k, op)
-    ctx.synchronize()
-    _ = work^
 
 
 def gemm_bf16_binding(
@@ -346,59 +259,17 @@ def gemm_bf16_binding(
         3  op        0 = OP_NN, 1 = OP_NT, 2 = OP_TN
         4  a_bf16    1 when A is bf16 bits, 0 when A is float32
     """
-    if len(params) != 5:
-        raise Error("gemm_bf16: params must contain 5 values (m, n, k, op, a_bf16), got " + String(len(params)))
-    var c_address = Int(py=c_addr)
-    var a_address = Int(py=a_addr)
-    var b_address = Int(py=b_addr)
-    var m = Int(py=params[0])
-    var n = Int(py=params[1])
-    var k = Int(py=params[2])
-    var op = Int(py=params[3])
-    var a_bf16 = Int(py=params[4]) != 0
-    _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
+
+    var native_c_addr = Int(py=c_addr)
+    var native_a_addr = Int(py=a_addr)
+    var native_b_addr = Int(py=b_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        # lane/gap-neural-models (2026-10-02): pooled buffers and workspace,
-        # staged download (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0
-        # restores fresh buffers). Copies only, the same kernels.
-        var lease = GemmHostLease()
-        var db = lease.u16(ctx, ROLE_B, n * k)
-        gemm_up_u16(ctx, lease, db, u16_ptr(b_address), n * k)
-        var dc = lease.f32(ctx, ROLE_C, m * n)
-        var da = lease.f32(ctx, ROLE_X, m * k)
-        if a_bf16:
-            var da_bits = lease.u16(ctx, ROLE_A, m * k)
-            gemm_up_u16(ctx, lease, da_bits, u16_ptr(a_address), m * k)
-            # lane/apple-fast-neural-gemm (2026-10-03): under FAST on Apple
-            # with MOJOLEARN_AFN_GEMM_BF16_MMA both operands' bits go straight
-            # to the simdgroup kernel (no widen launch, no float32 image of
-            # A); otherwise, and under IDENTICAL, the lines below unchanged.
-            var served = False
-            comptime if AFN_GEMM_BF16_MMA:
-                served = afn_gemm_bf16_bits_into(ctx, dc, da_bits, db, m, n, k, op)
-                if served:
-                    ctx.synchronize()
-            if not served:
-                bf16_widen(ctx, da, da_bits, m * k)
-                _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
-            _ = da_bits
-        else:
-            gemm_up_f32(ctx, lease, da, f32_ptr(a_address), m * k)
-            _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
-        gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
-        lease.release()
-        _ = db^
-        _ = dc^
-        _ = da^
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-    return PythonObject(m * n)
+        result = gemm_bf16_native(native_c_addr, native_a_addr, native_b_addr, native_params)
+    return PythonObject(result)
 
 
 def gemm_int8_binding(
@@ -413,55 +284,19 @@ def gemm_int8_binding(
     `mojolearn.identical.gemm.int8i32.v1` (OP_NT only). `qa`, `qb` are int8
     codes; `ea` (m entries) and `eb` (n entries) are int32 row exponents; `C`
     is float32. Returns `m * n`. `params` is `[m, n, k]`."""
-    if len(params) != 3:
-        raise Error("gemm_int8: params must contain 3 values (m, n, k), got " + String(len(params)))
-    var c_address = Int(py=c_addr)
-    var qa_address = Int(py=qa_addr)
-    var ea_address = Int(py=ea_addr)
-    var qb_address = Int(py=qb_addr)
-    var eb_address = Int(py=eb_addr)
-    var m = Int(py=params[0])
-    var n = Int(py=params[1])
-    var k = Int(py=params[2])
-    _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int8"))
-    if k > INT8_MAX_K:
-        raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
-    # lane/neural-net-experiment (2026-09-30): MOJOLEARN_LOWBIT_TIMING=1
-    # prints one line per phase of this call (`timing int8.<phase> <ms>
-    # ms`), a synchronize around each, so the board's gemm-int8 cell can be
-    # read as context + uploads + kernel + download + drains. Measurement
-    # only: the phases and their order are unchanged when it is off.
-    var ton = String(getenv("MOJOLEARN_LOWBIT_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
+
+    var native_c_addr = Int(py=c_addr)
+    var native_qa_addr = Int(py=qa_addr)
+    var native_ea_addr = Int(py=ea_addr)
+    var native_qb_addr = Int(py=qb_addr)
+    var native_eb_addr = Int(py=eb_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        _lowbit_tick(ctx, ton, tk, "context")
-        var dqa = _dev_i8(ctx, qa_address, m * k)
-        var dea = _dev_i32(ctx, ea_address, m)
-        var dqb = _dev_i8(ctx, qb_address, n * k)
-        var deb = _dev_i32(ctx, eb_address, n)
-        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-        _lowbit_tick(ctx, ton, tk, "uploads_and_alloc")
-        identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
-        ctx.synchronize()
-        _lowbit_tick(ctx, ton, tk, "kernel")
-        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-        ctx.synchronize()
-        _lowbit_tick(ctx, ton, tk, "download")
-        _ = dqa^
-        _ = dea^
-        _ = dqb^
-        _ = deb^
-        _ = dc^
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-        _lowbit_tick(ctx, ton, tk, "free_and_drain")
-    return PythonObject(m * n)
+        result = gemm_int8_native(native_c_addr, native_qa_addr, native_ea_addr, native_qb_addr, native_eb_addr, native_params)
+    return PythonObject(result)
 
 
 def gemm_fused_binding(
@@ -525,16 +360,6 @@ def gemm_fused_binding(
         return PythonObject(m * n)
 
 
-def _lowbit_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
-    """MOJOLEARN_LOWBIT_TIMING: synchronize, print `timing int8.<name> <ms>
-    ms`, advance `t`. A no-op when off."""
-    if not on:
-        return
-    ctx.synchronize()
-    var now = Int(perf_counter_ns())
-    print("timing int8." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
-    t = now
-
 
 def quantize_int8_binding(
     q_addr: PythonObject,
@@ -545,36 +370,17 @@ def quantize_int8_binding(
     """Row-wise int8 codes (`q`, rows x cols) and int32 exponents (`e`, rows)
     of a float32 matrix, by contract L-3 and L-4, on the device. `params`
     is `[rows, cols]`. Returns `rows * cols`."""
-    if len(params) != 2:
-        raise Error("quantize_int8: params must contain 2 values (rows, cols), got " + String(len(params)))
-    var q_address = Int(py=q_addr)
-    var e_address = Int(py=e_addr)
-    var x_address = Int(py=x_addr)
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    if rows <= 0 or cols <= 0:
-        raise Error("quantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+
+    var native_q_addr = Int(py=q_addr)
+    var native_e_addr = Int(py=e_addr)
+    var native_x_addr = Int(py=x_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dx = _dev_f32(ctx, x_address, rows * cols)
-        var dq = ctx.enqueue_create_buffer[DType.int8](rows * cols)
-        var de = ctx.enqueue_create_buffer[DType.int32](rows)
-        quantize_rows_int8_device(ctx, dq, de, dx, rows, cols)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=i8_ptr(q_address), src_buf=dq)
-        ctx.enqueue_copy(dst_ptr=i32_ptr(e_address), src_buf=de)
-        ctx.synchronize()
-        _ = dx^
-        _ = dq^
-        _ = de^
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-    return PythonObject(rows * cols)
+        result = quantize_int8_native(native_q_addr, native_e_addr, native_x_addr, native_params)
+    return PythonObject(result)
 
 
 def dequantize_int8_binding(
@@ -585,35 +391,17 @@ def dequantize_int8_binding(
 ) raises -> PythonObject:
     """`y = q * 2^e` row by row, exact, on the device. `params` is
     `[rows, cols]`. Returns `rows * cols`."""
-    if len(params) != 2:
-        raise Error("dequantize_int8: params must contain 2 values (rows, cols), got " + String(len(params)))
-    var y_address = Int(py=y_addr)
-    var q_address = Int(py=q_addr)
-    var e_address = Int(py=e_addr)
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    if rows <= 0 or cols <= 0:
-        raise Error("dequantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+
+    var native_y_addr = Int(py=y_addr)
+    var native_q_addr = Int(py=q_addr)
+    var native_e_addr = Int(py=e_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dq = _dev_i8(ctx, q_address, rows * cols)
-        var de = _dev_i32(ctx, e_address, rows)
-        var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
-        dequantize_rows_int8_device(ctx, dy, dq, de, rows, cols)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
-        ctx.synchronize()
-        _ = dq^
-        _ = de^
-        _ = dy^
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-    return PythonObject(rows * cols)
+        result = dequantize_int8_native(native_y_addr, native_q_addr, native_e_addr, native_params)
+    return PythonObject(result)
 
 
 # ===========================================================================
@@ -647,119 +435,50 @@ def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> Pyth
         6  b exponents  int32, n
 
     `params` is `[m, n, k]`."""
-    if len(addrs) != 7:
-        raise Error("gemm_int15: addrs must contain 7 addresses (c, a hi, a lo, a exponents, b hi, b lo, b exponents), got " + String(len(addrs)))
-    if len(params) != 3:
-        raise Error("gemm_int15: params must contain 3 values (m, n, k), got " + String(len(params)))
-    var c_address = Int(py=addrs[0])
-    var ah_address = Int(py=addrs[1])
-    var al_address = Int(py=addrs[2])
-    var ea_address = Int(py=addrs[3])
-    var bh_address = Int(py=addrs[4])
-    var bl_address = Int(py=addrs[5])
-    var eb_address = Int(py=addrs[6])
-    var m = Int(py=params[0])
-    var n = Int(py=params[1])
-    var k = Int(py=params[2])
-    _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int15"))
-    if k > INT15_MAX_K:
-        raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
+
+    var native_addrs = List[Int]()
+    for i in range(len(addrs)):  # small-loop(native descriptor words)
+        native_addrs.append(Int(py=addrs[i]))
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dah = _dev_i8(ctx, ah_address, m * k)
-        var dal = _dev_i8(ctx, al_address, m * k)
-        var dea = _dev_i32(ctx, ea_address, m)
-        var dbh = _dev_i8(ctx, bh_address, n * k)
-        var dbl = _dev_i8(ctx, bl_address, n * k)
-        var deb = _dev_i32(ctx, eb_address, n)
-        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-        identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-        ctx.synchronize()
-        _ = dah^
-        _ = dal^
-        _ = dea^
-        _ = dbh^
-        _ = dbl^
-        _ = deb^
-        _ = dc^
-        # DEVIATION 3010: drain the frees the buffers above enqueued.
-        ctx.synchronize()
-    return PythonObject(m * n)
+        result = gemm_int15_native(native_addrs, native_params)
+    return PythonObject(result)
 
 
 def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """Row-wise planes and int32 exponents of a float32 matrix, by clauses
     W-1 to W-3, on the device (the parallel schedule). `addrs`: 0 hi, 1 lo,
     2 exponents, 3 x. `params` is `[rows, cols]`. Returns `rows * cols`."""
-    if len(addrs) != 4:
-        raise Error("quantize_int15: addrs must contain 4 addresses (hi, lo, exponents, x), got " + String(len(addrs)))
-    if len(params) != 2:
-        raise Error("quantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
-    var h_address = Int(py=addrs[0])
-    var l_address = Int(py=addrs[1])
-    var e_address = Int(py=addrs[2])
-    var x_address = Int(py=addrs[3])
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    if rows <= 0 or cols <= 0:
-        raise Error("quantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+
+    var native_addrs = List[Int]()
+    for i in range(len(addrs)):  # small-loop(native descriptor words)
+        native_addrs.append(Int(py=addrs[i]))
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dx = _dev_f32(ctx, x_address, rows * cols)
-        var dh = ctx.enqueue_create_buffer[DType.int8](rows * cols)
-        var dl = ctx.enqueue_create_buffer[DType.int8](rows * cols)
-        var de = ctx.enqueue_create_buffer[DType.int32](rows)
-        var quant = Int15QuantWorkspace(ctx)
-        quantize_planes_int15_parallel_device(ctx, dh, dl, de, dx, quant, rows, cols, False)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=i8_ptr(h_address), src_buf=dh)
-        ctx.enqueue_copy(dst_ptr=i8_ptr(l_address), src_buf=dl)
-        ctx.enqueue_copy(dst_ptr=i32_ptr(e_address), src_buf=de)
-        ctx.synchronize()
-        _ = dx^
-        _ = dh^
-        _ = dl^
-        _ = de^
-        _ = quant^
-        # DEVIATION 3010: drain the frees the buffers above enqueued.
-        ctx.synchronize()
-    return PythonObject(rows * cols)
+        result = quantize_int15_native(native_addrs, native_params)
+    return PythonObject(result)
 
 
 def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`y = (hi * 128 + lo) * 2^e` row by row, on the device. `addrs`:
     0 y, 1 hi, 2 lo, 3 exponents. `params` is `[rows, cols]`."""
-    if len(addrs) != 4:
-        raise Error("dequantize_int15: addrs must contain 4 addresses (y, hi, lo, exponents), got " + String(len(addrs)))
-    if len(params) != 2:
-        raise Error("dequantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
-    var y_address = Int(py=addrs[0])
-    var h_address = Int(py=addrs[1])
-    var l_address = Int(py=addrs[2])
-    var e_address = Int(py=addrs[3])
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    if rows <= 0 or cols <= 0:
-        raise Error("dequantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+
+    var native_addrs = List[Int]()
+    for i in range(len(addrs)):  # small-loop(native descriptor words)
+        native_addrs.append(Int(py=addrs[i]))
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dh = _dev_i8(ctx, h_address, rows * cols)
-        var dl = _dev_i8(ctx, l_address, rows * cols)
-        var de = _dev_i32(ctx, e_address, rows)
-        var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
-        dequantize_planes_int15_device(ctx, dy, dh, dl, de, rows, cols)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
-        ctx.synchronize()
-        _ = dh^
-        _ = dl^
-        _ = de^
-        _ = dy^
-        # DEVIATION 3010: drain the frees the buffers above enqueued.
-        ctx.synchronize()
-    return PythonObject(rows * cols)
+        result = dequantize_int15_native(native_addrs, native_params)
+    return PythonObject(result)
 
 
 def to_bf16_binding(
@@ -767,31 +486,16 @@ def to_bf16_binding(
 ) raises -> PythonObject:
     """float32 to bf16 bits by contract L-2 (flush, then round to nearest
     even), on the device. `params` is `[count]`. Returns `count`."""
-    if len(params) != 1:
-        raise Error("to_bf16: params must contain 1 value (count)")
-    var dst_address = Int(py=dst_addr)
-    var src_address = Int(py=src_addr)
-    var count = Int(py=params[0])
-    if count <= 0:
-        raise Error("to_bf16: count must be positive, got " + String(count))
+
+    var native_dst_addr = Int(py=dst_addr)
+    var native_src_addr = Int(py=src_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dsrc = _dev_f32(ctx, src_address, count)
-        var ddst = ctx.enqueue_create_buffer[DType.uint16](count)
-        bf16_narrow(ctx, ddst, dsrc, count)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=u16_ptr(dst_address), src_buf=ddst)
-        ctx.synchronize()
-        _ = dsrc^
-        _ = ddst^
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-    return PythonObject(count)
+        result = to_bf16_native(native_dst_addr, native_src_addr, native_params)
+    return PythonObject(result)
 
 
 def from_bf16_binding(
@@ -799,31 +503,16 @@ def from_bf16_binding(
 ) raises -> PythonObject:
     """bf16 bits to float32 by contract L-1 (exact), on the device.
     `params` is `[count]`. Returns `count`."""
-    if len(params) != 1:
-        raise Error("from_bf16: params must contain 1 value (count)")
-    var dst_address = Int(py=dst_addr)
-    var src_address = Int(py=src_addr)
-    var count = Int(py=params[0])
-    if count <= 0:
-        raise Error("from_bf16: count must be positive, got " + String(count))
+
+    var native_dst_addr = Int(py=dst_addr)
+    var native_src_addr = Int(py=src_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dsrc = _dev_u16(ctx, src_address, count)
-        var ddst = ctx.enqueue_create_buffer[DType.float32](count)
-        bf16_widen(ctx, ddst, dsrc, count)
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=f32_ptr(dst_address), src_buf=ddst)
-        ctx.synchronize()
-        _ = dsrc^
-        _ = ddst^
-        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
-        # enqueued before this block's end destroys the context. Without it
-        # the MAX runtime allocator's lock is left held and the NEXT
-        # enqueue_create_buffer in the process blocks for ever (DEVIATION
-        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
-        # hang blames exactly this library). Host-side drain, no arithmetic.
-        ctx.synchronize()
-    return PythonObject(count)
+        result = from_bf16_native(native_dst_addr, native_src_addr, native_params)
+    return PythonObject(result)
 
 
 
@@ -834,17 +523,16 @@ def from_f16_binding(
     (`gemm/contract.mojo::f16_bits_to_f32`), on the device. The safetensors
     float16 reader's widening (pyglue-text-io, Oct 3). `params` is
     `[count]`. Returns `count`."""
-    if len(params) != 1:
-        raise Error("from_f16: params must contain 1 value (count)")
-    var dst_address = Int(py=dst_addr)
-    var src_address = Int(py=src_addr)
-    var count = Int(py=params[0])
-    if count <= 0:
-        raise Error("from_f16: count must be positive, got " + String(count))
+
+    var native_dst_addr = Int(py=dst_addr)
+    var native_src_addr = Int(py=src_addr)
+    var native_params = List[Int]()
+    for i in range(len(params)):  # small-loop(native descriptor words)
+        native_params.append(Int(py=params[i]))
+    var result = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        from_f16_device(ctx, f32_ptr(dst_address), u16_ptr(src_address), count)
-    return PythonObject(count)
+        result = from_f16_native(native_dst_addr, native_src_addr, native_params)
+    return PythonObject(result)
 
 # ---------------------------------------------------------------- linalg door
 # THE THREE DECOMPOSITIONS UNDER THEIR OWN NAMES, ON THE DEVICE (2026-09-19).
@@ -945,9 +633,15 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_linalg.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def linalg_native_api_v1_binding() raises -> PythonObject:
+    var table = LINALG_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def build__mojolearn_linalg() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
+        m.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         m.def_function[linalg_vendor_binding]("linalg_vendor")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")

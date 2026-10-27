@@ -439,7 +439,7 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
     >>> b = np.random.default_rng(1).random((32, 64), dtype=np.float32)
     >>> c = np.asarray(linalg.matmul(a, b, transpose_b=True))
     """
-    return _NATIVE(None, "family_lin_matmul", (_load(), a, b, transpose_a, transpose_b, out, identical), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul", (None, a, b, transpose_a, transpose_b, out, identical), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -476,7 +476,7 @@ def to_bf16(x):
     Subnormals are flushed, then each value is rounded to nearest even. Returns a
     uint16 `mojolearn.Array` of the same shape, the input format of `matmul_bf16`.
     """
-    return _NATIVE(None, "family_lin_to_bf16", (_load(), x), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_to_bf16", (None, x), _NATIVE_CONTEXT)
 
 
 def from_bf16(bits):
@@ -484,7 +484,7 @@ def from_bf16(bits):
 
     Returns a float32 `mojolearn.Array` of the same shape.
     """
-    return _NATIVE(None, "family_lin_from_bf16", (_load(), bits), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_from_bf16", (None, bits), _NATIVE_CONTEXT)
 
 
 def from_f16(bits):
@@ -512,12 +512,12 @@ def quantize_int8(x):
     exponents : mojolearn.Array of int32
         One per row; ``row = codes * 2**exponent``.
     """
-    return _NATIVE(None, "family_lin_quantize_int8", (_load(), x), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_quantize_int8", (None, x), _NATIVE_CONTEXT)
 
 
 def dequantize_int8(codes, exponents):
     """Recover float32 values ``codes * 2**exponents[row]`` exactly from `quantize_int8` output."""
-    return _NATIVE(None, "family_lin_dequantize_int8", (_load(), codes, exponents), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_dequantize_int8", (None, codes, exponents), _NATIVE_CONTEXT)
 
 
 def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
@@ -529,7 +529,7 @@ def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
     gives the same bits. `transpose_a`, `transpose_b` and `out` behave as in `matmul`.
     Requires the identical build.
     """
-    return _NATIVE(None, "family_lin_matmul_bf16", (_load(), a, b, transpose_a, transpose_b, out), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul_bf16", (None, a, b, transpose_a, transpose_b, out), _NATIVE_CONTEXT)
 
 
 def matmul_int8(a, b, *, out=None):
@@ -541,7 +541,7 @@ def matmul_int8(a, b, *, out=None):
     It is the product of the rounded operands, not the float32 product. `out` behaves
     as in `matmul`. Requires the identical build.
     """
-    return _NATIVE(None, "family_lin_matmul_int8", (_load(), a, b, out), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul_int8", (None, a, b, out), _NATIVE_CONTEXT)
 
 
 def _int8_operand(x, name):
@@ -581,12 +581,12 @@ def quantize_int15(x):
     exponents : mojolearn.Array of int32
         One per row.
     """
-    return _NATIVE(None, "family_lin_quantize_int15", (_load(), x), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_quantize_int15", (None, x), _NATIVE_CONTEXT)
 
 
 def dequantize_int15(hi, lo, exponents):
     """Recover float32 values ``(hi * 128 + lo) * 2**exponents[row]`` from `quantize_int15` output."""
-    return _NATIVE(None, "family_lin_dequantize_int15", (_load(), hi, lo, exponents), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_dequantize_int15", (None, hi, lo, exponents), _NATIVE_CONTEXT)
 
 
 def matmul_int15(a, b, *, out=None):
@@ -600,7 +600,7 @@ def matmul_int15(a, b, *, out=None):
     larger values raise `ValueError`. `out` behaves as in `matmul`. Requires the
     identical build.
     """
-    return _NATIVE(None, "family_lin_matmul_int15", (_load(), a, b, out), _NATIVE_CONTEXT)
+    return _NATIVE(None, "family_lin_matmul_int15", (None, a, b, out), _NATIVE_CONTEXT)
 
 
 def _out_or_new(out, m, n, who):
@@ -1011,7 +1011,23 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
 
 # The compiled owner of this module's public functions
 # (bindings/linalg_ops_native.mojo), connected once at import: each public
-# function is one native call, handed the linalg binding `_load()` resolved.
+# function is one native call; that boundary admits the connected binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_lin_state=globals())
+
+
+def _connect_native_linalg():
+    # glue: connect selected-mode images once; all public admission and binding
+    # replacement checks happen in the shared native provider boundary.
+    _backend.default_mode()
+    result = {}
+    for mode in ('identical', 'fast'):  # glue: two registered numeric modes
+        try:
+            result[mode] = _backend.binding(_MODULE_NAME, mode)
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+            result[mode] = type(error).__name__ + ': ' + str(error)
+    return result
+
+
+_native_connected_bindings = _connect_native_linalg()
