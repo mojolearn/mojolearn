@@ -20,7 +20,9 @@
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/full-api-verifier-20261027",
   "files": {
     "accepted-native-and-source.tgz": "715675966ef4e371af5683250cc39a772a09f47aa649216e6087632ecb55b6ad",
+    "apple-complete-reference.json": "64020c1fde8890a6d4c6ae873789b893c8b5be6dc282cf380b038c087f7a9320",
     "apple-final-capture.json": "0374e26d3e3da5234dbdf903c4138f9d5fe8a1e88785bef34057c54ce9e23846",
+    "apple-missing-five.json": "3ba36f6dbc35e3c68c0b7983a21e258d5ef0c266753f28cbfd939c6cd3c75ea8",
     "apple-normal-public.json": "c2e6346ec61fa90dc490c4a8e453dcf662425ddd9440ba2a6a902f652ebfa5f5",
     "checker-complete.log": "86c5631446f8ff9c7dd0d6b90210416e456e18c8ade252b90d1751daecf4eaee",
     "checker-reuse.log": "1614dee92706e3a9a55c10efeef67301b49f74698b39920bb8e6a091037895d0",
@@ -43,6 +45,11 @@
     "scope": "bounded correctness; no timing or quality measurements"
   },
   "format": "mojolearn.public-api-verifier-evidence.v1",
+  "integration": {
+    "amd_hotaisle_retry": "active",
+    "local_main_merge": "d763884b5",
+    "mac_missing_checks_completed": true
+  },
   "native_repairs": [
     "standalone block constructor parameter storage and native set_params reconstruction",
     "registered decision-tree constructor storage-hook admission for bagging members",
@@ -72,19 +79,15 @@
       "provider": "Hot Aisle"
     },
     "metal": {
-      "blocker": "tools/macos_serial_guard.py refused launch at macOS pressure level 2; installed old native paths still fail these five checks",
       "executed": 1275,
       "faults_caught_and_restored": 16,
       "hardware": "Apple M4",
-      "matching_cuda": 1270,
+      "matching_cuda": 1275,
+      "native_build": "one compiler job; separately compiled native repair group",
       "output_differences": [],
-      "repair_checks_pending": [
-        "mojolearn.BaggingClassifier.estimators_:get",
-        "mojolearn.BaggingClassifier.estimators_:set",
-        "mojolearn.BaggingRegressor.estimators_:get",
-        "mojolearn.BaggingRegressor.estimators_:set",
-        "mojolearn.Embedding.to_device"
-      ]
+      "prior_blocker": "tools/macos_serial_guard.py refused launch at macOS pressure level 2; installed old native paths still fail these five checks",
+      "repair_checks_completed": 5,
+      "repair_checks_pending": []
     }
   },
   "separate_light_flag": false,

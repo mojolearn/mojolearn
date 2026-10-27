@@ -214,7 +214,7 @@ def connect_sequence_device(training, device):
         try:
             owner = _backend.binding("_mojolearn_embedding", mode)
             cells = {"module": owner}
-            for name in ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download"):
+            for name in ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download"):  # glue: connect four fixed native ABI entries at import
                 entry = getattr(owner, name, None)
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError("embedding tensor owner requires compiled " + name)

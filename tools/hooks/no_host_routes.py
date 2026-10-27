@@ -74,12 +74,21 @@ _verify_small.py _verify_worker.py _verification_catalog.py
 _verify_graph.py _verify_native_runtime.py _verify_generation.py
 _verification_coverage.py _verification_ctr_models.py
 _verification_evidence_data.py _verification_profiles.py
+_verification_sources.py _verify_public.py _verify_light.py
+_verify_light_command.py _verify_light_faults.py _verify_api.py
+_verify_api_runner.py _verify_api_availability.py _verify_api_metadata.py
+_verify_api_estimators.py _verify_api_utilities.py _verify_api_optimizers.py
+_verify_api_neural.py _verify_api_training.py _verify_api_programs.py
+_verify_api_models.py _verify_api_misc.py _verify_api_faults.py
 _runtime_fallbacks.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
 _classical_host.py _serialize.py
 neural_inference.py _causal_lm_fixtures.py
 _bpe_trainer.py _tokenizer_synthetic.py
 """.split())
+# The bounded verifier modules above prepare test fixtures, compare outputs and
+# inject test faults. They are not product runtime implementations. Exact names
+# keep future modules subject to review; the scope test rejects product imports.
 # neural_inference.py: the public CPU inference product.
 # _causal_lm_fixtures.py: verification fixtures (_verify_causal_lm and tests only).
 # _serialize.py: model save/load (no fit, transform or predict).
