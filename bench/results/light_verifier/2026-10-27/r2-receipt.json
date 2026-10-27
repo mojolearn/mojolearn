@@ -1,0 +1,7 @@
+{
+  "key": "measurements/light-verifier/20261027/final-evidence.tar.gz",
+  "sha256": "719039d0dd571cd17e4ab1f06de77a008097740ef7c63539b75ede978e661ae1",
+  "bytes": 6027764,
+  "readback_verified": true,
+  "source_commit": "0c869bddf95ad984830aa47ad4566e8e0189ee6a"
+}

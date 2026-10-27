@@ -264,3 +264,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-27T07:46:31Z	measurements/light-verifier/20261027/081bfce43-amd.tar.gz	e7257034a83c3b370ff4a6b4ba20cbd2f1aebb56851b651e1aee509f6f9900af	50826	mojolearn-steward-do-amd	/root/results-light-verifier/081bfce43
 2026-10-27T07:54:13Z	measurements/light-verifier/20261027/65d10a9cb-nvidia.tar.gz	1daadf96ace59179671f64e55b0aaf82f5cdfcdba2eeaf463e55c77b2e797d17	15392	0ae286728028	/root/results-light-verifier/65d10a9cb
 2026-10-27T07:54:13Z	measurements/light-verifier/20261027/65d10a9cb-amd.tar.gz	f8234ba029bedf7273490276f1856b09cda2e8f3455a3b8861d04d3e2776de41	15357	mojolearn-steward-do-amd	/root/results-light-verifier/65d10a9cb
+2026-10-27T08:18:18Z	measurements/light-verifier/20261027/final-evidence.tar.gz	719039d0dd571cd17e4ab1f06de77a008097740ef7c63539b75ede978e661ae1	6027764	MacBook-Air-1-terrabyte.local	/Users/andrewhendel/mojolearn-evidence/light-verifier-20261027
