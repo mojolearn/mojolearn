@@ -46,9 +46,10 @@
   },
   "format": "mojolearn.public-api-verifier-evidence.v1",
   "integration": {
-    "amd_hotaisle_retry": "active",
+    "amd_hotaisle_retry": "completed without stock; no VM created",
     "local_main_merge": "d763884b5",
-    "mac_missing_checks_completed": true
+    "mac_missing_checks_completed": true,
+    "pushed_main_commit": "bb6f86a93517a6c874ed26e13a0f1a3ecf84b053"
   },
   "native_repairs": [
     "standalone block constructor parameter storage and native set_params reconstruction",
@@ -59,7 +60,15 @@
   "release_qualified": false,
   "retention": {
     "archive_artifact_hashes_verified": 6,
+    "completion_summary_r2": "measurements/verification/public-api-20261027/completion-and-hotaisle-retry.tgz",
     "delete_verified": "HTTP 204, then GET 404 and absent from listing",
+    "mac_completion": {
+      "archive_hashes_verified": true,
+      "bytes": 2939570,
+      "r2_download_sha256_verified": true,
+      "r2_key": "measurements/verification/public-api-20261027/mac-completion-bb6f86a93.tgz",
+      "sha256": "d4032660dca7ce46211808be36de623bc32e9dbe3cea81d058e3605a2dea3d5a"
+    },
     "nvidia_pod_deleted": "1ezjplia1wyp1d",
     "r2_archive": "measurements/box-archive/verifier-api-20261027/verifier-api-20261027-20261027T1739Z.tgz"
   },
@@ -76,7 +85,20 @@
     "hip": {
       "blocker": "VM availability HTTP 200 with null offerings throughout bounded rental retry and final stock check; bare-metal availability also null; no AMD rental created",
       "executed": 0,
-      "provider": "Hot Aisle"
+      "provider": "Hot Aisle",
+      "retry": {
+        "exit_code": 1,
+        "final_response": "HTTP 200, no offerings",
+        "finished_log_utc": "2026-10-27T18:25:11.848577+00:00",
+        "log": "hotaisle-retry-r2.log",
+        "prior_observed_offering": null,
+        "provider": "Hot Aisle",
+        "started_utc": "2026-10-27T17:54:47Z",
+        "state_directory_removed_by_controller": true,
+        "status": "unavailable",
+        "stock_wait_minutes": 30,
+        "vm_created": false
+      }
     },
     "metal": {
       "executed": 1275,
