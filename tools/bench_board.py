@@ -3367,6 +3367,16 @@ def successful_opponent_inference(race, arms, cells):
     return all(k in by_key and successful_opponent_cell(by_key[k]) for k in expected)
 
 
+def evidenced_opponent(cell):
+    """Reuse only successful timings with complete, retained measurement evidence."""
+    m = cell.get("measurement") or {}
+    return (cell.get("status") == "ok" and m.get("completeness") == "complete"
+            and not m.get("missing")
+            and all((m.get(k) or {}).get("status") == "verified" and
+                    (m.get(k) or {}).get("sha256") and (m.get(k) or {}).get("r2_key")
+                    for k in ("source", "artifacts")))
+
+
 def stored_opponents(ctx, race):
     """{arm: stored record} for the race's opponents the store holds under the
     same key, read-back included: a candidate (the fields known before
@@ -3389,7 +3399,7 @@ def stored_opponents(ctx, race):
     out = {}
     for arm in cands:
         pr = probe.get(arm)
-        if pr is None:
+        if pr is None or pr.get("probe_rc") or pr.get("startup_failure"):
             continue
         key = opponent_key(ctx["box"], race, arm, settings, dsha, ctx["rounds"],
                            params=pr.get("params"), version=pr.get("version"),
@@ -3398,6 +3408,8 @@ def stored_opponents(ctx, race):
         if hit is not None:
             cell = hit.get("cell") or {}
             measurement = cell.get("measurement") or {}
+            if not evidenced_opponent(cell):
+                continue
             if (race.get("family") == "classical" and measurement
                     and (measurement.get("retained_outputs") or {}).get("status") != "verified"):
                 continue  # hashes/logs alone did not retain classical outputs

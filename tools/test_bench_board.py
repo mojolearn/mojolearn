@@ -1518,7 +1518,7 @@ def _key(ctx, race, arm, params=READBACK, version="1.2.8", device_name=None, ove
 
 def _stored_record(ctx, race, arm, status="ok", over=None):
     cell = dict(bb.base_cell(ctx, race, arm, None), status=status, median_ms=1000.0,
-                times_ms=[1000.0], rounds=1)
+                times_ms=[1000.0], rounds=1, measurement=_retained_measurement())
     return bb.STORE.record(_key(ctx, race, arm, over=over), cell,
                            measured_at="2026-09-29T12:00:00Z", commit="c0ffee")
 
@@ -1634,7 +1634,7 @@ def test_store_retime_partial_and_measured_cells(tmp_path, monkeypatch):
 def test_backfill_store_imports_and_counts_skips_by_reason(tmp_path, monkeypatch):
     ctx, race = _store_ctx(tmp_path)
     cell = dict(bb.base_cell(ctx, race, "catboost-cpu", None), status="ok", median_ms=900.0,
-                library_version="1.2.8")
+                library_version="1.2.8", measurement=_retained_measurement())
     ours = dict(bb.base_cell(ctx, race, "ours", "identical"), status="ok", median_ms=450.0)
     sha = bb.race_data_sha(ctx, race, ctx["box"])
     params = {"arms": {"catboost-cpu": {"params": READBACK}}}
@@ -2050,3 +2050,19 @@ def test_gate_verdict_fails_on_an_own_cell_that_was_not_built():
     state["measure"]["own_not_built"] = rows
     verdict, why = G.gate_verdict(state)
     assert verdict == "FAIL" and any(w.startswith("measure: own arm not built algos/metric-f1-score") for w in why)
+
+
+def _retained_measurement():
+    return {"completeness": "complete", "missing": [],
+            "source": {"status": "verified", "sha256": "source", "r2_key": "source"},
+            "artifacts": {"status": "verified", "sha256": "result", "r2_key": "result"}}
+
+
+def test_reuse_requires_complete_retained_evidence_without_quality_gate():
+    cell = {"status": "ok", "measurement": _retained_measurement(), "quality": {"error": "shown"}}
+    assert bb.evidenced_opponent(cell)
+    for status in ('failed', 'REFUSED', 'UNKNOWN'):
+        assert not bb.evidenced_opponent(dict(cell, status=status))
+    assert not bb.evidenced_opponent({'status': 'ok'})
+    cell['measurement']['artifacts']['status'] = 'local'
+    assert not bb.evidenced_opponent(cell)
