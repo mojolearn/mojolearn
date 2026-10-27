@@ -4409,6 +4409,27 @@ def select_race_ids(races, spec):
     return [by_id[rid] for rid in dict.fromkeys(wanted)]
 
 
+def select_opponent_arms(races, spec):
+    """Narrow an opponents-only job to the arms whose evidence needs renewal.
+
+    Kept opponent measurements retain their original machine/store keys; this
+    selector schedules missing arms without pretending old records ran here.
+    """
+    wanted = {name.strip() for name in spec.split(',') if name.strip()}
+    available = {arm for race in races for arm in race['opponents']}
+    if not wanted or wanted - available:
+        raise SystemExit('--opponent-arms: name opponents in the selected race plan: '
+                         + ', '.join(sorted(wanted - available)))
+    selected = []
+    for race in races:
+        if race['our_arms']:
+            raise SystemExit('--opponent-arms requires --opponents-only')
+        opponents = [arm for arm in race['opponents'] if arm in wanted]
+        if opponents:
+            selected.append(dict(race, opponents=opponents, arms=list(opponents)))
+    return selected
+
+
 def _planned_refusal(vendor, key, arm):
     import fnmatch
     for v, kg, ag, why in PLANNED_REFUSALS:
@@ -4637,6 +4658,7 @@ def build_parser():
                    help="keep exactly these planned race ids (comma list or @file); unknown ids are refused")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
     p.add_argument("--opponents-only", action="store_true", help="run missing or failed opponent cells only; never run our arms")
+    p.add_argument("--opponent-arms", help="with --opponents-only: comma-separated opponent arms to run in the selected races")
     p.add_argument("--with-opponents", action="store_true",
                    help="also race the opponents the store does not hold (default: our GPU "
                         "arm(s) only; stored opponent cells still join the race)")
@@ -4914,6 +4936,10 @@ def main(argv=None):
         races = [dict(r, our_arms={}, arms=list(r["opponents"])) for r in races]
     if getattr(args, "race_ids", None):
         races = select_race_ids(races, args.race_ids)
+    if args.opponent_arms:
+        if not args.opponents_only:
+            raise SystemExit('--opponent-arms requires --opponents-only')
+        races = select_opponent_arms(races, args.opponent_arms)
     if args.shard:
         races = shard_races(races, args.shard)
     needed, corpus_missing = data_needs(races, datasets)
