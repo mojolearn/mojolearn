@@ -75,3 +75,8 @@ jobs:
         run: |
           /tmp/yaml-venv/bin/python tools/lane_accounting.py --self-test
           /tmp/yaml-venv/bin/python tools/lane_accounting.py --check
+      - name: Tiny verifier rejects faults and endpoint inventory is current
+        # Source inspection and comparator tests only; no GPU, fits or timing.
+        run: |
+          /tmp/yaml-venv/bin/python -m pytest -q tools/test_light_verifier.py tools/test_light_verifier_command.py tools/test_verification_endpoint_calls.py tools/test_verification_evidence.py
+          /tmp/yaml-venv/bin/python tools/verification_endpoints.py --check

@@ -431,7 +431,13 @@ class Walker:
     def ops(self, cls, names):
         """(op, Func) for the operation methods of `cls` a lane can call."""
         out = []
-        for op in set(self.pri.OPS) | {"__init__"}:
+        # Enumerate the class, not the old estimator-only operation vocabulary.
+        # Otherwise backward, checkpoint IO, properties and parameter methods
+        # cannot be credited even when the lane explicitly calls them.
+        members = {n.name for base in self.index.mro(cls) for n in base.node.body
+                   if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                   and self.pri._public_member(n.name)}
+        for op in sorted(members):
             if op not in names and op not in HARNESS_OPS and op != "__init__":
                 continue
             found = self.index.lookup(cls, op)
@@ -1145,6 +1151,91 @@ def python_rows(ls, walker, reach, base, whole_surface=False):
                              n_helpers_changed=len(path_changed), entries=sorted(entries),
                              lanes=sorted(lanes)))
     rows.sort(key=lambda r: (r["public"], r["op"]))
+    return rows
+
+
+def endpoint_rows(walker, reach):
+    """Map the complete existing endpoint census onto actual lane call roots.
+
+    Mapping is source reach, never runtime success. Do not credit a missing
+    public call merely because another method calls the same native export.
+    Metadata/lifetime-only endpoints have no numerical identity proposition;
+    the separate runtime checker still owns their behavior.
+    """
+    pri, index = walker.pri, walker.index
+    census = pri.endpoint_inventory(pri.REPO)
+    origins = {}
+    for canonical, origin, aliases in pri.public_names(pri.REPO, include_non_algorithm=True):
+        for name in (canonical, *aliases):
+            origins[name] = origin
+    by_root = defaultdict(set)
+    for lane, (roots, _, _) in reach.items():
+        for root in roots:
+            by_root[root].add(lane)
+    metadata = {"__repr__", "__str__", "__sklearn_tags__", "__sklearn_is_fitted__",
+                "__init_subclass__", "numeric_mode_used", "vendor_used"}
+    lifetime = {"__del__", "close", "__enter__", "__exit__", "free"}
+    rows = []
+    for endpoint in census['endpoints']:
+        public, method = endpoint['public'], endpoint['method']
+        origin = origins.get(public, public)
+        module, _, name = origin.rpartition('.')
+        target = index.resolve_name(module, name) if module else None
+        op = method.split(':', 1)[0]
+        lanes = set()
+        if target and target[0] in ('class', 'func'):
+            obj = target[1]
+            lanes.update(by_root.get((obj.key, op), ()))
+            # Only explicit calls on this class count. Inherited aliases may
+            # share an implementation; they still retain separate API rows.
+            if target[0] == 'class':
+                found = index.lookup(obj, op)
+                if found and found[0] == 'func':
+                    for lane, (roots, _, _) in reach.items():
+                        if (obj.key, op) in roots:
+                            lanes.add(lane)
+        adapter = '.adapters.' in public or '.adapters.' in origin
+        reason = None
+        if adapter:
+            reason = 'adapter boundary: installed-wheel smoke; arithmetic shares the existing kernel lanes'
+        elif op in metadata:
+            reason = 'metadata only; no numerical identity output'
+        elif op in lifetime:
+            reason = 'lifetime/context management; no numerical identity output'
+        elif public == 'mojolearn.ops.Session' and op in ('profile_reset', 'profile_report'):
+            reason = 'launch profiling diagnostics; no numerical identity output'
+        elif endpoint.get('always_refuses'):
+            reason = 'explicit unsupported-operation refusal; no numerical identity output'
+        rows.append(dict(endpoint=endpoint['endpoint'], public=public, op=method,
+                         kind=endpoint['kind'], where=endpoint['definition'],
+                         aliases=endpoint['aliases'], lanes=sorted(lanes),
+                         status='not_numerical' if reason else 'mapped' if lanes else 'unmapped',
+                         reason=reason, native_entries=endpoint['native_entries'],
+                         execution='not assessed'))
+    # Resolve direct receivers in the actual fixtures as well as the older
+    # estimator walk (which cannot infer ``with ops.Session() as s``).
+    import lane_select
+    from verification_endpoint_calls import lane_calls, source_calls
+    direct = lane_calls(lane_select.identity_break(), rows)
+    supplemental = defaultdict(set)
+    from light_verifier_reference import load
+    for module in load('_verification_sources').SUPPLEMENTAL_CHECKS:
+        path = os.path.join(ROOT, 'python', 'mojolearn', module + '.py')
+        if not os.path.isfile(path):
+            continue
+        tree = ast.parse(open(path).read())
+        functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+        roots = ('verify',) if module.endswith('_program') else ()
+        for n in tree.body:
+            if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'EXPECTED_CASES' for t in n.targets):
+                roots = ast.literal_eval(n.value)
+        for endpoint, cases in source_calls(functions, rows, roots).items():
+            supplemental[endpoint].update(module + ':' + case for case in cases)
+    for row in rows:
+        row['lanes'] = sorted(set(row['lanes']) | direct.get(row['endpoint'], set()))
+        row['checks'] = sorted(supplemental.get(row['endpoint'], ()))
+        if row['status'] != 'not_numerical':
+            row['status'] = 'mapped' if row['lanes'] or row['checks'] else 'unmapped'
     return rows
 
 
@@ -2873,6 +2964,7 @@ def main(argv=None):
         audit = dict(base=args.base, head=git("rev-parse", "HEAD").strip(),
                      scope="all" if args.whole_surface else "changed",
                      lane_inventory=sorted(reach), native=native, python=py)
+        audit['endpoints'] = endpoint_rows(walker, reach)
         audit["reference_evidence"] = reference_snapshot(
             os.path.join(ROOT, "python/mojolearn/verify_reference/table.json"), audit_lanes(audit))
         # Compatibility field: scoped retained metadata, never full admission.
@@ -2906,6 +2998,11 @@ def main(argv=None):
           f"{sum(1 for r in nat if r['sabotage_defines'] or r['sabotage_patches'])} with a sabotage arm")
     print(f"python: {len(audit['python'])} changed public methods; "
           f"{sum(1 for r in audit['python'] if r['lanes'])} with a lane")
+    endpoint_counts = defaultdict(int)
+    for row in audit.get('endpoints', ()):
+        endpoint_counts[row['status']] += 1
+    print('complete public endpoint census (source mapping only): ' +
+          ', '.join(f'{key} {value}' for key, value in sorted(endpoint_counts.items())))
     print("reference evidence: " + reference_label(audit_lanes(audit), references))
     print("Static audit completed; execution and candidate admission not assessed.")
     return 0
