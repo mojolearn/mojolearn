@@ -238,7 +238,7 @@ class KMeans(NumericModeMixin):
         TypeError
             If `oversampling_factor` is not a number.
         """
-        return _NATIVE(self, "family_kmeans_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_kmeans_fit", (None, X, sample_weight), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit the model and return `labels_`, the cluster of each row of `X`.
@@ -247,7 +247,7 @@ class KMeans(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return _NATIVE(self, "family_kmeans_fit_predict", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_kmeans_fit_predict", (None, X, sample_weight), _NATIVE_CONTEXT)
 
     # Mirrors cuML's `KMeans.predict` (`kmeans.pyx:1071-1082`): the fit's own
     # final assignment (`cluster/estimator.mojo::kmeans_predict`, host
@@ -277,7 +277,7 @@ class KMeans(NumericModeMixin):
         ValueError
             For a feature count other than the fit's, or a non-finite value.
         """
-        return _NATIVE(self, "family_kmeans_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_kmeans_predict", (None, X), _NATIVE_CONTEXT)
 
     # Reference: cuML `KMeans.transform` (`kmeans.pyx:1084`), cuVS
     # `kmeans_transform` (`detail/kmeans.cuh:1178-1219`). Each cell is the fused
@@ -309,7 +309,7 @@ class KMeans(NumericModeMixin):
         ValueError
             For a feature count other than the fit's, or a non-finite value.
         """
-        return _NATIVE(self, "family_kmeans_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_kmeans_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit the model, then return `transform(X)`.
@@ -318,7 +318,7 @@ class KMeans(NumericModeMixin):
         -------
         distances : Array of shape (n_samples, n_clusters), float32
         """
-        return _NATIVE(self, "family_kmeans_fit_transform", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_kmeans_fit_transform", (None, X, sample_weight), _NATIVE_CONTEXT)
 
     # The fitted centroids live on the device after the first query, under
     # `_resident_holder` (bindings/kmeans_native.mojo `_kmeans_resident`).
@@ -436,3 +436,6 @@ __all__ = ["KMeans"]
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("cluster")
 __all__ += _SKLEARN_LAYOUT["cluster"]
+
+# Import connection only; each native public operation admits the live registry.
+_native_family_bridge.connect_bindings("_mojolearn")

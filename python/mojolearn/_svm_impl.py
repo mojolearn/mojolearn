@@ -797,7 +797,7 @@ class SVC(NumericModeMixin):
         self : SVC
             The fitted estimator.
         """
-        return _NATIVE(self, "family_svc_svc_fit", (self._bind(_EXT_NAME), X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svc_fit", (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
     def _dual_times_sv(self, dual_coef, support_vectors, out=None, row=0, negate=False):
         """`dual_coef_ @ support_vectors_` in the binding (`svc_dual_gemv`,
@@ -862,7 +862,7 @@ class SVC(NumericModeMixin):
             (n_rows, K), float64, scikit-learn's vote-plus-confidence
             transform of the pairwise values.
         """
-        return _NATIVE(self, "family_svc_svc_decision", (self._bind(_EXT_NAME), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svc_decision", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer notes: binary predict is cuML's `applyPrediction` epilogue,
     # ON THE DEVICE: the label is chosen there by `val + b < 0 ? classes_[0] :
@@ -889,7 +889,7 @@ class SVC(NumericModeMixin):
             Labels from `classes_`: an int64 or float64 Array for integer
             or float labels, a Python list otherwise.
         """
-        return _NATIVE(self, "family_svc_svc_predict", (self._bind(_EXT_NAME), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svc_predict", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer note: libsvm's `svm_predict_probability`; the coupling is
     # `_multiclass_probability`.
@@ -916,7 +916,7 @@ class SVC(NumericModeMixin):
         AttributeError
             If the model was fitted with `probability=False`.
         """
-        return _NATIVE(self, "family_svc_svc_proba", (self._bind(_EXT_NAME), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svc_proba", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer note: the portable binary64 log (its Mojo twin, `pm_log`, in
     # the same epilogue call); a probability <= 0 raises as
@@ -940,7 +940,7 @@ class SVC(NumericModeMixin):
         AttributeError
             If the model was fitted with `probability=False`.
         """
-        return _NATIVE(self, "family_svc_svc_log_proba", (self._bind(_EXT_NAME), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svc_log_proba", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer note: a Python count over O(rows) labels (DEVIATION 2365).
     def score(self, X, y):
@@ -958,7 +958,7 @@ class SVC(NumericModeMixin):
         float
             Fraction of rows predicted correctly.
         """
-        return _NATIVE(self, "family_svc_svc_score", (self._bind(_EXT_NAME), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svc_score", (None, X, y), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: `dual_coef_`, `support_vectors_`,
     # `intercept_` as fitted (float32), `support_` `<i4`, `classes_` as
@@ -1479,7 +1479,7 @@ class SVR(NumericModeMixin):
         self : SVR
             The fitted estimator.
         """
-        return _NATIVE(self, "family_svc_svr_fit", (_extension(getattr(self, "numeric_mode", None)), X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svr_fit", (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
     @property
     def coef_(self):
@@ -1516,7 +1516,7 @@ class SVR(NumericModeMixin):
         Array of shape (n_rows,), float32
             `sum_j K(x, sv_j) dual_j + b` for each row.
         """
-        return _NATIVE(self, "family_svc_svr_predict", (self._bind(_EXT_NAME), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svr_predict", (None, X), _NATIVE_CONTEXT)
 
     # Maintainer notes: accumulated in FLOAT64 from float32 predictions, which
     # is what scikit-learn does and is not part of any identity claim.
@@ -1541,7 +1541,7 @@ class SVR(NumericModeMixin):
         float
             The R^2 score.
         """
-        return _NATIVE(self, "family_svc_svr_score", (self._bind(_EXT_NAME), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_svc_svr_score", (None, X, y), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: `dual_coef_`, `support_vectors_`,
     # `intercept_` as fitted (float32), `support_` `<i4`, `hyper` `<f8` [C,
@@ -1671,3 +1671,6 @@ _native_family_bridge.tables(family_svc_native=_native, family_svc_real=numbers.
                              family_svc_integral=numbers.Integral, family_svc_kernels=dict(_SVC_KERNELS),
                              family_svc_refused=dict(_SVC_REFUSED_KERNELS),
                              family_svr_refused=dict(_SVR_REFUSED_KERNELS))
+
+# Import connection only; each native public operation admits the live registry.
+_native_family_bridge.connect_bindings("_mojolearn_svm")

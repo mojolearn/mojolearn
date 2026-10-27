@@ -2,7 +2,7 @@
 # Shared import-connected binding admission for estimator frontends. The caller
 # enters compiled code once; runtime selection reads current mode/registry data
 # and never invokes Python _bind/load_set/_ModeSet.__getattr__ callbacks.
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
@@ -50,3 +50,16 @@ def estimator_binding(model: PythonObject, name: String, context: PythonObject) 
     if py_type(module) is not py_type(bi):
         raise Error("TypeError: native binding must be an exact extension module")
     return module
+
+
+def estimator_arguments(model: PythonObject, name: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    # Preserve explicit native/internal module arguments. Thin public calls
+    # reserve None for binding admission here, once after entering native code.
+    if len(args) == 0 or args[0] is not None:
+        return args
+    var selected = estimator_binding(model, name, context)
+    var values = Python.list(selected)
+    for i in range(1, len(args)):  # driver-loop: over fixed public method arguments
+        _ = py_call(values.append, args[i])
+    return py_call(native_loaded_module("builtins").tuple, values)
