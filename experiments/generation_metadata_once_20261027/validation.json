@@ -1,0 +1,25 @@
+{
+  "schema": "mojolearn.source-validation.v1",
+  "source_tests": {
+    "exit_code": 0,
+    "passed": 34,
+    "subtests_passed": 14,
+    "log": "source-tests-confirmed.log"
+  },
+  "dependency_closure": {
+    "exit_code": 0,
+    "modules": 80,
+    "failures": 0,
+    "report": "native-dependencies.json"
+  },
+  "python_probe_syntax": {
+    "exit_code": 0,
+    "runtime_execution": false
+  },
+  "compiled": false,
+  "public_runtime_validated": false,
+  "identity_validated": false,
+  "performance_measured": false,
+  "pending_validation_target": "Mac local candidate build/runtime; CPU and Apple identical GPU routes",
+  "other_vendor_validation": "pending; no AMD/NVIDIA campaign mutation"
+}

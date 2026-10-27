@@ -1,0 +1,85 @@
+{
+  "schema": "mojolearn.generation-metadata-inventory.v1",
+  "shared_vendors": [
+    "apple",
+    "nvidia",
+    "amd"
+  ],
+  "runtime_validated": false,
+  "rows": [
+    {
+      "site": "_run_snapshot / _read",
+      "stable": [
+        "model kind/width/vocab",
+        "embedding/head owner and addresses",
+        "head normalization epsilon and profile",
+        "ordered layer descriptions"
+      ],
+      "refresh": "each public forward/generate/read; lazy local route only",
+      "live": [
+        "input shape",
+        "state positions",
+        "input/output buffers"
+      ],
+      "remaining": "_state, routing, allocation and dispatch registries still use provider objects"
+    },
+    {
+      "site": "_causal_layer_run_prepared transformer",
+      "stable": [
+        "dimensions",
+        "window",
+        "extended options tail",
+        "weights/optional weights/int15 planes",
+        "arithmetic-profile identity"
+      ],
+      "refresh": "operation admission; standalone block call admits its own layer",
+      "live": [
+        "max_tokens",
+        "cached_tokens",
+        "cache owners and addresses",
+        "native session ownership"
+      ],
+      "remaining": "live state validation/copy and compiled provider/session dispatch"
+    },
+    {
+      "site": "_causal_layer_run_prepared mamba1/mamba2",
+      "stable": [
+        "weights",
+        "inner width",
+        "head count",
+        "conv width",
+        "dt limits"
+      ],
+      "refresh": "operation admission; standalone block call admits its own layer",
+      "live": [
+        "conv/h/cache buffers",
+        "buffered tokens",
+        "absolute position",
+        "h_last_"
+      ],
+      "remaining": "mutable buffers and dispatch registry reads"
+    },
+    {
+      "site": "GenerationWeightSnapshot",
+      "stable": [
+        "exact Array C-order address",
+        "strong buffer owner"
+      ],
+      "refresh": "operation admission",
+      "live": [
+        "foreign buffer bytes copied per use"
+      ],
+      "remaining": "foreign buffer protocol metadata/copy preserved"
+    },
+    {
+      "site": "resident and distributed execution",
+      "stable": [],
+      "refresh": "existing admission/session contract unchanged",
+      "live": [
+        "resident state transfer",
+        "remote worker state"
+      ],
+      "remaining": "not migrated by this patch; no unused local snapshot built"
+    }
+  ]
+}
