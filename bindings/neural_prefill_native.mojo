@@ -4,7 +4,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
-from bindings.neural_block_public import neural_training_entries, neural_mamba3_restore, neural_block_forward_binding, _neural_input
+from bindings.neural_block_public import neural_training_entries, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words, neural_mamba_session_call
+from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 
@@ -44,6 +45,7 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     _ = py_call(addresses.append, out._addr)
     _ = py_call(addresses.extend, report_addresses)
     var params = py_ints([b, l, d])
+    var native = py_get(fields, "_native_mamba_block_provider_cache")
     if session:
         if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
             py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
@@ -52,11 +54,22 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
             var owned_addresses = Python.list(x._addr, out._addr)
             _ = py_call(owned_addresses.extend, report_addresses)
             _ = py_call(params.append, owned)
-            _ = py_call(_native_function(entries, "mamba3_prefill_session_forward_owned"), fields["_prefill_session"], owned_addresses, params)
+            if native is not None:
+                _ = neural_mamba_session_call(native, fields, entries, 8,
+                    _neural_int_words(owned_addresses), _neural_int_words(params))
+            else:
+                _ = py_call(_native_function(entries, "mamba3_prefill_session_forward_owned"), fields["_prefill_session"], owned_addresses, params)
         else:
-            _ = py_call(_native_function(entries, "mamba3_prefill_session_forward"), fields["_prefill_session"], addresses, params)
+            if native is not None:
+                _ = neural_mamba_session_call(native, fields, entries, 6,
+                    _neural_int_words(addresses), _neural_int_words(params))
+            else:
+                _ = py_call(_native_function(entries, "mamba3_prefill_session_forward"), fields["_prefill_session"], addresses, params)
     else:
-        _ = py_call(_native_function(entries, "mamba3_forward_fresh"), addresses, params)
+        if native is not None:
+            _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
+        else:
+            _ = py_call(_native_function(entries, "mamba3_forward_fresh"), addresses, params)
     return Python.tuple(out, reports[0], reports[1], reports[2], reports[3])
 
 

@@ -237,6 +237,8 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_operation
+from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -356,6 +358,16 @@ def mamba_state_api_binding() raises -> PythonObject:
     if not capsule:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=capsule)
+
+
+def mamba_block_api_binding() raises -> PythonObject:
+    var api = NATIVE_MAMBA_BLOCK_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def mamba_prefill_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    # Exact native type admission; no extension layout or Python hook access.
+    return PythonObject(Int(session.downcast_value_ptr[Mamba3PrefillSession]()))
 
 
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
@@ -1501,6 +1513,8 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
         m.def_function[mamba1_profile_binding]("mamba1_profile")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
+        m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
+        m.def_function[mamba_prefill_native_handle_binding]("mamba_prefill_native_handle_v1")
         m.def_function[mamba1_forward_binding]("mamba1_forward")
         m.def_function[mamba1_backward_binding]("mamba1_backward")
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
