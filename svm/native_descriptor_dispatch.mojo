@@ -7,10 +7,20 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from svm.operation_metadata import SVC_ABI_NAME
+from svm.native_epilogue_dispatch import svc_native_epilogue, svc_native_platt, svc_native_splitmix
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from svm.estimator import svc_fit_host_borrowed, svc_predict_host
 
 
 def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    if op == 2:
+        return svc_native_epilogue(a[0], a[1], a[2], a[3], p, f)
+    if op == 3:
+        return svc_native_platt(a[0], a[1], a[2], p[0])
+    if op == 4:
+        return svc_native_splitmix(a[0], p[0], p[1], p[2])
+    if op == 5:
+        return GLOBAL_NUMERIC_MODE
     var n = p[0]
     var d = p[1]
     if op == 0:
@@ -65,11 +75,14 @@ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) 
 def svc_binary_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                   result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op > 1:
+        if op < 0 or op > 5:
             raise Error("SVC native ABI: unknown operation")
-        if na != (7 if op == 0 else 4) or np != 6 or nf != (4 if op == 0 else 6):
+        var expected_a = 7 if op == 0 else (4 if op == 1 or op == 2 else (3 if op == 3 else (1 if op == 4 else 0)))
+        var expected_p = 6 if op < 2 else (5 if op == 2 else (1 if op == 3 else (3 if op == 4 else 0)))
+        var expected_f = 4 if op == 0 else (6 if op == 1 else (5 if op == 2 else 0))
+        if na != expected_a or np != expected_p or nf != expected_f:
             raise Error("SVC native ABI: descriptor span differs from the named operation")
-        if result == 0 or ff == 0:
+        if result == 0 or (nf > 0 and ff == 0):
             raise Error("SVC native ABI: null result or scalar span")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)
