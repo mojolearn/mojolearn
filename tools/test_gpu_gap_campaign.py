@@ -658,3 +658,11 @@ def test_smoke_local_evidence_is_explicit_and_never_admitted_before_transfer(tmp
     doc = dict(finished=1, expected=1, checks={'data': {'status': 'ok'}},
                rows={'recipe': {'status': 'MATCHED'}}, retention_pending='transfer pending')
     assert C.smoke_exit_code(doc) == 2
+
+
+def test_measurement_command_selects_exact_recipe_for_custom_datasets(tmp_path):
+    args = SimpleNamespace(python_env='python', vendor='amd', cache=str(tmp_path))
+    for dataset in ('taxi-zones', 'amazon-books'):
+        rid = 'algos/als/'+dataset+'/rows=full'
+        cmd = C.command(args, dict(id=rid, family='algos', lane='als', dataset=dataset), tmp_path)
+        assert cmd[cmd.index('--race-ids')+1] == rid

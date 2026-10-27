@@ -88,6 +88,8 @@ def command(args, race, directory):
         cmd += ["--retime-opponents"]
     if race["dataset"] in B.DATASETS:
         cmd += ["--datasets", race["dataset"]]
+    if race.get("id"):
+        cmd += ["--race-ids", race["id"]]
     return cmd
 
 
