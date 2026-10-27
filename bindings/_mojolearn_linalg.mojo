@@ -193,11 +193,13 @@ def gemm_binding(
     dimension, no stride, no sub-view. `gemm/host_entry.mojo` refuses a
     non-positive extent and an unknown `op` by name."""
 
+    if len(params) != 4:
+        raise Error("gemm: expected 4 scalar parameters")
     var native_c_addr = Int(py=c_addr)
     var native_a_addr = Int(py=a_addr)
     var native_b_addr = Int(py=b_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(4):  # small-loop(4 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -260,11 +262,13 @@ def gemm_bf16_binding(
         4  a_bf16    1 when A is bf16 bits, 0 when A is float32
     """
 
+    if len(params) != 5:
+        raise Error("gemm_bf16: expected 5 scalar parameters")
     var native_c_addr = Int(py=c_addr)
     var native_a_addr = Int(py=a_addr)
     var native_b_addr = Int(py=b_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(5):  # small-loop(5 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -285,13 +289,15 @@ def gemm_int8_binding(
     codes; `ea` (m entries) and `eb` (n entries) are int32 row exponents; `C`
     is float32. Returns `m * n`. `params` is `[m, n, k]`."""
 
+    if len(params) != 3:
+        raise Error("gemm_int8: expected 3 scalar parameters")
     var native_c_addr = Int(py=c_addr)
     var native_qa_addr = Int(py=qa_addr)
     var native_ea_addr = Int(py=ea_addr)
     var native_qb_addr = Int(py=qb_addr)
     var native_eb_addr = Int(py=eb_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(3):  # small-loop(3 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -371,11 +377,13 @@ def quantize_int8_binding(
     of a float32 matrix, by contract L-3 and L-4, on the device. `params`
     is `[rows, cols]`. Returns `rows * cols`."""
 
+    if len(params) != 2:
+        raise Error("quantize_int8: expected 2 scalar parameters")
     var native_q_addr = Int(py=q_addr)
     var native_e_addr = Int(py=e_addr)
     var native_x_addr = Int(py=x_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(2):  # small-loop(2 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -392,11 +400,13 @@ def dequantize_int8_binding(
     """`y = q * 2^e` row by row, exact, on the device. `params` is
     `[rows, cols]`. Returns `rows * cols`."""
 
+    if len(params) != 2:
+        raise Error("dequantize_int8: expected 2 scalar parameters")
     var native_y_addr = Int(py=y_addr)
     var native_q_addr = Int(py=q_addr)
     var native_e_addr = Int(py=e_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(2):  # small-loop(2 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -436,11 +446,15 @@ def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> Pyth
 
     `params` is `[m, n, k]`."""
 
+    if len(params) != 3:
+        raise Error("gemm_int15: expected 3 scalar parameters")
+    if len(addrs) != 7:
+        raise Error("gemm_int15: expected 7 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(len(addrs)):  # small-loop(native descriptor words)
+    for i in range(7):  # small-loop(7 buffer descriptor words)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(3):  # small-loop(3 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -453,11 +467,15 @@ def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> 
     W-1 to W-3, on the device (the parallel schedule). `addrs`: 0 hi, 1 lo,
     2 exponents, 3 x. `params` is `[rows, cols]`. Returns `rows * cols`."""
 
+    if len(params) != 2:
+        raise Error("quantize_int15: expected 2 scalar parameters")
+    if len(addrs) != 4:
+        raise Error("quantize_int15: expected 4 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(len(addrs)):  # small-loop(native descriptor words)
+    for i in range(4):  # small-loop(4 buffer descriptor words)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(2):  # small-loop(2 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -469,11 +487,15 @@ def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -
     """`y = (hi * 128 + lo) * 2^e` row by row, on the device. `addrs`:
     0 y, 1 hi, 2 lo, 3 exponents. `params` is `[rows, cols]`."""
 
+    if len(params) != 2:
+        raise Error("dequantize_int15: expected 2 scalar parameters")
+    if len(addrs) != 4:
+        raise Error("dequantize_int15: expected 4 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(len(addrs)):  # small-loop(native descriptor words)
+    for i in range(4):  # small-loop(4 buffer descriptor words)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(2):  # small-loop(2 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -487,10 +509,12 @@ def to_bf16_binding(
     """float32 to bf16 bits by contract L-2 (flush, then round to nearest
     even), on the device. `params` is `[count]`. Returns `count`."""
 
+    if len(params) != 1:
+        raise Error("to_bf16: expected 1 scalar parameters")
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(1):  # small-loop(1 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -504,10 +528,12 @@ def from_bf16_binding(
     """bf16 bits to float32 by contract L-1 (exact), on the device.
     `params` is `[count]`. Returns `count`."""
 
+    if len(params) != 1:
+        raise Error("from_bf16: expected 1 scalar parameters")
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(1):  # small-loop(1 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -524,10 +550,12 @@ def from_f16_binding(
     float16 reader's widening (pyglue-text-io, Oct 3). `params` is
     `[count]`. Returns `count`."""
 
+    if len(params) != 1:
+        raise Error("from_f16: expected 1 scalar parameters")
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(len(params)):  # small-loop(native descriptor words)
+    for i in range(1):  # small-loop(1 scalar descriptor words)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
