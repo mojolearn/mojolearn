@@ -39,7 +39,7 @@ ENV_KEYS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 def runtime_environment(environ=None):
     """Retain numerical/runtime switches, excluding credentials and receipt paths."""
     environ = os.environ if environ is None else environ
-    prefixes = ("MOJOLEARN_", "CUDA_", "HIP_", "ROCR_", "ROCM_", "OMP_", "OPENBLAS_",
+    prefixes = ("MOJOLEARN_", "CUDA_", "HIP_", "HIPBLASLT_", "ROCR_", "ROCM_", "OMP_", "OPENBLAS_",
                 "MKL_", "TORCH_", "PYTORCH_", "CUBLAS_", "CUDNN_", "NCCL_", "MODULAR_", "MAX_")
     ignored = {RECEIPTS, "MOJOLEARN_BOARD_RECEIPTS", "MOJOLEARN_BOARD_SESSION"}
     return {k: v for k, v in sorted(environ.items())
