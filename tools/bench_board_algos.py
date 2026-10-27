@@ -4638,10 +4638,20 @@ def _build_ts(lane, arm, D):
             kw = dict(season_length=p["season_length"], model=p["model"], damped=p["damped"])
         else:
             kw = dict(p)
+        # FAIRNESS FIX (2026-10-13 audit): pin forecast controls that the
+        # old kwargs-only record omitted, then read the constructed object.
+        from bench_board_forecast_params import THETA_MODELS, CROSTON
+        if lane in THETA_MODELS or lane in CROSTON:
+            kw["prediction_intervals"] = None
+        if lane == "auto-theta":
+            kw["distribution"] = "normal"
         ctor = getattr(sfm, s["sf"])
         mk = lambda: ctor(**kw)  # noqa: E731
         info["config"] = "%s(%s)" % (ctor.__name__, ", ".join("%s=%r" % i for i in sorted(kw.items())))
-        rec = dict(kw, __library__="statsforecast", __implementation__=ctor)
+        from bench_board_forecast_params import statsforecast_record
+        rec = (statsforecast_record(mk(), _BP())
+               if lane in THETA_MODELS or lane in CROSTON
+               else dict(kw, __library__="statsforecast", __implementation__=ctor))
 
         def one(y):
             return mk().forecast(y=y, h=h)["mean"]
