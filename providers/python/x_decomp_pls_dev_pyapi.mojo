@@ -7,9 +7,9 @@ typed entry in x_decomp/pls_dev.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _n
+from providers.python.x_decomp_api_pyapi import _f, _n
 from x_decomp.pls_dev import pls_fit_dev_run
-from x_decomp.pls_pyapi import _pls_args, _pls_dst
+from providers.python.x_decomp_pls_pyapi import _pls_args, _pls_dst
 
 
 def pls_fit_dev_py(

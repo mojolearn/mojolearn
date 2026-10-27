@@ -6,7 +6,7 @@ integers and calls `dev_lanczos_run`; no data work happens here."""
 from std.python import PythonObject
 
 from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_lanczos_run
-from x_decomp.resident_pyapi import _id, _n
+from providers.python.x_decomp_resident_pyapi import _id, _n
 
 
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.

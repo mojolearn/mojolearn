@@ -8,7 +8,7 @@ x_decomp/pls.mojo; no data work happens here."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from x_decomp.api_pyapi import _f, _n
+from providers.python.x_decomp_api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.pls import PlsArgs, pls_fit_run
 

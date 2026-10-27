@@ -6,7 +6,7 @@ integers and calls one typed `*_run` entry in x_decomp/select_dev.mojo; no
 data work happens here."""
 from std.python import PythonObject
 
-from x_decomp.resident_pyapi import _id, _n
+from providers.python.x_decomp_resident_pyapi import _id, _n
 from x_decomp.select_dev import (
     dev_argmin_all_run,
     dev_dsum_sq_run,
