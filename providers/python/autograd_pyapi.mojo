@@ -18,7 +18,7 @@ matrix view."""
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
-from sequence.pyapi import fptr, fval, ival
+from providers.python.sequence_pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, FitValidation, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session

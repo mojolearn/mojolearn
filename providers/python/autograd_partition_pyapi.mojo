@@ -12,8 +12,8 @@ from autograd.partition_entries import (
     partition, partition_open_native, partition_load_native, partition_run_native, partition_save_native,
     partition_state_native, partition_residency_native, partition_events, partition_ready, partition_close_native,
 )
-from autograd.program_pyapi import array_input, output_array
-from autograd.program_arrays_pyapi import initialize_program_arrays, host_arrays_py
+from providers.python.autograd_program_pyapi import array_input, output_array
+from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, host_arrays_py
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 

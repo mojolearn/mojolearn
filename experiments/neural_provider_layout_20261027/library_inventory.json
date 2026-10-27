@@ -1,0 +1,623 @@
+{
+  "method": "Static imports over tracked Mojo sources; source tests and historical artifacts are not runtime callback proof.",
+  "outside_neural_families": [
+    {
+      "family": "arima",
+      "mojo_source_count": 43,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_arima.mojo",
+        "bindings/_mojolearn_arima_host.mojo",
+        "bindings/_mojolearn_forecast_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "cholesky",
+      "mojo_source_count": 26,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_gp.mojo",
+        "bindings/_mojolearn_gp_host.mojo",
+        "bindings/_mojolearn_linalg_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "cluster",
+      "mojo_source_count": 37,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_core_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "dbscan",
+      "mojo_source_count": 35,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators.mojo",
+        "bindings/_mojolearn_estimators_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "decomposition",
+      "mojo_source_count": 38,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators.mojo",
+        "bindings/_mojolearn_estimators_host.mojo",
+        "bindings/_mojolearn_linalg.mojo",
+        "bindings/_mojolearn_linalg_host.mojo",
+        "bindings/_mojolearn_scoped_gemm_probe.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "embedding",
+      "mojo_source_count": 11,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_embedding.mojo",
+        "bindings/_mojolearn_embedding_host.mojo",
+        "bindings/_mojolearn_embedding_infer_host.mojo",
+        "bindings/_mojolearn_transformer.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "ensemble",
+      "mojo_source_count": 65,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_rf.mojo",
+        "bindings/_mojolearn_rf_host.mojo",
+        "bindings/_mojolearn_trees.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "extratrees",
+      "mojo_source_count": 70,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_trees.mojo",
+        "bindings/_mojolearn_trees_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "gaussian_process",
+      "mojo_source_count": 35,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_gp.mojo",
+        "bindings/_mojolearn_gp_host.mojo",
+        "bindings/_mojolearn_gp_infer_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "gbdt",
+      "mojo_source_count": 227,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_gbdt.mojo",
+        "bindings/_mojolearn_gbdt_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "gemm",
+      "mojo_source_count": 99,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_byte_lm.mojo",
+        "bindings/_mojolearn_byte_lm_host.mojo",
+        "bindings/_mojolearn_estimators_host.mojo",
+        "bindings/_mojolearn_kernel_methods_host.mojo",
+        "bindings/_mojolearn_linalg.mojo",
+        "bindings/_mojolearn_linalg_host.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "bindings/_mojolearn_mixture_host.mojo",
+        "bindings/_mojolearn_mixture_infer_host.mojo",
+        "bindings/_mojolearn_neural_host.mojo",
+        "bindings/_mojolearn_scoped_gemm_probe.mojo",
+        "bindings/_mojolearn_solver_host.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_x_decomp.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "glm",
+      "mojo_source_count": 59,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators.mojo",
+        "bindings/_mojolearn_estimators_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "hdbscan",
+      "mojo_source_count": 39,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_hdbscan.mojo",
+        "bindings/_mojolearn_hdbscan_host.mojo",
+        "bindings/_mojolearn_hdbscan_infer_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "hierarchy",
+      "mojo_source_count": 32,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_solver.mojo",
+        "bindings/_mojolearn_solver_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "holtwinters",
+      "mojo_source_count": 24,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_tsa.mojo",
+        "bindings/_mojolearn_tsa_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "isolation_forest",
+      "mojo_source_count": 14,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_svm.mojo",
+        "bindings/_mojolearn_svm_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "ivf",
+      "mojo_source_count": 28,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_ivf.mojo",
+        "bindings/_mojolearn_ivf_host.mojo",
+        "bindings/_mojolearn_ivf_search_host.mojo",
+        "bindings/_mojolearn_x_ann.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "kde",
+      "mojo_source_count": 23,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators.mojo",
+        "bindings/_mojolearn_estimators_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "kernel_methods",
+      "mojo_source_count": 26,
+      "python_facing_sources": [
+        "kernel_methods/rbf_resident_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators_host.mojo",
+        "bindings/_mojolearn_kernel_methods.mojo",
+        "bindings/_mojolearn_kernel_methods_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "metrics",
+      "mojo_source_count": 59,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_metrics.mojo",
+        "bindings/_mojolearn_metrics_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "mixture",
+      "mojo_source_count": 20,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_mixture.mojo",
+        "bindings/_mojolearn_mixture_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "naive_bayes",
+      "mojo_source_count": 2,
+      "python_facing_sources": [],
+      "binding_entry_roots": [],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "neighbors",
+      "mojo_source_count": 82,
+      "python_facing_sources": [],
+      "binding_entry_roots": [],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "preprocessing",
+      "mojo_source_count": 5,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators_host.mojo",
+        "bindings/_mojolearn_preprocessing.mojo",
+        "bindings/_mojolearn_preprocessing_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "resample",
+      "mojo_source_count": 16,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_resample.mojo",
+        "bindings/_mojolearn_resample_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "solver",
+      "mojo_source_count": 27,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_solver.mojo",
+        "bindings/_mojolearn_solver_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "spectral",
+      "mojo_source_count": 42,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_metrics.mojo",
+        "bindings/_mojolearn_metrics_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "svm",
+      "mojo_source_count": 45,
+      "python_facing_sources": [
+        "svm/host/scale_gamma_host_pyapi.mojo",
+        "svm/host/svc_ovo_host_pyapi.mojo",
+        "svm/host/svc_proba_pyapi.mojo",
+        "svm/impl/scale_gamma_device_pyapi.mojo",
+        "svm/impl/svc_epilogue_pyapi.mojo",
+        "svm/impl/svc_ovo_layout_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_estimators_host.mojo",
+        "bindings/_mojolearn_kernel_methods.mojo",
+        "bindings/_mojolearn_kernel_methods_host.mojo",
+        "bindings/_mojolearn_svm.mojo",
+        "bindings/_mojolearn_svm_host.mojo",
+        "bindings/_mojolearn_x_linear_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "tokenizer",
+      "mojo_source_count": 23,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_tokenizer_fast.mojo",
+        "bindings/_mojolearn_tokenizer_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "tsa",
+      "mojo_source_count": 18,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_tsa.mojo",
+        "bindings/_mojolearn_tsa_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "umap",
+      "mojo_source_count": 40,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_metrics.mojo",
+        "bindings/_mojolearn_metrics_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_ann",
+      "mojo_source_count": 45,
+      "python_facing_sources": [
+        "x_ann/abi_pyapi.mojo",
+        "x_ann/resident_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_ivf.mojo",
+        "bindings/_mojolearn_x_ann.mojo",
+        "bindings/_mojolearn_x_ann_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_cluster",
+      "mojo_source_count": 48,
+      "python_facing_sources": [
+        "x_cluster/out_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_x_cluster.mojo",
+        "bindings/_mojolearn_x_cluster_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_cnn",
+      "mojo_source_count": 18,
+      "python_facing_sources": [
+        "x_cnn/host/ops_host_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_decomp",
+      "mojo_source_count": 140,
+      "python_facing_sources": [
+        "x_decomp/als_dev_pyapi.mojo",
+        "x_decomp/als_pyapi.mojo",
+        "x_decomp/api_pyapi.mojo",
+        "x_decomp/chi2_dev_pyapi.mojo",
+        "x_decomp/chi2_pyapi.mojo",
+        "x_decomp/decomp_owner_pyapi.mojo",
+        "x_decomp/dictl_dev_pyapi.mojo",
+        "x_decomp/dictl_pyapi.mojo",
+        "x_decomp/graph_device_pyapi.mojo",
+        "x_decomp/graph_host_pyapi.mojo",
+        "x_decomp/ipca_owner_pyapi.mojo",
+        "x_decomp/kit_device_pyapi.mojo",
+        "x_decomp/lanczos_dev_pyapi.mojo",
+        "x_decomp/lanczos_host_pyapi.mojo",
+        "x_decomp/lle_iter_dev_pyapi.mojo",
+        "x_decomp/lle_iter_pyapi.mojo",
+        "x_decomp/mcd_bmma_pyapi.mojo",
+        "x_decomp/mds_dev_pyapi.mojo",
+        "x_decomp/mds_pyapi.mojo",
+        "x_decomp/pls_dev_pyapi.mojo",
+        "x_decomp/pls_pyapi.mojo",
+        "x_decomp/qfix_pyapi.mojo",
+        "x_decomp/resident_pyapi.mojo",
+        "x_decomp/s_linalg_fast_pyapi.mojo",
+        "x_decomp/select_dev_pyapi.mojo",
+        "x_decomp/select_ops_pyapi.mojo",
+        "x_decomp/tsvd_owner_pyapi.mojo",
+        "x_decomp/w4_fast_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_linalg.mojo",
+        "bindings/_mojolearn_linalg_host.mojo",
+        "bindings/_mojolearn_scoped_gemm_probe.mojo",
+        "bindings/_mojolearn_x_decomp.mojo",
+        "bindings/_mojolearn_x_decomp_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_linear",
+      "mojo_source_count": 62,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_x_linear.mojo",
+        "bindings/_mojolearn_x_linear_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_metrics",
+      "mojo_source_count": 24,
+      "python_facing_sources": [],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_x_metrics.mojo",
+        "bindings/_mojolearn_x_metrics_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_neighbors",
+      "mojo_source_count": 41,
+      "python_facing_sources": [
+        "x_neighbors/dev_pyapi.mojo",
+        "x_neighbors/host_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_x_neighbors.mojo",
+        "bindings/_mojolearn_x_neighbors_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "x_prep",
+      "mojo_source_count": 60,
+      "python_facing_sources": [
+        "x_prep/fastnb_csr_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_x_prep.mojo",
+        "bindings/_mojolearn_x_prep_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    },
+    {
+      "family": "xtrees",
+      "mojo_source_count": 27,
+      "python_facing_sources": [
+        "xtrees/api_pyapi.mojo"
+      ],
+      "binding_entry_roots": [
+        "bindings/_mojolearn_rf.mojo",
+        "bindings/_mojolearn_rf_host.mojo",
+        "bindings/_mojolearn_x_trees.mojo",
+        "bindings/_mojolearn_x_trees_host.mojo"
+      ],
+      "assessment": "Existing native numerical tree plus listed Python-facing boundaries; callbacks and hot-loop ownership require per-operation trace before migration.",
+      "runtime_validated": false
+    }
+  ],
+  "priorities": [
+    {
+      "order": 1,
+      "scope": "Finish neural public operation validation",
+      "reason": "Provider layout now guarded; mixed bindings orchestration and foreign-buffer callbacks still need actual runtime evidence."
+    },
+    {
+      "order": 2,
+      "scope": "Classical preprocessing and shared input/output boundaries",
+      "owners": [
+        "core/scaler_fit_impl.mojo",
+        "core/classical_arrays_impl.mojo",
+        "bindings/classical_arrays.mojo"
+      ],
+      "reason": "Bounded shared descriptor admission can remove repeated metadata without moving numerical kernels."
+    },
+    {
+      "order": 3,
+      "scope": "Tree/ensemble/meta-estimator public owners",
+      "owners": [
+        "bindings/trees_public_meta.mojo",
+        "xtrees",
+        "extratrees",
+        "ensemble"
+      ],
+      "reason": "Metadata-once work exists; trace remaining model factories/dispatch targets before claiming native-only loops."
+    },
+    {
+      "order": 4,
+      "scope": "Linear/SVM/clustering/decomposition family boundaries",
+      "owners": [
+        "glm",
+        "svm",
+        "cluster",
+        "decomposition",
+        "x_linear",
+        "x_cluster",
+        "x_decomp"
+      ],
+      "reason": "Migrate one family at a time; existing native kernels do not justify broad ABI changes."
+    },
+    {
+      "order": 5,
+      "scope": "Neighbor/spectral/manifold and time-series boundaries",
+      "owners": [
+        "neighbors",
+        "ivf",
+        "umap",
+        "spectral",
+        "tsa",
+        "arima",
+        "holtwinters"
+      ],
+      "reason": "Retain algorithm/settings and buffer/worker ownership; optional special routes need individual audits."
+    }
+  ],
+  "remaining_runtime_to_provider_edges": [
+    {
+      "source": "bindings/causal_lm_public.mojo",
+      "operation": "_read -> _run_prepared -> _causal_layer_run_prepared",
+      "targets": [
+        "providers/python/generation_metadata_pyapi.mojo",
+        "providers/python/generation_session_pyapi.mojo",
+        "providers/python/neural_descriptor_pyapi.mojo"
+      ],
+      "required_change": "Operation-local native execution owner must receive descriptors and retained lifetimes once; per-layer provider entry/GIL/object handling remains, even though numerical calls use C ABI."
+    },
+    {
+      "source": "bindings/samba_inference_native.mojo",
+      "operation": "samba_forward layer loop / _m3_state_call",
+      "targets": [
+        "providers/python/neural_descriptor_pyapi.mojo"
+      ],
+      "required_change": "Retain layer/state/buffer ownership at outer boundary, carry native descriptors through loop; preserve busy/generation/state writeback."
+    },
+    {
+      "source": "bindings/samba_training_native.mojo",
+      "operation": "nonresident samba_gradients forward/backward loops",
+      "targets": [
+        "bindings/neural_prefill_native.mojo",
+        "providers/python/neural_descriptor_pyapi.mojo"
+      ],
+      "required_change": "Preserve tape ownership and reverse-order execution; use existing native whole-model owner where selected, avoid unused optional ABI expansion."
+    },
+    {
+      "source": "providers/python/autograd_torch_program_pyapi.mojo",
+      "operation": "Torch admission and whole-program run",
+      "targets": [
+        "bindings/native_torch_admission.mojo",
+        "autograd/program_entries.mojo"
+      ],
+      "required_change": "Framework import/capture/registration remains provider-specific; native program owner stays independent. Relocation alone does not eliminate framework callbacks."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The sequence lane's typed entries over `Exec`, moved word for word out of
-the Python door (`sequence/pyapi.mojo`, lane thin-neural): each `<name>_impl`
+the Python door (`providers/python/sequence_pyapi.mojo`, lane thin-neural): each `<name>_impl`
 takes the call's addresses and integer parameters as `List[Int]` and its
 float parameters as `List[Float64]` (the door's `py_ints` / `py_f64s`), and
 returns the count the door hands back. `fptr`, `ival` and `fval` here read

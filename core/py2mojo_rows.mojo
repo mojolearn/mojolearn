@@ -228,7 +228,7 @@ def rows_param_count(md: Int) raises -> Int:
 
 def rows_call(md: Int, n: Int, k: Int, src: Int, dst: Int, src2_in: Int, thr: Float64) raises -> RowsCall:
     """The checked call. `src2_in` and `thr` are read for HUBER_OUT only.
-    The Python door is `core/py2mojo_rows_pyapi.mojo`."""
+    The Python door is `providers/python/core_py2mojo_rows_pyapi.mojo`."""
     _ = rows_param_count(md)
     var src2 = 0
     var scal = UInt64(0)

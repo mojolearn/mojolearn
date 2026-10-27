@@ -7,10 +7,10 @@ from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.native_torch_admission import native_torch_metadata
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
-from autograd.program_arrays_pyapi import mapped_byte_array
+from providers.python.autograd_program_arrays_pyapi import mapped_byte_array
 from autograd.program_io import ProgramInput
-from autograd.program_pyapi import program_input, _integer
-from autograd.pyapi import ops_load_weights_py
+from providers.python.autograd_program_pyapi import program_input, _integer
+from providers.python.autograd_pyapi import ops_load_weights_py
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 
 

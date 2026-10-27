@@ -23,7 +23,7 @@ def test_native_execution_closures_have_no_provider_dependencies():
 
 
 @pytest.mark.parametrize('dependency', ['std.python', 'bindings.py_balanced',
-                                       'autograd.program_arrays_pyapi', 'adapters.torch',
+                                       'providers.python.autograd_program_arrays_pyapi', 'adapters.torch',
                                        'providers.python.buffers'])
 def test_transitive_provider_dependency_is_rejected(tmp_path, dependency):
     (tmp_path / 'core').mkdir()
@@ -60,7 +60,7 @@ def test_sequential_snapshot_is_reused_after_admission():
 
 
 def test_program_input_reads_provider_fields_before_native_rank_loop():
-    source = function('autograd/program_pyapi.mojo', 'array_input')
+    source = function('providers/python/autograd_program_pyapi.mojo', 'array_input')
     for field in ('shape', 'strides', 'dtype'):
         assert source.count('a.' + field) == 1
     assert 'return (src, sh)' in source

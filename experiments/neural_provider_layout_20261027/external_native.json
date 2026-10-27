@@ -1,0 +1,7 @@
+{
+  "module": "nn.topk",
+  "installed_package": "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/lib/mojo/nn.mojoc",
+  "bytes": 6276992,
+  "sha256": "602338eff58fd55f5c2619d0402522731e334da377e9d31c6446036369dca26e",
+  "scope": "Installed compiled native package retained; upstream internals not inspected."
+}

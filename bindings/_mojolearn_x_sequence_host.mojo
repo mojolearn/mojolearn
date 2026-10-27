@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU host binding of the sequence expansion lane. HOST ONLY: no
-DeviceContext, no kernel launch. Every entry is `sequence/pyapi.mojo`'s over a
+DeviceContext, no kernel launch. Every entry is `providers/python/sequence_pyapi.mojo`'s over a
 `HostExec`, the element bodies of `sequence/ops.mojo` looped in ascending
 order, under the GPU binding's names and address contract, so the lane's
 classes run unchanged on a CPU-only install (`_backend._HOST_MODULES`).
@@ -12,16 +12,16 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
-from autograd.python_errors_pyapi import graph_python_error
-from autograd.ops_frontend_pyapi import ops_session_call_py
-from autograd.session_frontend_pyapi import ops_session_initialize_py
+from providers.python.autograd_python_errors_pyapi import graph_python_error
+from providers.python.autograd_ops_frontend_pyapi import ops_session_call_py
+from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
-from autograd.session_lifetime_pyapi import ops_session_create_py
+from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec import HostExec
-from sequence.opt_public_host_pyapi import (
+from providers.python.sequence_opt_public_host_pyapi import (
     seq_optimizer_init_host_py,
     seq_optimizer_step_host_py,
     seq_lamb_step_host_py,
@@ -32,40 +32,40 @@ from sequence.opt_public_host_pyapi import (
     seq_optimizer_close_host_py,
 )
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
-from autograd.program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
-from autograd.program_control_pyapi import ops_program_control_py
-from autograd.torch_program_pyapi import ops_torch_program_run_py
-from autograd.distributed_pyapi import (
+from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
+from providers.python.autograd_program_control_pyapi import ops_program_control_py
+from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
+from providers.python.autograd_distributed_pyapi import (
     distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
     distributed_run_py, distributed_state_py, distributed_residency_py,
     distributed_save_py, distributed_close_py, distributed_enter_py,
 )
-from autograd.partition_pyapi import (
+from providers.python.autograd_partition_pyapi import (
     partition_open, partition_load, partition_fit_py, partition_run_py,
     partition_state_py, partition_residency_py, partition_save_py,
     partition_close_py, partition_enter_py, partition_profile_py,
 )
-from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
-from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from autograd.pyapi import model_gather_labels_py
-from autograd.pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
-from autograd.pyapi import model_import_params_py
+from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
+from providers.python.autograd_pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
+from providers.python.autograd_pyapi import model_gather_labels_py
+from providers.python.autograd_pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
+from providers.python.autograd_pyapi import model_import_params_py
 from core.label_cast import host_unique_inverse_cast
-from autograd.pyapi import ops_shape_py
+from providers.python.autograd_pyapi import ops_shape_py
 from autograd.ops_api import OPS_HOST
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
-from autograd.import_resolve_pyapi import onnx_resolve_py
+from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
+from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
-from autograd.import_frontend_pyapi import ops_import_model_c
-from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py
-from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from autograd.model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
-from sequence.pyapi import moe_backward_py
+from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
+from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
+from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
+from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
+from providers.python.sequence_pyapi import moe_backward_py
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -145,7 +145,7 @@ def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_ad
     """Sorted distinct labels and one int32 code per row for Sequential's
     classification losses, by the host twin (`core/label_cast.mojo`, the
     same statements as the device path): `src` the user's labels as they
-    are (autograd/pyapi.mojo cast_in_of descriptor, one per row), the
+    are (providers/python/autograd_pyapi.mojo cast_in_of descriptor, one per row), the
     classes in the labels' own dtype into classes_addr (n slots), codes
     into codes_addr. Returns the class count."""
     var ck = model_labels_check(src, classes_addr, codes_addr)
@@ -155,7 +155,7 @@ def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_ad
 
 def model_predict_labels_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
     """Sequential.predict of a classifier: the codes and the label gather
-    stay on the executor (autograd/pyapi.mojo model_predict_labels_py)."""
+    stay on the executor (providers/python/autograd_pyapi.mojo model_predict_labels_py)."""
     var ex = HostExec()
     return model_predict_labels_py(ex, addrs, prog, ptab, ip)
 
@@ -165,7 +165,7 @@ def model_fit_labels_binding(
 ) raises -> PythonObject:
     """Sequential.fit of a classifier in one call: the label sort writes the
     classes to the caller's buffer and the codes into an executor buffer,
-    and the fit reads them there (autograd/pyapi.mojo model_fit_labels_py).
+    and the fit reads them there (providers/python/autograd_pyapi.mojo model_fit_labels_py).
     Returns [class count, epochs run]."""
     var la = model_fit_labels_check(lab)
     var ex = HostExec()

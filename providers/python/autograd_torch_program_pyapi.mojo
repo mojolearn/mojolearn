@@ -21,7 +21,7 @@ from autograd.rankn import ShapeN
 from autograd.program import PROGRAM_IN_IDS, same_shape
 from autograd.program_io import ProgramInput
 from autograd.program_entries import program_execute_prepare, program_execute_run
-from autograd.program_pyapi import _imported_session_dims
+from providers.python.autograd_program_pyapi import _imported_session_dims
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:

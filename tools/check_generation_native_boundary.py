@@ -15,7 +15,9 @@ ROOTS = ("transformer.session_abi", "transformer.native_session_call",
 FORBIDDEN_IMPORTS = ("std.python", "providers", "bindings")
 CALLBACK_TOKENS = re.compile(r"\b(?:PythonObject|PyObjectPtr|Python|py_call|py_call_typed|GILReleased)\b")
 # Resolved from Modular's installed native packages, not this repository.
-EXTERNAL_MODULES = {"layout", "layout.tile_layout", "linalg.gemv", "linalg.matmul"}
+# nn.topk is supplied by lib/mojo/nn.mojoc; package hash/provenance is retained
+# in experiments/neural_provider_layout_20261027/external_native.json.
+EXTERNAL_MODULES = {"layout", "layout.tile_layout", "linalg.gemv", "linalg.matmul", "nn.topk"}
 
 
 def code_only(source):

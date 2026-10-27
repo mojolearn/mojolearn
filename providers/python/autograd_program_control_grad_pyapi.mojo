@@ -5,8 +5,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem
 from sequence.exec_trait import Exec
 from autograd.program_io import ProgramInput, HostArray
-from autograd.program_pyapi import program_input, program_inputs, _integer, _result, _dict
-from autograd.program_arrays_pyapi import host_array_py, host_arrays_py
+from providers.python.autograd_program_pyapi import program_input, program_inputs, _integer, _result, _dict
+from providers.python.autograd_program_arrays_pyapi import host_array_py, host_arrays_py
 from autograd.program_control_grad import (
     control_vjp_abort, control_vjp_finish, control_vjp_forward, control_vjp_prepare,
 )

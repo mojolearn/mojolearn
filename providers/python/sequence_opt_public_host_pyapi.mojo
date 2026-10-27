@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Python doors of the public sequence optimizers on the CPU host
 binding (sequence/opt_public.mojo on a `HostExec`): the same entry names
-and arguments as sequence/opt_public_pyapi.mojo, nothing resident.
+and arguments as providers/python/sequence_opt_public_pyapi.mojo, nothing resident.
 PythonObject arguments to typed addresses and words, one kernel entry, the
 count back. Nothing else here."""
 from std.python import PythonObject
@@ -18,7 +18,7 @@ from sequence.opt_public import (
     seq_optimizer_state_on,
     seq_optimizer_step_on,
 )
-from sequence.pyapi import py_f64s, py_ints
+from providers.python.sequence_pyapi import py_f64s, py_ints
 
 
 def seq_optimizer_init_host_py(words: PythonObject, ip: PythonObject) raises -> PythonObject:

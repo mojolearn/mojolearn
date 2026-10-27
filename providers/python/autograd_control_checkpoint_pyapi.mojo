@@ -5,8 +5,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_setitem
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
-from autograd.program_pyapi import _integer
-from autograd.pyapi import program_info
+from providers.python.autograd_program_pyapi import _integer
+from providers.python.autograd_pyapi import program_info
 from autograd.control_checkpoint import control_save, control_load
 from bindings.native_json import native_path
 

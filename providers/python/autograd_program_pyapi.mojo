@@ -7,22 +7,22 @@ from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
-from autograd.execution_profile_pyapi import execution_profile_object
+from providers.python.autograd_execution_profile_pyapi import execution_profile_object
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
-from autograd.program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input
+from providers.python.autograd_program_arrays_pyapi import output_array, output_array_dims, is_ndarray, is_integer_input, uint64_input
 from autograd.tape import Tape
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
-from autograd.program_arrays_pyapi import host_arrays_py
+from providers.python.autograd_program_arrays_pyapi import host_arrays_py
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program_control
-from autograd.pyapi import _dims_out
+from providers.python.autograd_pyapi import _dims_out
 
 
 def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:

@@ -141,7 +141,7 @@ from training.samba_ops import (
 # Apple FAST build with MOJOLEARN_AFN_SAMBA_FUSE (or _ALL); AFN_SAMBA_FUSE
 # is false everywhere else and nothing below registers.
 from training.samba_afn import AFN_SAMBA_FUSE
-from training.samba_afn_pyapi import (
+from providers.python.training_samba_afn_pyapi import (
     samba_afn_embedding_backward_tied_binding,
     samba_afn_norm_head_forward_binding,
     samba_afn_tail_train_binding,

@@ -20,7 +20,7 @@ from std.python import PythonObject
 
 from sequence.exec_device import DeviceExec
 from sequence.fit_team_impl import garch_team_impl, prophet_fit_team_impl
-from sequence.pyapi import py_f64s, py_ints
+from providers.python.sequence_pyapi import py_f64s, py_ints
 
 
 def garch_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:

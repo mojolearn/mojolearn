@@ -232,7 +232,7 @@
       "id": "neural/ops-session-step/gaussian/shape=full",
       "lane": "ops-session-step",
       "status": "existing_native_owner",
-      "source": "autograd/session_frontend_pyapi.mojo",
+      "source": "providers/python/autograd_session_frontend_pyapi.mojo",
       "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
       "whole_recipe_python_free": false,
       "runtime_validation": "pending_local_mac"

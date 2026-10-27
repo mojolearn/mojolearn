@@ -3,22 +3,22 @@
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
-from autograd.python_errors_pyapi import graph_int
+from providers.python.autograd_python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
-from autograd.program_pyapi import program_input, _integer, ops_program_fit_native_py
+from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
-from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
-from autograd.pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
-from autograd.model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
-from autograd.program_save_pyapi import ops_program_save_native_py
+from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input
+from providers.python.autograd_pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
+from providers.python.autograd_model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
+from providers.python.autograd_program_save_pyapi import ops_program_save_native_py
 from bindings.native_json import native_path
-from autograd.weight_frontend_pyapi import ops_weights_native_py
+from providers.python.autograd_weight_frontend_pyapi import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
-from autograd.execution_profile_pyapi import execution_profile_object
-from autograd.control_checkpoint_pyapi import control_save_py, control_load_py
-from autograd.gradient_diagnostics_pyapi import gradient_report_py
+from providers.python.autograd_execution_profile_pyapi import execution_profile_object
+from providers.python.autograd_control_checkpoint_pyapi import control_save_py, control_load_py
+from providers.python.autograd_gradient_diagnostics_pyapi import gradient_report_py
 
 
 def _nil(x: PythonObject) -> Bool:

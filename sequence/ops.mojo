@@ -85,11 +85,11 @@ comptime SEQ_SOFTMAX_ONE_EXP = not (
 #: `-D MOJOLEARN_TSA2_VAR` / `-D MOJOLEARN_TSA2_STL` are now harmless.
 #: IDENTICAL compiles the code above and below unchanged.
 #: TSA2_VAR: VAR's fit queues every launch behind one upload
-#: and ends on one wait (sequence/pyapi.mojo::var_fit_py); the residual
+#: and ends on one wait (providers/python/sequence_pyapi.mojo::var_fit_py); the residual
 #: and sigma_u products fuse their epilogues (sequence/vecar.mojo).
 #: TSA2_STL: STL's LOESS passes as one thread per output
 #: point over every series (sequence/stl_grid.mojo), the inner iterations
-#: queued, one wait per fit (sequence/pyapi.mojo::stl_py).
+#: queued, one wait per fit (providers/python/sequence_pyapi.mojo::stl_py).
 comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
 comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
@@ -104,7 +104,7 @@ comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"
 #: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
 comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
 #: MOJOLEARN_SEQ_FAST_VAR_COOP (FAST + Apple default, rollback _OFF): VAR's
-#: R-long one-thread folds (sequence/pyapi.mojo `_var_fit_queued`: the
+#: R-long one-thread folds (providers/python/sequence_pyapi.mojo `_var_fit_queued`: the
 #: column scale's two passes over R rows, Z^T Z and Z^T Ys, the sigma_u
 #: product) ran one thread per cell, each a ~R-step chain of strided loads
 #: (R = n_obs - p) that waits on memory at every step, a few dozen to a

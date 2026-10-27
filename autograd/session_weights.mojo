@@ -2,7 +2,7 @@
 # Session.load_weights, typed: the records of autograd/weight_import.mojo
 # (the target handle in word 0) are all checked, then each source tensor is
 # cast into its target session tensor in place. The Python door
-# (autograd/pyapi.mojo ops_load_weights_py) converts the records and names.
+# (providers/python/autograd_pyapi.mojo ops_load_weights_py) converts the records and names.
 from sequence.exec_trait import Exec
 from core.cast_in import CastIn
 from autograd.ops_api import ops_session

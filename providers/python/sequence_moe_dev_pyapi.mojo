@@ -6,7 +6,7 @@ typed result back. Nothing else."""
 from std.python import PythonObject
 
 from sequence.moe_dev import moe_forward_dev
-from sequence.pyapi import py_ints
+from providers.python.sequence_pyapi import py_ints
 
 
 def moe_forward_dev_py(handles: PythonObject, ip: PythonObject) raises -> PythonObject:
