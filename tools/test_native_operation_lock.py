@@ -47,3 +47,18 @@ def test_neural_layer_boundaries_use_lease_without_preacquiring_models():
         assert 'lock.acquire()' not in source and 'lock.release()' not in source
         assert 'lock_lease.acquire()' in source and 'lock_lease.release()' in source
     assert 'InterruptedError: native operation lock interrupted' in CORE
+
+
+def test_transformer_serialization_restores_a_fresh_native_owner():
+    tree = ast.parse((ROOT/'python/mojolearn/_transformer_impl.py').read_text())
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'TransformerBlock')
+    for name in ('__getstate__', '__setstate__'):
+        method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == name)
+        assert len(method.body) == 1 and isinstance(method.body[0], ast.Return)
+    source = (ROOT/'bindings/neural_block_public.mojo').read_text()
+    restore = source.split('def neural_block_setstate_binding')[1].split('def neural_block_c')[0]
+    assert 'operation_lock_create()' in restore
+    assert 'py_type(state) is not bi.dict' in restore
+    save = source.split('def neural_block_getstate_binding')[1].split('def neural_block_setstate_binding')[0]
+    assert 'String("_native_forward_owner")' in save
+    assert 'elif saved is not None:' in save

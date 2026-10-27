@@ -14,7 +14,7 @@ from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allo
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
-from providers.python.operation_lock_pyapi import OperationLockLease
+from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_reserved_execute,
     neural_descriptor_handle,
@@ -583,6 +583,61 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
     return result
 
 
+
+def neural_block_getstate_binding(block: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Preserve arithmetic-profile admission before serialization. This native
+    # admission uses the same binding contract as public forward, not the
+    # Python _extension helper. Only ordinary model state crosses the boundary.
+    var bi = Python.import_module("builtins")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        mode = context["backend"]._DEFAULT_MODE
+    var bindings = _model_bindings(fields["_native_route"], "transformer", context, mode)
+    var entries = bindings["transformer"]
+    var saved = py_get(fields, "_arithmetic_profile")
+    var saved_mode = py_get(fields, "_arithmetic_profile_mode", PythonObject("identical") if saved is not None else PythonObject(None))
+    if Bool(py=py_call(bi.hasattr, entries, "transformer_numeric_mode")):
+        var code = Int(py=_native_function(entries, "transformer_numeric_mode")())
+        if code != (1 if String(mode) == "identical" else 0):
+            raise Error("RuntimeError: transformer serialized model numeric mode differs from binding")
+    if Bool(py=py_call(bi.hasattr, entries, "transformer_arithmetic_profile")):
+        var profile = _native_function(entries, "transformer_arithmetic_profile")()
+        if saved is not None and Bool(py=saved_mode == mode) and not Bool(py=saved == profile):
+            raise Error("transformer serialized model arithmetic profile differs from binding")
+        py_setitem(fields, "_arithmetic_profile", profile)
+        py_setitem(fields, "_arithmetic_profile_mode", mode)
+        py_setitem(fields, "_arithmetic_profile_changed", _native_function(entries, "transformer_arithmetic_profile_changed")())
+    elif saved is not None:
+        raise Error("transformer: a tagged model requires a binding that reports its arithmetic profile")
+    var result = py_call(bi.dict, fields)
+    var transient_names = [String("_runtime_lock"), String("_native_session"), String("_session_binding"),
+        String("_native_forward_owner"), String("_native_block_provider_cache"),
+        String("_native_session_provider_cache"), String("_native_primitives_provider_cache")]
+    for name in transient_names:  # driver-loop: over operation owners excluded from serialized model state
+        _ = py_call(result.pop, name, PythonObject(None))
+    return result
+
+
+def neural_block_setstate_binding(block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    if py_type(state) is not bi.dict:
+        raise Error("TypeError: neural block restore requires an exact state dictionary")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    _ = py_call(fields.update, state)
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        mode = context["backend"]._DEFAULT_MODE
+    if String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        py_setitem(fields, "_runtime_lock", operation_lock_create())
+    else:
+        py_setitem(fields, "_runtime_lock", context["rlock"]())
+    py_setitem(fields, "_native_session", PythonObject(None))
+    py_setitem(fields, "_session_binding", PythonObject(None))
+    py_setitem(fields, "_native_forward_owner", PythonObject(None))
+    py_setitem(fields, "_native_block_provider_cache", PythonObject(None))
+    return PythonObject(None)
+
 def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
@@ -595,6 +650,10 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_forward_binding(args[0], args[1], args[2], args[3], args[4], args[5])
         elif operation == 4:
             result = neural_block_set_params_binding(args[0], args[1], args[2])
+        elif operation == 5:
+            result = neural_block_getstate_binding(args[0], args[1])
+        elif operation == 6:
+            result = neural_block_setstate_binding(args[0], args[1], args[2])
         else:
             result = neural_block_backward_binding(args[0], args[1], args[2], args[3])
         return result.steal_data()

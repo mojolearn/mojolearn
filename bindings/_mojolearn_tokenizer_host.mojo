@@ -1434,6 +1434,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
+        module.def_py_c_function(neural_block_c[5], "neural_block_getstate")
+        module.def_py_c_function(neural_block_c[6], "neural_block_setstate")
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
