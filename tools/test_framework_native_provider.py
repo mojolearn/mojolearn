@@ -123,3 +123,23 @@ def test_host_inference_operations_are_one_native_call():
     assert 'neural_descriptor_execute(provider, 2,' in native
     assert 'byte_lm_lengths(' in native and 'neural_copy_row_prefixes(' in native
     assert 'argmax_rows_f32(' in native
+
+
+def test_byte_config_keeps_frozen_dataclass_and_native_public_methods():
+    import ast
+    source = (ROOT / 'python/mojolearn/_byte_lm_config.py').read_text()
+    assert '@dataclass(frozen=True, init=False, repr=False, eq=False)' in source
+    assert 'ByteLanguageModelConfig.__setattr__ = _config_setattr' in source
+    assert 'ByteLanguageModelConfig.__delattr__ = _config_delattr' in source
+    tree = ast.parse(source)
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef))
+    for method in (n for n in cls.body if isinstance(n, ast.FunctionDef)):
+        body = method.body
+        if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            body = body[1:]
+        assert len(body) == 1 and isinstance(body[0], ast.Return), method.name
+        assert body[0].value.func.id == '_CONFIG', method.name
+    native = (ROOT / 'providers/python/byte_lm_metadata_pyapi.mojo').read_text()
+    assert 'byte_lm_config_frozen_error' in native and 'stash_python_error()' in native
+    assert 'native_storage_allocate(context["byte_lm_config_class"])' in native
+    assert 'training_byte_shape_validate(shape.d, shape.chunked)' in native
