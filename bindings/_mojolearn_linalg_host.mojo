@@ -37,6 +37,8 @@ CPU-only install `python/mojolearn/_cholesky_impl.py` binds
 through the trailing update's `gemm_oracle` leaf walk (chol_oracle's
 header, THE SABOTAGE).
 """
+from gemm.host.linalg_dispatch import LINALG_NATIVE_TABLE
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
@@ -676,9 +678,15 @@ def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_linalg_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def linalg_native_api_v1_binding() raises -> PythonObject:
+    var table = LINALG_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def build__mojolearn_linalg_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_linalg_host")
+        module.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         module.def_function[linalg_host_numeric_mode_binding]("linalg_host_numeric_mode")
         module.def_function[linalg_host_vendor_binding]("linalg_host_vendor")
         module.def_function[linalg_host_column_binding]("linalg_host_column")
