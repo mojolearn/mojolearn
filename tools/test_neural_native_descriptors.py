@@ -17,7 +17,7 @@ def test_connection_and_hot_execution_remain_separate():
     provider = read('providers/python/neural_descriptor_pyapi.mojo')
     connect = provider.split('def neural_descriptor_connect(')[1].split('def neural_descriptor_cached')[0]
     assert 'PyCapsule_IsValid' in connect and 'PyCapsule_GetPointer' in connect
-    assert 'NeuralDescriptorProvider(module, capsule, factory, name^, table[0])' in connect
+    assert 'NeuralDescriptorProvider(module, capsule, factory, name^, table[0], operation_count)' in connect
     execute = provider.split('def neural_descriptor_execute(')[1].split('def neural_descriptor_info')[0]
     assert 'with GILReleased(Python())' in execute and '_ = provider' in execute
     assert 'py_call' not in execute and 'getattr' not in execute and 'getenv' not in execute
