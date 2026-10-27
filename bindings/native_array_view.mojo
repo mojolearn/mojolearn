@@ -12,7 +12,7 @@ def _namespace(cls: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
     var names = py_call(b.list, fields.keys())
-    for i in range(len(names)):  # driver-loop: refuse foreign equality hooks before slot lookups
+    for i in range(len(names)):  # driver-loop: over refuse foreign equality hooks before slot lookups
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: native Array storage requires exact string class keys")
     return fields
@@ -27,7 +27,7 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
     var namespace = _namespace(cls)
     var names = Python.tuple("_store", "_mv", "_addr", "_readonly", "shape", "dtype", "order")
     var values = Python.dict()
-    for i in range(len(names)):  # driver-loop: native Array storage metadata, no Python properties
+    for i in range(len(names)):  # driver-loop: over native Array storage metadata, no Python properties
         var name = names[i]
         if py_get(namespace, name) is not slots[name]:
             raise Error("TypeError: native output requires the connected Array storage slots")
@@ -41,7 +41,7 @@ def native_array_ndarray_view(value: PythonObject, context: PythonObject) raises
         raise Error("TypeError: native output requires a supported numeric Array dtype")
     var shape = values["shape"]
     var empty = False
-    for i in range(len(shape)):  # driver-loop: admit dimensions before ndarray's native constructor
+    for i in range(len(shape)):  # driver-loop: over admit dimensions before ndarray's native constructor
         if py_type(shape[i]) is not b.int or Int(py=shape[i]) < 0:
             raise Error("TypeError: native output requires nonnegative native shape dimensions")
         empty = empty or Int(py=shape[i]) == 0

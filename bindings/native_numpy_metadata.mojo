@@ -17,7 +17,7 @@ def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:
     var fields = PythonObject(from_borrowed=pointer)
     var keys = py_call(py_type(Python.list()),fields)
     var string_type = py_type(PythonObject(""))
-    for i in range(len(keys)):  # driver-loop: dictionary lookup must not invoke a custom key's equality
+    for i in range(len(keys)):  # driver-loop: over dictionary lookup must not invoke a custom key's equality
         if py_type(keys[i]) is not string_type:
             raise Error("TypeError: NumPy native module fields require native string keys")
     return fields
