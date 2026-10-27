@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE ANN LANE'S CPU (HOST) BINDING (lane/algos-ann): IVF-PQ, t-SNE, CAGRA and the
 IVF quantization arms. Every entry takes (addrs, params) lists; the orders
-are written in x_ann/abi_pyapi.mojo's callers below and in
+are written in providers/python/x_ann_abi_pyapi.mojo's callers below and in
 python/mojolearn/_expansion_ann.py. `bindings/_mojolearn_x_ann_host.mojo`
 exports the same names with the same contract on the CPU."""
 from std.os import abort
@@ -14,7 +14,7 @@ from x_ann.filter_topk import filter_topk_host
 from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search
-from x_ann.abi_pyapi import in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
+from providers.python.x_ann_abi_pyapi import in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host

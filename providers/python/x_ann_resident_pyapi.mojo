@@ -4,7 +4,7 @@
 PythonObject arguments to typed values and back, nothing else. The address
 and parameter lists are documented in `x_ann/resident.mojo`."""
 from std.python import PythonObject
-from x_ann.abi_pyapi import py_int_list
+from providers.python.x_ann_abi_pyapi import py_int_list
 from x_ann.resident import (
     x_ann_index_export_codes,
     x_ann_index_prepare,

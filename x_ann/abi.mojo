@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The ann lane's typed address contract, shared by `x_ann/resident.mojo` and,
-through `x_ann/abi_pyapi.mojo`, by `bindings/_mojolearn_x_ann.mojo` and
+through `providers/python/x_ann_abi_pyapi.mojo`, by `bindings/_mojolearn_x_ann.mojo` and
 `bindings/_mojolearn_x_ann_host.mojo`: plain copies, no arithmetic. No
-Python here; the PythonObject unpacking is `x_ann/abi_pyapi.mojo`."""
+Python here; the PythonObject unpacking is `providers/python/x_ann_abi_pyapi.mojo`."""
 
 from std.memory import memcpy
 from core.hostptr import f32_ptr, i32_ptr

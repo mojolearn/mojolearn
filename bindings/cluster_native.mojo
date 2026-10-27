@@ -79,7 +79,7 @@ def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: St
               context: PythonObject) raises -> PythonObject:
     """`Array._from_flat(flat, shape, typestr)` without its copy: the
     entry returns each result as one `array.array` of the dtype's store code
-    (x_cluster/out_pyapi.mojo, one memcpy from the result), which becomes the
+    (providers/python/x_cluster_out_pyapi.mojo, one memcpy from the result), which becomes the
     Array's store as it is. Anything else is copied once, as `_from_flat` did.
     Same values either way."""
     var store = flat

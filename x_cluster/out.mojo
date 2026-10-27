@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What every cluster-lane entry returns (lane/algos-cluster). Host code; no
 device, no Python: the Python boundary both bindings share is
-`x_cluster/out_pyapi.mojo`."""
+`providers/python/x_cluster_out_pyapi.mojo`."""
 
 
 struct ClusterOut(Movable):
     """A fit's answer: float arrays, int arrays and float64 scalars, in the
-    order the entry documents. `cluster_out_to_py` (x_cluster/out_pyapi.mojo)
+    order the entry documents. `cluster_out_to_py` (providers/python/x_cluster_out_pyapi.mojo)
     returns `[[f...], [i...], [s...]]`: each float array an `array.array('f')`, each int array an `array.array('i')`
     (one memcpy each), the scalars a list of Python floats."""
 

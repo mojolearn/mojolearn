@@ -33,8 +33,8 @@ from x_cnn.host.ops_host import pad2d_forward_host as pad2d_forward_impl
 from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
 from x_cnn.host.ops_host import spmm_host as spmm_impl
 from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
-from x_cnn.host.ops_host_pyapi import csr_build_host_binding, perm_gather_host_binding, vals_t_host_binding
-from x_cnn.host.ops_host_pyapi import gcn_loops_host_binding
+from providers.python.x_cnn_host_ops_host_pyapi import csr_build_host_binding, perm_gather_host_binding, vals_t_host_binding
+from providers.python.x_cnn_host_ops_host_pyapi import gcn_loops_host_binding
 # lane fam2-neural (2026-10-04): the device epoch's element functions, looped
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
 # out of this shell; `out_f32` (the CPU column's output seam) lives there too.
