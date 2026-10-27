@@ -176,7 +176,7 @@ struct GenerationEngineAdmission(Movable):
     var published: Bool
 
     def __init__(out self, snapshot: GenerationOperationSnapshot, state: PythonObject, batch: Int, length: Int) raises:
-        self.snapshot = snapshot
+        self.snapshot = snapshot.copy()
         self.state = state
         self.states = List[PythonObject]()
         self.links = List[PythonObject]()
@@ -200,7 +200,7 @@ struct GenerationEngineAdmission(Movable):
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         var api = provider.downcast_value_ptr[GenerationNativeProvider]()
         for i in range(len(snapshot.layers)):  # driver-loop: admit layer/state owners once before native execution
-            var layer = snapshot.layers[i]
+            ref layer = snapshot.layers[i]
             var st = layers[i]
             var native_layer = NativeGenerationLayer(api[].forward, 0, [], [], 0)
             try:
@@ -254,7 +254,7 @@ struct GenerationEngineAdmission(Movable):
         # The existing ABI specifies reservation under the GIL. Retain that
         # contract for every shared session while the native operation runs.
         for i in range(len(self.native.layers)):  # driver-loop: reserve admitted native session owners
-            if len(self.native.layers[i].failure) != 0:
+            if self.native.layers[i].failure.byte_length() != 0:
                 break
             var already_reserved = False
             for index in self.reserved:  # driver-loop: tied blocks may share one admitted session
