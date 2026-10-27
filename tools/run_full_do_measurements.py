@@ -13,6 +13,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+import tarfile
 import time
 
 
@@ -87,6 +88,7 @@ def run(config):
                 command(['sh', 'tools/dataset_store.sh', 'stage', target, *config['data_keys']], name+'-data.log')
             command(['bash', 'tools/do_amd_steward.sh', 'extend', str(config['lease_minutes'])],
                     name+'-lease.log', env)
+            last_lease = time.time()
             record['status'] = 'running'
             save()
             with (out / (name+'-controller.log')).open('a') as log:
@@ -107,6 +109,26 @@ def run(config):
                     with gzip.open(local, 'rb') as f:
                         while f.read(1024*1024):
                             pass
+                    if time.time() - last_lease > config['lease_minutes']*30:
+                        command(['bash', 'tools/do_amd_steward.sh', 'extend', str(config['lease_minutes'])],
+                                name+'-lease.log', env)
+                        last_lease = time.time()
+                    boards = out/name/'boards'
+                    boards.mkdir(parents=True, exist_ok=True)
+                    board_path = boards/(rid+'.json')
+                    with tarfile.open(local) as archive:
+                        try:
+                            member = archive.extractfile('board.json')
+                        except KeyError:
+                            member = None
+                        if member is not None:
+                            board_path.write_bytes(member.read())
+                    if board_path.exists():
+                        ingest_rc = command([sys.executable, 'tools/main_board_ingest.py', '--gate-board',
+                                 vendor['board_box']+'='+str(board_path), '--columns', vendor['board_column']],
+                                name+'-board-ingest.log', check=False)
+                        if ingest_rc:
+                            record.setdefault('board_ingest_failures', []).append(event['id'])
                     record['last_recipe'] = event
                     record['completed'] = record.get('completed', 0) + 1
                     save()
@@ -118,8 +140,19 @@ def run(config):
             command(['bash', 'tools/box_archive.sh', 'full-measure-'+name, target], name+'-archive.log')
             if not record['complete']:
                 raise RuntimeError(name+' has pending work or a shared failure; box preserved for recovery')
-            # Teardown repeats the archive guard. Never release another owner.
-            command(['bash', 'tools/do_amd_steward.sh', 'down'], name+'-down.log', env)
+            if config.get('commit_boards'):
+                board_dir = 'bench/results/bench_board/main-'+vendor['board_column']
+                command(['git', 'add', board_dir], name+'-board-publish.log', check=False)
+                changed = subprocess.run(['git', 'diff', '--cached', '--quiet', '--', board_dir], cwd=repo).returncode
+                if changed:
+                    record['board_commit_rc'] = command(['git', 'commit', '--only', board_dir, '-m',
+                        'Record full '+name+' measurement campaign '+config['source_commit'][:9]],
+                        name+'-board-publish.log', check=False)
+                    if record['board_commit_rc'] == 0:
+                        record['board_push_rc'] = command(['git', 'push', 'origin', 'main'], name+'-board-publish.log', check=False)
+            # Results are already archived on the Mac and R2. Never release another owner.
+            command(['bash', 'tools/do_amd_steward.sh', 'down'], name+'-down.log',
+                    dict(env, MOJOLEARN_DOWN_NO_ARCHIVE='1'))
             record.update(status='complete', finished=time.time(), failed=doc.get('failed_recipes', []))
             save()
         journal.update(status='complete', finished=time.time())

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One frozen full measurement campaign on an already-owned DigitalOcean box."""
 import glob
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,12 +18,32 @@ def run(root):
     source.mkdir(exist_ok=True)
     with tarfile.open(root/'source.tar.gz') as archive:
         archive.extractall(source, filter='data')
-    # Track the actual frozen source bytes for the existing evidence collector.
+    # Sparse source checkout at the real frozen main commit. Verify every
+    # transferred file against Git's blob identity before hiding omitted data
+    # and historical evidence paths with skip-worktree bits.
     with (root/'source-install.log').open('w') as log:
-        for cmd in (['git', 'init', '-q'], ['git', 'add', '.'],
-                    ['git', '-c', 'user.name=Measurement Freeze', '-c', 'user.email=measurement@localhost',
-                     'commit', '-qm', 'Frozen main '+cfg['source_commit']]):
+        for cmd in (['git', 'init', '-q'],
+                    ['git', 'remote', 'add', 'origin', 'https://github.com/mojolearn/mojolearn.git'],
+                    ['git', 'fetch', '--depth=1', '--filter=blob:none', 'origin', cfg['source_commit']],
+                    ['git', 'update-ref', 'HEAD', 'FETCH_HEAD'], ['git', 'read-tree', 'HEAD']):
             subprocess.run(cmd, cwd=source, stdout=log, stderr=log, check=True)
+        tree = subprocess.check_output(['git', 'ls-tree', '-rz', 'HEAD'], cwd=source).split(b'\0')
+        omitted = []
+        for entry in tree:
+            if not entry:
+                continue
+            metadata, name = entry.split(b'\t', 1)
+            mode, kind, blob = metadata.split()
+            path = source/os.fsdecode(name)
+            if not path.is_file():
+                omitted.append(name)
+                continue
+            data = path.read_bytes()
+            actual = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest().encode()
+            if actual != blob:
+                raise RuntimeError('frozen source differs from main: '+os.fsdecode(name))
+        subprocess.run(['git', 'update-index', '--skip-worktree', '-z', '--stdin'], cwd=source,
+                       input=b'\0'.join(omitted)+b'\0', stdout=log, stderr=log, check=True)
     sys.path.insert(0, str(source/'tools'))
     import bench_board as B
     import bench_board_evidence as E

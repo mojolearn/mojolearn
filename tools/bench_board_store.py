@@ -14,7 +14,8 @@ board marked `source: stored (measured <UTC> on <box>, <device>)`.
 THE KEY (every field must be known, or the cell is neither reused nor
 stored):
 
-    box, machine          hostname and machine model (GPU name, else CPU model)
+    machine               machine model (GPU name, else CPU model)
+    box                   retained hostname provenance; never a reuse exclusion
     vendor, device, os    the board's vendor, the arm's device (and its name), the OS
     library, library_version   the version the arm's own worker imported
     family, lane, dataset, rows, neural_shape, arm
@@ -37,12 +38,12 @@ import hashlib
 import json
 import os
 
-KEY_FIELDS = ("box", "machine", "vendor", "device", "os", "library", "library_version",
+KEY_FIELDS = ("machine", "vendor", "device", "os", "library", "library_version",
               "family", "lane", "dataset", "rows", "neural_shape", "arm",
               "params_sha256", "settings_sha256", "data_sha256", "rounds")
 #: the fields known before any arm is constructed (the pre-filter: is there
 #: anything stored that could match, so constructing the arm is worth it?)
-PRE_FIELDS = ("box", "machine", "vendor", "os", "library", "family", "lane", "dataset", "rows",
+PRE_FIELDS = ("machine", "vendor", "os", "library", "family", "lane", "dataset", "rows",
               "neural_shape", "arm", "settings_sha256", "data_sha256", "rounds")
 #: key fields that may legitimately be None (not every race has them)
 OPTIONAL = ("rows", "neural_shape")
@@ -123,6 +124,6 @@ def stored_cell(record):
 
 
 def record(key, cell, *, measured_at, commit, params=None, infer_cells=None):
-    return {"key": {f: key.get(f) for f in KEY_FIELDS}, "measured_at": measured_at,
+    return {"key": dict({f: key.get(f) for f in KEY_FIELDS}, box=key.get("box")), "measured_at": measured_at,
             "commit": commit, "params": params, "cell": cell,
             "infer_cells": infer_cells or []}

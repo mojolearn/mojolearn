@@ -2066,3 +2066,31 @@ def test_reuse_requires_complete_retained_evidence_without_quality_gate():
     assert not bb.evidenced_opponent({'status': 'ok'})
     cell['measurement']['artifacts']['status'] = 'local'
     assert not bb.evidenced_opponent(cell)
+
+
+def test_hostname_is_provenance_not_an_opponent_reuse_exclusion(tmp_path):
+    ctx, race = _store_ctx(tmp_path)
+    rec = _stored_record(ctx, race, 'catboost-cpu')
+    key = dict(rec['key'], box='another-host')
+    assert bb.STORE.lookup({bb.STORE.key_id(rec['key']): rec}, key) is rec
+    assert rec['key']['box'] != key['box']
+
+
+def test_evidenced_backfill_uses_actual_worker_and_input_receipts(tmp_path):
+    m = _retained_measurement()
+    m.update(hardware={'status': 'verified', 'vendor': 'amd', 'host': 'original', 'os': 'Linux'},
+             dataset={'identity': 'input-hash'}, parameters={'params': {'alpha': 1}},
+             software={'version': '1.0'})
+    cell = {'status': 'ok', 'device': 'gpu', 'device_name': 'AMD Instinct Mi325X VF',
+            'arm': 'torch-eager-fp32', 'library': 'torch', 'rounds': 1, 'settings': {'seed': 7}, 'measurement': m}
+    board = {'box': {}, 'races': {'r': {'family': 'algos', 'lane': 'adafactor', 'dataset': 'synthetic', 'cells': [cell]}}}
+    path, store = tmp_path/'board.json', tmp_path/'store.jsonl'
+    path.write_text(json.dumps(board))
+    assert bb.backfill_evidenced_store(path, store) == 1
+    rec = next(iter(bb.STORE.load(store).values()))
+    assert rec['key']['box'] == 'original' and rec['key']['os'] == 'Linux'
+    assert rec['key']['machine'] == 'AMD Instinct MI325X'
+    assert rec['key']['data_sha256'] == 'input-hash'
+    m['hardware']['status'] = 'missing'
+    path.write_text(json.dumps(board))
+    assert bb.backfill_evidenced_store(path, store) == 0

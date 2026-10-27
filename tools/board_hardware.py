@@ -41,6 +41,8 @@ NOT_COMPARABLE = "NOT-COMPARABLE (different hardware)"
 
 # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
 BOXES = {
+    "do-nvidia": {"vendor": "nvidia", "gpu": "NVIDIA H100", "arch": "sm_90", "provider": "DO",
+                  "job_prefix": None, "column": "nvidia-h100"},
     "nv": {"vendor": "nvidia", "gpu": "NVIDIA L40S", "arch": "sm_89", "provider": "RunPod", "job_prefix": "n",
            "column": "nvidia-l40s", "note": "released 2026-10-09"},
     "nv2": {"vendor": "nvidia", "gpu": "NVIDIA L40S", "arch": "sm_89", "provider": "RunPod", "job_prefix": "v",
@@ -60,6 +62,7 @@ BOXES = {
 # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
 #: The main-board columns, one per GPU MODEL (never per vendor).
 COLUMNS = {
+    "nvidia-h100": {"vendor": "nvidia", "api": "cuda", "name": "NVIDIA H100"},
     "nvidia-l40s": {"vendor": "nvidia", "api": "cuda", "name": "NVIDIA L40S"},
     "amd-mi325x": {"vendor": "amd", "api": "hip", "name": "AMD Instinct MI325X"},
     "amd-mi300x": {"vendor": "amd", "api": "hip", "name": "AMD Instinct MI300X"},

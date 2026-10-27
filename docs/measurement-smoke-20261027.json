@@ -1,0 +1,324 @@
+{
+  "date": "2026-10-27",
+  "release": "0.8.62",
+  "scope": "Startup and effective algorithm/settings checks only. No fits or timed measurements in these smoke results.",
+  "vendors": {
+    "amd": {
+      "vendor": "amd",
+      "scope": "startup and settings only; no fits or timings",
+      "expected": 653,
+      "counts": {
+        "MATCHED": 454,
+        "REFUSED": 199
+      },
+      "neural": {
+        "MATCHED": 29
+      },
+      "sources": [
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-paired-0862/smoke/smoke.json",
+          "expected": 653,
+          "counts": {
+            "MATCHED": 409,
+            "REFUSED": 219,
+            "FAILED": 9,
+            "STARTED": 16
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-paired-repair-0862/smoke/smoke.json",
+          "expected": 25,
+          "counts": {
+            "MATCHED": 4,
+            "STARTED": 21
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-isolated-0862/smoke/smoke.json",
+          "expected": 21,
+          "counts": {
+            "REFUSED": 19,
+            "MATCHED": 2
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-loader-repair-0862/smoke/smoke.json",
+          "expected": 19,
+          "counts": {
+            "REFUSED": 19
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-lane-repair-0862/smoke/smoke.json",
+          "expected": 24,
+          "counts": {
+            "MATCHED": 20,
+            "REFUSED": 4
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-neural-repair-r2-0862/smoke/smoke.json",
+          "expected": 19,
+          "counts": {
+            "MATCHED": 19
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        }
+      ]
+    },
+    "nvidia": {
+      "vendor": "nvidia",
+      "scope": "startup and settings only; no fits or timings",
+      "expected": 653,
+      "counts": {
+        "MATCHED": 525,
+        "REFUSED": 128
+      },
+      "neural": {
+        "MATCHED": 29
+      },
+      "sources": [
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-paired-0862/smoke/smoke.json",
+          "expected": 653,
+          "counts": {
+            "MATCHED": 494,
+            "REFUSED": 150,
+            "FAILED": 9
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-paired-repair-0862/smoke/smoke.json",
+          "expected": 9,
+          "counts": {
+            "MATCHED": 9
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-lane-repair-0862/smoke/smoke.json",
+          "expected": 24,
+          "counts": {
+            "MATCHED": 22,
+            "REFUSED": 2
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/root/measure-smoke-20261027/run/campaign-generation-repair-0862/smoke/smoke.json",
+          "expected": 2,
+          "counts": {
+            "MATCHED": 2
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        }
+      ]
+    },
+    "apple": {
+      "vendor": "apple",
+      "scope": "startup and settings only; no fits or timings",
+      "expected": 653,
+      "counts": {
+        "MATCHED": 434,
+        "REFUSED": 219
+      },
+      "neural": {
+        "MATCHED": 23,
+        "REFUSED": 6
+      },
+      "sources": [
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/campaign-paired-0862/smoke/smoke.json",
+          "expected": 653,
+          "counts": {
+            "MATCHED": 412,
+            "REFUSED": 238,
+            "FAILED": 2,
+            "STARTED": 1
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/campaign-lane-repair-0862/smoke/smoke.json",
+          "expected": 27,
+          "counts": {
+            "MATCHED": 20,
+            "REFUSED": 5,
+            "FAILED": 1,
+            "STARTED": 1
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        },
+        {
+          "path": "/Users/andrewhendel/mojolearn-evidence/measurement-smoke-20261027/run2/apple/campaign-generation-repair-0862/smoke/smoke.json",
+          "expected": 2,
+          "counts": {
+            "MATCHED": 2
+          },
+          "checks": {
+            "arm-venvs": "ok",
+            "data": "ok",
+            "drivers-import": "ok",
+            "gpu-set": "ok",
+            "mamba-ssm": "ok",
+            "neural-fixtures": "ok",
+            "source-snapshot": "ok",
+            "stage": "ok",
+            "wheel": "ok"
+          },
+          "retention_pending": "copy full evidence to Mac and R2 before admission or teardown"
+        }
+      ]
+    }
+  },
+  "policy": {
+    "refused": "skip with retained reason; never timed",
+    "recipe_failure": "record and continue; aggregate failure at end",
+    "shared_setup_or_retention_failure": "stop and preserve existing work"
+  },
+  "retention": {
+    "amd": "measurements/box-archive/measurement-smoke-amd/measurement-smoke-amd-20261027T0742Z.tgz",
+    "nvidia": "measurements/box-archive/measurement-smoke-nvidia/measurement-smoke-nvidia-20261027T0756Z.tgz",
+    "apple": "measurements/measurement-smoke-20261027/apple-final-smoke-evidence.tar.gz"
+  },
+  "release_publication": "https://github.com/mojolearn/mojolearn/releases/tag/alpha-api-0.8.62-20261027",
+  "measurement_campaign": "Full AMD then NVIDIA on DigitalOcean requested separately; no timing success claimed by this smoke summary."
+}

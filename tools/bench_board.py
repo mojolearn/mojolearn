@@ -2997,6 +2997,8 @@ def _device_text(box, arm, vendor, device_name=None):
     the name its own worker reported (a CPU arm: the box's CPU model)."""
     dev = arm_device(arm, vendor)
     name = device_name if dev == "gpu" else (box.get("host") or {}).get("cpu_model")
+    if dev == "gpu":
+        name = HW.canonical_model(name) or name
     return "%s (%s)" % (dev, name) if name else None
 
 
@@ -3053,7 +3055,7 @@ def opponent_key(box, race, arm, settings, data_sha, rounds, params=None, versio
     """The store key of one opponent arm. `params` is its canonical read-back
     (BOARD-PARAMS), `version` and `device_name` what its own worker reported."""
     vendor = (box.get("gpu") or {}).get("vendor")
-    return {"box": (box.get("host") or {}).get("hostname"), "machine": _machine(box),
+    return {"box": (box.get("host") or {}).get("hostname"), "machine": HW.canonical_model(_machine(box)) or _machine(box),
             "vendor": vendor, "device": _device_text(box, arm, vendor, device_name),
             "os": (box.get("os") or {}).get("platform"),
             "library": arm_library(arm), "library_version": version,
@@ -3572,6 +3574,40 @@ def backfill_store(board_json, store_path):
                 params=params.get(c.get("arm")), infer_cells=infer))
             imported += 1
     return imported, skipped
+
+
+def backfill_evidenced_store(board_json, store_path):
+    """Recover GPU candidates from per-cell receipts on an aggregated board.
+
+    Aggregated boards lack a single host/OS/data receipt. Never substitute the
+    aggregate's synthetic box for the actual worker and input evidence.
+    """
+    board = load_result(board_json) or {}
+    imported = 0
+    for rr in board.get("races", {}).values():
+        for cell in rr.get("cells", []):
+            if cell.get("library") == "mojolearn" or not evidenced_opponent(cell):
+                continue
+            m = cell["measurement"]
+            hw, data, params = m.get("hardware") or {}, m.get("dataset") or {}, m.get("parameters") or {}
+            if hw.get("status") != "verified" or cell.get("device") != "gpu" or not params.get("params"):
+                continue
+            model = HW.canonical_model(cell.get("device_name"))
+            if not model:
+                continue
+            box = {"host": {"hostname": hw.get("host")}, "os": {"platform": hw.get("os")},
+                   "gpu": {"vendor": hw.get("vendor"), "name": model}}
+            race = {"family": rr.get("family"), "lane": rr.get("lane"), "dataset": rr.get("dataset"),
+                    "rows": rr.get("rows"), "shape": rr.get("shape")}
+            key = opponent_key(box, race, cell.get("arm"), cell.get("settings"), data.get("identity"),
+                               cell.get("rounds"), params=params["params"],
+                               version=(m.get("software") or {}).get("version"), device_name=cell.get("device_name"))
+            if STORE.missing(key):
+                continue
+            STORE.append(store_path, STORE.record(key, cell, measured_at=rr.get("finished"),
+                         commit=(m.get("source") or {}).get("commit"), params=params))
+            imported += 1
+    return imported
 
 
 def note_host_memory(rec, kills, arms):
