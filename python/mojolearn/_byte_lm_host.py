@@ -294,16 +294,16 @@ class LanguageModelInference:
     @property
     def shape(self):
         """The model dimensions, a :class:`~mojolearn.LanguageModelConfig`."""
-        return self._shape
+        return _HOST_TRAIN(self, "shape", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def profile(self):
         """The name of the arithmetic profile the CPU binding computes."""
-        return str(self._binding.byte_lm_host_profile(self._native))
+        return _HOST_TRAIN(self, "profile", (), _HOST_TRAIN_CONTEXT)
 
     def parameters_sha256(self):
         """SHA-256 of the parameters' little-endian float32 bytes."""
-        return _parameters_sha256(self._parameters)
+        return _HOST_TRAIN(self, "parameters_sha256", (), _HOST_TRAIN_CONTEXT)
 
     def logits(self, ids, *, lengths=None, threaded=None, threads=None):
         """Float32 logits for every position.
@@ -327,23 +327,7 @@ class LanguageModelInference:
         -------
         Array of shape (batch, length, vocab_size), float32
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            return _ragged.ragged_forward(
-                lambda padded: self.logits(padded, threaded=threaded, threads=threads),
-                raw, None, lengths, '<i4', 'LanguageModelInference.logits')[0]
-        flag = self._threads_flag(threaded)
-        count = self._threads_arg(threads)
-        tokens, _ = _logits_ids(ids, self._shape)
-        batch, length = tokens.shape
-        out = zeros((batch, length, self._shape.vocab_size), '<f4')
-        written = self._binding.byte_lm_host_logits(
-            [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
-             addr(out, name='logits')],
-            [batch, length], self._native, flag, count)
-        if int(written) != batch * length * self._shape.vocab_size:
-            raise RuntimeError('byte LM host wrote an unexpected number of logits')
-        return out
+        return _HOST_TRAIN(self, "logits", (ids, lengths, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     def loss_bits(self, ids, *, threaded=None, threads=None):
         """IEEE-754 bit pattern of the mean next-token loss.
@@ -363,21 +347,11 @@ class LanguageModelInference:
         int
             The float32 loss's bits, for exact comparison.
         """
-        flag = self._threads_flag(threaded)
-        count = self._threads_arg(threads)
-        tokens, _ = as_i32_c(ids, ndim=2, name='ids')
-        if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
-            raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
-        _refuse_ids(tokens, self._shape.vocab_size, self._shape.batch, self._shape.length + 1,
-                    self._shape.length)
-        return int(self._binding.byte_lm_host_loss(
-            [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids')],
-            self._native, flag, count))
+        return _HOST_TRAIN(self, "loss_bits", (ids, None, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     def loss(self, ids, *, threaded=None, threads=None):
         """Mean next-token loss as a float; see :meth:`loss_bits`."""
-        bits = self.loss_bits(ids, threaded=threaded, threads=threads)
-        return struct.unpack('<f', struct.pack('<I', bits))[0]
+        return _HOST_TRAIN(self, "inference_loss", (ids, None, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     def next_bytes(self, ids, *, lengths=None, threaded=None, threads=None):
         """Greedy next token after each row.
@@ -401,27 +375,8 @@ class LanguageModelInference:
         list of int
             One token id per row.
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            logits, lens = _ragged.ragged_forward(
-                lambda padded: self.logits(padded, threaded=threaded, threads=threads),
-                raw, None, lengths, '<i4', 'LanguageModelInference.next_bytes')
-            return _greedy_next_bytes(_ragged.last_real_rows(logits, lens, 'LanguageModelInference.next_bytes'))
-        flag = self._threads_flag(threaded)
-        entry = getattr(self._binding, 'byte_lm_host_next', None)
-        if flag and callable(entry):
-            count = self._threads_arg(threads)
-            tokens, _ = _logits_ids(ids, self._shape)
-            batch, length = tokens.shape
-            out = zeros((batch,), '<i4')
-            written = entry(
-                [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
-                 addr(out, name='next_bytes')],
-                [batch, length], self._native, count)
-            if int(written) != batch:
-                raise RuntimeError('byte LM host wrote an unexpected number of next bytes')
-            return list(flat_view(out, 'i'))
-        return _greedy_next_bytes(self.logits(ids, threaded=threaded, threads=threads))
+        return _HOST_TRAIN(self, "next_bytes", (ids, lengths, threaded, threads), _HOST_TRAIN_CONTEXT)
+
 
 
 class LanguageModelHostTrainer:
@@ -535,6 +490,7 @@ def _connect_host_trainer():
     except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
         binding = type(error).__name__ + ": " + str(error)
     context.update(byte_lm_host_trainer_class=LanguageModelHostTrainer,
+                   byte_lm_host_inference_class=LanguageModelInference,
                    byte_lm_config_class=ByteLanguageModelConfig, byte_lm_host_binding=binding,
                    byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES)
     return _binding()._module.byte_lm_host_trainer_call, context

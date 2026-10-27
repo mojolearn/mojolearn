@@ -4,6 +4,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.classical_pandas import classical_admit_value
+from bindings.native_buffer_owner import native_buffer_view
 
 
 def _b() raises -> PythonObject:
@@ -154,3 +156,36 @@ def _shape_of(state: PythonObject) raises -> _Shape:
 
 
 # ---------------------------------------------------------------- inputs and outputs
+
+
+def byte_lm_lengths(source: PythonObject, batch: Int, length: Int, context: PythonObject) raises -> List[Int]:
+    # Native scalar admission preserves integer index types (including NumPy
+    # integers in lists) without permitting user-defined index callbacks.
+    classical_admit_value(source, context)
+    var bi = _b()
+    var cls = py_type(source)
+    var values = source
+    if cls is context["array_class"]:
+        if len(source.shape) != 1:
+            raise Error("lengths must be one-dimensional")
+        values = source._mv
+    elif cls is not bi.list and cls is not bi.tuple and cls is not bi.range:
+        values = native_buffer_view(source)
+        if Int(py=values.ndim) != 1:
+            raise Error("lengths must be one-dimensional")
+    if len(values) != batch:
+        raise Error("one length is required per batch row")
+    var result = List[Int]()
+    for i in range(batch):  # driver-loop: over one admitted length metadata word per sequence
+        var value = values[i]
+        if py_type(value) is bi.bool or String(py=py_type(value).__name__) == "bool_":
+            raise Error("TypeError: lengths entries must be integers, not booleans")
+        var scalar = PythonObject(None)
+        try:
+            scalar = py_call(native_loaded_module("operator").index, value)
+        except:
+            raise Error("TypeError: lengths entries must be integers")
+        if Bool(py=scalar < PythonObject(1)) or Bool(py=scalar > PythonObject(length)):
+            raise Error("lengths must be in [1, L]")
+        result.append(Int(py=scalar))
+    return result^

@@ -20,10 +20,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.native_buffer_owner import native_storage_allocate
-from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of
+from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths
 from providers.python.training_buffer_pyapi import training_f32_cast_owned
 from core.training_state_validation import training_byte_shape_validate
 from core.sha256 import sha256_hex_addr
+from bindings.tsa_hw_native import tsa_array
+from core.neural_block_public_impl import neural_copy_row_prefixes
+from core.host_helpers_impl import argmax_rows_f32
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -236,7 +239,7 @@ def byte_lm_host_from_state(cls: PythonObject, args: PythonObject, context: Pyth
 
 
 def byte_lm_host_metadata(trainer: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
-    if py_type(trainer) is not context["byte_lm_host_trainer_class"]:
+    if py_type(trainer) is not context["byte_lm_host_trainer_class"] and py_type(trainer) is not context["byte_lm_host_inference_class"]:
         raise Error("TypeError: host metadata requires the connected native trainer class")
     var fields = py_fields(trainer)
     if operation == "profile":
@@ -249,6 +252,122 @@ def byte_lm_host_metadata(trainer: PythonObject, operation: String, context: Pyt
     if operation == "completed_steps":
         name = "_completed"
     return fields[name]
+
+
+def _host_threads(fields: PythonObject, threaded: PythonObject, threads: PythonObject) raises -> Tuple[Int, Int]:
+    var bi = native_loaded_module("builtins")
+    var flag = fields["_threaded"] if threaded is None else threaded
+    if py_type(flag) is not bi.bool:
+        raise Error("TypeError: threaded must be a bool or None")
+    var selected = fields["_threads"] if threads is None else threads
+    var count = 0
+    if selected is not None:
+        if py_type(selected) is not bi.int:
+            raise Error("TypeError: threads must be an int or None")
+        count = Int(py=selected)
+        if count < 1 or count > 1024:
+            raise Error("threads must be in [1, 1024]")
+    return (1 if Bool(py=flag) else 0, count)
+
+
+def byte_lm_host_infer(model: PythonObject, operation: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    if py_type(model) is not context["byte_lm_host_inference_class"]:
+        raise Error("TypeError: host inference requires the connected native model class")
+    classical_connect_numpy(context)
+    var fields = py_fields(model)
+    var threaded = _host_threads(fields, args[2], args[3])
+    var words = _host_words(fields, threaded[0], threaded[1])
+    var provider = _host_provider(fields)
+    var is_loss = operation == "loss_bits" or operation == "inference_loss"
+    classical_admit_value(args[0], context)
+    classical_admit_value(args[1], context)
+    var value = classical_input(args[0], context, "ids")
+    var dims = value.shape
+    var strides = value.strides
+    if len(dims) != 2:
+        raise Error("ids must be a two-dimensional array")
+    var batch = Int(py=dims[0])
+    var length = Int(py=dims[1])
+    var vocab = words[8]
+    if is_loss:
+        if batch != words[0] or length != words[1] + 1:
+            raise Error("ids must be [" + String(words[0]) + ", " + String(words[1] + 1) + "]")
+    elif batch < 1 or batch > 1048576 or length < 1 or length > words[1]:
+        raise Error("ids must be [batch, 1.." + String(words[1]) + "]")
+    var item = Int(py=value.itemsize)
+    var kind = classical_cast_kind(value, item, "ids", context)
+    var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
+    var token_address = Int(py=classical_address(tokens))
+    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+        batch, length, item, kind, _I32P(unsafe_from_address=token_address))
+    _ = value^
+    var sizes = List[Int](length=batch, fill=length)
+    if args[1] is not None:
+        sizes = byte_lm_lengths(args[1], batch, length, context)
+        var padded = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
+        neural_copy_row_prefixes(Int(py=classical_address(padded)), token_address, sizes, batch, length, 1)
+        tokens = padded
+        token_address = Int(py=classical_address(tokens))
+    var bad = neural_first_bad_id(_I32P(unsafe_from_address=token_address), batch, length, vocab,
+        length - 1 if is_loss else -1, _IGNORE_INDEX)
+    if bad >= 0:
+        var found = Int(_I32P(unsafe_from_address=token_address)[bad])
+        raise Error("ids must be byte values in [0, " + String(vocab) + "); got " + String(found)
+            + " at row " + String(bad // length) + ", position " + String(bad % length))
+    var parameters = fields["_parameters"]
+    var addresses: List[Int] = [Int(py=classical_address(parameters)), token_address]
+    words[12] = batch
+    words[13] = length
+    if is_loss:
+        var bits = neural_descriptor_execute(provider, 2, addresses, words, List[Float64](), False)
+        _ = tokens
+        _ = parameters
+        if operation == "inference_loss":
+            return PythonObject(Float64(bitcast[DType.float32](UInt32(bits))))
+        return PythonObject(bits)
+    if operation == "next_bytes" and args[1] is None and threaded[0] == 1:
+        var next = tsa_array("i", "<i4", Python.tuple(batch), batch, 4, context)
+        var next_address = Int(py=classical_address(next))
+        addresses.append(next_address)
+        var written = neural_descriptor_execute(provider, 1, addresses, words, List[Float64](), False)
+        if written != batch:
+            raise Error("RuntimeError: byte LM host wrote an unexpected number of next bytes")
+        var output = Python.list()
+        var ids = _I32P(unsafe_from_address=next_address)
+        for row in range(batch):  # driver-loop: over completed next-token results, publishing one per batch row
+            _ = py_call(output.append, Int(ids[row]))
+        _ = next
+        _ = tokens
+        _ = parameters
+        return output
+    if batch * length > 268435456 // vocab:
+        raise Error("byte LM host: logits exceed the admitted span")
+    var out = tsa_array("f", "<f4", Python.tuple(batch, length, vocab), batch * length * vocab, 4, context)
+    var out_address = Int(py=classical_address(out))
+    addresses.append(out_address)
+    var written = neural_descriptor_execute(provider, 0, addresses, words, List[Float64](), False)
+    if written != batch * length * vocab:
+        raise Error("RuntimeError: byte LM host wrote an unexpected number of logits")
+    _ = tokens
+    _ = parameters
+    if operation == "next_bytes":
+        var indices = List[Int64](length=batch, fill=0)
+        var source = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_address)
+        for row in range(batch):  # driver-loop: over admitted sequences, selecting each native result row
+            argmax_rows_f32(source + (row * length + sizes[row] - 1) * vocab, 1, vocab,
+                MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(indices.unsafe_ptr()) + row * 8))
+        var output = Python.list()
+        for row in range(batch):  # driver-loop: over completed next-token results, publishing one per batch row
+            _ = py_call(output.append, Int(indices[row]))
+        _ = out
+        return output
+    if args[1] is not None:
+        var padded = tsa_array("f", "<f4", Python.tuple(batch, length, vocab), batch * length * vocab, 4, context)
+        neural_copy_row_prefixes(Int(py=classical_address(padded)), out_address, sizes, batch, length, vocab)
+        _ = out
+        return padded
+    return out
 
 
 def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -319,6 +438,8 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
+        if operation == "logits" or operation == "next_bytes" or operation == "loss_bits" or operation == "inference_loss":
+            return byte_lm_host_infer(call[0], operation, call[2], call[3]).steal_data()
         if operation == "construct":
             return byte_lm_host_construct(call[0], call[2], call[3]).steal_data()
         if operation == "from_state":
