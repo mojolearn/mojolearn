@@ -19,7 +19,9 @@ def test_reuse_checks_exact_factory_module_and_session_admission_identity():
     assert 'held[].factory is factory' in neural
     assert 'held[].module is factory.__self__' in neural
     assert 'held[].name == name' in neural
-    assert 'return neural_descriptor_connect(factory, name)' in neural
+    assert 'return neural_descriptor_connect(factory, name, operation_count)' in neural
+    assert 'len(held[].calls) == operation_count' in neural
+    assert 'operation_count < 1' in neural
 
 
 def test_existing_mode_vendor_and_factory_admission_precedes_reuse():
