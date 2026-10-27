@@ -13,6 +13,7 @@ step (`byte_lm_trainer_run`). The same compiled entries with the same
 argument words as the Python bodies, so the step keeps its bits.
 """
 from std.memory import memcpy
+from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -20,7 +21,7 @@ from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_info
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_info, neural_descriptor_construct
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
@@ -326,7 +327,7 @@ def _provider(fields: PythonObject, binding: PythonObject) raises -> PythonObjec
     if factory is None:
         return PythonObject(None)
     var provider = neural_descriptor_reuse(py_get(fields, "_native_provider"), factory,
-        "mojolearn.training.byte_lm.v1", 8)
+        "mojolearn.training.byte_lm.v1", 10)
     py_setitem(fields, "_native_provider", provider)
     return provider
 
@@ -541,7 +542,7 @@ def _after_failure(fields: PythonObject) raises:
         _mark_lost(fields)
 
 
-def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject) raises -> PythonObject:
+def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
     var b = _b()
     var lost = fields["_lost_at"]
     if lost is not None:
@@ -556,17 +557,18 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
         raise Error("ImportError: Byte-LM binding lacks owned sessions (" + missing + "); rebuild bindings/build_byte_lm.sh")
     var state = fields["_state"]
     var completed = Int(py=state["completed_steps"])
-    if completed >= _MAX_STEP:
+    if train and completed >= _MAX_STEP:
         raise Error("ValueError: Byte-LM native call step counter is exhausted")
+    var provider = _provider(fields, binding)
     if fields["_native_session"] is None:
-        py_setitem(fields, "_native_session", py_call(binding.byte_lm_session_create))
+        py_setitem(fields, "_native_session", neural_descriptor_construct(provider, binding.byte_lm_session_create) if provider is not None else py_call(binding.byte_lm_session_create))
         py_setitem(fields, "_session_binding", binding)
         py_setitem(fields, "_session_open", False)
         py_setitem(fields, "_grad_step", -1)
     var session = fields["_native_session"]
-    var full = String(py=fields["_step_result"]) == "full"
+    var full = train and String(py=fields["_step_result"]) == "full"
     var out_loss = _f32(1, context)
-    var out_flags = _i32(shape.n_tensors(), context)
+    var out_flags = _i32(shape.n_tensors(), context) if train else PythonObject(None)
     var grads = _gradient_outputs(shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
     var addresses = Python.list(classical_address(tokens), classical_address(state["flags"]))
     if Bool(py=fields["_session_open"]):
@@ -577,7 +579,7 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
             _ = py_call(addresses.append, classical_address(state[key]))
     _ = py_call(addresses.append, classical_address(out_loss))
     _ = out_loss  # keep the Python object alive through the native call above
-    _ = py_call(addresses.append, classical_address(out_flags))
+    _ = py_call(addresses.append, classical_address(out_flags) if train else PythonObject(0))
     _ = out_flags  # keep the Python object alive through the native call above
     _ = out_loss  # keep the Python object alive through the native call above
     _ = py_call(addresses.append, classical_address(grads[0]) if full else PythonObject(0))
@@ -592,11 +594,10 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
     py_setitem(fields, "_grad_step", -1)
     var returned = PythonObject(None)
     try:
-        var provider = _provider(fields, binding)
         if provider is not None:
-            returned = PythonObject(_native_execute(fields, binding, provider, 1, addresses, shape, state, True))
+            returned = PythonObject(_native_execute(fields, binding, provider, 1, addresses, shape, state, train))
         else:
-            returned = py_call_typed(binding.byte_lm_trainer_step, session, addresses, _parameters(state, True),
+            returned = py_call_typed(binding.byte_lm_trainer_step, session, addresses, _parameters(state, train),
                                      shape.native_shape())
         _ = out_flags  # keep the Python object alive through the native call above
         _ = out_loss  # keep the Python object alive through the native call above
@@ -604,10 +605,12 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
         _after_failure(fields)
         raise error^
     _adopt_open(fields)
-    var expected = completed + 1
+    var expected = completed + Int(train)
     if py_type(returned) is not b.int or Int(py=returned) != expected:
         _mark_lost(fields)
         raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
+    if not train:
+        return PythonObject(_loss(out_loss))
     var result = b.dict()
     py_setitem(result, "loss", _loss(out_loss))
     py_setitem(result, "step", expected)
@@ -626,10 +629,10 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, bin
     return result
 
 
-def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject) raises -> PythonObject:
+def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
     var b = _b()
     var state = fields["_state"]
-    if Int(py=state["completed_steps"]) >= _MAX_STEP:
+    if train and Int(py=state["completed_steps"]) >= _MAX_STEP:
         raise Error("ValueError: Byte-LM native call step counter is exhausted")
     var entry = String(py=context["byte_lm_run_entry"])
     if not _has(binding, entry):
@@ -640,23 +643,42 @@ def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, bi
     var out_v = _f32(n, context)
     var out_flags = _i32(shape.n_tensors(), context)
     var out_loss = _f32(1, context)
-    var grads = _gradient_outputs(shape, True, context)
+    var grads = _gradient_outputs(shape, True, context) if train else Python.tuple(PythonObject(None), b.dict())
     var flat = grads[0]
     var by_name = grads[1]
     var addresses = Python.list()
     for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(the four named state arrays)
         _ = py_call(addresses.append, classical_address(state[key]))
     for value in [tokens, out_p, out_m, out_v, flat, out_flags, out_loss]:  # small-loop(the step's seven buffers)
-        _ = py_call(addresses.append, classical_address(value))
+        _ = py_call(addresses.append, classical_address(value) if value is not None else PythonObject(0))
     var named = Python.list()
     var keys = py_call(b.list, by_name)
     for i in range(len(keys)):  # driver-loop: one address per model parameter tensor
         _ = py_call(named.append, classical_address(by_name[keys[i]]))
-    var completed = py_call_typed(py_call(b.getattr, binding, entry), addresses, named, _parameters(state, True),
+    var provider = _provider(fields, binding)
+    var completed: PythonObject
+    if provider is not None:
+        var session = neural_descriptor_construct(provider, binding.byte_lm_session_create)
+        var handle = neural_descriptor_handle(provider, binding.byte_lm_native_session_handle_v1, session)
+        var descriptors: List[Int] = [handle]
+        for i in range(len(addresses)):  # small-loop(stateless buffers)
+            descriptors.append(Int(py=addresses[i]))
+        for i in range(len(named)):  # driver-loop: named gradient buffers
+            descriptors.append(Int(py=named[i]))
+        var locked_teardown = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
+        var plan = _native_plan(shape, state, train, 0, 0, locked_teardown)
+        completed = PythonObject(neural_descriptor_execute(provider, 8, descriptors, plan[0], plan[1]))
+        if locked_teardown:
+            _ = neural_descriptor_execute(provider, 9, [handle], List[Int](), List[Float64](), False)
+        _ = session
+    else:
+        completed = py_call_typed(py_call(b.getattr, binding, entry), addresses, named, _parameters(state, train),
                                   shape.native_shape())
-    var expected = Int(py=state["completed_steps"]) + 1
+    var expected = Int(py=state["completed_steps"]) + Int(train)
     if py_type(completed) is not b.int or Int(py=completed) != expected:
         raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
+    if not train:
+        return PythonObject(_loss(out_loss))
     var committed = py_call(b.dict, state)
     py_setitem(committed, "parameters", out_p)
     py_setitem(committed, "m", out_m)
@@ -810,7 +832,7 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
     return PythonObject(None)
 
 
-def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject, train: Bool = True) raises -> PythonObject:
     """`train_step(ids)`: `with self._lock: return self._run(ids, True)`."""
     classical_connect_numpy(context)
     var fields = py_fields(trainer)
@@ -824,9 +846,9 @@ def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: Pytho
         var binding = _binding(fields, shape, context)
         try:
             if _is_resident(fields, binding, context):
-                result = _run_resident(fields, tokens, shape, binding, context)
+                result = _run_resident(fields, tokens, shape, binding, context, train)
             else:
-                result = _run_stateless(fields, tokens, shape, binding, context)
+                result = _run_stateless(fields, tokens, shape, binding, context, train)
         except error:
             var text = String(error)
             if not text.startswith("ValueError:") and text.find(_TOKEN_REFUSAL) >= 0:
@@ -959,7 +981,7 @@ def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObj
             if lost is not None:
                 raise Error("RuntimeError: Byte-LM session lost at step " + _text(lost[0]) + "; last exported state is step " + _text(lost[1]))
             if fields["_native_session"] is None:
-                py_setitem(fields, "_native_session", py_call(binding.byte_lm_session_create))
+                py_setitem(fields, "_native_session", neural_descriptor_construct(provider, binding.byte_lm_session_create) if provider is not None else py_call(binding.byte_lm_session_create))
                 py_setitem(fields, "_session_binding", binding)
                 py_setitem(fields, "_session_open", False)
                 py_setitem(fields, "_grad_step", -1)
@@ -1020,8 +1042,8 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
         var operation = String(py=call[1])
         if operation == "construct":
             return byte_lm_construct(call[0], call[2], call[3]).steal_data()
-        if operation == "train_step":
-            return byte_lm_train_step(call[0], call[2], call[3]).steal_data()
+        if operation == "train_step" or operation == "evaluate":
+            return byte_lm_train_step(call[0], call[2], call[3], operation == "train_step").steal_data()
         if operation == "logits" or operation == "next_bytes":
             return byte_lm_logits(call[0], call[2], call[3], operation == "next_bytes").steal_data()
         if operation == "native_provider_info":

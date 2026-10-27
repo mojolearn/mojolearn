@@ -15,7 +15,10 @@ def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[
         stride *= shape[axis]
     var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=target)
     if contiguous:
-        memcpy(dest=dst, src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source), count=count)
+        # Ordinary buffers may start at an unaligned byte offset. Copy bytes
+        # without inventing an alignment guarantee for the admitted source.
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source), count=count * 4)
     else:
         for i in range(count):  # cpu-route: byte-preserving strided input admission
             var index = i
@@ -24,7 +27,8 @@ def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[
                 var axis = len(shape) - 1 - k
                 address += (index % shape[axis]) * strides[axis]
                 index //= shape[axis]
-            dst[i] = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)[0]
+            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
+            dst[i] = UInt32(bytes[0]) | (UInt32(bytes[1]) << 8) | (UInt32(bytes[2]) << 16) | (UInt32(bytes[3]) << 24)
     for i in range(count):  # cpu-route: existing finite-input admission on copied words
         if (dst[i] & UInt32(0x7f800000)) == UInt32(0x7f800000):
             raise Error(name + " must be finite float32")

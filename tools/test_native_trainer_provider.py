@@ -40,7 +40,7 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
     import ast
     source=(ROOT/'python/mojolearn/_byte_lm_impl.py').read_text()
     cls=next(node for node in ast.parse(source).body if isinstance(node,ast.ClassDef) and node.name=='SmallByteLanguageModelTrainer')
-    for name in ('logits','next_bytes','train_step'):
+    for name in ('logits','next_bytes','train_step','evaluate'):
         method=next(node for node in cls.body if isinstance(node,ast.FunctionDef) and node.name==name)
         body=method.body[1:] if isinstance(method.body[0],ast.Expr) and isinstance(method.body[0].value,ast.Constant) else method.body
         assert len(body)==1 and isinstance(body[0],ast.Return)
@@ -104,3 +104,21 @@ def test_linalg_gemm_uses_shared_native_transport():
     assert 'result = gemm_native(' in binding
     assert 'result = gemm_bf16_native(' in binding
     assert 'result = gemm_int8_native(' in binding
+
+
+def test_byte_lm_stateless_owner_and_locked_finalization_share_transport():
+    native=(ROOT/'training/byte_lm_stateless_run.mojo').read_text()
+    assert 'std.python' not in native and 'PythonObject' not in native
+    assert 'byte_train_step(ctx,' in native and 'byte_eval_loss(ctx,' in native
+    binding=(ROOT/'bindings/_mojolearn_byte_lm.mojo').read_text()
+    owner=binding.split('def _byte_lm_run(')[1].split('def _read_addresses(')[0]
+    assert 'byte_lm_run_native(' in owner and 'byte_lm_run_finalize(session)' in owner
+    assert 'byte_train_step(ctx,' not in owner
+    door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
+    stateless=door.split('def _run_stateless(')[1].split('def byte_lm_construct(')[0]
+    assert 'neural_descriptor_execute(provider, 8,' in stateless
+    assert 'neural_descriptor_execute(provider, 9,' in stateless
+    assert 'neural_descriptor_construct(provider, binding.byte_lm_session_create)' in stateless
+    common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    assert 'release_gil: Bool = True' in common
+    assert '_neural_descriptor_admit_entry(provider, factory)' in common

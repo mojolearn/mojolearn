@@ -110,14 +110,24 @@ def neural_descriptor_cached(
     return result
 
 
-def neural_descriptor_handle(provider: PythonObject, factory: PythonObject, value: PythonObject) raises -> Int:
-    # Shared setup-only admission of an engine's typed native state. The engine
-    # checks its exact value type; providers must retain value and provider for
-    # every subsequent use. No generic CPython object-layout cast is permitted.
+def _neural_descriptor_admit_entry(provider: PythonObject, factory: PythonObject) raises:
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var bi = native_loaded_module("builtins")
     if py_type(factory) is not py_type(bi.len) or factory.__self__ is not owner[].module:
         raise Error("TypeError: native state admission requires the provider's compiled entry")
+
+
+def neural_descriptor_construct(provider: PythonObject, factory: PythonObject) raises -> PythonObject:
+    # A no-argument compiled state constructor is lifetime admission only;
+    # subsequent computation uses the descriptor table rather than this door.
+    _neural_descriptor_admit_entry(provider, factory)
+    return py_call(factory)
+
+
+def neural_descriptor_handle(provider: PythonObject, factory: PythonObject, value: PythonObject) raises -> Int:
+    # The engine checks the exact value type. Retain value and provider for each
+    # subsequent handle use; never unwrap a generic extension object layout.
+    _neural_descriptor_admit_entry(provider, factory)
     var handle = Int(py=py_call(factory, value))
     if handle == 0:
         raise Error("native provider: state admission returned a null handle")
@@ -131,13 +141,19 @@ def neural_descriptor_matches(provider: PythonObject, canonical: PythonObject) r
 
 def neural_descriptor_execute(
     provider: PythonObject, operation: Int, addresses: List[Int], ints: List[Int], floats: List[Float64],
+    release_gil: Bool = True,
 ) raises -> Int:
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     if operation < 0 or operation >= len(owner[].calls):
         raise Error("neural native ABI: unknown operation")
     owner[].calls[operation] += 1
     var result = 0
-    with GILReleased(Python()):
+    if release_gil:
+        with GILReleased(Python()):
+            result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
+    else:
+        # Only resource finalization whose existing ownership contract requires
+        # the admission lock uses this branch; native computation keeps True.
         result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
     _ = provider
     return result
