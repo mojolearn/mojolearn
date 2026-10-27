@@ -1,0 +1,1 @@
+PASS: both real fault proofs replay locally and from portable objects without contaminating JSON stdout

@@ -8,6 +8,7 @@ runtime edits.
 import hashlib
 import io
 import json
+from contextlib import redirect_stdout
 from pathlib import Path
 import tempfile
 import xml.etree.ElementTree as ET
@@ -152,9 +153,14 @@ def verifier_update(reference):
                 path = Path(directory) / (key + '.json')
                 path.write_bytes(evidence.read_bytes(reuse.checked_ref(proof[key])))
                 paths.append(path)
-            failures = coverage_sabotage.check(coverage_sabotage.arms()[arm], *paths,
-                                               batch_bindings=proof['batch_bindings'])
-        require(not failures, 'verifier fault proof failed: ' + str(failures))
+            # This validator also runs inside JSON-producing publication CLIs.
+            # The checker is a human-facing CLI; retain its diagnostic text on
+            # failure without corrupting the caller's machine-readable stdout.
+            diagnostic = io.StringIO()
+            with redirect_stdout(diagnostic):
+                failures = coverage_sabotage.check(coverage_sabotage.arms()[arm], *paths,
+                                                   batch_bindings=proof['batch_bindings'])
+        require(not failures, 'verifier fault proof failed: ' + diagnostic.getvalue())
         previous, clean = reuse.read(proof['previous_clean']), reuse.read(proof['clean'])
         require(previous['cells'][cell]['hashes'] == clean['cells'][cell]['hashes'],
                 'fixture repair changed reference outputs')
