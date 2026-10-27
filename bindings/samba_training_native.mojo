@@ -10,7 +10,7 @@ from bindings.samba_state_native import samba_fields, samba_entries, samba_from_
 from bindings.neural_prefill_native import neural_prefill_forward, neural_prefill_backward, neural_prefill_close
 from bindings.neural_block_public import neural_block_backward_binding
 from bindings.causal_lm_public import _native_function
-from bindings.py_balanced import py_call, py_setitem, py_type
+from bindings.py_balanced import py_call, py_setitem, py_type, py_get
 
 
 def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObject) raises -> PythonObject:
