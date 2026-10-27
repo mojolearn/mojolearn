@@ -13,8 +13,8 @@
     ],
     "wheels": {
       "mojolearn-core": "790fd8bb15322d40713ba745b00ae6c58a391fb42cff42ae8794bcee375920c8",
-      "mojolearn-nvidia": "b15d206fc791896ef4ffe52b46a84807631681d496473306e73ebbc4dc61f04f",
-      "mojolearn-nvidia-ptx": "8095c89b0a677f970238ccdf859f45fd75c13412e9f417bdcd0a7cbb1f43dfc1"
+      "mojolearn-nvidia": "d84fc78a074e27a8830248642d29eda3b5fabbb026375f856ccada487573c5af",
+      "mojolearn-nvidia-ptx": "e0b390090eebd5ac4ec07f4708212448a077291d0da6063ecc90f758a74691da"
     }
   },
   "version": "0.8.60",
@@ -51,12 +51,13 @@
         "sha256": "79e260ff0445724ce197918f95d954ecbf110d7da4a22da304b54849fe4fff2d"
       },
       "after": {
-        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
-        "sha256": "b15d206fc791896ef4ffe52b46a84807631681d496473306e73ebbc4dc61f04f"
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final-corrected/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "d84fc78a074e27a8830248642d29eda3b5fabbb026375f856ccada487573c5af"
       },
       "changed": [
         "mojolearn_nvidia-VERSION.dist-info/LINUX_PAYLOAD.json",
-        "mojolearn_nvidia-VERSION.dist-info/RECORD"
+        "mojolearn_nvidia-VERSION.dist-info/RECORD",
+        "mojolearn_nvidia-VERSION.dist-info/gpu_plugin.json"
       ]
     },
     "mojolearn-nvidia-ptx": {
@@ -65,12 +66,14 @@
         "sha256": "1e4021aff073067a333104752b203339923e35de1cf618b8f37a149903fe546e"
       },
       "after": {
-        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
-        "sha256": "8095c89b0a677f970238ccdf859f45fd75c13412e9f417bdcd0a7cbb1f43dfc1"
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final-corrected/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "e0b390090eebd5ac4ec07f4708212448a077291d0da6063ecc90f758a74691da"
       },
       "changed": [
+        "mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json",
         "mojolearn_nvidia_ptx-VERSION.dist-info/LINUX_PAYLOAD.json",
-        "mojolearn_nvidia_ptx-VERSION.dist-info/RECORD"
+        "mojolearn_nvidia_ptx-VERSION.dist-info/RECORD",
+        "mojolearn_nvidia_ptx-VERSION.dist-info/gpu_plugin.json"
       ]
     }
   },

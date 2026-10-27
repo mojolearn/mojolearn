@@ -1,0 +1,18 @@
+{
+  "original": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/ptx-stale-metadata-r1/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+    "sha256": "8095c89b0a677f970238ccdf859f45fd75c13412e9f417bdcd0a7cbb1f43dfc1"
+  },
+  "after": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+    "sha256": "b40ab779383d0611baf0f989d0f4bfcd3f74313479060f908f45dcf87b86c2a4"
+  },
+  "changed": [
+    "mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json",
+    "mojolearn_nvidia_ptx-0.8.60.dist-info/RECORD"
+  ],
+  "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+  "native_bytes_changed": false,
+  "compiler_invoked": false,
+  "reason": "Verifier-only refreeze updated the release inventory but omitted the matching PTX set source metadata. Correct the unpublished metadata; retain the old artifact and failure."
+}

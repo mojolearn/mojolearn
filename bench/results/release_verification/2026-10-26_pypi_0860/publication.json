@@ -1,0 +1,106 @@
+{
+  "version": "0.8.60",
+  "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+  "status": "published",
+  "confirmed_at": "2026-10-27T01:40:44.773526+00:00",
+  "artifacts": [
+    {
+      "project": "mojolearn",
+      "file": "mojolearn-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "9bb4f209c11447a9059b19af693d8d3749f372d963a74502f6e439a234375150",
+      "url": "https://files.pythonhosted.org/packages/dc/b5/90219e0db9457236fb414eb8c94156b6649a018ce6e3ee8ee93891756dc8/mojolearn-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "uploaded": "2026-10-27T01:29:46.983597Z"
+    },
+    {
+      "project": "mojolearn-amd",
+      "file": "mojolearn_amd-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "76e87cb17ecf29e6276e26b8bac572e74072a7749499b0c85709f0d065dc87b6",
+      "url": "https://files.pythonhosted.org/packages/d9/5c/696561fc559d7a76a102cd16c72db64c707c755ca6fc925399803efa40fa/mojolearn_amd-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "uploaded": "2026-10-27T01:21:49.215261Z"
+    },
+    {
+      "project": "mojolearn-core",
+      "file": "mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "790fd8bb15322d40713ba745b00ae6c58a391fb42cff42ae8794bcee375920c8",
+      "url": "https://files.pythonhosted.org/packages/41/d4/af92960c210c84f1e8b0701f8f2aa33e02d41b01035a365a5bf980546552/mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "uploaded": "2026-10-27T00:28:12.270740Z"
+    },
+    {
+      "project": "mojolearn-nvidia",
+      "file": "mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "d84fc78a074e27a8830248642d29eda3b5fabbb026375f856ccada487573c5af",
+      "url": "https://files.pythonhosted.org/packages/33/8f/c12bed506ddda037f6857fa8bbd643a53b1932652299b3b3705cb2b0cc31/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "uploaded": "2026-10-27T01:13:16.576296Z"
+    },
+    {
+      "project": "mojolearn-nvidia-ptx",
+      "file": "mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "e0b390090eebd5ac4ec07f4708212448a077291d0da6063ecc90f758a74691da",
+      "url": "https://files.pythonhosted.org/packages/26/fc/df7735b447205420acd658d494a903c8e5a626fad0d7c4e5804f09b4c241/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "uploaded": "2026-10-27T01:05:01.844558Z"
+    },
+    {
+      "project": "mojolearn",
+      "file": "mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+      "sha256": "52b12974cb11ee92f1ec17830b18895ce743b001c3c5bf705964421304e9424b",
+      "url": "https://files.pythonhosted.org/packages/d3/35/9ce4297c38e2ff996c7c54f06fc7776f494ac67b144a170019656d0133d0/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+      "uploaded": "2026-10-27T01:39:05.406085Z"
+    }
+  ],
+  "workflows": [
+    {
+      "platform": "linux",
+      "conclusion": "success",
+      "databaseId": 40426338363,
+      "headSha": "03d761b89ccde08655a07063dd5e84169e72ab5c",
+      "status": "completed",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40426338363"
+    },
+    {
+      "platform": "nvidia-ptx",
+      "conclusion": "success",
+      "databaseId": 40430216748,
+      "headSha": "80d595fbcefd76c5945a774ec1a85465510ddf59",
+      "status": "completed",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40430216748"
+    },
+    {
+      "platform": "nvidia",
+      "conclusion": "success",
+      "databaseId": 40431043626,
+      "headSha": "80d595fbcefd76c5945a774ec1a85465510ddf59",
+      "status": "completed",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40431043626"
+    },
+    {
+      "platform": "amd",
+      "conclusion": "success",
+      "databaseId": 40431901245,
+      "headSha": "80d595fbcefd76c5945a774ec1a85465510ddf59",
+      "status": "completed",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40431901245"
+    },
+    {
+      "platform": "linux-meta",
+      "conclusion": "success",
+      "databaseId": 40432704836,
+      "headSha": "80d595fbcefd76c5945a774ec1a85465510ddf59",
+      "status": "completed",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40432704836"
+    },
+    {
+      "platform": "macos",
+      "conclusion": "success",
+      "databaseId": 40433542348,
+      "headSha": "80d595fbcefd76c5945a774ec1a85465510ddf59",
+      "status": "completed",
+      "url": "https://github.com/mojolearn/mojolearn/actions/runs/40433542348"
+    }
+  ],
+  "declared_native_fault_arms": 124,
+  "proven_native_fault_arms": 124,
+  "new_fault_arms_completed": 41,
+  "verification_scope": "Bounded correctness fixtures, fault injections and focused installed checks. Valid native, identity and adapter execution reused. No full-dataset measurement or performance campaign.",
+  "post_publication_runtime_verification": false,
+  "confirmation_scope": "Publication workflow conclusions and exact PyPI artifact hashes only."
+}

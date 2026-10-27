@@ -1,0 +1,36 @@
+{
+  "manifest_sha256": "1a56e72028b56f85ec10762877669fa04bb8ec66ba4cbacfbf4a1de4ee747219",
+  "repairs": [
+    {
+      "before": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/ptx-marker-stale-r1/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "b15d206fc791896ef4ffe52b46a84807631681d496473306e73ebbc4dc61f04f"
+      },
+      "after": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "d84fc78a074e27a8830248642d29eda3b5fabbb026375f856ccada487573c5af"
+      },
+      "changed": [
+        "mojolearn_nvidia-0.8.60.dist-info/gpu_plugin.json",
+        "mojolearn_nvidia-0.8.60.dist-info/RECORD"
+      ],
+      "native_bytes_changed": false
+    },
+    {
+      "before": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/ptx-marker-stale-r1/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "b40ab779383d0611baf0f989d0f4bfcd3f74313479060f908f45dcf87b86c2a4"
+      },
+      "after": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "e0b390090eebd5ac4ec07f4708212448a077291d0da6063ecc90f758a74691da"
+      },
+      "changed": [
+        "mojolearn_nvidia_ptx-0.8.60.dist-info/gpu_plugin.json",
+        "mojolearn_nvidia_ptx-0.8.60.dist-info/RECORD"
+      ],
+      "native_bytes_changed": false
+    }
+  ],
+  "reason": "Bind both NVIDIA package markers to the corrected PTX set provenance. No native bytes change."
+}
