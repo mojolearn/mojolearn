@@ -11,6 +11,19 @@ import tarfile
 import time
 
 
+def apply_runtime_environment(config, environ=None):
+    """Explicit candidate switches are inherited by every measurement child."""
+    environ = os.environ if environ is None else environ
+    selected = config.get('runtime_env', {})
+    allowed = {'MOJOLEARN_NEURAL_NATIVE_DISPATCH', 'MOJOLEARN_GENERATION_NATIVE_SESSION'}
+    if not isinstance(selected, dict) or set(selected) - allowed:
+        raise ValueError('runtime_env only accepts the declared neural provider switches')
+    if any(value not in ('0', '1') for value in selected.values()):
+        raise ValueError('runtime switches must be explicit string 0 or 1')
+    environ.update(selected)
+    return dict(selected)
+
+
 def deduplicate_sources(campaign):
     """Hardlink byte-identical retained sources before the teardown archive."""
     seen, links = {}, []
@@ -29,6 +42,7 @@ def deduplicate_sources(campaign):
 def run(root):
     root = Path(root)
     cfg = json.loads((root/'config.json').read_text())
+    apply_runtime_environment(cfg)
     source = root/'source'
     source.mkdir(exist_ok=True)
     with tarfile.open(root/'source.tar.gz') as archive:
@@ -104,7 +118,8 @@ def run(root):
            '--opponent-store', str(root/'opponent-store.jsonl'), '--keep-going',
            '--stop-at', str(time.time()+cfg['hours']*3600)]
     E.write(root/'invocation.json', {'argv': cmd, 'frozen_main': cfg['source_commit'],
-                                   'version': cfg['version'], 'whole_plan': True})
+                                   'version': cfg['version'], 'whole_plan': True,
+                                   'runtime_environment': E.runtime_environment()})
     small = root/'recipe-logs'
     small.mkdir(exist_ok=True)
     with (root/'campaign-controller.log').open('w') as log:

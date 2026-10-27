@@ -1,0 +1,39 @@
+{
+  "candidate_freeze": "pending complete neural/tape native-operation repair, root focused Mac bit check and target builds",
+  "failure_policy": "refused/skipped/failed/incomplete rows retained; continue independent recipes; retention failure pauses before next recipe",
+  "launched": false,
+  "old_evidence_mutated": false,
+  "opponent_reuse": "unmodified evidenced keys; fresh effective readback required; missing or mismatching opponents measured",
+  "prerequisite": [
+    "neural including tape has no Python computation/callbacks/internal CPython dispatch and stable metadata retained natively",
+    "one focused Mac bit check",
+    "actual NVIDIA/AMD target builds",
+    "frozen candidate installation and truthful runtime provenance manifest"
+  ],
+  "quality": "time and quality on both arms; historical vs_ours fields require fresh reference resolution before current presentation",
+  "runtime_artifacts": "incremental development artifacts; no release required; manifest admission integration pending",
+  "schema": "mojolearn.neural29-launch-plan.v1",
+  "separate_gpu_validation_campaign": false,
+  "vendors": {
+    "amd": {
+      "controller_template": "/Users/andrewhendel/mojolearn-evidence/neural29-refactor-run-plan-20261027/prepared/amd-controller.template.json",
+      "expected": 29,
+      "neural_smoke": false,
+      "release_after_archive": false,
+      "remote_root": "/root/measure-neural29-refactor-amd-20261027",
+      "require_existing_box": true,
+      "serial_within_vendor": true,
+      "ssh_target": "root@162.243.78.145"
+    },
+    "nvidia": {
+      "controller_template": "/Users/andrewhendel/mojolearn-evidence/neural29-refactor-run-plan-20261027/prepared/nvidia-controller.template.json",
+      "expected": 29,
+      "neural_smoke": false,
+      "release_after_archive": false,
+      "remote_root": "/root/measure-neural29-refactor-nvidia-20261027",
+      "require_existing_box": true,
+      "serial_within_vendor": true,
+      "ssh_target": "-p 30772 root@38.80.152.75"
+    }
+  }
+}

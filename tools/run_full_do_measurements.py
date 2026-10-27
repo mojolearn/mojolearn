@@ -77,6 +77,8 @@ def run(config):
             save()
             env = dict(os.environ, **vendor.get('provider_env', {}))
             state = Path(vendor['state_dir']) / 'state.env'
+            if not state.exists() and vendor.get('require_existing_box', False):
+                raise RuntimeError('required existing owned box state is missing: '+str(state))
             if not state.exists():
                 command(provider_command(vendor, 'up', 180), name+'-provision.log', env)
             owned = state_file(state)
