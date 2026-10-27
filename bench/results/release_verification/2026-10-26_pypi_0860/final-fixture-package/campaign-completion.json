@@ -1,0 +1,24 @@
+{
+  "status": "complete",
+  "declared_arms": 124,
+  "proven_arms": 124,
+  "newly_completed": 41,
+  "missing": [],
+  "worktrees": [
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/integ-0859",
+      "tracked_source_clean": true
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/verify0860-evidence",
+      "tracked_source_clean": true
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/verify0860-forest-fixed",
+      "tracked_source_clean": true
+    }
+  ],
+  "original_controller_exit": "Expected existing-output assertion at x_decomp-1 after explicit handoff; no run duplicated.",
+  "tail_controller": "All assigned batches completed and restored. Original misses/refusals retained; exact intended refusals reviewed. Two genuine fixture misses fixed and caught with retained native mutants.",
+  "compilation_for_fixture_fixes": false
+}

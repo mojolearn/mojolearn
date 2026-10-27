@@ -1,0 +1,10 @@
+{
+  "schema": "mojolearn.release-producer-inputs.v1",
+  "requirement_id": "candidate-amd",
+  "kind": "candidate",
+  "source_revision": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+  "input_fingerprint": "1922cc4bf2fdc205872e2ef6a12e7e2f22c9d384f7a2fa6e125700eee1db3544",
+  "report_sha256": "4ac4f0ddbfc2d190cc4ef4c6760db0fa87e28a3a8de7240c8bf3050908dfcdad",
+  "run_id": "81ce48020d82e2d28f051d7b5353a9ddcbaa8a9b75155d40ad51553556c13b10",
+  "admission": "Retained exact runtime bytes and original results; two changed verifier fixtures have separately recorded caught-and-restored proofs. No new native execution claimed."
+}

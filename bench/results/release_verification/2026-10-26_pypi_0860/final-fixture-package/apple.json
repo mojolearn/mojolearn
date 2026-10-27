@@ -1,0 +1,1067 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit",
+ "vendor": "arm64",
+ "commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "knn-clf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fbc85bd798862ef3"
+   ],
+   "parts": [
+    {
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad",
+     "multi": "9306ca8c7f146b8d"
+    }
+   ],
+   "infer": [
+    "8381d6badb2ee31b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f0b9be0fd408466b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8381d6badb2ee31b"
+   ],
+   "batch": [
+    "ae9a520d4ce52431"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.351909707998857,
+    "stages": {
+     "repeat=1/train": 0.4927368749631569,
+     "repeat=1/infer-save-reload": 0.19351349992211908,
+     "repeat=1/batch": 1.6653407498961315,
+     "repeat=1/batchgrad": 5.0709000788629055e-05,
+     "repeat=1/batchscale": 2.637505531311035e-05,
+     "repeat=1/ragged": 2.362497616559267e-05,
+     "repeat=1/stepfull": 2.150004729628563e-05
+    }
+   }
+  },
+  "x-neighbors-nearest-centroid/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a3ec310eee8eadd7"
+   ],
+   "parts": [
+    {
+     "centroids": "7e9b6bd666d5a4c3",
+     "std": "474f388dc5e8f17a",
+     "predict": "f6eeec2bf730706d",
+     "const_class": "88b6e6f8e0fcb3ac",
+     "shrunk": "515a371716b1062c",
+     "shrunk_predict": "9d0d25e08d53b635",
+     "proba": "6975903da6711871",
+     "manhattan": "72ba2600b0ddf293",
+     "dev": "1d649489a77ffaed",
+     "dev_unshrunk": "8c650415830dd1f0",
+     "log_proba": "ebe1812d0ff8d9fb"
+    }
+   ],
+   "infer": [
+    "1c64142221e7627e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2ff5ac8a9cbf4b12"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.807289500022307,
+    "stages": {
+     "repeat=1/train": 0.3614627500064671,
+     "repeat=1/infer-save-reload": 0.05333600006997585,
+     "repeat=1/batch": 1.3921773750334978,
+     "repeat=1/batchgrad": 4.341709427535534e-05,
+     "repeat=1/batchscale": 2.4041044525802135e-05,
+     "repeat=1/ragged": 2.2792024537920952e-05,
+     "repeat=1/stepfull": 2.191704697906971e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "linalg-eigh": "fixed-order-gram-1",
+  "x-metrics-regression": "metrics-undefined-weighted-score-1",
+  "trees-dart-options": "tree-shap-zero-cover-path-1",
+  "trees-shap-tree": "tree-shap-zero-cover-path-1",
+  "x-glm-poisson": "portable-positive-target-exp-1",
+  "x-glm-gamma": "portable-positive-target-exp-1",
+  "x-glm-tweedie": "portable-positive-target-exp-1",
+  "x-glm-poisson-sw": "portable-positive-target-exp-1",
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "tsvd": "explained-variance-train-contract-1",
+  "umap": "save-option-extras-contract-2",
+  "par-graph-umap": "save-option-extras-contract-2",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1",
+  "par-gmm": "classic-kmeanspp-init-1"
+ },
+ "batch_revisions": {
+  "et-clf-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-class-weights": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-multiclass-offgrid": "weighted-trees-batch-2026-10-20-v1",
+  "et-reg-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "optim-maximize": "expansion-batch-2026-09-28-v1",
+  "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+  "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+  "x-decomp-nmf": "nmf-inverse-batch-2026-09-28-v2",
+  "x-decomp-als": "expansion-batch-2026-09-28-v1",
+  "x-isotonic": "expansion-batch-2026-09-28-v1",
+  "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+  "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+  "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+  "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+  "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+  "x-metrics-search": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+  "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+  "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+  "x-prep-priors": "expansion-batch-2026-09-28-v1",
+  "resample-bca": "bca-distribution-batch-2026-09-28-v2",
+  "resample-unpaired": "bca-distribution-batch-2026-09-28-v2",
+  "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+  "resample-utils": "expansion-batch-2026-09-28-v1",
+  "sequence-lstm": "expansion-batch-2026-09-28-v1",
+  "sequence-gru": "expansion-batch-2026-09-28-v1",
+  "sequence-rnn": "expansion-batch-2026-09-28-v1",
+  "sequence-mlp": "expansion-batch-2026-09-28-v1",
+  "sequence-layernorm": "layernorm-batch-width-2026-09-28-v2",
+  "sequence-moe": "expansion-batch-2026-09-28-v1",
+  "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+  "sequence-lamb": "expansion-batch-2026-09-28-v1",
+  "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+  "sequence-var": "expansion-batch-2026-09-28-v1",
+  "sequence-theta": "expansion-batch-2026-09-28-v1",
+  "sequence-croston": "expansion-batch-2026-09-28-v1",
+  "sequence-ets": "expansion-batch-2026-09-28-v1",
+  "sequence-garch": "expansion-batch-2026-09-28-v1",
+  "sequence-prophet": "expansion-batch-2026-09-28-v1",
+  "sequence-stl": "expansion-batch-2026-09-28-v1",
+  "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+  "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+  "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+  "sequence-lion": "expansion-batch-2026-09-28-v1",
+  "sequence-adamax": "expansion-batch-2026-09-28-v1",
+  "sequence-nadam": "expansion-batch-2026-09-28-v1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_check": "not run: it needs the source tree (tools/lane_applicability.py); run from a checkout",
+ "gpu_slot": "held by this run (pid=86383)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.60",
+  "package_dir": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn",
+  "numpy": "2.5.4",
+  "python": "3.12.11",
+  "par_devices": "0",
+  "binding_provenance_protocol": "loaded-native-v2",
+  "bindings": [
+   {
+    "module": "mojolearn._host._mojolearn_core_host",
+    "sha256": "8a887d189f68198d3a499591b289e7202d9107b2de98ebde84135394e352bc23",
+    "size": 925632,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_core_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_embedding_infer_host",
+    "sha256": "98353dba7bf443f90642b8f858374bc2b684f8ed022c6b1e1e84cf96a314cb04",
+    "size": 151984,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_embedding_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_estimators_host",
+    "sha256": "630c3715f11bc31dd528c741ee75e9edfe76e90efab1baed12b27e6908624098",
+    "size": 826800,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_estimators_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forecast_host",
+    "sha256": "3b336a7ac309011b41b110f326fa827b538269c71a65c47abd425eb9136c3a0d",
+    "size": 268064,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_forecast_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forest_host",
+    "sha256": "e8cdf673c66978ffece5450fd9189d262059a604eed7936b532cd90e4cb8681d",
+    "size": 333728,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gp_infer_host",
+    "sha256": "05133462ef5281afdef173204790ccb79162b318a23056e64f8ba37373ab8ce3",
+    "size": 251536,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_gp_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_hdbscan_infer_host",
+    "sha256": "16df9afc19a2c83c40921eb1b3850bf8dbd159e2fdb4cbc07c2bcea0cbfe1045",
+    "size": 251536,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_hdbscan_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_ivf_search_host",
+    "sha256": "524c169828d00492e8f4cee0934f470a15d820f5c9aa09d22eab26176259b2b7",
+    "size": 250656,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_ivf_search_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_linalg_host",
+    "sha256": "90f174248703e6e89843ce92e12be4a49738a5c79d9637914afd0d1aac5b15ca",
+    "size": 349216,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_linalg_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_metrics_host",
+    "sha256": "b2809214dc7e62fc66242e78ebd91a4a0657e28a47d4005b4d4e24e69c1af6f1",
+    "size": 711840,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_metrics_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mixture_infer_host",
+    "sha256": "2c0ea9ccd73f0fc1d9a1c663d0a05f5a5319b382d9eac36362c476b17cef8ab4",
+    "size": 201360,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_mixture_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_neural_host",
+    "sha256": "01d9d8632ccaa8812f08a5ef4177778743c24352bbcabc03ec49078fe13487fb",
+    "size": 646080,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_preprocessing_host",
+    "sha256": "627aa069d29ba0c10549ff4a2ba7ed8c8839ad79fafbd02ee290dfd7387aff15",
+    "size": 185856,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_preprocessing_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_classical_host",
+    "sha256": "e781eac3a86a29d8ba94bc8dda9c599a9885bf61f078efae898e0d4fe8a2b2ab",
+    "size": 18004544,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_runtime_classical_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_manifold_host",
+    "sha256": "4a36c74f13208bfef9e3183a624496b84b5e910da62cfdda9a4b2866ef9fa9b9",
+    "size": 1416912,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_runtime_manifold_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_model_selection_host",
+    "sha256": "0280a106f44625d499a5c99f4b12f2e2049afbab2009fe3531ff5967b5f3d95b",
+    "size": 3110032,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_runtime_model_selection_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_svm_host",
+    "sha256": "5ca5baaa91a498b3c1cf8aff8c6c2249e42953ecace1b23e8a3693d7c93ed7c1",
+    "size": 399424,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_svm_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_tokenizer_host",
+    "sha256": "33d10b710e100050751f770a5808da47bb31f7ed6e3eaa11729109a3780cdb10",
+    "size": 13113120,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_decomp_host",
+    "sha256": "d79d3dfb1f7793d56c71701312512a4ae1b09588531a58bf2b20a4e6600c6e79",
+    "size": 1024048,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_x_decomp_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_linear_host",
+    "sha256": "f777e98ea8bcaecc5d5828069b41a6e80747c9ca85b7b05b82c478a788c7e927",
+    "size": 481568,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_x_linear_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_neighbors_host",
+    "sha256": "4d9a27031c7d16decacabc518ffdb4c0b171f6536860ec8421267bb5c9408a47",
+    "size": 613328,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_x_neighbors_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_prep_host",
+    "sha256": "595456b91936261dab99e1493aab1e2b80d11ef52059ea1724c7f0660ee4d480",
+    "size": 1090288,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/host/_mojolearn_dev_x_prep_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn",
+    "sha256": "6690946d8a8d73d4a707c9ce23e5ca27f7181731d7d8c57cee045ae8bbe52af1",
+    "size": 5852416,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_core.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_arima",
+    "sha256": "f13d994b89558d49cde37b8fd5c4c0b5fca3717947046ba4cb84a781e96f3493",
+    "size": 1172192,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_arima.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_byte_lm",
+    "sha256": "8e4c15c4b1a1f72e58f084fa006646b1632c26435793a9283da0e928fdf2831b",
+    "size": 6969200,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_byte_lm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_embedding",
+    "sha256": "ec51fa6995185e30e6554e3a89ac6ef8c8b6803c446d380cedd61f7fe9e2baf5",
+    "size": 564720,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_embedding.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_estimators",
+    "sha256": "f1cd4ea81e9fcc369de8bbca84c7eab25663cf35fd2fc8da25eb1bb48ec1fdf9",
+    "size": 7690816,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_estimators_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_gbdt",
+    "sha256": "3d4cace2ebb5de9e060735272b26c8ea90306cba6080db250bb3715df22c457b",
+    "size": 11270080,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_gbdt.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_gp",
+    "sha256": "8e40a78d04b02fc47ca0f00dc7dfe3b76552a8c27b463552bda0d1e4d815a9b7",
+    "size": 3848320,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_gp.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_hdbscan",
+    "sha256": "cc8bcf9ae789eedd913ea12e49b16d97d7da58706a9d05506d96a719ef6aba43",
+    "size": 3980400,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_hdbscan.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_ivf",
+    "sha256": "d180d9fc5a2cf5b153d130a940066f32fcbe230bd83518a5f26bac169a4f3d39",
+    "size": 1894800,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_ivf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_kernel_methods",
+    "sha256": "772c35039afc1afbbc9eb88e24b33530fe1026e03f40ea698ef269c6ae408261",
+    "size": 3701008,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_kernel_methods.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_linalg",
+    "sha256": "0c6a66448a7b51a2298078a5004ea61d242213d39eade2f0b60ecab15044cd0e",
+    "size": 2928592,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_linalg.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_mamba",
+    "sha256": "a8dc654e20bb824c2a3a30c7f956ea7be7c010580d0a442b28e6ccd25f40c4b5",
+    "size": 5359312,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_mamba.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_metrics",
+    "sha256": "6ad032e49e85d59470833d55cd6f303c1971c17761d70734c35285550f08deee",
+    "size": 7953504,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_mixture",
+    "sha256": "20b8fd5679b752260676e58effd56249aa6588569e783e8e403018ed1ace46b1",
+    "size": 3864656,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_mixture.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_preprocessing",
+    "sha256": "11baacc89a190c66f9f36c9635e6a3834e4ca223cac1488acfb1e6fe54ac6c63",
+    "size": 317984,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_preprocessing_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_resample",
+    "sha256": "923b9c8cb43794a87716513f4df37674a6d773c3383bdbf9b98f98aad95e09cf",
+    "size": 1648368,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_resample.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_rf",
+    "sha256": "44dc547756148a947f7318fc0a2cfd03382c60311ea706caef84e2be14aa039e",
+    "size": 3011520,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_rf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_solver",
+    "sha256": "18d84f9a217e462808f6bd241e0f5808c9cc3ec5ab2ad054ad9e2e8b4e33da1b",
+    "size": 2879648,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_solver.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_svm",
+    "sha256": "999ab8e672711abccdecb96739ae3beba8703b804b2b4ee680648c00755a8575",
+    "size": 4554768,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_svm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_training",
+    "sha256": "39a708715883db2b268094f6f5f4d918f156320562859b04921a31903429f2c8",
+    "size": 7987152,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_training.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_transformer",
+    "sha256": "2ffdac711bbb4d840bc78a1ed4619cd92ebfe9bd05523feb858f111d50334a5c",
+    "size": 5983264,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_transformer.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_trees",
+    "sha256": "4cf7690f6e06f41a9401356b0b00a3943d24bc2b9925314382682c4259ec310a",
+    "size": 2091920,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_trees.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_tsa",
+    "sha256": "963f9d1315f2340243aa9a7ca1ddda9fa56c2f8b39e6a214f05ad582defc6102",
+    "size": 646880,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_tsa_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_ann",
+    "sha256": "e235d23b71602620688ee6459656b54192fefa3e44172823424714cd0c46e9e9",
+    "size": 2190400,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_ann_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_cluster",
+    "sha256": "e2dca069002cf580143a2163b8fd224df29034390fe4c84a1df78473c9032293",
+    "size": 5900640,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_cluster_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_cnn",
+    "sha256": "b0800aa70e5dbb6b71cf4f6b8abf7b8c34ad64e28625a28a3d5c231e3f8c61d0",
+    "size": 4882768,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_cnn_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_decomp",
+    "sha256": "194f6078a21e7b44c1ca9f70631f0cc96770e99c322760aac662f0adc9eb49f3",
+    "size": 6557792,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_decomp_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_linear",
+    "sha256": "c0c368f5d1764a9a8b4fbc7a1893b80f7fa68171614140e70ee0e6ef5e50dfee",
+    "size": 3552496,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_linear_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_metrics",
+    "sha256": "e64e9937647d24f4eb74c4c8dff983814204fae1bedf9fe998eb3b593bed5868",
+    "size": 2599648,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_neighbors",
+    "sha256": "6c707b56f7bf29986301231fa793af5b2dc43b422467d6468168de8b8c2440b1",
+    "size": 4915072,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_neighbors_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_prep",
+    "sha256": "54e4a2266c379c4e880b023f340285b8f1462f3210f9917ecd965e3ea7413d95",
+    "size": 3585024,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_prep_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_sequence",
+    "sha256": "a3f337e1a9c05f06fab3d2034b930c784773192d90479e4fe218f802fb35d60f",
+    "size": 9761568,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_sequence_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._mojolearn_x_trees",
+    "sha256": "e8ae8b095818025712b5125a8adab332eb66cd9ca1ac838b870e68ba3243f981",
+    "size": 3355808,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_trees_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn",
+    "sha256": "6690946d8a8d73d4a707c9ce23e5ca27f7181731d7d8c57cee045ae8bbe52af1",
+    "size": 5852416,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_core.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_arima",
+    "sha256": "f13d994b89558d49cde37b8fd5c4c0b5fca3717947046ba4cb84a781e96f3493",
+    "size": 1172192,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_arima.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_byte_lm",
+    "sha256": "8e4c15c4b1a1f72e58f084fa006646b1632c26435793a9283da0e928fdf2831b",
+    "size": 6969200,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_byte_lm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_embedding",
+    "sha256": "ec51fa6995185e30e6554e3a89ac6ef8c8b6803c446d380cedd61f7fe9e2baf5",
+    "size": 564720,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_embedding.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_estimators",
+    "sha256": "f1cd4ea81e9fcc369de8bbca84c7eab25663cf35fd2fc8da25eb1bb48ec1fdf9",
+    "size": 7690816,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_estimators_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_gbdt",
+    "sha256": "3d4cace2ebb5de9e060735272b26c8ea90306cba6080db250bb3715df22c457b",
+    "size": 11270080,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_gbdt.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_gp",
+    "sha256": "8e40a78d04b02fc47ca0f00dc7dfe3b76552a8c27b463552bda0d1e4d815a9b7",
+    "size": 3848320,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_gp.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_hdbscan",
+    "sha256": "cc8bcf9ae789eedd913ea12e49b16d97d7da58706a9d05506d96a719ef6aba43",
+    "size": 3980400,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_hdbscan.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_ivf",
+    "sha256": "d180d9fc5a2cf5b153d130a940066f32fcbe230bd83518a5f26bac169a4f3d39",
+    "size": 1894800,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_ivf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_kernel_methods",
+    "sha256": "772c35039afc1afbbc9eb88e24b33530fe1026e03f40ea698ef269c6ae408261",
+    "size": 3701008,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_kernel_methods.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_linalg",
+    "sha256": "0c6a66448a7b51a2298078a5004ea61d242213d39eade2f0b60ecab15044cd0e",
+    "size": 2928592,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_linalg.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_mamba",
+    "sha256": "a8dc654e20bb824c2a3a30c7f956ea7be7c010580d0a442b28e6ccd25f40c4b5",
+    "size": 5359312,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_mamba.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_metrics",
+    "sha256": "6ad032e49e85d59470833d55cd6f303c1971c17761d70734c35285550f08deee",
+    "size": 7953504,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_mixture",
+    "sha256": "20b8fd5679b752260676e58effd56249aa6588569e783e8e403018ed1ace46b1",
+    "size": 3864656,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_mixture.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_preprocessing",
+    "sha256": "11baacc89a190c66f9f36c9635e6a3834e4ca223cac1488acfb1e6fe54ac6c63",
+    "size": 317984,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_preprocessing_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_resample",
+    "sha256": "923b9c8cb43794a87716513f4df37674a6d773c3383bdbf9b98f98aad95e09cf",
+    "size": 1648368,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_resample.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_rf",
+    "sha256": "44dc547756148a947f7318fc0a2cfd03382c60311ea706caef84e2be14aa039e",
+    "size": 3011520,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_rf.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_solver",
+    "sha256": "18d84f9a217e462808f6bd241e0f5808c9cc3ec5ab2ad054ad9e2e8b4e33da1b",
+    "size": 2879648,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_solver.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_svm",
+    "sha256": "999ab8e672711abccdecb96739ae3beba8703b804b2b4ee680648c00755a8575",
+    "size": 4554768,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_svm.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_training",
+    "sha256": "39a708715883db2b268094f6f5f4d918f156320562859b04921a31903429f2c8",
+    "size": 7987152,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_training.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_transformer",
+    "sha256": "2ffdac711bbb4d840bc78a1ed4619cd92ebfe9bd05523feb858f111d50334a5c",
+    "size": 5983264,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_transformer.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_trees",
+    "sha256": "4cf7690f6e06f41a9401356b0b00a3943d24bc2b9925314382682c4259ec310a",
+    "size": 2091920,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_trees.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_tsa",
+    "sha256": "963f9d1315f2340243aa9a7ca1ddda9fa56c2f8b39e6a214f05ad582defc6102",
+    "size": 646880,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_tsa_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_ann",
+    "sha256": "e235d23b71602620688ee6459656b54192fefa3e44172823424714cd0c46e9e9",
+    "size": 2190400,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_ann_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_cluster",
+    "sha256": "e2dca069002cf580143a2163b8fd224df29034390fe4c84a1df78473c9032293",
+    "size": 5900640,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_cluster_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_cnn",
+    "sha256": "b0800aa70e5dbb6b71cf4f6b8abf7b8c34ad64e28625a28a3d5c231e3f8c61d0",
+    "size": 4882768,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_cnn_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_decomp",
+    "sha256": "194f6078a21e7b44c1ca9f70631f0cc96770e99c322760aac662f0adc9eb49f3",
+    "size": 6557792,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_decomp_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_linear",
+    "sha256": "c0c368f5d1764a9a8b4fbc7a1893b80f7fa68171614140e70ee0e6ef5e50dfee",
+    "size": 3552496,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_linear_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_metrics",
+    "sha256": "e64e9937647d24f4eb74c4c8dff983814204fae1bedf9fe998eb3b593bed5868",
+    "size": 2599648,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_metrics_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_neighbors",
+    "sha256": "6c707b56f7bf29986301231fa793af5b2dc43b422467d6468168de8b8c2440b1",
+    "size": 4915072,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_neighbors_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_prep",
+    "sha256": "54e4a2266c379c4e880b023f340285b8f1462f3210f9917ecd965e3ea7413d95",
+    "size": 3585024,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_prep_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_sequence",
+    "sha256": "a3f337e1a9c05f06fab3d2034b930c784773192d90479e4fe218f802fb35d60f",
+    "size": 9761568,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_sequence_m1.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._sets.identical._mojolearn_x_trees",
+    "sha256": "e8ae8b095818025712b5125a8adab332eb66cd9ca1ac838b870e68ba3243f981",
+    "size": 3355808,
+    "file": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/self-test-macos/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_dev_x_trees_m1.so",
+    "path_source": "__file__"
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 2,
+  "source_sha256": "f94462a1eb1c6044881fe81bceea8c9badc010d405df7e96f734959d627707f6",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "knn-clf,x-neighbors-nearest-centroid",
+   "skip": "",
+   "fixtures": "base",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "82dc52c9f53fa152ac51145b5f5bb811ebe217dee43fb32d055663314aee8865",
+  "environment_digests": {
+   "MOJOLEARN_COMMIT": "95e6039f20f9c97edeb389c2a21915e313a31c1dcfe36e18d63523e3d086a314",
+   "MOJOLEARN_VENDOR": "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b",
+   "MOJOLEARN_NUMERIC_MODE": "319e2ba078f51cfad133ae161e413fb38dcfdd3b5348907aa82d909f8d86d800",
+   "MOJOLEARN_APPLE_FULL_DIAGNOSTIC": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "MOJOLEARN_CPU_THREADS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "OMP_NUM_THREADS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "OPENBLAS_NUM_THREADS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "VECLIB_MAXIMUM_THREADS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "MOJOLEARN_COMPILE_JOBS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "MOJOLEARN_BUILD_JOBS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+  },
+  "provenance": {
+   "commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+   "mode": "identical",
+   "vendor": "arm64",
+   "platform": "macOS-26.5.2-arm64-arm-64bit",
+   "python": "3.12.11",
+   "numpy": "2.5.4",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    }
+   }
+  }
+ },
+ "execution_leases": [
+  {
+   "kind": "mac_slot",
+   "token_present": true,
+   "token_sha256": "71e4290deb24f32cc2bad4c4dfedc10a4abbb101a1b08157283a357dea8bad97"
+  }
+ ]
+}

@@ -1,0 +1,2996 @@
+{
+  "schema": "mojolearn.release.incremental-gate.v1",
+  "profile": "release-light-v1",
+  "verdict": "PASS",
+  "input_mode": "candidate",
+  "candidate": {
+    "source": "candidate",
+    "vendor": "nvidia",
+    "version": "0.8.60",
+    "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+    "release_modes": [
+      "identical"
+    ],
+    "wheels": {
+      "mojolearn-core": "790fd8bb15322d40713ba745b00ae6c58a391fb42cff42ae8794bcee375920c8",
+      "mojolearn-nvidia": "b15d206fc791896ef4ffe52b46a84807631681d496473306e73ebbc4dc61f04f",
+      "mojolearn-nvidia-ptx": "8095c89b0a677f970238ccdf859f45fd75c13412e9f417bdcd0a7cbb1f43dfc1"
+    }
+  },
+  "version": "0.8.60",
+  "vendor": "nvidia",
+  "retained_gate": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/gate-nvidia/6d5bc3554f1f59dae742-release-light-v1/gate-smoke.json",
+    "sha256": "a26877648366efef5b0bedf90b80a8899680482ac49104a2c1e33a92152fb6fe"
+  },
+  "verifier_update": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/verifier-fixture-update/update.json",
+    "sha256": "35bb864111d95a2f3c59ffd900b632c374fda8d666f955d9990aede51d121896"
+  },
+  "wheels": {
+    "mojolearn-core": {
+      "before": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "8b84a6ba57c9c7af140d504fe216b0a6a1b4f37febe41ed41988362a375d8112"
+      },
+      "after": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "790fd8bb15322d40713ba745b00ae6c58a391fb42cff42ae8794bcee375920c8"
+      },
+      "changed": [
+        "mojolearn/_identity_break.py",
+        "mojolearn/_identity_lane_neighbors.py",
+        "mojolearn/identity_columns/COMMIT",
+        "mojolearn_core-VERSION.dist-info/LINUX_PAYLOAD.json",
+        "mojolearn_core-VERSION.dist-info/RECORD"
+      ]
+    },
+    "mojolearn-nvidia": {
+      "before": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "79e260ff0445724ce197918f95d954ecbf110d7da4a22da304b54849fe4fff2d"
+      },
+      "after": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "b15d206fc791896ef4ffe52b46a84807631681d496473306e73ebbc4dc61f04f"
+      },
+      "changed": [
+        "mojolearn_nvidia-VERSION.dist-info/LINUX_PAYLOAD.json",
+        "mojolearn_nvidia-VERSION.dist-info/RECORD"
+      ]
+    },
+    "mojolearn-nvidia-ptx": {
+      "before": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "1e4021aff073067a333104752b203339923e35de1cf618b8f37a149903fe546e"
+      },
+      "after": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+        "sha256": "8095c89b0a677f970238ccdf859f45fd75c13412e9f417bdcd0a7cbb1f43dfc1"
+      },
+      "changed": [
+        "mojolearn_nvidia_ptx-VERSION.dist-info/LINUX_PAYLOAD.json",
+        "mojolearn_nvidia_ptx-VERSION.dist-info/RECORD"
+      ]
+    }
+  },
+  "scope": "Only two tested verifier fixtures and source/RECORD provenance changed. Prior native, loader, dependency, adapter and within-release identity execution remains byte-bound and unchanged; original execution reports are preserved.",
+  "correctness": {
+    "coverage_counts": {
+      "coverage": {
+        "cpu_declared": 532,
+        "lanes": 571
+      },
+      "extended": {
+        "completed": 9,
+        "states": {
+          "IDENTICAL": 5,
+          "N/A": 4
+        }
+      },
+      "models": {
+        "completed": 116,
+        "expected": 116,
+        "states": {
+          "IDENTICAL": 116
+        }
+      },
+      "self-test": {
+        "clean": "IDENTICAL",
+        "controls": 2,
+        "perturbed": "DIVERGENT"
+      }
+    },
+    "expanded": {
+      "apis": {
+        "apis": {
+          "mojolearn.models": [
+            "CausalLM",
+            "ParallelCausalLM"
+          ],
+          "mojolearn.parallel_classical": [
+            "fit_kmeans",
+            "fit_logistic",
+            "fit_svm",
+            "fit_gaussian_process",
+            "fit_arima",
+            "transform_rbf_sampler"
+          ],
+          "mojolearn.parallel_ensemble": [
+            "fit_forest",
+            "fit_boosting",
+            "fit_isolation_forest",
+            "fit_ordered_rmse",
+            "fit_feature_freq",
+            "ParallelForestPredictor"
+          ],
+          "mojolearn.parallel_forecasting": [
+            "predict_arima",
+            "forecast_arima",
+            "predict_exponential_smoothing",
+            "forecast_exponential_smoothing"
+          ],
+          "mojolearn.parallel_gaussian_process": [
+            "fit_gaussian_process_classifier",
+            "predict_gaussian_process_classifier"
+          ],
+          "mojolearn.parallel_graph": [
+            "fit_graph",
+            "transform_umap"
+          ],
+          "mojolearn.parallel_ivf": [
+            "DistributedIVFIndex"
+          ],
+          "mojolearn.parallel_model_selection": [
+            "cross_val_score"
+          ],
+          "mojolearn.parallel_neighbors": [
+            "ParallelQueries"
+          ],
+          "mojolearn.parallel_neighbors_reference": [
+            "ReferenceShardedNeighbors"
+          ],
+          "mojolearn.parallel_preprocessing": [
+            "fit_scaler",
+            "transform_scaler"
+          ]
+        },
+        "binding": "/root/results-0859/nvidia/gate/venv/lib/python3.11/site-packages/mojolearn/cuda_native/sm_89/identical/_mojolearn_native_cluster.so",
+        "binding_sha256": "e725599296c4a5b0f533865bb424163cf2d4d3a30360d98a0d169ec31db04edb",
+        "gbdt_binding": "/root/results-0859/nvidia/gate/venv/lib/python3.11/site-packages/mojolearn/cuda_native/sm_89/identical/_mojolearn_native_trees.so",
+        "gbdt_sha256": "f500e0ff67312f5ec79a5c7eaaf69d7f71363ffa931d9c8064c97263704400bd",
+        "gbdt_symbols": [
+          "gbdt_fit"
+        ],
+        "ivf_symbols": [
+          "ivf_flat_partial_search",
+          "ivf_finalize_distances"
+        ]
+      },
+      "cross_validation": "OWED",
+      "multi_gpu": "OWED",
+      "native_fault_controls": "SEPARATE_GATE",
+      "physical_execution_trace": "OWED",
+      "release_qualified": false,
+      "scope": "expanded"
+    },
+    "installed": {
+      "device_arch": "sm_89",
+      "gpu_arch": "sm_89",
+      "gpu_plugin": {
+        "bundled_ptx": {
+          "manifest_sha256": "58e6189c865a77169b4ab02c64e4d09dce01be7201663b60caca9d942da75b92"
+        },
+        "code_format": "native",
+        "distribution": "mojolearn-nvidia",
+        "location": "/root/results-0859/nvidia/gate/venv/lib/python3.11/site-packages",
+        "payloads": [
+          "mojolearn-nvidia"
+        ],
+        "version": "0.8.59"
+      },
+      "package": "/root/results-0859/nvidia/gate/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+      "ptx_payload_files": {},
+      "ptx_selection": null,
+      "vendor": "cuda",
+      "version": "0.8.59"
+    },
+    "installed_from": {
+      "distributions": {
+        "mojolearn": null,
+        "mojolearn-amd": null,
+        "mojolearn-core": "0.8.59",
+        "mojolearn-nvidia": "0.8.59",
+        "mojolearn-nvidia-ptx": "0.8.59"
+      },
+      "expected_version": "0.8.59",
+      "package": "/root/results-0859/nvidia/gate/venv/lib/python3.11/site-packages/mojolearn",
+      "python": "/root/results-0859/nvidia/gate/venv/bin/python"
+    },
+    "jobs": [
+      {
+        "elapsed_seconds": 0.06446410599164665,
+        "exit_code": 0,
+        "name": "locate-installed",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/locate-installed.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 0.6661406880011782,
+        "exit_code": 0,
+        "name": "dependencies",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/dependencies.log",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 0.6666532169329002,
+        "exit_code": 0,
+        "name": "installed",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/installed.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 0.7678855410777032,
+        "exit_code": 0,
+        "name": "expanded-api",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/expanded-api.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 6.32683560391888,
+        "exit_code": 0,
+        "name": "loaded-lm-cpu",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/loaded-lm-cpu.log",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 8.080371198942885,
+        "exit_code": 0,
+        "name": "loaded-lm-gpu",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/loaded-lm-gpu.log",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 0.6660237839678302,
+        "exit_code": 0,
+        "name": "loaded-lm-cpu-gpu-compare",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/loaded-lm-cpu-gpu-compare.log",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 1.5175551979336888,
+        "exit_code": 0,
+        "name": "coverage",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/coverage.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 20.406429374939762,
+        "exit_code": 0,
+        "name": "models",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/models.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 13.690044317045249,
+        "exit_code": 0,
+        "name": "extended",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/extended.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      },
+      {
+        "elapsed_seconds": 3.9727846370078623,
+        "exit_code": 0,
+        "name": "self-test",
+        "output": "/root/results-0859/nvidia/gate/correctness-1793042495170160474/self-test.json",
+        "timed_out": false,
+        "timeout_seconds": 180
+      }
+    ],
+    "release_qualified": false,
+    "require_ptx": false,
+    "scope": "expanded",
+    "source_commit": "132b5aa5d78cc551a879af8e50bed3f39f2fee54",
+    "status": "PASSED",
+    "unqualified_properties": [],
+    "wheel": null,
+    "wheel_sha256": null
+  },
+  "autograd_counts": {
+    "ok": 24
+  },
+  "autograd_artifacts": {
+    "compiler": {
+      "path": "/root/mojolearn/.pixi/envs/default/bin/mojo",
+      "sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+      "version": "Mojo 1.0.0 (ed45d567)"
+    },
+    "files": [
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/autograd/checks/gpu.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-gradients-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-gradients-nvidia",
+        "log": "autograd-gradients-nvidia-1793036191605322492.log",
+        "sha256": "256d2c30b3d19c39d18db645c96231bab90709d0ad0d295f43736f4b0a4fbb39",
+        "source": "autograd/checks/gpu.mojo",
+        "source_sha256": "94906d74ea0ad6189dd2412de19ee278a1facfd869d9f58b8ab56670f959df64"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/autograd/checks/mlp_gpu.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-mlp-identity-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-mlp-identity-nvidia",
+        "log": "autograd-mlp-identity-nvidia-1793036229608800695.log",
+        "sha256": "230c43fad3a23d14069814f0f329510b6fd23ffe8faf6a0d3bf32de033372ab1",
+        "source": "autograd/checks/mlp_gpu.mojo",
+        "source_sha256": "fc742ede806ce66cce696baaf341b42ca456f61eaaee9e186a5aa5565ed839a2"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/autograd/checks/higher_gpu.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-higher-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-higher-nvidia",
+        "log": "autograd-higher-nvidia-1793036265706824415.log",
+        "sha256": "beb16c6c2b8c8834e8c56ee9f91e145c9a4b735d8390d713fcc182b06c2861a7",
+        "source": "autograd/checks/higher_gpu.mojo",
+        "source_sha256": "08e3540266f111a8c90bb0afe6e42fad732d53fd298a1a83277cbcdf8dfd6436"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/autograd/checks/import_gpu.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-import-ops-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-import-ops-nvidia",
+        "log": "autograd-import-ops-nvidia-1793036307701763324.log",
+        "sha256": "f221403cd98c36b72ba98e42fca1c56e859eb89039941c50b8a3eef2395ee60b",
+        "source": "autograd/checks/import_gpu.mojo",
+        "source_sha256": "e1b7435dacac575646425a962a36da3acc03ffa286e1db33373bc0da56b32057"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/mamba/checks/mamba_tape_backward_check.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-mamba-tape-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-mamba-tape-nvidia",
+        "log": "autograd-mamba-tape-nvidia-1793036348988278048.log",
+        "sha256": "89e0fd5fc8c728f29626925e6a4902238f6c56f45283e8c9eafece80f9324b28",
+        "source": "mamba/checks/mamba_tape_backward_check.mojo",
+        "source_sha256": "724ef77c5dd6d575285c70843053e38b54bd12c35ab2411203bc9c50669c3a2c"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/training/checks/lm_tape_backward_check.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-lm-tape-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-lm-tape-nvidia",
+        "log": "autograd-lm-tape-nvidia-1793036411976576087.log",
+        "sha256": "36f57dff45e79c4f53340ad0c1cb7798f63db10b8e80807b208ed665ef3492a6",
+        "source": "training/checks/lm_tape_backward_check.mojo",
+        "source_sha256": "fafa7eb57890c214764f54176d831dda71381b403b19b64b8c5c2d9b18b8eebd"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/training/checks/mlp_tape_step_check.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-small-mlp-tape-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-small-mlp-tape-nvidia",
+        "log": "autograd-small-mlp-tape-nvidia-1793036555151428622.log",
+        "sha256": "064876c805c713d4f4b974b3d747ad21a1d05fbfa58824f8bd23ab55855106ca",
+        "source": "training/checks/mlp_tape_step_check.mojo",
+        "source_sha256": "ea0ba3664198aa20079de11924361f3f21283bd7bb2e6853f5e9f58c38a8ad26"
+      },
+      {
+        "command": [
+          "/root/mojolearn/.pixi/envs/default/bin/mojo",
+          "build",
+          "-j",
+          "2",
+          "-D",
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "-D",
+          "MOJOLEARN_COLUMN_NVIDIA",
+          "--target-cpu",
+          "x86-64-v3",
+          "--target-accelerator",
+          "sm_89",
+          "-I",
+          "/root/mojolearn",
+          "/root/mojolearn/training/checks/samba_tape_step_check.mojo",
+          "-o",
+          "/root/results-autograd/artifacts/autograd-samba-tape-nvidia"
+        ],
+        "exit_code": 0,
+        "file": "autograd-samba-tape-nvidia",
+        "log": "autograd-samba-tape-nvidia-1793036591900506452.log",
+        "sha256": "ef1dbb900d6b299e2d68435d22a628ae361d73dbeb1f0872dbd77deb8ce4cdce",
+        "source": "training/checks/samba_tape_step_check.mojo",
+        "source_sha256": "ce06bf71025a8cf96f25f4f3bb019fb185202e8b465a744fa1ebab9ce4a608a4"
+      }
+    ],
+    "reuse": {
+      "compiler": {
+        "path": "/root/mojolearn/.pixi/envs/default/bin/mojo",
+        "sha256": "0bce743c710ca91b9513eb6bbe600dcce41892dd2b52f29427b17eeeb97d32fa",
+        "version": "Mojo 1.0.0 (ed45d567)"
+      },
+      "original_inputs": {
+        "autograd/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "4d1d73c68a6ba7cb5cc3d457479cd48af45a5d3bd7fbb8e1edb6ec9076e76261"
+        },
+        "autograd/cast_ops.mojo": {
+          "mode": "100644",
+          "sha256": "2e352c6d08c1a752ce6681559e7f216e8466d41ea89b9ad038dfe7c38011e569"
+        },
+        "autograd/checks/gpu.mojo": {
+          "mode": "100644",
+          "sha256": "94906d74ea0ad6189dd2412de19ee278a1facfd869d9f58b8ab56670f959df64"
+        },
+        "autograd/checks/gradients.mojo": {
+          "mode": "100644",
+          "sha256": "48d9b49c75a6e4b09615c26d960445dc229fa96af1120bf7bc2440b06966c7cb"
+        },
+        "autograd/checks/higher.mojo": {
+          "mode": "100644",
+          "sha256": "2c9512a5f1bd9be383ef309aea43675385d228066a86aa547be70a27d61dad93"
+        },
+        "autograd/checks/higher_gpu.mojo": {
+          "mode": "100644",
+          "sha256": "08e3540266f111a8c90bb0afe6e42fad732d53fd298a1a83277cbcdf8dfd6436"
+        },
+        "autograd/checks/import_cases.mojo": {
+          "mode": "100644",
+          "sha256": "9b14350d7f9a0c8aaee35d81d5cfc8b8a0c250242bbe17b4505752ba328bda61"
+        },
+        "autograd/checks/import_gpu.mojo": {
+          "mode": "100644",
+          "sha256": "e1b7435dacac575646425a962a36da3acc03ffa286e1db33373bc0da56b32057"
+        },
+        "autograd/checks/lifecycle.mojo": {
+          "mode": "100644",
+          "sha256": "8cd3a19ae8e461262d901e19254d469d0d7c56ef0aa5a251c695f7b3e80bc46d"
+        },
+        "autograd/checks/mlp_cases.mojo": {
+          "mode": "100644",
+          "sha256": "ab4d83060883a041f235b96a4c10a968862a40202fef41ecdd8cf3e1c41f1e7e"
+        },
+        "autograd/checks/mlp_gpu.mojo": {
+          "mode": "100644",
+          "sha256": "fc742ede806ce66cce696baaf341b42ca456f61eaaee9e186a5aa5565ed839a2"
+        },
+        "autograd/checks/support.mojo": {
+          "mode": "100644",
+          "sha256": "5d70bde1f34ad80975f201b95dbec5398700a97f49d32741a9843fa726692b78"
+        },
+        "autograd/composed_ops.mojo": {
+          "mode": "100644",
+          "sha256": "cca0975ae9d9fecf192ce2ebbd14c78290dcbe1c7ae2bb954507a88fc8da97d1"
+        },
+        "autograd/data.mojo": {
+          "mode": "100644",
+          "sha256": "e11ea564c5a67a4dde212f0f38c92527e1ba0d8342c978a84fbd2b3f6a64058f"
+        },
+        "autograd/data_ops.mojo": {
+          "mode": "100644",
+          "sha256": "d7b143714fad81a61f688d75c223991e5f5dccf9f1b98160a1c0a91470637f29"
+        },
+        "autograd/embedding_ops.mojo": {
+          "mode": "100644",
+          "sha256": "271d8e70dbd24f18c9e84fcc639fbbb9b43efff4821c786c26cb3c1d32ac8a2a"
+        },
+        "autograd/fold.mojo": {
+          "mode": "100644",
+          "sha256": "41e9efa012c321d49103ad913c369ab9d096957fe623d2c750860d54f056af1a"
+        },
+        "autograd/fold_kernels.mojo": {
+          "mode": "100644",
+          "sha256": "a5c9e875d43997788e2351cec08b91fda4c729f36225a97159236b806b087ab8"
+        },
+        "autograd/fold_ops.mojo": {
+          "mode": "100644",
+          "sha256": "4817ada61508211f966f52bde57cd28aa3ebf932599709537ebd0209dfe075ef"
+        },
+        "autograd/higher.mojo": {
+          "mode": "100644",
+          "sha256": "1feee65b43ab1db5720c8e970f7bc0f5a8f386356c19c2ebda6d8b332d919bcd"
+        },
+        "autograd/higher_fused.mojo": {
+          "mode": "100644",
+          "sha256": "1f6764dce36973d54e9826de0ab0cf031d439fafb599233196efa4c8469d7480"
+        },
+        "autograd/higher_loss_ops.mojo": {
+          "mode": "100644",
+          "sha256": "5a76ca9e3aa1eb62563079501ad5c8f75cd4c5c1bdca8265aec00e53b359546a"
+        },
+        "autograd/higher_ops.mojo": {
+          "mode": "100644",
+          "sha256": "a260e5af4c2da93c38bf31596e75efcdddf20f205159b3fe9dcf2694fd6c5144"
+        },
+        "autograd/import_api.mojo": {
+          "mode": "100644",
+          "sha256": "deeae97ddc7a8dc54199a3424daf8acc69e0ea3b0d5cdeb1035cd07fdb83afba"
+        },
+        "autograd/import_ops.mojo": {
+          "mode": "100644",
+          "sha256": "6fd2d9510317cb50c2b1b281962c60b934ac444009c025c9c1a4b80a8263175f"
+        },
+        "autograd/kernels/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "autograd/kernels/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "autograd/kernels/checks/readback.mojo": {
+          "mode": "100644",
+          "sha256": "194a4c3966a54b00c1f0da904f9ac342ad33fc315524a63c57bf574c2a712caf"
+        },
+        "autograd/kernels/embedding.mojo": {
+          "mode": "100644",
+          "sha256": "49b38e6032e2f8b55443015c66c36d35bd6f74b53565142407c8cf070127988a"
+        },
+        "autograd/kernels/embedding_runs.mojo": {
+          "mode": "100644",
+          "sha256": "0368f9cd37a414ec8ebe760ad53626004295a95b152b7351890ff892b927583f"
+        },
+        "autograd/kernels/embedding_sort.mojo": {
+          "mode": "100644",
+          "sha256": "d576c8bee721b5ef37336705e281784b1aa1523d9ffdf8f4afd45eb62340f69d"
+        },
+        "autograd/kernels/linear.mojo": {
+          "mode": "100644",
+          "sha256": "832d75f3554f90bd563b0e4ec44ed73eaa88e2d914ae810f651b11f8f89308e6"
+        },
+        "autograd/kernels/lm.mojo": {
+          "mode": "100644",
+          "sha256": "46e0f79c1d29d32f9b9151a6b1fa0fc7a9ca4fde80672505f8539d8d6bdd038c"
+        },
+        "autograd/kernels/mamba1.mojo": {
+          "mode": "100644",
+          "sha256": "b485cd3afb3d0da2affda4fab8545a1408ec839a5c15e6924823ae2b8cb94660"
+        },
+        "autograd/kernels/mamba1_prefill.mojo": {
+          "mode": "100644",
+          "sha256": "795d680781935cb39c89e4efe28c94d46a11d0732c08cb434e3e0b3dfebc90a9"
+        },
+        "autograd/kernels/mamba1_proj.mojo": {
+          "mode": "100644",
+          "sha256": "44a1d7abc44db9846a40d1b9a6f55b1f2c84cb78eaf1dbc67bee9e973a643987"
+        },
+        "autograd/kernels/mamba1_scan.mojo": {
+          "mode": "100644",
+          "sha256": "fcf89b2d09f1bf397978da9c8d9757022e10bf1b7d99f32573bc4dda73b860d7"
+        },
+        "autograd/kernels/mamba2.mojo": {
+          "mode": "100644",
+          "sha256": "b6d835617374302e5894c26d756964544cc7e2e6b5bffbd507cb19008aad678b"
+        },
+        "autograd/kernels/mamba2_prefill.mojo": {
+          "mode": "100644",
+          "sha256": "2451c28219398b11ca0aa74836b795ed3e27659af094248075e49cbc33a3d2e4"
+        },
+        "autograd/kernels/mamba2_proj.mojo": {
+          "mode": "100644",
+          "sha256": "ab2c2c90ed3b0b705d19e562158ea201e3020a637eacbd0a245c286cb7b0cd15"
+        },
+        "autograd/kernels/mamba2_ssd.mojo": {
+          "mode": "100644",
+          "sha256": "63411f04b9c4316b2551cc3e52f78ffbfa208159c8c513a7f051dab0b6a1af80"
+        },
+        "autograd/kernels/mamba3.mojo": {
+          "mode": "100644",
+          "sha256": "10818accfbf791d2c1e0256c16bc15c5e4d32603fa204f47f09cd60e41dd1e1b"
+        },
+        "autograd/kernels/mamba3_prefill.mojo": {
+          "mode": "100644",
+          "sha256": "119a10ee80831b07eb3b0bcf9bcc608ba0034ef663d76e00a61cdac70db188e6"
+        },
+        "autograd/kernels/mamba3_proj.mojo": {
+          "mode": "100644",
+          "sha256": "731acf58bd91317a5423e18c52bfd6bc00f177995826b447f3d8395a83a27a97"
+        },
+        "autograd/kernels/mamba_refusal.mojo": {
+          "mode": "100644",
+          "sha256": "e3ead5a2ab6873519011e4ddd158cfa8adb051d45c095699f54287e6611f3cb5"
+        },
+        "autograd/kernels/mlp.mojo": {
+          "mode": "100644",
+          "sha256": "245dc943f44e2cf712b276e3981c831399ee9f1e558ea5472f151ea568aaff9f"
+        },
+        "autograd/kernels/moe.mojo": {
+          "mode": "100644",
+          "sha256": "e9fcb9675092591df03e2c38d088a193c7d85bf3e2aceda963673371b18cbc16"
+        },
+        "autograd/kernels/recurrent.mojo": {
+          "mode": "100644",
+          "sha256": "2fe762866faee04cb69d8c4f31713eff3522107a3ffbd85d01a65849add05dfa"
+        },
+        "autograd/kernels/recurrent_scan.mojo": {
+          "mode": "100644",
+          "sha256": "6c8024db8cfa4ccea2f3b126fd7f4de88d7b069e8c15292ce69d72b767691834"
+        },
+        "autograd/kernels/transformer.mojo": {
+          "mode": "100644",
+          "sha256": "4ff2f264fa6d26b6ebf4677339adae1c9bde2b29216f2bd27ce343238a6d6fd4"
+        },
+        "autograd/kernels/transformer_afn.mojo": {
+          "mode": "100644",
+          "sha256": "4cf8ceb308f50707f2be1bb7c88681f94281dcb1e1cc965d0cbe5f7ff63f35bc"
+        },
+        "autograd/layers.mojo": {
+          "mode": "100644",
+          "sha256": "24283bd410987f4443510863489f411b7f3261cc2bbcba9aa2c00a3ad766cde7"
+        },
+        "autograd/loss_ops.mojo": {
+          "mode": "100644",
+          "sha256": "27bf56b92124e3940e7b72e9abc94bdf3b3f9e1a92b714885be4c578f71e3af3"
+        },
+        "autograd/losses.mojo": {
+          "mode": "100644",
+          "sha256": "1aa62ab8b12177d77aee3d8417fca9bf7ad5f00a52be76aa768f20a4a1335365"
+        },
+        "autograd/model_ops.mojo": {
+          "mode": "100644",
+          "sha256": "5710fa2b71fa0f8c322df81d4d0334155cd51ab159088e5c8e02e70ada1c0244"
+        },
+        "autograd/ops.mojo": {
+          "mode": "100644",
+          "sha256": "0b0e8fd417a38d09969792b49883a2fa0d4c7a5c0a82bc2d06c60ecfbb256558"
+        },
+        "autograd/optim.mojo": {
+          "mode": "100644",
+          "sha256": "71529f4ece9a348766f170f67a149d31eed651fda36aa7cdd0eb5c48724f5c54"
+        },
+        "autograd/pass1_ops.mojo": {
+          "mode": "100644",
+          "sha256": "4cb2b5ae2e4772982d9b705c2ef5a48edc6f21a6e16354730160f54e1996ccc5"
+        },
+        "autograd/profile.mojo": {
+          "mode": "100644",
+          "sha256": "257b7a9c87f320ee7fbd2e63ad6b03866de64d65f6cc92e6c591668a1ed2fe2d"
+        },
+        "autograd/rankn.mojo": {
+          "mode": "100644",
+          "sha256": "624c21348cc46e8e9d1f5d47f5423c179ad3364c24377c227d56e3b407735620"
+        },
+        "autograd/rankn_api.mojo": {
+          "mode": "100644",
+          "sha256": "b1065b12b5f7760077fafb35962c844a1b9178868a5627729cd60cffaeed9648"
+        },
+        "autograd/rankn_bmm.mojo": {
+          "mode": "100644",
+          "sha256": "dee26d2816b405b71aff1e4e37f49364f0f0a1fef0f967c3a64894f3fc232b2b"
+        },
+        "autograd/rankn_bmm_ops.mojo": {
+          "mode": "100644",
+          "sha256": "b21f1974cb7193452c1fb176c03ecc9069f2ac46a9e827f3c0babeb97f2ff3a7"
+        },
+        "autograd/rankn_conv_ops.mojo": {
+          "mode": "100644",
+          "sha256": "a3a871f8b59a7ee6ee49c9ac75cf58b1eb14f7a5249d72bef1a7da5b452db365"
+        },
+        "autograd/rankn_fold.mojo": {
+          "mode": "100644",
+          "sha256": "0ee95f42ae09c6609900960de5ab746f6b2577992b95930bd3127e93e995259e"
+        },
+        "autograd/rankn_fold_ops.mojo": {
+          "mode": "100644",
+          "sha256": "00b8b30cce13c63ee35a6f038730b471cb3b28baf13a29fa32b51fb0a043548e"
+        },
+        "autograd/rankn_layout.mojo": {
+          "mode": "100644",
+          "sha256": "87d06092d47c00b75d44cf9dd1423e98e377dd47b90c7092f9fe17617c75a6a3"
+        },
+        "autograd/rankn_layout_ops.mojo": {
+          "mode": "100644",
+          "sha256": "1f3b69cfd03f160703d02be1f71f287da8d2ae7c01df9b94ea6bc377f99588b9"
+        },
+        "autograd/rankn_ops.mojo": {
+          "mode": "100644",
+          "sha256": "fe26683f45bcc925c2c34b6380ffa52f454a0bd5827515779560e2994d32a3d1"
+        },
+        "autograd/refuse_scan.mojo": {
+          "mode": "100644",
+          "sha256": "0e4ae7fbbfe6654dacd94382963e8683a9a2e0c309617686cf5b6fc9e1c4b595"
+        },
+        "autograd/row_ops.mojo": {
+          "mode": "100644",
+          "sha256": "ebf2ae5fa8bcf1cb11ad5c57f998daa9611aecc8be7cc8d3afd3ed8e0b9b7dca"
+        },
+        "autograd/row_sort.mojo": {
+          "mode": "100644",
+          "sha256": "4be72ece260e85dccfe9ebf95256d7273ffe171de6a1176c514879e476e40dab"
+        },
+        "autograd/rules_conv2d.mojo": {
+          "mode": "100644",
+          "sha256": "3600dc06f4f916e63704c4eef517118b744d6c84c89249849a587078d38c1c21"
+        },
+        "autograd/rules_lm.mojo": {
+          "mode": "100644",
+          "sha256": "358f2e8836416d80b85e37462f2046743312184bb4fdf1ee33767c0e1107482b"
+        },
+        "autograd/rules_mamba.mojo": {
+          "mode": "100644",
+          "sha256": "ae01da5097afe887ef4da5037268d5083a2e0c27fe0559aab8f93a6494d0de6e"
+        },
+        "autograd/rules_mamba3.mojo": {
+          "mode": "100644",
+          "sha256": "3ad884691f0a63375ec6ae2852aced432af09a17741854ee7238e7c90ac461ac"
+        },
+        "autograd/rules_samba.mojo": {
+          "mode": "100644",
+          "sha256": "5ab2d1afdccc5f5666dadddfa2d489c845d2aa9295752d53501ff7141f4b782a"
+        },
+        "autograd/rules_small_mlp.mojo": {
+          "mode": "100644",
+          "sha256": "43e013d468e31c4e832ba6f0e3789f240a42ecff07707e40b4dfdff9efeda793"
+        },
+        "autograd/rules_transformer.mojo": {
+          "mode": "100644",
+          "sha256": "4fd46dbc5170d43f5a6618e937e78bbd81c9848178e467d087210b5e62e39e5e"
+        },
+        "autograd/tape.mojo": {
+          "mode": "100644",
+          "sha256": "bc0321d0f12a097c457b255f5be414a7f1c0d83fc6a86682cbce3026d0b343a8"
+        },
+        "autograd/transformer_primitives.mojo": {
+          "mode": "100644",
+          "sha256": "6515192197c185b747b0a0a259e9b5a618e55784ba2ee936dee2606b85ca2f15"
+        },
+        "autograd/transformer_primitives_ops.mojo": {
+          "mode": "100644",
+          "sha256": "05542cb1eda40267cbc105246d1e9adfe7a27c27445f552f85ac8a22ad887822"
+        },
+        "checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f"
+        },
+        "checks/identity_trace_read.mojo": {
+          "mode": "100644",
+          "sha256": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562"
+        },
+        "checks/kernel_matrix.mojo": {
+          "mode": "100644",
+          "sha256": "3b4c69b5d81988e894d2bdfdd2651a479427d21c6066f8fa2a45c00745157952"
+        },
+        "checks/kernel_matrix_attn.mojo": {
+          "mode": "100644",
+          "sha256": "28f6acb87b2b8b13b48bf92676a9ef9759a773543a51145c84a3ebc99f705983"
+        },
+        "checks/kernel_matrix_gemm.mojo": {
+          "mode": "100644",
+          "sha256": "379c143af199beb67dfb73b2f2246a90b5c328680f616618c54fb053506ee114"
+        },
+        "checks/numerics.mojo": {
+          "mode": "100644",
+          "sha256": "8cee8aeb5172945a6577228210b542abd3ac35f1f6fa0ef24c23aa0c1c20dd22"
+        },
+        "checks/numerics_int15.mojo": {
+          "mode": "100644",
+          "sha256": "5de125e1b81bff2b05235f059296c6ab4d5c2237ff70c988534e2af6bbedd6f2"
+        },
+        "checks/rtf_seam.mojo": {
+          "mode": "100644",
+          "sha256": "cbef549b95e2a1578cc893eb0841c52ed765564702311cd4188da9bc81aa9fe1"
+        },
+        "checks/soft_f64.mojo": {
+          "mode": "100644",
+          "sha256": "6ccfce630bea082659dd45f05fa6fdcd0c877e36e5d2510d78532e63cb80d850"
+        },
+        "checks/vendor.mojo": {
+          "mode": "100644",
+          "sha256": "88c31f57307d38354935005c21efda7456f48342b2261edf02963c2f904977bc"
+        },
+        "core/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "core/apple_air.mojo": {
+          "mode": "100644",
+          "sha256": "64328b11dba3cbbc2de085a51915534c47085abb5f3f7c1baf34684cbd9fbfd8"
+        },
+        "core/cast_in.mojo": {
+          "mode": "100644",
+          "sha256": "492a059ed6ecc1aaaade379dd6a8fcd8241ff4e30b329fc89c0ec72d7fc32f39"
+        },
+        "core/ctx_key.mojo": {
+          "mode": "100644",
+          "sha256": "d4c732a5787ef4cdea1b17f02bacba72b518c422279f090d01ae8191ef3dbdf7"
+        },
+        "core/device_arena.mojo": {
+          "mode": "100644",
+          "sha256": "4e1987f81a3114b8c06d5bb2b90406bf78d6ca67a00a5320fadc1a34f9cddf16"
+        },
+        "core/device_fold.mojo": {
+          "mode": "100644",
+          "sha256": "f0f4668c31c0c3949521b799be7c853b99df775b5a3ec164e8b04cb09732ef16"
+        },
+        "core/device_plan.mojo": {
+          "mode": "100644",
+          "sha256": "72a3f4fafe2cee74bb1b64b8a26ac38341907798ce774feb0dac562c5a9509b5"
+        },
+        "core/device_pool.mojo": {
+          "mode": "100644",
+          "sha256": "cab385df043dc839ee97094082580c0d373b4a0b31d49d4e1301c37acc6d432f"
+        },
+        "core/device_scan.mojo": {
+          "mode": "100644",
+          "sha256": "da53d2e05775272465efd7f4236e57fddafba33a476d4f3e15f8afc8435cf2ac"
+        },
+        "core/fast_radix_sort.mojo": {
+          "mode": "100644",
+          "sha256": "695da6dbb2aa0af2fb8ed1481425d026fa5ca51cd924626fe3c20e2477303929"
+        },
+        "core/host_lanes.mojo": {
+          "mode": "100644",
+          "sha256": "1632237663be4004055668bc30a03550fad19e1806b24d6ac2ccd2dcfead6574"
+        },
+        "core/host_parallel.mojo": {
+          "mode": "100644",
+          "sha256": "ae15177298d9ea8a310d96e29a5b3545f0aee8a3221e41abfc92864c33ec6c06"
+        },
+        "core/host_predict_threads.mojo": {
+          "mode": "100644",
+          "sha256": "d6f2795abb76ccf7ba3862bed088634bf1c67023e45b9b3dafdf06b6251197de"
+        },
+        "core/identity_trace.mojo": {
+          "mode": "100644",
+          "sha256": "0916a131eb6127b337d0164d065dbb7ce1db1e20665dd8c7bb7dc79efb810277"
+        },
+        "core/label_encode.mojo": {
+          "mode": "100644",
+          "sha256": "db4a65bb84d5292adfe8b6afc5b25e6c3bec8752cadf85b8bc56fa5653279fcb"
+        },
+        "core/launch_log.mojo": {
+          "mode": "100644",
+          "sha256": "828a361085bb0baa0fd1091fcbf5e0891bef710ae57aeb07db79b5f797a1a09a"
+        },
+        "core/neural_context.mojo": {
+          "mode": "100644",
+          "sha256": "04f1ca10616c3638b2b792c1118ae77cd48c7b0b35d3bb8ef882ea5749282ea6"
+        },
+        "core/package_profile.mojo": {
+          "mode": "100644",
+          "sha256": "62de1fa0475ec969be5725e47c53bee9ba30a478b53699301a3975a0de010aac"
+        },
+        "core/philox.mojo": {
+          "mode": "100644",
+          "sha256": "1a1c2c0f81b496287d54658f60a1af18ea0c0fa16df49feb069e3abf82e5a77d"
+        },
+        "core/philox_neural.mojo": {
+          "mode": "100644",
+          "sha256": "d7eba41aafa40257c55dcac7cd949f1e1298aba7844ad3cec4be629f519a0285"
+        },
+        "core/scratch_pool.mojo": {
+          "mode": "100644",
+          "sha256": "40b7e648cf4f628a733c8904da079a0a72091827d1ee4dcc518338feb2fe4eda"
+        },
+        "core/six_lane_experiment_guards.mojo": {
+          "mode": "100644",
+          "sha256": "d48fe80a5fa8fe89d0c40dd60878ae20ecca2a73aeb10175bab26022a65b635f"
+        },
+        "core/stable_radix_sort.mojo": {
+          "mode": "100644",
+          "sha256": "7d94fd3edb012152cca5e02c46358cabb9eeee9421be3f6db053de9ed5f04d86"
+        },
+        "core/staged_download.mojo": {
+          "mode": "100644",
+          "sha256": "cf70f875002d316c2e57a2f3bf926e57c1eb3a6f549fd7f93eeb3e1a27bd7537"
+        },
+        "core/step_glue.mojo": {
+          "mode": "100644",
+          "sha256": "55f38d5e805c1e741d5368476b9a3331139d106839d317fad4ab6159edc93978"
+        },
+        "core/step_phase.mojo": {
+          "mode": "100644",
+          "sha256": "09af17a4d316553686cc84437728f4a1578279a8078292f2770dee54faa44222"
+        },
+        "embedding/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "embedding/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "embedding/checks/embedding_identical.mojo": {
+          "mode": "100644",
+          "sha256": "882992242fe1580634f9a31aa546af4b1d087bdea826c4a69c7e4d4a6dd77b01"
+        },
+        "embedding/checks/embedding_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "e1864872be2dc5272117daa864eb433f3ab8027d76c273cacc403a6f36695841"
+        },
+        "experiments/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "6c6ec57de9f82ef42d82760f144a4571cb16b3cd6de33aaa7aa9fd65e8ab1fa1"
+        },
+        "experiments/apple_fast/gemm/scoped_dispatch.mojo": {
+          "mode": "100644",
+          "sha256": "b87c8bb182734e12fdabcc0e802da3dbdb5e731ff2a2123370c13c8da2201a35"
+        },
+        "gemm/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "gemm/afn_apple_fast.mojo": {
+          "mode": "100644",
+          "sha256": "1bfc418feb17367152d92fa25346412521e0d02c5f1e97876d41ae05058f7499"
+        },
+        "gemm/afn_apple_fast2.mojo": {
+          "mode": "100644",
+          "sha256": "a5cb91505b69de254cd51fe53085b8f8f6380cae23b70f364c6c5a9163e10929"
+        },
+        "gemm/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "gemm/checks/gemm_backward.mojo": {
+          "mode": "100644",
+          "sha256": "b89a8c4b77e4e0615d14d40f78f975d88300fc3d96fd26aea640d0a5ced27d2a"
+        },
+        "gemm/checks/gemm_identical.mojo": {
+          "mode": "100644",
+          "sha256": "0b8280ba2a4b5458c05c38f0e848274377dae23c2b62144a2687f1eda8213e74"
+        },
+        "gemm/checks/gemm_int15.mojo": {
+          "mode": "100644",
+          "sha256": "2891caee78a8a81911f4d159b49f66b9f536ad800fd649d0deac2dd9f2d78282"
+        },
+        "gemm/checks/gemm_int15_apple.mojo": {
+          "mode": "100644",
+          "sha256": "4cd731c8b478f3a78a3eb918d53cdba55e980b4dd88dbe6c830e35b730803805"
+        },
+        "gemm/checks/gemm_int15_epilogue.mojo": {
+          "mode": "100644",
+          "sha256": "38772acf5e380e798dcf63a5a078b945b61ba531fa60ef5b94567dbf0b39b20a"
+        },
+        "gemm/checks/gemm_int15_heads.mojo": {
+          "mode": "100644",
+          "sha256": "65ddf0528a9152db7e868b8952f729f9e69d94d1b88dc2509bacf7fb1c61b258"
+        },
+        "gemm/checks/gemm_int15_tuned.mojo": {
+          "mode": "100644",
+          "sha256": "1f062ca0d16b24e20d09953fd3b0e787e592a13470faefd80ffe12962fe565b9"
+        },
+        "gemm/checks/gemm_int8_mma.mojo": {
+          "mode": "100644",
+          "sha256": "858a8ecb550dbb201fd59c05d8c36ad89663f64da1c1b5c926d36df2a5451173"
+        },
+        "gemm/checks/gemm_int8_mma_amd.mojo": {
+          "mode": "100644",
+          "sha256": "a4056ffc097dca6247d6a23da39db00f1cbf922a7a2da669faee5420f408f59f"
+        },
+        "gemm/checks/gemm_int8_mma_tuned.mojo": {
+          "mode": "100644",
+          "sha256": "9d834932f8b09f0fa5c1711f7305eab7c5014de62a12460391c66c4fba840cf8"
+        },
+        "gemm/checks/gemm_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "882c173e4f37aa4de8180a375e075d0cc827292c3e9d77a86cd81c570df568c9"
+        },
+        "gemm/checks/quantize_int8_par.mojo": {
+          "mode": "100644",
+          "sha256": "ffa66cf8bdaf15876f353c3e9b707e7d745dfbd235a8a8518b2e01fbf3c75066"
+        },
+        "gemm/contract.mojo": {
+          "mode": "100644",
+          "sha256": "4331f964dd9b0ba46de78801753140c736d6c75bc07c480ef8b250395dc8a110"
+        },
+        "gemm/experiments/neural_grouped.mojo": {
+          "mode": "100644",
+          "sha256": "d298421fc884d085c3fcddcc04c5a0d31331caf543caf3a3f0d70eb1ac40c74c"
+        },
+        "gemm/experiments/neural_plans.mojo": {
+          "mode": "100644",
+          "sha256": "20ac07e943979751bbec21f00cc3d0c59a43934b06d20a3f8a74ccf3a7c369b3"
+        },
+        "gemm/experiments/neural_profile.mojo": {
+          "mode": "100644",
+          "sha256": "eabf74d599eff6c8f96a00203470982b13ac6460237e7c0512a4910efdab1bc3"
+        },
+        "gemm/experiments/neural_profile_device.mojo": {
+          "mode": "100644",
+          "sha256": "a2ce4e7e13ceef39354ed35af56ce6bb64dc4b571476c2bb49c6993e19789dce"
+        },
+        "gemm/experiments/neural_streaming.mojo": {
+          "mode": "100644",
+          "sha256": "a0a8987d99481b2370b50b546c3ffc072568fd574ce4507b9246a98e242c9d77"
+        },
+        "gemm/experiments/neural_switches.mojo": {
+          "mode": "100644",
+          "sha256": "ad281e1ddcaad1ce8762c9ff850e478ffa85571537eb339f1cb99903cfa09f09"
+        },
+        "gemm/experiments/neural_tiled.mojo": {
+          "mode": "100644",
+          "sha256": "f4de0995635f2a7681b3584a95e98b262cfdf6909fdde894b154e8fafb66fe8c"
+        },
+        "gemm/experiments/neural_tiled_v2.mojo": {
+          "mode": "100644",
+          "sha256": "6a4076656d520b489b767c4e9c4311726f0c6164d78e50d51be3b08b9e66bdcb"
+        },
+        "gemm/host/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "4d9f9558a0342ed5cef03721dce40b8995cffc0b9dd57fef34700b5b7bccf17c"
+        },
+        "gemm/host/gemm_host_rows.mojo": {
+          "mode": "100644",
+          "sha256": "682bd471119a4d72874b9c8a0afb75b8ea6b8238cecf6de6365b20e5346c2308"
+        },
+        "gemm/host/gemm_int15_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "1a5019954ebf507628c4af4af257afaec2e60a94ae630b319bbd14697b49e90e"
+        },
+        "gemm/host/gemm_lowbit_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "797bde85d773e966d5d79ee936a6ad73cbf9bbc8a02044424e3fa75a2eb585d4"
+        },
+        "gemm/host/gemm_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "9f3ebb178a544d58e0c4722be22c2246411a5cb011a33adc3e84e0dc06654132"
+        },
+        "gemm/host/neural_gemm.mojo": {
+          "mode": "100644",
+          "sha256": "69423884cf90edeff474e56e9eb1691ad5ee97475cf780b8dc444579e30fb016"
+        },
+        "gemm/neural_backward.mojo": {
+          "mode": "100644",
+          "sha256": "1acbc40efc06f35beb8a70839fc4ef60c28328f72eff5ec1cd8f2229d895a324"
+        },
+        "gemm/neural_dispatch.mojo": {
+          "mode": "100644",
+          "sha256": "4fb9394514d3f58d3e4591082b0dc5c272e2297f6395932c945306c5f0299c9d"
+        },
+        "mamba/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/checks/mamba2_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "e2acea33817d9512d9aa5c7512ea9faad572042493230beb42b0206ab828cf01"
+        },
+        "mamba/checks/mamba3_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "5b42a0208c9e69cffe2e8aa807264812ee518517561660a2366c0ca9441513b6"
+        },
+        "mamba/checks/mamba_backward_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "258f65cc9f2fc388ad17dac25e467ddd35372c68d63d1559a672457d855bc7fc"
+        },
+        "mamba/checks/mamba_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "06085b974063e3768d838c717c3a0bd668c0a96b7244e01ec1bdef177d6d616e"
+        },
+        "mamba/checks/mamba_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "9967b2e17797b4b9fdef304b59f8adfaa6146a66193c6f6ff18e61f8f07bab28"
+        },
+        "mamba/checks/mamba_rms_fold.mojo": {
+          "mode": "100644",
+          "sha256": "6ee1e67455eb097a6f57c429f86f783294b792c2b16ca57bfe22046e008f9030"
+        },
+        "mamba/checks/mamba_tape_backward_check.mojo": {
+          "mode": "100644",
+          "sha256": "724ef77c5dd6d575285c70843053e38b54bd12c35ab2411203bc9c50669c3a2c"
+        },
+        "mamba/impl/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/modeling/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/modeling/afn_mamba1_fused.mojo": {
+          "mode": "100644",
+          "sha256": "8b7fb5285ee8f907cdc776fa1eb8dcda8ada91c3b5b64d767c8bb481da0b1949"
+        },
+        "mamba/impl/modeling/modeling_mamba.mojo": {
+          "mode": "100644",
+          "sha256": "d213f09fcfdc391b4249149b6f651efbc5003e462de041212d264dc3d999b549"
+        },
+        "mamba/impl/modules/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/modules/afn_arena.mojo": {
+          "mode": "100644",
+          "sha256": "1de67258067b8e44cd1fe6e5cc7e54bf3a23304b7cd473c123532594df88bde2"
+        },
+        "mamba/impl/modules/afn_defines.mojo": {
+          "mode": "100644",
+          "sha256": "55d8a0394192882fc9bd4d67096a145eaf7fab6fca3b20a9bb8a30b07d1b7309"
+        },
+        "mamba/impl/modules/afn_proj_gemm.mojo": {
+          "mode": "100644",
+          "sha256": "ea2aab4f2c00f964cbcffd231f8927cea3b0da3a657bbee710c7430600c50fd5"
+        },
+        "mamba/impl/modules/afn_refusal.mojo": {
+          "mode": "100644",
+          "sha256": "c101f2abd1df9ebcda648a527750b3dfe2f3df5e3ac5960c94b3aad323e81811"
+        },
+        "mamba/impl/modules/afn_ssd_mma.mojo": {
+          "mode": "100644",
+          "sha256": "8da6f8b5d4426ae6ec7dd1ca4a07e50e42d2ec0a32292dff88c56b97ae6ed4b9"
+        },
+        "mamba/impl/modules/idn_gemm_ws.mojo": {
+          "mode": "100644",
+          "sha256": "020b36233089c234b610394be24260a628ae27d647a8638603c057543bc62c37"
+        },
+        "mamba/impl/modules/mamba2.mojo": {
+          "mode": "100644",
+          "sha256": "7ffebb90d9b50fb1343d0ccaca73840d62ff7614dfb9d1a6ec5909f2f86bbd39"
+        },
+        "mamba/impl/modules/mamba3.mojo": {
+          "mode": "100644",
+          "sha256": "750860ac6b6935d67626eb9aa0e282b410eab0b78cef1784b89d6eb38fdeb2f9"
+        },
+        "mamba/impl/modules/mamba3_transfer.mojo": {
+          "mode": "100644",
+          "sha256": "4966a68104abf8bf5b418d163ca48af28bbc7b3318d1817401e7615594518896"
+        },
+        "mamba/impl/modules/ssd_minimal.mojo": {
+          "mode": "100644",
+          "sha256": "167e8ac13d80aa213ebbf712f98f1b1ecd4e21a5ce969588ecc6bd7dc383370c"
+        },
+        "mamba/impl/ops/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/ops/afn_mamba3_fused.mojo": {
+          "mode": "100644",
+          "sha256": "8ba1d5338e9c26de5a8c68de80d3b4d06292fdbbc4fb555556866f9be7a33202"
+        },
+        "mamba/impl/ops/afn_selective_scan.mojo": {
+          "mode": "100644",
+          "sha256": "1390fa6c990d1b78b3265f74a7126cebe01e6a58f9c5115338610227d368958a"
+        },
+        "mamba/impl/ops/identical_scan_window.mojo": {
+          "mode": "100644",
+          "sha256": "e1030ea56e755e3c33f5ca48172ecf4383224d9c59d822d813cacaa585b37d4b"
+        },
+        "mamba/impl/ops/m1_persistent_scan.mojo": {
+          "mode": "100644",
+          "sha256": "aeb89cc75e6176318c0df35a6ac5c2174cd30f0d0dd6bd02e9439f31c88b1450"
+        },
+        "mamba/impl/ops/mamba3_siso.mojo": {
+          "mode": "100644",
+          "sha256": "1f39eb6af692747ee2a4811804c2663764087f90981eb02eb80cff662f2bb4f9"
+        },
+        "mamba/impl/ops/neural_gradient_profile.mojo": {
+          "mode": "100644",
+          "sha256": "59ee1799f6cd8606e2fae7366656f821c41c6e525e87dcf20a75bbc42f32c719"
+        },
+        "mamba/impl/ops/selective_scan_interface.mojo": {
+          "mode": "100644",
+          "sha256": "9f8a700dd04adfb26fe91bfb5d3960eec25301c5c5e5eb78ace31d5d4723f8c7"
+        },
+        "pixi.lock": {
+          "mode": "100644",
+          "sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509"
+        },
+        "pixi.toml": {
+          "mode": "100644",
+          "sha256": "5bd97d6cdab34b8e5db666baf73e3092b42a81447d88acf825fc31f26bdbc4a9"
+        },
+        "sequence/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "809cb211562212a9fc5b76331af755929dacb8218fcc23aca24e856ea4cdb9bb"
+        },
+        "sequence/adafactor.mojo": {
+          "mode": "100644",
+          "sha256": "fd8347ae8dcfe1d79c524c441e3bb4bf5769e8ac6632a46ef5770bc1c83a0a8c"
+        },
+        "sequence/adafactor_candidates.mojo": {
+          "mode": "100644",
+          "sha256": "f0a23c5955d5d6fd5143f5f6754d9d71f277c1c7ac4481ef5d421544e83d71a2"
+        },
+        "sequence/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "sequence/coop.mojo": {
+          "mode": "100644",
+          "sha256": "fd2376c403bdaff5cc6ef384adfe9efa11acf9d540e4eeb757aba115bf2b23fa"
+        },
+        "sequence/coop_lane.mojo": {
+          "mode": "100644",
+          "sha256": "18ec771965514160983df8d7b61812a935b2415ad8752775c416bbaaf27ca984"
+        },
+        "sequence/croston.mojo": {
+          "mode": "100644",
+          "sha256": "19bc6f100893ff33be6940767f85776a1e957f37b487cdf3322d2d4449b8891f"
+        },
+        "sequence/dispatch.mojo": {
+          "mode": "100644",
+          "sha256": "b3f65a52e2d4bf5c32ae206d2adf5915be83bdc93bcd2083e62ec48a6ea0f2bf"
+        },
+        "sequence/ets.mojo": {
+          "mode": "100644",
+          "sha256": "5e08705c8c88b8a02473a589f9894d75c18ecbd0b7bfea0da38a2a6499905539"
+        },
+        "sequence/ets_spec.mojo": {
+          "mode": "100644",
+          "sha256": "aa49bf89bd0c93e9a0f4855c521a644f726278c2f401c0202ae18f5244ed9dd5"
+        },
+        "sequence/ets_team.mojo": {
+          "mode": "100644",
+          "sha256": "a63647842e2d31745d68c6f346dc91ce8a2bd49b15209c898caa896af572732f"
+        },
+        "sequence/exec_device.mojo": {
+          "mode": "100644",
+          "sha256": "c9a165c04a5157ef05a7d1ba13d03722f5a601e86c9925dae21f4de1ce2569a0"
+        },
+        "sequence/exec_trait.mojo": {
+          "mode": "100644",
+          "sha256": "1ff8bd53ade1ab1354b8ff33e37f1bfa272fd30597c0a8337d7f57a395f02b2f"
+        },
+        "sequence/execution_profile.mojo": {
+          "mode": "100644",
+          "sha256": "8139e548df33a4d0e3a70b5d6943aa661aaa94421d32e74e144210a4374c609c"
+        },
+        "sequence/fit_team.mojo": {
+          "mode": "100644",
+          "sha256": "8305391a86716d8f91f3141be84a08672f4ecbf438292d1bd0d3f548efbc3840"
+        },
+        "sequence/fold32.mojo": {
+          "mode": "100644",
+          "sha256": "629c438310f366b74998043711e60ca0c36ee167625bfa01699c506bc4117102"
+        },
+        "sequence/garch.mojo": {
+          "mode": "100644",
+          "sha256": "0b4e15baf037c01dc50d7a955b4f01c5c7e10130bac869b03f07d77aec7b11e6"
+        },
+        "sequence/gemm_split.mojo": {
+          "mode": "100644",
+          "sha256": "259d9343df66f8c5a863b6bdbad432bdb727e49d1e5cedbf428f3490f01bb9ce"
+        },
+        "sequence/gemm_tiled.mojo": {
+          "mode": "100644",
+          "sha256": "5001e433c0cb5d93fcea3e4109e5fff02136e34ddd9bd62480f5ff5ad6db4be0"
+        },
+        "sequence/launch_profile.mojo": {
+          "mode": "100644",
+          "sha256": "f33782d2015e414a9572a1b3a15d076ea7c6f1bc85370b655864555cc091204d"
+        },
+        "sequence/layernorm.mojo": {
+          "mode": "100644",
+          "sha256": "a073a62888e29e41ae2e3319c58fe33e1c8a21ce09ee45c76e9a4024beb3f3d3"
+        },
+        "sequence/layernorm_core.mojo": {
+          "mode": "100644",
+          "sha256": "fc1b948365225c44bbc8c328115bd4d54545e03e4c42b87b66c62ec0c5e4ba41"
+        },
+        "sequence/mlp.mojo": {
+          "mode": "100644",
+          "sha256": "7a29edc8c38a9a02abc4a5edb72c99bccce700635dba5d740fb03151b22c524b"
+        },
+        "sequence/mlp_fit.mojo": {
+          "mode": "100644",
+          "sha256": "d3a2f62ae412eb2d48044b4a5c0df625fb080693854f7b87ab8fbe769c9298d5"
+        },
+        "sequence/moe.mojo": {
+          "mode": "100644",
+          "sha256": "9fc9ef43a018d39bc299d8ec240b11ac91df6533d995d37102ff22212677dd55"
+        },
+        "sequence/moe_group.mojo": {
+          "mode": "100644",
+          "sha256": "0a6e6c291f88afcedffffd6976a47d917d420b0037d49fd0b20ce37a753c4f28"
+        },
+        "sequence/moe_grouped.mojo": {
+          "mode": "100644",
+          "sha256": "06352d54436af19c258f29b1efb2fe5267ddfabfd775bcb0e53782388a5bcc52"
+        },
+        "sequence/moe_grouped_fold.mojo": {
+          "mode": "100644",
+          "sha256": "0d56917c135aba18d19ab58d009acff17bcf13814a686759beeed76d420aac6e"
+        },
+        "sequence/moe_mma.mojo": {
+          "mode": "100644",
+          "sha256": "05e97f7885204be276799bde7bcf08e68f804d16bd7628c86e1ef99dbb048d14"
+        },
+        "sequence/moe_reg.mojo": {
+          "mode": "100644",
+          "sha256": "125f48b873924b7732c6536e44120ddb6b3750b68c2c98e0396a77dab4e92f11"
+        },
+        "sequence/moe_tiled.mojo": {
+          "mode": "100644",
+          "sha256": "484404b7e561398d3ef7ea4fd1b47725c7316ee05335c9ec711e347bae4a5843"
+        },
+        "sequence/nm.mojo": {
+          "mode": "100644",
+          "sha256": "c86915b7abea0200f74610d01531b74ef391b18e44c6c6780deff1a916f2ad0f"
+        },
+        "sequence/ops.mojo": {
+          "mode": "100644",
+          "sha256": "9d755b4c1092e5ec735882de056c6cd2ce90e1a0ed1d9d2e22bf6abaeb4710c8"
+        },
+        "sequence/prophet.mojo": {
+          "mode": "100644",
+          "sha256": "922620fd1d67e5631f6a14664ab4ccaac01a624264c65b0587e13a4fbc9e8052"
+        },
+        "sequence/prophet_coop.mojo": {
+          "mode": "100644",
+          "sha256": "38c066734df294fa6429988306b3b2bc0e2e22d809f1fbb51748b25fbcbe1cb5"
+        },
+        "sequence/recurrent.mojo": {
+          "mode": "100644",
+          "sha256": "36524534e16b8549e63eb06a9762912804b6cb8fd5fad124c0ae2bda211dc1b5"
+        },
+        "sequence/recurrent_scan.mojo": {
+          "mode": "100644",
+          "sha256": "a5d5b4d307f2e186295fc317f7f2e2e46bc97fc23ce0acc879895281e9370e01"
+        },
+        "sequence/stl.mojo": {
+          "mode": "100644",
+          "sha256": "32d31685fc08ea710b268bdf06316447572cf2b07242ba6ca2542b2b4f5d0be1"
+        },
+        "sequence/stl_grid.mojo": {
+          "mode": "100644",
+          "sha256": "33d9db6eb711e1a79a2a70fcab91762c5525d7a840a8a93a0df194f02210edc4"
+        },
+        "sequence/theta.mojo": {
+          "mode": "100644",
+          "sha256": "950e8359f89818987bca521f112a797219ed0821ac83fbc5dd1dc7f090f89977"
+        },
+        "sequence/theta_spec.mojo": {
+          "mode": "100644",
+          "sha256": "496ff66cffea39abf3243ab0fb46f5492a51afd9d5bc199a0ca262a80216f7ea"
+        },
+        "sequence/vecar.mojo": {
+          "mode": "100644",
+          "sha256": "54cd52863e1fcb31fff3c35274b7dcc0750c4c40ba6067f3f2e4d57d2a6fa375"
+        },
+        "sequence/vecar_block.mojo": {
+          "mode": "100644",
+          "sha256": "8db0c3e4f591740412fed75fdd9e4bd8063b3773313e5f9fd057c872399aa566"
+        },
+        "training/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "training/afn_optim.mojo": {
+          "mode": "100644",
+          "sha256": "b93fb19aed9c71ec549f5d4020f6047f33f740d35f551cf2925c632ef0100245"
+        },
+        "training/byte_lm.mojo": {
+          "mode": "100644",
+          "sha256": "ced32874d988b763c8811a07ffa037fc809347ecaa2a07efd44528ce5fbc5b28"
+        },
+        "training/byte_lm_afn.mojo": {
+          "mode": "100644",
+          "sha256": "4c7b4eb9d63a90dc1c16b1dbc8f55502f01c59ae16dbc01ac8fb458ea5a45d2c"
+        },
+        "training/byte_lm_block_copy.mojo": {
+          "mode": "100644",
+          "sha256": "a3dadde2704db44e4922eb897e75d650d880559ba22a64d4b9fd9f4182962e4d"
+        },
+        "training/byte_lm_config.mojo": {
+          "mode": "100644",
+          "sha256": "fe029c0aae6df262afd5987c402328ab0b3e00e8ef64c71426ed2717d17ae21a"
+        },
+        "training/byte_lm_host.mojo": {
+          "mode": "100644",
+          "sha256": "45f950ed33b3db3ca710eeb3c4b70a2d3bf1356594422fa0f20c2fecd283953d"
+        },
+        "training/byte_lm_host_backward.mojo": {
+          "mode": "100644",
+          "sha256": "bbb7457d4b352a43c940e0cb3766970e3743c284168bfecb634873c73595c521"
+        },
+        "training/byte_lm_host_kernels.mojo": {
+          "mode": "100644",
+          "sha256": "bf7deaf1bc7bc65c09fbfdbf5a1eb0fcda312741ee785f31e2d6a2c5d4f61690"
+        },
+        "training/checkpoint.mojo": {
+          "mode": "100644",
+          "sha256": "290811f4d6e3cb2b5a13c9837a0862ba39fcbdf5c8365189a78c9e672e99f646"
+        },
+        "training/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "training/checks/chunked_lm_head_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "32772237cac4f4a063093c6079bb380f9eaae1c4e8af52c4b1a9f268413ea0c9"
+        },
+        "training/checks/lm_tape_backward_check.mojo": {
+          "mode": "100644",
+          "sha256": "fafa7eb57890c214764f54176d831dda71381b403b19b64b8c5c2d9b18b8eebd"
+        },
+        "training/checks/loss.mojo": {
+          "mode": "100644",
+          "sha256": "5c4185099eb8d40a0cce59910ae2cdd56a3ee28f9dbd51546ca39c5a49784eb4"
+        },
+        "training/checks/loss_contract.mojo": {
+          "mode": "100644",
+          "sha256": "fa31fb37fa67cb3a192e6e1f4366774a149e12af3b382223cc22015a29ab29fe"
+        },
+        "training/checks/loss_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "5317053e74b05b3e2d14009769f4c6e9daac70c9888434b17e3e61f456b9b45a"
+        },
+        "training/checks/mlp_tape_step_check.mojo": {
+          "mode": "100644",
+          "sha256": "ea0ba3664198aa20079de11924361f3f21283bd7bb2e6853f5e9f58c38a8ad26"
+        },
+        "training/checks/optimizer.mojo": {
+          "mode": "100644",
+          "sha256": "ec4940a59fd8426eb2fb5c4e13c766254f3ca854c2fd7fc3d141e48fe99081ea"
+        },
+        "training/checks/optimizer_contract.mojo": {
+          "mode": "100644",
+          "sha256": "da2a5c41b5c7acb70cb3e8239142f9a14a6770cbc231eda937daa08c022b6cbd"
+        },
+        "training/checks/optimizer_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "9e9e921d1410f9835936f0250b1306d0917f29f52e9fa741a832c52231a7e9be"
+        },
+        "training/checks/samba_tape_step_check.mojo": {
+          "mode": "100644",
+          "sha256": "ce06bf71025a8cf96f25f4f3bb019fb185202e8b465a744fa1ebab9ce4a608a4"
+        },
+        "training/checks/train_loop.mojo": {
+          "mode": "100644",
+          "sha256": "e62d8c4f39ec3f806093ba85e9bd332ccb4fd3cf65ec220047a169250cda73f6"
+        },
+        "training/chunked_lm_head_gemm_host.mojo": {
+          "mode": "100644",
+          "sha256": "681c0bc46ddf978a2a157a6458dbe0ba7bdf74330a3d7a385fd97d2ac6411dd2"
+        },
+        "training/chunked_lm_head_host.mojo": {
+          "mode": "100644",
+          "sha256": "deabaf7d87acf7ba2a3b7577b93cf9351004b803f8305afa7cbdb7554aecaec2"
+        },
+        "training/chunked_lm_head_profile.mojo": {
+          "mode": "100644",
+          "sha256": "1ce49694288fa8de18152ba3b959ef980a51ea824edca5f8b0f599faf9a71dc3"
+        },
+        "training/chunked_lm_head_v2.mojo": {
+          "mode": "100644",
+          "sha256": "be3b38de1dac7f7799f91133f620ebce1a19c00d5c0237e8a7adc632c39579f1"
+        },
+        "training/estimator.mojo": {
+          "mode": "100644",
+          "sha256": "b48ee8a3b48677fb0e08908bf20108de8d19b0729deda7e7c3b7619635fc3eda"
+        },
+        "training/loss_host_rows.mojo": {
+          "mode": "100644",
+          "sha256": "cf6020ca0821bb5fb984e8f6dd60c12208e297c76ef14e763a6989b74a74bb79"
+        },
+        "training/maximize.mojo": {
+          "mode": "100644",
+          "sha256": "2cfbb9ae8e7222df596453671b9682a9d65c38ce3a56fb9eea5002cd3f69a66e"
+        },
+        "training/mlp_fast.mojo": {
+          "mode": "100644",
+          "sha256": "7bf01313171992e16dfbab463c7427624b73ca8585cfe43a73efa37e7e06e560"
+        },
+        "training/mlp_ops.mojo": {
+          "mode": "100644",
+          "sha256": "744bc894a6c2471dcd9d5f7c67eb78b1f7fa41aa5dc726e3fbc7bf4e7bd39b9a"
+        },
+        "training/neural_ab_lifetime.mojo": {
+          "mode": "100644",
+          "sha256": "eb20243e809823d3251870ce035cbd935de12dcfa0f4f4714d0dafbfec5ff6e4"
+        },
+        "training/neural_ab_pointwise.mojo": {
+          "mode": "100644",
+          "sha256": "d1c735f0c94f89014d94954aa1d4868f16f93d413085484b9ad7336153a494af"
+        },
+        "training/neural_ab_profile_contract.mojo": {
+          "mode": "100644",
+          "sha256": "8be6e80fd1562ccb3a19633c48018088596bcd4c3714fbff0ef7bea382b94118"
+        },
+        "training/neural_ab_profiles.mojo": {
+          "mode": "100644",
+          "sha256": "254978b267c2f71c26e734cd029bd10e60e18b6525822787ec69246aa49cb375"
+        },
+        "training/neural_ab_shards.mojo": {
+          "mode": "100644",
+          "sha256": "42c8340eb6fdd40939ee2d7248e8e7fc179da31d50dc18fb12261fdc914e3d50"
+        },
+        "training/neural_arithmetic_profile.mojo": {
+          "mode": "100644",
+          "sha256": "30a2214c79dc3375c435d926705079fb371e5de57c6cf22f5922b7fb5efba503"
+        },
+        "training/neural_identical_experiments.mojo": {
+          "mode": "100644",
+          "sha256": "fe1283e0424f2ed308ab6434a84131dfde0fea32acace5cd2e789b60194fbf4c"
+        },
+        "training/opt_gate.mojo": {
+          "mode": "100644",
+          "sha256": "d1618efe5a9c09c7b64d75a4f6e954ec48284380e2fb4cf9fd2b30cb417631e7"
+        },
+        "training/optimizer_host_rows.mojo": {
+          "mode": "100644",
+          "sha256": "1ae41e412fdad7c14da37b8ca325b852133cba98822efcfc7a8d8d295ca171c7"
+        },
+        "training/residual_dropout_contract.mojo": {
+          "mode": "100644",
+          "sha256": "020eda4ab7bc1b6f7aab76b81d93842c44d4c949fe7b39cd393bf22c59e128ab"
+        },
+        "training/samba_afn.mojo": {
+          "mode": "100644",
+          "sha256": "0aeccc00b0fcc5ee0d2dceb4dfaebd312aa8ed489343721aed739c34ad64379b"
+        },
+        "training/samba_ops.mojo": {
+          "mode": "100644",
+          "sha256": "b154f02bba3bab1ddb794de8c04767410b5ade8949a2d4d827c776173d1184a0"
+        },
+        "training/samba_resident.mojo": {
+          "mode": "100644",
+          "sha256": "6feb991b47bfe9d5d916cf6ea1d259d6a945f646d50387fb3846b6f4be601940"
+        },
+        "transformer/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/block_options.mojo": {
+          "mode": "100644",
+          "sha256": "818891d93c627769cc2b3a5fdac5e4f01e028c3b13724c751a04f7c04b287cb0"
+        },
+        "transformer/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/checks/transformer_backward_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "e7965e72111ee225d46e3dab92c53fc877ccfe4e09f088773c927d8f91a53555"
+        },
+        "transformer/checks/transformer_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "dfe1150b6b60fbfa8c20dd8520de19e0d084a504a0170f9156b9e5e893bf63b1"
+        },
+        "transformer/checks/transformer_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "fa43eadee6dc7b4987e11569d3e75e74fb9eadcb30cc12bccfd0b03c8b3427ad"
+        },
+        "transformer/experiments/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "1cd3d96d3ddaebf9f5e575a6487eb6a2d2096562197c2dd405188b0fd1df536d"
+        },
+        "transformer/experiments/attention_schedules.mojo": {
+          "mode": "100644",
+          "sha256": "45784130ea0d4713f6f9bdd79f4ddcb5f9f3e6d2fd06a566263faf9b297c13e1"
+        },
+        "transformer/experiments/norm_profile.mojo": {
+          "mode": "100644",
+          "sha256": "4c486d56b3279ce6617e864a5b61017493ec0efdf0a93491d28e9cf9820fc181"
+        },
+        "transformer/experiments/norm_profile_contract.mojo": {
+          "mode": "100644",
+          "sha256": "43bbbefcb5f74eeaea561e2758ef5d40b0da5e9a3e02ebc07523996d415d1cb0"
+        },
+        "transformer/impl/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/impl/llama/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/impl/llama/afn_apple_fast.mojo": {
+          "mode": "100644",
+          "sha256": "6c5cf783bf1719a8287d6ea2b8cbf675eb9580d4490b1b2e1304b9abfe7609d6"
+        },
+        "transformer/impl/llama/fused_attention.mojo": {
+          "mode": "100644",
+          "sha256": "7780cf152d7062c941f707f4752f0c9368a8eda5d9ae7954062670775b3918b6"
+        },
+        "transformer/impl/llama/int15_block.mojo": {
+          "mode": "100644",
+          "sha256": "e3d88423f0f0228bf2dca8d69a06742716360802247c9f22405550ff71390856"
+        },
+        "transformer/impl/llama/modeling_llama.mojo": {
+          "mode": "100644",
+          "sha256": "90a1e197b701801edfe4a9d1e7a0e1c2da73ff6922373db4f73a67fd36c73091"
+        },
+        "x_cnn/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "x_cnn/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "x_cnn/neural_aux_contract.mojo": {
+          "mode": "100644",
+          "sha256": "52a3d33bd9cb21861618192c30af6174aa31fcee86c9dba046c926ba90a8c7ca"
+        },
+        "x_cnn/ops.mojo": {
+          "mode": "100644",
+          "sha256": "238a3601dabfd10d020eb95b82200d02506a9bab10dfbd900495700733b532cd"
+        },
+        "x_linear/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "c36f97c3f62aba7f2c8eaf119a2d165aaaec00c9470b607f6d7f2c2b39673f2e"
+        },
+        "x_linear/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "26a4218c8cb73c7c0d8ba957df1146f2005a9b5336e8a52290f09440d6f0dfc3"
+        },
+        "x_linear/ops.mojo": {
+          "mode": "100644",
+          "sha256": "47af0872b634526df83ec1ea2db40647d1859efaf9f8c0187a4edb58b92327a2"
+        },
+        "x_linear/team.mojo": {
+          "mode": "100644",
+          "sha256": "0b62a4d01fa723e8a5ab3b0915108802173ad5cd117a10b69a32aef731680249"
+        },
+        "x_linear/witness.mojo": {
+          "mode": "100644",
+          "sha256": "f56f2c0b9aa4973e6085418dec24b7ebfa8f9502ad5f094bc56de1ae00e7ced8"
+        }
+      },
+      "original_manifest_sha256": "18136ef55623e7b52ab5c2a40751f1322513c3419f49a8e72e03fb310bd16200",
+      "original_source_commit": "4e9f36ea2c1d8ff3ebac6b98e4ef8a58f5455310",
+      "reason": "unchanged transitive sources, toolchain locks, compiler, targets and compile commands",
+      "requested_inputs": {
+        "autograd/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "4d1d73c68a6ba7cb5cc3d457479cd48af45a5d3bd7fbb8e1edb6ec9076e76261"
+        },
+        "autograd/cast_ops.mojo": {
+          "mode": "100644",
+          "sha256": "2e352c6d08c1a752ce6681559e7f216e8466d41ea89b9ad038dfe7c38011e569"
+        },
+        "autograd/checks/gpu.mojo": {
+          "mode": "100644",
+          "sha256": "94906d74ea0ad6189dd2412de19ee278a1facfd869d9f58b8ab56670f959df64"
+        },
+        "autograd/checks/gradients.mojo": {
+          "mode": "100644",
+          "sha256": "48d9b49c75a6e4b09615c26d960445dc229fa96af1120bf7bc2440b06966c7cb"
+        },
+        "autograd/checks/higher.mojo": {
+          "mode": "100644",
+          "sha256": "2c9512a5f1bd9be383ef309aea43675385d228066a86aa547be70a27d61dad93"
+        },
+        "autograd/checks/higher_gpu.mojo": {
+          "mode": "100644",
+          "sha256": "08e3540266f111a8c90bb0afe6e42fad732d53fd298a1a83277cbcdf8dfd6436"
+        },
+        "autograd/checks/import_cases.mojo": {
+          "mode": "100644",
+          "sha256": "9b14350d7f9a0c8aaee35d81d5cfc8b8a0c250242bbe17b4505752ba328bda61"
+        },
+        "autograd/checks/import_gpu.mojo": {
+          "mode": "100644",
+          "sha256": "e1b7435dacac575646425a962a36da3acc03ffa286e1db33373bc0da56b32057"
+        },
+        "autograd/checks/lifecycle.mojo": {
+          "mode": "100644",
+          "sha256": "8cd3a19ae8e461262d901e19254d469d0d7c56ef0aa5a251c695f7b3e80bc46d"
+        },
+        "autograd/checks/mlp_cases.mojo": {
+          "mode": "100644",
+          "sha256": "ab4d83060883a041f235b96a4c10a968862a40202fef41ecdd8cf3e1c41f1e7e"
+        },
+        "autograd/checks/mlp_gpu.mojo": {
+          "mode": "100644",
+          "sha256": "fc742ede806ce66cce696baaf341b42ca456f61eaaee9e186a5aa5565ed839a2"
+        },
+        "autograd/checks/support.mojo": {
+          "mode": "100644",
+          "sha256": "5d70bde1f34ad80975f201b95dbec5398700a97f49d32741a9843fa726692b78"
+        },
+        "autograd/composed_ops.mojo": {
+          "mode": "100644",
+          "sha256": "cca0975ae9d9fecf192ce2ebbd14c78290dcbe1c7ae2bb954507a88fc8da97d1"
+        },
+        "autograd/data.mojo": {
+          "mode": "100644",
+          "sha256": "e11ea564c5a67a4dde212f0f38c92527e1ba0d8342c978a84fbd2b3f6a64058f"
+        },
+        "autograd/data_ops.mojo": {
+          "mode": "100644",
+          "sha256": "d7b143714fad81a61f688d75c223991e5f5dccf9f1b98160a1c0a91470637f29"
+        },
+        "autograd/embedding_ops.mojo": {
+          "mode": "100644",
+          "sha256": "271d8e70dbd24f18c9e84fcc639fbbb9b43efff4821c786c26cb3c1d32ac8a2a"
+        },
+        "autograd/fold.mojo": {
+          "mode": "100644",
+          "sha256": "41e9efa012c321d49103ad913c369ab9d096957fe623d2c750860d54f056af1a"
+        },
+        "autograd/fold_kernels.mojo": {
+          "mode": "100644",
+          "sha256": "a5c9e875d43997788e2351cec08b91fda4c729f36225a97159236b806b087ab8"
+        },
+        "autograd/fold_ops.mojo": {
+          "mode": "100644",
+          "sha256": "4817ada61508211f966f52bde57cd28aa3ebf932599709537ebd0209dfe075ef"
+        },
+        "autograd/higher.mojo": {
+          "mode": "100644",
+          "sha256": "1feee65b43ab1db5720c8e970f7bc0f5a8f386356c19c2ebda6d8b332d919bcd"
+        },
+        "autograd/higher_fused.mojo": {
+          "mode": "100644",
+          "sha256": "1f6764dce36973d54e9826de0ab0cf031d439fafb599233196efa4c8469d7480"
+        },
+        "autograd/higher_loss_ops.mojo": {
+          "mode": "100644",
+          "sha256": "5a76ca9e3aa1eb62563079501ad5c8f75cd4c5c1bdca8265aec00e53b359546a"
+        },
+        "autograd/higher_ops.mojo": {
+          "mode": "100644",
+          "sha256": "a260e5af4c2da93c38bf31596e75efcdddf20f205159b3fe9dcf2694fd6c5144"
+        },
+        "autograd/import_api.mojo": {
+          "mode": "100644",
+          "sha256": "deeae97ddc7a8dc54199a3424daf8acc69e0ea3b0d5cdeb1035cd07fdb83afba"
+        },
+        "autograd/import_ops.mojo": {
+          "mode": "100644",
+          "sha256": "6fd2d9510317cb50c2b1b281962c60b934ac444009c025c9c1a4b80a8263175f"
+        },
+        "autograd/kernels/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "autograd/kernels/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "autograd/kernels/checks/readback.mojo": {
+          "mode": "100644",
+          "sha256": "194a4c3966a54b00c1f0da904f9ac342ad33fc315524a63c57bf574c2a712caf"
+        },
+        "autograd/kernels/embedding.mojo": {
+          "mode": "100644",
+          "sha256": "49b38e6032e2f8b55443015c66c36d35bd6f74b53565142407c8cf070127988a"
+        },
+        "autograd/kernels/embedding_runs.mojo": {
+          "mode": "100644",
+          "sha256": "0368f9cd37a414ec8ebe760ad53626004295a95b152b7351890ff892b927583f"
+        },
+        "autograd/kernels/embedding_sort.mojo": {
+          "mode": "100644",
+          "sha256": "d576c8bee721b5ef37336705e281784b1aa1523d9ffdf8f4afd45eb62340f69d"
+        },
+        "autograd/kernels/linear.mojo": {
+          "mode": "100644",
+          "sha256": "832d75f3554f90bd563b0e4ec44ed73eaa88e2d914ae810f651b11f8f89308e6"
+        },
+        "autograd/kernels/lm.mojo": {
+          "mode": "100644",
+          "sha256": "46e0f79c1d29d32f9b9151a6b1fa0fc7a9ca4fde80672505f8539d8d6bdd038c"
+        },
+        "autograd/kernels/mamba1.mojo": {
+          "mode": "100644",
+          "sha256": "b485cd3afb3d0da2affda4fab8545a1408ec839a5c15e6924823ae2b8cb94660"
+        },
+        "autograd/kernels/mamba1_prefill.mojo": {
+          "mode": "100644",
+          "sha256": "795d680781935cb39c89e4efe28c94d46a11d0732c08cb434e3e0b3dfebc90a9"
+        },
+        "autograd/kernels/mamba1_proj.mojo": {
+          "mode": "100644",
+          "sha256": "44a1d7abc44db9846a40d1b9a6f55b1f2c84cb78eaf1dbc67bee9e973a643987"
+        },
+        "autograd/kernels/mamba1_scan.mojo": {
+          "mode": "100644",
+          "sha256": "fcf89b2d09f1bf397978da9c8d9757022e10bf1b7d99f32573bc4dda73b860d7"
+        },
+        "autograd/kernels/mamba2.mojo": {
+          "mode": "100644",
+          "sha256": "b6d835617374302e5894c26d756964544cc7e2e6b5bffbd507cb19008aad678b"
+        },
+        "autograd/kernels/mamba2_prefill.mojo": {
+          "mode": "100644",
+          "sha256": "2451c28219398b11ca0aa74836b795ed3e27659af094248075e49cbc33a3d2e4"
+        },
+        "autograd/kernels/mamba2_proj.mojo": {
+          "mode": "100644",
+          "sha256": "ab2c2c90ed3b0b705d19e562158ea201e3020a637eacbd0a245c286cb7b0cd15"
+        },
+        "autograd/kernels/mamba2_ssd.mojo": {
+          "mode": "100644",
+          "sha256": "63411f04b9c4316b2551cc3e52f78ffbfa208159c8c513a7f051dab0b6a1af80"
+        },
+        "autograd/kernels/mamba3.mojo": {
+          "mode": "100644",
+          "sha256": "10818accfbf791d2c1e0256c16bc15c5e4d32603fa204f47f09cd60e41dd1e1b"
+        },
+        "autograd/kernels/mamba3_prefill.mojo": {
+          "mode": "100644",
+          "sha256": "119a10ee80831b07eb3b0bcf9bcc608ba0034ef663d76e00a61cdac70db188e6"
+        },
+        "autograd/kernels/mamba3_proj.mojo": {
+          "mode": "100644",
+          "sha256": "731acf58bd91317a5423e18c52bfd6bc00f177995826b447f3d8395a83a27a97"
+        },
+        "autograd/kernels/mamba_refusal.mojo": {
+          "mode": "100644",
+          "sha256": "e3ead5a2ab6873519011e4ddd158cfa8adb051d45c095699f54287e6611f3cb5"
+        },
+        "autograd/kernels/mlp.mojo": {
+          "mode": "100644",
+          "sha256": "245dc943f44e2cf712b276e3981c831399ee9f1e558ea5472f151ea568aaff9f"
+        },
+        "autograd/kernels/moe.mojo": {
+          "mode": "100644",
+          "sha256": "e9fcb9675092591df03e2c38d088a193c7d85bf3e2aceda963673371b18cbc16"
+        },
+        "autograd/kernels/recurrent.mojo": {
+          "mode": "100644",
+          "sha256": "2fe762866faee04cb69d8c4f31713eff3522107a3ffbd85d01a65849add05dfa"
+        },
+        "autograd/kernels/recurrent_scan.mojo": {
+          "mode": "100644",
+          "sha256": "6c8024db8cfa4ccea2f3b126fd7f4de88d7b069e8c15292ce69d72b767691834"
+        },
+        "autograd/kernels/transformer.mojo": {
+          "mode": "100644",
+          "sha256": "4ff2f264fa6d26b6ebf4677339adae1c9bde2b29216f2bd27ce343238a6d6fd4"
+        },
+        "autograd/kernels/transformer_afn.mojo": {
+          "mode": "100644",
+          "sha256": "4cf8ceb308f50707f2be1bb7c88681f94281dcb1e1cc965d0cbe5f7ff63f35bc"
+        },
+        "autograd/layers.mojo": {
+          "mode": "100644",
+          "sha256": "24283bd410987f4443510863489f411b7f3261cc2bbcba9aa2c00a3ad766cde7"
+        },
+        "autograd/loss_ops.mojo": {
+          "mode": "100644",
+          "sha256": "27bf56b92124e3940e7b72e9abc94bdf3b3f9e1a92b714885be4c578f71e3af3"
+        },
+        "autograd/losses.mojo": {
+          "mode": "100644",
+          "sha256": "1aa62ab8b12177d77aee3d8417fca9bf7ad5f00a52be76aa768f20a4a1335365"
+        },
+        "autograd/model_ops.mojo": {
+          "mode": "100644",
+          "sha256": "5710fa2b71fa0f8c322df81d4d0334155cd51ab159088e5c8e02e70ada1c0244"
+        },
+        "autograd/ops.mojo": {
+          "mode": "100644",
+          "sha256": "0b0e8fd417a38d09969792b49883a2fa0d4c7a5c0a82bc2d06c60ecfbb256558"
+        },
+        "autograd/optim.mojo": {
+          "mode": "100644",
+          "sha256": "71529f4ece9a348766f170f67a149d31eed651fda36aa7cdd0eb5c48724f5c54"
+        },
+        "autograd/pass1_ops.mojo": {
+          "mode": "100644",
+          "sha256": "4cb2b5ae2e4772982d9b705c2ef5a48edc6f21a6e16354730160f54e1996ccc5"
+        },
+        "autograd/profile.mojo": {
+          "mode": "100644",
+          "sha256": "257b7a9c87f320ee7fbd2e63ad6b03866de64d65f6cc92e6c591668a1ed2fe2d"
+        },
+        "autograd/rankn.mojo": {
+          "mode": "100644",
+          "sha256": "624c21348cc46e8e9d1f5d47f5423c179ad3364c24377c227d56e3b407735620"
+        },
+        "autograd/rankn_api.mojo": {
+          "mode": "100644",
+          "sha256": "b1065b12b5f7760077fafb35962c844a1b9178868a5627729cd60cffaeed9648"
+        },
+        "autograd/rankn_bmm.mojo": {
+          "mode": "100644",
+          "sha256": "dee26d2816b405b71aff1e4e37f49364f0f0a1fef0f967c3a64894f3fc232b2b"
+        },
+        "autograd/rankn_bmm_ops.mojo": {
+          "mode": "100644",
+          "sha256": "b21f1974cb7193452c1fb176c03ecc9069f2ac46a9e827f3c0babeb97f2ff3a7"
+        },
+        "autograd/rankn_conv_ops.mojo": {
+          "mode": "100644",
+          "sha256": "a3a871f8b59a7ee6ee49c9ac75cf58b1eb14f7a5249d72bef1a7da5b452db365"
+        },
+        "autograd/rankn_fold.mojo": {
+          "mode": "100644",
+          "sha256": "0ee95f42ae09c6609900960de5ab746f6b2577992b95930bd3127e93e995259e"
+        },
+        "autograd/rankn_fold_ops.mojo": {
+          "mode": "100644",
+          "sha256": "00b8b30cce13c63ee35a6f038730b471cb3b28baf13a29fa32b51fb0a043548e"
+        },
+        "autograd/rankn_layout.mojo": {
+          "mode": "100644",
+          "sha256": "87d06092d47c00b75d44cf9dd1423e98e377dd47b90c7092f9fe17617c75a6a3"
+        },
+        "autograd/rankn_layout_ops.mojo": {
+          "mode": "100644",
+          "sha256": "1f3b69cfd03f160703d02be1f71f287da8d2ae7c01df9b94ea6bc377f99588b9"
+        },
+        "autograd/rankn_ops.mojo": {
+          "mode": "100644",
+          "sha256": "fe26683f45bcc925c2c34b6380ffa52f454a0bd5827515779560e2994d32a3d1"
+        },
+        "autograd/refuse_scan.mojo": {
+          "mode": "100644",
+          "sha256": "0e4ae7fbbfe6654dacd94382963e8683a9a2e0c309617686cf5b6fc9e1c4b595"
+        },
+        "autograd/row_ops.mojo": {
+          "mode": "100644",
+          "sha256": "ebf2ae5fa8bcf1cb11ad5c57f998daa9611aecc8be7cc8d3afd3ed8e0b9b7dca"
+        },
+        "autograd/row_sort.mojo": {
+          "mode": "100644",
+          "sha256": "4be72ece260e85dccfe9ebf95256d7273ffe171de6a1176c514879e476e40dab"
+        },
+        "autograd/rules_conv2d.mojo": {
+          "mode": "100644",
+          "sha256": "3600dc06f4f916e63704c4eef517118b744d6c84c89249849a587078d38c1c21"
+        },
+        "autograd/rules_lm.mojo": {
+          "mode": "100644",
+          "sha256": "358f2e8836416d80b85e37462f2046743312184bb4fdf1ee33767c0e1107482b"
+        },
+        "autograd/rules_mamba.mojo": {
+          "mode": "100644",
+          "sha256": "ae01da5097afe887ef4da5037268d5083a2e0c27fe0559aab8f93a6494d0de6e"
+        },
+        "autograd/rules_mamba3.mojo": {
+          "mode": "100644",
+          "sha256": "3ad884691f0a63375ec6ae2852aced432af09a17741854ee7238e7c90ac461ac"
+        },
+        "autograd/rules_samba.mojo": {
+          "mode": "100644",
+          "sha256": "5ab2d1afdccc5f5666dadddfa2d489c845d2aa9295752d53501ff7141f4b782a"
+        },
+        "autograd/rules_small_mlp.mojo": {
+          "mode": "100644",
+          "sha256": "43e013d468e31c4e832ba6f0e3789f240a42ecff07707e40b4dfdff9efeda793"
+        },
+        "autograd/rules_transformer.mojo": {
+          "mode": "100644",
+          "sha256": "4fd46dbc5170d43f5a6618e937e78bbd81c9848178e467d087210b5e62e39e5e"
+        },
+        "autograd/tape.mojo": {
+          "mode": "100644",
+          "sha256": "bc0321d0f12a097c457b255f5be414a7f1c0d83fc6a86682cbce3026d0b343a8"
+        },
+        "autograd/transformer_primitives.mojo": {
+          "mode": "100644",
+          "sha256": "6515192197c185b747b0a0a259e9b5a618e55784ba2ee936dee2606b85ca2f15"
+        },
+        "autograd/transformer_primitives_ops.mojo": {
+          "mode": "100644",
+          "sha256": "05542cb1eda40267cbc105246d1e9adfe7a27c27445f552f85ac8a22ad887822"
+        },
+        "checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f"
+        },
+        "checks/identity_trace_read.mojo": {
+          "mode": "100644",
+          "sha256": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562"
+        },
+        "checks/kernel_matrix.mojo": {
+          "mode": "100644",
+          "sha256": "3b4c69b5d81988e894d2bdfdd2651a479427d21c6066f8fa2a45c00745157952"
+        },
+        "checks/kernel_matrix_attn.mojo": {
+          "mode": "100644",
+          "sha256": "28f6acb87b2b8b13b48bf92676a9ef9759a773543a51145c84a3ebc99f705983"
+        },
+        "checks/kernel_matrix_gemm.mojo": {
+          "mode": "100644",
+          "sha256": "379c143af199beb67dfb73b2f2246a90b5c328680f616618c54fb053506ee114"
+        },
+        "checks/numerics.mojo": {
+          "mode": "100644",
+          "sha256": "8cee8aeb5172945a6577228210b542abd3ac35f1f6fa0ef24c23aa0c1c20dd22"
+        },
+        "checks/numerics_int15.mojo": {
+          "mode": "100644",
+          "sha256": "5de125e1b81bff2b05235f059296c6ab4d5c2237ff70c988534e2af6bbedd6f2"
+        },
+        "checks/rtf_seam.mojo": {
+          "mode": "100644",
+          "sha256": "cbef549b95e2a1578cc893eb0841c52ed765564702311cd4188da9bc81aa9fe1"
+        },
+        "checks/soft_f64.mojo": {
+          "mode": "100644",
+          "sha256": "6ccfce630bea082659dd45f05fa6fdcd0c877e36e5d2510d78532e63cb80d850"
+        },
+        "checks/vendor.mojo": {
+          "mode": "100644",
+          "sha256": "88c31f57307d38354935005c21efda7456f48342b2261edf02963c2f904977bc"
+        },
+        "core/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "core/apple_air.mojo": {
+          "mode": "100644",
+          "sha256": "64328b11dba3cbbc2de085a51915534c47085abb5f3f7c1baf34684cbd9fbfd8"
+        },
+        "core/cast_in.mojo": {
+          "mode": "100644",
+          "sha256": "492a059ed6ecc1aaaade379dd6a8fcd8241ff4e30b329fc89c0ec72d7fc32f39"
+        },
+        "core/ctx_key.mojo": {
+          "mode": "100644",
+          "sha256": "d4c732a5787ef4cdea1b17f02bacba72b518c422279f090d01ae8191ef3dbdf7"
+        },
+        "core/device_arena.mojo": {
+          "mode": "100644",
+          "sha256": "4e1987f81a3114b8c06d5bb2b90406bf78d6ca67a00a5320fadc1a34f9cddf16"
+        },
+        "core/device_fold.mojo": {
+          "mode": "100644",
+          "sha256": "f0f4668c31c0c3949521b799be7c853b99df775b5a3ec164e8b04cb09732ef16"
+        },
+        "core/device_plan.mojo": {
+          "mode": "100644",
+          "sha256": "72a3f4fafe2cee74bb1b64b8a26ac38341907798ce774feb0dac562c5a9509b5"
+        },
+        "core/device_pool.mojo": {
+          "mode": "100644",
+          "sha256": "cab385df043dc839ee97094082580c0d373b4a0b31d49d4e1301c37acc6d432f"
+        },
+        "core/device_scan.mojo": {
+          "mode": "100644",
+          "sha256": "da53d2e05775272465efd7f4236e57fddafba33a476d4f3e15f8afc8435cf2ac"
+        },
+        "core/fast_radix_sort.mojo": {
+          "mode": "100644",
+          "sha256": "695da6dbb2aa0af2fb8ed1481425d026fa5ca51cd924626fe3c20e2477303929"
+        },
+        "core/host_lanes.mojo": {
+          "mode": "100644",
+          "sha256": "1632237663be4004055668bc30a03550fad19e1806b24d6ac2ccd2dcfead6574"
+        },
+        "core/host_parallel.mojo": {
+          "mode": "100644",
+          "sha256": "ae15177298d9ea8a310d96e29a5b3545f0aee8a3221e41abfc92864c33ec6c06"
+        },
+        "core/host_predict_threads.mojo": {
+          "mode": "100644",
+          "sha256": "d6f2795abb76ccf7ba3862bed088634bf1c67023e45b9b3dafdf06b6251197de"
+        },
+        "core/identity_trace.mojo": {
+          "mode": "100644",
+          "sha256": "0916a131eb6127b337d0164d065dbb7ce1db1e20665dd8c7bb7dc79efb810277"
+        },
+        "core/label_encode.mojo": {
+          "mode": "100644",
+          "sha256": "db4a65bb84d5292adfe8b6afc5b25e6c3bec8752cadf85b8bc56fa5653279fcb"
+        },
+        "core/launch_log.mojo": {
+          "mode": "100644",
+          "sha256": "828a361085bb0baa0fd1091fcbf5e0891bef710ae57aeb07db79b5f797a1a09a"
+        },
+        "core/neural_context.mojo": {
+          "mode": "100644",
+          "sha256": "04f1ca10616c3638b2b792c1118ae77cd48c7b0b35d3bb8ef882ea5749282ea6"
+        },
+        "core/package_profile.mojo": {
+          "mode": "100644",
+          "sha256": "62de1fa0475ec969be5725e47c53bee9ba30a478b53699301a3975a0de010aac"
+        },
+        "core/philox.mojo": {
+          "mode": "100644",
+          "sha256": "1a1c2c0f81b496287d54658f60a1af18ea0c0fa16df49feb069e3abf82e5a77d"
+        },
+        "core/philox_neural.mojo": {
+          "mode": "100644",
+          "sha256": "d7eba41aafa40257c55dcac7cd949f1e1298aba7844ad3cec4be629f519a0285"
+        },
+        "core/scratch_pool.mojo": {
+          "mode": "100644",
+          "sha256": "40b7e648cf4f628a733c8904da079a0a72091827d1ee4dcc518338feb2fe4eda"
+        },
+        "core/six_lane_experiment_guards.mojo": {
+          "mode": "100644",
+          "sha256": "d48fe80a5fa8fe89d0c40dd60878ae20ecca2a73aeb10175bab26022a65b635f"
+        },
+        "core/stable_radix_sort.mojo": {
+          "mode": "100644",
+          "sha256": "7d94fd3edb012152cca5e02c46358cabb9eeee9421be3f6db053de9ed5f04d86"
+        },
+        "core/staged_download.mojo": {
+          "mode": "100644",
+          "sha256": "cf70f875002d316c2e57a2f3bf926e57c1eb3a6f549fd7f93eeb3e1a27bd7537"
+        },
+        "core/step_glue.mojo": {
+          "mode": "100644",
+          "sha256": "55f38d5e805c1e741d5368476b9a3331139d106839d317fad4ab6159edc93978"
+        },
+        "core/step_phase.mojo": {
+          "mode": "100644",
+          "sha256": "09af17a4d316553686cc84437728f4a1578279a8078292f2770dee54faa44222"
+        },
+        "embedding/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "embedding/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "embedding/checks/embedding_identical.mojo": {
+          "mode": "100644",
+          "sha256": "882992242fe1580634f9a31aa546af4b1d087bdea826c4a69c7e4d4a6dd77b01"
+        },
+        "embedding/checks/embedding_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "e1864872be2dc5272117daa864eb433f3ab8027d76c273cacc403a6f36695841"
+        },
+        "experiments/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "6c6ec57de9f82ef42d82760f144a4571cb16b3cd6de33aaa7aa9fd65e8ab1fa1"
+        },
+        "experiments/apple_fast/gemm/scoped_dispatch.mojo": {
+          "mode": "100644",
+          "sha256": "b87c8bb182734e12fdabcc0e802da3dbdb5e731ff2a2123370c13c8da2201a35"
+        },
+        "gemm/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "gemm/afn_apple_fast.mojo": {
+          "mode": "100644",
+          "sha256": "1bfc418feb17367152d92fa25346412521e0d02c5f1e97876d41ae05058f7499"
+        },
+        "gemm/afn_apple_fast2.mojo": {
+          "mode": "100644",
+          "sha256": "a5cb91505b69de254cd51fe53085b8f8f6380cae23b70f364c6c5a9163e10929"
+        },
+        "gemm/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "gemm/checks/gemm_backward.mojo": {
+          "mode": "100644",
+          "sha256": "b89a8c4b77e4e0615d14d40f78f975d88300fc3d96fd26aea640d0a5ced27d2a"
+        },
+        "gemm/checks/gemm_identical.mojo": {
+          "mode": "100644",
+          "sha256": "0b8280ba2a4b5458c05c38f0e848274377dae23c2b62144a2687f1eda8213e74"
+        },
+        "gemm/checks/gemm_int15.mojo": {
+          "mode": "100644",
+          "sha256": "2891caee78a8a81911f4d159b49f66b9f536ad800fd649d0deac2dd9f2d78282"
+        },
+        "gemm/checks/gemm_int15_apple.mojo": {
+          "mode": "100644",
+          "sha256": "4cd731c8b478f3a78a3eb918d53cdba55e980b4dd88dbe6c830e35b730803805"
+        },
+        "gemm/checks/gemm_int15_epilogue.mojo": {
+          "mode": "100644",
+          "sha256": "38772acf5e380e798dcf63a5a078b945b61ba531fa60ef5b94567dbf0b39b20a"
+        },
+        "gemm/checks/gemm_int15_heads.mojo": {
+          "mode": "100644",
+          "sha256": "65ddf0528a9152db7e868b8952f729f9e69d94d1b88dc2509bacf7fb1c61b258"
+        },
+        "gemm/checks/gemm_int15_tuned.mojo": {
+          "mode": "100644",
+          "sha256": "1f062ca0d16b24e20d09953fd3b0e787e592a13470faefd80ffe12962fe565b9"
+        },
+        "gemm/checks/gemm_int8_mma.mojo": {
+          "mode": "100644",
+          "sha256": "858a8ecb550dbb201fd59c05d8c36ad89663f64da1c1b5c926d36df2a5451173"
+        },
+        "gemm/checks/gemm_int8_mma_amd.mojo": {
+          "mode": "100644",
+          "sha256": "a4056ffc097dca6247d6a23da39db00f1cbf922a7a2da669faee5420f408f59f"
+        },
+        "gemm/checks/gemm_int8_mma_tuned.mojo": {
+          "mode": "100644",
+          "sha256": "9d834932f8b09f0fa5c1711f7305eab7c5014de62a12460391c66c4fba840cf8"
+        },
+        "gemm/checks/gemm_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "882c173e4f37aa4de8180a375e075d0cc827292c3e9d77a86cd81c570df568c9"
+        },
+        "gemm/checks/quantize_int8_par.mojo": {
+          "mode": "100644",
+          "sha256": "ffa66cf8bdaf15876f353c3e9b707e7d745dfbd235a8a8518b2e01fbf3c75066"
+        },
+        "gemm/contract.mojo": {
+          "mode": "100644",
+          "sha256": "4331f964dd9b0ba46de78801753140c736d6c75bc07c480ef8b250395dc8a110"
+        },
+        "gemm/experiments/neural_grouped.mojo": {
+          "mode": "100644",
+          "sha256": "d298421fc884d085c3fcddcc04c5a0d31331caf543caf3a3f0d70eb1ac40c74c"
+        },
+        "gemm/experiments/neural_plans.mojo": {
+          "mode": "100644",
+          "sha256": "20ac07e943979751bbec21f00cc3d0c59a43934b06d20a3f8a74ccf3a7c369b3"
+        },
+        "gemm/experiments/neural_profile.mojo": {
+          "mode": "100644",
+          "sha256": "eabf74d599eff6c8f96a00203470982b13ac6460237e7c0512a4910efdab1bc3"
+        },
+        "gemm/experiments/neural_profile_device.mojo": {
+          "mode": "100644",
+          "sha256": "a2ce4e7e13ceef39354ed35af56ce6bb64dc4b571476c2bb49c6993e19789dce"
+        },
+        "gemm/experiments/neural_streaming.mojo": {
+          "mode": "100644",
+          "sha256": "a0a8987d99481b2370b50b546c3ffc072568fd574ce4507b9246a98e242c9d77"
+        },
+        "gemm/experiments/neural_switches.mojo": {
+          "mode": "100644",
+          "sha256": "ad281e1ddcaad1ce8762c9ff850e478ffa85571537eb339f1cb99903cfa09f09"
+        },
+        "gemm/experiments/neural_tiled.mojo": {
+          "mode": "100644",
+          "sha256": "f4de0995635f2a7681b3584a95e98b262cfdf6909fdde894b154e8fafb66fe8c"
+        },
+        "gemm/experiments/neural_tiled_v2.mojo": {
+          "mode": "100644",
+          "sha256": "6a4076656d520b489b767c4e9c4311726f0c6164d78e50d51be3b08b9e66bdcb"
+        },
+        "gemm/host/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "4d9f9558a0342ed5cef03721dce40b8995cffc0b9dd57fef34700b5b7bccf17c"
+        },
+        "gemm/host/gemm_host_rows.mojo": {
+          "mode": "100644",
+          "sha256": "682bd471119a4d72874b9c8a0afb75b8ea6b8238cecf6de6365b20e5346c2308"
+        },
+        "gemm/host/gemm_int15_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "1a5019954ebf507628c4af4af257afaec2e60a94ae630b319bbd14697b49e90e"
+        },
+        "gemm/host/gemm_lowbit_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "797bde85d773e966d5d79ee936a6ad73cbf9bbc8a02044424e3fa75a2eb585d4"
+        },
+        "gemm/host/gemm_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "9f3ebb178a544d58e0c4722be22c2246411a5cb011a33adc3e84e0dc06654132"
+        },
+        "gemm/host/neural_gemm.mojo": {
+          "mode": "100644",
+          "sha256": "69423884cf90edeff474e56e9eb1691ad5ee97475cf780b8dc444579e30fb016"
+        },
+        "gemm/neural_backward.mojo": {
+          "mode": "100644",
+          "sha256": "1acbc40efc06f35beb8a70839fc4ef60c28328f72eff5ec1cd8f2229d895a324"
+        },
+        "gemm/neural_dispatch.mojo": {
+          "mode": "100644",
+          "sha256": "4fb9394514d3f58d3e4591082b0dc5c272e2297f6395932c945306c5f0299c9d"
+        },
+        "mamba/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/checks/mamba2_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "e2acea33817d9512d9aa5c7512ea9faad572042493230beb42b0206ab828cf01"
+        },
+        "mamba/checks/mamba3_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "5b42a0208c9e69cffe2e8aa807264812ee518517561660a2366c0ca9441513b6"
+        },
+        "mamba/checks/mamba_backward_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "258f65cc9f2fc388ad17dac25e467ddd35372c68d63d1559a672457d855bc7fc"
+        },
+        "mamba/checks/mamba_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "06085b974063e3768d838c717c3a0bd668c0a96b7244e01ec1bdef177d6d616e"
+        },
+        "mamba/checks/mamba_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "9967b2e17797b4b9fdef304b59f8adfaa6146a66193c6f6ff18e61f8f07bab28"
+        },
+        "mamba/checks/mamba_rms_fold.mojo": {
+          "mode": "100644",
+          "sha256": "6ee1e67455eb097a6f57c429f86f783294b792c2b16ca57bfe22046e008f9030"
+        },
+        "mamba/checks/mamba_tape_backward_check.mojo": {
+          "mode": "100644",
+          "sha256": "724ef77c5dd6d575285c70843053e38b54bd12c35ab2411203bc9c50669c3a2c"
+        },
+        "mamba/impl/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/modeling/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/modeling/afn_mamba1_fused.mojo": {
+          "mode": "100644",
+          "sha256": "8b7fb5285ee8f907cdc776fa1eb8dcda8ada91c3b5b64d767c8bb481da0b1949"
+        },
+        "mamba/impl/modeling/modeling_mamba.mojo": {
+          "mode": "100644",
+          "sha256": "d213f09fcfdc391b4249149b6f651efbc5003e462de041212d264dc3d999b549"
+        },
+        "mamba/impl/modules/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/modules/afn_arena.mojo": {
+          "mode": "100644",
+          "sha256": "1de67258067b8e44cd1fe6e5cc7e54bf3a23304b7cd473c123532594df88bde2"
+        },
+        "mamba/impl/modules/afn_defines.mojo": {
+          "mode": "100644",
+          "sha256": "55d8a0394192882fc9bd4d67096a145eaf7fab6fca3b20a9bb8a30b07d1b7309"
+        },
+        "mamba/impl/modules/afn_proj_gemm.mojo": {
+          "mode": "100644",
+          "sha256": "ea2aab4f2c00f964cbcffd231f8927cea3b0da3a657bbee710c7430600c50fd5"
+        },
+        "mamba/impl/modules/afn_refusal.mojo": {
+          "mode": "100644",
+          "sha256": "c101f2abd1df9ebcda648a527750b3dfe2f3df5e3ac5960c94b3aad323e81811"
+        },
+        "mamba/impl/modules/afn_ssd_mma.mojo": {
+          "mode": "100644",
+          "sha256": "8da6f8b5d4426ae6ec7dd1ca4a07e50e42d2ec0a32292dff88c56b97ae6ed4b9"
+        },
+        "mamba/impl/modules/idn_gemm_ws.mojo": {
+          "mode": "100644",
+          "sha256": "020b36233089c234b610394be24260a628ae27d647a8638603c057543bc62c37"
+        },
+        "mamba/impl/modules/mamba2.mojo": {
+          "mode": "100644",
+          "sha256": "7ffebb90d9b50fb1343d0ccaca73840d62ff7614dfb9d1a6ec5909f2f86bbd39"
+        },
+        "mamba/impl/modules/mamba3.mojo": {
+          "mode": "100644",
+          "sha256": "750860ac6b6935d67626eb9aa0e282b410eab0b78cef1784b89d6eb38fdeb2f9"
+        },
+        "mamba/impl/modules/mamba3_transfer.mojo": {
+          "mode": "100644",
+          "sha256": "4966a68104abf8bf5b418d163ca48af28bbc7b3318d1817401e7615594518896"
+        },
+        "mamba/impl/modules/ssd_minimal.mojo": {
+          "mode": "100644",
+          "sha256": "167e8ac13d80aa213ebbf712f98f1b1ecd4e21a5ce969588ecc6bd7dc383370c"
+        },
+        "mamba/impl/ops/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "mamba/impl/ops/afn_mamba3_fused.mojo": {
+          "mode": "100644",
+          "sha256": "8ba1d5338e9c26de5a8c68de80d3b4d06292fdbbc4fb555556866f9be7a33202"
+        },
+        "mamba/impl/ops/afn_selective_scan.mojo": {
+          "mode": "100644",
+          "sha256": "1390fa6c990d1b78b3265f74a7126cebe01e6a58f9c5115338610227d368958a"
+        },
+        "mamba/impl/ops/identical_scan_window.mojo": {
+          "mode": "100644",
+          "sha256": "e1030ea56e755e3c33f5ca48172ecf4383224d9c59d822d813cacaa585b37d4b"
+        },
+        "mamba/impl/ops/m1_persistent_scan.mojo": {
+          "mode": "100644",
+          "sha256": "aeb89cc75e6176318c0df35a6ac5c2174cd30f0d0dd6bd02e9439f31c88b1450"
+        },
+        "mamba/impl/ops/mamba3_siso.mojo": {
+          "mode": "100644",
+          "sha256": "1f39eb6af692747ee2a4811804c2663764087f90981eb02eb80cff662f2bb4f9"
+        },
+        "mamba/impl/ops/neural_gradient_profile.mojo": {
+          "mode": "100644",
+          "sha256": "59ee1799f6cd8606e2fae7366656f821c41c6e525e87dcf20a75bbc42f32c719"
+        },
+        "mamba/impl/ops/selective_scan_interface.mojo": {
+          "mode": "100644",
+          "sha256": "9f8a700dd04adfb26fe91bfb5d3960eec25301c5c5e5eb78ace31d5d4723f8c7"
+        },
+        "pixi.lock": {
+          "mode": "100644",
+          "sha256": "f6c531ef5300670dd0d66b0cd55cacabe12a28047e2d8d26648f430a46587509"
+        },
+        "pixi.toml": {
+          "mode": "100644",
+          "sha256": "5bd97d6cdab34b8e5db666baf73e3092b42a81447d88acf825fc31f26bdbc4a9"
+        },
+        "sequence/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "809cb211562212a9fc5b76331af755929dacb8218fcc23aca24e856ea4cdb9bb"
+        },
+        "sequence/adafactor.mojo": {
+          "mode": "100644",
+          "sha256": "fd8347ae8dcfe1d79c524c441e3bb4bf5769e8ac6632a46ef5770bc1c83a0a8c"
+        },
+        "sequence/adafactor_candidates.mojo": {
+          "mode": "100644",
+          "sha256": "f0a23c5955d5d6fd5143f5f6754d9d71f277c1c7ac4481ef5d421544e83d71a2"
+        },
+        "sequence/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "sequence/coop.mojo": {
+          "mode": "100644",
+          "sha256": "fd2376c403bdaff5cc6ef384adfe9efa11acf9d540e4eeb757aba115bf2b23fa"
+        },
+        "sequence/coop_lane.mojo": {
+          "mode": "100644",
+          "sha256": "18ec771965514160983df8d7b61812a935b2415ad8752775c416bbaaf27ca984"
+        },
+        "sequence/croston.mojo": {
+          "mode": "100644",
+          "sha256": "19bc6f100893ff33be6940767f85776a1e957f37b487cdf3322d2d4449b8891f"
+        },
+        "sequence/dispatch.mojo": {
+          "mode": "100644",
+          "sha256": "b3f65a52e2d4bf5c32ae206d2adf5915be83bdc93bcd2083e62ec48a6ea0f2bf"
+        },
+        "sequence/ets.mojo": {
+          "mode": "100644",
+          "sha256": "5e08705c8c88b8a02473a589f9894d75c18ecbd0b7bfea0da38a2a6499905539"
+        },
+        "sequence/ets_spec.mojo": {
+          "mode": "100644",
+          "sha256": "aa49bf89bd0c93e9a0f4855c521a644f726278c2f401c0202ae18f5244ed9dd5"
+        },
+        "sequence/ets_team.mojo": {
+          "mode": "100644",
+          "sha256": "a63647842e2d31745d68c6f346dc91ce8a2bd49b15209c898caa896af572732f"
+        },
+        "sequence/exec_device.mojo": {
+          "mode": "100644",
+          "sha256": "c9a165c04a5157ef05a7d1ba13d03722f5a601e86c9925dae21f4de1ce2569a0"
+        },
+        "sequence/exec_trait.mojo": {
+          "mode": "100644",
+          "sha256": "1ff8bd53ade1ab1354b8ff33e37f1bfa272fd30597c0a8337d7f57a395f02b2f"
+        },
+        "sequence/execution_profile.mojo": {
+          "mode": "100644",
+          "sha256": "8139e548df33a4d0e3a70b5d6943aa661aaa94421d32e74e144210a4374c609c"
+        },
+        "sequence/fit_team.mojo": {
+          "mode": "100644",
+          "sha256": "8305391a86716d8f91f3141be84a08672f4ecbf438292d1bd0d3f548efbc3840"
+        },
+        "sequence/fold32.mojo": {
+          "mode": "100644",
+          "sha256": "629c438310f366b74998043711e60ca0c36ee167625bfa01699c506bc4117102"
+        },
+        "sequence/garch.mojo": {
+          "mode": "100644",
+          "sha256": "0b4e15baf037c01dc50d7a955b4f01c5c7e10130bac869b03f07d77aec7b11e6"
+        },
+        "sequence/gemm_split.mojo": {
+          "mode": "100644",
+          "sha256": "259d9343df66f8c5a863b6bdbad432bdb727e49d1e5cedbf428f3490f01bb9ce"
+        },
+        "sequence/gemm_tiled.mojo": {
+          "mode": "100644",
+          "sha256": "5001e433c0cb5d93fcea3e4109e5fff02136e34ddd9bd62480f5ff5ad6db4be0"
+        },
+        "sequence/launch_profile.mojo": {
+          "mode": "100644",
+          "sha256": "f33782d2015e414a9572a1b3a15d076ea7c6f1bc85370b655864555cc091204d"
+        },
+        "sequence/layernorm.mojo": {
+          "mode": "100644",
+          "sha256": "a073a62888e29e41ae2e3319c58fe33e1c8a21ce09ee45c76e9a4024beb3f3d3"
+        },
+        "sequence/layernorm_core.mojo": {
+          "mode": "100644",
+          "sha256": "fc1b948365225c44bbc8c328115bd4d54545e03e4c42b87b66c62ec0c5e4ba41"
+        },
+        "sequence/mlp.mojo": {
+          "mode": "100644",
+          "sha256": "7a29edc8c38a9a02abc4a5edb72c99bccce700635dba5d740fb03151b22c524b"
+        },
+        "sequence/mlp_fit.mojo": {
+          "mode": "100644",
+          "sha256": "d3a2f62ae412eb2d48044b4a5c0df625fb080693854f7b87ab8fbe769c9298d5"
+        },
+        "sequence/moe.mojo": {
+          "mode": "100644",
+          "sha256": "9fc9ef43a018d39bc299d8ec240b11ac91df6533d995d37102ff22212677dd55"
+        },
+        "sequence/moe_group.mojo": {
+          "mode": "100644",
+          "sha256": "0a6e6c291f88afcedffffd6976a47d917d420b0037d49fd0b20ce37a753c4f28"
+        },
+        "sequence/moe_grouped.mojo": {
+          "mode": "100644",
+          "sha256": "06352d54436af19c258f29b1efb2fe5267ddfabfd775bcb0e53782388a5bcc52"
+        },
+        "sequence/moe_grouped_fold.mojo": {
+          "mode": "100644",
+          "sha256": "0d56917c135aba18d19ab58d009acff17bcf13814a686759beeed76d420aac6e"
+        },
+        "sequence/moe_mma.mojo": {
+          "mode": "100644",
+          "sha256": "05e97f7885204be276799bde7bcf08e68f804d16bd7628c86e1ef99dbb048d14"
+        },
+        "sequence/moe_reg.mojo": {
+          "mode": "100644",
+          "sha256": "125f48b873924b7732c6536e44120ddb6b3750b68c2c98e0396a77dab4e92f11"
+        },
+        "sequence/moe_tiled.mojo": {
+          "mode": "100644",
+          "sha256": "484404b7e561398d3ef7ea4fd1b47725c7316ee05335c9ec711e347bae4a5843"
+        },
+        "sequence/nm.mojo": {
+          "mode": "100644",
+          "sha256": "c86915b7abea0200f74610d01531b74ef391b18e44c6c6780deff1a916f2ad0f"
+        },
+        "sequence/ops.mojo": {
+          "mode": "100644",
+          "sha256": "9d755b4c1092e5ec735882de056c6cd2ce90e1a0ed1d9d2e22bf6abaeb4710c8"
+        },
+        "sequence/prophet.mojo": {
+          "mode": "100644",
+          "sha256": "922620fd1d67e5631f6a14664ab4ccaac01a624264c65b0587e13a4fbc9e8052"
+        },
+        "sequence/prophet_coop.mojo": {
+          "mode": "100644",
+          "sha256": "38c066734df294fa6429988306b3b2bc0e2e22d809f1fbb51748b25fbcbe1cb5"
+        },
+        "sequence/recurrent.mojo": {
+          "mode": "100644",
+          "sha256": "36524534e16b8549e63eb06a9762912804b6cb8fd5fad124c0ae2bda211dc1b5"
+        },
+        "sequence/recurrent_scan.mojo": {
+          "mode": "100644",
+          "sha256": "a5d5b4d307f2e186295fc317f7f2e2e46bc97fc23ce0acc879895281e9370e01"
+        },
+        "sequence/stl.mojo": {
+          "mode": "100644",
+          "sha256": "32d31685fc08ea710b268bdf06316447572cf2b07242ba6ca2542b2b4f5d0be1"
+        },
+        "sequence/stl_grid.mojo": {
+          "mode": "100644",
+          "sha256": "33d9db6eb711e1a79a2a70fcab91762c5525d7a840a8a93a0df194f02210edc4"
+        },
+        "sequence/theta.mojo": {
+          "mode": "100644",
+          "sha256": "950e8359f89818987bca521f112a797219ed0821ac83fbc5dd1dc7f090f89977"
+        },
+        "sequence/theta_spec.mojo": {
+          "mode": "100644",
+          "sha256": "496ff66cffea39abf3243ab0fb46f5492a51afd9d5bc199a0ca262a80216f7ea"
+        },
+        "sequence/vecar.mojo": {
+          "mode": "100644",
+          "sha256": "54cd52863e1fcb31fff3c35274b7dcc0750c4c40ba6067f3f2e4d57d2a6fa375"
+        },
+        "sequence/vecar_block.mojo": {
+          "mode": "100644",
+          "sha256": "8db0c3e4f591740412fed75fdd9e4bd8063b3773313e5f9fd057c872399aa566"
+        },
+        "training/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "training/afn_optim.mojo": {
+          "mode": "100644",
+          "sha256": "b93fb19aed9c71ec549f5d4020f6047f33f740d35f551cf2925c632ef0100245"
+        },
+        "training/byte_lm.mojo": {
+          "mode": "100644",
+          "sha256": "ced32874d988b763c8811a07ffa037fc809347ecaa2a07efd44528ce5fbc5b28"
+        },
+        "training/byte_lm_afn.mojo": {
+          "mode": "100644",
+          "sha256": "4c7b4eb9d63a90dc1c16b1dbc8f55502f01c59ae16dbc01ac8fb458ea5a45d2c"
+        },
+        "training/byte_lm_block_copy.mojo": {
+          "mode": "100644",
+          "sha256": "a3dadde2704db44e4922eb897e75d650d880559ba22a64d4b9fd9f4182962e4d"
+        },
+        "training/byte_lm_config.mojo": {
+          "mode": "100644",
+          "sha256": "fe029c0aae6df262afd5987c402328ab0b3e00e8ef64c71426ed2717d17ae21a"
+        },
+        "training/byte_lm_host.mojo": {
+          "mode": "100644",
+          "sha256": "45f950ed33b3db3ca710eeb3c4b70a2d3bf1356594422fa0f20c2fecd283953d"
+        },
+        "training/byte_lm_host_backward.mojo": {
+          "mode": "100644",
+          "sha256": "bbb7457d4b352a43c940e0cb3766970e3743c284168bfecb634873c73595c521"
+        },
+        "training/byte_lm_host_kernels.mojo": {
+          "mode": "100644",
+          "sha256": "bf7deaf1bc7bc65c09fbfdbf5a1eb0fcda312741ee785f31e2d6a2c5d4f61690"
+        },
+        "training/checkpoint.mojo": {
+          "mode": "100644",
+          "sha256": "290811f4d6e3cb2b5a13c9837a0862ba39fcbdf5c8365189a78c9e672e99f646"
+        },
+        "training/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "training/checks/chunked_lm_head_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "32772237cac4f4a063093c6079bb380f9eaae1c4e8af52c4b1a9f268413ea0c9"
+        },
+        "training/checks/lm_tape_backward_check.mojo": {
+          "mode": "100644",
+          "sha256": "fafa7eb57890c214764f54176d831dda71381b403b19b64b8c5c2d9b18b8eebd"
+        },
+        "training/checks/loss.mojo": {
+          "mode": "100644",
+          "sha256": "5c4185099eb8d40a0cce59910ae2cdd56a3ee28f9dbd51546ca39c5a49784eb4"
+        },
+        "training/checks/loss_contract.mojo": {
+          "mode": "100644",
+          "sha256": "fa31fb37fa67cb3a192e6e1f4366774a149e12af3b382223cc22015a29ab29fe"
+        },
+        "training/checks/loss_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "5317053e74b05b3e2d14009769f4c6e9daac70c9888434b17e3e61f456b9b45a"
+        },
+        "training/checks/mlp_tape_step_check.mojo": {
+          "mode": "100644",
+          "sha256": "ea0ba3664198aa20079de11924361f3f21283bd7bb2e6853f5e9f58c38a8ad26"
+        },
+        "training/checks/optimizer.mojo": {
+          "mode": "100644",
+          "sha256": "ec4940a59fd8426eb2fb5c4e13c766254f3ca854c2fd7fc3d141e48fe99081ea"
+        },
+        "training/checks/optimizer_contract.mojo": {
+          "mode": "100644",
+          "sha256": "da2a5c41b5c7acb70cb3e8239142f9a14a6770cbc231eda937daa08c022b6cbd"
+        },
+        "training/checks/optimizer_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "9e9e921d1410f9835936f0250b1306d0917f29f52e9fa741a832c52231a7e9be"
+        },
+        "training/checks/samba_tape_step_check.mojo": {
+          "mode": "100644",
+          "sha256": "ce06bf71025a8cf96f25f4f3bb019fb185202e8b465a744fa1ebab9ce4a608a4"
+        },
+        "training/checks/train_loop.mojo": {
+          "mode": "100644",
+          "sha256": "e62d8c4f39ec3f806093ba85e9bd332ccb4fd3cf65ec220047a169250cda73f6"
+        },
+        "training/chunked_lm_head_gemm_host.mojo": {
+          "mode": "100644",
+          "sha256": "681c0bc46ddf978a2a157a6458dbe0ba7bdf74330a3d7a385fd97d2ac6411dd2"
+        },
+        "training/chunked_lm_head_host.mojo": {
+          "mode": "100644",
+          "sha256": "deabaf7d87acf7ba2a3b7577b93cf9351004b803f8305afa7cbdb7554aecaec2"
+        },
+        "training/chunked_lm_head_profile.mojo": {
+          "mode": "100644",
+          "sha256": "1ce49694288fa8de18152ba3b959ef980a51ea824edca5f8b0f599faf9a71dc3"
+        },
+        "training/chunked_lm_head_v2.mojo": {
+          "mode": "100644",
+          "sha256": "be3b38de1dac7f7799f91133f620ebce1a19c00d5c0237e8a7adc632c39579f1"
+        },
+        "training/estimator.mojo": {
+          "mode": "100644",
+          "sha256": "b48ee8a3b48677fb0e08908bf20108de8d19b0729deda7e7c3b7619635fc3eda"
+        },
+        "training/loss_host_rows.mojo": {
+          "mode": "100644",
+          "sha256": "cf6020ca0821bb5fb984e8f6dd60c12208e297c76ef14e763a6989b74a74bb79"
+        },
+        "training/maximize.mojo": {
+          "mode": "100644",
+          "sha256": "2cfbb9ae8e7222df596453671b9682a9d65c38ce3a56fb9eea5002cd3f69a66e"
+        },
+        "training/mlp_fast.mojo": {
+          "mode": "100644",
+          "sha256": "7bf01313171992e16dfbab463c7427624b73ca8585cfe43a73efa37e7e06e560"
+        },
+        "training/mlp_ops.mojo": {
+          "mode": "100644",
+          "sha256": "744bc894a6c2471dcd9d5f7c67eb78b1f7fa41aa5dc726e3fbc7bf4e7bd39b9a"
+        },
+        "training/neural_ab_lifetime.mojo": {
+          "mode": "100644",
+          "sha256": "eb20243e809823d3251870ce035cbd935de12dcfa0f4f4714d0dafbfec5ff6e4"
+        },
+        "training/neural_ab_pointwise.mojo": {
+          "mode": "100644",
+          "sha256": "d1c735f0c94f89014d94954aa1d4868f16f93d413085484b9ad7336153a494af"
+        },
+        "training/neural_ab_profile_contract.mojo": {
+          "mode": "100644",
+          "sha256": "8be6e80fd1562ccb3a19633c48018088596bcd4c3714fbff0ef7bea382b94118"
+        },
+        "training/neural_ab_profiles.mojo": {
+          "mode": "100644",
+          "sha256": "254978b267c2f71c26e734cd029bd10e60e18b6525822787ec69246aa49cb375"
+        },
+        "training/neural_ab_shards.mojo": {
+          "mode": "100644",
+          "sha256": "42c8340eb6fdd40939ee2d7248e8e7fc179da31d50dc18fb12261fdc914e3d50"
+        },
+        "training/neural_arithmetic_profile.mojo": {
+          "mode": "100644",
+          "sha256": "30a2214c79dc3375c435d926705079fb371e5de57c6cf22f5922b7fb5efba503"
+        },
+        "training/neural_identical_experiments.mojo": {
+          "mode": "100644",
+          "sha256": "fe1283e0424f2ed308ab6434a84131dfde0fea32acace5cd2e789b60194fbf4c"
+        },
+        "training/opt_gate.mojo": {
+          "mode": "100644",
+          "sha256": "d1618efe5a9c09c7b64d75a4f6e954ec48284380e2fb4cf9fd2b30cb417631e7"
+        },
+        "training/optimizer_host_rows.mojo": {
+          "mode": "100644",
+          "sha256": "1ae41e412fdad7c14da37b8ca325b852133cba98822efcfc7a8d8d295ca171c7"
+        },
+        "training/residual_dropout_contract.mojo": {
+          "mode": "100644",
+          "sha256": "020eda4ab7bc1b6f7aab76b81d93842c44d4c949fe7b39cd393bf22c59e128ab"
+        },
+        "training/samba_afn.mojo": {
+          "mode": "100644",
+          "sha256": "0aeccc00b0fcc5ee0d2dceb4dfaebd312aa8ed489343721aed739c34ad64379b"
+        },
+        "training/samba_ops.mojo": {
+          "mode": "100644",
+          "sha256": "b154f02bba3bab1ddb794de8c04767410b5ade8949a2d4d827c776173d1184a0"
+        },
+        "training/samba_resident.mojo": {
+          "mode": "100644",
+          "sha256": "6feb991b47bfe9d5d916cf6ea1d259d6a945f646d50387fb3846b6f4be601940"
+        },
+        "transformer/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/block_options.mojo": {
+          "mode": "100644",
+          "sha256": "818891d93c627769cc2b3a5fdac5e4f01e028c3b13724c751a04f7c04b287cb0"
+        },
+        "transformer/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/checks/transformer_backward_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "e7965e72111ee225d46e3dab92c53fc877ccfe4e09f088773c927d8f91a53555"
+        },
+        "transformer/checks/transformer_fixture.mojo": {
+          "mode": "100644",
+          "sha256": "dfe1150b6b60fbfa8c20dd8520de19e0d084a504a0170f9156b9e5e893bf63b1"
+        },
+        "transformer/checks/transformer_oracle.mojo": {
+          "mode": "100644",
+          "sha256": "fa43eadee6dc7b4987e11569d3e75e74fb9eadcb30cc12bccfd0b03c8b3427ad"
+        },
+        "transformer/experiments/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "1cd3d96d3ddaebf9f5e575a6487eb6a2d2096562197c2dd405188b0fd1df536d"
+        },
+        "transformer/experiments/attention_schedules.mojo": {
+          "mode": "100644",
+          "sha256": "45784130ea0d4713f6f9bdd79f4ddcb5f9f3e6d2fd06a566263faf9b297c13e1"
+        },
+        "transformer/experiments/norm_profile.mojo": {
+          "mode": "100644",
+          "sha256": "4c486d56b3279ce6617e864a5b61017493ec0efdf0a93491d28e9cf9820fc181"
+        },
+        "transformer/experiments/norm_profile_contract.mojo": {
+          "mode": "100644",
+          "sha256": "43bbbefcb5f74eeaea561e2758ef5d40b0da5e9a3e02ebc07523996d415d1cb0"
+        },
+        "transformer/impl/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/impl/llama/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+        },
+        "transformer/impl/llama/afn_apple_fast.mojo": {
+          "mode": "100644",
+          "sha256": "6c5cf783bf1719a8287d6ea2b8cbf675eb9580d4490b1b2e1304b9abfe7609d6"
+        },
+        "transformer/impl/llama/fused_attention.mojo": {
+          "mode": "100644",
+          "sha256": "7780cf152d7062c941f707f4752f0c9368a8eda5d9ae7954062670775b3918b6"
+        },
+        "transformer/impl/llama/int15_block.mojo": {
+          "mode": "100644",
+          "sha256": "e3d88423f0f0228bf2dca8d69a06742716360802247c9f22405550ff71390856"
+        },
+        "transformer/impl/llama/modeling_llama.mojo": {
+          "mode": "100644",
+          "sha256": "90a1e197b701801edfe4a9d1e7a0e1c2da73ff6922373db4f73a67fd36c73091"
+        },
+        "x_cnn/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "x_cnn/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "x_cnn/neural_aux_contract.mojo": {
+          "mode": "100644",
+          "sha256": "52a3d33bd9cb21861618192c30af6174aa31fcee86c9dba046c926ba90a8c7ca"
+        },
+        "x_cnn/ops.mojo": {
+          "mode": "100644",
+          "sha256": "238a3601dabfd10d020eb95b82200d02506a9bab10dfbd900495700733b532cd"
+        },
+        "x_linear/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "c36f97c3f62aba7f2c8eaf119a2d165aaaec00c9470b607f6d7f2c2b39673f2e"
+        },
+        "x_linear/checks/__init__.mojo": {
+          "mode": "100644",
+          "sha256": "26a4218c8cb73c7c0d8ba957df1146f2005a9b5336e8a52290f09440d6f0dfc3"
+        },
+        "x_linear/ops.mojo": {
+          "mode": "100644",
+          "sha256": "47af0872b634526df83ec1ea2db40647d1859efaf9f8c0187a4edb58b92327a2"
+        },
+        "x_linear/team.mojo": {
+          "mode": "100644",
+          "sha256": "0b62a4d01fa723e8a5ab3b0915108802173ad5cd117a10b69a32aef731680249"
+        },
+        "x_linear/witness.mojo": {
+          "mode": "100644",
+          "sha256": "f56f2c0b9aa4973e6085418dec24b7ebfa8f9502ad5f094bc56de1ae00e7ced8"
+        }
+      },
+      "schema": "mojolearn.autograd-artifact-reuse/1",
+      "source_commit": "132b5aa5d78cc551a879af8e50bed3f39f2fee54",
+      "target": "sm_89",
+      "target_cpu": "x86-64-v3"
+    },
+    "schema": "mojolearn.autograd-gate-artifacts/1",
+    "source_commit": "4e9f36ea2c1d8ff3ebac6b98e4ef8a58f5455310",
+    "state": "built",
+    "target": "sm_89",
+    "target_cpu": "x86-64-v3",
+    "vendor": "nvidia"
+  },
+  "adapters": {
+    "enabled": true,
+    "ok": true,
+    "status": "PASSED",
+    "rc": 0,
+    "phases": {
+      "max-training": 0,
+      "torch-compile": 0,
+      "torch-training": 0
+    }
+  }
+}

@@ -1,0 +1,55 @@
+mac_slot: admitted after 0.003s
+# vendor=arm64 commit=667ed9fdd1638644a73f547e70b0f376ea1246f0 (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-10-26 20:04:28  macOS-26.5.2-arm64-arm-64bit
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             |
+|------------------------|------------------|
+# START knn-clf/base repeat=1/train
+# DONE knn-clf/base repeat=1/train 0.493s
+# START knn-clf/base repeat=1/infer-save-reload
+# DONE knn-clf/base repeat=1/infer-save-reload 0.194s
+# START knn-clf/base repeat=1/batch
+# DONE knn-clf/base repeat=1/batch 1.665s
+# START knn-clf/base repeat=1/batchgrad
+# DONE knn-clf/base repeat=1/batchgrad 0.000s
+# START knn-clf/base repeat=1/batchscale
+# DONE knn-clf/base repeat=1/batchscale 0.000s
+# START knn-clf/base repeat=1/ragged
+# DONE knn-clf/base repeat=1/ragged 0.000s
+# START knn-clf/base repeat=1/stepfull
+# DONE knn-clf/base repeat=1/stepfull 0.000s
+# CELL knn-clf/base STABLE 2.352s
+| knn-clf                | fbc85bd798862ef3 |
+| knn-clf infer          | 8381d6badb2ee31b |
+| knn-clf model          | f0b9be0fd408466b |
+| knn-clf batch          | ae9a520d4ce52431 |
+# START x-neighbors-nearest-centroid/base repeat=1/train
+# DONE x-neighbors-nearest-centroid/base repeat=1/train 0.361s
+# START x-neighbors-nearest-centroid/base repeat=1/infer-save-reload
+# DONE x-neighbors-nearest-centroid/base repeat=1/infer-save-reload 0.053s
+# START x-neighbors-nearest-centroid/base repeat=1/batch
+# DONE x-neighbors-nearest-centroid/base repeat=1/batch 1.392s
+# START x-neighbors-nearest-centroid/base repeat=1/batchgrad
+# DONE x-neighbors-nearest-centroid/base repeat=1/batchgrad 0.000s
+# START x-neighbors-nearest-centroid/base repeat=1/batchscale
+# DONE x-neighbors-nearest-centroid/base repeat=1/batchscale 0.000s
+# START x-neighbors-nearest-centroid/base repeat=1/ragged
+# DONE x-neighbors-nearest-centroid/base repeat=1/ragged 0.000s
+# START x-neighbors-nearest-centroid/base repeat=1/stepfull
+# DONE x-neighbors-nearest-centroid/base repeat=1/stepfull 0.000s
+# CELL x-neighbors-nearest-centroid/base STABLE 1.807s
+| x-neighbors-nearest-centroid | a3ec310eee8eadd7 |
+| x-neighbors-nearest-centroid infer | 1c64142221e7627e |
+| x-neighbors-nearest-centroid batch | 2ff5ac8a9cbf4b12 |
+
+cells=2 stable=2 moved=0 refused=0
+infer: stable=2
+model: stable=1 n/a=1
+batch: stable=2
+batchgrad: n/a=2
+batchscale: n/a=2
+ragged: n/a=2
+stepfull: n/a=2
+n/a: knn-clf batchgrad n/a:no-backward, knn-clf batchscale n/a:not-in-the-serving-set, knn-clf ragged n/a:no-sequence-axis, knn-clf stepfull n/a:no-decode-state, x-neighbors-nearest-centroid batchgrad n/a:no-backward, x-neighbors-nearest-centroid batchscale n/a:not-in-the-serving-set, x-neighbors-nearest-centroid model n/a:no-save, x-neighbors-nearest-centroid ragged n/a:no-sequence-axis, x-neighbors-nearest-centroid stepfull n/a:no-decode-state
+wrote /Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/installed-fixtures-macos-r2/apple.json
+mac_slot: {"wait_seconds": 0.00301258300896734, "run_seconds": 5.023953249910846, "exit_code": 0}

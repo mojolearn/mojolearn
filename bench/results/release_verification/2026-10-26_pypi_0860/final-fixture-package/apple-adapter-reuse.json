@@ -1,0 +1,27 @@
+{
+  "schema": "mojolearn.release.apple-adapter-reuse.v1",
+  "before": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/macos/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+    "sha256": "e5eab5693d610533693e787e50f5245ceff336f913edfdf4edae82f9ec065b79"
+  },
+  "after": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/macos/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+    "sha256": "52b12974cb11ee92f1ec17830b18895ce743b001c3c5bf705964421304e9424b"
+  },
+  "version": "0.8.60",
+  "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+  "retained_gate": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/gate-apple/adapters/reuse.json",
+    "sha256": "f62c023f7a37dbb7a47a14e251a5ed796b28950effff5105b5593f55e71081b7"
+  },
+  "verifier_update": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/verifier-fixture-update/update.json",
+    "sha256": "35bb864111d95a2f3c59ffd900b632c374fda8d666f955d9990aede51d121896"
+  },
+  "changed": [
+    "mojolearn-VERSION.dist-info/RECORD",
+    "mojolearn/_identity_break.py",
+    "mojolearn/_identity_lane_neighbors.py",
+    "mojolearn/identity_columns/COMMIT"
+  ]
+}

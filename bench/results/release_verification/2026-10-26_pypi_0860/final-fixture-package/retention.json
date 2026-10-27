@@ -1,0 +1,6 @@
+{
+  "wheels": "measurements/verification/0.8.60/final-0860-wheels.tgz",
+  "fixture_sources_and_original_miss": "measurements/verification/0.8.60/verifier-fixture-update.tgz",
+  "full_local_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026",
+  "scope": "All final native bytes unchanged from the qualified pre-fixture package. New fixtures pass installed CPU and Apple execution. Original comparator and fault-injection evidence retained."
+}

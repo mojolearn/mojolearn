@@ -1,0 +1,18 @@
+{
+  "wheel_sha256": "52b12974cb11ee92f1ec17830b18895ce743b001c3c5bf705964421304e9424b",
+  "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+  "checks": [
+    {
+      "vendor": "cpu",
+      "exit_code": 0,
+      "cases": 2,
+      "report_sha256": "a60f3fbc3794a42909982e024562cdefc68bbb3a37ed58088dc20457aa64b185"
+    },
+    {
+      "vendor": "apple",
+      "exit_code": 0,
+      "cases": 2,
+      "report_sha256": "9ab5aea42f89987d6ed0d53bebc7b933fcdec197837347f86e813c2796f2a454"
+    }
+  ]
+}

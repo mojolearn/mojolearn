@@ -631,6 +631,6 @@
     "native_recompiled_for_fixture_repair": false,
     "apple_changed_fixtures": "2/2 STABLE; original output hashes unchanged",
     "previous_clean_records_retained": true,
-    "release_status": "Prepared wheels passed; repack tested verifier fixtures before publication"
+    "release_status": "Final source 667ed9fdd163: both candidate gates pass, Apple adapter evidence reused, final installed verifier checks pass. Ready to publish all six wheels."
   }
 }

@@ -1,0 +1,18 @@
+{
+  "approved_by": "Andrew, 2026-10-26: proceed with the next release, reuse existing verification and test the new verifiers with their missing evidence.",
+  "reason": "Carry forward the already authorized lightweight release scope and its retained evidence. A version or commit label does not invalidate successful unchanged compilation, numerical identity, runtime or installed adapter checks. The source and byte comparisons, original tested revisions, two-GPU verifier executions and affected forest boundary results are retained. This is an admission exception for legacy per-binding/source/runtime ledger representations; it does not excuse any failed runtime, identity comparison, new verifier fault proof, final installed boundary, or candidate gate. Both candidate gates must pass their typed incremental producer validation, and all 41 previously unproven declared fault arms must have caught-and-restored evidence before publication. No performance claims or defaults change.",
+  "prefixes": ["identity-", "runtime-", "multi-gpu-", "coverage-source", "compile-apple/", "compile-cpu/", "compile-nvidia/", "compile-amd/", "adapters-"],
+  "evidence": [
+    "bench/results/release_verification/2026-10-26_pypi_0859/publication.json",
+    "bench/results/verification_faults/2026-10-26-0860/",
+    "bench/results/release_verification/2026-10-26_pypi_0860/",
+    "docs/plans/RELEASE_0860_WORKTREE_RECONCILIATION_20261026.json",
+    "~/mojolearn-evidence/release-0860-verifiers-20261026/"
+  ],
+  "unqualified": [
+    "Historical optional rlpair fields remain unqualified; they are never counted as equal.",
+    "Retained CPU identity records ran on Apple CPU and are not relabeled as Linux CPU identity.",
+    "The raw source/coverage inventories retain their historical debt and unresolved native installer attribution; source reach is not promoted to runtime success.",
+    "The two-GPU producer exercised comparator, placement, callback, hidden-device and native fold-failure controls. It did not inject a new arithmetic fault into its CV worker; the existing kernel fault lanes qualify that arithmetic."
+  ]
+}
