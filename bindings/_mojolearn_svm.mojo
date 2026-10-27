@@ -75,7 +75,7 @@ from isolation_forest.estimator import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
 # the device (the CPU binding runs svm/host/svc_proba.mojo's host twin)
-from svm.impl.svc_epilogue_pyapi import (
+from providers.python.svm_impl_svc_epilogue_pyapi import (
     svc_pair_epilogue_device_binding,
     svc_platt_train_device_binding,
     svc_splitmix_perm_device_binding,
@@ -91,9 +91,9 @@ from svm.estimator import (
 )
 
 
-from svm.impl.scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from svm.estimator import _family_ctx as _sg_family_ctx
-from svm.impl.svc_ovo_layout_pyapi import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
+from providers.python.svm_impl_svc_ovo_layout_pyapi import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
