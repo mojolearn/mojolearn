@@ -10,7 +10,7 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute,
 )
 from providers.python.estimator_binding_pyapi import estimator_binding
-from providers.python.compiled_binding_snapshot import CompiledBindingSnapshot
+from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT, XN_MODE_OPERATION, xn_operation_id
 
 
