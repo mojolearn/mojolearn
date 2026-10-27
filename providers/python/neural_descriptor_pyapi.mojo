@@ -19,13 +19,13 @@ struct NeuralDescriptorProvider(Movable, Writable):
     var entry: NativeDescriptorCall
     var calls: List[Int]
 
-    def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall):
+    def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall, operation_count: Int = 6):
         self.module = module
         self.capsule = capsule
         self.factory = factory
         self.name = name^
         self.entry = entry
-        self.calls = List[Int](length=6, fill=0)
+        self.calls = List[Int](length=operation_count, fill=0)
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("NeuralDescriptorProvider(", self.name, ", calls=", self.calls, ")")
@@ -34,7 +34,9 @@ struct NeuralDescriptorProvider(Movable, Writable):
         self.write_to(writer)
 
 
-def neural_descriptor_connect(factory: PythonObject, var name: String) raises -> PythonObject:
+def neural_descriptor_connect(factory: PythonObject, var name: String, operation_count: Int = 6) raises -> PythonObject:
+    if operation_count < 1:
+        raise Error("native provider: operation_count must be positive")
     var bi = native_loaded_module("builtins")
     if py_type(factory) is not py_type(bi.len):
         raise Error("TypeError: neural native ABI factory must be a compiled extension entry")
@@ -51,18 +53,20 @@ def neural_descriptor_connect(factory: PythonObject, var name: String) raises ->
     if not raw:
         raise cpy.unsafe_get_error()
     var table = MutPointer[NativeDescriptorCall, MutUntrackedOrigin](unsafe_from_address=Int(raw.value()))
-    return PythonObject(alloc=NeuralDescriptorProvider(module, capsule, factory, name^, table[0]))
+    return PythonObject(alloc=NeuralDescriptorProvider(module, capsule, factory, name^, table[0], operation_count))
 
 
-def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name: String) raises -> PythonObject:
+def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name: String, operation_count: Int = 6) raises -> PythonObject:
+    if operation_count < 1:
+        raise Error("native provider: operation_count must be positive")
     # Caller admits this exact compiled factory before entering here. Retain
     # factory identity as well as its module: swapping an ABI entry on the same
     # module must reconnect, even if the facade/canonical module did not change.
     if previous is not None:
         var held = previous.downcast_value_ptr[NeuralDescriptorProvider]()
-        if held[].factory is factory and held[].module is factory.__self__ and held[].name == name:
+        if held[].factory is factory and held[].module is factory.__self__ and held[].name == name and len(held[].calls) == operation_count:
             return previous
-    return neural_descriptor_connect(factory, name)
+    return neural_descriptor_connect(factory, name, operation_count)
 
 
 def neural_descriptor_cached(
@@ -116,6 +120,6 @@ def neural_descriptor_info(provider: PythonObject) raises -> PythonObject:
     # executor itself. Counts record attempts, including refused native calls.
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var counts = Python.list()
-    for value in owner[].calls:  # small-loop(six named native operations)
+    for value in owner[].calls:  # small-loop(the admitted table's named native operations)
         _ = py_call(counts.append, value)
     return Python.tuple(PythonObject(owner[].name), counts)
