@@ -753,6 +753,20 @@ def pypi_wheel_guard(args, python, vendor):
         args.mojolearn_version = manifest["version"]
     return pypi_wheel_record(manifest), None
 
+
+def installed_artifact_record(wheel, artifact_identity):
+    """Distinguish an incremental install from its retained base wheel."""
+    components = (artifact_identity or {}).get("component_sources")
+    if not components:
+        return wheel
+    import copy
+    record = copy.deepcopy(wheel or {})
+    record["base_distribution_source"] = record.get("base_distribution_source", record.get("source"))
+    record["source"] = "incremental"
+    record["component_sources"] = copy.deepcopy(components)
+    record["qualification_scope"] = "Base wheel provenance plus pinned rebuilt components; not the unmodified published wheel"
+    return record
+
 #: The two clocks (tools/board_clock_audit.py, standard library only): per cell
 #: the whole-operation clock (incl. the host-to-device copy) and the kernel-only
 #: clock where stored fields give them, and each opponent ratio on its clock
@@ -5030,6 +5044,7 @@ def main(argv=None):
             raise SystemExit("bench_board: installed artifact guard: " + verify.stderr[-1500:])
     if wheel is None and result:
         wheel = ((result.get("box") or {}).get("mojolearn") or {}).get("wheel")
+    wheel = installed_artifact_record(wheel, artifact_identity)
     ptxas = None
     if vendor == "nvidia":
         drv = _box_once(("nvidia-driver",), lambda: capture(["nvidia-smi", "--query-gpu=driver_version",
