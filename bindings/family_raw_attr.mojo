@@ -33,9 +33,14 @@ def family_raw_get_or(model: PythonObject, name: String, default: PythonObject) 
     AttributeError selects `default`; any other exception propagates."""
     ref cpy = Python().cpython()
     var key = PythonObject(name)
+    # Resolve the exception type before lookup can set CPython's error indicator.
+    # The registry validation performs PythonObject operations; doing that with
+    # a pending lookup error consumes it, losing both missing-field defaults and
+    # non-AttributeError exceptions (BGMM first fit, extended GMM, GMM reload).
+    # Reproduction: tests/native_family_raw_attr_probe.mojo and its Python test.
+    var attribute_error = native_loaded_module("builtins").AttributeError
     var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, key._obj_ptr)
     if not result:
-        var attribute_error = native_loaded_module("builtins").AttributeError
         if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(attribute_error._obj_ptr) != 0:
             cpy.lib.get_function[NoneType]("PyErr_Clear")()
             return default
