@@ -82,3 +82,25 @@ def test_training_constructors_share_admission_helpers():
     assert 'training_f32_owned(' in construct
     copy=(ROOT/'core/training_input_copy.mojo').read_text()
     assert 'std.python' not in copy and 'PythonObject' not in copy
+
+
+def test_linalg_gemm_uses_shared_native_transport():
+    import ast
+    source=(ROOT/'python/mojolearn/_linalg_impl.py').read_text()
+    funcs={node.name:node for node in ast.parse(source).body if isinstance(node,ast.FunctionDef)}
+    for name in ('matmul','matmul_bf16','matmul_int8','to_bf16','from_bf16','quantize_int8','dequantize_int8'):
+        calls=[n for n in ast.walk(funcs[name]) if isinstance(n,ast.Call)]
+        assert not any(isinstance(n.func,ast.Name) and n.func.id=='_load' for n in calls)
+    door=(ROOT/'bindings/linalg_ops_lowbit.mojo').read_text()
+    assert 'neural_descriptor_execute(provider, op, addresses, parameters' in door
+    assert 'neural_descriptor_reuse' in door
+    assert 'family_call(bf["default_mode"])' not in door
+    assert '.environ' not in door
+    native=(ROOT/'gemm/linalg_native.mojo').read_text()
+    assert 'std.python' not in native and 'PythonObject' not in native
+    for owner in ('identical_gemm_host(', 'identical_gemm_int8_into(', 'identical_gemm_bf16w_into('):
+        assert native.count(owner)==(2 if owner=='identical_gemm_bf16w_into(' else 1)
+    binding=(ROOT/'bindings/_mojolearn_linalg.mojo').read_text()
+    assert 'result = gemm_native(' in binding
+    assert 'result = gemm_bf16_native(' in binding
+    assert 'result = gemm_int8_native(' in binding
