@@ -2,6 +2,7 @@
 # Named block operations on the common native descriptor transport. All math,
 # transfer, reports and retained stages remain in the existing Mamba owners.
 from std.ffi import _Global
+from mamba.native_tape_dispatch import mamba_tape_operation
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
@@ -13,13 +14,18 @@ from mamba.impl.mamba_shell_impl import (
 
 # 0/1 reserve/release under the provider GIL; 2/3/4 Mamba1/2/3 VJP;
 # 5 fresh Mamba3 prefill; 6/7 session prefill/VJP; 8/9 owned prefill/VJP.
+# 10..14 immutable tape reserve/release/forward/backward/close.
 # Session execution prepends an admitted opaque owner handle to its words.
-comptime MAMBA_BLOCK_OPERATIONS = 10
+comptime MAMBA_BLOCK_OPERATIONS = 15
 
 
 def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
     if op < 0 or op >= MAMBA_BLOCK_OPERATIONS:
         raise Error("Mamba block native ABI: unknown operation")
+    if op >= 10:
+        if len(f) != 0:
+            raise Error("mamba3 forward tape: unexpected float scalars")
+        return mamba_tape_operation(op - 10, a, words)
     var p = List[Int]()
     var handle = 0
     if op < 2 or op >= 6:

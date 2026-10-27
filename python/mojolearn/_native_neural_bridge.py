@@ -15,6 +15,7 @@ def connect_training(backend, vendor, inference_bindings):
         "transformer": ("_mojolearn_transformer", (
             "transformer_vendor", "transformer_numeric_mode", "transformer_backward",
             "transformer_block_api_v1", "transformer_native_session_handle_v1",
+            "transformer_tape_create_native_v1", "transformer_tape_handle_native_v1",
             "transformer_session_create", "transformer_session_close",
             "transformer_session_backward", "transformer_session_invalidate_tape",
             "transformer_arithmetic_profile", "transformer_arithmetic_profile_changed",
@@ -23,6 +24,7 @@ def connect_training(backend, vendor, inference_bindings):
             "transformer_session_forward_tape", "transformer_session_backward_tape")),
         "mamba": ("_mojolearn_mamba", (
             "mamba_vendor", "mamba_numeric_mode", "mamba_state_api_v1", "mamba_block_api_v1",
+            "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1",
             "mamba_prefill_native_handle_v1", "mamba1_backward", "mamba2_backward",
             "mamba3_backward", "mamba3_forward", "mamba3_decode_step", "mamba3_prefill_session_create",
             "mamba3_prefill_session_backward", "mamba3_prefill_session_backward_owned",

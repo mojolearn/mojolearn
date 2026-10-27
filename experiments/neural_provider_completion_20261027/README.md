@@ -68,3 +68,21 @@ poisoned Python method bypass and unsupported-lock refusal. OS-signal behavior,
 long contention and shared mixed-layer execution remain pending. The native
 wait returns cancellation on EINTR rather than running application handlers in
 native execution. No performance gain is claimed from the source change.
+
+Immutable tapes (third source tranche): Transformer and Mamba3 forward snapshots
+now use the shared block provider tables for forward, backward, and close. Exact
+native owner allocation/handle admission is done once before forward; the tape
+retains that provider image, boxed owner, handle, and family through consumption.
+Replacing a block's later bindings cannot redirect an old tape to another image.
+Reservations still occur under the provider GIL, numerical work releases it, and
+cleanup preserves the previous consume-on-failed-backward contract. Close remains
+idempotent. No new arithmetic or activation-retention default was introduced.
+
+This applies only when the existing `MOJOLEARN_NEURAL_NATIVE_DISPATCH=1` candidate
+and pre-existing `MOJOLEARN_IDN_ACT_RETAIN=3` compiled tape route are selected.
+The default retained-session route, CPU route, and mixed Samba outer loops are
+separate outstanding work. `samba_tape_probe.py` is authored but NOT executed:
+it compares a public mixed-layer dropout training step's loss/parameter bytes
+and requires table counters to prove the tape route was reached. Root owns
+compilation and focused Mac runtime; tape consumption/failure/concurrency probes
+and any unsupported compile branches remain pending, with no performance claim.

@@ -2,6 +2,7 @@
 # Private sibling ABI for the existing fresh/backward Transformer operations.
 # Common descriptor transport; no Python/provider imports or changed kernels.
 from std.ffi import _Global
+from transformer.native_tape_dispatch import transformer_tape_operation
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
@@ -12,10 +13,13 @@ from transformer.transformer_binding_impl import (
 
 # 0 reserve, 1 release (caller GIL/lock held); 2 session fresh, 3 session
 # backward; 4 ephemeral fresh, 5 ephemeral backward. Session operations prepend
+# Tape operations 6..10 reserve/release/forward/backward/close their own owner.
 # one checked opaque owner handle to their integer vector. All spans borrowed.
 
 
 def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
+    if op >= 6:
+        return transformer_tape_operation(op - 6, a, words)
     var p = List[Int]()
     var session = 0
     if op < 4:
@@ -108,7 +112,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 6 or nf != 0:
+        if op < 0 or op >= 11 or nf != 0 or na < 0 or na > 24 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")
