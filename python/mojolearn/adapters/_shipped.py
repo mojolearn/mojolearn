@@ -45,7 +45,7 @@ def _connect():
     # glue: framework installation and exact path storage are connected once.
     # No model or public metadata helper calls this setup function.
     from .. import _backend
-    from ..importers._program import _IMPORT_NATIVE
+    from .._native_family_bridge import _unavailable
     from pathlib import PosixPath
     from types import MemberDescriptorType
     try:
@@ -65,7 +65,11 @@ def _connect():
     else:
         layout.update(set_drive=fields['_drv'].__set__, set_root=fields['_root'].__set__,
                       set_parts=fields['_parts'].__set__)
-    return _IMPORT_NATIVE, dict(cache=_CACHE, directory=directory, layout_error=error,
+    try:
+        entry = _backend.binding("_mojolearn_x_sequence").ops_import_model
+    except (ImportError, AttributeError) as exc:
+        entry = _unavailable(exc)
+    return entry, dict(cache=_CACHE, directory=directory, layout_error=error,
                                schema=SCHEMA, abi=ABI, files=FILES, path_layout=layout)
 
 

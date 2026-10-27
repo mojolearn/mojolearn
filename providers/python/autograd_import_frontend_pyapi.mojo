@@ -15,7 +15,7 @@ from bindings.optimizer_public_words import stash_python_error, optimizer_python
 from providers.python.autograd_python_errors_pyapi import graph_python_error, graph_int
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py, ops_session_fields
 from providers.python.autograd_ops_frontend_pyapi import _program_initialize
-from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, neural_descriptor_execute, neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_entry
 from providers.python.autograd_import_lower_pyapi import _import_out
 from providers.python.autograd_program_arrays_pyapi import program_admit_value
 from autograd.program_import_request import NativeProgramImport
@@ -102,11 +102,16 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         var handle = 0
         if reader is not None:
             var stored = _fields(reader, context["layouts"][context["reader"]])
-            if stored["b"] is not fields["_b"]:
-                raise Error("ValueError: the graph was read by another binding than this session's; pass the ONNX file's path instead")
             if py_type(stored["h"]) is not b.int:
                 raise Error("TypeError: native graph handle requires an exact integer")
-            handle = Int(py=stored["h"])
+            var graph_owner = stored["_lifetime"].downcast_value_ptr[NativeDescriptorResource]()
+            var graph_provider = graph_owner[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
+            var session_provider = owner[].provider.downcast_value_ptr[NeuralDescriptorProvider]()
+            if graph_provider[].module is not session_provider[].module:
+                raise Error("ValueError: the graph was read by another binding than this session's; pass the ONNX file's path instead")
+            if graph_owner[].handle == 0 or graph_owner[].handle != Int(py=stored["h"]):
+                raise Error("TypeError: graph handle differs from its native registry owner")
+            handle = graph_owner[].handle
         var names = List[String]()
         var dimensions = List[Int]()
         for i in range(len(words[0])):  # driver-loop: over admitted import input names

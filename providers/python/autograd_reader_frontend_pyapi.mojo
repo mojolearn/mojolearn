@@ -153,10 +153,15 @@ def _reader_binding(value: PythonObject, context: PythonObject) raises -> Tuple[
         var mode = context["backend"]["_DEFAULT_MODE"]
         if mode is None:
             mode = context["backend"]["_SELECTED"]
-        var entry = context["connections"][mode]
+        var entry = context["bindings"][mode]
         if py_type(entry) is bi.str:
             raise Error(String(py=entry))
-        binding = py_fields(entry)["binding"]
+        binding = entry
+    var aliases = context["aliases"]
+    for i in range(len(aliases)):  # driver-loop: over connected module aliases, without invoking lazy Python proxy hooks
+        if binding is aliases[i][0]:
+            binding = aliases[i][1]
+            break
     if py_type(binding) is not py_type(bi):
         raise Error("TypeError: ONNX reader requires a connected native binding module")
     var factory = py_get(py_fields(binding), "onnx_native_api_v1")
@@ -167,7 +172,7 @@ def _reader_binding(value: PythonObject, context: PythonObject) raises -> Tuple[
     var provider = neural_descriptor_reuse(py_get(context["providers"], factory.__self__), factory,
         "mojolearn.autograd.onnx.v1", 4)
     py_setitem(context["providers"], factory.__self__, provider)
-    return (binding, provider)
+    return (factory.__self__, provider)
 
 
 def reader_read(path: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
