@@ -78,6 +78,25 @@ def run(root):
     # Prove remote retention works before any fit starts.
     proof = E.archive(root/'retention-preflight.tar.gz', {'run.json': E.encoded(cfg)})
     E.write(root/'retention-preflight.json', E.public_ref(E.upload(proof)))
+    if cfg.get('neural_smoke'):
+        selected = json.loads((root/'manifest.json').read_text())[cfg['vendor']]
+        neural = [rid for rid in selected if rid.startswith('neural/')]
+        if len(neural) != 29:
+            raise RuntimeError('neural smoke requires the complete 29-recipe plan')
+        E.write(root/'neural-smoke-manifest.json', {cfg['vendor']: neural})
+        smoke_cmd = [python, str(source/'tools/gpu_gap_campaign.py'), '--vendor', cfg['vendor'],
+                     '--manifest', str(root/'neural-smoke-manifest.json'), '--out', str(root/'neural-smoke'),
+                     '--cache', cache, '--python-env', python, '--wheel-manifest', manifest,
+                     '--cpu-fallback', '--smoke', '--smoke-timeout', '60', '--smoke-load-timeout', '300',
+                     '--smoke-stage-timeout', '1800']
+        print('NEURAL_SMOKE_STARTED', flush=True)
+        with (root/'neural-smoke.log').open('w') as log:
+            smoke_rc = subprocess.run(smoke_cmd, cwd=source, stdout=log, stderr=log).returncode
+        smoke = json.loads((root/'neural-smoke/smoke/smoke.json').read_text())
+        rows = smoke.get('rows', {})
+        if smoke_rc or len(rows) != 29 or any(r.get('status') != 'MATCHED' for r in rows.values()):
+            raise RuntimeError('neural smoke incomplete; retain failure logs and repair affected recipes')
+        print('NEURAL_SMOKE_PASSED 29/29', flush=True)
     campaign = root/'campaign'
     cmd = [python, str(source/'tools/gpu_gap_campaign.py'), '--vendor', cfg['vendor'],
            '--manifest', str(root/'manifest.json'), '--out', str(campaign), '--cache', cache,
