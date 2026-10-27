@@ -8,8 +8,14 @@ from pathlib import Path
 import traceback
 
 
+# Test evidence only, retained even when a strict assertion fails.
+RUNTIME_AUDITS = []
+
+
 def qualify():
+    RUNTIME_AUDITS.clear()
     import numpy as np
+    from mojolearn._verify_native_runtime import audit_native_call
     from mojolearn import SambaConfig, SambaStack
     from mojolearn import _native_neural_bridge as neural
 
@@ -33,7 +39,13 @@ def qualify():
         outputs = []
         for arm, (model, state) in enumerate(zip(models, states)):
             os.environ['MOJOLEARN_NEURAL_NATIVE_DISPATCH'] = str(arm)
-            outputs.append(np.asarray(model.step(ids[:, t], state)).copy())
+            if arm == 1 and t in (0, ids.shape[1] - 1):
+                audit = audit_native_call(model.step, ids[:, t], state)
+                RUNTIME_AUDITS.append(dict(operation='SambaStack.step', step=t, report=audit.report()))
+                value = audit.assert_native()
+            else:
+                value = model.step(ids[:, t], state)
+            outputs.append(np.asarray(value).copy())
         assert np.array_equal(outputs[0].view('u4'), outputs[1].view('u4')), t
         for a, b in zip(states[0].layers, states[1].layers):
             for name in ('cached_tokens', 'buffered_tokens', 'pending'):
@@ -81,7 +93,7 @@ def qualify():
     assert not called
     models[1]._blocks[1].allocate_state(1, 12)
     assert vars(models[1]._blocks[1])['_native_session_provider_cache'] is cache
-    return dict(status='passed', checks=['mixed Mamba3/attention six-step bitwise outputs',
+    return dict(status='passed', runtime_audits=RUNTIME_AUDITS, checks=['mixed Mamba3/attention six-step bitwise outputs',
         'carried token counters', 'stable provider and native-session link',
         'same-module compiled factory replacement', 'Python factory refusal without invocation', 'recovery'],
         logits_sha256=hashlib.sha256(outputs[1].tobytes()).hexdigest(),
@@ -95,7 +107,7 @@ def main():
     try:
         report = qualify()
     except BaseException:
-        report = dict(status='failed', traceback=traceback.format_exc())
+        report = dict(status='failed', traceback=traceback.format_exc(), runtime_audits=RUNTIME_AUDITS)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(dict(status=report['status'], evidence=str(args.output))))

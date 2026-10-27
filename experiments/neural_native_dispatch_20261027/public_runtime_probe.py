@@ -10,8 +10,14 @@ import tempfile
 import traceback
 
 
+# Test evidence only; preserve failed audits as structured output too.
+RUNTIME_AUDITS = []
+
+
 def qualify():
+    RUNTIME_AUDITS.clear()
     import numpy as np
+    from mojolearn._verify_native_runtime import audit_native_call
     from mojolearn._causal_lm_fixtures import family_fixture, _write_checkpoint
     from mojolearn.models import CausalLM
 
@@ -34,7 +40,17 @@ def qualify():
             ids = np.array([[1, 4, 7]], dtype='i4')
             states = [model.allocate_state(1, 48) for model in models]
             for repeat in range(8):
-                outputs = [np.asarray(model.forward(ids, state)).copy() for model, state in zip(models, states)]
+                baseline_output = baseline.forward(ids, states[0])
+                if repeat in (0, 7):
+                    # Profile the actual candidate operation, with input/oracle
+                    # preparation outside. Baseline poisoning below is separate.
+                    audit = audit_native_call(candidate.forward, ids, states[1])
+                    RUNTIME_AUDITS.append(dict(family=family, operation='forward', repeat=repeat,
+                                               report=audit.report()))
+                    candidate_output = audit.assert_native()
+                else:
+                    candidate_output = candidate.forward(ids, states[1])
+                outputs = [np.asarray(value).copy() for value in (baseline_output, candidate_output)]
                 assert np.array_equal(outputs[0].view('u4'), outputs[1].view('u4')), (family, repeat)
                 assert states[0].positions == states[1].positions
                 for a, b in zip(states[0].layers, states[1].layers):
@@ -43,7 +59,11 @@ def qualify():
                     for attr in ('cached_tokens', 'buffered_tokens', 'absolute_position'):
                         if hasattr(a, attr):
                             assert getattr(a, attr) == getattr(b, attr), (family, repeat, attr)
-            generated = [np.asarray(model.generate(ids, 5, greedy=False, seed=7, top_k=2)).copy() for model in models]
+            baseline_generated = baseline.generate(ids, 5, greedy=False, seed=7, top_k=2)
+            audit = audit_native_call(candidate.generate, ids, 5, greedy=False, seed=7, top_k=2)
+            RUNTIME_AUDITS.append(dict(family=family, operation='generate', report=audit.report()))
+            candidate_generated = audit.assert_native()
+            generated = [np.asarray(value).copy() for value in (baseline_generated, candidate_generated)]
             assert np.array_equal(*generated), family
             diagnostic = next(module.neural_native_dispatch_info for module in tuple(sys.modules.values())
                               if module is not None and hasattr(module, 'neural_native_dispatch_info'))
@@ -76,7 +96,7 @@ def qualify():
             candidate.forward(ids, candidate.allocate_state(1, 12))
             results.append(dict(family=family, counts=counts, logits_sha256=hashlib.sha256(outputs[1].tobytes()).hexdigest(),
                                 tokens=generated[1].tolist(), status='passed'))
-    return dict(status='passed', families=results, pending=['Samba and Mamba3 public execution', 'concurrency/busy',
+    return dict(status='passed', families=results, runtime_audits=RUNTIME_AUDITS, pending=['Samba and Mamba3 public execution', 'concurrency/busy',
                 'CPU fallback', 'owned Mamba3', 'full-workload timing', 'other targets'])
 
 
@@ -87,7 +107,7 @@ def main():
     try:
         report = qualify()
     except BaseException:
-        report = dict(status='failed', traceback=traceback.format_exc())
+        report = dict(status='failed', traceback=traceback.format_exc(), runtime_audits=RUNTIME_AUDITS)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(dict(status=report['status'], evidence=str(args.output))))

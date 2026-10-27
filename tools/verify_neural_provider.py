@@ -229,7 +229,11 @@ def worker(config_path):
             spec = importlib.util.spec_from_file_location('provider_public_probe', config['path'])
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            result['probe'] = module.qualify()
+            try:
+                result['probe'] = module.qualify()
+            finally:
+                # Preserve structured audit reports even if assert_native raises.
+                result['runtime_audits'] = getattr(module, 'RUNTIME_AUDITS', [])
             result['status'] = 'passed' if result['probe'].get('status') == 'passed' else 'failed'
     except BaseException:
         result['exception'] = traceback.format_exc()

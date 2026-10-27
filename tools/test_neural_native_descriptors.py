@@ -77,3 +77,28 @@ def test_result_and_error_share_stable_caller_owned_storage():
     assert 'Int(MutPointer(to=output[0].error))' in caller
     assert 'return output[0].result' in caller
     assert 'Array[Int, 1]' not in caller
+
+
+def test_public_probes_strictly_audit_candidate_calls_and_retain_reports():
+    import ast
+
+    causal = read('experiments/neural_native_dispatch_20261027/public_runtime_probe.py')
+    samba = read('experiments/samba_native_dispatch_20261027/public_provider_probe.py')
+    for body, expected in ((causal, {'candidate.forward', 'candidate.generate'}),
+                           (samba, {'model.step'})):
+        tree = ast.parse(body)
+        calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
+        audited = {ast.unparse(call.args[0]) for call in calls
+                   if isinstance(call.func, ast.Name) and call.func.id == 'audit_native_call'}
+        assert audited == expected
+        assert any(ast.unparse(call.func) == 'audit.assert_native' for call in calls)
+        assert 'report=audit.report()' in body
+        assert "runtime_audits=RUNTIME_AUDITS" in body
+        assert "status='failed', traceback=traceback.format_exc(), runtime_audits=RUNTIME_AUDITS" in body
+    assert 'if arm == 1 and t in (0, ids.shape[1] - 1):' in samba
+    # Independent callback controls stay present and outside strict audit.
+    assert 'baseline.forward(ids, baseline.allocate_state(1, 12))' in causal
+    assert 'assert len(calls) == n' in causal
+    assert 'assert not called' in samba
+    runner = read('tools/verify_neural_provider.py')
+    assert "result['runtime_audits'] = getattr(module, 'RUNTIME_AUDITS', [])" in runner
