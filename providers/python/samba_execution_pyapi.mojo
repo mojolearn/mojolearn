@@ -483,7 +483,7 @@ def samba_provider_forward(fields: PythonObject, config: PythonObject, entries: 
     var primitive = py_get(fields, "_native_primitives")
     if primitive is None:
         return PythonObject(None)
-    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 12)
+    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 25)
     py_setitem(fields, "_native_primitives", primitive)
     if not samba_provider_eligible(fields):
         return PythonObject(None)
@@ -498,7 +498,7 @@ def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries
     var primitive = py_get(fields, "_native_primitives")
     if primitive is None or not samba_provider_eligible(fields):
         return PythonObject(None)
-    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 12)
+    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 25)
     py_setitem(fields, "_native_primitives", primitive)
     var shape = ids.shape
     var admitted = AdmittedSambaExecution(fields, config, PythonObject(None), primitive,

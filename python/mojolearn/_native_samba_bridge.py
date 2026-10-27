@@ -10,6 +10,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
     import mmap
     import sys
     import _thread
+    from ._native_operation_lock import _OperationLock
     from collections import OrderedDict, defaultdict
     from pathlib import PosixPath, PurePosixPath
     from types import ModuleType
@@ -73,7 +74,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
         "native_factories": (dict, list, tuple, set, bool, int, float, complex, str, bytes, bytearray),
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap),
-        "opaque_types": (_thread.LockType, type(_thread.RLock())),
+        "opaque_types": (_thread.LockType, type(_thread.RLock()), _OperationLock),
         "path_types": (PosixPath, PurePosixPath), "module_type": ModuleType, "modules": sys.modules,
         "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32", "float64", "longdouble"),
         "type_flags": vars(type)["__flags__"].__get__,
@@ -105,7 +106,7 @@ def connect(config_cls, model_cls, training, neural, state_cls):
         "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_step",
         "optimizer_resident_step_io", "optimizer_maximize_dev", "accumulation_is_aligned",
         "samba_resident_enabled", "samba_resident_open", "samba_resident_forward", "samba_resident_step",
-        "samba_resident_accumulated_step",
+        "samba_resident_accumulated_step", "samba_resident_native_handle_v1",
         "optimizer_parallel_available", "accumulate_parallel_available", "clip_parallel_available",
         "samba_head_loss", "training_chunked_lm_head_enabled", "chunked_lm_head_v2_train",
         "samba_afn_norm_head_forward", "samba_afn_tail_train", "samba_afn_embedding_backward_tied",
