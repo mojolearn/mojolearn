@@ -297,6 +297,9 @@ class PairedSessions(unittest.TestCase):
         # An older supported pair has no new paired-session metadata. It must
         # survive a rebuild even when its historical input board is unavailable.
         own=race["cells"][0]
+        # Simulate the older expanded storage format before removing pairing
+        # metadata; a new compact reference must retain its referenced bytes.
+        own["main_board"]["observation"]=MB.restore_observation(own["main_board"]["observation"])
         own["main_board"]["observation"].pop("paired_race",None)
         own["main_board"]["observation"].pop("paired_box",None)
         obs3=MB.previous_observations(rebuilt)

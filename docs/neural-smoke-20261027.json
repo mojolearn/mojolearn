@@ -19,6 +19,12 @@
         "local_archive": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/apple-neural-smoke-evidence.tar.gz",
         "r2_key": "measurements/neural-smoke-20261027/apple-neural-smoke-evidence.tar.gz",
         "upload": "ok"
+      },
+      "default_cache_validation": {
+        "counts": {
+          "MATCHED": 2
+        },
+        "r2_key": "measurements/neural-smoke-20261027/apple-generation-default-evidence.tar.gz"
       }
     },
     "amd": {
@@ -39,7 +45,19 @@
     },
     "nvidia": {
       "expected": 29,
-      "status": "pending current-box smoke; previous L40S smoke passed 29/29"
+      "counts": {
+        "MATCHED": 29
+      },
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia-neural-smoke.json",
+      "retention": {
+        "bytes": 678708,
+        "r2_bucket": "mojolearn-data",
+        "r2_key": "measurements/records/v1/f0a32ee4561aa600d86ba6760e510b1f66837fa3dae4b2a2c6b2b32e7bdd202c.tar.gz",
+        "sha256": "f0a32ee4561aa600d86ba6760e510b1f66837fa3dae4b2a2c6b2b32e7bdd202c",
+        "status": "verified",
+        "verification": "GET sha256",
+        "local_archive": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027/nvidia-neural-smoke-evidence.tar.gz"
+      }
     }
   },
   "measurement_run": {
@@ -47,7 +65,7 @@
     "provider": "RunPod",
     "gpu": "NVIDIA RTX 6000 Ada Generation",
     "source_freeze": "7d881805f7f9173934a062ba8006e663ebf68c8a",
-    "status": "setup",
+    "status": "neural smoke passed 29/29; controller preparing measurement fixtures",
     "neural_first": true,
     "amd_box": "kept running; not released",
     "evidence": "/Users/andrewhendel/mojolearn-evidence/full-measurement-nvidia-20261027"
@@ -62,6 +80,23 @@
     "wins_vs_fastest_admitted": 11,
     "losses_vs_fastest_admitted": 18,
     "scored_samples_per_arm": 1,
-    "state": "interrupted by Mac ENOSPC; raw evidence retained; no claim of full completion"
+    "state": "interrupted by Mac ENOSPC; raw evidence retained; no claim of full completion",
+    "full_board_retained": {
+      "sha256": "ebbe46d4a7d261a86cae31d3675133bf24a00cf9fa9e6335b415303a951b4ac3",
+      "bytes": 16384510,
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/partial-main-amd-board.tar.gz",
+      "status": "verified",
+      "r2_key": "measurements/records/v1/ebbe46d4a7d261a86cae31d3675133bf24a00cf9fa9e6335b415303a951b4ac3.tar.gz",
+      "r2_bucket": "mojolearn-data",
+      "verification": "GET sha256"
+    },
+    "git_board_publication": "Compacted through the board tool: references replace only byte-identical embedded copies; every original value and audit fingerprint verified unchanged.",
+    "storage_verification": {
+      "original_canonical_sha256": "fa89d62acb67276fa47a040e97d64a737335e100ab804032d80908c5365be1bb",
+      "restored_canonical_sha256": "fa89d62acb67276fa47a040e97d64a737335e100ab804032d80908c5365be1bb",
+      "exact_value_preservation": true,
+      "committed_bytes": 50577142,
+      "unchanged_audit_fingerprints": 1616
+    }
   }
 }

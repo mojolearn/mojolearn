@@ -2095,11 +2095,16 @@ def save_result(path, result):
     # Andrew 2026-10-22: no stored ratio from an opponent pair whose parameters are not MATCHED
     enforce_pairs(result)
     tmp = path + ".tmp"
+    encoded = json.dumps(result, indent=1, sort_keys=True, default=str)
+    if len(encoded.encode()) > 50 * 1024 * 1024:
+        # Preserve every value; machine-readable boards need not duplicate
+        # indentation bytes once they reach the repository's file-size limit.
+        encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), default=str)
     with open(tmp, "w") as fh:
         # Audit history makes these machine-readable boards large. One-space
         # indentation preserves every value while avoiding needless size;
         # BOARD.md is the human-facing rendering.
-        json.dump(result, fh, indent=1, sort_keys=True, default=str)
+        fh.write(encoded)
     os.replace(tmp, path)
 
 

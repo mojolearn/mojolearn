@@ -90,6 +90,8 @@ import re
 import subprocess
 import sys
 
+from board_observation import _cell_bytes, compact_observation, restore_observation
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 EVIDENCE = os.path.expanduser("~/mojolearn-evidence")
@@ -153,7 +155,8 @@ SETTINGS_KEYS = ("params", "dataset_params", "block", "task", "kind", "stride_su
 PRIORITY = {"paired": 4, "gate": 4, "json": 3, "algos": 2, "gridbb": 2, "previous": 1}
 OB_FIELDS = ("column", "vendor", "box", "job", "sha", "ct", "kind", "family", "lane", "dataset", "race_id",
              "status_raw", "status", "infra", "median_ms", "quality", "digest", "comparability", "evidence",
-             "measured", "tag", "reason", "hardware", "version", "gpu_recorded", "measured_cell", "paired_race", "paired_box")
+             "measured", "tag", "reason", "hardware", "version", "gpu_recorded", "measured_cell", "paired_race", "paired_box",
+             "measured_cell_ref")
 #: A line that records the GPU a job ran on (FSPEED-HEADER device=, an ALGOS/GRIDBB device header); a value with
 #: spaces is quoted or written with '_'. Text naming no GPU ("gpu", "selftest") is not judged.
 DEVICE_LINE_RE = re.compile(r"(?:^|[\s:])(?:FSPEED-HEADER|ALGOS-HEADER|ALGOS-DEVICE|GRIDBB-DEVICE)\b.*?"
@@ -553,6 +556,7 @@ def previous_observations(prev):
             mb = c.get("main_board") or {}
             ob = mb.get("observation")
             if c.get("library") == "mojolearn" and isinstance(ob, dict) and ob.get("sha"):
+                ob = restore_observation(ob)
                 item = _reroute(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous"))
                 # A rebuild is not a new measurement. Preserve an unchanged
                 # historical pair and its audit instead of borrowing different
@@ -564,6 +568,7 @@ def previous_observations(prev):
     # the failed runs the previous board listed (FAILED table, flags), so a rotated input keeps them too
     for ob in ((prev or {}).get("main_board") or {}).get("failed_observations") or []:
         if isinstance(ob, dict) and ob.get("sha"):
+            ob = restore_observation(ob)
             out.append(_reroute(dict({k: ob.get(k) for k in OB_FIELDS}, prior_kind=ob.get("kind"), kind="previous")))
     return [o for o in out if o.get("column")]
 
@@ -780,8 +785,28 @@ def source_kind(ob):
     return (ob.get("prior_kind") or "previous") if ob["kind"] == "previous" else ob["kind"]
 
 
+def compact_existing_board(path):
+    """Lossless storage repair; leave all timings, audits and evidence intact."""
+    with open(path) as stream:
+        board = json.load(stream)
+    for race in board.get("races", {}).values():
+        for cell in race.get("cells", []):
+            mb = cell.get("main_board") or {}
+            ob = mb.get("observation")
+            if isinstance(ob, dict):
+                packed = compact_observation(ob)
+                if _cell_bytes(restore_observation(packed)) != _cell_bytes(restore_observation(ob)):
+                    raise ValueError("observation compaction changed retained evidence")
+                mb["observation"] = packed
+    tmp = str(path) + ".tmp"
+    with open(tmp, "w") as stream:
+        json.dump(board, stream, sort_keys=True, separators=(",", ":"))
+        stream.write("\n")
+    os.replace(tmp, path)
+
+
 def stored_ob(ob):
-    return dict({k: ob.get(k) for k in OB_FIELDS}, kind=source_kind(ob))
+    return compact_observation(dict({k: ob.get(k) for k in OB_FIELDS}, kind=source_kind(ob)))
 
 
 def is_ok(ob):
@@ -1453,11 +1478,16 @@ def build_parser():
     p.add_argument("--skip-tag-re", default=DEFAULT_SKIP_TAG_RE)
     p.add_argument("--check", action="store_true", help="dry run: print the cells that would change, write nothing")
     p.add_argument("--max-lines", type=int, default=40, help="change lines printed per column with --check")
+    p.add_argument("--compact-existing", metavar="BOARD_JSON",
+                   help="losslessly compact duplicate embedded observations without rebuilding the board")
     return p
 
 
 def run(argv=None, BB=None, resolve=None, out=sys.stdout):
     args = build_parser().parse_args(argv)
+    if args.compact_existing:
+        compact_existing_board(args.compact_existing)
+        return {}
     args.results = args.results or DEFAULT_RESULTS
     args.grid_logs = args.grid_logs or DEFAULT_GRID_LOGS
     args.opponents = args.opponents or DEFAULT_OPPONENTS

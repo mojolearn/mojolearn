@@ -1,14 +1,14 @@
 # mojolearn benchmark board
 
-Generated 2026-10-27T08:23:03Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-27T11:20:49Z from `board.json` (schema `mojolearn-bench-board/1`).
 
-> MAIN BOARD amd-mi325x, version label main@de429235f. Unreleased: not reproducible by pip install; the release boards are the reference.
+> MAIN BOARD amd-mi325x, version label main@de0876621. Unreleased: not reproducible by pip install; the release boards are the reference.
 
-> Cells: 231 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@de429235f (2026-10-27T08:17:45Z). Boxes: AMD Instinct MI325X (amd, DO).
+> Cells: 404 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@de0876621 (2026-10-27T08:32:28Z). Boxes: AMD Instinct MI325X (amd, DO).
 
-> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 6 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
+> Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 20 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 231).
+> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: n/a 404).
 
 > Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 8 races.
 
@@ -18,20 +18,34 @@ Generated 2026-10-27T08:23:03Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 231.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: n/a 404.
 
 DIFFER: none.
 
 ## FAILED
 
-Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 6 failed runs.
+Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECORD, NO-OURS-CELL). They are never a numeric cell and never replace an ok cell; an older ok cell stays on the board flagged with the failed run. 20 failed runs.
 
 | lane | dataset | commit | hardware | version | box/job | reason | ok cell on the board |
 |---|---|---|---|---|---|---|---|
-| gcn | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |
-| gcn | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |
-| graphsage | istella | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |
-| graphsage | taxi | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@6416999f7 amd/a1210 stays |
+| adafactor | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-3b090d545639c736a0c7dc56e3b2b72d662ee4c813febcfa3ac604c3e2032a85 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e stays |
+| adagrad | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-831d92d1fb4fc1aa4a82351003852a9e0aa6a4abb91e1252a68bf3d59fa15176 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 stays |
+| adam | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-2b20520d0a6699fb830f05c90ab84b4cb550845ee1ab637fd160a755f44def0b | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 stays |
+| adamax | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-ec8d671222265ced7af279d26c8dbbe262c0aa0faf3d930b4310e17c73765ec2 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 stays |
+| adamw | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-3bf8e8594c6d04095b429809c67122e893cd442d0431271911c714c12bfd969f | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 stays |
+| avgpool1d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-bc406214490ca21e9c2d8e7eb073156b88c525dda1a28985da4b7eab0e425c0c | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-c1a3592fe99e264d7771d8f70a4727d834f6334904fb3f679b6c0b6faba09881 stays |
+| avgpool2d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-1eb675a8131576ebde15660e22cd18478a319833c03c913ae07bd12f73be1c7c | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a | main@79fcd24a5 amd/paired-ddf54539edfbea7f894d4f108dee90ab74bc97f7b0fd79dfd2d47173dd3f73b2 stays |
+| batchnorm1d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-dc75264c079997df32a37cbefb2ebbb0ed433e1d3eae0d13f7d8f02aa3bf0f78 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.b | main@3c60869cf amd/paired-92c32b752176a9b8bf2065554aa750c29dc1d4f2b63043868a88df19cfa6f5d4 stays |
+| batchnorm2d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-13918284f8fff98a12f4bb85245baab9e1d96f42e0bcc31639c4946bcb330134 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.b | main@3c60869cf amd/paired-290f77101012de7e3d43ccd22c144fb63e003a06a75d6d6dacf855f451300c5f stays |
+| conv1d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-969b8d0b3e7b648d57442bd2c7a3e2d32d4b446f39e475a9bebf2ba07415245d | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.c | main@3c60869cf amd/paired-ea5d7efc1138eebc85d5e289358420f00569a685aeb29734913c6c8caebbb381 stays |
+| conv2d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-a0f12a70fb93c7ba019ee4874ccbfd1ce3ef05d2a81f23f218846f20a68e71b4 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.c | main@3c60869cf amd/paired-1887dd5be5a0351a8e0653c306ff4824c626d38a40e1b0625e2d1638709f7d65 stays |
+| embedding | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-e96300f084a92119de55a8424124ed3d5db17c5c918503a99fde164d93d8929d | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.e | main@d11b82091 amd/paired-d385c9af47829b9f2d20f8a0cad1cbe5b9baccb183d80fbde7aa704a954145c6 stays |
+| global-avgpool | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-2d43c701a981e121bace013175491d1e4d64e45d1f81261cf0d1225d64aa99f8 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.g | main@d11b82091 amd/paired-7f40c2d85a6a832dbf13528a9897fe3c94118d5086d1c26c9880b8d7404e5975 stays |
+| global-maxpool | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-d8026165c17501ff76ff5b7903b68655dbf0a0d55a91f2899cb9d85dbdf42b14 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.g | main@d11b82091 amd/paired-f721f4183d1237b97766ade5525d0022088cfbe17bd6c713aa41695fd4433667 stays |
+| layernorm | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-e8e8acf7d7b435f9112dd94efbe0833db5967041c883510cc2ad981de7bfb713 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.l | main@79fcd24a5 amd/paired-5939cde02360535239ede45137d834b8f9785d819a429934a6922df8c93ed92f stays |
+| linalg-svdvals | istella | main@de0876621 | AMD Instinct MI325X (amd, DO) | 0.8.62 | amd/gate-926066fa1d9a164284c0eae343460cb58ab089c631b7878897f1b31dc648be88 | REFUSED(error: {"error": "Exception(\"the one-sided Jacobi SVD did not converge in 15 sweeps at n_cols = 220: the last sweep still performed 448.0 rotations against a tolerance of 1e-07. The remedy is more sweeps, t) | none |
+| maxpool1d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-759e18895ce040f7696db51221090554844c6aba5d84cc7c78913ed36dc78ab5 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.m | main@79fcd24a5 amd/paired-9b09a78002421099ee1e041691a221ccfd1ee58caec079a17f2c9dbdc800cfe0 stays |
+| maxpool2d | synthetic | main@de0876621 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.62 (source build, main@de0876621) | amd/gate-6863e2e8f2ca3859adbcd9916c771350b89641fa08b4267d02cff0e86dd4aef5 | REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.m | main@79fcd24a5 amd/paired-6e6eecc8c845fc493a7cd56ba91c16e19946b221260de30760196dfea866dadc stays |
 | moe | synthetic | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@a1c96a5ba amd/a1682 stays |
 | resnet-block | synthetic | main@a8fd6d926 | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | amd/a0006 | not_ready | main@bac431c11 amd/a0004 stays |
 
@@ -46,8 +60,8 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 | memory bytes | - |
 | OS | - |
 | Python | - |
-| mojolearn | main@de429235f (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
-| script commit | de429235f038cd67ce64495d9ae668cbbf3f72cc |
+| mojolearn | main@de0876621 (wheel mixed source/wheel provenance; see each cell's version and measurement record, sha256 -) |
+| script commit | de08766214fcf07935d0b1355aa6450d0f02fc1c |
 | patch sync | - |
 | modes | identical |
 | rounds | 1 timed after 1 warm-up, arms interleaved round by round |
@@ -70,9 +84,9 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 
 ## Coverage
 
-Races: 231 planned, 231 done, 0 failed, 0 unsupported, 0 pending. Cells: 592 (HOST-MEMORY 1, REFUSED 27, ok 564).
+Races: 404 planned, 404 done, 0 failed, 0 unsupported, 0 pending. Cells: 765 (HOST-MEMORY 1, REFUSED 27, ok 737).
 
-Inference cells: 65 (REFUSED 2, ok 63).
+Inference cells: 142 (REFUSED 2, ok 140).
 
 ## Quality at a glance
 
@@ -82,6 +96,12 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 |---|---|---|---|---|---|---|
 | algos | adaboost-clf | istella | accuracy (higher is better) | - | 0.934990 | - |
 | algos | adaboost-clf | istella | logloss (lower is better) | - | 0.438712 | - |
+| algos | adaboost-clf | taxi | accuracy (higher is better) | - | 0.765230 | - |
+| algos | adaboost-clf | taxi | logloss (lower is better) | - | 0.543227 | - |
+| algos | adaboost-reg | istella | r2 (higher is better) | - | 0.229908 | - |
+| algos | adaboost-reg | istella | rmse (lower is better) | - | 0.733047 | - |
+| algos | adaboost-reg | taxi | r2 (higher is better) | - | 0.675081 | - |
+| algos | adaboost-reg | taxi | rmse (lower is better) | - | 9.078710 | - |
 | algos | adafactor | synthetic | optimizer_update_error_vs_torch_fp32 | - | 3.386e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | adafactor | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 1.033e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | adagrad | synthetic | optimizer_update_error_vs_torch_fp32 | - | 1.874e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
@@ -92,12 +112,28 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | adamax | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 4.144e-09 | torch-eager-fp32 0.000000; torch-compile-fp32 6.17e-09 |
 | algos | adamw | synthetic | optimizer_update_error_vs_torch_fp32 | - | 8.841e-06 | torch-eager-fp32 0.000000; torch-compile-fp32 6.012e-05; torch-fused-fp32 6.574e-05 |
 | algos | adamw | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.34e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 2.272e-07; torch-fused-fp32 2.484e-07 |
-| algos | ard | istella | r2 (higher is better) | - | -0.124856 | sklearn-cpu 0.327436 |
-| algos | ard | istella | rmse (lower is better) | - | 0.885949 | sklearn-cpu 0.685058 |
+| algos | additive-chi2 | istella | kernel_rel_error (lower is better) | - | 0.087730 | - |
+| algos | additive-chi2 | taxi | kernel_rel_error (lower is better) | - | 0.093892 | - |
+| algos | als | taxi-zones | recall_at_10 (higher is better) | - | 0.070872 | - |
+| algos | als | text | recall_at_10 (higher is better) | - | 0.546049 | - |
+| algos | ard | istella | r2 (higher is better) | - | 0.325685 | - |
+| algos | ard | istella | rmse (lower is better) | - | 0.685949 | - |
+| algos | ard | taxi | r2 (higher is better) | - | 0.909193 | - |
+| algos | ard | taxi | rmse (lower is better) | - | 4.799513 | - |
+| algos | auto-theta | synthetic | forecast_rmse (lower is better) | - | 1.438912 | - |
+| algos | auto-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.054628 | - |
 | algos | avgpool1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | avgpool1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | avgpool2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | avgpool2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | bagging-clf | istella | accuracy (higher is better) | - | 0.941700 | - |
+| algos | bagging-clf | istella | logloss (lower is better) | - | 0.149948 | - |
+| algos | bagging-clf | taxi | accuracy (higher is better) | - | 0.767490 | - |
+| algos | bagging-clf | taxi | logloss (lower is better) | - | 0.531007 | - |
+| algos | bagging-reg | istella | r2 (higher is better) | - | 0.520638 | - |
+| algos | bagging-reg | istella | rmse (lower is better) | - | 0.578352 | - |
+| algos | bagging-reg | taxi | r2 (higher is better) | - | 0.933950 | - |
+| algos | bagging-reg | taxi | rmse (lower is better) | - | 4.093305 | - |
 | algos | batchnorm1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.004642 | torch-eager-fp32 0.000000; torch-compile-fp32 0.002793; torch-eager-bf16 0.000000; torch-compile-bf16 0.002793 |
 | algos | batchnorm1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 8.097e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 5.248e-08; torch-eager-bf16 0.000000; torch-compile-bf16 5.248e-08 |
 | algos | batchnorm2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.001395 | torch-eager-fp32 0.000000; torch-compile-fp32 0.001471; torch-eager-bf16 0.000000; torch-compile-bf16 0.001471 |
@@ -108,15 +144,33 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | bernoulli-nb | istella | logloss (lower is better) | - | 5.350625 | sklearn-cpu 4.278741 |
 | algos | bernoulli-nb | taxi | accuracy (higher is better) | - | 0.755560 | sklearn-cpu 0.755560 |
 | algos | bernoulli-nb | taxi | logloss (lower is better) | - | 0.557803 | sklearn-cpu 0.557802 |
-| algos | binarizer | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | binarizer | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | binarizer | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | binarizer | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
+| algos | binarizer | istella | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | binarizer | istella | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | binarizer | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | binarizer | taxi | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | bisecting-kmeans | istella | n_clusters | - | 8 | - |
+| algos | bisecting-kmeans | istella | silhouette (higher is better) | - | 0.118345 | - |
+| algos | bisecting-kmeans | taxi | n_clusters | - | 8 | - |
+| algos | bisecting-kmeans | taxi | silhouette (higher is better) | - | 0.155357 | - |
+| algos | bootstrap | istella | ci_endpoint_diff_over_width_vs_scipy | - | 0.027369 | - |
+| algos | bootstrap | istella | ci_high | - | 0.294850 | - |
+| algos | bootstrap | istella | ci_low | - | 0.271250 | - |
+| algos | bootstrap | istella | standard_error | - | 0.005987 | - |
+| algos | bootstrap | taxi | ci_endpoint_diff_over_width_vs_scipy | - | 0.005021 | - |
+| algos | bootstrap | taxi | ci_high | - | 18.717379 | - |
+| algos | bootstrap | taxi | ci_low | - | 18.249411 | - |
+| algos | bootstrap | taxi | standard_error | - | 0.117837 | - |
+| algos | bpe-train | enwik8 | jaccard_vs_ours | - | 1.000000 | - |
+| algos | bpe-train | enwik8 | n_tokens | - | 4096 | - |
 | algos | categorical-nb | istella | accuracy (higher is better) | - | 0.838850 | sklearn-cpu 0.838850 |
 | algos | categorical-nb | istella | logloss (lower is better) | - | 0.412625 | sklearn-cpu 0.412625 |
 | algos | categorical-nb | taxi | accuracy (higher is better) | - | 0.765850 | sklearn-cpu 0.765850 |
 | algos | categorical-nb | taxi | logloss (lower is better) | - | 0.538866 | sklearn-cpu 0.538866 |
+| algos | cca | istella | mean_canonical_corr (higher is better) | - | 0.998053 | - |
+| algos | cca | taxi | mean_canonical_corr (higher is better) | - | 0.576863 | - |
 | algos | cholesky | synthetic | relative_residual | - | 2.9e-07 | torch-gpu 2.519e-07 |
+| algos | clip-grad-norm | synthetic | norm | - | 4096.267578 | torch-eager-fp32 4096.267578; torch-compile-fp32 4096.267578 |
+| algos | clip-grad-norm | synthetic | norm_rel_diff_vs_ours | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | cnn-clf | synthetic | accuracy (higher is better) | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 1.000000; torch-eager-bf16 1.000000; torch-compile-bf16 1.000000 |
 | algos | complement-nb | istella | accuracy (higher is better) | - | 0.849360 | sklearn-cpu 0.849350 |
 | algos | complement-nb | istella | logloss (lower is better) | - | 3.762524 | sklearn-cpu 3.174763 |
@@ -124,21 +178,57 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | complement-nb | taxi | logloss (lower is better) | - | 0.715492 | sklearn-cpu 0.715493 |
 | algos | complement-nb | text | accuracy (higher is better) | - | 0.983067 | sklearn-cpu 0.983067 |
 | algos | complement-nb | text | logloss (lower is better) | - | 0.559491 | sklearn-cpu 0.557285 |
-| algos | connected-components | istella | n_components | - | 81 | - |
-| algos | connected-components | taxi | n_components | - | 588 | - |
+| algos | connected-components | istella | ari_vs_networkx | - | 1.000000 | - |
+| algos | connected-components | istella | n_components | - | 523 | - |
+| algos | connected-components | istella | partition_disagreement_vs_networkx (0 is networkx's partition exactly) | - | 0.000000 | - |
+| algos | connected-components | taxi | ari_vs_networkx | - | 1.000000 | - |
+| algos | connected-components | taxi | n_components | - | 4070 | - |
+| algos | connected-components | taxi | partition_disagreement_vs_networkx (0 is networkx's partition exactly) | - | 0.000000 | - |
 | algos | conv1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.318264 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 3418.035805; torch-compile-bf16 3418.035805 |
 | algos | conv1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.948e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.004377; torch-compile-bf16 0.004377 |
 | algos | conv2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.372529 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 3418.486565; torch-compile-bf16 3418.486565 |
 | algos | conv2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 3.307e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.003382; torch-compile-bf16 0.003382 |
+| algos | cross-entropy | synthetic | loss_rel_err_vs_fp64 | - | 4.564e-08 | torch-eager-fp32 4.564e-08; torch-compile-fp32 4.564e-08 |
+| algos | cross-entropy | synthetic | grad_max_rel_diff_vs_ours | - | - | torch-eager-fp32 4.191e-09; torch-compile-fp32 7.451e-09 |
+| algos | cross-val-predict | istella | max_pred_diff_over_std_y_vs_sklearn | - | 0.0002496 | - |
+| algos | cross-val-predict | istella | r2_held_out | - | 0.334495 | - |
+| algos | cross-val-predict | taxi | max_pred_diff_over_std_y_vs_sklearn | - | 0.043346 | - |
+| algos | cross-val-predict | taxi | r2_held_out | - | 0.938477 | - |
+| algos | cross-val-score | istella | max_fold_score_diff_vs_sklearn | - | 0.018112 | - |
+| algos | cross-val-score | istella | mean_r2 (higher is better) | - | 0.334732 | - |
+| algos | cross-val-score | taxi | max_fold_score_diff_vs_sklearn | - | 5.96e-08 | - |
+| algos | cross-val-score | taxi | mean_r2 (higher is better) | - | 0.937956 | - |
+| algos | cross-validate | istella | max_fold_score_diff_vs_sklearn | - | 7.153e-06 | - |
+| algos | cross-validate | istella | mean_test_r2 | - | 0.334716 | - |
+| algos | cross-validate | istella | mean_train_r2 | - | 0.338075 | - |
+| algos | cross-validate | taxi | max_fold_score_diff_vs_sklearn | - | 0.0001654 | - |
+| algos | cross-validate | taxi | mean_test_r2 | - | 0.937956 | - |
+| algos | cross-validate | taxi | mean_train_r2 | - | 0.938807 | - |
+| algos | croston-optimized | synthetic | forecast_rmse (lower is better) | - | 1.675538 | - |
+| algos | croston-optimized | taxi-hourly | forecast_rmse (lower is better) | - | 1.398253 | - |
+| algos | croston-sba | synthetic | forecast_rmse (lower is better) | - | 1.674465 | - |
+| algos | croston-sba | taxi-hourly | forecast_rmse (lower is better) | - | 1.386677 | - |
+| algos | croston | synthetic | forecast_rmse (lower is better) | - | 1.674840 | - |
+| algos | croston | taxi-hourly | forecast_rmse (lower is better) | - | 1.390261 | - |
 | algos | damped-ets | synthetic | forecast_rmse (lower is better) | - | 13.931153 | statsmodels-cpu 26.588738; statsforecast-cpu 13.945986 |
 | algos | damped-ets | taxi-hourly | forecast_rmse (lower is better) | - | 96.690449 | statsmodels-cpu 196.955273; statsforecast-cpu 96.685568 |
-| algos | dropout2d | synthetic | dropout_contract_relative_error | - | 5.422e-08 | torch-eager-fp32 5.422e-08; torch-compile-fp32 5.421e-08 |
-| algos | dropout2d | synthetic | dropout_probability_z | - | 0.708333 | torch-eager-fp32 1.489583; torch-compile-fp32 1.791667 |
-| algos | dropout2d | synthetic | dropped_channel_fraction | - | 0.096680 | torch-eager-fp32 0.093018; torch-compile-fp32 0.108398 |
-| algos | dropout2d | synthetic | expected_dropout_probability | - | 0.100000 | torch-eager-fp32 0.100000; torch-compile-fp32 0.100000 |
-| algos | dropout2d | synthetic | identifiable_channels | - | 4096 | torch-eager-fp32 4096; torch-compile-fp32 4096 |
-| algos | dynamic-optimized-theta | synthetic | forecast_rmse (lower is better) | - | 1.436278 | statsforecast-cpu 1.436045 |
-| algos | dynamic-optimized-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.086628 | statsforecast-cpu 49.314797 |
+| algos | decision-tree-clf | istella | accuracy (higher is better) | - | 0.935000 | - |
+| algos | decision-tree-clf | istella | logloss (lower is better) | - | 0.758303 | - |
+| algos | decision-tree-clf | taxi | accuracy (higher is better) | - | 0.756300 | - |
+| algos | decision-tree-clf | taxi | logloss (lower is better) | - | 1.202243 | - |
+| algos | decision-tree-reg | istella | r2 (higher is better) | - | 0.368402 | - |
+| algos | decision-tree-reg | istella | rmse (lower is better) | - | 0.663867 | - |
+| algos | decision-tree-reg | taxi | r2 (higher is better) | - | 0.891592 | - |
+| algos | decision-tree-reg | taxi | rmse (lower is better) | - | 5.244053 | - |
+| algos | dropout2d | synthetic | dropout_contract_relative_error | - | 5.422e-08 | torch-compile-fp32 5.421e-08; torch-eager-fp32 5.422e-08 |
+| algos | dropout2d | synthetic | dropout_probability_z | - | 0.708333 | torch-compile-fp32 1.791667; torch-eager-fp32 1.489583 |
+| algos | dropout2d | synthetic | dropped_channel_fraction | - | 0.096680 | torch-compile-fp32 0.108398; torch-eager-fp32 0.093018 |
+| algos | dropout2d | synthetic | expected_dropout_probability | - | 0.100000 | torch-compile-fp32 0.100000; torch-eager-fp32 0.100000 |
+| algos | dropout2d | synthetic | identifiable_channels | - | 4096 | torch-compile-fp32 4096; torch-eager-fp32 4096 |
+| algos | dynamic-optimized-theta | synthetic | forecast_rmse (lower is better) | - | 1.436278 | - |
+| algos | dynamic-optimized-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.086628 | - |
+| algos | dynamic-theta | synthetic | forecast_rmse (lower is better) | - | 1.437256 | - |
+| algos | dynamic-theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.101249 | - |
 | algos | eigh | synthetic | max_eigenvalue_error | - | 3.692e-07 | torch-gpu 1.044e-06 |
 | algos | eigh | synthetic | relative_residual | - | 6.672e-07 | torch-gpu 9.614e-07 |
 | algos | elliptic-envelope | istella | fraction_flagged | - | 0.092480 | sklearn-cpu - |
@@ -146,38 +236,60 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | elliptic-envelope | taxi | jaccard_vs_sklearn (1 is scikit-learn's flags exactly) | - | - | sklearn-cpu 1.000000 |
 | algos | embedding | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
 | algos | embedding | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
-| algos | enet-cv | istella | r2 (higher is better) | - | 0.326805 | sklearn-cpu 0.326805 |
-| algos | enet-cv | istella | rmse (lower is better) | - | 0.685379 | sklearn-cpu 0.685379 |
-| algos | enet-cv | taxi | r2 (higher is better) | - | 0.909004 | sklearn-cpu 0.909004 |
-| algos | enet-cv | taxi | rmse (lower is better) | - | 4.804486 | sklearn-cpu 4.804486 |
+| algos | enet-cv | istella | r2 (higher is better) | - | 0.326805 | - |
+| algos | enet-cv | istella | rmse (lower is better) | - | 0.685379 | - |
+| algos | enet-cv | taxi | r2 (higher is better) | - | 0.909004 | - |
+| algos | enet-cv | taxi | rmse (lower is better) | - | 4.804486 | - |
+| algos | gamma | istella | r2 (higher is better) | - | 0.218164 | - |
+| algos | gamma | istella | rmse (lower is better) | - | 0.738615 | - |
+| algos | gamma | taxi | r2 (higher is better) | - | -231.911806 | - |
+| algos | gamma | taxi | rmse (lower is better) | - | 243.070661 | - |
+| algos | garch | synthetic | mean_llf (higher is better) | - | -1938.222656 | - |
+| algos | garch | taxi-hourly | mean_llf (higher is better) | - | -1131.723763 | - |
 | algos | gaussian-nb | istella | accuracy (higher is better) | - | 0.876570 | sklearn-cpu 0.876530 |
 | algos | gaussian-nb | istella | logloss (lower is better) | - | 3.574420 | sklearn-cpu 3.417392 |
 | algos | gaussian-nb | taxi | accuracy (higher is better) | - | 0.719820 | sklearn-cpu 0.719900 |
 | algos | gaussian-nb | taxi | logloss (lower is better) | - | 1.132249 | sklearn-cpu 1.133898 |
-| algos | gcn | istella | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.025557; torch-eager-bf16 2662.412698; torch-compile-bf16 2662.401917 |
-| algos | gcn | istella | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 9.36e-08; torch-eager-bf16 0.002187; torch-compile-bf16 0.002187 |
-| algos | gcn | taxi | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.001702; torch-eager-bf16 1509.509399; torch-compile-bf16 1509.509515 |
-| algos | gcn | taxi | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 7.846e-08; torch-eager-bf16 0.002330; torch-compile-bf16 0.002330 |
+| algos | gaussian-rp | istella | mean_abs_distortion | - | 0.680693 | - |
+| algos | gaussian-rp | taxi | mean_abs_distortion | - | 0.345752 | - |
+| algos | gcn | istella | max_rel_diff_vs_torch_eager_fp32 | - | 0.157394 | torch-eager-fp32 0.000000; torch-compile-fp32 0.012107; torch-eager-bf16 2864.509532; torch-compile-bf16 2864.518340 |
+| algos | gcn | istella | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 1.722e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 7.901e-08; torch-eager-bf16 0.002187; torch-compile-bf16 0.002187 |
+| algos | gcn | taxi | max_rel_diff_vs_torch_eager_fp32 | - | 0.016065 | torch-eager-fp32 0.000000; torch-compile-fp32 0.001863; torch-eager-bf16 1509.503811; torch-compile-bf16 1509.502996 |
+| algos | gcn | taxi | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 9.606e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 7.085e-08; torch-eager-bf16 0.002330; torch-compile-bf16 0.002330 |
 | algos | global-avgpool | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.015661 | torch-eager-fp32 0.000000; torch-compile-fp32 0.007299; torch-eager-bf16 0.000000; torch-compile-bf16 0.007299 |
 | algos | global-avgpool | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 1.506e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 1.01e-07; torch-eager-bf16 0.000000; torch-compile-bf16 1.01e-07 |
 | algos | global-maxpool | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | global-maxpool | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
-| algos | graphsage | istella | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.140845; torch-eager-bf16 3907.144070; torch-compile-bf16 3678.232431 |
-| algos | graphsage | istella | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 8.05e-08; torch-eager-bf16 0.003366; torch-compile-bf16 0.003054 |
-| algos | graphsage | taxi | max_rel_diff_vs_torch_eager_fp32 | - | - | torch-eager-fp32 -; torch-compile-fp32 0.162162; torch-eager-bf16 4680.142857; torch-compile-bf16 4608.154297 |
-| algos | graphsage | taxi | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | - | torch-eager-fp32 -; torch-compile-fp32 8.776e-08; torch-eager-bf16 0.003557; torch-compile-bf16 0.003285 |
-| algos | gru-clf | synthetic | accuracy (higher is better) | - | 0.971625 | torch-eager-fp32 0.971842; torch-compile-fp32 0.971842; torch-eager-bf16 0.971788; torch-compile-bf16 0.971788 |
+| algos | graphsage | istella | max_rel_diff_vs_torch_eager_fp32 | - | 0.298023 | torch-eager-fp32 0.000000; torch-compile-fp32 0.119209; torch-eager-bf16 3907.173872; torch-compile-bf16 3678.143024 |
+| algos | graphsage | istella | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 2.89e-07 | torch-eager-fp32 0.000000; torch-compile-fp32 8.086e-08; torch-eager-bf16 0.003366; torch-compile-bf16 0.003054 |
+| algos | graphsage | taxi | max_rel_diff_vs_torch_eager_fp32 | - | 0.476837 | torch-eager-fp32 0.000000; torch-compile-fp32 0.186047; torch-eager-bf16 5040.230769; torch-compile-bf16 4607.677460 |
+| algos | graphsage | taxi | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 9.224e-08 | torch-eager-fp32 0.000000; torch-compile-fp32 4.492e-08; torch-eager-bf16 0.003557; torch-compile-bf16 0.003285 |
+| algos | grid-search-cv | istella | abs_best_score_diff_vs_sklearn | - | 8.225e-07 | - |
+| algos | grid-search-cv | istella | best_alpha | - | 0.100000 | - |
+| algos | grid-search-cv | istella | best_score | - | 0.334732 | - |
+| algos | grid-search-cv | istella | max_mean_test_score_diff_vs_sklearn | - | 4.158e-05 | - |
+| algos | grid-search-cv | taxi | abs_best_score_diff_vs_sklearn | - | 3.042e-05 | - |
+| algos | grid-search-cv | taxi | best_alpha | - | 0.100000 | - |
+| algos | grid-search-cv | taxi | best_score | - | 0.937956 | - |
+| algos | grid-search-cv | taxi | max_mean_test_score_diff_vs_sklearn | - | 3.055e-05 | - |
+| algos | gru-clf | synthetic | accuracy (higher is better) | - | 0.971625 | torch-eager-fp32 0.971625; torch-compile-fp32 0.971625; torch-eager-bf16 0.971463; torch-compile-bf16 0.971463 |
 | algos | gru-clf | synthetic | logloss (lower is better) | - | 0.070054 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
-| algos | gru-clf | taxi-hourly | accuracy (higher is better) | - | 0.865723 | torch-eager-fp32 0.865668; torch-compile-fp32 0.865668; torch-eager-bf16 0.865777; torch-compile-bf16 0.865777 |
+| algos | gru-clf | taxi-hourly | accuracy (higher is better) | - | 0.865723 | torch-eager-fp32 0.865723; torch-compile-fp32 0.865723; torch-eager-bf16 0.865777; torch-compile-bf16 0.865777 |
 | algos | gru-clf | taxi-hourly | logloss (lower is better) | - | 0.303537 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
-| algos | gru-reg | synthetic | r2 (higher is better) | - | 0.982337 | torch-eager-fp32 0.981946; torch-compile-fp32 0.981946; torch-eager-bf16 0.981940; torch-compile-bf16 0.981940 |
-| algos | gru-reg | synthetic | rmse (lower is better) | - | 0.153975 | torch-eager-fp32 0.155672; torch-compile-fp32 0.155672; torch-eager-bf16 0.155700; torch-compile-bf16 0.155700 |
-| algos | gru-reg | taxi-hourly | r2 (higher is better) | - | 0.747875 | torch-eager-fp32 0.748219; torch-compile-fp32 0.748219; torch-eager-bf16 0.748254; torch-compile-bf16 0.748254 |
-| algos | gru-reg | taxi-hourly | rmse (lower is better) | - | 0.544554 | torch-eager-fp32 0.544182; torch-compile-fp32 0.544182; torch-eager-bf16 0.544144; torch-compile-bf16 0.544144 |
+| algos | gru-reg | synthetic | r2 (higher is better) | - | 0.982337 | torch-eager-fp32 0.982337; torch-compile-fp32 0.982337; torch-eager-bf16 0.982313; torch-compile-bf16 0.982313 |
+| algos | gru-reg | synthetic | rmse (lower is better) | - | 0.153975 | torch-eager-fp32 0.153975; torch-compile-fp32 0.153975; torch-eager-bf16 0.154079; torch-compile-bf16 0.154079 |
+| algos | gru-reg | taxi-hourly | r2 (higher is better) | - | 0.747875 | torch-eager-fp32 0.747875; torch-compile-fp32 0.747875; torch-eager-bf16 0.748021; torch-compile-bf16 0.748021 |
+| algos | gru-reg | taxi-hourly | rmse (lower is better) | - | 0.544554 | torch-eager-fp32 0.544554; torch-compile-fp32 0.544554; torch-eager-bf16 0.544395; torch-compile-bf16 0.544395 |
+| algos | huber | istella | r2 (higher is better) | - | -0.007193 | - |
+| algos | huber | istella | rmse (lower is better) | - | 0.838333 | - |
+| algos | huber | taxi | r2 (higher is better) | - | 0.900215 | - |
+| algos | huber | taxi | rmse (lower is better) | - | 5.031174 | - |
+| algos | incremental-pca | istella | explained_variance_fraction | - | 1.000000 | - |
+| algos | incremental-pca | taxi | explained_variance_fraction | - | 0.999995 | - |
 | algos | ivf-pq | istella | recall_at_10 (higher is better) | - | 0.802100 | faiss-cpu 0.801550 |
 | algos | ivf-pq | taxi | recall_at_10 (higher is better) | - | 0.981250 | faiss-cpu 0.979450 |
 | algos | ivf-refine | istella | recall_at_10 (higher is better) | - | 0.994575 | faiss-cpu 0.993125 |
-| algos | jl-min-dim | synthetic | equal_fraction_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
+| algos | jl-min-dim | synthetic | equal_fraction_vs_sklearn | - | 1.000000 | - |
 | algos | kbins | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | kbins | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | kbins | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
@@ -186,27 +298,39 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | kernel-pca | istella | subspace_cos_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
 | algos | kernel-pca | taxi | rbf_feature_distance_relative_stress | - | 0.545709 | sklearn-cpu - |
 | algos | kernel-pca | taxi | subspace_cos_vs_sklearn | - | 1.000000 | sklearn-cpu 1.000000 |
-| algos | kernel-shap | istella | rel_error_vs_exact | - | 8.307e-08 | shap-cpu 8.63e-15 |
-| algos | kernel-shap | taxi | rel_error_vs_exact | - | 1.056e-07 | - |
-| algos | knn-imputer | istella | masked_rmse | - | 323953.237332 | sklearn-cpu 986208.700423 |
-| algos | knn-imputer | taxi | masked_rmse | - | 6.151696 | sklearn-cpu 5.263919 |
-| algos | label-binarizer | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-binarizer | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-binarizer | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-binarizer | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-encoder | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-encoder | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-encoder | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | label-encoder | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
+| algos | kernel-shap | istella | rel_error_vs_exact | - | 7.306e-08 | - |
+| algos | kernel-shap | taxi | rel_error_vs_exact | - | 6.346e-08 | - |
+| algos | knn-imputer | istella | masked_rmse | - | 323953.237303 | - |
+| algos | knn-imputer | istella | max_abs_diff_vs_sklearn | - | 2.562e+07 | - |
+| algos | knn-imputer | taxi | masked_rmse | - | 5.108599 | - |
+| algos | knn-imputer | taxi | max_abs_diff_vs_sklearn | - | 16.693946 | - |
+| algos | kpss | synthetic | flag_agreement_vs_statsmodels (1 is statsmodels' decisions exactly) | - | 1.000000 | - |
+| algos | kpss | synthetic | stat_max_rel_diff_vs_statsmodels | - | 4.318e-05 | - |
+| algos | kpss | synthetic | stationary_fraction | - | 0.031250 | - |
+| algos | kpss | taxi-hourly | flag_agreement_vs_statsmodels (1 is statsmodels' decisions exactly) | - | 1.000000 | - |
+| algos | kpss | taxi-hourly | stat_max_rel_diff_vs_statsmodels | - | 6.237e-06 | - |
+| algos | kpss | taxi-hourly | stationary_fraction | - | 0.687500 | - |
+| algos | label-binarizer | istella | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-binarizer | istella | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-binarizer | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-binarizer | taxi | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-encoder | istella | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-encoder | istella | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-encoder | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-encoder | taxi | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | label-propagation | istella | accuracy (higher is better) | - | 0.905500 | - |
+| algos | label-propagation | taxi | accuracy (higher is better) | - | 0.701600 | - |
+| algos | label-spreading | istella | accuracy (higher is better) | - | 0.904450 | - |
+| algos | label-spreading | taxi | accuracy (higher is better) | - | 0.676400 | - |
 | algos | lamb | synthetic | relative_error_vs_own_host | - | 0.000000 | - |
 | algos | lars | istella | r2 (higher is better) | - | 0.328699 | sklearn-cpu -1.051e+22 |
 | algos | lars | istella | rmse (lower is better) | - | 0.684414 | sklearn-cpu 8.562e+10 |
 | algos | lars | taxi | r2 (higher is better) | - | 0.908983 | sklearn-cpu 0.908983 |
 | algos | lars | taxi | rmse (lower is better) | - | 4.805051 | sklearn-cpu 4.805057 |
-| algos | lasso-cv | istella | r2 (higher is better) | - | 0.325506 | sklearn-cpu 0.325507 |
-| algos | lasso-cv | istella | rmse (lower is better) | - | 0.686040 | sklearn-cpu 0.686040 |
-| algos | lasso-cv | taxi | r2 (higher is better) | - | 0.909038 | sklearn-cpu 0.909038 |
-| algos | lasso-cv | taxi | rmse (lower is better) | - | 4.803593 | sklearn-cpu 4.803593 |
+| algos | lasso-cv | istella | r2 (higher is better) | - | 0.325506 | - |
+| algos | lasso-cv | istella | rmse (lower is better) | - | 0.686040 | - |
+| algos | lasso-cv | taxi | r2 (higher is better) | - | 0.909038 | - |
+| algos | lasso-cv | taxi | rmse (lower is better) | - | 4.803593 | - |
 | algos | lasso-lars | istella | r2 (higher is better) | - | 0.310834 | sklearn-cpu 0.310591 |
 | algos | lasso-lars | istella | rmse (lower is better) | - | 0.693461 | sklearn-cpu 0.693584 |
 | algos | lasso-lars | taxi | r2 (higher is better) | - | 0.908998 | sklearn-cpu 0.908998 |
@@ -217,31 +341,153 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | lda-clf | istella | logloss (lower is better) | - | 0.235875 | sklearn-cpu 0.439049 |
 | algos | lda-clf | taxi | accuracy (higher is better) | - | 0.762530 | sklearn-cpu 0.762530 |
 | algos | lda-clf | taxi | logloss (lower is better) | - | 0.539763 | sklearn-cpu 0.539767 |
+| algos | learning-curve | istella | max_mean_test_score_diff_vs_sklearn | - | 0.0003848 | - |
+| algos | learning-curve | istella | mean_test_r2_first | - | 0.321543 | - |
+| algos | learning-curve | istella | mean_test_r2_last | - | 0.334716 | - |
+| algos | learning-curve | taxi | max_mean_test_score_diff_vs_sklearn | - | 3.042e-05 | - |
+| algos | learning-curve | taxi | mean_test_r2_first | - | 0.937536 | - |
+| algos | learning-curve | taxi | mean_test_r2_last | - | 0.937956 | - |
+| algos | linalg-svdvals | taxi | max_rel_sv_err_vs_fp64 | - | 3.583e-07 | torch-eager-fp32 2.102e-05; torch-compile-fp32 2.102e-05 |
 | algos | lion | synthetic | relative_error_vs_own_host | - | 0.000000 | - |
+| algos | lle | istella | trustworthiness_k15 (higher is better, 1 at most) | - | 0.852200 | - |
+| algos | lle | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | 0.839575 | - |
 | algos | louvain | istella | modularity | - | 0.911187 | - |
 | algos | louvain | istella | n_communities | - | 40 | - |
 | algos | louvain | taxi | modularity | - | 0.941953 | - |
 | algos | louvain | taxi | n_communities | - | 58 | - |
-| algos | lstm-clf | synthetic | accuracy (higher is better) | - | 0.967068 | torch-eager-fp32 0.968696; torch-compile-fp32 0.968696; torch-eager-bf16 0.968913; torch-compile-bf16 0.968913 |
+| algos | lowbit-dequantize-int15 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 0.388691 |
+| algos | lowbit-dequantize-int15 | synthetic | max_rel_diff_vs_contract_out0 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 2.794e-09 |
+| algos | lowbit-dequantize-int8 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 0.928991 |
+| algos | lowbit-dequantize-int8 | synthetic | max_rel_diff_vs_contract_out0 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 2.933e-11 |
+| algos | lowbit-from-bf16 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 1.000000 |
+| algos | lowbit-from-bf16 | synthetic | max_rel_diff_vs_contract_out0 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000 |
+| algos | lowbit-matmul-int15 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp64 1.000000 |
+| algos | lowbit-matmul-int15 | synthetic | max_rel_diff_vs_contract_out0 | - | 0.000000 | torch-eager-fp64 0.000000 |
+| algos | lowbit-quantize-int15 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 0.999751 |
+| algos | lowbit-quantize-int8 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 1.000000 |
+| algos | lowbit-to-bf16 | synthetic | equal_word_fraction_vs_contract | - | 1.000000 | torch-eager-fp32 1.000000; torch-compile-fp32 1.000000 |
+| algos | lr-constant | synthetic | max_rel_diff_vs_ours (0 is our output exactly) | - | 0.000000 | - |
+| algos | lr-exponential | synthetic | max_rel_diff_vs_ours (0 is our output exactly) | - | 0.000000 | - |
+| algos | lr-onecycle | synthetic | max_rel_diff_vs_ours (0 is our output exactly) | - | 0.000000 | - |
+| algos | lr-step | synthetic | max_rel_diff_vs_ours (0 is our output exactly) | - | 0.000000 | - |
+| algos | lr-warmup-cosine | synthetic | max_rel_diff_vs_ours (0 is our output exactly) | - | 0.000000 | - |
+| algos | lr-warmup-linear | synthetic | max_rel_diff_vs_ours (0 is our output exactly) | - | 0.000000 | - |
+| algos | lstm-clf | synthetic | accuracy (higher is better) | - | 0.967068 | torch-eager-fp32 0.967068; torch-compile-fp32 0.967068; torch-eager-bf16 0.966851; torch-compile-bf16 0.966851 |
 | algos | lstm-clf | synthetic | logloss (lower is better) | - | 0.079720 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
-| algos | lstm-clf | taxi-hourly | accuracy (higher is better) | - | 0.870443 | torch-eager-fp32 0.868218; torch-compile-fp32 0.868218; torch-eager-bf16 0.868056; torch-compile-bf16 0.868056 |
+| algos | lstm-clf | taxi-hourly | accuracy (higher is better) | - | 0.870443 | torch-eager-fp32 0.870443; torch-compile-fp32 0.870443; torch-eager-bf16 0.870497; torch-compile-bf16 0.870497 |
 | algos | lstm-clf | taxi-hourly | logloss (lower is better) | - | 0.297146 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
-| algos | lstm-reg | synthetic | r2 (higher is better) | - | 0.979398 | torch-eager-fp32 0.981013; torch-compile-fp32 0.981013; torch-eager-bf16 0.981004; torch-compile-bf16 0.981004 |
-| algos | lstm-reg | synthetic | rmse (lower is better) | - | 0.166295 | torch-eager-fp32 0.159641; torch-compile-fp32 0.159641; torch-eager-bf16 0.159679; torch-compile-bf16 0.159679 |
-| algos | lstm-reg | taxi-hourly | r2 (higher is better) | - | 0.754306 | torch-eager-fp32 0.751679; torch-compile-fp32 0.751679; torch-eager-bf16 0.751591; torch-compile-bf16 0.751591 |
-| algos | lstm-reg | taxi-hourly | rmse (lower is better) | - | 0.537563 | torch-eager-fp32 0.540429; torch-compile-fp32 0.540429; torch-eager-bf16 0.540526; torch-compile-bf16 0.540526 |
+| algos | lstm-reg | synthetic | r2 (higher is better) | - | 0.979398 | torch-eager-fp32 0.979398; torch-compile-fp32 0.979398; torch-eager-bf16 0.979417; torch-compile-bf16 0.979417 |
+| algos | lstm-reg | synthetic | rmse (lower is better) | - | 0.166295 | torch-eager-fp32 0.166295; torch-compile-fp32 0.166295; torch-eager-bf16 0.166217; torch-compile-bf16 0.166217 |
+| algos | lstm-reg | taxi-hourly | r2 (higher is better) | - | 0.754306 | torch-eager-fp32 0.754306; torch-compile-fp32 0.754306; torch-eager-bf16 0.754170; torch-compile-bf16 0.754170 |
+| algos | lstm-reg | taxi-hourly | rmse (lower is better) | - | 0.537563 | torch-eager-fp32 0.537563; torch-compile-fp32 0.537563; torch-eager-bf16 0.537712; torch-compile-bf16 0.537712 |
 | algos | lstsq | istella | relative_residual | - | 0.849956 | torch-gpu - |
 | algos | lstsq | taxi | relative_residual | - | 0.756366 | torch-gpu 0.756366 |
 | algos | lu-factor | synthetic | relative_residual | - | 3.256e-06 | torch-gpu 4.003e-07 |
 | algos | lu-solve | synthetic | relative_residual | - | 3.256e-06 | torch-gpu 4.003e-07 |
-| algos | maxabs-scaler | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | maxabs-scaler | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | maxabs-scaler | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
-| algos | maxabs-scaler | taxi | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
+| algos | maxabs-scaler | istella | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | maxabs-scaler | istella | rel_diff_vs_sklearn | - | 0.000000 | - |
+| algos | maxabs-scaler | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | - |
+| algos | maxabs-scaler | taxi | rel_diff_vs_sklearn | - | 0.000000 | - |
 | algos | maxpool1d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | maxpool1d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | maxpool2d | synthetic | max_rel_diff_vs_torch_eager_fp32 | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
 | algos | maxpool2d | synthetic | rel_fro_vs_torch_eager_fp32 (0 is the eager FP32 torch output exactly) | - | 0.000000 | torch-eager-fp32 0.000000; torch-compile-fp32 0.000000; torch-eager-bf16 0.000000; torch-compile-bf16 0.000000 |
+| algos | metric-accuracy-score | istella | outputs | - | 1 | - |
+| algos | metric-accuracy-score | taxi | outputs | - | 1 | - |
+| algos | metric-adjusted-mutual-info-score | istella | outputs | - | 1 | - |
+| algos | metric-adjusted-mutual-info-score | taxi | outputs | - | 1 | - |
+| algos | metric-adjusted-rand-score | istella | outputs | - | 1 | - |
+| algos | metric-adjusted-rand-score | taxi | outputs | - | 1 | - |
+| algos | metric-auc | istella | outputs | - | 1 | - |
+| algos | metric-auc | taxi | outputs | - | 1 | - |
+| algos | metric-average-precision-score | istella | outputs | - | 1 | - |
+| algos | metric-average-precision-score | taxi | outputs | - | 1 | - |
+| algos | metric-balanced-accuracy-score | istella | outputs | - | 1 | - |
+| algos | metric-balanced-accuracy-score | taxi | outputs | - | 1 | - |
+| algos | metric-brier-score-loss | istella | outputs | - | 1 | - |
+| algos | metric-brier-score-loss | taxi | outputs | - | 1 | - |
+| algos | metric-calinski-harabasz-score | istella | outputs | - | 1 | - |
+| algos | metric-calinski-harabasz-score | taxi | outputs | - | 1 | - |
+| algos | metric-class-likelihood-ratios | istella | outputs | - | 1 | - |
+| algos | metric-class-likelihood-ratios | taxi | outputs | - | 1 | - |
+| algos | metric-classification-report | istella | outputs | - | 17 | - |
+| algos | metric-classification-report | taxi | outputs | - | 17 | - |
+| algos | metric-cohen-kappa-score | istella | outputs | - | 1 | - |
+| algos | metric-cohen-kappa-score | taxi | outputs | - | 1 | - |
+| algos | metric-completeness-score | istella | outputs | - | 1 | - |
+| algos | metric-completeness-score | taxi | outputs | - | 1 | - |
+| algos | metric-confusion-matrix | istella | outputs | - | 1 | - |
+| algos | metric-confusion-matrix | taxi | outputs | - | 1 | - |
+| algos | metric-contingency-matrix | istella | outputs | - | 1 | - |
+| algos | metric-contingency-matrix | taxi | outputs | - | 1 | - |
+| algos | metric-coverage-error | istella | outputs | - | 1 | - |
+| algos | metric-coverage-error | taxi | outputs | - | 1 | - |
+| algos | metric-d2-absolute-error-score | istella | outputs | - | 1 | - |
+| algos | metric-d2-absolute-error-score | taxi | outputs | - | 1 | - |
+| algos | metric-d2-log-loss-score | istella | outputs | - | 1 | - |
+| algos | metric-d2-log-loss-score | taxi | outputs | - | 1 | - |
+| algos | metric-d2-pinball-score | istella | outputs | - | 1 | - |
+| algos | metric-d2-pinball-score | taxi | outputs | - | 1 | - |
+| algos | metric-d2-tweedie-score | istella | outputs | - | 1 | - |
+| algos | metric-d2-tweedie-score | taxi | outputs | - | 1 | - |
+| algos | metric-davies-bouldin-score | istella | outputs | - | 1 | - |
+| algos | metric-davies-bouldin-score | taxi | outputs | - | 1 | - |
+| algos | metric-dcg-score | istella | outputs | - | 1 | - |
+| algos | metric-dcg-score | taxi | outputs | - | 1 | - |
+| algos | metric-det-curve | istella | outputs | - | 3 | - |
+| algos | metric-det-curve | taxi | outputs | - | 3 | - |
+| algos | metric-entropy | istella | outputs | - | 1 | - |
+| algos | metric-entropy | taxi | outputs | - | 1 | - |
+| algos | metric-explained-variance-score | istella | outputs | - | 1 | - |
+| algos | metric-explained-variance-score | taxi | outputs | - | 1 | - |
+| algos | metric-f1-score | istella | outputs | - | 1 | - |
+| algos | metric-f1-score | taxi | outputs | - | 1 | - |
+| algos | metric-fbeta-score | istella | outputs | - | 1 | - |
+| algos | metric-fbeta-score | taxi | outputs | - | 1 | - |
+| algos | metric-fowlkes-mallows-score | istella | outputs | - | 1 | - |
+| algos | metric-fowlkes-mallows-score | taxi | outputs | - | 1 | - |
+| algos | metric-hamming-loss | istella | outputs | - | 1 | - |
+| algos | metric-hamming-loss | taxi | outputs | - | 1 | - |
+| algos | metric-hinge-loss | istella | outputs | - | 1 | - |
+| algos | metric-hinge-loss | taxi | outputs | - | 1 | - |
+| algos | metric-homogeneity-completeness-v-measure | istella | outputs | - | 1 | - |
+| algos | metric-homogeneity-completeness-v-measure | taxi | outputs | - | 1 | - |
+| algos | metric-homogeneity-score | istella | outputs | - | 1 | - |
+| algos | metric-homogeneity-score | taxi | outputs | - | 1 | - |
+| algos | metric-jaccard-score | istella | outputs | - | 1 | - |
+| algos | metric-jaccard-score | taxi | outputs | - | 1 | - |
+| algos | metric-label-ranking-average-precision-score | istella | outputs | - | 1 | - |
+| algos | metric-label-ranking-average-precision-score | taxi | outputs | - | 1 | - |
+| algos | metric-label-ranking-loss | istella | outputs | - | 1 | - |
+| algos | metric-label-ranking-loss | taxi | outputs | - | 1 | - |
+| algos | metric-log-loss | istella | outputs | - | 1 | - |
+| algos | metric-log-loss | taxi | outputs | - | 1 | - |
+| algos | metric-matthews-corrcoef | istella | outputs | - | 1 | - |
+| algos | metric-matthews-corrcoef | taxi | outputs | - | 1 | - |
+| algos | metric-max-error | istella | outputs | - | 1 | - |
+| algos | metric-max-error | taxi | outputs | - | 1 | - |
+| algos | metric-mean-absolute-error | istella | outputs | - | 1 | - |
+| algos | metric-mean-absolute-error | taxi | outputs | - | 1 | - |
+| algos | metric-mean-absolute-percentage-error | istella | outputs | - | 1 | - |
+| algos | metric-mean-absolute-percentage-error | taxi | outputs | - | 1 | - |
+| algos | metric-mean-gamma-deviance | istella | outputs | - | 1 | - |
+| algos | metric-mean-gamma-deviance | taxi | outputs | - | 1 | - |
+| algos | metric-mean-pinball-loss | istella | outputs | - | 1 | - |
+| algos | metric-mean-pinball-loss | taxi | outputs | - | 1 | - |
+| algos | metric-mean-poisson-deviance | istella | outputs | - | 1 | - |
+| algos | metric-mean-poisson-deviance | taxi | outputs | - | 1 | - |
+| algos | metric-mean-squared-error | istella | outputs | - | 1 | - |
+| algos | metric-mean-squared-error | taxi | outputs | - | 1 | - |
+| algos | metric-mean-squared-log-error | istella | outputs | - | 1 | - |
+| algos | metric-mean-squared-log-error | taxi | outputs | - | 1 | - |
+| algos | metric-mean-tweedie-deviance | istella | outputs | - | 1 | - |
+| algos | metric-mean-tweedie-deviance | taxi | outputs | - | 1 | - |
+| algos | metric-median-absolute-error | istella | outputs | - | 1 | - |
+| algos | metric-median-absolute-error | taxi | outputs | - | 1 | - |
+| algos | metric-multilabel-confusion-matrix | istella | outputs | - | 1 | - |
+| algos | metric-multilabel-confusion-matrix | taxi | outputs | - | 1 | - |
+| algos | metric-mutual-info-score | istella | outputs | - | 1 | - |
+| algos | metric-mutual-info-score | taxi | outputs | - | 1 | - |
 | algos | min-cov-det | istella | n_features | - | 220 | sklearn-cpu - |
 | algos | min-cov-det | istella | rel_diff_vs_sklearn | - | 0.239361 | sklearn-cpu - |
 | algos | min-cov-det | taxi | n_features | - | 11 | sklearn-cpu 11 |
@@ -524,17 +770,44 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 
 | family | lane | dataset | batch | rows | ours FAST ms | ours IDENTICAL ms | FAST = IDENTICAL bits | opponents |
 |---|---|---|---|---|---|---|---|---|
+| algos | adaboost-clf | istella | Xq | - | - | 377.9 | - | - |
+| algos | adaboost-clf | taxi | Xq | - | - | 136.1 | - | - |
+| algos | adaboost-reg | istella | Xq | - | - | 71.9 | - | - |
+| algos | adaboost-reg | taxi | Xq | - | - | 25.5 | - | - |
 | algos | avgpool1d | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 1.299); torch-compile-fp32 0.1 ms (IDENTICAL/arm 0.759); torch-eager-bf16 0.1 ms (IDENTICAL/arm 1.084); torch-compile-bf16 0.1 ms (IDENTICAL/arm 0.730) |
 | algos | avgpool2d | synthetic | Xq | - | - | 0.2 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 1.420); torch-compile-fp32 0.2 ms (IDENTICAL/arm 0.868); torch-eager-bf16 0.1 ms (IDENTICAL/arm 1.378); torch-compile-bf16 0.2 ms (IDENTICAL/arm 0.940) |
+| algos | bagging-clf | istella | Xq | - | - | 84.6 | - | - |
+| algos | bagging-clf | taxi | Xq | - | - | 6.6 | - | - |
+| algos | bagging-reg | istella | Xq | - | - | 42.0 | - | - |
+| algos | bagging-reg | taxi | Xq | - | - | 3.4 | - | - |
 | algos | batchnorm1d | synthetic | Xq | - | - | 1.3 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 10.152); torch-compile-fp32 0.2 ms (IDENTICAL/arm 7.351); torch-eager-bf16 0.1 ms (IDENTICAL/arm 9.751); torch-compile-bf16 0.2 ms (IDENTICAL/arm 7.249) |
 | algos | batchnorm2d | synthetic | Xq | - | - | 1.3 | - | torch-eager-fp32 0.2 ms (IDENTICAL/arm 6.623); torch-compile-fp32 0.2 ms (IDENTICAL/arm 8.063); torch-eager-bf16 0.2 ms (IDENTICAL/arm 6.211); torch-compile-bf16 0.2 ms (IDENTICAL/arm 7.883) |
+| algos | cnn-clf | synthetic | Xq | - | - | 9.2 | - | torch-eager-fp32 0.9 ms (IDENTICAL/arm 9.815); torch-compile-fp32 0.7 ms (IDENTICAL/arm 13.164); torch-eager-bf16 1.0 ms (IDENTICAL/arm 9.593); torch-compile-bf16 0.7 ms (IDENTICAL/arm 13.751) |
 | algos | conv1d | synthetic | Xq | - | - | 1.7 | - | torch-eager-fp32 0.7 ms (IDENTICAL/arm 2.537); torch-compile-fp32 0.9 ms (IDENTICAL/arm 2.039); torch-eager-bf16 0.4 ms (IDENTICAL/arm 4.613); torch-compile-bf16 0.5 ms (IDENTICAL/arm 3.568) |
 | algos | conv2d | synthetic | Xq | - | - | 1.1 | - | torch-eager-fp32 0.3 ms (IDENTICAL/arm 3.868); torch-compile-fp32 0.4 ms (IDENTICAL/arm 3.135); torch-eager-bf16 0.3 ms (IDENTICAL/arm 4.307); torch-compile-bf16 0.3 ms (IDENTICAL/arm 3.308) |
-| algos | dropout2d | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 0.827); torch-compile-fp32 0.1 ms (IDENTICAL/arm 0.660) |
+| algos | decision-tree-clf | istella | Xq | - | - | 417.2 | - | - |
+| algos | decision-tree-clf | taxi | Xq | - | - | 34.6 | - | - |
+| algos | decision-tree-reg | istella | Xq | - | - | 208.2 | - | - |
+| algos | decision-tree-reg | taxi | Xq | - | - | 16.6 | - | - |
+| algos | dropout2d | synthetic | Xq | - | - | 0.2 | - | - |
 | algos | embedding | synthetic | Xq | - | - | 0.3 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 3.086); torch-compile-fp32 0.2 ms (IDENTICAL/arm 1.758) |
+| algos | gcn | istella | Xq | - | - | 1.2 | - | torch-eager-fp32 2.2 ms (IDENTICAL/arm 0.537); torch-compile-fp32 1.6 ms (IDENTICAL/arm 0.740); torch-eager-bf16 2.1 ms (IDENTICAL/arm 0.559); torch-compile-bf16 1.6 ms (IDENTICAL/arm 0.749) |
+| algos | gcn | taxi | Xq | - | - | 0.9 | - | torch-eager-fp32 1.9 ms (IDENTICAL/arm 0.468); torch-compile-fp32 1.3 ms (IDENTICAL/arm 0.678); torch-eager-bf16 1.8 ms (IDENTICAL/arm 0.488); torch-compile-bf16 1.4 ms (IDENTICAL/arm 0.663) |
 | algos | global-avgpool | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.0 ms (IDENTICAL/arm 1.213); torch-compile-fp32 0.1 ms (IDENTICAL/arm 0.452); torch-eager-bf16 0.0 ms (IDENTICAL/arm 1.260); torch-compile-bf16 0.1 ms (IDENTICAL/arm 0.524) |
 | algos | global-maxpool | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 0.643); torch-compile-fp32 0.1 ms (IDENTICAL/arm 0.486); torch-eager-bf16 0.1 ms (IDENTICAL/arm 0.570); torch-compile-bf16 0.1 ms (IDENTICAL/arm 0.535) |
+| algos | graphsage | istella | Xq | - | - | 1.7 | - | torch-eager-fp32 2.5 ms (IDENTICAL/arm 0.670); torch-compile-fp32 2.6 ms (IDENTICAL/arm 0.638); torch-eager-bf16 2.4 ms (IDENTICAL/arm 0.695); torch-compile-bf16 2.6 ms (IDENTICAL/arm 0.647) |
+| algos | graphsage | taxi | Xq | - | - | 0.8 | - | torch-eager-fp32 0.4 ms (IDENTICAL/arm 2.048); torch-compile-fp32 0.4 ms (IDENTICAL/arm 2.002); torch-eager-bf16 0.4 ms (IDENTICAL/arm 2.017); torch-compile-bf16 0.4 ms (IDENTICAL/arm 1.995) |
+| algos | gru-clf | synthetic | Xq | - | - | 18.8 | - | torch-eager-fp32 6.2 ms (IDENTICAL/arm 3.037); torch-compile-fp32 6.0 ms (IDENTICAL/arm 3.107); torch-eager-bf16 6.1 ms (IDENTICAL/arm 3.083); torch-compile-bf16 6.4 ms (IDENTICAL/arm 2.945) |
+| algos | gru-clf | taxi-hourly | Xq | - | - | 18.8 | - | torch-eager-fp32 6.2 ms (IDENTICAL/arm 3.031); torch-compile-fp32 6.2 ms (IDENTICAL/arm 3.017); torch-eager-bf16 6.2 ms (IDENTICAL/arm 3.055); torch-compile-bf16 6.4 ms (IDENTICAL/arm 2.933) |
+| algos | gru-reg | synthetic | Xq | - | - | 9.4 | - | torch-eager-fp32 6.1 ms (IDENTICAL/arm 1.549); torch-compile-fp32 6.0 ms (IDENTICAL/arm 1.558); torch-eager-bf16 6.2 ms (IDENTICAL/arm 1.527); torch-compile-bf16 6.2 ms (IDENTICAL/arm 1.506) |
+| algos | gru-reg | taxi-hourly | Xq | - | - | 9.2 | - | torch-eager-fp32 6.1 ms (IDENTICAL/arm 1.523); torch-compile-fp32 6.1 ms (IDENTICAL/arm 1.508); torch-eager-bf16 6.0 ms (IDENTICAL/arm 1.537); torch-compile-bf16 5.9 ms (IDENTICAL/arm 1.556) |
+| algos | incremental-pca | istella | Xq | - | - | 213.6 | - | - |
+| algos | incremental-pca | taxi | Xq | - | - | 22.0 | - | - |
 | algos | layernorm | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 1.826); torch-compile-fp32 0.1 ms (IDENTICAL/arm 1.149); torch-eager-bf16 0.1 ms (IDENTICAL/arm 1.806); torch-compile-bf16 0.1 ms (IDENTICAL/arm 1.081) |
+| algos | lstm-clf | synthetic | Xq | - | - | 22.5 | - | torch-eager-fp32 3.0 ms (IDENTICAL/arm 7.385); torch-compile-fp32 3.1 ms (IDENTICAL/arm 7.316); torch-eager-bf16 3.0 ms (IDENTICAL/arm 7.421); torch-compile-bf16 3.3 ms (IDENTICAL/arm 6.892) |
+| algos | lstm-clf | taxi-hourly | Xq | - | - | 22.3 | - | torch-eager-fp32 3.2 ms (IDENTICAL/arm 6.858); torch-compile-fp32 3.2 ms (IDENTICAL/arm 6.961); torch-eager-bf16 3.0 ms (IDENTICAL/arm 7.356); torch-compile-bf16 3.3 ms (IDENTICAL/arm 6.844) |
+| algos | lstm-reg | synthetic | Xq | - | - | 11.0 | - | torch-eager-fp32 3.1 ms (IDENTICAL/arm 3.596); torch-compile-fp32 3.3 ms (IDENTICAL/arm 3.348); torch-eager-bf16 3.0 ms (IDENTICAL/arm 3.729); torch-compile-bf16 3.2 ms (IDENTICAL/arm 3.401) |
+| algos | lstm-reg | taxi-hourly | Xq | - | - | 11.0 | - | torch-eager-fp32 3.3 ms (IDENTICAL/arm 3.380); torch-compile-fp32 3.3 ms (IDENTICAL/arm 3.325); torch-eager-bf16 3.1 ms (IDENTICAL/arm 3.606); torch-compile-bf16 3.3 ms (IDENTICAL/arm 3.362) |
 | algos | maxpool1d | synthetic | Xq | - | - | 0.1 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 0.991); torch-compile-fp32 0.1 ms (IDENTICAL/arm 0.700); torch-eager-bf16 0.1 ms (IDENTICAL/arm 0.926); torch-compile-bf16 0.1 ms (IDENTICAL/arm 0.735) |
 | algos | maxpool2d | synthetic | Xq | - | - | 0.2 | - | torch-eager-fp32 0.1 ms (IDENTICAL/arm 1.211); torch-compile-fp32 0.2 ms (IDENTICAL/arm 0.986); torch-eager-bf16 0.1 ms (IDENTICAL/arm 1.177); torch-compile-bf16 0.2 ms (IDENTICAL/arm 0.993) |
 | classical | kmeans | istella | Xq | 500000 | - | 18.1 | - | hipvs-gpu - ms (IDENTICAL/arm -) |
@@ -556,28 +829,28 @@ What customers run is torch in bf16. The headline divides our IDENTICAL median b
 | avgpool2d | synthetic | 0.6 | 0.8 (torch-eager-bf16) | 0.750 | 0.9 (torch-eager-fp32) | 0.669 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | batchnorm1d | synthetic | 0.6 | 0.9 (torch-eager-bf16) | 0.655 | 1.0 (torch-eager-fp32) | 0.599 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | batchnorm2d | synthetic | 0.6 | 1.2 (torch-eager-bf16) | 0.524 | 1.0 (torch-eager-fp32) | 0.620 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
-| cnn-clf | synthetic | 315.0 | - | - | - | - | no torch bf16 arm on this lane |
+| cnn-clf | synthetic | 304.9 | 260.7 (torch-eager-bf16) | 1.170 | 204.1 (torch-eager-fp32) | 1.494 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | conv1d | synthetic | 7.1 | 1.4 (torch-eager-bf16) | 5.128 | 1.9 (torch-eager-fp32) | 3.693 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | conv2d | synthetic | 6.4 | 1.5 (torch-eager-bf16) | 4.127 | 1.2 (torch-eager-fp32) | 5.487 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
-| dropout2d | synthetic | 0.3 | - | - | 0.7 (torch-eager-fp32) | 0.397 | no torch bf16 arm on this lane |
+| dropout2d | synthetic | 0.4 | - | - | 0.7 (torch-eager-fp32) | 0.611 | no torch bf16 arm on this lane |
 | embedding | synthetic | 1.6 | - | - | 1.0 (torch-eager-fp32) | 1.520 | no torch bf16 arm on this lane |
-| gcn | istella | 3.0 | - | - | - | - | no torch bf16 arm on this lane |
-| gcn | taxi | 1.4 | - | - | - | - | no torch bf16 arm on this lane |
+| gcn | istella | 3.5 | 2.9 (torch-compile-bf16) | 1.227 | 3.4 (torch-compile-fp32) | 1.032 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| gcn | taxi | 1.9 | 2.4 (torch-compile-bf16) | 0.770 | 2.8 (torch-compile-fp32) | 0.668 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | global-avgpool | synthetic | 0.2 | 0.5 (torch-eager-bf16) | 0.540 | 0.7 (torch-eager-fp32) | 0.373 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | global-maxpool | synthetic | 0.2 | 0.5 (torch-eager-bf16) | 0.516 | 0.6 (torch-eager-fp32) | 0.416 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
-| graphsage | istella | 5.9 | - | - | - | - | no torch bf16 arm on this lane |
-| graphsage | taxi | 1.6 | - | - | - | - | no torch bf16 arm on this lane |
-| gru-clf | synthetic | 514.9 | - | - | - | - | no torch bf16 arm on this lane |
-| gru-clf | taxi-hourly | 515.5 | - | - | - | - | no torch bf16 arm on this lane |
-| gru-reg | synthetic | 513.3 | - | - | - | - | no torch bf16 arm on this lane |
-| gru-reg | taxi-hourly | 513.4 | - | - | - | - | no torch bf16 arm on this lane |
+| graphsage | istella | 6.4 | 5.3 (torch-compile-bf16) | 1.224 | 5.4 (torch-eager-fp32) | 1.195 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| graphsage | taxi | 2.1 | 1.6 (torch-eager-bf16) | 1.331 | 1.6 (torch-eager-fp32) | 1.304 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| gru-clf | synthetic | 535.9 | 1866.6 (torch-eager-bf16) | 0.287 | 1659.7 (torch-compile-fp32) | 0.323 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| gru-clf | taxi-hourly | 535.4 | 1749.5 (torch-compile-bf16) | 0.306 | 1785.5 (torch-eager-fp32) | 0.300 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| gru-reg | synthetic | 532.2 | 1866.3 (torch-compile-bf16) | 0.285 | 1721.8 (torch-eager-fp32) | 0.309 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| gru-reg | taxi-hourly | 532.8 | 1646.5 (torch-compile-bf16) | 0.324 | 1769.0 (torch-eager-fp32) | 0.301 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | lamb | synthetic | 13.4 | - | - | - | - | no torch bf16 arm on this lane |
 | layernorm | synthetic | 0.6 | 0.8 (torch-eager-bf16) | 0.841 | 0.8 (torch-eager-fp32) | 0.810 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | lion | synthetic | 3.5 | - | - | - | - | no torch bf16 arm on this lane |
-| lstm-clf | synthetic | 631.6 | - | - | - | - | no torch bf16 arm on this lane |
-| lstm-clf | taxi-hourly | 630.7 | - | - | - | - | no torch bf16 arm on this lane |
-| lstm-reg | synthetic | 628.6 | - | - | - | - | no torch bf16 arm on this lane |
-| lstm-reg | taxi-hourly | 627.9 | - | - | - | - | no torch bf16 arm on this lane |
+| lstm-clf | synthetic | 651.3 | 932.4 (torch-eager-bf16) | 0.699 | 802.9 (torch-eager-fp32) | 0.811 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| lstm-clf | taxi-hourly | 651.0 | 992.3 (torch-eager-bf16) | 0.656 | 876.5 (torch-compile-fp32) | 0.743 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| lstm-reg | synthetic | 644.9 | 1028.5 (torch-eager-bf16) | 0.627 | 787.6 (torch-eager-fp32) | 0.819 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
+| lstm-reg | taxi-hourly | 645.9 | 998.1 (torch-eager-bf16) | 0.647 | 909.9 (torch-eager-fp32) | 0.710 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | maxpool1d | synthetic | 0.3 | 0.9 (torch-eager-bf16) | 0.368 | 0.8 (torch-eager-fp32) | 0.431 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | maxpool2d | synthetic | 0.5 | 1.1 (torch-compile-bf16) | 0.490 | 0.9 (torch-eager-fp32) | 0.613 | torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax |
 | moe | synthetic | 15.2 | - | - | - | - | no torch bf16 arm on this lane |
@@ -1875,20 +2148,155 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### adaboost-clf / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027/amd/boards/algos.adaboost-clf.istella.rows=full.json (amd/gate-dbeafe8e34c31105e19df3590ba2a31be1d6de35511fec176b07daafca1e4024)`, ran on AMD Instinct MI325X (amd, DO) job gate-dbeafe8e34c31105e19df3590ba2a31be1d6de35511fec176b07daafca1e4024
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.adaboost-clf.istella.rows=full.json (amd/gate-1885af6837d324eb397025c9179c04d69c8b7e74d63ff1e833eef2363cba0482)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3701.1 | 3701.1..3701.1 | 1 | - | - | 3701.1 | 3685.3 | 15.79 (upload_ms_separate) | - | - | 5270.6 | 2319.7 | accuracy=0.934990, logloss=0.438712 | - | main board, one scored run | wheel | ok (main@de429235f amd/gate-dbeafe8e34c31105e19df3590ba2a31be1d6de35511fec176b07daafca1e4024 2026-10-27; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3678.7 | 3678.7..3678.7 | 1 | - | - | 3678.7 | 3662.9 | 15.79 (upload_ms_separate) | - | - | 5270.5 | 2319.7 | accuracy=0.934990, logloss=0.438712 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1885af6837d324eb397025c9179c04d69c8b7e74d63ff1e833eef2363cba0482 2026-10-27; identity vs the nvidia columns: n/a) |
 
 calls:
-- `ours`: `mojolearn.AdaBoostClassifier(algorithm='SAMME', estimator='<mojolearn._expansion_trees.DecisionTreeClas..., learning_rate=1, n_estimators=50, random_state=7)`
+- `ours`: `mojolearn.AdaBoostClassifier(algorithm='SAMME', estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, n_estimators=50, random_state=7)`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/168537/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/171071/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'algorithm': 'SAMME', 'estimator': 'DecisionTreeClassifier(max_depth=3, random_state=7)', 'learning_rate': 1.0, 'n_estimators': 50, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| algorithm | "SAMME" |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeClassifier"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "class_weight": null, "criterion": "gini", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 3, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": 128, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| learning_rate | 1.0 |
+| n_estimators | 50 |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 377.9 | 377.9..377.9 | 1 | - | - | 377.9 | 376.3 | 1.60 (predict_upload_ms) | - | - | accuracy=0.934990, logloss=0.438712 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.AdaBoostClassifier(algorithm='SAMME', estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, n_estimators=50, random_state=7); predict(Xq)(Xq)
+
+### adaboost-clf / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.adaboost-clf.taxi.rows=full.json (amd/gate-eb647350a46c87de05cdd7ef75becce2b593cde4bc66e18f9680461499970cb9)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 850.9 | 850.9..850.9 | 1 | - | - | 850.9 | 850.0 | 0.93 (upload_ms_separate) | - | - | 2798.6 | 2235.7 | accuracy=0.765230, logloss=0.543227 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-eb647350a46c87de05cdd7ef75becce2b593cde4bc66e18f9680461499970cb9 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AdaBoostClassifier(algorithm='SAMME', estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, n_estimators=50, random_state=7)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/171477/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'algorithm': 'SAMME', 'estimator': 'DecisionTreeClassifier(max_depth=3, random_state=7)', 'learning_rate': 1.0, 'n_estimators': 50, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| algorithm | "SAMME" |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeClassifier"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "class_weight": null, "criterion": "gini", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 3, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": 128, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| learning_rate | 1.0 |
+| n_estimators | 50 |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 136.1 | 136.1..136.1 | 1 | - | - | 136.1 | 136.0 | 0.11 (predict_upload_ms) | - | - | accuracy=0.765230, logloss=0.543227 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.AdaBoostClassifier(algorithm='SAMME', estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, n_estimators=50, random_state=7); predict(Xq)(Xq)
+
+### adaboost-reg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.adaboost-reg.istella.rows=full.json (amd/gate-862ddabb67d29b02b9cb5f45c5ce4560bb85ea5de3b09c6aec1c211662feab85)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1304.2 | 1304.2..1304.2 | 1 | - | - | 1304.2 | 1288.4 | 15.85 (upload_ms_separate) | - | - | 4411.0 | 2319.5 | finite=True, r2=0.229908, rmse=0.733047 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-862ddabb67d29b02b9cb5f45c5ce4560bb85ea5de3b09c6aec1c211662feab85 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AdaBoostRegressor(estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, loss='linear', n_estimators=50, random_state=7)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/171862/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'estimator': 'DecisionTreeRegressor(max_depth=3, random_state=7)', 'learning_rate': 1.0, 'loss': 'linear', 'n_estimators': 50, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeRegressor"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "criterion": "squared_error", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 3, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": null, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| learning_rate | 1.0 |
+| loss | "linear" |
+| n_estimators | 50 |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 71.9 | 71.9..71.9 | 1 | - | - | 71.9 | 70.2 | 1.61 (predict_upload_ms) | - | - | finite=True, r2=0.229908, rmse=0.733047 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.AdaBoostRegressor(estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, loss='linear', n_estimators=50, random_state=7); predict(Xq)(Xq)
+
+### adaboost-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.adaboost-reg.taxi.rows=full.json (amd/gate-cb79930665eade0edc80665388317065f7a667f6a02b64c8003f598760ad4c3b)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 784.8 | 784.8..784.8 | 1 | - | - | 784.8 | 783.8 | 0.93 (upload_ms_separate) | - | - | 2736.5 | 2235.5 | finite=True, r2=0.675081, rmse=9.078710 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-cb79930665eade0edc80665388317065f7a667f6a02b64c8003f598760ad4c3b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AdaBoostRegressor(estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, loss='linear', n_estimators=50, random_state=7)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/172444/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'estimator': 'DecisionTreeRegressor(max_depth=3, random_state=7)', 'learning_rate': 1.0, 'loss': 'linear', 'n_estimators': 50, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeRegressor"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "criterion": "squared_error", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 3, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": null, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| learning_rate | 1.0 |
+| loss | "linear" |
+| n_estimators | 50 |
+| seed | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 25.5 | 25.5..25.5 | 1 | - | - | 25.5 | 25.4 | 0.11 (predict_upload_ms) | - | - | finite=True, r2=0.675081, rmse=9.078710 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.AdaBoostRegressor(estimator={estimator: {module: 'mojolearn._expansion_tr..., learning_rate=1, loss='linear', n_estimators=50, random_state=7); predict(Xq)(Xq)
 
 ### adafactor / synthetic (rows full, shape -)
 
@@ -1898,7 +2306,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 8.2 | 8.2..8.2 | 1 | - | - | - | 8.2 | - (stored kernel) | - | - | 1722.4 | 235846.9 | optimizer_update_error_vs_torch_fp32=3.386e-06, rel_fro_vs_torch_eager_fp32=1.033e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 8.2 | 8.2..8.2 | 1 | - | - | - | 8.2 | - (stored kernel) | - | - | 1722.4 | 235846.9 | optimizer_update_error_vs_torch_fp32=3.386e-06, rel_fro_vs_torch_eager_fp32=1.033e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-3b090d545639c736a0c7dc56e3b2b72d662ee4c813febcfa3ac604c3e2032a85 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 7.2 | 7.2..7.2 | 1 | 1.130 | - | - | 7.2 | - (stored kernel) | 1.130 (kernel/kernel) | - | 2785.7 | 832.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 104.5 | 104.5..104.5 | 1 | 0.078 | - | - | 104.5 | - (stored kernel) | 0.078 (kernel/kernel) | - | 2840.6 | 832.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
@@ -1942,7 +2350,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 5.2 | 5.2..5.2 | 1 | - | - | - | 5.2 | - (stored kernel) | - | - | 1528.4 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.874e-06, rel_fro_vs_torch_eager_fp32=3.207e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 5.2 | 5.2..5.2 | 1 | - | - | - | 5.2 | - (stored kernel) | - | - | 1528.4 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.874e-06, rel_fro_vs_torch_eager_fp32=3.207e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-831d92d1fb4fc1aa4a82351003852a9e0aa6a4abb91e1252a68bf3d59fa15176 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.4 | 4.4..4.4 | 1 | 1.197 | - | - | 4.4 | - (stored kernel) | 1.197 (kernel/kernel) | - | 2742.2 | 960.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.6 | 2.6..2.6 | 1 | 2.037 | - | - | 2.6 | - (stored kernel) | 2.037 (kernel/kernel) | - | 3089.0 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
@@ -2000,7 +2408,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.6 | 11.6..11.6 | 1 | - | - | - | 11.6 | - (stored kernel) | - | - | 3033.8 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.844e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.6 | 11.6..11.6 | 1 | - | - | - | 11.6 | - (stored kernel) | - | - | 3033.8 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.844e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-2b20520d0a6699fb830f05c90ab84b4cb550845ee1ab637fd160a755f44def0b failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.9 | 5.9..5.9 | 1 | 1.953 | - | - | 5.9 | - (stored kernel) | 1.953 (kernel/kernel) | - | 2782.5 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 53.6 | 53.6..53.6 | 1 | 0.216 | - | - | 53.6 | - (stored kernel) | 0.216 (kernel/kernel) | - | 3227.1 | 960.0 | optimizer_update_error_vs_torch_fp32=1.355e-05, rel_fro_vs_torch_eager_fp32=5.116e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-fused-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.0 | 4.0..4.0 | 1 | 2.894 | - | - | 4.0 | - (stored kernel) | 2.894 (kernel/kernel) | - | 2703.8 | 896.0 | optimizer_update_error_vs_torch_fp32=6.002e-06, rel_fro_vs_torch_eager_fp32=2.267e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2082,7 +2490,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 9.1 | 9.1..9.1 | 1 | - | - | - | 9.1 | - (stored kernel) | - | - | 1528.3 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.54e-06, rel_fro_vs_torch_eager_fp32=4.144e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 9.1 | 9.1..9.1 | 1 | - | - | - | 9.1 | - (stored kernel) | - | - | 1528.3 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.54e-06, rel_fro_vs_torch_eager_fp32=4.144e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-ec8d671222265ced7af279d26c8dbbe262c0aa0faf3d930b4310e17c73765ec2 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.6 | 5.6..5.6 | 1 | 1.626 | - | - | 5.6 | - (stored kernel) | 1.626 (kernel/kernel) | - | 2752.0 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 47.9 | 47.9..47.9 | 1 | 0.190 | - | - | 47.9 | - (stored kernel) | 0.190 (kernel/kernel) | - | 3221.6 | 960.0 | optimizer_update_error_vs_torch_fp32=2.292e-06, rel_fro_vs_torch_eager_fp32=6.17e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
@@ -2139,7 +2547,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.7 | 11.7..11.7 | 1 | - | - | - | 11.7 | - (stored kernel) | - | - | 3032.6 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.841e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.7 | 11.7..11.7 | 1 | - | - | - | 11.7 | - (stored kernel) | - | - | 3032.6 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.841e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-3bf8e8594c6d04095b429809c67122e893cd442d0431271911c714c12bfd969f failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 6.5 | 6.5..6.5 | 1 | 1.788 | - | - | 6.5 | - (stored kernel) | 1.788 (kernel/kernel) | - | 2782.5 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 54.6 | 54.6..54.6 | 1 | 0.214 | - | - | 54.6 | - (stored kernel) | 0.214 (kernel/kernel) | - | 3223.3 | 960.0 | optimizer_update_error_vs_torch_fp32=6.012e-05, rel_fro_vs_torch_eager_fp32=2.272e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-fused-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 3.5 | 3.5..3.5 | 1 | 3.373 | - | - | 3.5 | - (stored kernel) | 3.373 (kernel/kernel) | - | 2703.8 | 896.0 | optimizer_update_error_vs_torch_fp32=6.574e-05, rel_fro_vs_torch_eager_fp32=2.484e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2213,20 +2621,137 @@ accepted difference: torch-fused-fp32 foreach: torch's foreach/fused selects its
 
 accepted difference: torch-fused-fp32 fused: torch's foreach/fused selects its own implementation of the same optimizer update; the raw execution choice remains recorded
 
-### ard / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
+### additive-chi2 / istella (rows full, shape X 100000x220; Xq 1000x220; y 100000; yq 1000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1661)`, ran on AMD Instinct MI325X (amd, DO) job a1661
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.additive-chi2.istella.rows=full.json (amd/gate-224dc59d7dd62fd2e52a3773d8d9e24baa654710c031c12c4154a158f8c5a408)`, ran on AMD Instinct MI325X (amd, DO) job gate-224dc59d7dd62fd2e52a3773d8d9e24baa654710c031c12c4154a158f8c5a408
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@6cd6bed7f) | identical | 1234.1 | 1234.1..1234.1 | 1 | - | - | 1234.1 | - | - (stored whole) | - | - | - | - | finite=True, r2=-0.124856, rmse=0.885949 | - | main board, one scored run | - | ok (main@6cd6bed7f amd/a1661 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 14123.5 | 14123.5..14123.5 | 1 | unchecked | unchecked | 14123.5 | 14123.5 | 0.00 (cpu-arm) | - | - | 1389.6 | - | finite=True, r2=0.327436, rmse=0.685058 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 123.8 | 123.8..123.8 | 1 | - | - | 123.8 | 122.2 | 1.61 (upload_ms_separate) | - | - | 3698.0 | 2055.1 | kernel_rel_error=0.087730 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-224dc59d7dd62fd2e52a3773d8d9e24baa654710c031c12c4154a158f8c5a408 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.AdditiveChi2Sampler(sample_interval=0.5, sample_steps=2)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/176063/vram_* bytes for this pid at the round's end (not a peak)
 
-settings: {'alpha_1': 1e-06, 'alpha_2': 1e-06, 'fit_intercept': True, 'lambda_1': 1e-06, 'lambda_2': 1e-06, 'max_iter': 300, 'threshold_lambda': 10000.0, 'tol': 0.001}. Rows: None. Timed: None.
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### additive-chi2 / taxi (rows full, shape X 100000x11; Xq 1000x11; y 100000; yq 1000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.additive-chi2.taxi.rows=full.json (amd/gate-7eb8b3a92aaeb0faf2400700a6fd64bc5822f7005c1636b0ae4a2cf88abd039f)`, ran on AMD Instinct MI325X (amd, DO) job gate-7eb8b3a92aaeb0faf2400700a6fd64bc5822f7005c1636b0ae4a2cf88abd039f
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 23.2 | 23.2..23.2 | 1 | - | - | 23.2 | 23.0 | 0.14 (upload_ms_separate) | - | - | 2496.5 | 2055.1 | kernel_rel_error=0.093892 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-7eb8b3a92aaeb0faf2400700a6fd64bc5822f7005c1636b0ae4a2cf88abd039f 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AdditiveChi2Sampler(sample_interval=0.5, sample_steps=2)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/176568/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### als / taxi-zones (rows full, shape X 129352x261; Xq 14373x261)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.als.taxi-zones.rows=full.json (amd/gate-ee2052e2e27896e614641a183f78be74b52595004edbcf2b1dc4c4f57ede2f9c)`, ran on AMD Instinct MI325X (amd, DO) job gate-ee2052e2e27896e614641a183f78be74b52595004edbcf2b1dc4c4f57ede2f9c
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 99130.7 | 99130.7..99130.7 | 1 | - | - | 99130.7 | - | - (stored whole) | - | - | 1522.0 | 1698.4 | recall_at_10=0.070872 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ee2052e2e27896e614641a183f78be74b52595004edbcf2b1dc4c4f57ede2f9c 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AlternatingLeastSquares(alpha=1, calculate_training_loss=False, cg_steps=3, factors=64, iterations=15, random_state=7, regularization=0.01, use_cg=True)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/177523/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### als / text (rows full, shape X 86626x4096; Xq 9626x4096; y 86626; yq 9626)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.als.text.rows=full.json (amd/gate-d89c0c7d0a4656ffc80c2bdebb0ec3e890bd33c0a3b4e8b8cceb471fae402570)`, ran on AMD Instinct MI325X (amd, DO) job gate-d89c0c7d0a4656ffc80c2bdebb0ec3e890bd33c0a3b4e8b8cceb471fae402570
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 120587.2 | 120587.2..120587.2 | 1 | - | - | 120587.2 | - | - (stored whole) | - | - | 6698.9 | 1698.4 | recall_at_10=0.546049 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d89c0c7d0a4656ffc80c2bdebb0ec3e890bd33c0a3b4e8b8cceb471fae402570 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AlternatingLeastSquares(alpha=1, calculate_training_loss=False, cg_steps=3, factors=64, iterations=15, random_state=7, regularization=0.01, use_cg=True)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/178222/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### ard / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.ard.istella.rows=full.json (amd/gate-25ad04a8a97490686d1cb31390cfe9ec09ea1414cdb7e152d23bcb76c22dfd46)`, ran on AMD Instinct MI325X (amd, DO) job gate-25ad04a8a97490686d1cb31390cfe9ec09ea1414cdb7e152d23bcb76c22dfd46
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2225.5 | 2225.5..2225.5 | 1 | - | - | 2225.5 | 2223.9 | 1.64 (upload_ms_separate) | - | - | 3438.3 | 2055.3 | finite=True, r2=0.325685, rmse=0.685949 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-25ad04a8a97490686d1cb31390cfe9ec09ea1414cdb7e152d23bcb76c22dfd46 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.ARDRegression(alpha_1=1e-06, alpha_2=1e-06, compute_score=False, copy_X=True, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, threshold_lambda=10000, tol=0.001, verbose=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/179502/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### ard / taxi (rows full, shape X 100000x11; Xq 100000x11; y 100000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.ard.taxi.rows=full.json (amd/gate-e557d7fbdd2e0080baf0b4996969a1179c7cc170073b8c07d926adb39af00768)`, ran on AMD Instinct MI325X (amd, DO) job gate-e557d7fbdd2e0080baf0b4996969a1179c7cc170073b8c07d926adb39af00768
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 53.8 | 53.8..53.8 | 1 | - | - | 53.8 | 53.7 | 0.16 (upload_ms_separate) | - | - | 2481.6 | 2055.3 | finite=True, r2=0.909193, rmse=4.799513 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e557d7fbdd2e0080baf0b4996969a1179c7cc170073b8c07d926adb39af00768 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.ARDRegression(alpha_1=1e-06, alpha_2=1e-06, compute_score=False, copy_X=True, fit_intercept=True, lambda_1=1e-06, lambda_2=1e-06, max_iter=300, threshold_lambda=10000, tol=0.001, verbose=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/180028/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### auto-theta / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.auto-theta.synthetic.rows=full.json (amd/gate-b543f05bbab4aaf340dcb16bac03644e7385308dbdd87f0958b89e74753c83bd)`, ran on AMD Instinct MI325X (amd, DO) job gate-b543f05bbab4aaf340dcb16bac03644e7385308dbdd87f0958b89e74753c83bd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 220.8 | 220.8..220.8 | 1 | - | - | 220.8 | - | - (stored whole) | - | - | 2062.0 | 1778.3 | forecast_rmse=1.438912 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b543f05bbab4aaf340dcb16bac03644e7385308dbdd87f0958b89e74753c83bd 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AutoTheta(decomposition_type='multiplicative', season_length=24)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/180615/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### auto-theta / taxi-hourly (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.auto-theta.taxi-hourly.rows=full.json (amd/gate-2f281bb91399a5951d66b94a5479c5e63de70e5faffef4f3a22f0b3eba379963)`, ran on AMD Instinct MI325X (amd, DO) job gate-2f281bb91399a5951d66b94a5479c5e63de70e5faffef4f3a22f0b3eba379963
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1377.9 | 1377.9..1377.9 | 1 | - | - | 1377.9 | - | - (stored whole) | - | - | 2061.7 | 1778.3 | forecast_rmse=49.054628 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2f281bb91399a5951d66b94a5479c5e63de70e5faffef4f3a22f0b3eba379963 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.AutoTheta(decomposition_type='multiplicative', season_length=24)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/181317/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -2240,7 +2765,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.7 ms) = 0.499; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.4 | 0.4..0.4 | 1 | - | - | - | 0.4 | - (stored kernel) | - | - | 2196.9 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-c1a3592fe99e264d7771d8f70a4727d834f6334904fb3f679b6c0b6faba09881 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.4 | 0.4..0.4 | 1 | - | - | - | 0.4 | - (stored kernel) | - | - | 2196.9 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-c1a3592fe99e264d7771d8f70a4727d834f6334904fb3f679b6c0b6faba09881 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-bc406214490ca21e9c2d8e7eb073156b88c525dda1a28985da4b7eab0e425c0c failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.517 | - | - | 0.7 | - (stored kernel) | 0.517 (kernel/kernel) | - | 1785.7 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.2 | 1.2..1.2 | 1 | 0.293 | - | - | 1.2 | - (stored kernel) | 0.293 (kernel/kernel) | - | 2237.5 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.499 | - | - | 0.7 | - (stored kernel) | 0.499 (kernel/kernel) | - | 1785.2 | 224.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2302,7 +2827,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.8 ms) = 0.750; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2397.0 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-ddf54539edfbea7f894d4f108dee90ab74bc97f7b0fd79dfd2d47173dd3f73b2 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2397.0 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-ddf54539edfbea7f894d4f108dee90ab74bc97f7b0fd79dfd2d47173dd3f73b2 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-1eb675a8131576ebde15660e22cd18478a319833c03c913ae07bd12f73be1c7c failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.9 | 0.9..0.9 | 1 | 0.669 | - | - | 0.9 | - (stored kernel) | 0.669 (kernel/kernel) | - | 2099.4 | 541.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.2 | 1.2..1.2 | 1 | 0.504 | - | - | 1.2 | - (stored kernel) | 0.504 (kernel/kernel) | - | 2554.5 | 541.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.8 | 0.8..0.8 | 1 | 0.750 | - | - | 0.8 | - (stored kernel) | 0.750 (kernel/kernel) | - | 2099.3 | 541.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2365,6 +2890,174 @@ inference call, torch-eager-bf16: torch.AvgPool2d(ceil_mode=False, count_include
 
 inference call, torch-compile-bf16: torch.AvgPool2d(ceil_mode=False, count_include_pad=True, kernel_size=2, padding=0, seed=7, stride=2, x=float32[64x64x112x112]); forward(x) (no autograd)(Xq)
 
+### bagging-clf / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bagging-clf.istella.rows=full.json (amd/gate-17baa2d8e2dbc6c17e0a2826a392b069aef99157f0aa94a29730baa7c353cfe2)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1351.3 | 1351.3..1351.3 | 1 | - | - | 1351.3 | 1335.5 | 15.80 (upload_ms_separate) | - | - | 4412.9 | 2323.3 | accuracy=0.941700, logloss=0.149948 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-17baa2d8e2dbc6c17e0a2826a392b069aef99157f0aa94a29730baa7c353cfe2 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.BaggingClassifier(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/184038/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'bootstrap': True, 'bootstrap_features': False, 'estimator': 'DecisionTreeClassifier(max_depth=12, random_state=7)', 'max_features': 1.0, 'max_samples': 1.0, 'n_estimators': 10, 'oob_score': False, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| bootstrap | true |
+| bootstrap_features | false |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeClassifier"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "class_weight": null, "criterion": "gini", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 12, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": 128, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| max_features | 1.0 |
+| max_samples | 1.0 |
+| n_estimators | 10 |
+| oob_score | false |
+| seed | 7 |
+| warm_start | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 84.6 | 84.6..84.6 | 1 | - | - | 84.6 | 83.0 | 1.64 (predict_upload_ms) | - | - | accuracy=0.941700, logloss=0.149948 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.BaggingClassifier(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False); predict(Xq)(Xq)
+
+### bagging-clf / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bagging-clf.taxi.rows=full.json (amd/gate-2ac06622b2b5917f3dcab76f681b383b39f49c3d895b39da0ffc3d78996c9ceb)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 256.8 | 256.8..256.8 | 1 | - | - | 256.8 | 255.9 | 0.92 (upload_ms_separate) | - | - | 2738.6 | 2235.3 | accuracy=0.767490, logloss=0.531007 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2ac06622b2b5917f3dcab76f681b383b39f49c3d895b39da0ffc3d78996c9ceb 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.BaggingClassifier(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/184423/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'bootstrap': True, 'bootstrap_features': False, 'estimator': 'DecisionTreeClassifier(max_depth=12, random_state=7)', 'max_features': 1.0, 'max_samples': 1.0, 'n_estimators': 10, 'oob_score': False, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| bootstrap | true |
+| bootstrap_features | false |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeClassifier"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "class_weight": null, "criterion": "gini", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 12, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": 128, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| max_features | 1.0 |
+| max_samples | 1.0 |
+| n_estimators | 10 |
+| oob_score | false |
+| seed | 7 |
+| warm_start | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 6.6 | 6.6..6.6 | 1 | - | - | 6.6 | 6.5 | 0.11 (predict_upload_ms) | - | - | accuracy=0.767490, logloss=0.531007 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.BaggingClassifier(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False); predict(Xq)(Xq)
+
+### bagging-reg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bagging-reg.istella.rows=full.json (amd/gate-7b3a6d00e7513f068795dbaab1af9a63aaf69fa8d1eec62f1224979851a61182)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2950.0 | 2950.0..2950.0 | 1 | - | - | 2950.0 | 2934.2 | 15.80 (upload_ms_separate) | - | - | 4390.0 | 2243.2 | finite=True, r2=0.520638, rmse=0.578352 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-7b3a6d00e7513f068795dbaab1af9a63aaf69fa8d1eec62f1224979851a61182 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.BaggingRegressor(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/184807/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'bootstrap': True, 'bootstrap_features': False, 'estimator': 'DecisionTreeRegressor(max_depth=12, random_state=7) [ours only: n_bins=1024]', 'max_features': 1.0, 'max_samples': 1.0, 'n_estimators': 10, 'oob_score': False, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=1024 quantile bins per feature (both ours arms; ours' maximum, the nearest to exact) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| bootstrap | true |
+| bootstrap_features | false |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeRegressor"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "criterion": "squared_error", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 12, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": 1024, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| max_features | 1.0 |
+| max_samples | 1.0 |
+| n_estimators | 10 |
+| oob_score | false |
+| seed | 7 |
+| warm_start | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 42.0 | 42.0..42.0 | 1 | - | - | 42.0 | 40.4 | 1.60 (predict_upload_ms) | - | - | finite=True, r2=0.520638, rmse=0.578352 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.BaggingRegressor(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False); predict(Xq)(Xq)
+
+### bagging-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bagging-reg.taxi.rows=full.json (amd/gate-57133cee59b256d04df39b7a08f7e67089e3712a5896cbda8db20908843f1962)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 371.3 | 371.3..371.3 | 1 | - | - | 371.3 | 370.3 | 0.92 (upload_ms_separate) | - | - | 2715.2 | 2235.2 | finite=True, r2=0.933950, rmse=4.093305 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-57133cee59b256d04df39b7a08f7e67089e3712a5896cbda8db20908843f1962 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.BaggingRegressor(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/185201/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'bootstrap': True, 'bootstrap_features': False, 'estimator': 'DecisionTreeRegressor(max_depth=12, random_state=7) [ours only: n_bins=1024]', 'max_features': 1.0, 'max_samples': 1.0, 'n_estimators': 10, 'oob_score': False, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=1024 quantile bins per feature (both ours arms; ours' maximum, the nearest to exact) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| bootstrap | true |
+| bootstrap_features | false |
+| estimator | {"estimator": {"module": "mojolearn._expansion_trees", "name": "DecisionTreeRegressor"}, "library": "mojolearn", "parameters": {"bootstrap": false, "ccp_alpha": 0.0, "criterion": "squared_error", "device": "gpu", "inference_engine": "auto", "max_batch_size": 4096, "max_depth": 12, "max_features": null, "max_leaf_nodes": null, "max_samples": 1.0, "min_impurity_decrease": 0.0, "min_samples_leaf": 1, "min_samples_split": 2, "min_weight_fraction_leaf": 0.0, "monotonic_cst": null, "n_bins": 1024, "n_estimators": 1, "n_streams": 1, "numeric_mode": null, "oob_score": false, "random_state": 7, "splitter": "best"}, "source": "get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size"} |
+| max_features | 1.0 |
+| max_samples | 1.0 |
+| n_estimators | 10 |
+| oob_score | false |
+| seed | 7 |
+| warm_start | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 3.4 | 3.4..3.4 | 1 | - | - | 3.4 | 3.3 | 0.11 (predict_upload_ms) | - | - | finite=True, r2=0.933950, rmse=4.093305 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.BaggingRegressor(bootstrap=True, bootstrap_features=False, estimator={estimator: {module: 'mojolearn._expansion_tr..., max_features=1, max_samples=1, n_estimators=10, oob_score=False, random_state=7, verbose=0, warm_start=False); predict(Xq)(Xq)
+
 ### batchnorm1d / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave4/campaign/measured/algos.batchnorm1d.synthetic.rows=full/board.json (amd/paired-92c32b752176a9b8bf2065554aa750c29dc1d4f2b63043868a88df19cfa6f5d4)`, ran on mojolearn-steward-do-amd
@@ -2373,7 +3066,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.9 ms) = 0.655; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2325.2 | 235669.6 | max_rel_diff_vs_torch_eager_fp32=0.004642, rel_fro_vs_torch_eager_fp32=8.097e-08 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-92c32b752176a9b8bf2065554aa750c29dc1d4f2b63043868a88df19cfa6f5d4 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2325.2 | 235669.6 | max_rel_diff_vs_torch_eager_fp32=0.004642, rel_fro_vs_torch_eager_fp32=8.097e-08 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-92c32b752176a9b8bf2065554aa750c29dc1d4f2b63043868a88df19cfa6f5d4 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-dc75264c079997df32a37cbefb2ebbb0ed433e1d3eae0d13f7d8f02aa3bf0f78 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.b) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.0 | 1.0..1.0 | 1 | 0.599 | - | - | 1.0 | - (stored kernel) | 0.599 (kernel/kernel) | - | 2511.0 | 320.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.5 | 1.5..1.5 | 1 | 0.393 | - | - | 1.5 | - (stored kernel) | 0.393 (kernel/kernel) | - | 2367.4 | 320.0 | max_rel_diff_vs_torch_eager_fp32=0.002793, rel_fro_vs_torch_eager_fp32=5.248e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.9 | 0.9..0.9 | 1 | 0.655 | - | - | 0.9 | - (stored kernel) | 0.655 (kernel/kernel) | - | 2144.3 | 320.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2435,7 +3128,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.2 ms) = 0.524; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2250.4 | 235669.6 | max_rel_diff_vs_torch_eager_fp32=0.001395, rel_fro_vs_torch_eager_fp32=1.249e-07 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-290f77101012de7e3d43ccd22c144fb63e003a06a75d6d6dacf855f451300c5f 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2250.4 | 235669.6 | max_rel_diff_vs_torch_eager_fp32=0.001395, rel_fro_vs_torch_eager_fp32=1.249e-07 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-290f77101012de7e3d43ccd22c144fb63e003a06a75d6d6dacf855f451300c5f 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-13918284f8fff98a12f4bb85245baab9e1d96f42e0bcc31639c4946bcb330134 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.b) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.0 | 1.0..1.0 | 1 | 0.620 | - | - | 1.0 | - (stored kernel) | 0.620 (kernel/kernel) | - | 2397.3 | 250.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.3 | 1.3..1.3 | 1 | 0.466 | - | - | 1.3 | - (stored kernel) | 0.466 (kernel/kernel) | - | 2286.2 | 250.0 | max_rel_diff_vs_torch_eager_fp32=0.001471, rel_fro_vs_torch_eager_fp32=6.868e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.2 | 1.2..1.2 | 1 | 0.524 | - | - | 1.2 | - (stored kernel) | 0.524 (kernel/kernel) | - | 2030.8 | 250.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2548,18 +3241,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### binarizer / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.binarizer.istella.rows=full.json (amd/gate-a2cc6fcd0346d9c63a620a7712e56c9dbf7e1b55f6d53cb2ed642362bdc15386)`, ran on AMD Instinct MI325X (amd, DO) job gate-a2cc6fcd0346d9c63a620a7712e56c9dbf7e1b55f6d53cb2ed642362bdc15386
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 0.1 | 0.1..0.1 | 1 | - | - | 0.1 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x220, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 26.2 | 26.2..26.2 | 1 | unchecked | unchecked | 26.2 | 26.2 | 0.00 (cpu-arm) | - | - | 1508.5 | - | output_shape=100000x220 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 298.8 | 298.8..298.8 | 1 | - | - | 298.8 | 282.3 | 16.43 (upload_ms_separate) | - | - | 4444.6 | 4743.1 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x220, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a2cc6fcd0346d9c63a620a7712e56c9dbf7e1b55f6d53cb2ed642362bdc15386 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.Binarizer(copy=True, threshold=0)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'threshold': 0.0}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/188677/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), Binarizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
@@ -2567,20 +3258,94 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### binarizer / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.binarizer.taxi.rows=full.json (amd/gate-beac98ed1853bc244f5fa93395abf4b7334b1d061bb73efd19d37693cd396eec)`, ran on AMD Instinct MI325X (amd, DO) job gate-beac98ed1853bc244f5fa93395abf4b7334b1d061bb73efd19d37693cd396eec
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 0.1 | 0.1..0.1 | 1 | - | - | 0.1 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x11, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 1.6 | 1.6..1.6 | 1 | unchecked | unchecked | 1.6 | 1.6 | 0.00 (cpu-arm) | - | - | 273.0 | - | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 23.1 | 23.1..23.1 | 1 | - | - | 23.1 | 22.3 | 0.85 (upload_ms_separate) | - | - | 2530.8 | 2055.1 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x11, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-beac98ed1853bc244f5fa93395abf4b7334b1d061bb73efd19d37693cd396eec 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.Binarizer(copy=True, threshold=0)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'threshold': 0.0}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/189383/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), Binarizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### bisecting-kmeans / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bisecting-kmeans.istella.rows=full.json (amd/gate-c94250bd9c2b60bcee5120d7ae1af1b0fb90661789eacc54596a3ffcc7cc8afa)`, ran on AMD Instinct MI325X (amd, DO) job gate-c94250bd9c2b60bcee5120d7ae1af1b0fb90661789eacc54596a3ffcc7cc8afa
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2509.5 | 2509.5..2509.5 | 1 | - | - | 2509.5 | 2493.8 | 15.72 (upload_ms_separate) | - | - | 4915.7 | 1876.0 | n_clusters=8, silhouette=0.118345 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c94250bd9c2b60bcee5120d7ae1af1b0fb90661789eacc54596a3ffcc7cc8afa 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', copy_x=True, init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001, verbose=0)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/189888/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### bisecting-kmeans / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bisecting-kmeans.taxi.rows=full.json (amd/gate-32bb34ca12696bc942bf8fccf383d787c4c359b33b12c4540b36ca4e782d708d)`, ran on AMD Instinct MI325X (amd, DO) job gate-32bb34ca12696bc942bf8fccf383d787c4c359b33b12c4540b36ca4e782d708d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 206.2 | 206.2..206.2 | 1 | - | - | 206.2 | 205.4 | 0.86 (upload_ms_separate) | - | - | 2442.0 | 1876.0 | n_clusters=8, silhouette=0.155357 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-32bb34ca12696bc942bf8fccf383d787c4c359b33b12c4540b36ca4e782d708d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', copy_x=True, init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001, verbose=0)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/190428/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### bootstrap / istella (rows full, shape X 20000x220; Xq 100000x220; y 20000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bootstrap.istella.rows=full.json (amd/gate-fe746b594f7df928343e9a54688fdf89e1b39e46ad80c3607ef5f086ab380329)`, ran on AMD Instinct MI325X (amd, DO) job gate-fe746b594f7df928343e9a54688fdf89e1b39e46ad80c3607ef5f086ab380329
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.2 | 3.2..3.2 | 1 | - | - | 3.2 | - | - (stored whole) | - | - | 3005.1 | 1698.4 | ci_endpoint_diff_over_width_vs_scipy=0.027369, ci_high=0.294850, ci_low=0.271250, standard_error=0.005987 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-fe746b594f7df928343e9a54688fdf89e1b39e46ad80c3607ef5f086ab380329 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/190954/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### bootstrap / taxi (rows full, shape X 20000x11; Xq 100000x11; y 20000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bootstrap.taxi.rows=full.json (amd/gate-d2d6724f3097796373c2a6d9882a1f0277ec2ffcaf99ccc4439a33eb626284ba)`, ran on AMD Instinct MI325X (amd, DO) job gate-d2d6724f3097796373c2a6d9882a1f0277ec2ffcaf99ccc4439a33eb626284ba
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.1 | 3.1..3.1 | 1 | - | - | 3.1 | - | - (stored whole) | - | - | 2112.0 | 1698.4 | ci_endpoint_diff_over_width_vs_scipy=0.005021, ci_high=18.717379, ci_low=18.249411, standard_error=0.117837 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d2d6724f3097796373c2a6d9882a1f0277ec2ffcaf99ccc4439a33eb626284ba 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/191459/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### bpe-train / enwik8 (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.bpe-train.enwik8.rows=full.json (amd/gate-8560d023fb2009b2f3e343b9c35237d1144edf1d469a1d47671b0bf9ea609631)`, ran on AMD Instinct MI325X (amd, DO) job gate-8560d023fb2009b2f3e343b9c35237d1144edf1d469a1d47671b0bf9ea609631
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 47.6 | 47.6..47.6 | 1 | - | - | 47.6 | - | - (stored whole) | - | - | 135.5 | - | jaccard_vs_ours=1.000000, n_tokens=4096 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-8560d023fb2009b2f3e343b9c35237d1144edf1d469a1d47671b0bf9ea609631 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
@@ -2626,20 +3391,54 @@ config: cuML benchmark (RAPIDS), CategoricalNB (https://github.com/rapidsai/cuml
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### cholesky / synthetic (rows full, shape -)
+### cca / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.cholesky.synthetic.rows=full.json (amd/paired-f416682614822772463619595afae92fb6c665d8a39c3a103aed240af2324ae5)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cca.istella.rows=full.json (amd/gate-3f821395f6bfd455a05f9431a194a4ba223b85ddcb046903f0fad2cf079cbf3f)`, ran on AMD Instinct MI325X (amd, DO) job gate-3f821395f6bfd455a05f9431a194a4ba223b85ddcb046903f0fad2cf079cbf3f
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.45 | identical | 164.4 | 164.4..164.4 | 1 | - | - | 164.4 | 158.6 | 5.82 (upload_ms_separate) | - | - | 4023.0 | 1791.8 | relative_residual=2.9e-07 | - | main board, one scored run | wheel | ok (main@9c8c53fb2 amd/paired-f416682614822772463619595afae92fb6c665d8a39c3a103aed240af2324ae5 2026-10-15; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 32.1 | 32.1..32.1 | 1 | 5.119 | - | 113.3 | 32.1 | 81.20 (upload_ms_untimed) | 4.938 (kernel/kernel) | - | 3581.2 | 790.4 | relative_residual=2.519e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-14T17:59:15Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 14285.1 | 14285.1..14285.1 | 1 | - | - | 14285.1 | 14269.4 | 15.70 (upload_ms_separate) | - | - | 6748.1 | 2055.6 | mean_canonical_corr=0.998053 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-3f821395f6bfd455a05f9431a194a4ba223b85ddcb046903f0fad2cf079cbf3f 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CCA(copy=True, max_iter=500, n_components=2, scale=True, tol=1e-06)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/194297/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cca / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cca.taxi.rows=full.json (amd/gate-48c993b9a2641918bea45ba09119205d1665217afd4bc10099f7192a97ad338e)`, ran on AMD Instinct MI325X (amd, DO) job gate-48c993b9a2641918bea45ba09119205d1665217afd4bc10099f7192a97ad338e
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 231.2 | 231.2..231.2 | 1 | - | - | 231.2 | 230.4 | 0.83 (upload_ms_separate) | - | - | 2694.8 | 2055.6 | mean_canonical_corr=0.576863 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-48c993b9a2641918bea45ba09119205d1665217afd4bc10099f7192a97ad338e 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CCA(copy=True, max_iter=500, n_components=2, scale=True, tol=1e-06)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/194828/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cholesky / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cholesky.synthetic.rows=full.json (amd/gate-dba78d4d5c8c0304d81624d540d747aca1abb9001f8546fdb66f6f583474a840)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 171.9 | 171.9..171.9 | 1 | - | - | 171.9 | 166.1 | 5.81 (upload_ms_separate) | - | - | 4038.6 | 2045.8 | relative_residual=2.9e-07 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-dba78d4d5c8c0304d81624d540d747aca1abb9001f8546fdb66f6f583474a840 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-gpu | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 32.1 | 32.1..32.1 | 1 | 5.352 | - | 113.3 | 32.1 | 81.20 (upload_ms_untimed) | 5.171 (kernel/kernel) | - | 3581.2 | 790.4 | relative_residual=2.519e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-15T03:18:57Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
 
 calls:
 - `ours`: `mojolearn.Cholesky(jitter=0, seed=7, arg0=float32[8192x8192])`
 - `torch-gpu`: `torch.linalg_cholesky(jitter=0, seed=7, arg0=float32[8192x8192])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/140556/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/195549/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -2656,21 +3455,61 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | jitter | 0.0 |
 | seed | 7 |
 
-### cnn-clf / synthetic (rows full, shape X 20000x1x28x28; Xq 5000x1x28x28; y 20000; yq 5000)
+### clip-grad-norm / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1647)`, ran on AMD Instinct MI325X (amd, DO) job a1647
-
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.clip-grad-norm.synthetic.rows=full.json (amd/gate-454258617db5dfe79ed815d387b215294d135f936062b6a3930a34dc43dea59c)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@2afa942e3) | identical | 315.0 | 315.0..315.0 | 1 | - | - | 315.0 | - | - (stored whole) | - | - | - | - | accuracy=1.000000 | - | main board, one scored run | - | ok (main@2afa942e3 amd/a1647 2026-10-11; identity vs the nvidia columns: n/a) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 172.9 | 172.9..172.9 | 1 | unchecked | unchecked | - | 172.9 | - (stored kernel) | - | - | 3768.4 | 271.5 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 245.0 | 245.0..245.0 | 1 | unchecked | unchecked | - | 245.0 | - (stored kernel) | - | - | 3778.8 | 198.0 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 251.7 | 251.7..251.7 | 1 | unchecked | unchecked | - | 251.7 | - (stored kernel) | - | - | 5492.3 | 278.6 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 269.9 | 269.9..269.9 | 1 | unchecked | unchecked | - | 269.9 | - (stored kernel) | - | - | 5267.5 | 277.6 | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 9.7 | 9.7..9.7 | 1 | - | - | 9.7 | - | - (stored whole) | - | - | 2193.0 | 1698.3 | norm=4096.267578, norm_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-454258617db5dfe79ed815d387b215294d135f936062b6a3930a34dc43dea59c 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.6 | 0.6..0.6 | 1 | 16.537 | - | - | 0.6 | - (stored kernel) | 16.537 (MIXED ours whole / arm kernel) | - | 2080.1 | 192.0 | norm=4096.267578, norm_rel_diff_vs_ours=0.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.5 | 0.5..0.5 | 1 | 19.034 | - | - | 0.5 | - (stored kernel) | 19.034 (MIXED ours whole / arm kernel) | - | 2126.0 | 192.0 | norm=4096.267578, norm_rel_diff_vs_ours=0.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `torch-eager-fp32`: `torch.clip_grad_norm_(error_if_nonfinite=True, max_norm=1, norm_type=2, seed=7, grad0=float32[2097152], grad1=float32[2097152], grad2=float32[2097152], grad3=float32[2097152], grad4=float32[2097152], grad5=float32[2097152], ...)`
+- `torch-compile-fp32`: `torch.clip_grad_norm_(error_if_nonfinite=True, max_norm=1, norm_type=2, seed=7, grad0=float32[2097152], grad1=float32[2097152], grad2=float32[2097152], grad3=float32[2097152], grad4=float32[2097152], grad5=float32[2097152], ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/196662/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'error_if_nonfinite': True, 'max_norm': 1.0, 'norm_type': 2.0}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| error_if_nonfinite | true | true | true |
+| input_arrays | [{"dtype": "float32", "name": "grad0", "sha256": "425d9661e8b62e734616b0bf717c5fcdfb5abc3f888e56c5d7b717297c594422", "shape": [2097152]}, {"dtype": "float32", "name": "grad1", "sha256": "37057f4a51b95e73e5afeeaa685a7fb7f9edbd8fdc6176906c902c58468a9297", "shape": [2097152]}, {"dtype": "float32", "name": "grad2", "sha256": "add88e4612158853905ae5358cae21284f65f545c27fbbac9f9dbf795dc4eec3", "shape": [2097152]}, {"dtype": "float32", "name": "grad3", "sha256": "f32a261b72214eaa94da23aa5adb9db8f3793e0e251b9ba2b6f28e3b2ddd4440", "shape": [2097152]}, {"dtype": "float32", "name": "grad4", "sha256": "1cf0af23726caf5bd4dfe38418fb839d9e4491389f645774c392162ce2cd9056", "shape": [2097152]}, {"dtype": "float32", "name": "grad5", "sha256": "db3477a5a0a4ccb953cd745959a393d38f40e34b15292d738a6be4153a248d4c", "shape": [2097152]}, {"dtype": "float32", "name": "grad6", "sha256": "057e35f6b7ae65a59d08fb5ffbb75ce09d7df81d6d384a75cddfd8b9b4154198", "shape": [2097152]}, {"dtype": "float32", "name": "grad7", "sha256": "960cc7590264316b918bc39d3a0db48ae4e761e4d5b3412386f71df80b3d1e9d", "shape": [2097152]}] | [{"dtype": "float32", "name": "grad0", "sha256": "425d9661e8b62e734616b0bf717c5fcdfb5abc3f888e56c5d7b717297c594422", "shape": [2097152]}, {"dtype": "float32", "name": "grad1", "sha256": "37057f4a51b95e73e5afeeaa685a7fb7f9edbd8fdc6176906c902c58468a9297", "shape": [2097152]}, {"dtype": "float32", "name": "grad2", "sha256": "add88e4612158853905ae5358cae21284f65f545c27fbbac9f9dbf795dc4eec3", "shape": [2097152]}, {"dtype": "float32", "name": "grad3", "sha256": "f32a261b72214eaa94da23aa5adb9db8f3793e0e251b9ba2b6f28e3b2ddd4440", "shape": [2097152]}, {"dtype": "float32", "name": "grad4", "sha256": "1cf0af23726caf5bd4dfe38418fb839d9e4491389f645774c392162ce2cd9056", "shape": [2097152]}, {"dtype": "float32", "name": "grad5", "sha256": "db3477a5a0a4ccb953cd745959a393d38f40e34b15292d738a6be4153a248d4c", "shape": [2097152]}, {"dtype": "float32", "name": "grad6", "sha256": "057e35f6b7ae65a59d08fb5ffbb75ce09d7df81d6d384a75cddfd8b9b4154198", "shape": [2097152]}, {"dtype": "float32", "name": "grad7", "sha256": "960cc7590264316b918bc39d3a0db48ae4e761e4d5b3412386f71df80b3d1e9d", "shape": [2097152]}] | [{"dtype": "float32", "name": "grad0", "sha256": "425d9661e8b62e734616b0bf717c5fcdfb5abc3f888e56c5d7b717297c594422", "shape": [2097152]}, {"dtype": "float32", "name": "grad1", "sha256": "37057f4a51b95e73e5afeeaa685a7fb7f9edbd8fdc6176906c902c58468a9297", "shape": [2097152]}, {"dtype": "float32", "name": "grad2", "sha256": "add88e4612158853905ae5358cae21284f65f545c27fbbac9f9dbf795dc4eec3", "shape": [2097152]}, {"dtype": "float32", "name": "grad3", "sha256": "f32a261b72214eaa94da23aa5adb9db8f3793e0e251b9ba2b6f28e3b2ddd4440", "shape": [2097152]}, {"dtype": "float32", "name": "grad4", "sha256": "1cf0af23726caf5bd4dfe38418fb839d9e4491389f645774c392162ce2cd9056", "shape": [2097152]}, {"dtype": "float32", "name": "grad5", "sha256": "db3477a5a0a4ccb953cd745959a393d38f40e34b15292d738a6be4153a248d4c", "shape": [2097152]}, {"dtype": "float32", "name": "grad6", "sha256": "057e35f6b7ae65a59d08fb5ffbb75ce09d7df81d6d384a75cddfd8b9b4154198", "shape": [2097152]}, {"dtype": "float32", "name": "grad7", "sha256": "960cc7590264316b918bc39d3a0db48ae4e761e4d5b3412386f71df80b3d1e9d", "shape": [2097152]}] |
+| max_norm | 1.0 | 1.0 | 1.0 |
+| norm_type | 2.0 | 2.0 | 2.0 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### cnn-clf / synthetic (rows full, shape X 20000x1x28x28; Xq 5000x1x28x28; y 20000; yq 5000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cnn-clf.synthetic.rows=full.json (amd/gate-4d2e1f60328fcca777c5a83911ae5e4becbf2fc9c4c14d40898241846140fb02)`, ran on mojolearn-steward-do-amd
+
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 260.7 ms) = 1.170; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 204.1 ms) = 1.494. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 304.9 | 304.9..304.9 | 1 | - | - | 304.9 | 303.8 | 1.17 (upload_ms_separate) | - | - | 2506.4 | 2705.6 | accuracy=1.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4d2e1f60328fcca777c5a83911ae5e4becbf2fc9c4c14d40898241846140fb02 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 204.1 | 204.1..204.1 | 1 | 1.494 | - | 288.8 | 204.1 | 84.75 (upload_ms_untimed) | 1.488 (kernel/kernel) | - | 5825.4 | 423.5 | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 213.5 | 213.5..213.5 | 1 | 1.428 | - | 295.7 | 213.5 | 82.19 (upload_ms_untimed) | 1.423 (kernel/kernel) | - | 5551.3 | 350.0 | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 260.7 | 260.7..260.7 | 1 | 1.170 | - | 343.3 | 260.7 | 82.68 (upload_ms_untimed) | 1.165 (kernel/kernel) | - | 4361.6 | 431.6 | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 291.0 | 291.0..291.0 | 1 | 1.048 | - | 372.3 | 291.0 | 81.26 (upload_ms_untimed) | 1.044 (kernel/kernel) | - | 3851.9 | 431.6 | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+
+calls:
+- `ours`: `mojolearn.CNNClassifier(batch_size=128, betas=[0.9, 0.999], conv_channels=[8, 16], dampening=0, eps=1e-08, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, ...)`
+- `torch-eager-fp32`: `torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0)`
+- `torch-compile-fp32`: `torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0)`
+- `torch-eager-bf16`: `torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0)`
+- `torch-compile-bf16`: `torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/197526/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -2678,7 +3517,63 @@ settings: {'batch_size': 128, 'conv_channels': [8, 16], 'dampening': 0.0, 'input
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (attributes) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 128 | 128 | 128 | 128 | 128 |
+| betas | [0.9, 0.999] | - | - | - | - |
+| conv_channels | [8, 16] | [8, 16] | [8, 16] | [8, 16] | [8, 16] |
+| dampening | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| eps | 1e-08 | - | - | - | - |
+| input_shape | [1, 28, 28] | [1, 28, 28] | [1, 28, 28] | [1, 28, 28] | [1, 28, 28] |
+| kernel_size | 3 | 3 | 3 | 3 | 3 |
+| learning_rate | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 |
+| max_iter | 2 | 2 | 2 | 2 | 2 |
+| momentum | 0.9 | 0.9 | 0.9 | 0.9 | 0.9 |
+| nesterov | false | false | false | false | false |
+| optimizer | "sgd" | "sgd" | "sgd" | "sgd" | "sgd" |
+| pool_size | 2 | 2 | 2 | 2 | 2 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 betas: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-eager-fp32 eps: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-compile-fp32 betas: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-compile-fp32 eps: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-eager-bf16 betas: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-eager-bf16 eps: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-compile-bf16 betas: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+accepted difference: torch-compile-bf16 eps: SGD on both arms: ours' CNNClassifier uses betas/eps only for adam/adamw (_expansion_cnn.py fit), torch.optim.SGD has neither
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 9.2 | 9.2..9.2 | 1 | - | - | 9.2 | 8.9 | 0.31 (predict_upload_ms) | - | - | accuracy=1.000000 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.9 | 0.9..0.9 | 1 | 9.815 | - | 1.4 | 0.9 | 0.51 (predict_upload_ms (the predict inputs' own copy)) | 9.486 (kernel/kernel) | - | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.7 | 0.7..0.7 | 1 | 13.164 | - | 1.2 | 0.7 | 0.55 (predict_upload_ms (the predict inputs' own copy)) | 12.723 (kernel/kernel) | - | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.0 | 1.0..1.0 | 1 | 9.593 | - | 1.6 | 1.0 | 0.60 (predict_upload_ms (the predict inputs' own copy)) | 9.272 (kernel/kernel) | - | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.7 | 0.7..0.7 | 1 | 13.751 | - | 1.4 | 0.7 | 0.68 (predict_upload_ms (the predict inputs' own copy)) | 13.291 (kernel/kernel) | - | accuracy=1.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.CNNClassifier(batch_size=128, betas=[0.9, 0.999], conv_channels=[8, 16], dampening=0, eps=1e-08, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.Conv2d(batch_size=128, conv_channels=[8, 16], dampening=0, input_shape=[1, 28, 28], kernel_size=3, learning_rate=0.01, max_iter=2, momentum=0.9, nesterov=False, optimizer='sgd', pool_size=2, seed=7, shuffle=True, weight_decay=0); predict(Xq)(Xq)
 
 ### complement-nb / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
@@ -2737,35 +3632,31 @@ config: cuML benchmark (RAPIDS), ComplementNB (https://github.com/rapidsai/cuml/
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### connected-components / istella (rows full, shape -)
+### connected-components / istella (rows full, shape X 100000x220; indices 1521510; indices2 311818; indptr 100001; indptr2 100001; y 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a0870)`, ran on AMD Instinct MI325X (amd, DO) job a0870
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.connected-components.istella.rows=full.json (amd/gate-686ad405ffe02c89b0564a381cbcdb86247545b65e30b19bdce5d7279c49d36a)`, ran on AMD Instinct MI325X (amd, DO) job gate-686ad405ffe02c89b0564a381cbcdb86247545b65e30b19bdce5d7279c49d36a
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@4df610f3b) | identical | 0.7 | 0.7..0.7 | 1 | - | - | 0.7 | - | - (stored whole) | - | - | - | - | n_components=81 | - | main board, one scored run | - | ok (main@4df610f3b amd/a0870 2026-10-08; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.9 | 2.9..2.9 | 1 | - | - | 2.9 | - | - (stored whole) | - | - | 2162.3 | 1698.4 | ari_vs_networkx=1.000000, n_components=523, partition_disagreement_vs_networkx=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-686ad405ffe02c89b0564a381cbcdb86247545b65e30b19bdce5d7279c49d36a 2026-10-27; identity vs the nvidia columns: n/a) |
 
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/199158/vram_* bytes for this pid at the round's end (not a peak)
 
-mismatch: ours takes the CSR graph as an (indptr, indices, n) tuple and uploads it inside the clock (the 2026-10-08 CSR entries; before, a dense n x n adjacency built before the clock); networkx and cuGraph take the graph itself
-
-mismatch: opponents withheld: the lane settings at this tree's HEAD differ from the settings release-board-resume-r2 recorded for its opponent race (an opponent job must score them again)
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### connected-components / taxi (rows full, shape -)
+### connected-components / taxi (rows full, shape X 100000x11; indices 1258298; indices2 271380; indptr 100001; indptr2 100001; y 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a0870)`, ran on AMD Instinct MI325X (amd, DO) job a0870
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.connected-components.taxi.rows=full.json (amd/gate-1033f76c6baba0ab97c68fa73e296ad4b4a68b8cea4a0d81b22e60ee6cfe8707)`, ran on AMD Instinct MI325X (amd, DO) job gate-1033f76c6baba0ab97c68fa73e296ad4b4a68b8cea4a0d81b22e60ee6cfe8707
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@4df610f3b) | identical | 0.6 | 0.6..0.6 | 1 | - | - | 0.6 | - | - (stored whole) | - | - | - | - | n_components=588 | - | main board, one scored run | - | ok (main@4df610f3b amd/a0870 2026-10-08; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 2080.1 | 1698.4 | ari_vs_networkx=1.000000, n_components=4070, partition_disagreement_vs_networkx=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1033f76c6baba0ab97c68fa73e296ad4b4a68b8cea4a0d81b22e60ee6cfe8707 2026-10-27; identity vs the nvidia columns: n/a) |
 
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/199603/vram_* bytes for this pid at the round's end (not a peak)
 
-mismatch: ours takes the CSR graph as an (indptr, indices, n) tuple and uploads it inside the clock (the 2026-10-08 CSR entries; before, a dense n x n adjacency built before the clock); networkx and cuGraph take the graph itself
-
-mismatch: opponents withheld: the lane settings at this tree's HEAD differ from the settings release-board-resume-r2 recorded for its opponent race (an opponent job must score them again)
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
@@ -2777,7 +3668,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.4 ms) = 5.128; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 7.1 | 7.1..7.1 | 1 | - | - | - | 7.1 | - (stored kernel) | - | - | 3022.2 | 239248.5 | max_rel_diff_vs_torch_eager_fp32=0.318264, rel_fro_vs_torch_eager_fp32=3.948e-07 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-ea5d7efc1138eebc85d5e289358420f00569a685aeb29734913c6c8caebbb381 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 7.1 | 7.1..7.1 | 1 | - | - | - | 7.1 | - (stored kernel) | - | - | 3022.2 | 239248.5 | max_rel_diff_vs_torch_eager_fp32=0.318264, rel_fro_vs_torch_eager_fp32=3.948e-07 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-ea5d7efc1138eebc85d5e289358420f00569a685aeb29734913c6c8caebbb381 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-969b8d0b3e7b648d57442bd2c7a3e2d32d4b446f39e475a9bebf2ba07415245d failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.c) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.9 | 1.9..1.9 | 1 | 3.693 | - | - | 1.9 | - (stored kernel) | 3.693 (kernel/kernel) | - | 3210.3 | 896.6 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.6 | 2.6..2.6 | 1 | 2.742 | - | - | 2.6 | - (stored kernel) | 2.742 (kernel/kernel) | - | 2879.6 | 896.6 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.4 | 1.4..1.4 | 1 | 5.128 | - | - | 1.4 | - (stored kernel) | 5.128 (kernel/kernel) | - | 3456.1 | 832.4 | max_rel_diff_vs_torch_eager_fp32=3418.035805, rel_fro_vs_torch_eager_fp32=0.004377 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2843,7 +3734,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.5 ms) = 4.127; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 6.4 | 6.4..6.4 | 1 | - | - | - | 6.4 | - (stored kernel) | - | - | 2627.0 | 239248.5 | max_rel_diff_vs_torch_eager_fp32=0.372529, rel_fro_vs_torch_eager_fp32=3.307e-07 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-1887dd5be5a0351a8e0653c306ff4824c626d38a40e1b0625e2d1638709f7d65 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 6.4 | 6.4..6.4 | 1 | - | - | - | 6.4 | - (stored kernel) | - | - | 2627.0 | 239248.5 | max_rel_diff_vs_torch_eager_fp32=0.372529, rel_fro_vs_torch_eager_fp32=3.307e-07 | - | main board, one scored run | wheel | ok (main@3c60869cf amd/paired-1887dd5be5a0351a8e0653c306ff4824c626d38a40e1b0625e2d1638709f7d65 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-a0f12a70fb93c7ba019ee4874ccbfd1ce3ef05d2a81f23f218846f20a68e71b4 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.c) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.2 | 1.2..1.2 | 1 | 5.487 | - | - | 1.2 | - (stored kernel) | 5.487 (kernel/kernel) | - | 2601.7 | 347.4 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.0 | 2.0..2.0 | 1 | 3.169 | - | - | 2.0 | - (stored kernel) | 3.169 (kernel/kernel) | - | 2481.4 | 347.4 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.5 | 1.5..1.5 | 1 | 4.127 | - | - | 1.5 | - (stored kernel) | 4.127 (kernel/kernel) | - | 2634.0 | 320.8 | max_rel_diff_vs_torch_eager_fp32=3418.486565, rel_fro_vs_torch_eager_fp32=0.003382 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2901,6 +3792,225 @@ inference call, torch-eager-bf16: torch.Conv2d(bias=True, dilation=1, groups=1, 
 
 inference call, torch-compile-bf16: torch.Conv2d(bias=True, dilation=1, groups=1, in_channels=64, kernel_size=3, out_channels=64, padding=1, padding_mode='zeros', seed=7, stride=1, x=float32[64x64x56x56], bias=float32[64], weight=float32[64x64x3x3]); forward(x) (no autograd)(Xq)
 
+### cross-entropy / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-entropy.synthetic.rows=full.json (amd/gate-beed67b9904fc5dbd838d521ac3dbb9ba842360adb8ff25b5782867189f6d988)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 136.2 | 136.2..136.2 | 1 | - | - | 136.2 | - | - (stored whole) | - | - | 3026.3 | 2387.8 | loss_rel_err_vs_fp64=4.564e-08 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-beed67b9904fc5dbd838d521ac3dbb9ba842360adb8ff25b5782867189f6d988 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 43.3 | 43.3..43.3 | 1 | 3.143 | - | - | 43.3 | - (stored kernel) | 3.143 (MIXED ours whole / arm kernel) | - | 2593.4 | 1024.1 | grad_max_rel_diff_vs_ours=4.191e-09, loss_rel_err_vs_fp64=4.564e-08 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 35.9 | 35.9..35.9 | 1 | 3.796 | - | - | 35.9 | - (stored kernel) | 3.796 (MIXED ours whole / arm kernel) | - | 2690.2 | 512.1 | grad_max_rel_diff_vs_ours=7.451e-09, loss_rel_err_vs_fp64=4.564e-08 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch.cross_entropy(ignore_index=-100, label_smoothing=0, reduction='mean', seed=7, logits=float32[8192x8192], targets=int64[8192])`
+- `torch-compile-fp32`: `torch.cross_entropy(ignore_index=-100, label_smoothing=0, reduction='mean', seed=7, logits=float32[8192x8192], targets=int64[8192])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/202310/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'ignore_index': -100, 'label_smoothing': 0.0, 'reduction': 'mean'}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| ignore_index | -100 | -100 | -100 |
+| input_arrays | [{"dtype": "float32", "name": "logits", "sha256": "47063fcd6fadbe8a253138469e39ce8e3830b8db6162ed7f3837837b34fe2a6d", "shape": [8192, 8192]}, {"dtype": "int64", "name": "targets", "sha256": "2f22fbf61120a42f9505f8f6c7752f155a2ae113555f5472cc0821fab92c23e5", "shape": [8192]}] | [{"dtype": "float32", "name": "logits", "sha256": "47063fcd6fadbe8a253138469e39ce8e3830b8db6162ed7f3837837b34fe2a6d", "shape": [8192, 8192]}, {"dtype": "int64", "name": "targets", "sha256": "2f22fbf61120a42f9505f8f6c7752f155a2ae113555f5472cc0821fab92c23e5", "shape": [8192]}] | [{"dtype": "float32", "name": "logits", "sha256": "47063fcd6fadbe8a253138469e39ce8e3830b8db6162ed7f3837837b34fe2a6d", "shape": [8192, 8192]}, {"dtype": "int64", "name": "targets", "sha256": "2f22fbf61120a42f9505f8f6c7752f155a2ae113555f5472cc0821fab92c23e5", "shape": [8192]}] |
+| label_smoothing | 0.0 | 0.0 | 0.0 |
+| reduction | "mean" | "mean" | "mean" |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### cross-val-predict / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-val-predict.istella.rows=full.json (amd/gate-08f4b4c807069a74cdace7de2e2e351a3861cdf30f586a14c1e74fb1cb7e7a2d)`, ran on AMD Instinct MI325X (amd, DO) job gate-08f4b4c807069a74cdace7de2e2e351a3861cdf30f586a14c1e74fb1cb7e7a2d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 13056.5 | 13056.5..13056.5 | 1 | - | - | 13056.5 | - | - (stored whole) | - | - | 4066.7 | 1936.2 | max_pred_diff_over_std_y_vs_sklearn=0.0002496, r2_held_out=0.334495 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-08f4b4c807069a74cdace7de2e2e351a3861cdf30f586a14c1e74fb1cb7e7a2d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/202976/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cross-val-predict / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-val-predict.taxi.rows=full.json (amd/gate-4a8ce49ba1c1b824eb9eb38e8cc5cbf50c5fd7bcc6a4e554a9fef38d56c48c01)`, ran on AMD Instinct MI325X (amd, DO) job gate-4a8ce49ba1c1b824eb9eb38e8cc5cbf50c5fd7bcc6a4e554a9fef38d56c48c01
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 696.0 | 696.0..696.0 | 1 | - | - | 696.0 | - | - (stored whole) | - | - | 2392.3 | 1936.0 | max_pred_diff_over_std_y_vs_sklearn=0.043346, r2_held_out=0.938477 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4a8ce49ba1c1b824eb9eb38e8cc5cbf50c5fd7bcc6a4e554a9fef38d56c48c01 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/203552/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cross-val-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-val-score.istella.rows=full.json (amd/gate-b4205433fd7b72ff3561a7affd27b705751bc80b829a79fa4a1884dc0a5a697d)`, ran on AMD Instinct MI325X (amd, DO) job gate-b4205433fd7b72ff3561a7affd27b705751bc80b829a79fa4a1884dc0a5a697d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 12928.6 | 12928.6..12928.6 | 1 | - | - | 12928.6 | - | - (stored whole) | - | - | 4429.3 | 2293.3 | max_fold_score_diff_vs_sklearn=0.018112, mean_r2=0.334732 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b4205433fd7b72ff3561a7affd27b705751bc80b829a79fa4a1884dc0a5a697d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/204114/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cross-val-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-val-score.taxi.rows=full.json (amd/gate-f52eb8e023887b528eeccae1477b983199b42d3d289de0a54349cd85e40e9cd0)`, ran on AMD Instinct MI325X (amd, DO) job gate-f52eb8e023887b528eeccae1477b983199b42d3d289de0a54349cd85e40e9cd0
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 735.2 | 735.2..735.2 | 1 | - | - | 735.2 | - | - (stored whole) | - | - | 2748.4 | 2293.2 | max_fold_score_diff_vs_sklearn=5.96e-08, mean_r2=0.937956 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-f52eb8e023887b528eeccae1477b983199b42d3d289de0a54349cd85e40e9cd0 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/204737/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cross-validate / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-validate.istella.rows=full.json (amd/gate-94c5e4e5fdd10563484f66ce2e60d4669e935399447db57eea8cfb09fdcbe419)`, ran on AMD Instinct MI325X (amd, DO) job gate-94c5e4e5fdd10563484f66ce2e60d4669e935399447db57eea8cfb09fdcbe419
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 21198.7 | 21198.7..21198.7 | 1 | - | - | 21198.7 | - | - (stored whole) | - | - | 4253.0 | 2115.6 | max_fold_score_diff_vs_sklearn=7.153e-06, mean_test_r2=0.334716, mean_train_r2=0.338075 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-94c5e4e5fdd10563484f66ce2e60d4669e935399447db57eea8cfb09fdcbe419 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/205298/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### cross-validate / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.cross-validate.taxi.rows=full.json (amd/gate-ca180d5ad47f164a4cd1a275cdcd3eddd6924a7d4414bf85ed2fa923f91c3b30)`, ran on AMD Instinct MI325X (amd, DO) job gate-ca180d5ad47f164a4cd1a275cdcd3eddd6924a7d4414bf85ed2fa923f91c3b30
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1154.7 | 1154.7..1154.7 | 1 | - | - | 1154.7 | - | - (stored whole) | - | - | 2575.8 | 2115.5 | max_fold_score_diff_vs_sklearn=0.0001654, mean_test_r2=0.937956, mean_train_r2=0.938807 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ca180d5ad47f164a4cd1a275cdcd3eddd6924a7d4414bf85ed2fa923f91c3b30 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/206085/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### croston-optimized / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.croston-optimized.synthetic.rows=full.json (amd/gate-991bc5af08ddf4747e95f1d88043b387e4b0a83fe3d4296a6f278cb42582b705)`, ran on AMD Instinct MI325X (amd, DO) job gate-991bc5af08ddf4747e95f1d88043b387e4b0a83fe3d4296a6f278cb42582b705
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 16.9 | 16.9..16.9 | 1 | - | - | 16.9 | - | - (stored whole) | - | - | 2061.2 | 1698.3 | forecast_rmse=1.675538 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-991bc5af08ddf4747e95f1d88043b387e4b0a83fe3d4296a6f278cb42582b705 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CrostonOptimized()`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/206726/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### croston-optimized / taxi-hourly (rows full, shape Yfit 48x1392; Yhold 48x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.croston-optimized.taxi-hourly.rows=full.json (amd/gate-be56cbcfe71d8a098e4fc20ac9f295ab442b1d2d8e842fa26cb01d7241d92d1f)`, ran on AMD Instinct MI325X (amd, DO) job gate-be56cbcfe71d8a098e4fc20ac9f295ab442b1d2d8e842fa26cb01d7241d92d1f
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 22.7 | 22.7..22.7 | 1 | - | - | 22.7 | - | - (stored whole) | - | - | 2061.2 | 1698.3 | forecast_rmse=1.398253 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-be56cbcfe71d8a098e4fc20ac9f295ab442b1d2d8e842fa26cb01d7241d92d1f 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CrostonOptimized()`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/207425/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### croston-sba / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.croston-sba.synthetic.rows=full.json (amd/gate-927a4749c9208d5443c48308167454013f4bafd45290f5476f07529088c41e7e)`, ran on AMD Instinct MI325X (amd, DO) job gate-927a4749c9208d5443c48308167454013f4bafd45290f5476f07529088c41e7e
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 9.6 | 9.6..9.6 | 1 | - | - | 9.6 | - | - (stored whole) | - | - | 2061.2 | 1698.3 | forecast_rmse=1.674465 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-927a4749c9208d5443c48308167454013f4bafd45290f5476f07529088c41e7e 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CrostonSBA()`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/208115/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### croston-sba / taxi-hourly (rows full, shape Yfit 48x1392; Yhold 48x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.croston-sba.taxi-hourly.rows=full.json (amd/gate-58e3c8148aa4f5dbc616281e762f53230405af9d9986efa40f1fafa4065a044f)`, ran on AMD Instinct MI325X (amd, DO) job gate-58e3c8148aa4f5dbc616281e762f53230405af9d9986efa40f1fafa4065a044f
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 9.6 | 9.6..9.6 | 1 | - | - | 9.6 | - | - (stored whole) | - | - | 2060.8 | 1698.3 | forecast_rmse=1.386677 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-58e3c8148aa4f5dbc616281e762f53230405af9d9986efa40f1fafa4065a044f 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CrostonSBA()`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/208805/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### croston / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.croston.synthetic.rows=full.json (amd/gate-21248eff42fedfc15115459fb0f287ee96b7a38b79f4edcae8f2827af1ac4286)`, ran on AMD Instinct MI325X (amd, DO) job gate-21248eff42fedfc15115459fb0f287ee96b7a38b79f4edcae8f2827af1ac4286
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 9.7 | 9.7..9.7 | 1 | - | - | 9.7 | - | - (stored whole) | - | - | 2060.8 | 1698.3 | forecast_rmse=1.674840 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-21248eff42fedfc15115459fb0f287ee96b7a38b79f4edcae8f2827af1ac4286 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CrostonClassic()`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/209504/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### croston / taxi-hourly (rows full, shape Yfit 48x1392; Yhold 48x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.croston.taxi-hourly.rows=full.json (amd/gate-415ab5ca9a97bba50fb4b19134cd2b793243578e9fcfbbe00bf828093a4af234)`, ran on AMD Instinct MI325X (amd, DO) job gate-415ab5ca9a97bba50fb4b19134cd2b793243578e9fcfbbe00bf828093a4af234
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 9.5 | 9.5..9.5 | 1 | - | - | 9.5 | - | - (stored whole) | - | - | 2061.0 | 1698.3 | forecast_rmse=1.390261 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-415ab5ca9a97bba50fb4b19134cd2b793243578e9fcfbbe00bf828093a4af234 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.CrostonClassic()`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/210199/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
 ### damped-ets / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1679)`, ran on AMD Instinct MI325X (amd, DO) job a1679
@@ -2941,26 +4051,248 @@ config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### dropout2d / synthetic (rows full, shape -)
+### decision-tree-clf / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd-wave6/campaign/measured/algos.dropout2d.synthetic.rows=full/board.json (amd/paired-83c79858ab104ed99cc6702e9e6e73017e0a5a67b5f99086ff8470099d7f0694)`, ran on mojolearn-steward-do-amd
-
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 0.7 ms) = 0.397. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.decision-tree-clf.istella.rows=full.json (amd/gate-5a6cc0eb587e3320d9c45553763d8fc62938e98ea244ada583e86097c650bbdd)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.3 | 0.3..0.3 | 1 | - | - | - | 0.3 | - (stored kernel) | - | - | 2251.6 | 235669.5 | dropout_contract_relative_error=5.422e-08, dropout_probability_z=0.708333, dropped_channel_fraction=0.096680, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | main board, one scored run | wheel | ok (main@0f3f674f2 amd/paired-83c79858ab104ed99cc6702e9e6e73017e0a5a67b5f99086ff8470099d7f0694 2026-10-14; identity vs the nvidia columns: n/a) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.397 | - | - | 0.7 | - (stored kernel) | 0.397 (kernel/kernel) | - | 1849.1 | 250.0 | dropout_contract_relative_error=5.422e-08, dropout_probability_z=1.489583, dropped_channel_fraction=0.093018, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.387 | - | - | 0.7 | - (stored kernel) | 0.387 (kernel/kernel) | - | 1977.2 | 250.0 | dropout_contract_relative_error=5.421e-08, dropout_probability_z=1.791667, dropped_channel_fraction=0.108398, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3845.1 | 3845.1..3845.1 | 1 | - | - | 3845.1 | 3828.3 | 16.84 (upload_ms_separate) | - | - | 3593.8 | 2317.2 | accuracy=0.935000, logloss=0.758303 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-5a6cc0eb587e3320d9c45553763d8fc62938e98ea244ada583e86097c650bbdd 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.DecisionTreeClassifier(bootstrap=False, ccp_alpha=0, criterion='gini', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/212534/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'ccp_alpha': 0.0, 'criterion': 'gini', 'max_depth': 16, 'max_features': 1.0, 'min_impurity_decrease': 0.0, 'min_samples_leaf': 1, 'min_samples_split': 2, 'min_weight_fraction_leaf': 0.0, 'random_state': 7, 'splitter': 'best'}. Rows: None. Timed: None.
+
+mismatch: cuml-gpu is cuML's forest with one tree, no bootstrap, every feature (no GPU single-tree class exists), n_bins=128 as ours
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size) |
+| bootstrap | false |
+| ccp_alpha | 0.0 |
+| class_weight | null |
+| criterion | "gini" |
+| inference_engine | "auto" |
+| max_batch_size | 4096 |
+| max_bin | 128 |
+| max_depth | 16 |
+| max_features | 1.0 |
+| max_leaves | null |
+| max_samples | 1.0 |
+| min_samples_leaf | 1 |
+| min_samples_split | 2 |
+| min_split_gain | 0.0 |
+| min_weight_fraction_leaf | 0.0 |
+| monotonic_cst | null |
+| n_estimators | 1 |
+| n_streams | 1 |
+| oob_score | false |
+| seed | 7 |
+| splitter | "best" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 417.2 | 417.2..417.2 | 1 | - | - | 417.2 | 415.6 | 1.60 (predict_upload_ms) | - | - | accuracy=0.935000, logloss=0.758303 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.DecisionTreeClassifier(bootstrap=False, ccp_alpha=0, criterion='gini', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...); predict(Xq)(Xq)
+
+### decision-tree-clf / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.decision-tree-clf.taxi.rows=full.json (amd/gate-e87300a71b3300e5a1db3f00bcb8956e3832c7f8bcfd4de50d07974cd64a2db2)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1830.4 | 1830.4..1830.4 | 1 | - | - | 1830.4 | 1829.5 | 0.93 (upload_ms_separate) | - | - | 2717.1 | 2233.2 | accuracy=0.756300, logloss=1.202243 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e87300a71b3300e5a1db3f00bcb8956e3832c7f8bcfd4de50d07974cd64a2db2 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.DecisionTreeClassifier(bootstrap=False, ccp_alpha=0, criterion='gini', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/212919/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'ccp_alpha': 0.0, 'criterion': 'gini', 'max_depth': 16, 'max_features': 1.0, 'min_impurity_decrease': 0.0, 'min_samples_leaf': 1, 'min_samples_split': 2, 'min_weight_fraction_leaf': 0.0, 'random_state': 7, 'splitter': 'best'}. Rows: None. Timed: None.
+
+mismatch: cuml-gpu is cuML's forest with one tree, no bootstrap, every feature (no GPU single-tree class exists), n_bins=128 as ours
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size) |
+| bootstrap | false |
+| ccp_alpha | 0.0 |
+| class_weight | null |
+| criterion | "gini" |
+| inference_engine | "auto" |
+| max_batch_size | 4096 |
+| max_bin | 128 |
+| max_depth | 16 |
+| max_features | 1.0 |
+| max_leaves | null |
+| max_samples | 1.0 |
+| min_samples_leaf | 1 |
+| min_samples_split | 2 |
+| min_split_gain | 0.0 |
+| min_weight_fraction_leaf | 0.0 |
+| monotonic_cst | null |
+| n_estimators | 1 |
+| n_streams | 1 |
+| oob_score | false |
+| seed | 7 |
+| splitter | "best" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 34.6 | 34.6..34.6 | 1 | - | - | 34.6 | 34.5 | 0.11 (predict_upload_ms) | - | - | accuracy=0.756300, logloss=1.202243 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.DecisionTreeClassifier(bootstrap=False, ccp_alpha=0, criterion='gini', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...); predict(Xq)(Xq)
+
+### decision-tree-reg / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.decision-tree-reg.istella.rows=full.json (amd/gate-873e1c5cc6537f171e47bce3b70edfd6dde040ba8e8655c66fe87342c3870f21)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2476.1 | 2476.1..2476.1 | 1 | - | - | 2476.1 | 2460.3 | 15.79 (upload_ms_separate) | - | - | 3541.0 | 2237.1 | finite=True, r2=0.368402, rmse=0.663867 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-873e1c5cc6537f171e47bce3b70edfd6dde040ba8e8655c66fe87342c3870f21 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.DecisionTreeRegressor(bootstrap=False, ccp_alpha=0, criterion='squared_error', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/213312/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'ccp_alpha': 0.0, 'criterion': 'squared_error', 'max_depth': 16, 'max_features': 1.0, 'min_impurity_decrease': 0.0, 'min_samples_leaf': 1, 'min_samples_split': 2, 'min_weight_fraction_leaf': 0.0, 'random_state': 7, 'splitter': 'best'}. Rows: None. Timed: None.
+
+mismatch: cuml-gpu is cuML's forest with one tree (see decision-tree-clf)
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=1024 quantile bins per feature (both ours arms and cuML; ours' maximum, the nearest to exact) (not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size) |
+| bootstrap | false |
+| ccp_alpha | 0.0 |
+| criterion | "squared_error" |
+| inference_engine | "auto" |
+| max_batch_size | 4096 |
+| max_bin | 1024 |
+| max_depth | 16 |
+| max_features | 1.0 |
+| max_leaves | null |
+| max_samples | 1.0 |
+| min_samples_leaf | 1 |
+| min_samples_split | 2 |
+| min_split_gain | 0.0 |
+| min_weight_fraction_leaf | 0.0 |
+| monotonic_cst | null |
+| n_estimators | 1 |
+| n_streams | 1 |
+| oob_score | false |
+| seed | 7 |
+| splitter | "best" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 208.2 | 208.2..208.2 | 1 | - | - | 208.2 | 206.6 | 1.60 (predict_upload_ms) | - | - | finite=True, r2=0.368402, rmse=0.663867 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.DecisionTreeRegressor(bootstrap=False, ccp_alpha=0, criterion='squared_error', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...); predict(Xq)(Xq)
+
+### decision-tree-reg / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.decision-tree-reg.taxi.rows=full.json (amd/gate-9702fb3f92855e0de395d2fc8b22113511281f2d0d375f0d04e8baa694625e23)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 177.5 | 177.5..177.5 | 1 | - | - | 177.5 | 176.6 | 0.93 (upload_ms_separate) | - | - | 2665.0 | 2233.1 | finite=True, r2=0.891592, rmse=5.244053 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9702fb3f92855e0de395d2fc8b22113511281f2d0d375f0d04e8baa694625e23 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.DecisionTreeRegressor(bootstrap=False, ccp_alpha=0, criterion='squared_error', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/213696/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'ccp_alpha': 0.0, 'criterion': 'squared_error', 'max_depth': 16, 'max_features': 1.0, 'min_impurity_decrease': 0.0, 'min_samples_leaf': 1, 'min_samples_split': 2, 'min_weight_fraction_leaf': 0.0, 'random_state': 7, 'splitter': 'best'}. Rows: None. Timed: None.
+
+mismatch: cuml-gpu is cuML's forest with one tree (see decision-tree-clf)
+
+mismatch: ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=1024 quantile bins per feature (both ours arms and cuML; ours' maximum, the nearest to exact) (not a scikit-learn parameter), scikit-learn on exact thresholds
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params + forest settings _cfg n_estimators,bootstrap,max_samples,oob_score,n_streams,max_batch_size) |
+| bootstrap | false |
+| ccp_alpha | 0.0 |
+| criterion | "squared_error" |
+| inference_engine | "auto" |
+| max_batch_size | 4096 |
+| max_bin | 1024 |
+| max_depth | 16 |
+| max_features | 1.0 |
+| max_leaves | null |
+| max_samples | 1.0 |
+| min_samples_leaf | 1 |
+| min_samples_split | 2 |
+| min_split_gain | 0.0 |
+| min_weight_fraction_leaf | 0.0 |
+| monotonic_cst | null |
+| n_estimators | 1 |
+| n_streams | 1 |
+| oob_score | false |
+| seed | 7 |
+| splitter | "best" |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 16.6 | 16.6..16.6 | 1 | - | - | 16.6 | 16.5 | 0.11 (predict_upload_ms) | - | - | finite=True, r2=0.891592, rmse=5.244053 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.DecisionTreeRegressor(bootstrap=False, ccp_alpha=0, criterion='squared_error', device='gpu', inference_engine='auto', max_batch_size=4096, max_depth=16, max_features=1, max_samples=1, min_impurity_decrease=0, min_samples_leaf=1, ...); predict(Xq)(Xq)
+
+### dropout2d / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.dropout2d.synthetic.rows=full.json (amd/gate-6bdc1c677078eb039f068f5bf6836e3ce6ec94044f9aad16d9200aa5837c2b42)`, ran on mojolearn-steward-do-amd
+
+headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 0.7 ms) = 0.611. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 0.4 | 0.4..0.4 | 1 | - | - | - | 0.4 | - (stored kernel) | - | - | 2307.1 | 1698.3 | dropout_contract_relative_error=5.422e-08, dropout_probability_z=0.708333, dropped_channel_fraction=0.096680, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-6bdc1c677078eb039f068f5bf6836e3ce6ec94044f9aad16d9200aa5837c2b42 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.594 | - | - | 0.7 | - (stored kernel) | 0.594 (kernel/kernel) | - | 1977.2 | 250.0 | dropout_contract_relative_error=5.421e-08, dropout_probability_z=1.791667, dropped_channel_fraction=0.108398, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | - | ok (stored (measured 2026-10-14T04:56:39Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.611 | - | - | 0.7 | - (stored kernel) | 0.611 (kernel/kernel) | - | 1849.1 | 250.0 | dropout_contract_relative_error=5.422e-08, dropout_probability_z=1.489583, dropped_channel_fraction=0.093018, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | - | ok (stored (measured 2026-10-14T04:56:39Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
 
 calls:
 - `ours`: `mojolearn.Dropout2d(p=0.1, random_state=7, x=float32[64x64x56x56])`
-- `torch-eager-fp32`: `torch.Dropout2d(p=0.1, seed=7, x=float32[64x64x56x56])`
 - `torch-compile-fp32`: `torch.Dropout2d(p=0.1, seed=7, x=float32[64x64x56x56])`
+- `torch-eager-fp32`: `torch.Dropout2d(p=0.1, seed=7, x=float32[64x64x56x56])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/190582/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/215007/vram_* bytes for this pid at the round's end (not a peak)
 
-memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+memory, torch-compile-fp32, torch-eager-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
 settings: {'p': 0.1}. Rows: None. Timed: None.
 
@@ -2968,41 +4300,33 @@ config: the board's own settings (no NVIDIA harness entry)
 
 parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
 
-| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
-|---|---||---|---||---|---|
-| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
-| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "cd7e0a7d8c0c594cca519b9cf49c8f086513282644cb8b6c06771dcb98504f2d", "shape": [64, 64, 56, 56]}] | [{"dtype": "float32", "name": "x", "sha256": "cd7e0a7d8c0c594cca519b9cf49c8f086513282644cb8b6c06771dcb98504f2d", "shape": [64, 64, 56, 56]}] | [{"dtype": "float32", "name": "x", "sha256": "cd7e0a7d8c0c594cca519b9cf49c8f086513282644cb8b6c06771dcb98504f2d", "shape": [64, 64, 56, 56]}] |
-| p | 0.1 | 0.1 | 0.1 |
-| seed | 7 | 7 | 7 |
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (declared) |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "cd7e0a7d8c0c594cca519b9cf49c8f086513282644cb8b6c06771dcb98504f2d", "shape": [64, 64, 56, 56]}] |
+| p | 0.1 |
+| seed | 7 |
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.44 | Xq | - | 0.1 | 0.1..0.1 | 1 | - | - | - | 0.1 | - (stored kernel) | - | - | dropout_contract_relative_error=5.422e-08, dropout_probability_z=0.708333, dropped_channel_fraction=0.096680, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.1 | 0.1..0.1 | 1 | 0.827 | - | - | 0.1 | - (stored kernel) | 0.827 (kernel/kernel) | - | dropout_contract_relative_error=5.422e-08, dropout_probability_z=1.489583, dropped_channel_fraction=0.093018, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | ok |
-| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.1 | 0.1..0.1 | 1 | 0.660 | - | - | 0.1 | - (stored kernel) | 0.660 (kernel/kernel) | - | dropout_contract_relative_error=5.421e-08, dropout_probability_z=1.791667, dropped_channel_fraction=0.108398, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | ok |
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 0.2 | 0.2..0.2 | 1 | - | - | - | 0.2 | - (stored kernel) | - | - | dropout_contract_relative_error=5.422e-08, dropout_probability_z=0.708333, dropped_channel_fraction=0.096680, expected_dropout_probability=0.100000, identifiable_channels=4096 | - | LIKE-FOR-LIKE-SPAN | ok |
 
 inference call, ours: mojolearn.Dropout2d(p=0.1, random_state=7, x=float32[64x64x56x56]); forward(x) (no autograd)(Xq)
 
-inference call, torch-eager-fp32: torch.Dropout2d(p=0.1, seed=7, x=float32[64x64x56x56]); forward(x) (no autograd)(Xq)
-
-inference call, torch-compile-fp32: torch.Dropout2d(p=0.1, seed=7, x=float32[64x64x56x56]); forward(x) (no autograd)(Xq)
-
 ### dynamic-optimized-theta / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1679)`, ran on AMD Instinct MI325X (amd, DO) job a1679
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.dynamic-optimized-theta.synthetic.rows=full.json (amd/gate-98e5d913fb8e0a4e0d273ed6f0c0e717c246b1b03e5c891f7090900538ae684f)`, ran on AMD Instinct MI325X (amd, DO) job gate-98e5d913fb8e0a4e0d273ed6f0c0e717c246b1b03e5c891f7090900538ae684f
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a1c96a5ba) | identical | 765.3 | 765.3..765.3 | 1 | - | - | 765.3 | - | - (stored whole) | - | - | - | - | forecast_rmse=1.436278 | - | main board, one scored run | - | ok (main@a1c96a5ba amd/a1679 2026-10-11; identity vs the nvidia columns: n/a) |
-| statsforecast-cpu | statsforecast | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | statsforecast 2.1.1 | opponent | 354.2 | 354.2..354.2 | 1 | unchecked | unchecked | 354.2 | 354.2 | 0.00 (cpu-arm) | - | - | 283.6 | - | forecast_rmse=1.436045 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 178.8 | 178.8..178.8 | 1 | - | - | 178.8 | - | - (stored whole) | - | - | 2061.6 | 1778.3 | forecast_rmse=1.436278 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-98e5d913fb8e0a4e0d273ed6f0c0e717c246b1b03e5c891f7090900538ae684f 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.DynamicOptimizedTheta(decomposition_type='multiplicative', model='DOTM', season_length=24)`
 
-memory, statsforecast-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'decomposition_type': 'multiplicative', 'season_length': 24}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/215556/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3010,18 +4334,50 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### dynamic-optimized-theta / taxi-hourly (rows full, shape Yfit 64x1392; Yhold 64x48)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1679)`, ran on AMD Instinct MI325X (amd, DO) job a1679
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.dynamic-optimized-theta.taxi-hourly.rows=full.json (amd/gate-785cd18ddfcbf527d83355d8a11c624076c455aeac00b9ff0e399bcbe2cd28c6)`, ran on AMD Instinct MI325X (amd, DO) job gate-785cd18ddfcbf527d83355d8a11c624076c455aeac00b9ff0e399bcbe2cd28c6
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a1c96a5ba) | identical | 4411.8 | 4411.8..4411.8 | 1 | - | - | 4411.8 | - | - (stored whole) | - | - | - | - | forecast_rmse=49.086628 | - | main board, one scored run | - | ok (main@a1c96a5ba amd/a1679 2026-10-11; identity vs the nvidia columns: n/a) |
-| statsforecast-cpu | statsforecast | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | statsforecast 2.1.1 | opponent | 798.7 | 798.7..798.7 | 1 | unchecked | unchecked | 798.7 | 798.7 | 0.00 (cpu-arm) | - | - | 283.8 | - | forecast_rmse=49.314797 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1260.4 | 1260.4..1260.4 | 1 | - | - | 1260.4 | - | - (stored whole) | - | - | 2061.8 | 1778.3 | forecast_rmse=49.086628 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-785cd18ddfcbf527d83355d8a11c624076c455aeac00b9ff0e399bcbe2cd28c6 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.DynamicOptimizedTheta(decomposition_type='multiplicative', model='DOTM', season_length=24)`
 
-memory, statsforecast-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/216256/vram_* bytes for this pid at the round's end (not a peak)
 
-settings: {'decomposition_type': 'multiplicative', 'season_length': 24}. Rows: None. Timed: None.
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### dynamic-theta / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.dynamic-theta.synthetic.rows=full.json (amd/gate-3ed56407a0b8ba2e6105fc82abd39830de02fe37363b949ce3dec988e57cf5f8)`, ran on AMD Instinct MI325X (amd, DO) job gate-3ed56407a0b8ba2e6105fc82abd39830de02fe37363b949ce3dec988e57cf5f8
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 50.4 | 50.4..50.4 | 1 | - | - | 50.4 | - | - (stored whole) | - | - | 2061.7 | 1778.3 | forecast_rmse=1.437256 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-3ed56407a0b8ba2e6105fc82abd39830de02fe37363b949ce3dec988e57cf5f8 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.DynamicTheta(decomposition_type='multiplicative', model='DSTM', season_length=24)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/216949/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### dynamic-theta / taxi-hourly (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.dynamic-theta.taxi-hourly.rows=full.json (amd/gate-73b1c4f4dc863403d3bbe8137cc49475e361b209fbe06dae71c042197ad7ef8d)`, ran on AMD Instinct MI325X (amd, DO) job gate-73b1c4f4dc863403d3bbe8137cc49475e361b209fbe06dae71c042197ad7ef8d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 120.0 | 120.0..120.0 | 1 | - | - | 120.0 | - | - (stored whole) | - | - | 2061.9 | 1778.3 | forecast_rmse=49.101249 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-73b1c4f4dc863403d3bbe8137cc49475e361b209fbe06dae71c042197ad7ef8d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.DynamicTheta(decomposition_type='multiplicative', model='DSTM', season_length=24)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/217639/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3029,18 +4385,18 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### eigh / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.eigh.synthetic.rows=full.json (amd/paired-053f014c028c0397e981aa3b45a28284e98eb66df9d5b2f46362453e70b44f14)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.eigh.synthetic.rows=full.json (amd/gate-6b53850cf3fecbe02fe38bf53917f832ecfc04887caec184f75bfb3c539375be)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.45 | identical | 531.1 | 531.1..531.1 | 1 | - | - | 531.1 | 529.5 | 1.59 (upload_ms_separate) | - | - | 2871.9 | 3490.2 | max_eigenvalue_error=3.692e-07, relative_residual=6.672e-07 | - | main board, one scored run | wheel | ok (main@9c8c53fb2 amd/paired-053f014c028c0397e981aa3b45a28284e98eb66df9d5b2f46362453e70b44f14 2026-10-15; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 117.0 | 117.0..117.0 | 1 | 4.540 | - | 196.8 | 117.0 | 79.81 (upload_ms_untimed) | 4.526 (kernel/kernel) | - | 2426.4 | 400.7 | max_eigenvalue_error=1.044e-06, relative_residual=9.614e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-14T18:04:55Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 541.0 | 541.0..541.0 | 1 | - | - | 541.0 | 539.4 | 1.59 (upload_ms_separate) | - | - | 2695.4 | 4446.2 | max_eigenvalue_error=3.692e-07, relative_residual=6.672e-07 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-6b53850cf3fecbe02fe38bf53917f832ecfc04887caec184f75bfb3c539375be 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-gpu | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 117.0 | 117.0..117.0 | 1 | 4.624 | - | 196.8 | 117.0 | 79.81 (upload_ms_untimed) | 4.611 (kernel/kernel) | - | 2426.4 | 400.7 | max_eigenvalue_error=1.044e-06, relative_residual=9.614e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-15T03:16:56Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
 
 calls:
 - `ours`: `mojolearn.eigh(UPLO='L', seed=7, arg0=float32[4096x4096])`
 - `torch-gpu`: `torch.linalg_eigh(UPLO='L', seed=7, arg0=float32[4096x4096])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/139756/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/218287/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3099,7 +4455,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 1.6 | 1.6..1.6 | 1 | - | - | 1.6 | 1.5 | 0.07 (upload_ms_separate) | - | - | 3011.3 | 235893.3 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@d11b82091 amd/paired-d385c9af47829b9f2d20f8a0cad1cbe5b9baccb183d80fbde7aa704a954145c6 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 1.6 | 1.6..1.6 | 1 | - | - | 1.6 | 1.5 | 0.07 (upload_ms_separate) | - | - | 3011.3 | 235893.3 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@d11b82091 amd/paired-d385c9af47829b9f2d20f8a0cad1cbe5b9baccb183d80fbde7aa704a954145c6 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-e96300f084a92119de55a8424124ed3d5db17c5c918503a99fde164d93d8929d failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.e) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.0 | 1.0..1.0 | 1 | 1.520 | - | - | 1.0 | - (stored kernel) | 1.447 (kernel/kernel) | - | 2705.8 | 782.6 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.3 | 1.3..1.3 | 1 | 1.191 | - | - | 1.3 | - (stored kernel) | 1.133 (kernel/kernel) | - | 2786.4 | 640.2 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
@@ -3155,18 +4511,16 @@ inference call, torch-compile-fp32: torch.Embedding(embedding_dim=1024, norm_typ
 
 ### enet-cv / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1645)`, ran on AMD Instinct MI325X (amd, DO) job a1645
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.enet-cv.istella.rows=full.json (amd/gate-8c6213f8145338a5d0bba896c949ed884db81c851e8616cbf81fc0ee3a454a36)`, ran on AMD Instinct MI325X (amd, DO) job gate-8c6213f8145338a5d0bba896c949ed884db81c851e8616cbf81fc0ee3a454a36
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@2afa942e3) | identical | 854.8 | 854.8..854.8 | 1 | - | - | 854.8 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.326805, rmse=0.685379 | - | main board, one scored run | - | ok (main@2afa942e3 amd/a1645 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 47198.6 | 47198.6..47198.6 | 1 | unchecked | unchecked | 47198.6 | 47198.6 | 0.00 (cpu-arm) | - | - | 8285.3 | - | finite=True, r2=0.326805, rmse=0.685379 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 932.3 | 932.3..932.3 | 1 | - | - | 932.3 | 916.5 | 15.80 (upload_ms_separate) | - | - | 3369.3 | 2139.4 | finite=True, r2=0.326805, rmse=0.685379 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-8c6213f8145338a5d0bba896c949ed884db81c851e8616cbf81fc0ee3a454a36 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1], copy_X=True, cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, n_alphas='deprecated', positive=False, precompute=True, random_state=7, selection='cyclic', tol=0.0001, ...)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'alphas': [0.001, 0.01, 0.1, 1.0], 'cv': 5, 'eps': 0.001, 'fit_intercept': True, 'l1_ratio': 0.5, 'max_iter': 1000, 'positive': False, 'random_state': 7, 'selection': 'cyclic', 'tol': 0.0001}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/219936/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3174,18 +4528,84 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### enet-cv / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1645)`, ran on AMD Instinct MI325X (amd, DO) job a1645
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.enet-cv.taxi.rows=full.json (amd/gate-b30fb78ecb1e7ba9fbbb4d131df101ce4f11ffe18b4938da1b9bcb25fa22224a)`, ran on AMD Instinct MI325X (amd, DO) job gate-b30fb78ecb1e7ba9fbbb4d131df101ce4f11ffe18b4938da1b9bcb25fa22224a
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@2afa942e3) | identical | 222.8 | 222.8..222.8 | 1 | - | - | 222.8 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.909004, rmse=4.804486 | - | main board, one scored run | - | ok (main@2afa942e3 amd/a1645 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 279.5 | 279.5..279.5 | 1 | unchecked | unchecked | 279.5 | 279.5 | 0.00 (cpu-arm) | - | - | 673.5 | - | finite=True, r2=0.909004, rmse=4.804486 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 187.0 | 187.0..187.0 | 1 | - | - | 187.0 | 186.1 | 0.92 (upload_ms_separate) | - | - | 2492.7 | 2055.4 | finite=True, r2=0.909004, rmse=4.804486 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b30fb78ecb1e7ba9fbbb4d131df101ce4f11ffe18b4938da1b9bcb25fa22224a 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.ElasticNetCV(alphas=[0.001, 0.01, 0.1, 1], copy_X=True, cv=5, eps=0.001, fit_intercept=True, l1_ratio=0.5, max_iter=1000, n_alphas='deprecated', positive=False, precompute=True, random_state=7, selection='cyclic', tol=0.0001, ...)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/220488/vram_* bytes for this pid at the round's end (not a peak)
 
-settings: {'alphas': [0.001, 0.01, 0.1, 1.0], 'cv': 5, 'eps': 0.001, 'fit_intercept': True, 'l1_ratio': 0.5, 'max_iter': 1000, 'positive': False, 'random_state': 7, 'selection': 'cyclic', 'tol': 0.0001}. Rows: None. Timed: None.
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### gamma / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gamma.istella.rows=full.json (amd/gate-310b33433db443aadc367ed7d921dba37c849b926531efa9048b03693a95edea)`, ran on AMD Instinct MI325X (amd, DO) job gate-310b33433db443aadc367ed7d921dba37c849b926531efa9048b03693a95edea
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 343.5 | 343.5..343.5 | 1 | - | - | 343.5 | 327.7 | 15.81 (upload_ms_separate) | - | - | 3358.4 | 2169.4 | finite=True, r2=0.218164, rmse=0.738615 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-310b33433db443aadc367ed7d921dba37c849b926531efa9048b03693a95edea 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.GammaRegressor(alpha=0.0001, fit_intercept=True, max_iter=100, solver='newton-cholesky', tol=0.0001, verbose=0, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/222274/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### gamma / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gamma.taxi.rows=full.json (amd/gate-4d937c71cc481ad81c37b782e0a9a3ee89cebc60e93460a4c4b877d44489ff57)`, ran on AMD Instinct MI325X (amd, DO) job gate-4d937c71cc481ad81c37b782e0a9a3ee89cebc60e93460a4c4b877d44489ff57
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 49.3 | 49.3..49.3 | 1 | - | - | 49.3 | 48.4 | 0.94 (upload_ms_separate) | - | - | 2481.1 | 2085.4 | finite=True, r2=-231.911806, rmse=243.070661 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4d937c71cc481ad81c37b782e0a9a3ee89cebc60e93460a4c4b877d44489ff57 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.GammaRegressor(alpha=0.0001, fit_intercept=True, max_iter=100, solver='newton-cholesky', tol=0.0001, verbose=0, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/222803/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### garch / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.garch.synthetic.rows=full.json (amd/gate-dbd2897741c6cf088342d0ebfdd91ea20d846a022c992e0eeb71df720d45e7ec)`, ran on AMD Instinct MI325X (amd, DO) job gate-dbd2897741c6cf088342d0ebfdd91ea20d846a022c992e0eeb71df720d45e7ec
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 46.9 | 46.9..46.9 | 1 | - | - | 46.9 | - | - (stored whole) | - | - | 2243.5 | 2295.8 | mean_llf=-1938.222656 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-dbd2897741c6cf088342d0ebfdd91ea20d846a022c992e0eeb71df720d45e7ec 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.GARCH(dist='normal', mean='Constant', o=0, p=1, power=2, q=1)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/223408/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### garch / taxi-hourly (rows full, shape Yfit 64x1391; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.garch.taxi-hourly.rows=full.json (amd/gate-c6f40575ccf2f014366d689dbd1ecb199baf67dd8478b3eaede9aba84f7ba479)`, ran on AMD Instinct MI325X (amd, DO) job gate-c6f40575ccf2f014366d689dbd1ecb199baf67dd8478b3eaede9aba84f7ba479
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 87.0 | 87.0..87.0 | 1 | - | - | 87.0 | - | - (stored whole) | - | - | 2244.2 | 2295.8 | mean_llf=-1131.723763 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c6f40575ccf2f014366d689dbd1ecb199baf67dd8478b3eaede9aba84f7ba479 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.GARCH(dist='normal', mean='Constant', o=0, p=1, power=2, q=1)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/224108/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3229,21 +4649,62 @@ config: cuML benchmark (RAPIDS), GaussianNB (https://github.com/rapidsai/cuml/bl
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### gcn / istella (rows full, shape X 100000x220; indices 1521510; indptr 100001; y 100000)
+### gaussian-rp / istella (rows full, shape X 900000x220; Xq 100000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1210)`, ran on AMD Instinct MI325X (amd, DO) job a1210
-
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gaussian-rp.istella.rows=full.json (amd/gate-4321cd631b6fb1bcfd52bbe3201bf4815d046db08406a46d9cdf76414e6586d0)`, ran on AMD Instinct MI325X (amd, DO) job gate-4321cd631b6fb1bcfd52bbe3201bf4815d046db08406a46d9cdf76414e6586d0
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@6416999f7) | identical | 3.0 | 3.0..3.0 | 1 | - | - | 3.0 | - | - (stored whole) | - | - | - | - | error=Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-istella-def/gcn-istella-host-quality/host.log | - | main board, one scored run | - | ok (main@6416999f7 amd/a1210 2026-10-10; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0006 failed: not_ready) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 16.9 | 16.9..16.9 | 1 | unchecked | unchecked | - | 16.9 | - (stored kernel) | - | - | 3417.9 | 1918.3 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 3.6 | 3.6..3.6 | 1 | unchecked | unchecked | - | 3.6 | - (stored kernel) | - | - | 3477.3 | 383.2 | max_rel_diff_vs_torch_eager_fp32=0.025557, rel_fro_vs_torch_eager_fp32=9.36e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 10.7 | 10.7..10.7 | 1 | unchecked | unchecked | - | 10.7 | - (stored kernel) | - | - | 4528.1 | 2307.5 | max_rel_diff_vs_torch_eager_fp32=2662.412698, rel_fro_vs_torch_eager_fp32=0.002187 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 3.3 | 3.3..3.3 | 1 | unchecked | unchecked | - | 3.3 | - (stored kernel) | - | - | 5066.5 | 766.2 | max_rel_diff_vs_torch_eager_fp32=2662.401917, rel_fro_vs_torch_eager_fp32=0.002187 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1859.4 | 1859.4..1859.4 | 1 | - | - | 1859.4 | 1845.3 | 14.13 (upload_ms_separate) | - | - | 3310.9 | 2139.1 | mean_abs_distortion=0.680693 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4321cd631b6fb1bcfd52bbe3201bf4815d046db08406a46d9cdf76414e6586d0 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.GaussianRandomProjection(compute_inverse_components=False, eps=0.1, n_components=10, random_state=7)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/225238/vram_* bytes for this pid at the round's end (not a peak)
+
+config: cuML benchmark (RAPIDS), GaussianRandomProjection (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### gaussian-rp / taxi (rows full, shape X 900000x11; Xq 100000x11)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gaussian-rp.taxi.rows=full.json (amd/gate-f59f3b0de658d7e42fb9c918de4e45a0781137097374b7b434e994a216e7fbeb)`, ran on AMD Instinct MI325X (amd, DO) job gate-f59f3b0de658d7e42fb9c918de4e45a0781137097374b7b434e994a216e7fbeb
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 111.1 | 111.1..111.1 | 1 | - | - | 111.1 | 110.3 | 0.78 (upload_ms_separate) | - | - | 2513.6 | 2055.1 | mean_abs_distortion=0.345752 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-f59f3b0de658d7e42fb9c918de4e45a0781137097374b7b434e994a216e7fbeb 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.GaussianRandomProjection(compute_inverse_components=False, eps=0.1, n_components=10, random_state=7)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/225744/vram_* bytes for this pid at the round's end (not a peak)
+
+config: cuML benchmark (RAPIDS), GaussianRandomProjection (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### gcn / istella (rows full, shape X 100000x220; indices 1521510; indptr 100001; y 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gcn.istella.rows=full.json (amd/gate-89e4d6d1c4a668203deab9a4a7065b68fa18bc74c1644d0b8e7d4bea6c8a22df)`, ran on mojolearn-steward-do-amd
+
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 2.9 ms) = 1.227; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 3.4 ms) = 1.032. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.5 | 3.5..3.5 | 1 | - | - | - | 3.5 | - (stored kernel) | - | - | 2697.8 | 5096.1 | max_rel_diff_vs_torch_eager_fp32=0.157394, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.gcn.istella.rows=full/work/gcn-istella-host-quality/host.log, rel_fro_vs_torch_eager_fp32=1.722e-07 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-89e4d6d1c4a668203deab9a4a7065b68fa18bc74c1644d0b8e7d4bea6c8a22df 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.6 | 4.6..4.6 | 1 | 0.775 | - | 7.9 | 4.6 | 3.34 (upload_ms_untimed) | 0.775 (kernel/kernel) | - | 5471.0 | 2070.3 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 3.4 | 3.4..3.4 | 1 | 1.032 | - | 7.1 | 3.4 | 3.65 (upload_ms_untimed) | 1.032 (kernel/kernel) | - | 5582.2 | 570.4 | max_rel_diff_vs_torch_eager_fp32=0.012107, rel_fro_vs_torch_eager_fp32=7.901e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.7 | 4.7..4.7 | 1 | 0.757 | - | 8.1 | 4.7 | 3.38 (upload_ms_untimed) | 0.757 (kernel/kernel) | - | 4642.5 | 2459.4 | max_rel_diff_vs_torch_eager_fp32=2864.509532, rel_fro_vs_torch_eager_fp32=0.002187 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.9 | 2.9..2.9 | 1 | 1.227 | - | 6.2 | 2.9 | 3.35 (upload_ms_untimed) | 1.227 (kernel/kernel) | - | 4682.0 | 924.2 | max_rel_diff_vs_torch_eager_fp32=2864.518340, rel_fro_vs_torch_eager_fp32=0.002187 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `ours`: `mojolearn.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, random_state=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220])`
+- `torch-eager-fp32`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220])`
+- `torch-compile-fp32`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220])`
+- `torch-eager-bf16`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220])`
+- `torch-compile-bf16`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/226429/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3251,23 +4712,62 @@ settings: {'add_self_loops': True, 'bias': True, 'improved': False, 'normalize':
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| add_self_loops | true | true | true | true | true |
+| bias | true | true | true | true | true |
+| improved | false | false | false | false | false |
+| in_channels | 220 | 220 | 220 | 220 | 220 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "7cb3a3a30a0bd546d951d743efdfc9a5aa497cc58947c74088bba2cb1cc43cf2", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "7cb3a3a30a0bd546d951d743efdfc9a5aa497cc58947c74088bba2cb1cc43cf2", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "7cb3a3a30a0bd546d951d743efdfc9a5aa497cc58947c74088bba2cb1cc43cf2", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "7cb3a3a30a0bd546d951d743efdfc9a5aa497cc58947c74088bba2cb1cc43cf2", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "7cb3a3a30a0bd546d951d743efdfc9a5aa497cc58947c74088bba2cb1cc43cf2", "shape": [128, 220]}] |
+| normalize | true | true | true | true | true |
+| out_channels | 128 | 128 | 128 | 128 | 128 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 1.2 | 1.2..1.2 | 1 | - | - | - | 1.2 | - (stored kernel) | - | - | max_rel_diff_vs_torch_eager_fp32=0.157394, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.gcn.istella.rows=full/work/gcn-istella-host-quality/host.log, rel_fro_vs_torch_eager_fp32=1.722e-07 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 2.2 | 2.2..2.2 | 1 | 0.537 | - | 5.6 | 2.2 | 3.34 (predict_upload_ms (the predict inputs' own copy)) | 0.537 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.6 | 1.6..1.6 | 1 | 0.740 | - | 5.3 | 1.6 | 3.65 (predict_upload_ms (the predict inputs' own copy)) | 0.740 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.012107, rel_fro_vs_torch_eager_fp32=7.901e-08 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 2.1 | 2.1..2.1 | 1 | 0.559 | - | 5.5 | 2.1 | 3.38 (predict_upload_ms (the predict inputs' own copy)) | 0.559 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=2864.509532, rel_fro_vs_torch_eager_fp32=0.002187 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.6 | 1.6..1.6 | 1 | 0.749 | - | 4.9 | 1.6 | 3.35 (predict_upload_ms (the predict inputs' own copy)) | 0.749 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=2864.518340, rel_fro_vs_torch_eager_fp32=0.002187 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, random_state=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220]); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-fp32: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220]); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220]); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220]); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=220, normalize=True, out_channels=128, seed=7, x=float32[100000x220], extra0=int64[2x1521510], bias=float32[128], lin.weight=float32[128x220]); forward(x) (no autograd)(Xq)
 
 ### gcn / taxi (rows full, shape X 100000x11; indices 1258298; indptr 100001; y 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1210)`, ran on AMD Instinct MI325X (amd, DO) job a1210
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gcn.taxi.rows=full.json (amd/gate-f9ccf963753ce29b272b6cc265866896f887338b21003adf3d0330b757b67258)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 2.4 ms) = 0.770; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 2.8 ms) = 0.668. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@6416999f7) | identical | 1.4 | 1.4..1.4 | 1 | - | - | 1.4 | - | - (stored whole) | - | - | - | - | error=Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-gcn-taxi-def/gcn-taxi-host-quality/host.log | - | main board, one scored run | - | ok (main@6416999f7 amd/a1210 2026-10-10; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0006 failed: not_ready) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 14.1 | 14.1..14.1 | 1 | unchecked | unchecked | - | 14.1 | - (stored kernel) | - | - | 3333.2 | 1573.4 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 3.2 | 3.2..3.2 | 1 | unchecked | unchecked | - | 3.2 | - (stored kernel) | - | - | 3461.6 | 295.5 | max_rel_diff_vs_torch_eager_fp32=0.001702, rel_fro_vs_torch_eager_fp32=7.846e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 9.0 | 9.0..9.0 | 1 | unchecked | unchecked | - | 9.0 | - (stored kernel) | - | - | 4436.3 | 1858.7 | max_rel_diff_vs_torch_eager_fp32=1509.509399, rel_fro_vs_torch_eager_fp32=0.002330 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2.8 | 2.8..2.8 | 1 | unchecked | unchecked | - | 2.8 | - (stored kernel) | - | - | 4978.9 | 574.3 | max_rel_diff_vs_torch_eager_fp32=1509.509515, rel_fro_vs_torch_eager_fp32=0.002330 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1.9 | 1.9..1.9 | 1 | - | - | - | 1.9 | - (stored kernel) | - | - | 2585.2 | 2526.0 | max_rel_diff_vs_torch_eager_fp32=0.016065, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.gcn.taxi.rows=full/work/gcn-taxi-host-quality/host.log, rel_fro_vs_torch_eager_fp32=9.606e-08 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-f9ccf963753ce29b272b6cc265866896f887338b21003adf3d0330b757b67258 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 3.6 | 3.6..3.6 | 1 | 0.519 | - | 12.4 | 3.6 | 8.75 (upload_ms_untimed) | 0.519 (kernel/kernel) | - | 5380.5 | 1725.4 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.8 | 2.8..2.8 | 1 | 0.668 | - | 11.5 | 2.8 | 8.66 (upload_ms_untimed) | 0.668 (kernel/kernel) | - | 5443.6 | 446.3 | max_rel_diff_vs_torch_eager_fp32=0.001863, rel_fro_vs_torch_eager_fp32=7.085e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.2 | 4.2..4.2 | 1 | 0.445 | - | 12.8 | 4.2 | 8.58 (upload_ms_untimed) | 0.445 (kernel/kernel) | - | 4556.3 | 2010.3 | max_rel_diff_vs_torch_eager_fp32=1509.503811, rel_fro_vs_torch_eager_fp32=0.002330 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.4 | 2.4..2.4 | 1 | 0.770 | - | 11.0 | 2.4 | 8.59 (upload_ms_untimed) | 0.770 (kernel/kernel) | - | 4595.2 | 731.1 | max_rel_diff_vs_torch_eager_fp32=1509.502996, rel_fro_vs_torch_eager_fp32=0.002330 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, random_state=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11])`
+- `torch-eager-fp32`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11])`
+- `torch-compile-fp32`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11])`
+- `torch-eager-bf16`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11])`
+- `torch-compile-bf16`: `torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/227418/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3275,7 +4775,39 @@ settings: {'add_self_loops': True, 'bias': True, 'improved': False, 'normalize':
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| add_self_loops | true | true | true | true | true |
+| bias | true | true | true | true | true |
+| improved | false | false | false | false | false |
+| in_channels | 11 | 11 | 11 | 11 | 11 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "b35ab18718e9f5db1c2fd264909864ed0f0f287466c2a3bdad9d0da0ac4a0f4b", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "b35ab18718e9f5db1c2fd264909864ed0f0f287466c2a3bdad9d0da0ac4a0f4b", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "b35ab18718e9f5db1c2fd264909864ed0f0f287466c2a3bdad9d0da0ac4a0f4b", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "b35ab18718e9f5db1c2fd264909864ed0f0f287466c2a3bdad9d0da0ac4a0f4b", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "bias", "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560", "shape": [128]}, {"dtype": "float32", "name": "lin.weight", "sha256": "b35ab18718e9f5db1c2fd264909864ed0f0f287466c2a3bdad9d0da0ac4a0f4b", "shape": [128, 11]}] |
+| normalize | true | true | true | true | true |
+| out_channels | 128 | 128 | 128 | 128 | 128 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 0.9 | 0.9..0.9 | 1 | - | - | - | 0.9 | - (stored kernel) | - | - | max_rel_diff_vs_torch_eager_fp32=0.016065, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.gcn.taxi.rows=full/work/gcn-taxi-host-quality/host.log, rel_fro_vs_torch_eager_fp32=9.606e-08 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.9 | 1.9..1.9 | 1 | 0.468 | - | 10.7 | 1.9 | 8.75 (predict_upload_ms (the predict inputs' own copy)) | 0.468 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.3 | 1.3..1.3 | 1 | 0.678 | - | 10.0 | 1.3 | 8.66 (predict_upload_ms (the predict inputs' own copy)) | 0.678 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.001863, rel_fro_vs_torch_eager_fp32=7.085e-08 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.8 | 1.8..1.8 | 1 | 0.488 | - | 10.4 | 1.8 | 8.58 (predict_upload_ms (the predict inputs' own copy)) | 0.488 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=1509.503811, rel_fro_vs_torch_eager_fp32=0.002330 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 1.4 | 1.4..1.4 | 1 | 0.663 | - | 9.9 | 1.4 | 8.59 (predict_upload_ms (the predict inputs' own copy)) | 0.663 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=1509.502996, rel_fro_vs_torch_eager_fp32=0.002330 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, random_state=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11]); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-fp32: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11]); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11]); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11]); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: torch_geometric.GCNConv(add_self_loops=True, bias=True, improved=False, in_channels=11, normalize=True, out_channels=128, seed=7, x=float32[100000x11], extra0=int64[2x1258298], bias=float32[128], lin.weight=float32[128x11]); forward(x) (no autograd)(Xq)
 
 ### global-avgpool / synthetic (rows full, shape -)
 
@@ -3285,7 +4817,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.5 ms) = 0.540; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.2 | 0.2..0.2 | 1 | - | - | - | 0.2 | - (stored kernel) | - | - | 700.6 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.015661, rel_fro_vs_torch_eager_fp32=1.506e-07 | - | main board, one scored run | wheel | ok (main@d11b82091 amd/paired-7f40c2d85a6a832dbf13528a9897fe3c94118d5086d1c26c9880b8d7404e5975 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.2 | 0.2..0.2 | 1 | - | - | - | 0.2 | - (stored kernel) | - | - | 700.6 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.015661, rel_fro_vs_torch_eager_fp32=1.506e-07 | - | main board, one scored run | wheel | ok (main@d11b82091 amd/paired-7f40c2d85a6a832dbf13528a9897fe3c94118d5086d1c26c9880b8d7404e5975 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-2d43c701a981e121bace013175491d1e4d64e45d1f81261cf0d1225d64aa99f8 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.g) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.7 | 0.7..0.7 | 1 | 0.373 | - | - | 0.7 | - (stored kernel) | 0.373 (kernel/kernel) | - | 1687.0 | 12.6 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.9 | 0.9..0.9 | 1 | 0.257 | - | - | 0.9 | - (stored kernel) | 0.257 (kernel/kernel) | - | 2051.8 | 12.6 | max_rel_diff_vs_torch_eager_fp32=0.007299, rel_fro_vs_torch_eager_fp32=1.01e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.5 | 0.5..0.5 | 1 | 0.540 | - | - | 0.5 | - (stored kernel) | 0.540 (kernel/kernel) | - | 1686.3 | 12.6 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -3343,7 +4875,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.5 ms) = 0.516; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.2 | 0.2..0.2 | 1 | - | - | - | 0.2 | - (stored kernel) | - | - | 700.5 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@d11b82091 amd/paired-f721f4183d1237b97766ade5525d0022088cfbe17bd6c713aa41695fd4433667 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.2 | 0.2..0.2 | 1 | - | - | - | 0.2 | - (stored kernel) | - | - | 700.5 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@d11b82091 amd/paired-f721f4183d1237b97766ade5525d0022088cfbe17bd6c713aa41695fd4433667 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-d8026165c17501ff76ff5b7903b68655dbf0a0d55a91f2899cb9d85dbdf42b14 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.g) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.6 | 0.6..0.6 | 1 | 0.416 | - | - | 0.6 | - (stored kernel) | 0.416 (kernel/kernel) | - | 1662.0 | 12.9 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.8 | 0.8..0.8 | 1 | 0.305 | - | - | 0.8 | - (stored kernel) | 0.305 (kernel/kernel) | - | 2077.1 | 12.9 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.5 | 0.5..0.5 | 1 | 0.516 | - | - | 0.5 | - (stored kernel) | 0.516 (kernel/kernel) | - | 1661.6 | 12.9 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -3395,19 +4927,26 @@ inference call, torch-compile-bf16: torch.AdaptiveMaxPool2d(output_size=1, seed=
 
 ### graphsage / istella (rows full, shape X 100000x220; indices 1521510; indptr 100001; y 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1210)`, ran on AMD Instinct MI325X (amd, DO) job a1210
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.graphsage.istella.rows=full.json (amd/gate-3a011db73bf4cab31fcb9a954d658f4b70b1592964675552f84803e16959497a)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 5.3 ms) = 1.224; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 5.4 ms) = 1.195. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@6416999f7) | identical | 5.9 | 5.9..5.9 | 1 | - | - | 5.9 | - | - (stored whole) | - | - | - | - | error=Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-istella-def/graphsage-istella-host-quality/host.log | - | main board, one scored run | - | ok (main@6416999f7 amd/a1210 2026-10-10; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0006 failed: not_ready) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 12.5 | 12.5..12.5 | 1 | unchecked | unchecked | - | 12.5 | - (stored kernel) | - | - | 3373.3 | 1651.2 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 3.4 | 3.4..3.4 | 1 | unchecked | unchecked | - | 3.4 | - (stored kernel) | - | - | 3458.5 | 463.5 | max_rel_diff_vs_torch_eager_fp32=0.140845, rel_fro_vs_torch_eager_fp32=8.05e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 12.6 | 12.6..12.6 | 1 | unchecked | unchecked | - | 12.6 | - (stored kernel) | - | - | 4489.7 | 1626.7 | max_rel_diff_vs_torch_eager_fp32=3907.144070, rel_fro_vs_torch_eager_fp32=0.003366 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 3.2 | 3.2..3.2 | 1 | unchecked | unchecked | - | 3.2 | - (stored kernel) | - | - | 5119.7 | 433.0 | max_rel_diff_vs_torch_eager_fp32=3678.232431, rel_fro_vs_torch_eager_fp32=0.003054 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 6.4 | 6.4..6.4 | 1 | - | - | - | 6.4 | - (stored kernel) | - | - | 2671.2 | 5180.0 | max_rel_diff_vs_torch_eager_fp32=0.298023, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.graphsage.istella.rows=full/work/graphsage-istella-host-quality/host.log, rel_fro_vs_torch_eager_fp32=2.89e-07 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-3a011db73bf4cab31fcb9a954d658f4b70b1592964675552f84803e16959497a 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.4 | 5.4..5.4 | 1 | 1.195 | - | 8.8 | 5.4 | 3.41 (upload_ms_untimed) | 1.195 (kernel/kernel) | - | 5210.5 | 1851.7 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 6.8 | 6.8..6.8 | 1 | 0.942 | - | 10.3 | 6.8 | 3.47 (upload_ms_untimed) | 0.942 (kernel/kernel) | - | 5430.0 | 623.9 | max_rel_diff_vs_torch_eager_fp32=0.119209, rel_fro_vs_torch_eager_fp32=8.086e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.9 | 5.9..5.9 | 1 | 1.092 | - | 9.2 | 5.9 | 3.34 (upload_ms_untimed) | 1.092 (kernel/kernel) | - | 3495.3 | 1827.3 | max_rel_diff_vs_torch_eager_fp32=3907.173872, rel_fro_vs_torch_eager_fp32=0.003366 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.3 | 5.3..5.3 | 1 | 1.224 | - | 8.6 | 5.3 | 3.35 (upload_ms_untimed) | 1.224 (kernel/kernel) | - | 3696.6 | 593.2 | max_rel_diff_vs_torch_eager_fp32=3678.143024, rel_fro_vs_torch_eager_fp32=0.003054 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, random_state=7, root_weight=True, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...)`
+- `torch-eager-fp32`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...)`
+- `torch-compile-fp32`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...)`
+- `torch-eager-bf16`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...)`
+- `torch-compile-bf16`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/230049/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3415,27 +4954,128 @@ settings: {'aggr': 'mean', 'bias': True, 'normalize': False, 'out_channels': 128
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| aggr | "mean" | "mean" | "mean" | "mean" | "mean" |
+| bias | true | true | true | true | true |
+| in_channels | 220 | 220 | 220 | 220 | 220 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "9ae1d2a5f6f8369c556f4dd7006140269df948dee0864b7ef3dc05d11faab79a", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "4352498e88af906697f124cd9354ebb27be21aa53a2c7a689cd59aee3ec7b835", "shape": [128, 220]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "09ec3f2bb1037c877cb19aabd38cecafa04bf5d3db56bfa314664ce723ed20ce", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "9ae1d2a5f6f8369c556f4dd7006140269df948dee0864b7ef3dc05d11faab79a", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "4352498e88af906697f124cd9354ebb27be21aa53a2c7a689cd59aee3ec7b835", "shape": [128, 220]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "09ec3f2bb1037c877cb19aabd38cecafa04bf5d3db56bfa314664ce723ed20ce", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "9ae1d2a5f6f8369c556f4dd7006140269df948dee0864b7ef3dc05d11faab79a", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "4352498e88af906697f124cd9354ebb27be21aa53a2c7a689cd59aee3ec7b835", "shape": [128, 220]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "09ec3f2bb1037c877cb19aabd38cecafa04bf5d3db56bfa314664ce723ed20ce", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "9ae1d2a5f6f8369c556f4dd7006140269df948dee0864b7ef3dc05d11faab79a", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "4352498e88af906697f124cd9354ebb27be21aa53a2c7a689cd59aee3ec7b835", "shape": [128, 220]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "09ec3f2bb1037c877cb19aabd38cecafa04bf5d3db56bfa314664ce723ed20ce", "shape": [128, 220]}] | [{"dtype": "float32", "name": "x", "sha256": "168603880b8aabb9bac6e23c3d9b67220f9e624f87cac177fb734650cf1b55ef", "shape": [100000, 220]}, {"dtype": "int64", "name": "extra0", "sha256": "f7793b06443b4f909be7dee755b715bafa37cbdbc1f4895dfc7273d70148ce53", "shape": [2, 1521510]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "9ae1d2a5f6f8369c556f4dd7006140269df948dee0864b7ef3dc05d11faab79a", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "4352498e88af906697f124cd9354ebb27be21aa53a2c7a689cd59aee3ec7b835", "shape": [128, 220]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "09ec3f2bb1037c877cb19aabd38cecafa04bf5d3db56bfa314664ce723ed20ce", "shape": [128, 220]}] |
+| normalize | false | false | false | false | false |
+| out_channels | 128 | 128 | 128 | 128 | 128 |
+| project | false | false | false | false | false |
+| root_weight | true | true | true | true | true |
+| seed | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 1.7 | 1.7..1.7 | 1 | - | - | - | 1.7 | - (stored kernel) | - | - | max_rel_diff_vs_torch_eager_fp32=0.298023, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.graphsage.istella.rows=full/work/graphsage-istella-host-quality/host.log, rel_fro_vs_torch_eager_fp32=2.89e-07 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 2.5 | 2.5..2.5 | 1 | 0.670 | - | 5.9 | 2.5 | 3.41 (predict_upload_ms (the predict inputs' own copy)) | 0.670 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 2.6 | 2.6..2.6 | 1 | 0.638 | - | 6.1 | 2.6 | 3.47 (predict_upload_ms (the predict inputs' own copy)) | 0.638 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.119209, rel_fro_vs_torch_eager_fp32=8.086e-08 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 2.4 | 2.4..2.4 | 1 | 0.695 | - | 5.8 | 2.4 | 3.34 (predict_upload_ms (the predict inputs' own copy)) | 0.695 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=3907.173872, rel_fro_vs_torch_eager_fp32=0.003366 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 2.6 | 2.6..2.6 | 1 | 0.647 | - | 6.0 | 2.6 | 3.35 (predict_upload_ms (the predict inputs' own copy)) | 0.647 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=3678.143024, rel_fro_vs_torch_eager_fp32=0.003054 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, random_state=7, root_weight=True, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-fp32: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=220, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x220], extra0=int64[2x1521510], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
 
 ### graphsage / taxi (rows full, shape X 100000x11; indices 1258298; indptr 100001; y 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1210)`, ran on AMD Instinct MI325X (amd, DO) job a1210
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.graphsage.taxi.rows=full.json (amd/gate-da04108742c5d8e7d2a7800c69f41119c8658a6da36ecc9a887ed5cce681a337)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1.6 ms) = 1.331; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1.6 ms) = 1.304. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@6416999f7) | identical | 1.6 | 1.6..1.6 | 1 | - | - | 1.6 | - | - (stored whole) | - | - | - | - | error=Own host reference failed (bba_neural_fixtures.FixturesMissing: neural fixtures missing: run tools/neural_fixtures.py generate (tools/neural_fixtures_box.sh generate on a box, then stage) (no fixture directory: pass --neural-fixtures)); see /root/lq/out/a1210/work-graphsage-taxi-def/graphsage-taxi-host-quality/host.log | - | main board, one scored run | - | ok (main@6416999f7 amd/a1210 2026-10-10; identity vs the nvidia columns: n/a; newer run a8fd6d926/a0006 failed: not_ready) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1.4 | 1.4..1.4 | 1 | unchecked | unchecked | - | 1.4 | - (stored kernel) | - | - | 3308.4 | 299.7 | - | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1.5 | 1.5..1.5 | 1 | unchecked | unchecked | - | 1.5 | - (stored kernel) | - | - | 3439.0 | 299.7 | max_rel_diff_vs_torch_eager_fp32=0.162162, rel_fro_vs_torch_eager_fp32=8.776e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1.5 | 1.5..1.5 | 1 | unchecked | unchecked | - | 1.5 | - (stored kernel) | - | - | 4422.1 | 227.1 | max_rel_diff_vs_torch_eager_fp32=4680.142857, rel_fro_vs_torch_eager_fp32=0.003557 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1.4 | 1.4..1.4 | 1 | unchecked | unchecked | - | 1.4 | - (stored kernel) | - | - | 5037.8 | 230.2 | max_rel_diff_vs_torch_eager_fp32=4608.154297, rel_fro_vs_torch_eager_fp32=0.003285 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.1 | 2.1..2.1 | 1 | - | - | - | 2.1 | - (stored kernel) | - | - | 2556.6 | 2526.0 | max_rel_diff_vs_torch_eager_fp32=0.476837, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.graphsage.taxi.rows=full/work/graphsage-taxi-host-quality/host.log, rel_fro_vs_torch_eager_fp32=9.224e-08 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-da04108742c5d8e7d2a7800c69f41119c8658a6da36ecc9a887ed5cce681a337 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.6 | 1.6..1.6 | 1 | 1.304 | - | 10.3 | 1.6 | 8.64 (upload_ms_untimed) | 1.304 (kernel/kernel) | - | 5123.3 | 424.9 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.7 | 1.7..1.7 | 1 | 1.231 | - | 10.2 | 1.7 | 8.52 (upload_ms_untimed) | 1.231 (kernel/kernel) | - | 5017.4 | 380.3 | max_rel_diff_vs_torch_eager_fp32=0.186047, rel_fro_vs_torch_eager_fp32=4.492e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.6 | 1.6..1.6 | 1 | 1.331 | - | 9.9 | 1.6 | 8.30 (upload_ms_untimed) | 1.331 (kernel/kernel) | - | 3408.5 | 360.5 | max_rel_diff_vs_torch_eager_fp32=5040.230769, rel_fro_vs_torch_eager_fp32=0.003557 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.8 | 1.8..1.8 | 1 | 1.172 | - | 10.1 | 1.8 | 8.27 (upload_ms_untimed) | 1.172 (kernel/kernel) | - | 3486.9 | 309.2 | max_rel_diff_vs_torch_eager_fp32=4607.677460, rel_fro_vs_torch_eager_fp32=0.003285 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, random_state=7, root_weight=True, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...)`
+- `torch-eager-fp32`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...)`
+- `torch-compile-fp32`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...)`
+- `torch-eager-bf16`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...)`
+- `torch-compile-bf16`: `torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/231041/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
 settings: {'aggr': 'mean', 'bias': True, 'normalize': False, 'out_channels': 128, 'project': False, 'root_weight': True}. Rows: None. Timed: None.
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| aggr | "mean" | "mean" | "mean" | "mean" | "mean" |
+| bias | true | true | true | true | true |
+| in_channels | 11 | 11 | 11 | 11 | 11 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "c093c9855f6ddc171f4e33b1ecc52351d018b27b3b134c0632668c380351c866", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "353aa6970485912b79be77e1170fc94d31b2b10a7659daacf628897544e52e14", "shape": [128, 11]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "d4dea7b4372f2d7a460e96f1437684fb7fbc27b347f9f1bf3a8b5e0debc7de09", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "c093c9855f6ddc171f4e33b1ecc52351d018b27b3b134c0632668c380351c866", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "353aa6970485912b79be77e1170fc94d31b2b10a7659daacf628897544e52e14", "shape": [128, 11]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "d4dea7b4372f2d7a460e96f1437684fb7fbc27b347f9f1bf3a8b5e0debc7de09", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "c093c9855f6ddc171f4e33b1ecc52351d018b27b3b134c0632668c380351c866", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "353aa6970485912b79be77e1170fc94d31b2b10a7659daacf628897544e52e14", "shape": [128, 11]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "d4dea7b4372f2d7a460e96f1437684fb7fbc27b347f9f1bf3a8b5e0debc7de09", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "c093c9855f6ddc171f4e33b1ecc52351d018b27b3b134c0632668c380351c866", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "353aa6970485912b79be77e1170fc94d31b2b10a7659daacf628897544e52e14", "shape": [128, 11]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "d4dea7b4372f2d7a460e96f1437684fb7fbc27b347f9f1bf3a8b5e0debc7de09", "shape": [128, 11]}] | [{"dtype": "float32", "name": "x", "sha256": "7211703ff0f737d28e1799b7f77f34cfdc435d90fa64371c3c3927aeeb33acc4", "shape": [100000, 11]}, {"dtype": "int64", "name": "extra0", "sha256": "e7bb01cb5544c7360e6dd1932e7d1e85b3c4f4ade7878a512e6d7349bebbb783", "shape": [2, 1258298]}, {"dtype": "float32", "name": "lin_l.bias", "sha256": "c093c9855f6ddc171f4e33b1ecc52351d018b27b3b134c0632668c380351c866", "shape": [128]}, {"dtype": "float32", "name": "lin_l.weight", "sha256": "353aa6970485912b79be77e1170fc94d31b2b10a7659daacf628897544e52e14", "shape": [128, 11]}, {"dtype": "float32", "name": "lin_r.weight", "sha256": "d4dea7b4372f2d7a460e96f1437684fb7fbc27b347f9f1bf3a8b5e0debc7de09", "shape": [128, 11]}] |
+| normalize | false | false | false | false | false |
+| out_channels | 128 | 128 | 128 | 128 | 128 |
+| project | false | false | false | false | false |
+| root_weight | true | true | true | true | true |
+| seed | 7 | 7 | 7 | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 0.8 | 0.8..0.8 | 1 | - | - | - | 0.8 | - (stored kernel) | - | - | max_rel_diff_vs_torch_eager_fp32=0.476837, own_host_reference_error=Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.graphsage.taxi.rows=full/work/graphsage-taxi-host-quality/host.log, rel_fro_vs_torch_eager_fp32=9.224e-08 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.4 | 0.4..0.4 | 1 | 2.048 | - | 9.0 | 0.4 | 8.64 (predict_upload_ms (the predict inputs' own copy)) | 2.048 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.4 | 0.4..0.4 | 1 | 2.002 | - | 8.9 | 0.4 | 8.52 (predict_upload_ms (the predict inputs' own copy)) | 2.002 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=0.186047, rel_fro_vs_torch_eager_fp32=4.492e-08 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.4 | 0.4..0.4 | 1 | 2.017 | - | 8.7 | 0.4 | 8.30 (predict_upload_ms (the predict inputs' own copy)) | 2.017 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=5040.230769, rel_fro_vs_torch_eager_fp32=0.003557 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 0.4 | 0.4..0.4 | 1 | 1.995 | - | 8.7 | 0.4 | 8.27 (predict_upload_ms (the predict inputs' own copy)) | 1.995 (kernel/kernel) | - | max_rel_diff_vs_torch_eager_fp32=4607.677460, rel_fro_vs_torch_eager_fp32=0.003285 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, random_state=7, root_weight=True, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-fp32: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-fp32: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-eager-bf16: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+inference call, torch-compile-bf16: torch_geometric.SAGEConv(aggr='mean', bias=True, in_channels=11, normalize=False, out_channels=128, project=False, root_weight=True, seed=7, x=float32[100000x11], extra0=int64[2x1258298], lin_l.bias=float32[128], ...); forward(x) (no autograd)(Xq)
+
+### grid-search-cv / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.grid-search-cv.istella.rows=full.json (amd/gate-e1522e32de70f1b2d74842a9e2e6635243327d72378b60ee1757b201fa7889a3)`, ran on AMD Instinct MI325X (amd, DO) job gate-e1522e32de70f1b2d74842a9e2e6635243327d72378b60ee1757b201fa7889a3
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 54963.6 | 54963.6..54963.6 | 1 | - | - | 54963.6 | - | - (stored whole) | - | - | 4244.9 | 2115.6 | abs_best_score_diff_vs_sklearn=8.225e-07, best_alpha=0.100000, best_score=0.334732, max_mean_test_score_diff_vs_sklearn=4.158e-05 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e1522e32de70f1b2d74842a9e2e6635243327d72378b60ee1757b201fa7889a3 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/231914/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### grid-search-cv / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.grid-search-cv.taxi.rows=full.json (amd/gate-2517b75f9d6327a3c56e5052666c8387c4ea72db5fe66ce7ccbe1d3e29f4e2f8)`, ran on AMD Instinct MI325X (amd, DO) job gate-2517b75f9d6327a3c56e5052666c8387c4ea72db5fe66ce7ccbe1d3e29f4e2f8
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2851.2 | 2851.2..2851.2 | 1 | - | - | 2851.2 | - | - (stored whole) | - | - | 2564.6 | 2115.5 | abs_best_score_diff_vs_sklearn=3.042e-05, best_alpha=0.100000, best_score=0.937956, max_mean_test_score_diff_vs_sklearn=3.055e-05 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2517b75f9d6327a3c56e5052666c8387c4ea72db5fe66ce7ccbe1d3e29f4e2f8 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/232709/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3443,19 +5083,26 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### gru-clf / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gru-clf.synthetic.rows=full.json (amd/gate-1b1c41e59e896bb9f8c2df3139a0b82c893ffbebefe09ac063e949cc53dc7a93)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1866.6 ms) = 0.287; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 1659.7 ms) = 0.323. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 514.9 | 514.9..514.9 | 1 | - | - | 514.9 | - | - (stored whole) | - | - | - | - | accuracy=0.971625, logloss=0.070054 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1946.7 | 1946.7..1946.7 | 1 | unchecked | unchecked | - | 1946.7 | - (stored kernel) | - | - | 3217.3 | 324.7 | accuracy=0.971842 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1997.8 | 1997.8..1997.8 | 1 | unchecked | unchecked | - | 1997.8 | - (stored kernel) | - | - | 3248.0 | 324.7 | accuracy=0.971842 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1852.7 | 1852.7..1852.7 | 1 | unchecked | unchecked | - | 1852.7 | - (stored kernel) | - | - | 4957.7 | 168.7 | accuracy=0.971788 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1973.8 | 1973.8..1973.8 | 1 | unchecked | unchecked | - | 1973.8 | - (stored kernel) | - | - | 5008.5 | 168.7 | accuracy=0.971788 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 535.9 | 535.9..535.9 | 1 | - | - | 535.9 | 535.6 | 0.23 (upload_ms_separate) | - | - | 2442.9 | 2055.6 | accuracy=0.971625, logloss=0.070054 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1b1c41e59e896bb9f8c2df3139a0b82c893ffbebefe09ac063e949cc53dc7a93 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1737.5 | 1737.5..1737.5 | 1 | 0.308 | - | 1817.9 | 1737.5 | 80.47 (upload_ms_untimed) | 0.308 (kernel/kernel) | - | 5295.2 | 476.7 | accuracy=0.971625 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1659.7 | 1659.7..1659.7 | 1 | 0.323 | - | 1740.7 | 1659.7 | 80.96 (upload_ms_untimed) | 0.323 (kernel/kernel) | - | 4950.0 | 476.7 | accuracy=0.971625 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1866.6 | 1866.6..1866.6 | 1 | 0.287 | - | 1947.2 | 1866.6 | 80.56 (upload_ms_untimed) | 0.287 (kernel/kernel) | - | 3725.2 | 320.7 | accuracy=0.971463 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1886.6 | 1886.6..1886.6 | 1 | 0.284 | - | 1968.2 | 1886.6 | 81.61 (upload_ms_untimed) | 0.284 (kernel/kernel) | - | 3330.1 | 320.7 | accuracy=0.971463 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.GRUClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/233583/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3463,23 +5110,85 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 18.8 | 18.8..18.8 | 1 | - | - | 18.8 | 18.7 | 0.07 (predict_upload_ms) | - | - | accuracy=0.971625, logloss=0.070054 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.2 | 6.2..6.2 | 1 | 3.037 | - | 6.6 | 6.2 | 0.39 (predict_upload_ms (the predict inputs' own copy)) | 3.026 (kernel/kernel) | - | accuracy=0.971625 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.0 | 6.0..6.0 | 1 | 3.107 | - | 6.4 | 6.0 | 0.33 (predict_upload_ms (the predict inputs' own copy)) | 3.096 (kernel/kernel) | - | accuracy=0.971625 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.1 | 6.1..6.1 | 1 | 3.083 | - | 6.4 | 6.1 | 0.29 (predict_upload_ms (the predict inputs' own copy)) | 3.072 (kernel/kernel) | - | accuracy=0.971463 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.4 | 6.4..6.4 | 1 | 2.945 | - | 6.7 | 6.4 | 0.28 (predict_upload_ms (the predict inputs' own copy)) | 2.935 (kernel/kernel) | - | accuracy=0.971463 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.GRUClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### gru-clf / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gru-clf.taxi-hourly.rows=full.json (amd/gate-d6d72a2f18673a8e4dc1fa533f28662319bf8e873ae6fc6649b758cb2a63c380)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 1749.5 ms) = 0.306; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1785.5 ms) = 0.300. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 515.5 | 515.5..515.5 | 1 | - | - | 515.5 | - | - (stored whole) | - | - | - | - | accuracy=0.865723, logloss=0.303537 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1792.8 | 1792.8..1792.8 | 1 | unchecked | unchecked | - | 1792.8 | - (stored kernel) | - | - | 3610.7 | 324.7 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2027.5 | 2027.5..2027.5 | 1 | unchecked | unchecked | - | 2027.5 | - (stored kernel) | - | - | 3258.5 | 324.7 | accuracy=0.865668 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2025.2 | 2025.2..2025.2 | 1 | unchecked | unchecked | - | 2025.2 | - (stored kernel) | - | - | 5294.2 | 168.7 | accuracy=0.865777 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1899.7 | 1899.7..1899.7 | 1 | unchecked | unchecked | - | 1899.7 | - (stored kernel) | - | - | 5008.7 | 168.7 | accuracy=0.865777 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 535.4 | 535.4..535.4 | 1 | - | - | 535.4 | 535.2 | 0.22 (upload_ms_separate) | - | - | 2442.5 | 2055.6 | accuracy=0.865723, logloss=0.303537 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d6d72a2f18673a8e4dc1fa533f28662319bf8e873ae6fc6649b758cb2a63c380 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1785.5 | 1785.5..1785.5 | 1 | 0.300 | - | 1864.9 | 1785.5 | 79.40 (upload_ms_untimed) | 0.300 (kernel/kernel) | - | 4903.4 | 476.7 | accuracy=0.865723 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1831.9 | 1831.9..1831.9 | 1 | 0.292 | - | 1914.7 | 1831.9 | 82.87 (upload_ms_untimed) | 0.292 (kernel/kernel) | - | 4949.8 | 476.7 | accuracy=0.865723 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1890.5 | 1890.5..1890.5 | 1 | 0.283 | - | 1973.4 | 1890.5 | 82.88 (upload_ms_untimed) | 0.283 (kernel/kernel) | - | 3276.9 | 320.7 | accuracy=0.865777 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1749.5 | 1749.5..1749.5 | 1 | 0.306 | - | 1831.3 | 1749.5 | 81.79 (upload_ms_untimed) | 0.306 (kernel/kernel) | - | 3323.9 | 320.7 | accuracy=0.865777 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.GRUClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/234485/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3487,23 +5196,85 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 18.8 | 18.8..18.8 | 1 | - | - | 18.8 | 18.7 | 0.07 (predict_upload_ms) | - | - | accuracy=0.865723, logloss=0.303537 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.2 | 6.2..6.2 | 1 | 3.031 | - | 6.5 | 6.2 | 0.27 (predict_upload_ms (the predict inputs' own copy)) | 3.020 (kernel/kernel) | - | accuracy=0.865723 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.2 | 6.2..6.2 | 1 | 3.017 | - | 6.5 | 6.2 | 0.28 (predict_upload_ms (the predict inputs' own copy)) | 3.007 (kernel/kernel) | - | accuracy=0.865723 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.2 | 6.2..6.2 | 1 | 3.055 | - | 6.5 | 6.2 | 0.36 (predict_upload_ms (the predict inputs' own copy)) | 3.045 (kernel/kernel) | - | accuracy=0.865777 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.4 | 6.4..6.4 | 1 | 2.933 | - | 6.7 | 6.4 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 2.923 (kernel/kernel) | - | accuracy=0.865777 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.GRUClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### gru-reg / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gru-reg.synthetic.rows=full.json (amd/gate-ff081d0afa2257ac52cbff81132637ab122b85c84b103b9b54c57e30f92a3e91)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 1866.3 ms) = 0.285; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1721.8 ms) = 0.309. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 513.3 | 513.3..513.3 | 1 | - | - | 513.3 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.982337, rmse=0.153975 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1993.7 | 1993.7..1993.7 | 1 | unchecked | unchecked | - | 1993.7 | - (stored kernel) | - | - | 3044.7 | 324.4 | finite=True, r2=0.981946, rmse=0.155672 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1996.8 | 1996.8..1996.8 | 1 | unchecked | unchecked | - | 1996.8 | - (stored kernel) | - | - | 3072.8 | 324.4 | finite=True, r2=0.981946, rmse=0.155672 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2078.2 | 2078.2..2078.2 | 1 | unchecked | unchecked | - | 2078.2 | - (stored kernel) | - | - | 3656.3 | 168.4 | finite=True, r2=0.981940, rmse=0.155700 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2123.0 | 2123.0..2123.0 | 1 | unchecked | unchecked | - | 2123.0 | - (stored kernel) | - | - | 3708.5 | 168.4 | finite=True, r2=0.981940, rmse=0.155700 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 532.2 | 532.2..532.2 | 1 | - | - | 532.2 | 531.9 | 0.22 (upload_ms_separate) | - | - | 2441.0 | 2055.4 | finite=True, r2=0.982337, rmse=0.153975 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ff081d0afa2257ac52cbff81132637ab122b85c84b103b9b54c57e30f92a3e91 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1721.8 | 1721.8..1721.8 | 1 | 0.309 | - | 1803.2 | 1721.8 | 81.37 (upload_ms_untimed) | 0.309 (kernel/kernel) | - | 2983.5 | 476.3 | finite=True, r2=0.982337, rmse=0.153975 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1735.6 | 1735.6..1735.6 | 1 | 0.307 | - | 1816.3 | 1735.6 | 80.71 (upload_ms_untimed) | 0.306 (kernel/kernel) | - | 3028.8 | 476.3 | finite=True, r2=0.982337, rmse=0.153975 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1933.9 | 1933.9..1933.9 | 1 | 0.275 | - | 2017.6 | 1933.9 | 83.69 (upload_ms_untimed) | 0.275 (kernel/kernel) | - | 2713.7 | 320.3 | finite=True, r2=0.982313, rmse=0.154079 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1866.3 | 1866.3..1866.3 | 1 | 0.285 | - | 1947.7 | 1866.3 | 81.41 (upload_ms_untimed) | 0.285 (kernel/kernel) | - | 2757.9 | 320.3 | finite=True, r2=0.982313, rmse=0.154079 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.GRURegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/235573/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3511,23 +5282,85 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 9.4 | 9.4..9.4 | 1 | - | - | 9.4 | 9.3 | 0.07 (predict_upload_ms) | - | - | finite=True, r2=0.982337, rmse=0.153975 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.1 | 6.1..6.1 | 1 | 1.549 | - | 6.4 | 6.1 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 1.538 (kernel/kernel) | - | finite=True, r2=0.982337, rmse=0.153975 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.0 | 6.0..6.0 | 1 | 1.558 | - | 6.6 | 6.0 | 0.55 (predict_upload_ms (the predict inputs' own copy)) | 1.547 (kernel/kernel) | - | finite=True, r2=0.982337, rmse=0.153975 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.2 | 6.2..6.2 | 1 | 1.527 | - | 6.5 | 6.2 | 0.32 (predict_upload_ms (the predict inputs' own copy)) | 1.517 (kernel/kernel) | - | finite=True, r2=0.982313, rmse=0.154079 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.2 | 6.2..6.2 | 1 | 1.506 | - | 6.6 | 6.2 | 0.36 (predict_upload_ms (the predict inputs' own copy)) | 1.495 (kernel/kernel) | - | finite=True, r2=0.982313, rmse=0.154079 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.GRURegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### gru-reg / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.gru-reg.taxi-hourly.rows=full.json (amd/gate-c23a2294610d7082abb40318932ee160ffe69581cc492598c27c7f8f944abbcc)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 1646.5 ms) = 0.324; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 1769.0 ms) = 0.301. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 513.4 | 513.4..513.4 | 1 | - | - | 513.4 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.747875, rmse=0.544554 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2012.1 | 2012.1..2012.1 | 1 | unchecked | unchecked | - | 2012.1 | - (stored kernel) | - | - | 3044.6 | 324.4 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2006.3 | 2006.3..2006.3 | 1 | unchecked | unchecked | - | 2006.3 | - (stored kernel) | - | - | 3072.3 | 324.4 | finite=True, r2=0.748219, rmse=0.544182 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1801.3 | 1801.3..1801.3 | 1 | unchecked | unchecked | - | 1801.3 | - (stored kernel) | - | - | 3655.7 | 168.4 | finite=True, r2=0.748254, rmse=0.544144 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2127.7 | 2127.7..2127.7 | 1 | unchecked | unchecked | - | 2127.7 | - (stored kernel) | - | - | 3708.4 | 168.4 | finite=True, r2=0.748254, rmse=0.544144 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 532.8 | 532.8..532.8 | 1 | - | - | 532.8 | 532.6 | 0.21 (upload_ms_separate) | - | - | 2440.7 | 2055.4 | finite=True, r2=0.747875, rmse=0.544554 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c23a2294610d7082abb40318932ee160ffe69581cc492598c27c7f8f944abbcc 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1769.0 | 1769.0..1769.0 | 1 | 0.301 | - | 1850.1 | 1769.0 | 81.13 (upload_ms_untimed) | 0.301 (kernel/kernel) | - | 2984.0 | 476.3 | finite=True, r2=0.747875, rmse=0.544554 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1812.9 | 1812.9..1812.9 | 1 | 0.294 | - | 1894.7 | 1812.9 | 81.86 (upload_ms_untimed) | 0.294 (kernel/kernel) | - | 3027.4 | 476.3 | finite=True, r2=0.747875, rmse=0.544554 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1865.5 | 1865.5..1865.5 | 1 | 0.286 | - | 1947.3 | 1865.5 | 81.75 (upload_ms_untimed) | 0.285 (kernel/kernel) | - | 2710.4 | 320.3 | finite=True, r2=0.748021, rmse=0.544395 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1646.5 | 1646.5..1646.5 | 1 | 0.324 | - | 1728.8 | 1646.5 | 82.24 (upload_ms_untimed) | 0.323 (kernel/kernel) | - | 2760.8 | 320.3 | finite=True, r2=0.748021, rmse=0.544395 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.GRURegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/236472/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -3535,7 +5368,172 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 9.2 | 9.2..9.2 | 1 | - | - | 9.2 | 9.2 | 0.06 (predict_upload_ms) | - | - | finite=True, r2=0.747875, rmse=0.544554 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.1 | 6.1..6.1 | 1 | 1.523 | - | 6.4 | 6.1 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 1.512 (kernel/kernel) | - | finite=True, r2=0.747875, rmse=0.544554 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.1 | 6.1..6.1 | 1 | 1.508 | - | 6.4 | 6.1 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 1.498 (kernel/kernel) | - | finite=True, r2=0.747875, rmse=0.544554 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 6.0 | 6.0..6.0 | 1 | 1.537 | - | 6.3 | 6.0 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 1.527 (kernel/kernel) | - | finite=True, r2=0.748021, rmse=0.544395 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 5.9 | 5.9..5.9 | 1 | 1.556 | - | 6.2 | 5.9 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 1.546 (kernel/kernel) | - | finite=True, r2=0.748021, rmse=0.544395 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.GRURegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.GRU(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+### huber / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.huber.istella.rows=full.json (amd/gate-ab57fda479aac2631b6341683f0c4acfdd1c111b3e4bfcd04a1b4d99214d9175)`, ran on AMD Instinct MI325X (amd, DO) job gate-ab57fda479aac2631b6341683f0c4acfdd1c111b3e4bfcd04a1b4d99214d9175
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 849.2 | 849.2..849.2 | 1 | - | - | 849.2 | 833.5 | 15.80 (upload_ms_separate) | - | - | 3387.8 | 2425.4 | finite=True, r2=-0.007193, rmse=0.838333 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ab57fda479aac2631b6341683f0c4acfdd1c111b3e4bfcd04a1b4d99214d9175 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.HuberRegressor(alpha=0.0001, epsilon=1.35, fit_intercept=True, max_iter=100, tol=1e-05, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/237074/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### huber / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.huber.taxi.rows=full.json (amd/gate-b7d36b1669232e81d64dffd17d5444bb2d3e706cd9e673fa31e96a78443e7f57)`, ran on AMD Instinct MI325X (amd, DO) job gate-b7d36b1669232e81d64dffd17d5444bb2d3e706cd9e673fa31e96a78443e7f57
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 270.2 | 270.2..270.2 | 1 | - | - | 270.2 | 269.3 | 0.93 (upload_ms_separate) | - | - | 2504.0 | 2425.4 | finite=True, r2=0.900215, rmse=5.031174 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b7d36b1669232e81d64dffd17d5444bb2d3e706cd9e673fa31e96a78443e7f57 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.HuberRegressor(alpha=0.0001, epsilon=1.35, fit_intercept=True, max_iter=100, tol=1e-05, warm_start=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/237604/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### incremental-pca / istella (rows full, shape X 900000x220; Xq 100000x220)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.incremental-pca.istella.rows=full.json (amd/gate-349260c3618b95f946fa24cb3c4b6f4490a142d00b9488e1b1869e3a689915bd)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2329.0 | 2329.0..2329.0 | 1 | - | - | 2329.0 | 2314.9 | 14.12 (upload_ms_separate) | - | - | 3108.7 | 1876.2 | explained_variance_fraction=1.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-349260c3618b95f946fa24cb3c4b6f4490a142d00b9488e1b1869e3a689915bd 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.IncrementalPCA(batch_size=65536, copy=True, n_components=10, whiten=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/238029/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'batch_size': 65536, 'n_components': 10, 'whiten': False}. Rows: None. Timed: None.
+
+mismatch: per-batch SVD: ours eigh of the d x d Gram matrix of the stacked batch (Jacobi eigh); cuML cp.linalg.svd and scikit-learn scipy.linalg.svd of the stacked batch: different algorithms, so both opponents are refused
+
+config: cuML benchmark (RAPIDS), IncrementalPCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| batch_size | 65536 |
+| copy | true |
+| n_components | 10 |
+| seed | "none (deterministic)" |
+| whiten | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 213.6 | 213.6..213.6 | 1 | - | - | 213.6 | 212.0 | 1.60 (predict_upload_ms) | - | - | explained_variance_fraction=1.000000 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.IncrementalPCA(batch_size=65536, copy=True, n_components=10, whiten=False); transform(Xq)(Xq)
+
+### incremental-pca / taxi (rows full, shape X 900000x11; Xq 100000x11)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.incremental-pca.taxi.rows=full.json (amd/gate-9d0e5e1a6dc9ffba6f4b4254ecc931889942d945955b8b710a8dd3c20589cd97)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 161.4 | 161.4..161.4 | 1 | - | - | 161.4 | 160.6 | 0.78 (upload_ms_separate) | - | - | 2309.5 | 1875.9 | explained_variance_fraction=0.999995 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9d0e5e1a6dc9ffba6f4b4254ecc931889942d945955b8b710a8dd3c20589cd97 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.IncrementalPCA(batch_size=65536, copy=True, n_components=10, whiten=False)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/238414/vram_* bytes for this pid at the round's end (not a peak)
+
+settings: {'batch_size': 65536, 'n_components': 10, 'whiten': False}. Rows: None. Timed: None.
+
+mismatch: per-batch SVD: ours eigh of the d x d Gram matrix of the stacked batch (Jacobi eigh); cuML cp.linalg.svd and scikit-learn scipy.linalg.svd of the stacked batch: different algorithms, so both opponents are refused
+
+config: cuML benchmark (RAPIDS), IncrementalPCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (get_params) |
+| batch_size | 65536 |
+| copy | true |
+| n_components | 10 |
+| seed | "none (deterministic)" |
+| whiten | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 22.0 | 22.0..22.0 | 1 | - | - | 22.0 | 21.9 | 0.11 (predict_upload_ms) | - | - | explained_variance_fraction=0.999995 | - | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, ours: mojolearn.IncrementalPCA(batch_size=65536, copy=True, n_components=10, whiten=False); transform(Xq)(Xq)
 
 ### ivf-pq / istella (rows full, shape index 400000x220; queries 4000x220)
 
@@ -3596,18 +5594,13 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### jl-min-dim / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.jl-min-dim.synthetic.rows=full.json (amd/gate-240d30f7ac1d589d5131a7a961692031701d58a1d67581f0e7569e594c9aa1d0)`, ran on AMD Instinct MI325X (amd, DO) job gate-240d30f7ac1d589d5131a7a961692031701d58a1d67581f0e7569e594c9aa1d0
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 6.5 | 6.5..6.5 | 1 | - | - | 6.5 | - | - (stored whole) | - | - | - | - | equal_fraction_vs_sklearn=1.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 164.9 | 164.9..164.9 | 1 | unchecked | unchecked | 164.9 | 164.9 | 0.00 (cpu-arm) | - | - | 204.8 | - | equal_fraction_vs_sklearn=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 14.6 | 14.6..14.6 | 1 | - | - | 14.6 | - | - (stored whole) | - | - | 108.5 | - | equal_fraction_vs_sklearn=1.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-240d30f7ac1d589d5131a7a961692031701d58a1d67581f0e7569e594c9aa1d0 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
-
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3691,51 +5684,50 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### kernel-shap / istella (rows full, shape X 100000x220; Xq 100x220; y 100000; yq 100)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1692)`, ran on AMD Instinct MI325X (amd, DO) job a1692
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.kernel-shap.istella.rows=full.json (amd/gate-aae115c2e6743800683b1191175030db127c8718ec2f02df86d79d7bd1fb2ae1)`, ran on AMD Instinct MI325X (amd, DO) job gate-aae115c2e6743800683b1191175030db127c8718ec2f02df86d79d7bd1fb2ae1
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 8243.6 | 8243.6..8243.6 | 1 | - | - | 8243.6 | - | - (stored whole) | - | - | - | - | rel_error_vs_exact=8.307e-08 | - | main board, one scored run | - | ok (main@c8ef6c66d amd/a1692 2026-10-11; identity vs the nvidia columns: n/a) |
-| shap-cpu | shap | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | shap 0.51.0 | opponent | 10339.5 | 10339.5..10339.5 | 1 | unchecked | unchecked | 10339.5 | 10339.5 | 0.00 (cpu-arm) | - | - | 2196.3 | - | rel_error_vs_exact=8.63e-15 | - | SPAN-ASYMMETRIC(fit_before_its_clock) | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10022.7 | 10022.7..10022.7 | 1 | - | - | 10022.7 | - | - (stored whole) | - | - | 3614.0 | 2055.4 | rel_error_vs_exact=7.306e-08 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-aae115c2e6743800683b1191175030db127c8718ec2f02df86d79d7bd1fb2ae1 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.KernelExplainer(l1_reg=False, link='identity', n_background=100, nsamples=2048, seed=7)`
 
-memory, shap-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'l1_reg': False, 'link': 'identity', 'n_background': 100, 'nsamples': 2048}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/244603/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### kernel-shap / taxi (rows full, shape -)
+### kernel-shap / taxi (rows full, shape X 100000x11; Xq 100x11; y 100000; yq 100)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a0904)`, ran on AMD Instinct MI325X (amd, DO) job a0904
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.kernel-shap.taxi.rows=full.json (amd/gate-2df6577d005acb6b4315a6f7a074c62f2d2fbaaaac3c349caaa09b76ac62bd8a)`, ran on AMD Instinct MI325X (amd, DO) job gate-2df6577d005acb6b4315a6f7a074c62f2d2fbaaaac3c349caaa09b76ac62bd8a
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@03b648834) | identical | 252.6 | 252.6..252.6 | 1 | - | - | 252.6 | - | - (stored whole) | - | - | - | - | rel_error_vs_exact=1.056e-07 | - | main board, one scored run | - | ok (main@03b648834 amd/a0904 2026-10-09; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 464.6 | 464.6..464.6 | 1 | - | - | 464.6 | - | - (stored whole) | - | - | 2617.3 | 2055.4 | rel_error_vs_exact=6.346e-08 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2df6577d005acb6b4315a6f7a074c62f2d2fbaaaac3c349caaa09b76ac62bd8a 2026-10-27; identity vs the nvidia columns: n/a) |
 
-settings: {'explained_model': 'one float32 ridge (alpha 1, centered) on every arm, coefficients solved once in a fixed order by the harness', 'l1_reg': False, 'link': 'identity', 'n_background': 100, 'nsamples': 2048}. Rows: None. Timed: None.
+calls:
+- `ours`: `mojolearn.KernelExplainer(l1_reg=False, link='identity', n_background=100, nsamples=2048, seed=7)`
 
-mismatch: opponents withheld: the lane settings at this tree's HEAD differ from the settings release-board-resume-r2 recorded for its opponent race (an opponent job must score them again)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/245142/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
 ### knn-imputer / istella (rows full, shape X 100000x220; X_true 100000x220; Xq 20000x220; Xq_true 20000x220; y 100000; yq 20000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1686)`, ran on AMD Instinct MI325X (amd, DO) job a1686
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.knn-imputer.istella.rows=full.json (amd/gate-0c02e3b545f25fc0c26f1228f2d150808495177de4a2b8570825bd45e87997b2)`, ran on AMD Instinct MI325X (amd, DO) job gate-0c02e3b545f25fc0c26f1228f2d150808495177de4a2b8570825bd45e87997b2
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a1c96a5ba) | identical | 22.9 | 22.9..22.9 | 1 | - | - | 22.9 | - | - (stored whole) | - | - | - | - | masked_rmse=323953.237332 | - | main board, one scored run | - | ok (main@a1c96a5ba amd/a1686 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 16.2 | 16.2..16.2 | 1 | unchecked | unchecked | 16.2 | 16.2 | 0.00 (cpu-arm) | - | - | 3528.4 | - | masked_rmse=986208.700423 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 20.6 | 20.6..20.6 | 1 | - | - | 20.6 | 18.9 | 1.65 (upload_ms_separate) | - | - | 2185.1 | 1875.8 | masked_rmse=323953.237303, max_abs_diff_vs_sklearn=2.562e+07 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-0c02e3b545f25fc0c26f1228f2d150808495177de4a2b8570825bd45e87997b2 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.KNNImputer(add_indicator=False, copy=True, keep_empty_features=False, metric='nan_euclidean', missing_values=nan, n_neighbors=5, weights='uniform')`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'add_indicator': False, 'keep_empty_features': False, 'metric': 'nan_euclidean', 'n_neighbors': 5, 'weights': 'uniform'}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/245649/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3743,18 +5735,44 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### knn-imputer / taxi (rows full, shape X 100000x11; X_true 100000x11; Xq 20000x11; Xq_true 20000x11; y 100000; yq 20000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1160)`, ran on AMD Instinct MI325X (amd, DO) job a1160
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.knn-imputer.taxi.rows=full.json (amd/gate-20eba66a7237745262656dfa0e8f65929075271a620dee0954431c406922994d)`, ran on AMD Instinct MI325X (amd, DO) job gate-20eba66a7237745262656dfa0e8f65929075271a620dee0954431c406922994d
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@0a7b206f1) | identical | 1.1 | 1.1..1.1 | 1 | - | - | 1.1 | - | - (stored whole) | - | - | - | - | masked_rmse=6.151696 | - | main board, one scored run | - | ok (main@0a7b206f1 amd/a1160 2026-10-09; identity vs nvidia-l40s: MATCH) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 1.9 | 1.9..1.9 | 1 | unchecked | unchecked | 1.9 | 1.9 | 0.00 (cpu-arm) | - | - | 1966.8 | - | masked_rmse=5.263919 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 18.4 | 18.4..18.4 | 1 | - | - | 18.4 | 18.2 | 0.16 (upload_ms_separate) | - | - | 999.5 | 1875.8 | masked_rmse=5.108599, max_abs_diff_vs_sklearn=16.693946 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-20eba66a7237745262656dfa0e8f65929075271a620dee0954431c406922994d 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.KNNImputer(add_indicator=False, copy=True, keep_empty_features=False, metric='nan_euclidean', missing_values=nan, n_neighbors=5, weights='uniform')`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/246885/vram_* bytes for this pid at the round's end (not a peak)
 
-settings: {'add_indicator': False, 'keep_empty_features': False, 'metric': 'nan_euclidean', 'n_neighbors': 5, 'weights': 'uniform'}. Rows: None. Timed: None.
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### kpss / synthetic (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.kpss.synthetic.rows=full.json (amd/gate-8352eedcd0180f7096ac3e47879e6e5aca223618f59d583af5572a979a186d42)`, ran on AMD Instinct MI325X (amd, DO) job gate-8352eedcd0180f7096ac3e47879e6e5aca223618f59d583af5572a979a186d42
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.6 | 2.6..2.6 | 1 | - | - | 2.6 | - | - (stored whole) | - | - | 2061.1 | 1698.3 | flag_agreement_vs_statsmodels=1.000000, stat_max_rel_diff_vs_statsmodels=4.318e-05, stationary_fraction=0.031250 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-8352eedcd0180f7096ac3e47879e6e5aca223618f59d583af5572a979a186d42 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/247407/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### kpss / taxi-hourly (rows full, shape Yfit 64x1392; Yhold 64x48)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.kpss.taxi-hourly.rows=full.json (amd/gate-9fba1001c7f11c91bd69d608601965e909830de0d8d1496af672cebac362ddb1)`, ran on AMD Instinct MI325X (amd, DO) job gate-9fba1001c7f11c91bd69d608601965e909830de0d8d1496af672cebac362ddb1
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.8 | 2.8..2.8 | 1 | - | - | 2.8 | - | - (stored whole) | - | - | 2061.0 | 1698.3 | flag_agreement_vs_statsmodels=1.000000, stat_max_rel_diff_vs_statsmodels=6.237e-06, stationary_fraction=0.687500 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9fba1001c7f11c91bd69d608601965e909830de0d8d1496af672cebac362ddb1 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/247914/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3762,18 +5780,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### label-binarizer / istella (rows full, shape X 1000000x8; Xq 100000x8; lab 1000000; labq 100000; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-binarizer.istella.rows=full.json (amd/gate-676e7bb0e8e798ef85074aa174dfb3de2fb2957041696998ac75b2d76e4a951b)`, ran on AMD Instinct MI325X (amd, DO) job gate-676e7bb0e8e798ef85074aa174dfb3de2fb2957041696998ac75b2d76e4a951b
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 16.1 | 16.1..16.1 | 1 | - | - | 16.1 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x16, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 51.9 | 51.9..51.9 | 1 | unchecked | unchecked | 51.9 | 51.9 | 0.00 (cpu-arm) | - | - | 680.8 | - | output_shape=100000x16 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 40.6 | 40.6..40.6 | 1 | - | - | 40.6 | 40.3 | 0.29 (upload_ms_separate) | - | - | 1390.3 | 1875.8 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x16, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-676e7bb0e8e798ef85074aa174dfb3de2fb2957041696998ac75b2d76e4a951b 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LabelBinarizer(neg_label=0, pos_label=1, sparse_output=False)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'neg_label': 0, 'pos_label': 1}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/248419/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), LabelBinarizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
@@ -3781,18 +5797,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### label-binarizer / taxi (rows full, shape X 1000000x5; Xq 100000x5; lab 1000000; labq 100000; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-binarizer.taxi.rows=full.json (amd/gate-4cc76c3a0ec7375e21520d51a35fcf6bb8298ef2c183b2053e8ae13552ebd2b0)`, ran on AMD Instinct MI325X (amd, DO) job gate-4cc76c3a0ec7375e21520d51a35fcf6bb8298ef2c183b2053e8ae13552ebd2b0
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 223.0 | 223.0..223.0 | 1 | - | - | 223.0 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x259, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 139.4 | 139.4..139.4 | 1 | unchecked | unchecked | 139.4 | 139.4 | 0.00 (cpu-arm) | - | - | 6601.1 | - | output_shape=100000x259 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 503.3 | 503.3..503.3 | 1 | - | - | 503.3 | 503.0 | 0.28 (upload_ms_separate) | - | - | 7401.0 | 1985.8 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x259, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4cc76c3a0ec7375e21520d51a35fcf6bb8298ef2c183b2053e8ae13552ebd2b0 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LabelBinarizer(neg_label=0, pos_label=1, sparse_output=False)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'neg_label': 0, 'pos_label': 1}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/248927/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), LabelBinarizer (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
@@ -3800,18 +5814,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### label-encoder / istella (rows full, shape X 1000000x8; Xq 100000x8; lab 1000000; labq 100000; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-encoder.istella.rows=full.json (amd/gate-488cf5e9959e911998cab51ec0df136964e2d32a7eac4afaff24736780116879)`, ran on AMD Instinct MI325X (amd, DO) job gate-488cf5e9959e911998cab51ec0df136964e2d32a7eac4afaff24736780116879
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 2.9 | 2.9..2.9 | 1 | - | - | 2.9 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 6.8 | 6.8..6.8 | 1 | unchecked | unchecked | 6.8 | 6.8 | 0.00 (cpu-arm) | - | - | 313.1 | - | output_shape=100000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.5 | 7.5..7.5 | 1 | - | - | 7.5 | 7.3 | 0.22 (upload_ms_separate) | - | - | 1006.8 | 1875.8 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-488cf5e9959e911998cab51ec0df136964e2d32a7eac4afaff24736780116879 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LabelEncoder()`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/249450/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), LabelEncoder (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
@@ -3819,20 +5831,86 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### label-encoder / taxi (rows full, shape X 1000000x5; Xq 100000x5; lab 1000000; labq 100000; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-encoder.taxi.rows=full.json (amd/gate-b2acb39d0333b6ca086f82f549b4c9a737fd53e9a15d86b948e1e6041a15e892)`, ran on AMD Instinct MI325X (amd, DO) job gate-b2acb39d0333b6ca086f82f549b4c9a737fd53e9a15d86b948e1e6041a15e892
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 2.7 | 2.7..2.7 | 1 | - | - | 2.7 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 20.6 | 20.6..20.6 | 1 | unchecked | unchecked | 20.6 | 20.6 | 0.00 (cpu-arm) | - | - | 300.5 | - | output_shape=100000 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.6 | 7.6..7.6 | 1 | - | - | 7.6 | 7.4 | 0.22 (upload_ms_separate) | - | - | 994.5 | 1875.8 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b2acb39d0333b6ca086f82f549b4c9a737fd53e9a15d86b948e1e6041a15e892 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LabelEncoder()`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/249955/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), LabelEncoder (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### label-propagation / istella (rows full, shape X 200000x220; Xq 20000x220; y 200000; y_semi 200000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-propagation.istella.rows=full.json (amd/gate-c9d75c3ffddf1ffaeac20783afee1f56d68c63954aae995b8eb6b5fe01daa005)`, ran on AMD Instinct MI325X (amd, DO) job gate-c9d75c3ffddf1ffaeac20783afee1f56d68c63954aae995b8eb6b5fe01daa005
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2603.5 | 2603.5..2603.5 | 1 | - | - | 2603.5 | 2600.3 | 3.24 (upload_ms_separate) | - | - | 3564.0 | 2705.4 | accuracy=0.905500 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c9d75c3ffddf1ffaeac20783afee1f56d68c63954aae995b8eb6b5fe01daa005 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.LabelPropagation(gamma=20, kernel='knn', max_iter=1000, n_neighbors=7, tol=0.001)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/250466/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### label-propagation / taxi (rows full, shape X 200000x11; Xq 20000x11; y 200000; y_semi 200000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-propagation.taxi.rows=full.json (amd/gate-3f6b89119cb80bf4fd3f5df1110322c8ca2df08139eca3ba8ea28d925fc32cc4)`, ran on AMD Instinct MI325X (amd, DO) job gate-3f6b89119cb80bf4fd3f5df1110322c8ca2df08139eca3ba8ea28d925fc32cc4
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1464.6 | 1464.6..1464.6 | 1 | - | - | 1464.6 | 1464.3 | 0.28 (upload_ms_separate) | - | - | 2512.2 | 2705.4 | accuracy=0.701600 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-3f6b89119cb80bf4fd3f5df1110322c8ca2df08139eca3ba8ea28d925fc32cc4 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.LabelPropagation(gamma=20, kernel='knn', max_iter=1000, n_neighbors=7, tol=0.001)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/251198/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### label-spreading / istella (rows full, shape X 200000x220; Xq 20000x220; y 200000; y_semi 200000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-spreading.istella.rows=full.json (amd/gate-9160cd090c510f36b5016d6920b477ac1f3aed4e7b3d95ce1f86185a34d1ee5f)`, ran on AMD Instinct MI325X (amd, DO) job gate-9160cd090c510f36b5016d6920b477ac1f3aed4e7b3d95ce1f86185a34d1ee5f
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1959.2 | 1959.2..1959.2 | 1 | - | - | 1959.2 | 1956.0 | 3.24 (upload_ms_separate) | - | - | 3565.1 | 2705.4 | accuracy=0.904450 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9160cd090c510f36b5016d6920b477ac1f3aed4e7b3d95ce1f86185a34d1ee5f 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.LabelSpreading(alpha=0.2, gamma=20, kernel='knn', max_iter=30, n_neighbors=7, tol=0.001)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/251814/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### label-spreading / taxi (rows full, shape X 200000x11; Xq 20000x11; y 200000; y_semi 200000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.label-spreading.taxi.rows=full.json (amd/gate-1e3d547cdde2bcd6156760d9f41f81c6c6304f3b9656a53e24433fa9715626fb)`, ran on AMD Instinct MI325X (amd, DO) job gate-1e3d547cdde2bcd6156760d9f41f81c6c6304f3b9656a53e24433fa9715626fb
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 813.4 | 813.4..813.4 | 1 | - | - | 813.4 | 813.1 | 0.28 (upload_ms_separate) | - | - | 2512.5 | 2705.4 | accuracy=0.676400 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1e3d547cdde2bcd6156760d9f41f81c6c6304f3b9656a53e24433fa9715626fb 2026-10-27; identity vs the nvidia columns: n/a) |
+
+calls:
+- `ours`: `mojolearn.LabelSpreading(alpha=0.2, gamma=20, kernel='knn', max_iter=30, n_neighbors=7, tol=0.001)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/252349/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
@@ -3890,18 +5968,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### lasso-cv / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1645)`, ran on AMD Instinct MI325X (amd, DO) job a1645
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lasso-cv.istella.rows=full.json (amd/gate-e3c0764f5ebf5b35383bb1b2ac4e1529c4945b92ed15c5a963d7a535feca9a93)`, ran on AMD Instinct MI325X (amd, DO) job gate-e3c0764f5ebf5b35383bb1b2ac4e1529c4945b92ed15c5a963d7a535feca9a93
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@2afa942e3) | identical | 836.6 | 836.6..836.6 | 1 | - | - | 836.6 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.325506, rmse=0.686040 | - | main board, one scored run | - | ok (main@2afa942e3 amd/a1645 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 42194.4 | 42194.4..42194.4 | 1 | unchecked | unchecked | 42194.4 | 42194.4 | 0.00 (cpu-arm) | - | - | 8912.8 | - | finite=True, r2=0.325507, rmse=0.686040 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 807.4 | 807.4..807.4 | 1 | - | - | 807.4 | 791.6 | 15.79 (upload_ms_separate) | - | - | 3369.5 | 2139.4 | finite=True, r2=0.325506, rmse=0.686040 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e3c0764f5ebf5b35383bb1b2ac4e1529c4945b92ed15c5a963d7a535feca9a93 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LassoCV(alphas=[0.001, 0.01, 0.1, 1], copy_X=True, cv=5, eps=0.001, fit_intercept=True, max_iter=1000, n_alphas='deprecated', positive=False, precompute=True, random_state=7, selection='cyclic', tol=0.0001, verbose=False)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'alphas': [0.001, 0.01, 0.1, 1.0], 'cv': 5, 'eps': 0.001, 'fit_intercept': True, 'max_iter': 1000, 'positive': False, 'random_state': 7, 'selection': 'cyclic', 'tol': 0.0001}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/253766/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3909,18 +5985,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### lasso-cv / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-results.txt (amd/a1645)`, ran on AMD Instinct MI325X (amd, DO) job a1645
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lasso-cv.taxi.rows=full.json (amd/gate-2b7b9f61b5ace730a7fe8d2506782ca973cdcf2a909c9d33ed1095cb9274b918)`, ran on AMD Instinct MI325X (amd, DO) job gate-2b7b9f61b5ace730a7fe8d2506782ca973cdcf2a909c9d33ed1095cb9274b918
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@2afa942e3) | identical | 198.7 | 198.7..198.7 | 1 | - | - | 198.7 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.909038, rmse=4.803593 | - | main board, one scored run | - | ok (main@2afa942e3 amd/a1645 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 277.2 | 277.2..277.2 | 1 | unchecked | unchecked | 277.2 | 277.2 | 0.00 (cpu-arm) | - | - | 680.5 | - | finite=True, r2=0.909038, rmse=4.803593 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 184.3 | 184.3..184.3 | 1 | - | - | 184.3 | 183.3 | 0.93 (upload_ms_separate) | - | - | 2492.9 | 2055.4 | finite=True, r2=0.909038, rmse=4.803593 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2b7b9f61b5ace730a7fe8d2506782ca973cdcf2a909c9d33ed1095cb9274b918 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LassoCV(alphas=[0.001, 0.01, 0.1, 1], copy_X=True, cv=5, eps=0.001, fit_intercept=True, max_iter=1000, n_alphas='deprecated', positive=False, precompute=True, random_state=7, selection='cyclic', tol=0.0001, verbose=False)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {'alphas': [0.001, 0.01, 0.1, 1.0], 'cv': 5, 'eps': 0.001, 'fit_intercept': True, 'max_iter': 1000, 'positive': False, 'random_state': 7, 'selection': 'cyclic', 'tol': 0.0001}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/254320/vram_* bytes for this pid at the round's end (not a peak)
 
 config: the board's own settings (no NVIDIA harness entry)
 
@@ -3972,7 +6046,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.8 ms) = 0.841; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2518.4 | 235846.9 | max_rel_diff_vs_torch_eager_fp32=0.011086, rel_fro_vs_torch_eager_fp32=6.669e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-5939cde02360535239ede45137d834b8f9785d819a429934a6922df8c93ed92f 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.6 | 0.6..0.6 | 1 | - | - | - | 0.6 | - (stored kernel) | - | - | 2518.4 | 235846.9 | max_rel_diff_vs_torch_eager_fp32=0.011086, rel_fro_vs_torch_eager_fp32=6.669e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-5939cde02360535239ede45137d834b8f9785d819a429934a6922df8c93ed92f 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-e8e8acf7d7b435f9112dd94efbe0833db5967041c883510cc2ad981de7bfb713 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.l) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.8 | 0.8..0.8 | 1 | 0.810 | - | - | 0.8 | - (stored kernel) | 0.810 (kernel/kernel) | - | 1890.1 | 320.1 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.4 | 1.4..1.4 | 1 | 0.459 | - | - | 1.4 | - (stored kernel) | 0.459 (kernel/kernel) | - | 2336.8 | 392.1 | max_rel_diff_vs_torch_eager_fp32=0.007530, rel_fro_vs_torch_eager_fp32=5.326e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.8 | 0.8..0.8 | 1 | 0.841 | - | - | 0.8 | - (stored kernel) | 0.841 (kernel/kernel) | - | 1890.4 | 320.1 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -4063,6 +6137,66 @@ config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
+### learning-curve / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.learning-curve.istella.rows=full.json (amd/gate-82a16ccbee790a931d7126d18b61f988544a9e8dc03315d15c8567975d49dfd0)`, ran on AMD Instinct MI325X (amd, DO) job gate-82a16ccbee790a931d7126d18b61f988544a9e8dc03315d15c8567975d49dfd0
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 64389.0 | 64389.0..64389.0 | 1 | - | - | 64389.0 | - | - (stored whole) | - | - | 4089.1 | 2115.6 | max_mean_test_score_diff_vs_sklearn=0.0003848, mean_test_r2_first=0.321543, mean_test_r2_last=0.334716 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-82a16ccbee790a931d7126d18b61f988544a9e8dc03315d15c8567975d49dfd0 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/257411/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### learning-curve / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.learning-curve.taxi.rows=full.json (amd/gate-40dddbb833560fb5abd5dae8d078c5867cfc2e37689067c87f6495e530ec5fdf)`, ran on AMD Instinct MI325X (amd, DO) job gate-40dddbb833560fb5abd5dae8d078c5867cfc2e37689067c87f6495e530ec5fdf
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3533.2 | 3533.2..3533.2 | 1 | - | - | 3533.2 | - | - (stored whole) | - | - | 2597.6 | 2115.5 | max_mean_test_score_diff_vs_sklearn=3.042e-05, mean_test_r2_first=0.937536, mean_test_r2_last=0.937956 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-40dddbb833560fb5abd5dae8d078c5867cfc2e37689067c87f6495e530ec5fdf 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/258019/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### linalg-svdvals / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.linalg-svdvals.taxi.rows=full.json (amd/gate-5e09d4577b05db8a96016af11cde7796d08f2aa9f8b2c960b13244035adc53fd)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 20.1 | 20.1..20.1 | 1 | - | - | 20.1 | - | - (stored whole) | - | - | 2172.6 | 1698.4 | max_rel_sv_err_vs_fp64=3.583e-07 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-5e09d4577b05db8a96016af11cde7796d08f2aa9f8b2c960b13244035adc53fd 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 262.8 | 262.8..262.8 | 1 | 0.077 | - | 262.8 | - | - (stored whole) | 0.077 (whole/whole) | - | 2003.7 | 168.0 | max_rel_sv_err_vs_fp64=2.102e-05 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 272.4 | 272.4..272.4 | 1 | 0.074 | - | 272.4 | - | - (stored whole) | 0.074 (whole/whole) | - | 2070.1 | 126.0 | max_rel_sv_err_vs_fp64=2.102e-05 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch.linalg_svdvals(X=float32[1000000x11])`
+- `torch-compile-fp32`: `torch.linalg_svdvals(X=float32[1000000x11])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/259489/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {}. Rows: None. Timed: None.
+
+mismatch: ours: the singular values of R from a Householder QR (python/mojolearn/_linalg_impl.py svdvals); torch: its LAPACK/cuSOLVER/rocSOLVER gesvd of X; quality is against float64 numpy
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| input_arrays | [{"dtype": "float32", "name": "X", "sha256": "33fdb983b45d51732ce911c8887c0c9f9cf7a7416ae67ebfe983fa0b3a4c8b77", "shape": [1000000, 11]}] | [{"dtype": "float32", "name": "X", "sha256": "33fdb983b45d51732ce911c8887c0c9f9cf7a7416ae67ebfe983fa0b3a4c8b77", "shape": [1000000, 11]}] | [{"dtype": "float32", "name": "X", "sha256": "33fdb983b45d51732ce911c8887c0c9f9cf7a7416ae67ebfe983fa0b3a4c8b77", "shape": [1000000, 11]}] |
+| seed | "none (deterministic)" | "none (deterministic)" | "none (deterministic)" |
+
 ### lion / synthetic (rows full, shape -)
 
 race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0006)`, ran on AMD Instinct MI325X (amd, DO) job a0006
@@ -4077,57 +6211,413 @@ settings: {'betas': [0.9, 0.99], 'lr': 0.001, 'weight_decay': 0.0}. Rows: None. 
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### louvain / istella (rows full, shape -)
+### lle / istella (rows full, shape X 10000x220; Xq 2000x220)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a0870)`, ran on AMD Instinct MI325X (amd, DO) job a0870
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lle.istella.rows=full.json (amd/gate-a93f790eca75e0c9d1c82c611ac480c68fa0cc3aae29c9aabe45081bf8afbfd2)`, ran on AMD Instinct MI325X (amd, DO) job gate-a93f790eca75e0c9d1c82c611ac480c68fa0cc3aae29c9aabe45081bf8afbfd2
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@4df610f3b) | identical | 359.9 | 359.9..359.9 | 1 | - | - | 359.9 | - | - (stored whole) | - | - | - | - | modularity=0.911187, n_communities=40 | - | main board, one scored run | - | ok (main@4df610f3b amd/a0870 2026-10-08; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 95558.0 | 95558.0..95558.0 | 1 | - | - | 95558.0 | 95557.8 | 0.21 (upload_ms_separate) | - | - | 2679.8 | 2388.1 | trustworthiness_k15=0.852200 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a93f790eca75e0c9d1c82c611ac480c68fa0cc3aae29c9aabe45081bf8afbfd2 2026-10-27; identity vs the nvidia columns: n/a) |
 
-settings: {'resolution': 1.0, 'seed': 7, 'threshold': 1e-07}. Rows: None. Timed: None.
+calls:
+- `ours`: `mojolearn.LocallyLinearEmbedding(eigen_solver='dense', hessian_tol=0.0001, max_iter=100, method='standard', modified_tol=1e-12, n_components=2, n_neighbors=10, neighbors_algorithm='auto', random_state=7, reg=0.001, tol=1e-06)`
 
-mismatch: networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are order-dependent; ours pins a colour-batched move order (a fixed hash colouring, ties to the smallest community id)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/260621/vram_* bytes for this pid at the round's end (not a peak)
 
-mismatch: ours takes the CSR graph as an (indptr, indices, n) tuple and uploads it inside the clock (the 2026-10-08 CSR entries; before, a dense n x n adjacency built before the clock); networkx and cuGraph take the graph itself
-
-mismatch: opponents withheld: the lane settings at this tree's HEAD differ from the settings release-board-resume-r2 recorded for its opponent race (an opponent job must score them again)
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
-### louvain / taxi (rows full, shape -)
+### lle / taxi (rows full, shape X 10000x11; Xq 2000x11)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a0870)`, ran on AMD Instinct MI325X (amd, DO) job a0870
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lle.taxi.rows=full.json (amd/gate-af69cb5c9b05d45580ca0456e6a4e45feaf57e10fe344b064bb8b0e518e5ca77)`, ran on AMD Instinct MI325X (amd, DO) job gate-af69cb5c9b05d45580ca0456e6a4e45feaf57e10fe344b064bb8b0e518e5ca77
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@4df610f3b) | identical | 71.2 | 71.2..71.2 | 1 | - | - | 71.2 | - | - (stored whole) | - | - | - | - | modularity=0.941953, n_communities=58 | - | main board, one scored run | - | ok (main@4df610f3b amd/a0870 2026-10-08; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 99069.8 | 99069.8..99069.8 | 1 | - | - | 99069.8 | 99069.7 | 0.08 (upload_ms_separate) | - | - | 2628.5 | 1876.1 | trustworthiness_k15=0.839575 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-af69cb5c9b05d45580ca0456e6a4e45feaf57e10fe344b064bb8b0e518e5ca77 2026-10-27; identity vs the nvidia columns: n/a) |
 
-settings: {'resolution': 1.0, 'seed': 7, 'threshold': 1e-07}. Rows: None. Timed: None.
+calls:
+- `ours`: `mojolearn.LocallyLinearEmbedding(eigen_solver='dense', hessian_tol=0.0001, max_iter=100, method='standard', modified_tol=1e-12, n_components=2, n_neighbors=10, neighbors_algorithm='auto', random_state=7, reg=0.001, tol=1e-06)`
 
-mismatch: networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are order-dependent; ours pins a colour-batched move order (a fixed hash colouring, ties to the smallest community id)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/261203/vram_* bytes for this pid at the round's end (not a peak)
 
-mismatch: ours takes the CSR graph as an (indptr, indices, n) tuple and uploads it inside the clock (the 2026-10-08 CSR entries; before, a dense n x n adjacency built before the clock); networkx and cuGraph take the graph itself
+config: the board's own settings (no NVIDIA harness entry)
 
-mismatch: opponents withheld: the lane settings at this tree's HEAD differ from the settings release-board-resume-r2 recorded for its opponent race (an opponent job must score them again)
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### louvain / istella (rows full, shape X 20000x220; indices 304830; indices2 62848; indptr 20001; indptr2 20001; y 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.louvain.istella.rows=full.json (amd/gate-ba86a5c4e544efdf297c82e18c3926c912eac706e94fcbc9bef9cabe095dcca2)`, ran on AMD Instinct MI325X (amd, DO) job gate-ba86a5c4e544efdf297c82e18c3926c912eac706e94fcbc9bef9cabe095dcca2
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 372.4 | 372.4..372.4 | 1 | - | - | 372.4 | - | - (stored whole) | - | - | 772.0 | 1698.9 | modularity=0.911187, n_communities=40 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ba86a5c4e544efdf297c82e18c3926c912eac706e94fcbc9bef9cabe095dcca2 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/262991/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### louvain / taxi (rows full, shape X 20000x11; indices 253708; indices2 54528; indptr 20001; indptr2 20001; y 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.louvain.taxi.rows=full.json (amd/gate-a3d90b61884c4c03730fa89642a81a0328ce0a1ab07b3d5bef43f70b03bcb92e)`, ran on AMD Instinct MI325X (amd, DO) job gate-a3d90b61884c4c03730fa89642a81a0328ce0a1ab07b3d5bef43f70b03bcb92e
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 84.1 | 84.1..84.1 | 1 | - | - | 84.1 | - | - (stored whole) | - | - | 755.6 | 1698.9 | modularity=0.941953, n_communities=58 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a3d90b61884c4c03730fa89642a81a0328ce0a1ab07b3d5bef43f70b03bcb92e 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/263437/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lowbit-dequantize-int15 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-dequantize-int15.synthetic.rows=full.json (amd/gate-be3a8fd3b9ef9bed68542547cd3e395fab68054f07589f6d411856d312306c6e)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 35.3 | 35.3..35.3 | 1 | - | - | 35.3 | - | - (stored whole) | - | - | 978.9 | 1698.3 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-be3a8fd3b9ef9bed68542547cd3e395fab68054f07589f6d411856d312306c6e 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 8.7 | 8.7..8.7 | 1 | 4.034 | - | 8.7 | - | - (stored whole) | 4.034 (whole/whole) | - | 2142.0 | 304.0 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 7.5 | 7.5..7.5 | 1 | 4.704 | - | 7.5 | - | - (stored whole) | 4.704 (whole/whole) | - | 2346.8 | 96.0 | equal_word_fraction_vs_contract=0.388691, max_rel_diff_vs_contract_out0=2.794e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, hi=int8[4096x4096], lo=int8[4096x4096], exponents=int32[4096])`
+- `torch-compile-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, hi=int8[4096x4096], lo=int8[4096x4096], exponents=int32[4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/264050/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'cols': 4096, 'rows': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no function of this contract; the torch arms are the contract written in torch ops (frexp, ldexp, round half to even, clamp), eager and torch.compile
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| cols | 4096 | 4096 | 4096 |
+| input_arrays | [{"dtype": "int8", "name": "hi", "sha256": "b24c7f3c308c340597677ef22de376ace06d63cd8083995c6441a98ebf3c3868", "shape": [4096, 4096]}, {"dtype": "int8", "name": "lo", "sha256": "f68ab76b92402d6b30c77b39877806e91ce2eb77f6783a9bc9a25607b3876378", "shape": [4096, 4096]}, {"dtype": "int32", "name": "exponents", "sha256": "ab57e32939cbba7feb724284efe330a30d48dca2bcd07355456d094836a51cce", "shape": [4096]}] | [{"dtype": "int8", "name": "hi", "sha256": "b24c7f3c308c340597677ef22de376ace06d63cd8083995c6441a98ebf3c3868", "shape": [4096, 4096]}, {"dtype": "int8", "name": "lo", "sha256": "f68ab76b92402d6b30c77b39877806e91ce2eb77f6783a9bc9a25607b3876378", "shape": [4096, 4096]}, {"dtype": "int32", "name": "exponents", "sha256": "ab57e32939cbba7feb724284efe330a30d48dca2bcd07355456d094836a51cce", "shape": [4096]}] | [{"dtype": "int8", "name": "hi", "sha256": "b24c7f3c308c340597677ef22de376ace06d63cd8083995c6441a98ebf3c3868", "shape": [4096, 4096]}, {"dtype": "int8", "name": "lo", "sha256": "f68ab76b92402d6b30c77b39877806e91ce2eb77f6783a9bc9a25607b3876378", "shape": [4096, 4096]}, {"dtype": "int32", "name": "exponents", "sha256": "ab57e32939cbba7feb724284efe330a30d48dca2bcd07355456d094836a51cce", "shape": [4096]}] |
+| rows | 4096 | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### lowbit-dequantize-int8 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-dequantize-int8.synthetic.rows=full.json (amd/gate-2db28a9ec1e0ccb8e8221a8bf0898ae6db5490f42f6744b3b18023489a5f37f6)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 36.1 | 36.1..36.1 | 1 | - | - | 36.1 | - | - (stored whole) | - | - | 962.5 | 1698.3 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2db28a9ec1e0ccb8e8221a8bf0898ae6db5490f42f6744b3b18023489a5f37f6 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 8.1 | 8.1..8.1 | 1 | 4.443 | - | 8.1 | - | - (stored whole) | 4.443 (whole/whole) | - | 2101.2 | 224.0 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 7.3 | 7.3..7.3 | 1 | 4.958 | - | 7.3 | - | - (stored whole) | 4.958 (whole/whole) | - | 2330.1 | 80.0 | equal_word_fraction_vs_contract=0.928991, max_rel_diff_vs_contract_out0=2.933e-11 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, codes=int8[4096x4096], exponents=int32[4096])`
+- `torch-compile-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, codes=int8[4096x4096], exponents=int32[4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/265018/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'cols': 4096, 'rows': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no function of this contract; the torch arms are the contract written in torch ops (frexp, ldexp, round half to even, clamp), eager and torch.compile
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| cols | 4096 | 4096 | 4096 |
+| input_arrays | [{"dtype": "int8", "name": "codes", "sha256": "4157ef2ec27e9864de38ff7e412e678d3fa3de8978b6dd6630b961545d5ac553", "shape": [4096, 4096]}, {"dtype": "int32", "name": "exponents", "sha256": "a87f168cb4f31fca1e41228872d850fb64f9c132c4b801bad81929d843bf301a", "shape": [4096]}] | [{"dtype": "int8", "name": "codes", "sha256": "4157ef2ec27e9864de38ff7e412e678d3fa3de8978b6dd6630b961545d5ac553", "shape": [4096, 4096]}, {"dtype": "int32", "name": "exponents", "sha256": "a87f168cb4f31fca1e41228872d850fb64f9c132c4b801bad81929d843bf301a", "shape": [4096]}] | [{"dtype": "int8", "name": "codes", "sha256": "4157ef2ec27e9864de38ff7e412e678d3fa3de8978b6dd6630b961545d5ac553", "shape": [4096, 4096]}, {"dtype": "int32", "name": "exponents", "sha256": "a87f168cb4f31fca1e41228872d850fb64f9c132c4b801bad81929d843bf301a", "shape": [4096]}] |
+| rows | 4096 | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### lowbit-from-bf16 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-from-bf16.synthetic.rows=full.json (amd/gate-a09cee2a5d09f46c3350168723cdd8a461f9ab9c874ea9addc07ca03cb10b29c)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 33.4 | 33.4..33.4 | 1 | - | - | 33.4 | - | - (stored whole) | - | - | 975.8 | 1698.3 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a09cee2a5d09f46c3350168723cdd8a461f9ab9c874ea9addc07ca03cb10b29c 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 8.6 | 8.6..8.6 | 1 | 3.897 | - | 8.6 | - | - (stored whole) | 3.897 (whole/whole) | - | 2059.0 | 96.0 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 8.1 | 8.1..8.1 | 1 | 4.141 | - | 8.1 | - | - (stored whole) | 4.141 (whole/whole) | - | 2343.5 | 96.0 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, bits=uint16[4096x4096])`
+- `torch-compile-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, bits=uint16[4096x4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/265788/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'cols': 4096, 'rows': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no function of this contract; the torch arms are the contract written in torch ops (frexp, ldexp, round half to even, clamp), eager and torch.compile
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| cols | 4096 | 4096 | 4096 |
+| input_arrays | [{"dtype": "uint16", "name": "bits", "sha256": "77bcb1117913c578e6863bb1e37c1ac6d5cbb1580c65ff18fc0cd6a89f855dae", "shape": [4096, 4096]}] | [{"dtype": "uint16", "name": "bits", "sha256": "77bcb1117913c578e6863bb1e37c1ac6d5cbb1580c65ff18fc0cd6a89f855dae", "shape": [4096, 4096]}] | [{"dtype": "uint16", "name": "bits", "sha256": "77bcb1117913c578e6863bb1e37c1ac6d5cbb1580c65ff18fc0cd6a89f855dae", "shape": [4096, 4096]}] |
+| rows | 4096 | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### lowbit-matmul-int15 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-matmul-int15.synthetic.rows=full.json (amd/gate-15cd7ecd0858a5d6792d37d9fe307265b9bb9687775d9e4f1d4ce6610890ca9d)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 38.6 | 38.6..38.6 | 1 | - | - | 38.6 | - | - (stored whole) | - | - | 1011.3 | 1698.3 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-15cd7ecd0858a5d6792d37d9fe307265b9bb9687775d9e4f1d4ce6610890ca9d 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp64 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 11.2 | 11.2..11.2 | 1 | 3.449 | - | 11.2 | - | - (stored whole) | 3.449 (whole/whole) | - | 2439.3 | 848.0 | equal_word_fraction_vs_contract=1.000000, max_rel_diff_vs_contract_out0=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp64`: `torch._VariableFunctionsClass.ldexp(k=4096, m=4096, n=4096, seed=7, a_hi=int8[4096x4096], a_lo=int8[4096x4096], a_exponents=int32[4096], b_hi=int8[4096x4096], b_lo=int8[4096x4096], b_exponents=int32[4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/266473/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp64: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'k': 4096, 'm': 4096, 'n': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no fifteen-bit product; both torch arms compute the contract's exact integer sum with torch's own kernels (float64 matmul, int8 matmul)
+
+mismatch: torch._int_mm is CUDA only: AMD races the float64 arm alone
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-eager-fp64 |
+|---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) |
+| input_arrays | [{"dtype": "int8", "name": "a_hi", "sha256": "62fcb1d6fcd1c8e596bb82c9b6f92312417132dae48f2a94b9b340736833d484", "shape": [4096, 4096]}, {"dtype": "int8", "name": "a_lo", "sha256": "f58a240c09f54782a2de1d01fa62d5ad4ea4d0d7828d9a631fddd30c110eacd6", "shape": [4096, 4096]}, {"dtype": "int32", "name": "a_exponents", "sha256": "332f8e9cad0c768c6b0feaa11eeebc9c91fb5ebf387493fe79cbca61fda33b4b", "shape": [4096]}, {"dtype": "int8", "name": "b_hi", "sha256": "d717cb9c17569822df2631c623d5ff3b7a8e0e0f94afb4db939617d406afa786", "shape": [4096, 4096]}, {"dtype": "int8", "name": "b_lo", "sha256": "c10babaca7157e196077e61baf264e42db95b84fefb8b0f4c5e02693727397c2", "shape": [4096, 4096]}, {"dtype": "int32", "name": "b_exponents", "sha256": "2b76ccc7b57445526b13eeb77a65dbc49430c220fe02bcb1da1a91a48ae5ab1f", "shape": [4096]}] | [{"dtype": "int8", "name": "a_hi", "sha256": "62fcb1d6fcd1c8e596bb82c9b6f92312417132dae48f2a94b9b340736833d484", "shape": [4096, 4096]}, {"dtype": "int8", "name": "a_lo", "sha256": "f58a240c09f54782a2de1d01fa62d5ad4ea4d0d7828d9a631fddd30c110eacd6", "shape": [4096, 4096]}, {"dtype": "int32", "name": "a_exponents", "sha256": "332f8e9cad0c768c6b0feaa11eeebc9c91fb5ebf387493fe79cbca61fda33b4b", "shape": [4096]}, {"dtype": "int8", "name": "b_hi", "sha256": "d717cb9c17569822df2631c623d5ff3b7a8e0e0f94afb4db939617d406afa786", "shape": [4096, 4096]}, {"dtype": "int8", "name": "b_lo", "sha256": "c10babaca7157e196077e61baf264e42db95b84fefb8b0f4c5e02693727397c2", "shape": [4096, 4096]}, {"dtype": "int32", "name": "b_exponents", "sha256": "2b76ccc7b57445526b13eeb77a65dbc49430c220fe02bcb1da1a91a48ae5ab1f", "shape": [4096]}] |
+| k | 4096 | 4096 |
+| m | 4096 | 4096 |
+| n | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 |
+
+### lowbit-quantize-int15 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-quantize-int15.synthetic.rows=full.json (amd/gate-1e78692fd1c400cd067d203592ef7e5b4b7fa55c1eacc5f464b16962a9ede757)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 24.0 | 24.0..24.0 | 1 | - | - | 24.0 | - | - (stored whole) | - | - | 914.4 | 1698.3 | equal_word_fraction_vs_contract=1.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1e78692fd1c400cd067d203592ef7e5b4b7fa55c1eacc5f464b16962a9ede757 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 7.2 | 7.2..7.2 | 1 | 3.336 | - | 7.2 | - | - (stored whole) | 3.336 (whole/whole) | - | 2199.3 | 336.0 | equal_word_fraction_vs_contract=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.2 | 4.2..4.2 | 1 | 5.760 | - | 4.2 | - | - (stored whole) | 5.760 (whole/whole) | - | 2301.1 | 96.0 | equal_word_fraction_vs_contract=0.999751 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, x=float32[4096x4096])`
+- `torch-compile-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, x=float32[4096x4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/267105/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'cols': 4096, 'rows': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no function of this contract; the torch arms are the contract written in torch ops (frexp, ldexp, round half to even, clamp), eager and torch.compile
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| cols | 4096 | 4096 | 4096 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] |
+| rows | 4096 | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### lowbit-quantize-int8 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-quantize-int8.synthetic.rows=full.json (amd/gate-4f311ebf245665111d9c86993e1627a015bbdc6f8e6a0b0a73052a21d1d4bbe1)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 17.4 | 17.4..17.4 | 1 | - | - | 17.4 | - | - (stored whole) | - | - | 866.1 | 1698.3 | equal_word_fraction_vs_contract=1.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4f311ebf245665111d9c86993e1627a015bbdc6f8e6a0b0a73052a21d1d4bbe1 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.3 | 4.3..4.3 | 1 | 4.083 | - | 4.3 | - | - (stored whole) | 4.083 (whole/whole) | - | 2137.8 | 336.0 | equal_word_fraction_vs_contract=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 3.9 | 3.9..3.9 | 1 | 4.425 | - | 3.9 | - | - (stored whole) | 4.425 (whole/whole) | - | 2269.5 | 80.0 | equal_word_fraction_vs_contract=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, x=float32[4096x4096])`
+- `torch-compile-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, x=float32[4096x4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/267882/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'cols': 4096, 'rows': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no function of this contract; the torch arms are the contract written in torch ops (frexp, ldexp, round half to even, clamp), eager and torch.compile
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| cols | 4096 | 4096 | 4096 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] |
+| rows | 4096 | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### lowbit-to-bf16 / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lowbit-to-bf16.synthetic.rows=full.json (amd/gate-0ed6041914fdf763810184045009d5a91763c433553f7ef245bd984e3e7e2ce7)`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 17.9 | 17.9..17.9 | 1 | - | - | 17.9 | - | - (stored whole) | - | - | 911.7 | 1698.3 | equal_word_fraction_vs_contract=1.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-0ed6041914fdf763810184045009d5a91763c433553f7ef245bd984e3e7e2ce7 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 6.2 | 6.2..6.2 | 1 | 2.902 | - | 6.2 | - | - (stored whole) | 2.902 (whole/whole) | - | 2046.2 | 208.0 | equal_word_fraction_vs_contract=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.8 | 5.8..5.8 | 1 | 3.069 | - | 5.8 | - | - (stored whole) | 3.069 (whole/whole) | - | 2312.7 | 96.0 | equal_word_fraction_vs_contract=1.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+calls:
+- `torch-eager-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, x=float32[4096x4096])`
+- `torch-compile-fp32`: `torch._VariableFunctionsClass.ldexp(cols=4096, rows=4096, seed=7, x=float32[4096x4096])`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/268649/vram_* bytes for this pid at the round's end (not a peak)
+
+memory, torch-eager-fp32, torch-compile-fp32: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: {'cols': 4096, 'rows': 4096}. Rows: None. Timed: None.
+
+mismatch: torch has no function of this contract; the torch arms are the contract written in torch ops (frexp, ldexp, round half to even, clamp), eager and torch.compile
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-fp32 | torch-eager-fp32 |
+|---|---||---|---||---|---|
+| library (source) | mojolearn (declared) | torch (declared) | torch (declared) |
+| cols | 4096 | 4096 | 4096 |
+| input_arrays | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] | [{"dtype": "float32", "name": "x", "sha256": "485a7287793a9d7d33d710ea2820ea9c7519d31100db4bafeee813baa532dd7d", "shape": [4096, 4096]}] |
+| rows | 4096 | 4096 | 4096 |
+| seed | "none (deterministic)" | 7 | 7 |
+
+### lr-constant / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lr-constant.synthetic.rows=full.json (amd/gate-a3d67b451f1dffe2d69814e99a0815dcad9d40d6d508e1d8d09bafb1fd4b10ca)`, ran on AMD Instinct MI325X (amd, DO) job gate-a3d67b451f1dffe2d69814e99a0815dcad9d40d6d508e1d8d09bafb1fd4b10ca
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 26474.0 | 26474.0..26474.0 | 1 | - | - | 26474.0 | - | - (stored whole) | - | - | 112.1 | - | max_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a3d67b451f1dffe2d69814e99a0815dcad9d40d6d508e1d8d09bafb1fd4b10ca 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lr-exponential / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lr-exponential.synthetic.rows=full.json (amd/gate-ad9435f2c807fb531b4e205950c9b06dc39bba990e25657a67fac59a1ffc0f32)`, ran on AMD Instinct MI325X (amd, DO) job gate-ad9435f2c807fb531b4e205950c9b06dc39bba990e25657a67fac59a1ffc0f32
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 28624.7 | 28624.7..28624.7 | 1 | - | - | 28624.7 | - | - (stored whole) | - | - | 112.1 | - | max_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ad9435f2c807fb531b4e205950c9b06dc39bba990e25657a67fac59a1ffc0f32 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lr-onecycle / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lr-onecycle.synthetic.rows=full.json (amd/gate-86c9fd697f7064b801c5470094b57850eaa10d4fd83406fca7b38daae9f2ad44)`, ran on AMD Instinct MI325X (amd, DO) job gate-86c9fd697f7064b801c5470094b57850eaa10d4fd83406fca7b38daae9f2ad44
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 28943.2 | 28943.2..28943.2 | 1 | - | - | 28943.2 | - | - (stored whole) | - | - | 111.6 | - | max_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-86c9fd697f7064b801c5470094b57850eaa10d4fd83406fca7b38daae9f2ad44 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lr-step / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lr-step.synthetic.rows=full.json (amd/gate-33e48adbf9a01b04f108a25c13a5f110bd26d72a8a814464671df75e7bb7e821)`, ran on AMD Instinct MI325X (amd, DO) job gate-33e48adbf9a01b04f108a25c13a5f110bd26d72a8a814464671df75e7bb7e821
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 28181.9 | 28181.9..28181.9 | 1 | - | - | 28181.9 | - | - (stored whole) | - | - | 111.4 | - | max_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-33e48adbf9a01b04f108a25c13a5f110bd26d72a8a814464671df75e7bb7e821 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lr-warmup-cosine / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lr-warmup-cosine.synthetic.rows=full.json (amd/gate-fb15b7a5957ff075e13001032a76feb43acdb0812f02c876b05585b4e921785d)`, ran on AMD Instinct MI325X (amd, DO) job gate-fb15b7a5957ff075e13001032a76feb43acdb0812f02c876b05585b4e921785d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 26450.0 | 26450.0..26450.0 | 1 | - | - | 26450.0 | - | - (stored whole) | - | - | 111.6 | - | max_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-fb15b7a5957ff075e13001032a76feb43acdb0812f02c876b05585b4e921785d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### lr-warmup-linear / synthetic (rows full, shape -)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lr-warmup-linear.synthetic.rows=full.json (amd/gate-9900b47a485adf340ddae2f50ae45112c435f445c121b9cadc2e27824ed81221)`, ran on AMD Instinct MI325X (amd, DO) job gate-9900b47a485adf340ddae2f50ae45112c435f445c121b9cadc2e27824ed81221
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 25735.5 | 25735.5..25735.5 | 1 | - | - | 25735.5 | - | - (stored whole) | - | - | 111.3 | - | max_rel_diff_vs_ours=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9900b47a485adf340ddae2f50ae45112c435f445c121b9cadc2e27824ed81221 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU rocm-smi --showpids lists no VRAM for this pid
+
+config: the board's own settings (no NVIDIA harness entry)
 
 parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
 ### lstm-clf / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lstm-clf.synthetic.rows=full.json (amd/gate-a1656a131e7559d9f37d8e3e1159b126fbc225bd2a8caaa3a2f483e489ec2e97)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 932.4 ms) = 0.699; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 802.9 ms) = 0.811. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 631.6 | 631.6..631.6 | 1 | - | - | 631.6 | - | - (stored whole) | - | - | - | - | accuracy=0.967068, logloss=0.079720 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 903.2 | 903.2..903.2 | 1 | unchecked | unchecked | - | 903.2 | - (stored kernel) | - | - | 3208.6 | 350.8 | accuracy=0.968696 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 894.9 | 894.9..894.9 | 1 | unchecked | unchecked | - | 894.9 | - (stored kernel) | - | - | 3257.9 | 350.8 | accuracy=0.968696 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 854.9 | 854.9..854.9 | 1 | unchecked | unchecked | - | 854.9 | - (stored kernel) | - | - | 4967.1 | 182.8 | accuracy=0.968913 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1044.0 | 1044.0..1044.0 | 1 | unchecked | unchecked | - | 1044.0 | - (stored kernel) | - | - | 5000.0 | 182.8 | accuracy=0.968913 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 651.3 | 651.3..651.3 | 1 | - | - | 651.3 | 651.1 | 0.24 (upload_ms_separate) | - | - | 2442.9 | 2055.6 | accuracy=0.967068, logloss=0.079720 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a1656a131e7559d9f37d8e3e1159b126fbc225bd2a8caaa3a2f483e489ec2e97 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 802.9 | 802.9..802.9 | 1 | 0.811 | - | 883.9 | 802.9 | 81.01 (upload_ms_untimed) | 0.811 (kernel/kernel) | - | 5288.9 | 502.8 | accuracy=0.967068 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 806.3 | 806.3..806.3 | 1 | 0.808 | - | 889.0 | 806.3 | 82.66 (upload_ms_untimed) | 0.807 (kernel/kernel) | - | 4948.3 | 502.8 | accuracy=0.967068 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 932.4 | 932.4..932.4 | 1 | 0.699 | - | 1013.4 | 932.4 | 80.98 (upload_ms_untimed) | 0.698 (kernel/kernel) | - | 3744.5 | 334.8 | accuracy=0.966851 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1024.5 | 1024.5..1024.5 | 1 | 0.636 | - | 1103.7 | 1024.5 | 79.27 (upload_ms_untimed) | 0.636 (kernel/kernel) | - | 3330.4 | 334.8 | accuracy=0.966851 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LSTMClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/273202/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4135,23 +6625,85 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 22.5 | 22.5..22.5 | 1 | - | - | 22.5 | 22.4 | 0.07 (predict_upload_ms) | - | - | accuracy=0.967068, logloss=0.079720 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.0 | 3.0..3.0 | 1 | 7.385 | - | 3.4 | 3.0 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 7.362 (kernel/kernel) | - | accuracy=0.967068 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.1 | 3.1..3.1 | 1 | 7.316 | - | 3.4 | 3.1 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 7.294 (kernel/kernel) | - | accuracy=0.967068 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.0 | 3.0..3.0 | 1 | 7.421 | - | 3.3 | 3.0 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 7.398 (kernel/kernel) | - | accuracy=0.966851 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.3 | 3.3..3.3 | 1 | 6.892 | - | 3.6 | 3.3 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 6.871 (kernel/kernel) | - | accuracy=0.966851 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.LSTMClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### lstm-clf / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lstm-clf.taxi-hourly.rows=full.json (amd/gate-ce904ee69ec697eac595df5095bd6270c2c95dd514c3ec47bfa8b1ee91500feb)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 992.3 ms) = 0.656; fp32 twin: ours IDENTICAL / torch fp32 (torch-compile-fp32, 876.5 ms) = 0.743. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 630.7 | 630.7..630.7 | 1 | - | - | 630.7 | - | - (stored whole) | - | - | - | - | accuracy=0.870443, logloss=0.297146 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 861.1 | 861.1..861.1 | 1 | unchecked | unchecked | - | 861.1 | - (stored kernel) | - | - | 3603.8 | 350.8 | accuracy=0.868218 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 815.7 | 815.7..815.7 | 1 | unchecked | unchecked | - | 815.7 | - (stored kernel) | - | - | 3258.3 | 350.8 | accuracy=0.868218 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1039.6 | 1039.6..1039.6 | 1 | unchecked | unchecked | - | 1039.6 | - (stored kernel) | - | - | 5292.2 | 182.8 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 977.6 | 977.6..977.6 | 1 | unchecked | unchecked | - | 977.6 | - (stored kernel) | - | - | 5008.3 | 182.8 | accuracy=0.868056 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 651.0 | 651.0..651.0 | 1 | - | - | 651.0 | 650.7 | 0.22 (upload_ms_separate) | - | - | 2443.0 | 2055.6 | accuracy=0.870443, logloss=0.297146 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ce904ee69ec697eac595df5095bd6270c2c95dd514c3ec47bfa8b1ee91500feb 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 922.2 | 922.2..922.2 | 1 | 0.706 | - | 1005.3 | 922.2 | 83.09 (upload_ms_untimed) | 0.706 (kernel/kernel) | - | 4903.1 | 502.8 | accuracy=0.870443 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 876.5 | 876.5..876.5 | 1 | 0.743 | - | 956.5 | 876.5 | 80.01 (upload_ms_untimed) | 0.742 (kernel/kernel) | - | 4949.6 | 502.8 | accuracy=0.870443 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 992.3 | 992.3..992.3 | 1 | 0.656 | - | 1076.9 | 992.3 | 84.70 (upload_ms_untimed) | 0.656 (kernel/kernel) | - | 3282.8 | 334.8 | accuracy=0.870497 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1027.9 | 1027.9..1027.9 | 1 | 0.633 | - | 1107.2 | 1027.9 | 79.31 (upload_ms_untimed) | 0.633 (kernel/kernel) | - | 3329.2 | 334.8 | accuracy=0.870497 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LSTMClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/274309/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4159,23 +6711,85 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 22.3 | 22.3..22.3 | 1 | - | - | 22.3 | 22.2 | 0.07 (predict_upload_ms) | - | - | accuracy=0.870443, logloss=0.297146 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.2 | 3.2..3.2 | 1 | 6.858 | - | 3.6 | 3.2 | 0.38 (predict_upload_ms (the predict inputs' own copy)) | 6.835 (kernel/kernel) | - | accuracy=0.870443 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.2 | 3.2..3.2 | 1 | 6.961 | - | 3.5 | 3.2 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 6.938 (kernel/kernel) | - | accuracy=0.870443 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.0 | 3.0..3.0 | 1 | 7.356 | - | 3.3 | 3.0 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 7.331 (kernel/kernel) | - | accuracy=0.870497 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.3 | 3.3..3.3 | 1 | 6.844 | - | 3.5 | 3.3 | 0.29 (predict_upload_ms (the predict inputs' own copy)) | 6.821 (kernel/kernel) | - | accuracy=0.870497 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.LSTMClassifier(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### lstm-reg / synthetic (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lstm-reg.synthetic.rows=full.json (amd/gate-4005d3e2d993927baf47a05b0b294b2ef95e40b0e113c92fabfac109d6378ccc)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 1028.5 ms) = 0.627; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 787.6 ms) = 0.819. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 628.6 | 628.6..628.6 | 1 | - | - | 628.6 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.979398, rmse=0.166295 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 923.1 | 923.1..923.1 | 1 | unchecked | unchecked | - | 923.1 | - (stored kernel) | - | - | 3036.9 | 350.5 | finite=True, r2=0.981013, rmse=0.159641 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 973.6 | 973.6..973.6 | 1 | unchecked | unchecked | - | 973.6 | - (stored kernel) | - | - | 3082.7 | 350.5 | finite=True, r2=0.981013, rmse=0.159641 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1053.4 | 1053.4..1053.4 | 1 | unchecked | unchecked | - | 1053.4 | - (stored kernel) | - | - | 3660.4 | 182.5 | finite=True, r2=0.981004, rmse=0.159679 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1065.8 | 1065.8..1065.8 | 1 | unchecked | unchecked | - | 1065.8 | - (stored kernel) | - | - | 3706.1 | 182.5 | finite=True, r2=0.981004, rmse=0.159679 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 644.9 | 644.9..644.9 | 1 | - | - | 644.9 | 644.7 | 0.22 (upload_ms_separate) | - | - | 2441.2 | 2055.4 | finite=True, r2=0.979398, rmse=0.166295 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4005d3e2d993927baf47a05b0b294b2ef95e40b0e113c92fabfac109d6378ccc 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 787.6 | 787.6..787.6 | 1 | 0.819 | - | 871.2 | 787.6 | 83.62 (upload_ms_untimed) | 0.819 (kernel/kernel) | - | 2970.1 | 502.4 | finite=True, r2=0.979398, rmse=0.166295 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 945.1 | 945.1..945.1 | 1 | 0.682 | - | 1024.7 | 945.1 | 79.59 (upload_ms_untimed) | 0.682 (kernel/kernel) | - | 3028.8 | 502.4 | finite=True, r2=0.979398, rmse=0.166295 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1028.5 | 1028.5..1028.5 | 1 | 0.627 | - | 1109.5 | 1028.5 | 81.02 (upload_ms_untimed) | 0.627 (kernel/kernel) | - | 2740.0 | 334.4 | finite=True, r2=0.979417, rmse=0.166217 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1029.3 | 1029.3..1029.3 | 1 | 0.627 | - | 1107.5 | 1029.3 | 78.19 (upload_ms_untimed) | 0.626 (kernel/kernel) | - | 2759.6 | 334.4 | finite=True, r2=0.979417, rmse=0.166217 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LSTMRegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/275207/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4183,23 +6797,85 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 11.0 | 11.0..11.0 | 1 | - | - | 11.0 | 11.0 | 0.07 (predict_upload_ms) | - | - | finite=True, r2=0.979398, rmse=0.166295 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.1 | 3.1..3.1 | 1 | 3.596 | - | 3.4 | 3.1 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 3.575 (kernel/kernel) | - | finite=True, r2=0.979398, rmse=0.166295 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.3 | 3.3..3.3 | 1 | 3.348 | - | 3.6 | 3.3 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 3.328 (kernel/kernel) | - | finite=True, r2=0.979398, rmse=0.166295 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.0 | 3.0..3.0 | 1 | 3.729 | - | 3.3 | 3.0 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 3.706 (kernel/kernel) | - | finite=True, r2=0.979417, rmse=0.166217 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.2 | 3.2..3.2 | 1 | 3.401 | - | 3.5 | 3.2 | 0.29 (predict_upload_ms (the predict inputs' own copy)) | 3.381 (kernel/kernel) | - | finite=True, r2=0.979417, rmse=0.166217 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.LSTMRegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### lstm-reg / taxi-hourly (rows full, shape X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt (amd/a1211)`, ran on AMD Instinct MI325X (amd, DO) job a1211
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lstm-reg.taxi-hourly.rows=full.json (amd/gate-7844f570c6aa623f2705bb58782268767abeec528a06392d32c028d1863bec52)`, ran on mojolearn-steward-do-amd
 
-headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twin: ours IDENTICAL / torch fp32: - (no completed torch fp32 arm). Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
+headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 998.1 ms) = 0.647; fp32 twin: ours IDENTICAL / torch fp32 (torch-eager-fp32, 909.9 ms) = 0.710. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax.
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@1665b5626) | identical | 627.9 | 627.9..627.9 | 1 | - | - | 627.9 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.754306, rmse=0.537563 | - | main board, one scored run | - | ok (main@1665b5626 amd/a1211 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 920.3 | 920.3..920.3 | 1 | unchecked | unchecked | - | 920.3 | - (stored kernel) | - | - | 3043.3 | 350.5 | finite=True, r2=0.751679, rmse=0.540429 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 976.5 | 976.5..976.5 | 1 | unchecked | unchecked | - | 976.5 | - (stored kernel) | - | - | 3084.4 | 350.5 | finite=True, r2=0.751679, rmse=0.540429 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1017.5 | 1017.5..1017.5 | 1 | unchecked | unchecked | - | 1017.5 | - (stored kernel) | - | - | 3667.0 | 182.5 | finite=True, r2=0.751591, rmse=0.540526 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 1057.7 | 1057.7..1057.7 | 1 | unchecked | unchecked | - | 1057.7 | - (stored kernel) | - | - | 3707.8 | 182.5 | finite=True, r2=0.751591, rmse=0.540526 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 645.9 | 645.9..645.9 | 1 | - | - | 645.9 | 645.6 | 0.22 (upload_ms_separate) | - | - | 2440.6 | 2055.4 | finite=True, r2=0.754306, rmse=0.537563 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-7844f570c6aa623f2705bb58782268767abeec528a06392d32c028d1863bec52 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 909.9 | 909.9..909.9 | 1 | 0.710 | - | 988.2 | 909.9 | 78.34 (upload_ms_untimed) | 0.710 (kernel/kernel) | - | 2983.5 | 502.4 | finite=True, r2=0.754306, rmse=0.537563 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 939.2 | 939.2..939.2 | 1 | 0.688 | - | 1023.7 | 939.2 | 84.46 (upload_ms_untimed) | 0.687 (kernel/kernel) | - | 3030.5 | 502.4 | finite=True, r2=0.754306, rmse=0.537563 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 998.1 | 998.1..998.1 | 1 | 0.647 | - | 1078.6 | 998.1 | 80.56 (upload_ms_untimed) | 0.647 (kernel/kernel) | - | 2712.9 | 334.4 | finite=True, r2=0.754170, rmse=0.537712 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| torch-compile-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1014.8 | 1014.8..1014.8 | 1 | 0.636 | - | 1093.4 | 1014.8 | 78.60 (upload_ms_untimed) | 0.636 (kernel/kernel) | - | 2759.4 | 334.4 | finite=True, r2=0.754170, rmse=0.537712 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.LSTMRegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...)`
+- `torch-eager-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-fp32`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-eager-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+- `torch-compile-bf16`: `torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...)`
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/276096/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-eager-fp32, torch-compile-fp32, torch-eager-bf16, torch-compile-bf16: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4207,22 +6883,77 @@ settings: {'batch_size': 256, 'hidden_size': 64, 'learning_rate': 0.001, 'max_ep
 
 config: the board's own settings (no NVIDIA harness entry)
 
-parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
+
+| parameter | ours | torch-compile-bf16 | torch-compile-fp32 | torch-eager-bf16 | torch-eager-fp32 |
+|---|---||---|---||---|---||---|---||---|---|
+| library (source) | mojolearn (get_params + effective optimizer options betas,eps,weight_decay) | torch (declared) | torch (declared) | torch (declared) | torch (declared) |
+| batch_size | 256 | 256 | 256 | 256 | 256 |
+| betas | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] | [0.9, 0.999] |
+| eps | 1e-08 | 1e-08 | 1e-08 | 1e-08 | 1e-08 |
+| hidden_size | 64 | 64 | 64 | 64 | 64 |
+| learning_rate | 0.001 | 0.001 | 0.001 | 0.001 | 0.001 |
+| lr_schedule | null | - | - | - | - |
+| max_epochs | 2 | 2 | 2 | 2 | 2 |
+| nonlinearity | "tanh" | - | - | - | - |
+| num_layers | 1 | 1 | 1 | 1 | 1 |
+| optimizer | "adam" | "adam" | "adam" | "adam" | "adam" |
+| optimizer_options | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} | {"betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.0} |
+| predict_chunk | 4096 | 4096 | 4096 | 4096 | 4096 |
+| seed | 7 | 7 | 7 | 7 | 7 |
+| shuffle | true | true | true | true | true |
+| weight_decay | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+
+accepted difference: torch-eager-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-fp32 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-fp32 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-eager-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-eager-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+accepted difference: torch-compile-bf16 lr_schedule: no learning-rate schedule on either arm: ours' lr_schedule None steps at the constant learning_rate (_x_sequence_rnn.py _RecurrentBase._lrs), the torch arm's Adam has no scheduler
+
+accepted difference: torch-compile-bf16 nonlinearity: LSTM/GRU have fixed sigmoid gates and tanh cell activations on both arms; ours' nonlinearity is unused there (_x_sequence_rnn.py _RecurrentBase._cell) and torch.nn.LSTM/GRU take none
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | hardware | version | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | AMD Instinct MI325X (amd, DO) | 0.8.62 | Xq | - | 11.0 | 11.0..11.0 | 1 | - | - | 11.0 | 11.0 | 0.07 (predict_upload_ms) | - | - | finite=True, r2=0.754306, rmse=0.537563 | - | LIKE-FOR-LIKE-SPAN | ok |
+| torch-eager-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.3 | 3.3..3.3 | 1 | 3.380 | - | 3.6 | 3.3 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 3.360 (kernel/kernel) | - | finite=True, r2=0.754306, rmse=0.537563 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-fp32 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.3 | 3.3..3.3 | 1 | 3.325 | - | 3.6 | 3.3 | 0.30 (predict_upload_ms (the predict inputs' own copy)) | 3.305 (kernel/kernel) | - | finite=True, r2=0.754306, rmse=0.537563 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-eager-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.1 | 3.1..3.1 | 1 | 3.606 | - | 3.4 | 3.1 | 0.31 (predict_upload_ms (the predict inputs' own copy)) | 3.585 (kernel/kernel) | - | finite=True, r2=0.754170, rmse=0.537712 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+| torch-compile-bf16 | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | Xq | - | 3.3 | 3.3..3.3 | 1 | 3.362 | - | 3.8 | 3.3 | 0.48 (predict_upload_ms (the predict inputs' own copy)) | 3.342 (kernel/kernel) | - | finite=True, r2=0.754170, rmse=0.537712 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | ok |
+
+inference call, ours: mojolearn.LSTMRegressor(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, nonlinearity='tanh', num_layers=1, optimizer='adam', ...); predict(Xq)(Xq)
+
+inference call, torch-eager-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-fp32: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-eager-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
+
+inference call, torch-compile-bf16: torch.LSTM(batch_size=256, betas=[0.9, 0.999], eps=1e-08, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={betas: [0.9, 0.999], eps: 1e-08, weight_deca..., predict_chunk=4096, seed=7, ...); predict(Xq)(Xq)
 
 ### lstsq / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.lstsq.istella.rows=full/board.json (amd/paired-67859f8b54a103e967715d76d15eaa572d9e01fcb17cab37e9d6b88d78d9091b)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lstsq.istella.rows=full.json (amd/gate-ce1ce66a97bbf83776de338160944084e11054d223b1e79b4dd6bdf1d99ca481)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 321.6 | 321.6..321.6 | 1 | - | - | 321.6 | 305.9 | 15.76 (upload_ms_separate) | - | - | 3495.3 | 235661.1 | relative_residual=0.849956 | - | main board, one scored run | wheel | ok (main@d425c1417 amd/paired-67859f8b54a103e967715d76d15eaa572d9e01fcb17cab37e9d6b88d78d9091b 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2291.3 | 2291.3..2291.3 | 1 | - | - | 2291.3 | 2275.5 | 15.80 (upload_ms_separate) | - | - | 3175.3 | 1876.3 | relative_residual=0.849956 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ce1ce66a97bbf83776de338160944084e11054d223b1e79b4dd6bdf1d99ca481 2026-10-27; identity vs the nvidia columns: n/a) |
 | torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | REFUSED(error: {"error": "RuntimeError(\"REFUSED: torch.linalg.lstsq (driver 'gels' on CUDA/ROCm: QR without pivoting, full rank assumed) returned a non-finite solution on this rank-deficient X; not a result\")", "e) (measured this run) |
 
 calls:
 - `ours`: `mojolearn.lstsq(seed=7, arg0=float32[1000000x220], arg1=float32[1000000])`
 - `torch-gpu`: `torch.linalg_lstsq(seed=7, arg0=float32[1000000x220], arg1=float32[1000000])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/94228/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/276676/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-gpu: host not sampled; GPU not sampled
 
@@ -4242,18 +6973,18 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 
 ### lstsq / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-gpu-repair-20261014/amd/repair2/measured/algos.lstsq.taxi.rows=full/board.json (amd/paired-9d7c466693bba67fc8323d918c76429fdd964cf4b9fc939cf4ab661be4496343)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lstsq.taxi.rows=full.json (amd/gate-d2eb7699ed0a8991fb7ecf63d6b164f449158156e7fb0f3d7f8a85cc03c57322)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 6.1 | 6.1..6.1 | 1 | - | - | 6.1 | 5.3 | 0.89 (upload_ms_separate) | - | - | 2423.0 | 236201.6 | relative_residual=0.756366 | - | main board, one scored run | wheel | ok (main@d425c1417 amd/paired-9d7c466693bba67fc8323d918c76429fdd964cf4b9fc939cf4ab661be4496343 2026-10-14; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 26.5 | 26.5..26.5 | 1 | 0.231 | - | - | 26.5 | - (stored kernel) | 0.198 (kernel/kernel) | - | 1766.5 | 223.5 | relative_residual=0.756366 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 121.3 | 121.3..121.3 | 1 | - | - | 121.3 | 120.3 | 0.92 (upload_ms_separate) | - | - | 2298.0 | 1876.2 | relative_residual=0.756366 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d2eb7699ed0a8991fb7ecf63d6b164f449158156e7fb0f3d7f8a85cc03c57322 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-gpu | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 26.5 | 26.5..26.5 | 1 | 4.568 | - | - | 26.5 | - (stored kernel) | 4.533 (kernel/kernel) | - | 1766.5 | 223.5 | relative_residual=0.756366 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-14T02:06:30Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
 
 calls:
 - `ours`: `mojolearn.lstsq(seed=7, arg0=float32[1000000x11], arg1=float32[1000000])`
 - `torch-gpu`: `torch.linalg_lstsq(seed=7, arg0=float32[1000000x11], arg1=float32[1000000])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/93751/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/277204/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4265,26 +6996,26 @@ config: the board's own settings (no NVIDIA harness entry)
 
 parameters (tools/bench_board_params.py, read back from each constructed arm; reference `ours`, seed 7): MATCHED
 
-| parameter | ours | torch-gpu |
-|---|---||---|---|
-| library (source) | mojolearn (declared) | torch (declared) |
-| input_arrays | [{"dtype": "float32", "sha256": "33fdb983b45d51732ce911c8887c0c9f9cf7a7416ae67ebfe983fa0b3a4c8b77", "shape": [1000000, 11]}, {"dtype": "float32", "sha256": "5cda40092ba17e30737e2496638e974415a8f261f8325676b16da6739af5e09a", "shape": [1000000]}] | [{"dtype": "float32", "sha256": "33fdb983b45d51732ce911c8887c0c9f9cf7a7416ae67ebfe983fa0b3a4c8b77", "shape": [1000000, 11]}, {"dtype": "float32", "sha256": "5cda40092ba17e30737e2496638e974415a8f261f8325676b16da6739af5e09a", "shape": [1000000]}] |
-| seed | 7 | 7 |
+| parameter | ours |
+|---|---|
+| library (source) | mojolearn (declared) |
+| input_arrays | [{"dtype": "float32", "sha256": "33fdb983b45d51732ce911c8887c0c9f9cf7a7416ae67ebfe983fa0b3a4c8b77", "shape": [1000000, 11]}, {"dtype": "float32", "sha256": "5cda40092ba17e30737e2496638e974415a8f261f8325676b16da6739af5e09a", "shape": [1000000]}] |
+| seed | 7 |
 
 ### lu-factor / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.lu-factor.synthetic.rows=full.json (amd/paired-00a9de2d225e6d6cac985b274a7bcd063970d9fa541ec3908cfd88d321b7a619)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lu-factor.synthetic.rows=full.json (amd/gate-8b2dab3128bcdec566d2651fbf0ab4be704d5ff635dc7c91d55214047f2ca327)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.45 | identical | 321.9 | 321.9..321.9 | 1 | - | - | 321.9 | 317.1 | 4.87 (upload_ms_separate) | - | - | 2934.6 | 1807.2 | relative_residual=3.256e-06 | - | main board, one scored run | wheel | ok (main@9c8c53fb2 amd/paired-00a9de2d225e6d6cac985b274a7bcd063970d9fa541ec3908cfd88d321b7a619 2026-10-15; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 82.0 | 82.0..82.0 | 1 | 3.924 | - | 165.1 | 82.0 | 83.07 (upload_ms_untimed) | 3.865 (kernel/kernel) | - | 2281.7 | 710.0 | relative_residual=4.003e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-14T17:58:15Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 951.9 | 951.9..951.9 | 1 | - | - | 951.9 | 947.1 | 4.88 (upload_ms_separate) | - | - | 2768.7 | 1875.8 | relative_residual=3.256e-06 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-8b2dab3128bcdec566d2651fbf0ab4be704d5ff635dc7c91d55214047f2ca327 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-gpu | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 82.0 | 82.0..82.0 | 1 | 11.604 | - | 165.1 | 82.0 | 83.07 (upload_ms_untimed) | 11.544 (kernel/kernel) | - | 2281.7 | 710.0 | relative_residual=4.003e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-15T03:16:03Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
 
 calls:
 - `ours`: `mojolearn.lu_factor(seed=7, arg0=float32[8192x8192], arg1=float32[8192x64])`
 - `torch-gpu`: `torch.linalg_lu_factor(seed=7, arg0=float32[8192x8192], arg1=float32[8192x64])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/138924/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/277707/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4302,18 +7033,18 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 
 ### lu-solve / synthetic (rows full, shape -)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/watch-20261014T221348Z/identity-evidence-audit/board-ingest-inputs/amd-algos.lu-solve.synthetic.rows=full.json (amd/paired-7ed87b11b8f3c1b051ac8060b72f20053c38c1b283aab719ee019fc7746e7bff)`, ran on mojolearn-steward-do-amd
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.lu-solve.synthetic.rows=full.json (amd/gate-2af9836fb2ae2bece0515a26e7b2a1068e920d1c7aea7022b9d5839babe69a10)`, ran on mojolearn-steward-do-amd
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.45 | identical | 318.7 | 318.7..318.7 | 1 | - | - | 318.7 | 313.8 | 4.89 (upload_ms_separate) | - | - | 3196.0 | 1295.2 | relative_residual=3.256e-06 | - | main board, one scored run | wheel | ok (main@9c8c53fb2 amd/paired-7ed87b11b8f3c1b051ac8060b72f20053c38c1b283aab719ee019fc7746e7bff 2026-10-15; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 81.2 | 81.2..81.2 | 1 | 3.925 | - | 164.8 | 81.2 | 83.65 (upload_ms_untimed) | 3.865 (kernel/kernel) | - | 2302.7 | 712.0 | relative_residual=4.003e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-14T17:55:18Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 850.1 | 850.1..850.1 | 1 | - | - | 850.1 | 845.3 | 4.88 (upload_ms_separate) | - | - | 1206.1 | 1875.8 | relative_residual=3.256e-06 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2af9836fb2ae2bece0515a26e7b2a1068e920d1c7aea7022b9d5839babe69a10 2026-10-27; identity vs the nvidia columns: n/a) |
+| torch-gpu | torch | gpu | AMD Instinct MI325X (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 81.2 | 81.2..81.2 | 1 | 10.472 | - | 164.8 | 81.2 | 83.65 (upload_ms_untimed) | 10.412 (kernel/kernel) | - | 2302.7 | 712.0 | relative_residual=4.003e-07 | - | SPAN-ASYMMETRIC(upload_outside_its_clock) | - | ok (stored (measured 2026-10-15T03:15:19Z on mojolearn-steward-do-amd, gpu (AMD Instinct MI325X))) |
 
 calls:
 - `ours`: `mojolearn.solve(seed=7, arg0=float32[8192x8192], arg1=float32[8192x64])`
 - `torch-gpu`: `torch.linalg_solve(seed=7, arg0=float32[8192x8192], arg1=float32[8192x64])`
 
-memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/138154/vram_* bytes for this pid at the round's end (not a peak)
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/278198/vram_* bytes for this pid at the round's end (not a peak)
 
 memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
 
@@ -4331,18 +7062,16 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 
 ### maxabs-scaler / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.maxabs-scaler.istella.rows=full.json (amd/gate-e11d9160bf1d147e9f929ccea5bc1f6db936c53ed4b57e1dee64836c7f656c2c)`, ran on AMD Instinct MI325X (amd, DO) job gate-e11d9160bf1d147e9f929ccea5bc1f6db936c53ed4b57e1dee64836c7f656c2c
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 17.9 | 17.9..17.9 | 1 | - | - | 17.9 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x220, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 123.0 | 123.0..123.0 | 1 | unchecked | unchecked | 123.0 | 123.0 | 0.00 (cpu-arm) | - | - | 2222.0 | - | output_shape=100000x220 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 23.4 | 23.4..23.4 | 1 | - | - | 23.4 | 6.6 | 16.77 (upload_ms_separate) | - | - | 2363.6 | 1875.7 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x220, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e11d9160bf1d147e9f929ccea5bc1f6db936c53ed4b57e1dee64836c7f656c2c 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.MaxAbsScaler(copy=True)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/278858/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), MaxAbsScaler (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
@@ -4350,18 +7079,16 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 
 ### maxabs-scaler / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
 
-race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20261011/amd_ingest/results.txt (amd/a0005)`, ran on AMD Instinct MI325X (amd, DO) job a0005
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.maxabs-scaler.taxi.rows=full.json (amd/gate-00fcc3554142b2c65be3117b30036fc4c61e962785950b42ca22eece123f92d6)`, ran on AMD Instinct MI325X (amd, DO) job gate-00fcc3554142b2c65be3117b30036fc4c61e962785950b42ca22eece123f92d6
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.41 (source build, main@a8fd6d926) | identical | 2.6 | 2.6..2.6 | 1 | - | - | 2.6 | - | - (stored whole) | - | - | - | - | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x11, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | - | ok (main@a8fd6d926 amd/a0005 2026-10-12; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 27.7 | 27.7..27.7 | 1 | unchecked | unchecked | 27.7 | 27.7 | 0.00 (cpu-arm) | - | - | 308.5 | - | output_shape=100000x11 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.5 | 7.5..7.5 | 1 | - | - | 7.5 | 6.4 | 1.07 (upload_ms_separate) | - | - | 1007.6 | 1875.7 | max_abs_diff_vs_sklearn=0.000000, output_shape=100000x11, rel_diff_vs_sklearn=0.000000 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-00fcc3554142b2c65be3117b30036fc4c61e962785950b42ca22eece123f92d6 2026-10-27; identity vs the nvidia columns: n/a) |
 
-memory, ours: host not sampled; GPU not sampled
+calls:
+- `ours`: `mojolearn.MaxAbsScaler(copy=True)`
 
-memory, sklearn-cpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU cpu arm: no device memory
-
-settings: {}. Rows: None. Timed: None.
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/279369/vram_* bytes for this pid at the round's end (not a peak)
 
 config: cuML benchmark (RAPIDS), MaxAbsScaler (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
 
@@ -4375,7 +7102,7 @@ headline: ours IDENTICAL / torch bf16 (torch-eager-bf16, 0.9 ms) = 0.368; fp32 t
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.3 | 0.3..0.3 | 1 | - | - | - | 0.3 | - (stored kernel) | - | - | 2197.0 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-9b09a78002421099ee1e041691a221ccfd1ee58caec079a17f2c9dbdc800cfe0 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.3 | 0.3..0.3 | 1 | - | - | - | 0.3 | - (stored kernel) | - | - | 2197.0 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-9b09a78002421099ee1e041691a221ccfd1ee58caec079a17f2c9dbdc800cfe0 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-759e18895ce040f7696db51221090554844c6aba5d84cc7c78913ed36dc78ab5 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.m) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.8 | 0.8..0.8 | 1 | 0.431 | - | - | 0.8 | - (stored kernel) | 0.431 (kernel/kernel) | - | 1800.5 | 288.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.5 | 1.5..1.5 | 1 | 0.238 | - | - | 1.5 | - (stored kernel) | 0.238 (kernel/kernel) | - | 2322.8 | 232.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.9 | 0.9..0.9 | 1 | 0.368 | - | - | 0.9 | - (stored kernel) | 0.368 (kernel/kernel) | - | 1796.8 | 288.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -4437,7 +7164,7 @@ headline: ours IDENTICAL / torch bf16 (torch-compile-bf16, 1.1 ms) = 0.490; fp32
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.5 | 0.5..0.5 | 1 | - | - | - | 0.5 | - (stored kernel) | - | - | 2396.7 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-6e6eecc8c845fc493a7cd56ba91c16e19946b221260de30760196dfea866dadc 2026-10-14; identity vs the nvidia columns: n/a) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 0.5 | 0.5..0.5 | 1 | - | - | - | 0.5 | - (stored kernel) | - | - | 2396.7 | 235669.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-6e6eecc8c845fc493a7cd56ba91c16e19946b221260de30760196dfea866dadc 2026-10-14; identity vs the nvidia columns: n/a; newer run de0876621/gate-6863e2e8f2ca3859adbcd9916c771350b89641fa08b4267d02cff0e86dd4aef5 failed: REFUSED(REFUSED: "quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-); error: quality scorer unavailable: own host reference: Own host reference failed (ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory); see /root/measure-full-20261027-amd-r2/campaign/measured/algos.m) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 0.9 | 0.9..0.9 | 1 | 0.613 | - | - | 0.9 | - (stored kernel) | 0.613 (kernel/kernel) | - | 2110.6 | 639.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.2 | 1.2..1.2 | 1 | 0.448 | - | - | 1.2 | - (stored kernel) | 0.448 (kernel/kernel) | - | 2836.1 | 553.5 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-eager-bf16 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 1.8 | 1.8..1.8 | 1 | 0.298 | - | - | 1.8 | - (stored kernel) | 0.298 (kernel/kernel) | - | 2111.0 | 639.0 | max_rel_diff_vs_torch_eager_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -4490,6 +7217,1350 @@ inference call, torch-compile-fp32: torch.MaxPool2d(ceil_mode=False, dilation=1,
 inference call, torch-eager-bf16: torch.MaxPool2d(ceil_mode=False, dilation=1, kernel_size=2, padding=0, seed=7, stride=2, x=float32[64x64x112x112]); forward(x) (no autograd)(Xq)
 
 inference call, torch-compile-bf16: torch.MaxPool2d(ceil_mode=False, dilation=1, kernel_size=2, padding=0, seed=7, stride=2, x=float32[64x64x112x112]); forward(x) (no autograd)(Xq)
+
+### metric-accuracy-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-accuracy-score.istella.rows=full.json (amd/gate-afd571e4b3082cefca4089aec322c034656996899ead167729b0341cc8429997)`, ran on AMD Instinct MI325X (amd, DO) job gate-afd571e4b3082cefca4089aec322c034656996899ead167729b0341cc8429997
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.2 | 3.2..3.2 | 1 | - | - | 3.2 | - | - (stored whole) | - | - | 2992.7 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-afd571e4b3082cefca4089aec322c034656996899ead167729b0341cc8429997 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/283420/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-accuracy-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-accuracy-score.taxi.rows=full.json (amd/gate-d1382f6765450b6c80a6895dd77fe5ec7caa260b62031566cc4727ff3308e52b)`, ran on AMD Instinct MI325X (amd, DO) job gate-d1382f6765450b6c80a6895dd77fe5ec7caa260b62031566cc4727ff3308e52b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.2 | 3.2..3.2 | 1 | - | - | 3.2 | - | - (stored whole) | - | - | 2116.4 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d1382f6765450b6c80a6895dd77fe5ec7caa260b62031566cc4727ff3308e52b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/283928/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-adjusted-mutual-info-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-adjusted-mutual-info-score.istella.rows=full.json (amd/gate-3d45637ad4a2711bf2b01b39728f623c9bfc5fb7eec172d4262ef05a799cf85b)`, ran on AMD Instinct MI325X (amd, DO) job gate-3d45637ad4a2711bf2b01b39728f623c9bfc5fb7eec172d4262ef05a799cf85b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 179.7 | 179.7..179.7 | 1 | - | - | 179.7 | - | - (stored whole) | - | - | 1689.0 | 1698.9 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-3d45637ad4a2711bf2b01b39728f623c9bfc5fb7eec172d4262ef05a799cf85b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/284442/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-adjusted-mutual-info-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-adjusted-mutual-info-score.taxi.rows=full.json (amd/gate-e6e9d4be50d1b6d81cd98308d72b07768c716293cc78d355b26771e3576ec3fe)`, ran on AMD Instinct MI325X (amd, DO) job gate-e6e9d4be50d1b6d81cd98308d72b07768c716293cc78d355b26771e3576ec3fe
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 132.3 | 132.3..132.3 | 1 | - | - | 132.3 | - | - (stored whole) | - | - | 811.8 | 1698.9 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e6e9d4be50d1b6d81cd98308d72b07768c716293cc78d355b26771e3576ec3fe 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/284950/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-adjusted-rand-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-adjusted-rand-score.istella.rows=full.json (amd/gate-df6bb8540d2e71870673ae59ea275bda491fdaa929e3368e2d318dbf610923ac)`, ran on AMD Instinct MI325X (amd, DO) job gate-df6bb8540d2e71870673ae59ea275bda491fdaa929e3368e2d318dbf610923ac
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.9 | 4.9..4.9 | 1 | - | - | 4.9 | - | - (stored whole) | - | - | 2994.9 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-df6bb8540d2e71870673ae59ea275bda491fdaa929e3368e2d318dbf610923ac 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/285458/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-adjusted-rand-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-adjusted-rand-score.taxi.rows=full.json (amd/gate-85047480799b5d238a3df59b666fb47ca09831bb1fda84c2e20eed21593c4398)`, ran on AMD Instinct MI325X (amd, DO) job gate-85047480799b5d238a3df59b666fb47ca09831bb1fda84c2e20eed21593c4398
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.9 | 3.9..3.9 | 1 | - | - | 3.9 | - | - (stored whole) | - | - | 2117.5 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-85047480799b5d238a3df59b666fb47ca09831bb1fda84c2e20eed21593c4398 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/285964/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-auc / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-auc.istella.rows=full.json (amd/gate-d9f9cc045a2ed1972c045c62dbe883d418638c0a277280d27766068afbc30c98)`, ran on AMD Instinct MI325X (amd, DO) job gate-d9f9cc045a2ed1972c045c62dbe883d418638c0a277280d27766068afbc30c98
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.3 | 11.3..11.3 | 1 | - | - | 11.3 | - | - (stored whole) | - | - | 1682.6 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d9f9cc045a2ed1972c045c62dbe883d418638c0a277280d27766068afbc30c98 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/286668/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-auc / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-auc.taxi.rows=full.json (amd/gate-4beb3efadcc4e6a6b64dff663ae0cc3942d34d9c4d5ebd01d15f3f8dc9279d12)`, ran on AMD Instinct MI325X (amd, DO) job gate-4beb3efadcc4e6a6b64dff663ae0cc3942d34d9c4d5ebd01d15f3f8dc9279d12
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.0 | 11.0..11.0 | 1 | - | - | 11.0 | - | - (stored whole) | - | - | 805.3 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4beb3efadcc4e6a6b64dff663ae0cc3942d34d9c4d5ebd01d15f3f8dc9279d12 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/287174/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-average-precision-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-average-precision-score.istella.rows=full.json (amd/gate-e04ca96f0bb9b60fccc8c60fd4ccd4e2ac88c52f6f99f90720c6e53fa6abed77)`, ran on AMD Instinct MI325X (amd, DO) job gate-e04ca96f0bb9b60fccc8c60fd4ccd4e2ac88c52f6f99f90720c6e53fa6abed77
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 13.9 | 13.9..13.9 | 1 | - | - | 13.9 | - | - (stored whole) | - | - | 1686.8 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e04ca96f0bb9b60fccc8c60fd4ccd4e2ac88c52f6f99f90720c6e53fa6abed77 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/287680/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-average-precision-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-average-precision-score.taxi.rows=full.json (amd/gate-a76f800916198bccb71988b2838e7fd2d9a9ebed5eec7d0ac67dc547363a37ae)`, ran on AMD Instinct MI325X (amd, DO) job gate-a76f800916198bccb71988b2838e7fd2d9a9ebed5eec7d0ac67dc547363a37ae
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 12.3 | 12.3..12.3 | 1 | - | - | 12.3 | - | - (stored whole) | - | - | 810.1 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a76f800916198bccb71988b2838e7fd2d9a9ebed5eec7d0ac67dc547363a37ae 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/288186/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-balanced-accuracy-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-balanced-accuracy-score.istella.rows=full.json (amd/gate-e278e054278f8ff52e9a1d955809d25adea9f84f33967a2ddd5655c48dc378ee)`, ran on AMD Instinct MI325X (amd, DO) job gate-e278e054278f8ff52e9a1d955809d25adea9f84f33967a2ddd5655c48dc378ee
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.4 | 11.4..11.4 | 1 | - | - | 11.4 | - | - (stored whole) | - | - | 1686.7 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e278e054278f8ff52e9a1d955809d25adea9f84f33967a2ddd5655c48dc378ee 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/288702/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-balanced-accuracy-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-balanced-accuracy-score.taxi.rows=full.json (amd/gate-d5b0ac8acdf35294105b784fdb1f8bfea934013d02c4af264888408c19993d1b)`, ran on AMD Instinct MI325X (amd, DO) job gate-d5b0ac8acdf35294105b784fdb1f8bfea934013d02c4af264888408c19993d1b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.6 | 11.6..11.6 | 1 | - | - | 11.6 | - | - (stored whole) | - | - | 809.6 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-d5b0ac8acdf35294105b784fdb1f8bfea934013d02c4af264888408c19993d1b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/289205/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-brier-score-loss / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-brier-score-loss.istella.rows=full.json (amd/gate-2ebb5ebca12039cc462f33922df85541016b1565859457473cbf2d23bbeff136)`, ran on AMD Instinct MI325X (amd, DO) job gate-2ebb5ebca12039cc462f33922df85541016b1565859457473cbf2d23bbeff136
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.3 | 7.3..7.3 | 1 | - | - | 7.3 | - | - (stored whole) | - | - | 1686.9 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2ebb5ebca12039cc462f33922df85541016b1565859457473cbf2d23bbeff136 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/289710/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-brier-score-loss / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-brier-score-loss.taxi.rows=full.json (amd/gate-e4b2741c3678cbadc7389b9c2df2e0e21bcf9597f45fb4412db411b07652c239)`, ran on AMD Instinct MI325X (amd, DO) job gate-e4b2741c3678cbadc7389b9c2df2e0e21bcf9597f45fb4412db411b07652c239
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.2 | 7.2..7.2 | 1 | - | - | 7.2 | - | - (stored whole) | - | - | 810.1 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e4b2741c3678cbadc7389b9c2df2e0e21bcf9597f45fb4412db411b07652c239 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/290217/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-calinski-harabasz-score / istella (rows full, shape X 1000000x220; Xq 20000x220; y 1000000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-calinski-harabasz-score.istella.rows=full.json (amd/gate-8208dec23f955081b781aebd3b282c01de5aed6476614e61849fa0c51de6a3d6)`, ran on AMD Instinct MI325X (amd, DO) job gate-8208dec23f955081b781aebd3b282c01de5aed6476614e61849fa0c51de6a3d6
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.3 | 10.3..10.3 | 1 | - | - | 10.3 | - | - (stored whole) | - | - | 1719.4 | 1968.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-8208dec23f955081b781aebd3b282c01de5aed6476614e61849fa0c51de6a3d6 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/290732/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-calinski-harabasz-score / taxi (rows full, shape X 1000000x11; Xq 20000x11; y 1000000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-calinski-harabasz-score.taxi.rows=full.json (amd/gate-392a77e758fb88ff7dea8b0d48852a3a27a30643f97d8230d84c62c04d948cc0)`, ran on AMD Instinct MI325X (amd, DO) job gate-392a77e758fb88ff7dea8b0d48852a3a27a30643f97d8230d84c62c04d948cc0
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.4 | 3.4..3.4 | 1 | - | - | 3.4 | - | - (stored whole) | - | - | 806.1 | 1968.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-392a77e758fb88ff7dea8b0d48852a3a27a30643f97d8230d84c62c04d948cc0 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/291238/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-class-likelihood-ratios / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-class-likelihood-ratios.istella.rows=full.json (amd/gate-76fba90998c308fb1b1c98bfd29e6ed620c5b2583a8b841df3bbb959eb352919)`, ran on AMD Instinct MI325X (amd, DO) job gate-76fba90998c308fb1b1c98bfd29e6ed620c5b2583a8b841df3bbb959eb352919
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.8 | 10.8..10.8 | 1 | - | - | 10.8 | - | - (stored whole) | - | - | 1686.4 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-76fba90998c308fb1b1c98bfd29e6ed620c5b2583a8b841df3bbb959eb352919 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/291746/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-class-likelihood-ratios / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-class-likelihood-ratios.taxi.rows=full.json (amd/gate-073035103c04344ae1ed913a4cf5fa01ea3bd0345034f4bd3950efc3dd36513c)`, ran on AMD Instinct MI325X (amd, DO) job gate-073035103c04344ae1ed913a4cf5fa01ea3bd0345034f4bd3950efc3dd36513c
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.9 | 10.9..10.9 | 1 | - | - | 10.9 | - | - (stored whole) | - | - | 809.8 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-073035103c04344ae1ed913a4cf5fa01ea3bd0345034f4bd3950efc3dd36513c 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/292254/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-classification-report / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-classification-report.istella.rows=full.json (amd/gate-1d10707f051fdd9e492fa11d172534fe4ae3960f26376e4c2dfd6ac8bd7cf15b)`, ran on AMD Instinct MI325X (amd, DO) job gate-1d10707f051fdd9e492fa11d172534fe4ae3960f26376e4c2dfd6ac8bd7cf15b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 22.7 | 22.7..22.7 | 1 | - | - | 22.7 | - | - (stored whole) | - | - | 1687.2 | 1968.6 | outputs=17 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1d10707f051fdd9e492fa11d172534fe4ae3960f26376e4c2dfd6ac8bd7cf15b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/292769/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-classification-report / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-classification-report.taxi.rows=full.json (amd/gate-9695735edd2a71a6297241d68685772c164473dd26372968d776f4c317673916)`, ran on AMD Instinct MI325X (amd, DO) job gate-9695735edd2a71a6297241d68685772c164473dd26372968d776f4c317673916
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 22.4 | 22.4..22.4 | 1 | - | - | 22.4 | - | - (stored whole) | - | - | 810.2 | 1968.6 | outputs=17 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9695735edd2a71a6297241d68685772c164473dd26372968d776f4c317673916 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/293275/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-cohen-kappa-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-cohen-kappa-score.istella.rows=full.json (amd/gate-88bca29548becfeb415d7c9ac5c1926c1eded6ec82b02dc1e26fc56c2b7056b3)`, ran on AMD Instinct MI325X (amd, DO) job gate-88bca29548becfeb415d7c9ac5c1926c1eded6ec82b02dc1e26fc56c2b7056b3
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.7 | 10.7..10.7 | 1 | - | - | 10.7 | - | - (stored whole) | - | - | 1686.7 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-88bca29548becfeb415d7c9ac5c1926c1eded6ec82b02dc1e26fc56c2b7056b3 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/293780/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-cohen-kappa-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-cohen-kappa-score.taxi.rows=full.json (amd/gate-315458273b6b5a73d20a16b8afaa11a3aef53b6ed449695a58f1976d4b58bc1d)`, ran on AMD Instinct MI325X (amd, DO) job gate-315458273b6b5a73d20a16b8afaa11a3aef53b6ed449695a58f1976d4b58bc1d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.8 | 10.8..10.8 | 1 | - | - | 10.8 | - | - (stored whole) | - | - | 809.7 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-315458273b6b5a73d20a16b8afaa11a3aef53b6ed449695a58f1976d4b58bc1d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/294285/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-completeness-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-completeness-score.istella.rows=full.json (amd/gate-6b6e31caee3e3126e20597a1b7b1045911bd18e6545d2a1f98aee82f84adccbe)`, ran on AMD Instinct MI325X (amd, DO) job gate-6b6e31caee3e3126e20597a1b7b1045911bd18e6545d2a1f98aee82f84adccbe
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 5.6 | 5.6..5.6 | 1 | - | - | 5.6 | - | - (stored whole) | - | - | 3179.1 | 1886.0 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-6b6e31caee3e3126e20597a1b7b1045911bd18e6545d2a1f98aee82f84adccbe 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/294804/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-completeness-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-completeness-score.taxi.rows=full.json (amd/gate-212d4c654a58ff95f79e1ac00553aff98e9051c31dc87bf3eb94ee29fae4ee01)`, ran on AMD Instinct MI325X (amd, DO) job gate-212d4c654a58ff95f79e1ac00553aff98e9051c31dc87bf3eb94ee29fae4ee01
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.1 | 7.1..7.1 | 1 | - | - | 7.1 | - | - (stored whole) | - | - | 2302.0 | 1886.0 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-212d4c654a58ff95f79e1ac00553aff98e9051c31dc87bf3eb94ee29fae4ee01 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/295495/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-confusion-matrix / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-confusion-matrix.istella.rows=full.json (amd/gate-c2e587f0dc7e29ca3df6aa0256655f12ce5aa6b03aaf880b1a4172b106efb4bc)`, ran on AMD Instinct MI325X (amd, DO) job gate-c2e587f0dc7e29ca3df6aa0256655f12ce5aa6b03aaf880b1a4172b106efb4bc
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 5.8 | 5.8..5.8 | 1 | - | - | 5.8 | - | - (stored whole) | - | - | 3178.2 | 1875.8 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c2e587f0dc7e29ca3df6aa0256655f12ce5aa6b03aaf880b1a4172b106efb4bc 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/296002/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-confusion-matrix / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-confusion-matrix.taxi.rows=full.json (amd/gate-27fc4afea62d00a4333dbe0ed74a5a84716bc7cee83a1932dcd3246babd1c5e5)`, ran on AMD Instinct MI325X (amd, DO) job gate-27fc4afea62d00a4333dbe0ed74a5a84716bc7cee83a1932dcd3246babd1c5e5
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 5.5 | 5.5..5.5 | 1 | - | - | 5.5 | - | - (stored whole) | - | - | 2301.0 | 1875.8 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-27fc4afea62d00a4333dbe0ed74a5a84716bc7cee83a1932dcd3246babd1c5e5 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/296508/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-contingency-matrix / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-contingency-matrix.istella.rows=full.json (amd/gate-c9acbab3d37c9ebfc5f086d9a0a40640366b5a49842d02dd863c6aaf34693fc1)`, ran on AMD Instinct MI325X (amd, DO) job gate-c9acbab3d37c9ebfc5f086d9a0a40640366b5a49842d02dd863c6aaf34693fc1
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.8 | 10.8..10.8 | 1 | - | - | 10.8 | - | - (stored whole) | - | - | 1688.7 | 1698.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c9acbab3d37c9ebfc5f086d9a0a40640366b5a49842d02dd863c6aaf34693fc1 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/297022/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-contingency-matrix / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-contingency-matrix.taxi.rows=full.json (amd/gate-87eb20900980d1d285a4843d000a6f11b06ead8f924f2e0731e1982329026261)`, ran on AMD Instinct MI325X (amd, DO) job gate-87eb20900980d1d285a4843d000a6f11b06ead8f924f2e0731e1982329026261
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.8 | 10.8..10.8 | 1 | - | - | 10.8 | - | - (stored whole) | - | - | 811.3 | 1698.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-87eb20900980d1d285a4843d000a6f11b06ead8f924f2e0731e1982329026261 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/297532/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-coverage-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-coverage-error.istella.rows=full.json (amd/gate-4a825543cb944da18e0f9ae61dee76fdf6455885d5424de84039be24e01e21c4)`, ran on AMD Instinct MI325X (amd, DO) job gate-4a825543cb944da18e0f9ae61dee76fdf6455885d5424de84039be24e01e21c4
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 26.3 | 26.3..26.3 | 1 | - | - | 26.3 | - | - (stored whole) | - | - | 1714.6 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4a825543cb944da18e0f9ae61dee76fdf6455885d5424de84039be24e01e21c4 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/298038/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-coverage-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-coverage-error.taxi.rows=full.json (amd/gate-1f06e6cd96909d3ed7c61f265cea4ace3d8f2c8eb30f0cab02239879e4dbdb9b)`, ran on AMD Instinct MI325X (amd, DO) job gate-1f06e6cd96909d3ed7c61f265cea4ace3d8f2c8eb30f0cab02239879e4dbdb9b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 19.1 | 19.1..19.1 | 1 | - | - | 19.1 | - | - (stored whole) | - | - | 827.8 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1f06e6cd96909d3ed7c61f265cea4ace3d8f2c8eb30f0cab02239879e4dbdb9b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/298543/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-absolute-error-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-absolute-error-score.istella.rows=full.json (amd/gate-5e28076c466be2d06a8ec470093f624a5441109fe74665c7f668d99b25f6bc7a)`, ran on AMD Instinct MI325X (amd, DO) job gate-5e28076c466be2d06a8ec470093f624a5441109fe74665c7f668d99b25f6bc7a
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.0 | 3.0..3.0 | 1 | - | - | 3.0 | - | - (stored whole) | - | - | 1680.8 | 1698.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-5e28076c466be2d06a8ec470093f624a5441109fe74665c7f668d99b25f6bc7a 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/299058/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-absolute-error-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-absolute-error-score.taxi.rows=full.json (amd/gate-c685b5b53314f1dc44c93b54289f0a6f333566c08b30bd1754f42d9b5d04437c)`, ran on AMD Instinct MI325X (amd, DO) job gate-c685b5b53314f1dc44c93b54289f0a6f333566c08b30bd1754f42d9b5d04437c
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.0 | 3.0..3.0 | 1 | - | - | 3.0 | - | - (stored whole) | - | - | 803.5 | 1698.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c685b5b53314f1dc44c93b54289f0a6f333566c08b30bd1754f42d9b5d04437c 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/299565/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-log-loss-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-log-loss-score.istella.rows=full.json (amd/gate-e6a6fa3f96c0294d7f1165b8c263da5f638be9f7708c3fd464ce1be3bd4f223d)`, ran on AMD Instinct MI325X (amd, DO) job gate-e6a6fa3f96c0294d7f1165b8c263da5f638be9f7708c3fd464ce1be3bd4f223d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.6 | 7.6..7.6 | 1 | - | - | 7.6 | - | - (stored whole) | - | - | 1687.2 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e6a6fa3f96c0294d7f1165b8c263da5f638be9f7708c3fd464ce1be3bd4f223d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/300590/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-log-loss-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-log-loss-score.taxi.rows=full.json (amd/gate-283ee76be72b58303e82f0073bc53df9408fbf02340b41d72a3662d26488c86a)`, ran on AMD Instinct MI325X (amd, DO) job gate-283ee76be72b58303e82f0073bc53df9408fbf02340b41d72a3662d26488c86a
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.5 | 7.5..7.5 | 1 | - | - | 7.5 | - | - (stored whole) | - | - | 809.9 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-283ee76be72b58303e82f0073bc53df9408fbf02340b41d72a3662d26488c86a 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/301110/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-pinball-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-pinball-score.istella.rows=full.json (amd/gate-57e75d85d30d560c6bb05c10e3088141a40c4f5a1d25ce93ab516591490c337e)`, ran on AMD Instinct MI325X (amd, DO) job gate-57e75d85d30d560c6bb05c10e3088141a40c4f5a1d25ce93ab516591490c337e
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.1 | 3.1..3.1 | 1 | - | - | 3.1 | - | - (stored whole) | - | - | 1680.6 | 1698.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-57e75d85d30d560c6bb05c10e3088141a40c4f5a1d25ce93ab516591490c337e 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/301616/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-pinball-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-pinball-score.taxi.rows=full.json (amd/gate-3a67837cb7776990168b872863e14770177476ade51d10593cd739648448eff4)`, ran on AMD Instinct MI325X (amd, DO) job gate-3a67837cb7776990168b872863e14770177476ade51d10593cd739648448eff4
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.1 | 3.1..3.1 | 1 | - | - | 3.1 | - | - (stored whole) | - | - | 803.6 | 1698.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-3a67837cb7776990168b872863e14770177476ade51d10593cd739648448eff4 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/302120/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-tweedie-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-tweedie-score.istella.rows=full.json (amd/gate-568b4caf50a4924e5b471a7b517f120557d2e95b1b2de646db841114a3a367d5)`, ran on AMD Instinct MI325X (amd, DO) job gate-568b4caf50a4924e5b471a7b517f120557d2e95b1b2de646db841114a3a367d5
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.1 | 3.1..3.1 | 1 | - | - | 3.1 | - | - (stored whole) | - | - | 1680.5 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-568b4caf50a4924e5b471a7b517f120557d2e95b1b2de646db841114a3a367d5 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/302629/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-d2-tweedie-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-d2-tweedie-score.taxi.rows=full.json (amd/gate-936b6a98a9bf4947b584927dffa7cbf80335685f27a3879be8a5b323c202b9cf)`, ran on AMD Instinct MI325X (amd, DO) job gate-936b6a98a9bf4947b584927dffa7cbf80335685f27a3879be8a5b323c202b9cf
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.3 | 3.3..3.3 | 1 | - | - | 3.3 | - | - (stored whole) | - | - | 803.2 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-936b6a98a9bf4947b584927dffa7cbf80335685f27a3879be8a5b323c202b9cf 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/303140/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-davies-bouldin-score / istella (rows full, shape X 1000000x220; Xq 20000x220; y 1000000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-davies-bouldin-score.istella.rows=full.json (amd/gate-49508f1ecfcaebd8cc283ead34985d617f3edfc45400eb4cd3b735facb54d632)`, ran on AMD Instinct MI325X (amd, DO) job gate-49508f1ecfcaebd8cc283ead34985d617f3edfc45400eb4cd3b735facb54d632
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 8.8 | 8.8..8.8 | 1 | - | - | 8.8 | - | - (stored whole) | - | - | 1718.8 | 1968.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-49508f1ecfcaebd8cc283ead34985d617f3edfc45400eb4cd3b735facb54d632 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/303837/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-davies-bouldin-score / taxi (rows full, shape X 1000000x11; Xq 20000x11; y 1000000; yq 20000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-davies-bouldin-score.taxi.rows=full.json (amd/gate-f351cc1a3c036e6195b01718795dba006516cd202ac9e1003d53231da9bea753)`, ran on AMD Instinct MI325X (amd, DO) job gate-f351cc1a3c036e6195b01718795dba006516cd202ac9e1003d53231da9bea753
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.0 | 3.0..3.0 | 1 | - | - | 3.0 | - | - (stored whole) | - | - | 805.9 | 1968.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-f351cc1a3c036e6195b01718795dba006516cd202ac9e1003d53231da9bea753 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/304340/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-dcg-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-dcg-score.istella.rows=full.json (amd/gate-83f261a0334d13cef2ea66d73b0bbcf7a4f77c70929f3835b28f8f421ad8febb)`, ran on AMD Instinct MI325X (amd, DO) job gate-83f261a0334d13cef2ea66d73b0bbcf7a4f77c70929f3835b28f8f421ad8febb
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 27.2 | 27.2..27.2 | 1 | - | - | 27.2 | - | - (stored whole) | - | - | 1714.3 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-83f261a0334d13cef2ea66d73b0bbcf7a4f77c70929f3835b28f8f421ad8febb 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/304847/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-dcg-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-dcg-score.taxi.rows=full.json (amd/gate-5305339cd459ad37cf7ea1b29a94c7abc45ee12c643168b7728d67e7eb360f00)`, ran on AMD Instinct MI325X (amd, DO) job gate-5305339cd459ad37cf7ea1b29a94c7abc45ee12c643168b7728d67e7eb360f00
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 19.7 | 19.7..19.7 | 1 | - | - | 19.7 | - | - (stored whole) | - | - | 827.8 | 2398.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-5305339cd459ad37cf7ea1b29a94c7abc45ee12c643168b7728d67e7eb360f00 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/305363/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-det-curve / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-det-curve.istella.rows=full.json (amd/gate-1da60267fcd9da0c2da88a134ab2a71fe067a294433aa29644b20979d4590be6)`, ran on AMD Instinct MI325X (amd, DO) job gate-1da60267fcd9da0c2da88a134ab2a71fe067a294433aa29644b20979d4590be6
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.3 | 10.3..10.3 | 1 | - | - | 10.3 | - | - (stored whole) | - | - | 1691.2 | 1698.4 | outputs=3 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-1da60267fcd9da0c2da88a134ab2a71fe067a294433aa29644b20979d4590be6 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/305871/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-det-curve / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-det-curve.taxi.rows=full.json (amd/gate-4a41e49ac410f1185ce2867b5a0733aef1755f3817f4892576812dcbd160ebd4)`, ran on AMD Instinct MI325X (amd, DO) job gate-4a41e49ac410f1185ce2867b5a0733aef1755f3817f4892576812dcbd160ebd4
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 10.0 | 10.0..10.0 | 1 | - | - | 10.0 | - | - (stored whole) | - | - | 814.6 | 1698.4 | outputs=3 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-4a41e49ac410f1185ce2867b5a0733aef1755f3817f4892576812dcbd160ebd4 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/306376/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-entropy / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-entropy.istella.rows=full.json (amd/gate-73122935fcce45e29c16c97914120d37108cb730ef1698036bdd5c30e36111fa)`, ran on AMD Instinct MI325X (amd, DO) job gate-73122935fcce45e29c16c97914120d37108cb730ef1698036bdd5c30e36111fa
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.7 | 2.7..2.7 | 1 | - | - | 2.7 | - | - (stored whole) | - | - | 2993.4 | 1708.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-73122935fcce45e29c16c97914120d37108cb730ef1698036bdd5c30e36111fa 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/306884/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-entropy / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-entropy.taxi.rows=full.json (amd/gate-86d01c4e37dbc19cba7f2fa8b50df3a7950fb6e879bb5517c5548f7bf1530546)`, ran on AMD Instinct MI325X (amd, DO) job gate-86d01c4e37dbc19cba7f2fa8b50df3a7950fb6e879bb5517c5548f7bf1530546
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 2116.3 | 1708.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-86d01c4e37dbc19cba7f2fa8b50df3a7950fb6e879bb5517c5548f7bf1530546 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/307399/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-explained-variance-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-explained-variance-score.istella.rows=full.json (amd/gate-019d89356e4a9e4e9c2c1fbbc63273c12a03ee95c0d8bb715c8f85cb0e9d68f5)`, ran on AMD Instinct MI325X (amd, DO) job gate-019d89356e4a9e4e9c2c1fbbc63273c12a03ee95c0d8bb715c8f85cb0e9d68f5
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.9 | 3.9..3.9 | 1 | - | - | 3.9 | - | - (stored whole) | - | - | 1684.1 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-019d89356e4a9e4e9c2c1fbbc63273c12a03ee95c0d8bb715c8f85cb0e9d68f5 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/307904/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-explained-variance-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-explained-variance-score.taxi.rows=full.json (amd/gate-df3229dd3559e33b832fa661bea5ebd32a58bbf999954546b257e1e4e92f8e04)`, ran on AMD Instinct MI325X (amd, DO) job gate-df3229dd3559e33b832fa661bea5ebd32a58bbf999954546b257e1e4e92f8e04
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.8 | 3.8..3.8 | 1 | - | - | 3.8 | - | - (stored whole) | - | - | 806.9 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-df3229dd3559e33b832fa661bea5ebd32a58bbf999954546b257e1e4e92f8e04 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/308407/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-f1-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-f1-score.istella.rows=full.json (amd/gate-890317cc5435a3150c5e51366641061810f8ca337b64575c761dc2fb564cec90)`, ran on AMD Instinct MI325X (amd, DO) job gate-890317cc5435a3150c5e51366641061810f8ca337b64575c761dc2fb564cec90
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.7 | 7.7..7.7 | 1 | - | - | 7.7 | - | - (stored whole) | - | - | 3177.6 | 1875.8 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-890317cc5435a3150c5e51366641061810f8ca337b64575c761dc2fb564cec90 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/308919/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-f1-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-f1-score.taxi.rows=full.json (amd/gate-46067405ef2efd1d440d4ae2134ca730a1a5c836d32a6078347b8aeae95319bc)`, ran on AMD Instinct MI325X (amd, DO) job gate-46067405ef2efd1d440d4ae2134ca730a1a5c836d32a6078347b8aeae95319bc
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 7.2 | 7.2..7.2 | 1 | - | - | 7.2 | - | - (stored whole) | - | - | 2300.8 | 1875.8 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-46067405ef2efd1d440d4ae2134ca730a1a5c836d32a6078347b8aeae95319bc 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/309432/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-fbeta-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-fbeta-score.istella.rows=full.json (amd/gate-8d0ef588783685f893170eb937641e22387a67383651305e2008780e349064bd)`, ran on AMD Instinct MI325X (amd, DO) job gate-8d0ef588783685f893170eb937641e22387a67383651305e2008780e349064bd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 12.1 | 12.1..12.1 | 1 | - | - | 12.1 | - | - (stored whole) | - | - | 1687.0 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-8d0ef588783685f893170eb937641e22387a67383651305e2008780e349064bd 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/309937/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-fbeta-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-fbeta-score.taxi.rows=full.json (amd/gate-bfda8f9864f14ea0db19cc91c3357fc1a326833e7d01fb017b3c5e78339449d5)`, ran on AMD Instinct MI325X (amd, DO) job gate-bfda8f9864f14ea0db19cc91c3357fc1a326833e7d01fb017b3c5e78339449d5
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 12.2 | 12.2..12.2 | 1 | - | - | 12.2 | - | - (stored whole) | - | - | 809.9 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-bfda8f9864f14ea0db19cc91c3357fc1a326833e7d01fb017b3c5e78339449d5 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/310444/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-fowlkes-mallows-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-fowlkes-mallows-score.istella.rows=full.json (amd/gate-e315e8eb166a66b44db6c732810aa979e1b3df81bc8c2a74a97fa8c788d249b2)`, ran on AMD Instinct MI325X (amd, DO) job gate-e315e8eb166a66b44db6c732810aa979e1b3df81bc8c2a74a97fa8c788d249b2
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 3.9 | 3.9..3.9 | 1 | - | - | 3.9 | - | - (stored whole) | - | - | 3178.2 | 1875.8 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e315e8eb166a66b44db6c732810aa979e1b3df81bc8c2a74a97fa8c788d249b2 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/310952/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-fowlkes-mallows-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-fowlkes-mallows-score.taxi.rows=full.json (amd/gate-eda583ef3c3d9d7553831dfa49aac40673c36233d69f39000ed8a64b1604d025)`, ran on AMD Instinct MI325X (amd, DO) job gate-eda583ef3c3d9d7553831dfa49aac40673c36233d69f39000ed8a64b1604d025
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.0 | 4.0..4.0 | 1 | - | - | 4.0 | - | - (stored whole) | - | - | 2301.8 | 1875.8 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-eda583ef3c3d9d7553831dfa49aac40673c36233d69f39000ed8a64b1604d025 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/311470/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-hamming-loss / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-hamming-loss.istella.rows=full.json (amd/gate-39e781b92f86361ae84575b3b1422e6ce31404c74ac38a4c9839239dbe445dd6)`, ran on AMD Instinct MI325X (amd, DO) job gate-39e781b92f86361ae84575b3b1422e6ce31404c74ac38a4c9839239dbe445dd6
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.3 | 11.3..11.3 | 1 | - | - | 11.3 | - | - (stored whole) | - | - | 1687.1 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-39e781b92f86361ae84575b3b1422e6ce31404c74ac38a4c9839239dbe445dd6 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/312165/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-hamming-loss / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-hamming-loss.taxi.rows=full.json (amd/gate-6ae6863f45193016b09e2fff86be28fa8b911af6d7267bdeba903436589fa3b8)`, ran on AMD Instinct MI325X (amd, DO) job gate-6ae6863f45193016b09e2fff86be28fa8b911af6d7267bdeba903436589fa3b8
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.3 | 11.3..11.3 | 1 | - | - | 11.3 | - | - (stored whole) | - | - | 810.1 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-6ae6863f45193016b09e2fff86be28fa8b911af6d7267bdeba903436589fa3b8 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/312672/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-hinge-loss / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-hinge-loss.istella.rows=full.json (amd/gate-a62f3dabc51faebcfee3e2b421cf843d9dc0318e1dbd4c3400aa19034fd5469b)`, ran on AMD Instinct MI325X (amd, DO) job gate-a62f3dabc51faebcfee3e2b421cf843d9dc0318e1dbd4c3400aa19034fd5469b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 6.9 | 6.9..6.9 | 1 | - | - | 6.9 | - | - (stored whole) | - | - | 1686.8 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a62f3dabc51faebcfee3e2b421cf843d9dc0318e1dbd4c3400aa19034fd5469b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/313178/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-hinge-loss / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-hinge-loss.taxi.rows=full.json (amd/gate-a81bc0a1483f2b99e1ad7b6dd4d1a10573a593ea7bee8e2d4dbe94930c67069a)`, ran on AMD Instinct MI325X (amd, DO) job gate-a81bc0a1483f2b99e1ad7b6dd4d1a10573a593ea7bee8e2d4dbe94930c67069a
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 6.8 | 6.8..6.8 | 1 | - | - | 6.8 | - | - (stored whole) | - | - | 809.8 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-a81bc0a1483f2b99e1ad7b6dd4d1a10573a593ea7bee8e2d4dbe94930c67069a 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/313694/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-homogeneity-completeness-v-measure / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-homogeneity-completeness-v-measure.istella.rows=full.json (amd/gate-9b25574628fca3cfc8e091a41aa5e501a6e3f242e9dd26bcd192226e7b2fb558)`, ran on AMD Instinct MI325X (amd, DO) job gate-9b25574628fca3cfc8e091a41aa5e501a6e3f242e9dd26bcd192226e7b2fb558
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.4 | 11.4..11.4 | 1 | - | - | 11.4 | - | - (stored whole) | - | - | 3179.4 | 1886.0 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9b25574628fca3cfc8e091a41aa5e501a6e3f242e9dd26bcd192226e7b2fb558 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/314249/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-homogeneity-completeness-v-measure / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-homogeneity-completeness-v-measure.taxi.rows=full.json (amd/gate-cf28ef7b0a5dddced978a085eacdc28b9dd91a1abb0cd3b7d771ce24700a2598)`, ran on AMD Instinct MI325X (amd, DO) job gate-cf28ef7b0a5dddced978a085eacdc28b9dd91a1abb0cd3b7d771ce24700a2598
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 16.7 | 16.7..16.7 | 1 | - | - | 16.7 | - | - (stored whole) | - | - | 2301.9 | 1886.0 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-cf28ef7b0a5dddced978a085eacdc28b9dd91a1abb0cd3b7d771ce24700a2598 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/314756/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-homogeneity-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-homogeneity-score.istella.rows=full.json (amd/gate-08da99bd6f6c207decf5c1886c45ca377f54b4bc3c5e792bf11eb5978e8d66cc)`, ran on AMD Instinct MI325X (amd, DO) job gate-08da99bd6f6c207decf5c1886c45ca377f54b4bc3c5e792bf11eb5978e8d66cc
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 5.6 | 5.6..5.6 | 1 | - | - | 5.6 | - | - (stored whole) | - | - | 3179.3 | 1886.0 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-08da99bd6f6c207decf5c1886c45ca377f54b4bc3c5e792bf11eb5978e8d66cc 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/315262/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-homogeneity-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-homogeneity-score.taxi.rows=full.json (amd/gate-23092f56e8a3523175ddbb246e98c4737e47b29738368735814da6bf256206c1)`, ran on AMD Instinct MI325X (amd, DO) job gate-23092f56e8a3523175ddbb246e98c4737e47b29738368735814da6bf256206c1
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 6.8 | 6.8..6.8 | 1 | - | - | 6.8 | - | - (stored whole) | - | - | 2302.1 | 1886.0 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-23092f56e8a3523175ddbb246e98c4737e47b29738368735814da6bf256206c1 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/315776/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-jaccard-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-jaccard-score.istella.rows=full.json (amd/gate-374e81f89479837352f0dfebba10ddef31e51261f90c71c80f25f63c4c8a7e4f)`, ran on AMD Instinct MI325X (amd, DO) job gate-374e81f89479837352f0dfebba10ddef31e51261f90c71c80f25f63c4c8a7e4f
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 12.0 | 12.0..12.0 | 1 | - | - | 12.0 | - | - (stored whole) | - | - | 1686.8 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-374e81f89479837352f0dfebba10ddef31e51261f90c71c80f25f63c4c8a7e4f 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/316282/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-jaccard-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-jaccard-score.taxi.rows=full.json (amd/gate-64014831ef8301db9202d5ff7663b951578f8e3db8c1292e415e81a536f54a00)`, ran on AMD Instinct MI325X (amd, DO) job gate-64014831ef8301db9202d5ff7663b951578f8e3db8c1292e415e81a536f54a00
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.9 | 11.9..11.9 | 1 | - | - | 11.9 | - | - (stored whole) | - | - | 809.9 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-64014831ef8301db9202d5ff7663b951578f8e3db8c1292e415e81a536f54a00 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/316787/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-label-ranking-average-precision-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-label-ranking-average-precision-score.istella.rows=full.json (amd/gate-bda33b268322d85ad1db5386c38c7b7ed8337b9f67ac4312dfc7835f145f88b1)`, ran on AMD Instinct MI325X (amd, DO) job gate-bda33b268322d85ad1db5386c38c7b7ed8337b9f67ac4312dfc7835f145f88b1
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 27.1 | 27.1..27.1 | 1 | - | - | 27.1 | - | - (stored whole) | - | - | 1714.4 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-bda33b268322d85ad1db5386c38c7b7ed8337b9f67ac4312dfc7835f145f88b1 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/317823/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-label-ranking-average-precision-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-label-ranking-average-precision-score.taxi.rows=full.json (amd/gate-42ee6f8b70244bb12a6ff69a8f28a45020d2510a1c12e2ab10d20b5bcfbb8f35)`, ran on AMD Instinct MI325X (amd, DO) job gate-42ee6f8b70244bb12a6ff69a8f28a45020d2510a1c12e2ab10d20b5bcfbb8f35
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 19.2 | 19.2..19.2 | 1 | - | - | 19.2 | - | - (stored whole) | - | - | 827.8 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-42ee6f8b70244bb12a6ff69a8f28a45020d2510a1c12e2ab10d20b5bcfbb8f35 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/318331/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-label-ranking-loss / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-label-ranking-loss.istella.rows=full.json (amd/gate-17edcbbe89f512b9dfe108ca7b11a7ca3d23cc13bf13c30041d8e0b88c298b16)`, ran on AMD Instinct MI325X (amd, DO) job gate-17edcbbe89f512b9dfe108ca7b11a7ca3d23cc13bf13c30041d8e0b88c298b16
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 26.6 | 26.6..26.6 | 1 | - | - | 26.6 | - | - (stored whole) | - | - | 1714.5 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-17edcbbe89f512b9dfe108ca7b11a7ca3d23cc13bf13c30041d8e0b88c298b16 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/318845/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-label-ranking-loss / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-label-ranking-loss.taxi.rows=full.json (amd/gate-7d7c3b7689c2c8c4e17fa04d4fefbebbdd3fdfb983f9037b371390691996dbce)`, ran on AMD Instinct MI325X (amd, DO) job gate-7d7c3b7689c2c8c4e17fa04d4fefbebbdd3fdfb983f9037b371390691996dbce
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 19.2 | 19.2..19.2 | 1 | - | - | 19.2 | - | - (stored whole) | - | - | 828.1 | 2398.6 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-7d7c3b7689c2c8c4e17fa04d4fefbebbdd3fdfb983f9037b371390691996dbce 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/319351/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-log-loss / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-log-loss.istella.rows=full.json (amd/gate-627f90e30b85a34a2c7860481a3348f5b6d82fb3f9d32b98440cbd5d5c3db59d)`, ran on AMD Instinct MI325X (amd, DO) job gate-627f90e30b85a34a2c7860481a3348f5b6d82fb3f9d32b98440cbd5d5c3db59d
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.4 | 4.4..4.4 | 1 | - | - | 4.4 | - | - (stored whole) | - | - | 3177.3 | 2576.1 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-627f90e30b85a34a2c7860481a3348f5b6d82fb3f9d32b98440cbd5d5c3db59d 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/319956/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-log-loss / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-log-loss.taxi.rows=full.json (amd/gate-6d4af10957ad9fd4049700736e370d07eb1ee00e3205654573a7c7813624531b)`, ran on AMD Instinct MI325X (amd, DO) job gate-6d4af10957ad9fd4049700736e370d07eb1ee00e3205654573a7c7813624531b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.4 | 4.4..4.4 | 1 | - | - | 4.4 | - | - (stored whole) | - | - | 2300.1 | 2576.1 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-6d4af10957ad9fd4049700736e370d07eb1ee00e3205654573a7c7813624531b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/320562/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-matthews-corrcoef / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-matthews-corrcoef.istella.rows=full.json (amd/gate-c13701ec81001b96ff95e155c8b8bf9bb38966210178d1a771d009b41c3be04c)`, ran on AMD Instinct MI325X (amd, DO) job gate-c13701ec81001b96ff95e155c8b8bf9bb38966210178d1a771d009b41c3be04c
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.4 | 11.4..11.4 | 1 | - | - | 11.4 | - | - (stored whole) | - | - | 1686.8 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c13701ec81001b96ff95e155c8b8bf9bb38966210178d1a771d009b41c3be04c 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/321067/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-matthews-corrcoef / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-matthews-corrcoef.taxi.rows=full.json (amd/gate-ca2ba815cf094142310d33f1fd5bf485c03d52c864a56a14df233a16b9186c6c)`, ran on AMD Instinct MI325X (amd, DO) job gate-ca2ba815cf094142310d33f1fd5bf485c03d52c864a56a14df233a16b9186c6c
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.3 | 11.3..11.3 | 1 | - | - | 11.3 | - | - (stored whole) | - | - | 810.1 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ca2ba815cf094142310d33f1fd5bf485c03d52c864a56a14df233a16b9186c6c 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/321574/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-max-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-max-error.istella.rows=full.json (amd/gate-e83b2a2af5225f6b5c0299087e65a77c00d78aad34132c16ac48093375a9d699)`, ran on AMD Instinct MI325X (amd, DO) job gate-e83b2a2af5225f6b5c0299087e65a77c00d78aad34132c16ac48093375a9d699
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1.8 | 1.8..1.8 | 1 | - | - | 1.8 | - | - (stored whole) | - | - | 1680.1 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e83b2a2af5225f6b5c0299087e65a77c00d78aad34132c16ac48093375a9d699 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/322079/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-max-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-max-error.taxi.rows=full.json (amd/gate-bed6aff5640385d4ab5eb705cd9e8280a5154a4f5f8df376a4c1203463bf1746)`, ran on AMD Instinct MI325X (amd, DO) job gate-bed6aff5640385d4ab5eb705cd9e8280a5154a4f5f8df376a4c1203463bf1746
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 1.9 | 1.9..1.9 | 1 | - | - | 1.9 | - | - (stored whole) | - | - | 802.7 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-bed6aff5640385d4ab5eb705cd9e8280a5154a4f5f8df376a4c1203463bf1746 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/322597/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-absolute-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-absolute-error.istella.rows=full.json (amd/gate-44f558dd6a31e2df1840c380a521a38132e9d994ab6d9cb792251e3ce6385923)`, ran on AMD Instinct MI325X (amd, DO) job gate-44f558dd6a31e2df1840c380a521a38132e9d994ab6d9cb792251e3ce6385923
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.2 | 4.2..4.2 | 1 | - | - | 4.2 | - | - (stored whole) | - | - | 2991.8 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-44f558dd6a31e2df1840c380a521a38132e9d994ab6d9cb792251e3ce6385923 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/323102/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-absolute-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-absolute-error.taxi.rows=full.json (amd/gate-c847d89df2e7f8881b3fc39aba4cd8aba853722511602b48182137c7cccfebab)`, ran on AMD Instinct MI325X (amd, DO) job gate-c847d89df2e7f8881b3fc39aba4cd8aba853722511602b48182137c7cccfebab
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.2 | 4.2..4.2 | 1 | - | - | 4.2 | - | - (stored whole) | - | - | 2115.0 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-c847d89df2e7f8881b3fc39aba4cd8aba853722511602b48182137c7cccfebab 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/323604/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-absolute-percentage-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-absolute-percentage-error.istella.rows=full.json (amd/gate-231cad8fb6441050b2236136cd99ca4f1b9ab6b7da45f0a98280d16bed64b09a)`, ran on AMD Instinct MI325X (amd, DO) job gate-231cad8fb6441050b2236136cd99ca4f1b9ab6b7da45f0a98280d16bed64b09a
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.2 | 2.2..2.2 | 1 | - | - | 2.2 | - | - (stored whole) | - | - | 1679.7 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-231cad8fb6441050b2236136cd99ca4f1b9ab6b7da45f0a98280d16bed64b09a 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/324114/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-absolute-percentage-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-absolute-percentage-error.taxi.rows=full.json (amd/gate-11f481abbaf8874cb72d1e287a975587b372b03871e89770791313cd522e4ad1)`, ran on AMD Instinct MI325X (amd, DO) job gate-11f481abbaf8874cb72d1e287a975587b372b03871e89770791313cd522e4ad1
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.2 | 2.2..2.2 | 1 | - | - | 2.2 | - | - (stored whole) | - | - | 803.2 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-11f481abbaf8874cb72d1e287a975587b372b03871e89770791313cd522e4ad1 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/324625/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-gamma-deviance / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-gamma-deviance.istella.rows=full.json (amd/gate-095b4e4fa461142b944405ac81feff7439369830b98b0a14d17d33d2f81d2414)`, ran on AMD Instinct MI325X (amd, DO) job gate-095b4e4fa461142b944405ac81feff7439369830b98b0a14d17d33d2f81d2414
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 1680.3 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-095b4e4fa461142b944405ac81feff7439369830b98b0a14d17d33d2f81d2414 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/325133/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-gamma-deviance / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-gamma-deviance.taxi.rows=full.json (amd/gate-2f151ae396d4d6c4eeb907980f4323d7276477ce9780ec2ef9a1905d96b1626b)`, ran on AMD Instinct MI325X (amd, DO) job gate-2f151ae396d4d6c4eeb907980f4323d7276477ce9780ec2ef9a1905d96b1626b
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.4 | 2.4..2.4 | 1 | - | - | 2.4 | - | - (stored whole) | - | - | 803.3 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-2f151ae396d4d6c4eeb907980f4323d7276477ce9780ec2ef9a1905d96b1626b 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/325643/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-pinball-loss / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-pinball-loss.istella.rows=full.json (amd/gate-06b7ab417add062f6e3fb07d0ba4e9aac4245b9e4fcab18a036bb2ddb1572cb7)`, ran on AMD Instinct MI325X (amd, DO) job gate-06b7ab417add062f6e3fb07d0ba4e9aac4245b9e4fcab18a036bb2ddb1572cb7
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 1680.1 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-06b7ab417add062f6e3fb07d0ba4e9aac4245b9e4fcab18a036bb2ddb1572cb7 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/326149/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-pinball-loss / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-pinball-loss.taxi.rows=full.json (amd/gate-62a6810c3fe7d2ab5ff9e357d4a62fbd74dec00986592f7fb450790216bc6f58)`, ran on AMD Instinct MI325X (amd, DO) job gate-62a6810c3fe7d2ab5ff9e357d4a62fbd74dec00986592f7fb450790216bc6f58
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.2 | 2.2..2.2 | 1 | - | - | 2.2 | - | - (stored whole) | - | - | 803.4 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-62a6810c3fe7d2ab5ff9e357d4a62fbd74dec00986592f7fb450790216bc6f58 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/326664/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-poisson-deviance / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-poisson-deviance.istella.rows=full.json (amd/gate-651a1e22dc6be8ad42f606582d2399261eed1e674518b83a0b6fb2ad5cd483c6)`, ran on AMD Instinct MI325X (amd, DO) job gate-651a1e22dc6be8ad42f606582d2399261eed1e674518b83a0b6fb2ad5cd483c6
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.4 | 2.4..2.4 | 1 | - | - | 2.4 | - | - (stored whole) | - | - | 1680.3 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-651a1e22dc6be8ad42f606582d2399261eed1e674518b83a0b6fb2ad5cd483c6 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/327169/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-poisson-deviance / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-poisson-deviance.taxi.rows=full.json (amd/gate-b3cc62f4b0d9a60395db1d960f48df3e26865ec2e686ff71d261ef1946c4322a)`, ran on AMD Instinct MI325X (amd, DO) job gate-b3cc62f4b0d9a60395db1d960f48df3e26865ec2e686ff71d261ef1946c4322a
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 803.7 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b3cc62f4b0d9a60395db1d960f48df3e26865ec2e686ff71d261ef1946c4322a 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/327674/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-squared-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-squared-error.istella.rows=full.json (amd/gate-f8af9903ced263265a6abfc60364cb7514a3bd107b7f363f275ce14f1673abdf)`, ran on AMD Instinct MI325X (amd, DO) job gate-f8af9903ced263265a6abfc60364cb7514a3bd107b7f363f275ce14f1673abdf
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.1 | 4.1..4.1 | 1 | - | - | 4.1 | - | - (stored whole) | - | - | 2992.0 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-f8af9903ced263265a6abfc60364cb7514a3bd107b7f363f275ce14f1673abdf 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/328186/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-squared-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-squared-error.taxi.rows=full.json (amd/gate-41e7f61fcf1424560de5dd939a933ce78123e7db5446d20cef31307a48876bb2)`, ran on AMD Instinct MI325X (amd, DO) job gate-41e7f61fcf1424560de5dd939a933ce78123e7db5446d20cef31307a48876bb2
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.1 | 4.1..4.1 | 1 | - | - | 4.1 | - | - (stored whole) | - | - | 2115.0 | 1698.3 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-41e7f61fcf1424560de5dd939a933ce78123e7db5446d20cef31307a48876bb2 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/328889/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-squared-log-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-squared-log-error.istella.rows=full.json (amd/gate-408010514df2c45260046268c24234f8154a16dfec48b7c23522feb9be003fea)`, ran on AMD Instinct MI325X (amd, DO) job gate-408010514df2c45260046268c24234f8154a16dfec48b7c23522feb9be003fea
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 1680.4 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-408010514df2c45260046268c24234f8154a16dfec48b7c23522feb9be003fea 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/329395/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-squared-log-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-squared-log-error.taxi.rows=full.json (amd/gate-0ce919f2ad01be8b5809ecdf8c8612f1698798fef185cbbae971e30f7115fead)`, ran on AMD Instinct MI325X (amd, DO) job gate-0ce919f2ad01be8b5809ecdf8c8612f1698798fef185cbbae971e30f7115fead
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 803.2 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-0ce919f2ad01be8b5809ecdf8c8612f1698798fef185cbbae971e30f7115fead 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/329899/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-tweedie-deviance / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-tweedie-deviance.istella.rows=full.json (amd/gate-16351026103309f07cfde08b3e7da4c9222608228548c903d7d5fcc0803767aa)`, ran on AMD Instinct MI325X (amd, DO) job gate-16351026103309f07cfde08b3e7da4c9222608228548c903d7d5fcc0803767aa
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.4 | 2.4..2.4 | 1 | - | - | 2.4 | - | - (stored whole) | - | - | 1680.3 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-16351026103309f07cfde08b3e7da4c9222608228548c903d7d5fcc0803767aa 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/330407/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mean-tweedie-deviance / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mean-tweedie-deviance.taxi.rows=full.json (amd/gate-073314be3ab28887483852d4acea3420eeeecba1ff40bd7cd84f74bbb54e4e09)`, ran on AMD Instinct MI325X (amd, DO) job gate-073314be3ab28887483852d4acea3420eeeecba1ff40bd7cd84f74bbb54e4e09
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 803.5 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-073314be3ab28887483852d4acea3420eeeecba1ff40bd7cd84f74bbb54e4e09 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/330920/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-median-absolute-error / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-median-absolute-error.istella.rows=full.json (amd/gate-b7514b720ce0aaea89e2d15dbd4ac93915257854a63858f656644a61dcd3db29)`, ran on AMD Instinct MI325X (amd, DO) job gate-b7514b720ce0aaea89e2d15dbd4ac93915257854a63858f656644a61dcd3db29
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.3 | 2.3..2.3 | 1 | - | - | 2.3 | - | - (stored whole) | - | - | 1680.3 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-b7514b720ce0aaea89e2d15dbd4ac93915257854a63858f656644a61dcd3db29 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/331427/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-median-absolute-error / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-median-absolute-error.taxi.rows=full.json (amd/gate-e496a203cc13402602f9500b34cc752fb393955ffc9a4e564dd15ed4458ab8c2)`, ran on AMD Instinct MI325X (amd, DO) job gate-e496a203cc13402602f9500b34cc752fb393955ffc9a4e564dd15ed4458ab8c2
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 2.4 | 2.4..2.4 | 1 | - | - | 2.4 | - | - (stored whole) | - | - | 803.2 | 1698.4 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-e496a203cc13402602f9500b34cc752fb393955ffc9a4e564dd15ed4458ab8c2 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/331935/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-multilabel-confusion-matrix / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-multilabel-confusion-matrix.istella.rows=full.json (amd/gate-ddd2cff1eaccf1c4e771b8581a45d4364af37305c6f8636bae822410514307c0)`, ran on AMD Instinct MI325X (amd, DO) job gate-ddd2cff1eaccf1c4e771b8581a45d4364af37305c6f8636bae822410514307c0
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.7 | 11.7..11.7 | 1 | - | - | 11.7 | - | - (stored whole) | - | - | 1687.2 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-ddd2cff1eaccf1c4e771b8581a45d4364af37305c6f8636bae822410514307c0 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/332440/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-multilabel-confusion-matrix / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-multilabel-confusion-matrix.taxi.rows=full.json (amd/gate-9526c6a532604219a8a2340915641a21d46c1053e2da9cc419893c290addfcff)`, ran on AMD Instinct MI325X (amd, DO) job gate-9526c6a532604219a8a2340915641a21d46c1053e2da9cc419893c290addfcff
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 11.7 | 11.7..11.7 | 1 | - | - | 11.7 | - | - (stored whole) | - | - | 810.1 | 1968.5 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-9526c6a532604219a8a2340915641a21d46c1053e2da9cc419893c290addfcff 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/332955/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mutual-info-score / istella (rows full, shape X 1000000x220; Xq 100000x220; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mutual-info-score.istella.rows=full.json (amd/gate-dd49be1d184e20105ecc31d472bfb9a6869cabf1b579c536b32fb897dc2622dd)`, ran on AMD Instinct MI325X (amd, DO) job gate-dd49be1d184e20105ecc31d472bfb9a6869cabf1b579c536b32fb897dc2622dd
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 4.6 | 4.6..4.6 | 1 | - | - | 4.6 | - | - (stored whole) | - | - | 3178.9 | 1875.9 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-dd49be1d184e20105ecc31d472bfb9a6869cabf1b579c536b32fb897dc2622dd 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/333465/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
+
+### metric-mutual-info-score / taxi (rows full, shape X 1000000x11; Xq 100000x11; y 1000000; yq 100000)
+
+race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/full-measurement-20261027-r2/amd/boards/algos.metric-mutual-info-score.taxi.rows=full.json (amd/gate-989c3adf0f6ba111e6ded48d367d6d2c79e3ef621785ccfd45b294e88aa01b45)`, ran on AMD Instinct MI325X (amd, DO) job gate-989c3adf0f6ba111e6ded48d367d6d2c79e3ef621785ccfd45b294e88aa01b45
+
+| arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.62 | identical | 6.4 | 6.4..6.4 | 1 | - | - | 6.4 | - | - (stored whole) | - | - | 2301.8 | 1875.9 | outputs=1 | - | main board, one scored run | wheel | ok (main@de0876621 amd/gate-989c3adf0f6ba111e6ded48d367d6d2c79e3ef621785ccfd45b294e88aa01b45 2026-10-27; identity vs the nvidia columns: n/a) |
+
+memory, ours: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU KFD /sys/class/kfd/kfd/proc/333972/vram_* bytes for this pid at the round's end (not a peak)
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: not checked on the main board (our one scored run; opponents copied, never re-run)
 
 ### min-cov-det / istella (rows full, shape X 100000x220; Xq 100000x220; y 100000; yq 100000)
 

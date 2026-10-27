@@ -126,6 +126,14 @@ def pairing(race, mode, phase, observations_only=False):
     # predates it and stays part of the evidence.
     records = [{k: v for k, v in c.items()
                 if k not in ignored and not (k == "call" and c.get("phase") != "infer")} for c in cells]
+    # Storage compaction is not changed measurement evidence. Resolve the
+    # checked in-document reference before hashing, preserving the original
+    # audit fingerprint and rejecting any changed referenced cell bytes.
+    from board_observation import restore_observation
+    for c in records:
+        mb = c.get("main_board")
+        if isinstance(mb, dict) and isinstance(mb.get("observation"), dict):
+            c["main_board"] = dict(mb, observation=restore_observation(mb["observation"]))
     if observations_only:
         # Cross-vendor identity and newer-failure flags are derived annotations,
         # not a change to this race's measured work, device, source or settings.
