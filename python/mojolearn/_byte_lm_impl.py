@@ -722,7 +722,7 @@ class SmallByteLanguageModelTrainer:
     @property
     def data_schedule(self):
         """A copy of the ``data_schedule`` descriptor, as checkpoints keep it."""
-        return json.loads(json.dumps(self._state['data_schedule']))
+        return _LM_TRAINER(self, "data_schedule", (), _LM_TRAINER_CONTEXT)
 
     @staticmethod
     def parameter_registry(shape=None):
@@ -739,29 +739,21 @@ class SmallByteLanguageModelTrainer:
             One ``{"name", "shape", "offset", "size"}`` record per tensor, in
             the order of the flat parameter vector.
         """
-        shape = require_shape(shape)
-        return [{'name': name, 'shape': tensor_shape, 'offset': shape.offsets[index],
-                 'size': shape.offsets[index + 1] - shape.offsets[index]}
-                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))]  # glue: one registry entry per named parameter
+        return _LM_TRAINER(None, "parameter_registry", (shape,), _LM_TRAINER_CONTEXT)
 
     @property
     def step_(self):
         """Number of completed training steps."""
-        with self._lock:
-            return self._state['completed_steps']
+        return _LM_TRAINER(self, "step", (), _LM_TRAINER_CONTEXT)
 
     @property
     def parameters_(self):
         """A copy of the current flat float32 parameters."""
-        with self._lock:
-            if self._session_open:
-                return self.export_state()['parameters']
-            self._require_not_lost()
-            return self._state['parameters'].copy()
+        return _LM_TRAINER(self, "parameters", (), _LM_TRAINER_CONTEXT)
 
     def state_dict(self):
         """The complete training state; same as :meth:`export_state`."""
-        return self.export_state()
+        return _LM_TRAINER(self, "export_state", (), _LM_TRAINER_CONTEXT)
 
     def _require_not_lost(self):
         if self._lost_at is not None:
@@ -791,11 +783,7 @@ class SmallByteLanguageModelTrainer:
             configuration, ``data_schedule`` and metadata, as accepted by
             :meth:`load_state_dict`.
         """
-        with self._lock:
-            self._require_not_lost()
-            if self._session_open:
-                return _snapshot(self._export_state_impl(), copy=False)
-            return _snapshot(self._state)
+        return _LM_TRAINER(self, "export_state", (), _LM_TRAINER_CONTEXT)
 
     def export_gradients(self, named=True):
         """The pre-update gradient of the last completed step of a resident session.
@@ -820,16 +808,7 @@ class SmallByteLanguageModelTrainer:
             If no resident session is open, or no step has completed since it was
             opened, restored or rolled back.
         """
-        with self._lock:
-            self._require_not_lost()
-            if not self._session_open:
-                raise RuntimeError('Byte-LM export_gradients requires an open resident session; '
-                                   'the stateless train_step returns its gradients')
-            completed = self._state['completed_steps']
-            if self._grad_step != completed:
-                raise RuntimeError('Byte-LM has no gradient to export: no step has completed '
-                                   'since open, restore, import or rollback')
-            return self._export_gradients_impl(completed, named)
+        return _LM_TRAINER(self, "export_gradients", (named,), _LM_TRAINER_CONTEXT)
 
     # DEVIATION 3010: what the OPEN resident session's quadratic
     # attention stages are holding RIGHT NOW. `None` when no session is
@@ -985,8 +964,7 @@ class SmallByteLanguageModelTrainer:
         session nothing can be exported: the device is released and the trainer
         stays lost until :meth:`load_state_dict`.
         """
-        with self._lock:
-            self._suspend_session()
+        return _LM_TRAINER(self, "close", (), _LM_TRAINER_CONTEXT)
 
     def _suspend_session(self):
         if self._session_open and self._lost_at is None:
@@ -1140,14 +1118,7 @@ class SmallByteLanguageModelTrainer:
         -------
         dict
         """
-        with self._lock:
-            self._binding()
-            return dict(json.loads(_canonical(self._runtime)), schema='small-byte-lm.run-metadata.v1',
-                        qualification='authored/unqualified', profile=self._state['profile'],
-                        device_state_lifetime='resident' if self._is_resident() else 'call',
-                        step_result=self._step_result, last_export_step=self._last_export_step,
-                        config=dict(self._state['config']), data_schedule=_schedule(self._state['data_schedule']),
-                        completed_steps=self.step_, next_batch_index=self.step_)
+        return _LM_TRAINER(self, "run_metadata", (), _LM_TRAINER_CONTEXT)
 
     def _run(self, ids, train):
         """`train_step` / `evaluate`: the ids are checked and copied here, and
@@ -1665,6 +1636,10 @@ def _connect_trainer():
     from types import MethodType
     context = _state_context()
     _numeric_profile.default_profile("training")  # glue: connect the training profile before public construction
+    context.update(byte_lm_source_root=str(Path(__file__).resolve().parents[2]), byte_lm_wrapper_file=__file__,
+                   byte_lm_source_names=('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
+                                        'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
+                                        'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py'))
     context.update(byte_lm_trainer_class=SmallByteLanguageModelTrainer, byte_lm_config_class=ByteLanguageModelConfig,
                    byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES,
                    byte_lm_lock=type(threading.RLock()))
