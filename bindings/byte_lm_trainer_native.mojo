@@ -17,12 +17,17 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_info
+from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.neural_block_public import _neural_lengths
+from core.neural_block_public_impl import neural_copy_row_prefixes
+from core.host_helpers_impl import argmax_rows_f32
 from bindings.tsa_hw_native import tsa_array
 from core.xseq_marshal import neural_cast_i32_2d
 
@@ -33,7 +38,7 @@ comptime _MAX_STEP = 999999
 
 
 def _b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def _text(value: PythonObject) raises -> String:
@@ -169,7 +174,7 @@ def _shape_of(state: PythonObject) raises -> _Shape:
                 raise Error("ValueError: Byte-LM shape requires integer dimensions")
             var n = 0
             try:
-                n = Int(py=py_call(Python.import_module("operator").index, v))
+                n = Int(py=py_call(native_loaded_module("operator").index, v))
             except:
                 raise Error("ValueError: Byte-LM shape requires integer dimensions")
             if not (0 < n and n <= (1 << 20)):
@@ -190,6 +195,7 @@ def _ids(source: PythonObject, shape: _Shape, context: PythonObject) raises -> P
     int32 copy of an int32 buffer of exactly that shape."""
     var b = _b()
     var refusal = String("TypeError: Byte-LM ids must be a int32 array (a NumPy array, an array.array or a mojolearn Array)")
+    classical_admit_value(source, context)
     var buffer = classical_is_array(source, context)
     if not buffer and py_type(source) is not b.list and py_type(source) is not b.tuple:
         try:
@@ -199,7 +205,6 @@ def _ids(source: PythonObject, shape: _Shape, context: PythonObject) raises -> P
             buffer = False
     if not buffer:
         raise Error(refusal)
-    classical_admit_value(source, context)
     var value = classical_input(source, context, "ids")
     var dtype = String(py=py_call(b.str, value.dtype))
     var item = Int(py=value.itemsize)
@@ -266,10 +271,10 @@ def _mode(context: PythonObject) raises -> PythonObject:
     # `_backend.numeric_mode()` gave them (a setting changed after import
     # is seen; the bare `_DEFAULT_MODE` constant is not that answer)
     var backend = context["backend"]
-    var mode = py_call_typed(backend["default_mode"])
+    # Import-time connection resolves the initial default. Read its native
+    # configuration once here; a product operation never invokes backend.py.
+    var mode = backend["_DEFAULT_MODE"]
     if mode is None or py_type(mode) is not _b().str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
-        raise Error("RuntimeError: SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode")
-    if not Bool(py=py_call_typed(backend["numeric_mode"]) == mode):
         raise Error("RuntimeError: SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode")
     return mode
 
@@ -308,8 +313,70 @@ def _load(shape: _Shape, context: PythonObject) raises -> PythonObject:
     return binding
 
 
+def _provider(fields: PythonObject, binding: PythonObject) raises -> PythonObject:
+    var factory = py_call(_b().getattr, binding, "byte_lm_trainer_api_v1", PythonObject(None))
+    if factory is None:
+        return PythonObject(None)
+    var provider = neural_descriptor_reuse(py_get(fields, "_native_provider"), factory,
+        "mojolearn.training.byte_lm.v1", 8)
+    py_setitem(fields, "_native_provider", provider)
+    return provider
+
+
+def _session_handle(fields: PythonObject, binding: PythonObject, provider: PythonObject) raises -> Int:
+    var session = fields["_native_session"]
+    var factory = binding.byte_lm_native_session_handle_v1
+    if py_get(fields, "_provider_session") is session and py_get(fields, "_provider_handle_factory") is factory and py_get(fields, "_provider_handle_owner") is provider:
+        return Int(py=fields["_provider_handle"])
+    var handle = neural_descriptor_handle(provider, factory, session)
+    py_setitem(fields, "_provider_session", session)
+    py_setitem(fields, "_provider_handle_factory", factory)
+    py_setitem(fields, "_provider_handle_owner", provider)
+    py_setitem(fields, "_provider_handle", handle)
+    return handle
+
+
+def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0,
+                 length: Int = 0, release: Bool = False) raises -> Tuple[List[Int], List[Float64]]:
+    var cfg = state["config"]
+    var ints = List[Int]()
+    for i in range(9):  # small-loop(the admitted model shape)
+        ints.append(shape.d[i])
+    ints.append(Int(shape.chunked))
+    ints.append(Int(train))
+    ints.append(Int(py=state["completed_steps"]))
+    ints.append(Int(py=cfg["kind"]))
+    ints.append(Int(py=cfg["nesterov"]))
+    ints.append(batch)
+    ints.append(length)
+    ints.append(Int(release))
+    var floats = List[Float64]()
+    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:  # small-loop(the eight optimizer scalars)
+        floats.append(Float64(py=cfg[key]))
+    return (ints^, floats^)
+
+
+def _native_execute(fields: PythonObject, binding: PythonObject, provider: PythonObject,
+                    operation: Int, addresses: PythonObject, shape: _Shape, state: PythonObject,
+                    train: Bool, batch: Int = 0, length: Int = 0, release: Bool = False) raises -> Int:
+    var session = fields["_native_session"]
+    var a = List[Int]()
+    a.append(_session_handle(fields, binding, provider))
+    for i in range(len(addresses)):  # small-loop(the admitted operation buffer descriptors)
+        a.append(Int(py=addresses[i]))
+    var plan = _native_plan(shape, state, train, batch, length, release)
+    var result = neural_descriptor_execute(provider, operation, a, plan[0], plan[1])
+    _ = session  # owner is live through the synchronous native call
+    _ = binding
+    return result
+
+
 def _forget(fields: PythonObject, context: PythonObject) raises:
     """`_forget_session`."""
+    py_setitem(fields, "_provider_session", PythonObject(None))
+    py_setitem(fields, "_provider_handle_owner", PythonObject(None))
+    py_setitem(fields, "_provider_handle_factory", PythonObject(None))
+    py_setitem(fields, "_provider_handle", 0)
     py_setitem(fields, "_native_session", PythonObject(None))
     py_setitem(fields, "_session_binding", PythonObject(None))
     py_setitem(fields, "_session_open", False)
@@ -342,7 +409,8 @@ def _export_release(fields: PythonObject, shape: _Shape, context: PythonObject) 
     _ = out_p  # keep the Python object alive through the native call above
     _ = out_flags  # keep the Python object alive through the native call above
     _ = out_v  # keep the Python object alive through the native call above
-    var returned = py_call_typed(binding.byte_lm_trainer_export_state, fields["_native_session"], addresses,
+    var provider = _provider(fields, binding)
+    var returned = PythonObject(_native_execute(fields, binding, provider, 3, addresses, shape, state, False, release=True)) if provider is not None else py_call_typed(binding.byte_lm_trainer_export_state, fields["_native_session"], addresses,
                                  shape.native_shape(), completed, PythonObject(True))
     _ = out_flags  # keep the Python object alive through the native call above
     _ = out_v  # keep the Python object alive through the native call above
@@ -375,9 +443,15 @@ def _suspend(fields: PythonObject, shape: _Shape, context: PythonObject) raises:
         return
     var session = fields["_native_session"]
     var binding = fields["_session_binding"]
+    var provider = _provider(fields, binding) if session is not None else PythonObject(None)
+    var handle = _session_handle(fields, binding, provider) if provider is not None else 0
     _forget(fields, context)
     if session is not None:
-        _ = py_call(binding.byte_lm_session_close, session)
+        if provider is not None:
+            _ = neural_descriptor_execute(provider, 4, [handle], List[Int](), List[Float64]())
+            _ = session
+        else:
+            _ = py_call(binding.byte_lm_session_close, session)
 
 
 def _binding(fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
@@ -391,9 +465,8 @@ def _binding(fields: PythonObject, shape: _Shape, context: PythonObject) raises 
     return binding
 
 
-def _is_resident(fields: PythonObject, shape: _Shape, context: PythonObject) raises -> Bool:
+def _is_resident(fields: PythonObject, binding: PythonObject, context: PythonObject) raises -> Bool:
     if fields["_resident"] is None:
-        var binding = _binding(fields, shape, context)
         var names = context["byte_lm_session_entries"]
         var all_there = True
         for i in range(len(names)):  # small-loop(the session entry names)
@@ -436,10 +509,20 @@ def _after_failure(fields: PythonObject) raises:
     var usable = False
     var completed = PythonObject(None)
     try:
-        var info = py_call(binding.byte_lm_session_info, session)
-        is_open = Bool(py=info[3])
-        usable = Bool(py=info[2])
-        completed = info[0]
+        var provider = _provider(fields, binding)
+        if provider is not None:
+            var info = List[Int](length=4, fill=0)
+            _ = neural_descriptor_execute(provider, 5, [_session_handle(fields, binding, provider), Int(info.unsafe_ptr())], List[Int](), List[Float64]())
+            is_open = info[3] != 0
+            usable = info[2] != 0
+            completed = PythonObject(info[0])
+            _ = info^
+            _ = session
+        else:
+            var info = py_call(binding.byte_lm_session_info, session)
+            is_open = Bool(py=info[3])
+            usable = Bool(py=info[2])
+            completed = info[0]
     except:
         is_open = Bool(py=fields["_session_open"])
         usable = False
@@ -450,13 +533,12 @@ def _after_failure(fields: PythonObject) raises:
         _mark_lost(fields)
 
 
-def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _b()
     var lost = fields["_lost_at"]
     if lost is not None:
         raise Error("RuntimeError: Byte-LM session lost at step " + _text(lost[0]) + "; last exported state is step "
                     + _text(lost[1]))
-    var binding = _binding(fields, shape, context)
     var names = context["byte_lm_session_entries"]
     var missing = String("")
     for i in range(len(names)):  # small-loop(the session entry names)
@@ -502,8 +584,12 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, con
     py_setitem(fields, "_grad_step", -1)
     var returned = PythonObject(None)
     try:
-        returned = py_call_typed(binding.byte_lm_trainer_step, session, addresses, _parameters(state, True),
-                                 shape.native_shape())
+        var provider = _provider(fields, binding)
+        if provider is not None:
+            returned = PythonObject(_native_execute(fields, binding, provider, 1, addresses, shape, state, True))
+        else:
+            returned = py_call_typed(binding.byte_lm_trainer_step, session, addresses, _parameters(state, True),
+                                     shape.native_shape())
         _ = out_flags  # keep the Python object alive through the native call above
         _ = out_loss  # keep the Python object alive through the native call above
     except error:
@@ -514,7 +600,6 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, con
     if py_type(returned) is not b.int or Int(py=returned) != expected:
         _mark_lost(fields)
         raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
-    _ = _mode(context)
     var result = b.dict()
     py_setitem(result, "loss", _loss(out_loss))
     py_setitem(result, "step", expected)
@@ -533,12 +618,11 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, con
     return result
 
 
-def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _b()
     var state = fields["_state"]
     if Int(py=state["completed_steps"]) >= _MAX_STEP:
         raise Error("ValueError: Byte-LM native call step counter is exhausted")
-    var binding = _binding(fields, shape, context)
     var entry = String(py=context["byte_lm_run_entry"])
     if not _has(binding, entry):
         raise Error("ImportError: Byte-LM binding lacks " + entry + "; rebuild bindings/build_byte_lm.sh")
@@ -591,13 +675,15 @@ def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: Pytho
     _ = py_call(lock.acquire)
     var result = PythonObject(None)
     try:
+        classical_admit_value(fields["_state"], context)
         var shape = _shape_of(fields["_state"])
         var tokens = _ids(args[0], shape, context)
+        var binding = _binding(fields, shape, context)
         try:
-            if _is_resident(fields, shape, context):
-                result = _run_resident(fields, tokens, shape, context)
+            if _is_resident(fields, binding, context):
+                result = _run_resident(fields, tokens, shape, binding, context)
             else:
-                result = _run_stateless(fields, tokens, shape, context)
+                result = _run_stateless(fields, tokens, shape, binding, context)
         except error:
             var text = String(error)
             if not text.startswith("ValueError:") and text.find(_TOKEN_REFUSAL) >= 0:
@@ -610,13 +696,193 @@ def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: Pytho
     return result
 
 
+def _logits_input(source: PythonObject, lengths: PythonObject, shape: _Shape,
+                  context: PythonObject) raises -> Tuple[PythonObject, Int, Int, List[Int]]:
+    classical_admit_value(source, context)
+    classical_admit_value(lengths, context)
+    var value = classical_input(source, context, "ids")
+    var dims = value.shape
+    if len(dims) != 2:
+        raise Error("ValueError: ids must be [batch, 1.." + String(shape.length()) + "]")
+    var batch = Int(py=dims[0])
+    var length = Int(py=dims[1])
+    if batch < 1 or batch > 1024 or length < 1 or length > shape.length() or batch * length > 268435456 // shape.vocab():
+        raise Error("ValueError: Byte-LM logits input shape exceeds its admitted bounds")
+    var item = Int(py=value.itemsize)
+    var kind = classical_cast_kind(value, item, "ids", context)
+    var strides = value.strides
+    var source_addr = Int(py=classical_address(value))
+    var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
+    var token_addr = Int(py=classical_address(tokens))
+    neural_cast_i32_2d(source_addr, Int(py=strides[0]), Int(py=strides[1]), batch, length,
+        item, kind, _I32P(unsafe_from_address=token_addr))
+    _ = value^
+    var sizes = List[Int](length=batch, fill=length)
+    if lengths is not None:
+        sizes = _neural_lengths(lengths, batch, length, context)
+        var padded = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
+        neural_copy_row_prefixes(Int(py=classical_address(padded)), token_addr, sizes, batch, length, 1)
+        _ = tokens^
+        tokens = padded
+    return (tokens, batch, length, sizes^)
+
+
+def _pooled_logits(fields: PythonObject, batch: Int, length: Int, vocab: Int,
+                   context: PythonObject) raises -> PythonObject:
+    var pool = py_get(fields, "_logits_pool")
+    if pool is None:
+        pool = native_storage_allocate(context["byte_lm_logits_pool"])
+        py_setitem(py_fields(pool), "keep", 2)
+        py_setitem(py_fields(pool), "free", Python.list())
+        py_setitem(fields, "_logits_pool", pool)
+    if py_type(pool) is not context["byte_lm_logits_pool"]:
+        raise Error("TypeError: Byte-LM logits requires its native output pool")
+    var free = py_fields(pool)["free"]
+    if py_type(free) is not _b().list:
+        raise Error("TypeError: Byte-LM logits pool requires a native list")
+    var count = batch * length * vocab
+    var store = PythonObject(None)
+    for i in range(len(free)):  # small-loop(the bounded reusable host-buffer pool)
+        if py_type(free[i]) is not context["array_type"]:
+            raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
+        if len(free[i]) == count:
+            store = py_call(free.pop, i)
+            break
+    if store is None:
+        store = py_call(context["array_type"], "f", py_call(context["native_bytes_type"], count * 4))
+    var out = classical_wrap_array(store, Python.tuple(batch, length, vocab), "<f4", "C", context["byte_lm_pooled_context"])
+    py_setitem(py_fields(out), "_pool", pool)
+    return out
+
+
+def byte_lm_pooled_finalize(owner: PythonObject, context: PythonObject) raises:
+    # Installed as a compiled instance-method descriptor. A decref during a
+    # native operation never invokes _PooledLogits.__del__ or pool.give Python.
+    if py_type(owner) is not context["byte_lm_pooled_class"]:
+        return
+    var pool = py_get(py_fields(owner), "_pool")
+    if pool is None or py_type(pool) is not context["byte_lm_logits_pool"]:
+        return
+    var store = py_call(context["byte_lm_store_getter"], owner, context["byte_lm_pooled_class"])
+    if py_type(store) is not context["array_type"]:
+        return
+    var pool_fields = py_fields(pool)
+    var free = py_get(pool_fields, "free")
+    var keep = py_get(pool_fields, "keep")
+    if py_type(free) is not _b().list or py_type(keep) is not _b().int or Int(py=keep) < 1:
+        return
+    for i in range(len(free)):  # small-loop(the bounded reusable host-buffer pool)
+        if free[i] is store:
+            return
+    if len(free) >= Int(py=keep):
+        _ = py_call(free.pop, 0)
+    _ = py_call(free.append, store)
+
+
+def byte_lm_pooled_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        byte_lm_pooled_finalize(args[1], args[0])
+    except:
+        # Finalization is best effort, as the previous Python __del__; a
+        # malformed/expired pool must not lose the Array's owned storage.
+        pass
+    return PythonObject(None).steal_data()
+
+
+def byte_lm_logits(trainer: PythonObject, args: PythonObject, context: PythonObject,
+                   next_bytes: Bool = False) raises -> PythonObject:
+    classical_connect_numpy(context)
+    var fields = py_fields(trainer)
+    var lock = fields["_lock"]
+    _ = py_call(lock.acquire)
+    var result = PythonObject(None)
+    try:
+        classical_admit_value(fields["_state"], context)
+        var shape = _shape_of(fields["_state"])
+        var admitted = _logits_input(args[0], args[1], shape, context)
+        var tokens = admitted[0]
+        var batch = admitted[1]
+        var length = admitted[2]
+        var binding = _binding(fields, shape, context)
+        var provider = _provider(fields, binding)
+        var resident = _is_resident(fields, binding, context)
+        var direct_next = next_bytes and resident and args[1] is None
+        var expected = batch if direct_next else batch * length * shape.vocab()
+        var out = _i32(batch, context) if direct_next else (_pooled_logits(fields, batch, length, shape.vocab(), context) if resident else tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context))
+        var written = 0
+        if resident:
+            var lost = fields["_lost_at"]
+            if lost is not None:
+                raise Error("RuntimeError: Byte-LM session lost at step " + _text(lost[0]) + "; last exported state is step " + _text(lost[1]))
+            if fields["_native_session"] is None:
+                py_setitem(fields, "_native_session", py_call(binding.byte_lm_session_create))
+                py_setitem(fields, "_session_binding", binding)
+                py_setitem(fields, "_session_open", False)
+                py_setitem(fields, "_grad_step", -1)
+            var state = fields["_state"]
+            var addresses = Python.list(classical_address(tokens), classical_address(out), classical_address(state["flags"]))
+            for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three session admission buffers)
+                _ = py_call(addresses.append, 0 if Bool(py=fields["_session_open"]) else Int(py=classical_address(state[key])))
+            try:
+                if provider is not None:
+                    written = _native_execute(fields, binding, provider, 6 if direct_next else 2, addresses, shape, state, False, batch, length)
+                else:
+                    var entry = binding.byte_lm_trainer_next_bytes if direct_next else binding.byte_lm_trainer_logits
+                    written = Int(py=py_call_typed(entry, fields["_native_session"], addresses, Python.list(batch, length), _parameters(state, False), shape.native_shape()))
+            except problem:
+                _after_failure(fields)
+                raise problem
+            _adopt_open(fields)
+        else:
+            var state = fields["_state"]
+            var addresses: List[Int] = [Int(py=classical_address(state["parameters"])), Int(py=classical_address(tokens)), Int(py=classical_address(out))]
+            if provider is not None:
+                var plan = _native_plan(shape, state, False, batch, length)
+                written = neural_descriptor_execute(provider, 7, addresses, plan[0], plan[1])
+            else:
+                written = Int(py=py_call_typed(binding.byte_lm_logits, Python.list(addresses[0], addresses[1], addresses[2]), Python.list(batch, length), shape.native_shape()))
+        _ = tokens
+        if written != expected:
+            raise Error("RuntimeError: byte LM returned an unexpected number of logits")
+        if next_bytes:
+            var indices = List[Int64](length=batch, fill=0)
+            if direct_next:
+                var source = _I32P(unsafe_from_address=Int(py=classical_address(out)))
+                for row in range(batch):  # cpu-route: consume the native greedy output
+                    indices[row] = Int64(source[row])
+            else:
+                var source = _F32P(unsafe_from_address=Int(py=classical_address(out)))
+                for row in range(batch):  # cpu-route: same strict first-max owner on each last real row
+                    argmax_rows_f32(source + (row * length + admitted[3][row] - 1) * shape.vocab(), 1, shape.vocab(), MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(indices.unsafe_ptr()) + row * 8))
+            result = Python.list()
+            for row in range(batch):  # driver-loop: publish the completed native token outputs
+                _ = py_call(result.append, Int(indices[row]))
+        elif args[1] is not None:
+            result = tsa_array("f", "<f4", Python.tuple(batch, length, shape.vocab()), expected, 4, context)
+            neural_copy_row_prefixes(Int(py=classical_address(result)), Int(py=classical_address(out)), admitted[3], batch, length, shape.vocab())
+        else:
+            result = out
+        _ = out
+    except problem:
+        _ = py_call(lock.release)
+        raise problem
+    _ = py_call(lock.release)
+    return result
+
+
 def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
-        if operation != "train_step":
-            raise Error("RuntimeError: unknown byte LM trainer operation " + operation)
-        return byte_lm_train_step(call[0], call[2], call[3]).steal_data()
+        if operation == "train_step":
+            return byte_lm_train_step(call[0], call[2], call[3]).steal_data()
+        if operation == "logits" or operation == "next_bytes":
+            return byte_lm_logits(call[0], call[2], call[3], operation == "next_bytes").steal_data()
+        if operation == "native_provider_info":
+            var fields = py_fields(call[0])
+            return neural_descriptor_info(fields["_native_provider"]).steal_data()
+        raise Error("RuntimeError: unknown byte LM trainer operation " + operation)
     except error:
         var text = String(error)
         if text.startswith("TypeError:"):
