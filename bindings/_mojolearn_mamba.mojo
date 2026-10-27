@@ -360,6 +360,16 @@ def mamba_state_api_binding() raises -> PythonObject:
     return PythonObject(from_owned=capsule)
 
 
+
+def mamba3_tape_create_native_binding() raises -> PythonObject:
+    # Empty typed lifetime admission only; all forward work uses the provider.
+    return PythonObject(alloc=Mamba3ForwardTape(Mamba3PrefillSession()))
+
+
+def mamba3_tape_handle_native_binding(tape: PythonObject) raises -> PythonObject:
+    # Exact registered owner, never an inferred extension object layout.
+    return PythonObject(Int(tape.downcast_value_ptr[Mamba3ForwardTape]()))
+
 def mamba_block_api_binding() raises -> PythonObject:
     var api = NATIVE_MAMBA_BLOCK_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1514,6 +1524,8 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba1_profile_binding]("mamba1_profile")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
+        m.def_function[mamba3_tape_create_native_binding]("mamba3_tape_create_native_v1")
+        m.def_function[mamba3_tape_handle_native_binding]("mamba3_tape_handle_native_v1")
         m.def_function[mamba_prefill_native_handle_binding]("mamba_prefill_native_handle_v1")
         m.def_function[mamba1_forward_binding]("mamba1_forward")
         m.def_function[mamba1_backward_binding]("mamba1_backward")

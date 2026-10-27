@@ -612,6 +612,16 @@ def transformer_session_forward_binding(
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
 
 
+
+def transformer_tape_create_native_binding() raises -> PythonObject:
+    # Empty typed lifetime admission only; all forward work uses the provider.
+    return PythonObject(alloc=TransformerForwardTape(List[Int]()))
+
+
+def transformer_tape_handle_native_binding(tape: PythonObject) raises -> PythonObject:
+    # Exact registered owner, never an inferred extension object layout.
+    return PythonObject(Int(tape.downcast_value_ptr[TransformerForwardTape]()))
+
 def transformer_block_api_binding() raises -> PythonObject:
     # Same common named-table transport used by other native sibling entries.
     ref cpy = Python().cpython()
@@ -1588,6 +1598,8 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
         m.def_function[transformer_block_api_binding]("transformer_block_api_v1")
+        m.def_function[transformer_tape_create_native_binding]("transformer_tape_create_native_v1")
+        m.def_function[transformer_tape_handle_native_binding]("transformer_tape_handle_native_v1")
         m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
