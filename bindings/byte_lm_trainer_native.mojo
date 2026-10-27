@@ -30,7 +30,8 @@ from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.host_helpers_impl import argmax_rows_f32
 from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
-from providers.python.training_buffer_pyapi import training_f32_owned
+from providers.python.training_buffer_pyapi import training_f32_owned, training_i32_owned
+from core.training_state_validation import training_admit_moments_and_flags, training_byte_shape_validate
 from bindings.native_json import native_json_parse, native_path_exists
 from bindings.native_transport import _transport_json
 from core.sha256_file import sha256_file
@@ -713,6 +714,36 @@ def _run_stateless(fields: PythonObject, tokens: PythonObject, shape: _Shape, bi
     return result
 
 
+def _optimizer_configuration(lr: PythonObject, beta_values: PythonObject, eps: PythonObject,
+                             weight_decay: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = _b()
+    var betas: PythonObject
+    try:
+        # Only already-admitted native containers/buffers reach iteration.
+        betas = py_call(bi.tuple, beta_values)
+    except:
+        raise Error("ValueError: Byte-LM betas must contain two scalars")
+    if len(betas) != 2:
+        raise Error("ValueError: Byte-LM betas must contain two scalars")
+    var config = bi.dict()
+    var keys = [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]
+    var scalars: List[PythonObject] = [lr, betas[0], betas[1], eps, weight_decay]
+    var numeric = List[Float64]()
+    for i in range(5):  # small-loop(the five optimizer configuration scalars)
+        numeric.append(training_f32_scalar(scalars[i], "Byte-LM " + keys[i], context, True))
+        py_setitem(config, keys[i], numeric[i])
+    if numeric[0] <= 0 or numeric[3] <= 0 or numeric[4] < 0:
+        raise Error("ValueError: Byte-LM requires lr > 0, eps > 0 and weight_decay >= 0")
+    if numeric[1] < 0 or numeric[1] >= 1 or numeric[2] < 0 or numeric[2] >= 1:
+        raise Error("ValueError: Byte-LM betas must remain in [0, 1) in float32")
+    py_setitem(config, "kind", 2)
+    py_setitem(config, "momentum", 0.0)
+    py_setitem(config, "dampening", 0.0)
+    py_setitem(config, "nesterov", False)
+    py_setitem(config, "max_norm", 0.0)
+    return config
+
+
 def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var bi = _b()
@@ -769,30 +800,7 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
             offset += count
     else:
         flat = training_f32_owned(parameters, [total], "Byte-LM parameters", context)
-    var betas: PythonObject
-    try:
-        # Only already-admitted native containers/buffers reach iteration.
-        betas = py_call(bi.tuple, args[3])
-    except:
-        raise Error("ValueError: Byte-LM betas must contain two scalars")
-    if len(betas) != 2:
-        raise Error("ValueError: Byte-LM betas must contain two scalars")
-    var config = bi.dict()
-    var keys = [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]
-    var scalars: List[PythonObject] = [args[2], betas[0], betas[1], args[4], args[5]]
-    var numeric = List[Float64]()
-    for i in range(5):  # small-loop(the five optimizer configuration scalars)
-        numeric.append(training_f32_scalar(scalars[i], "Byte-LM " + keys[i], context, True))
-        py_setitem(config, keys[i], numeric[i])
-    if numeric[0] <= 0 or numeric[3] <= 0 or numeric[4] < 0:
-        raise Error("ValueError: Byte-LM requires lr > 0, eps > 0 and weight_decay >= 0")
-    if numeric[1] < 0 or numeric[1] >= 1 or numeric[2] < 0 or numeric[2] >= 1:
-        raise Error("ValueError: Byte-LM betas must remain in [0, 1) in float32")
-    py_setitem(config, "kind", 2)
-    py_setitem(config, "momentum", 0.0)
-    py_setitem(config, "dampening", 0.0)
-    py_setitem(config, "nesterov", False)
-    py_setitem(config, "max_norm", 0.0)
+    var config = _optimizer_configuration(args[2], args[3], args[4], args[5], context)
     var schedule_text = training_schedule_json(args[1], 256, 16384, "Byte-LM data_schedule", context)
     var schedule = native_json_parse(PythonObject(schedule_text))
     var vocabulary = py_get(schedule, "vocabulary")
@@ -846,6 +854,138 @@ def byte_lm_construct(trainer: PythonObject, args: PythonObject, context: Python
     _forget(fields, context)
     _ = binding
     return PythonObject(None)
+
+
+def _state_step(value: PythonObject) raises -> Int:
+    var bi = _b()
+    if py_type(value) is bi.bool or String(py=py_type(value).__name__) == "bool_":
+        raise Error("ValueError: Byte-LM completed_steps must be an integer")
+    var step = 0
+    try:
+        step = Int(py=py_call(native_loaded_module("operator").index, value))
+    except:
+        raise Error("ValueError: Byte-LM completed_steps must be an integer")
+    if step < 0 or step > _MAX_STEP:
+        raise Error("ValueError: Byte-LM completed_steps must be in [0, 999999]")
+    return step
+
+
+def _validated_state(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Admission and every copy complete before the current trainer/session is
+    # touched. Stable metadata is captured once; native buffers validate values.
+    classical_admit_value(source, context)
+    var bi = _b()
+    if py_type(source) is not bi.dict:
+        raise Error("ValueError: Byte-LM state has missing or unknown fields")
+    var keys = Python.list("schema", "profile", "numeric_mode", "parameter_names", "parameter_shapes",
+        "parameter_offsets", "parameters", "m", "v", "flags", "completed_steps",
+        "next_batch_index", "config", "data_schedule")
+    if py_contains(source, "model_shape"):
+        _ = py_call(keys.append, "model_shape")
+    if not Bool(py=py_call(bi.set, source) == py_call(bi.set, keys)):
+        raise Error("ValueError: Byte-LM state has missing or unknown fields")
+    var shape = _shape_of(source)
+    training_byte_shape_validate(shape.d, shape.chunked)
+    var mode = source["numeric_mode"]
+    if py_type(mode) is not bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
+        raise Error("ValueError: Byte-LM state profile/registry/mode mismatch")
+    var binding = context["byte_lm_bindings"][mode]
+    if py_type(binding) is bi.str:
+        raise Error("ImportError: " + String(py=binding))
+    var suffix = String(py=py_call(_entry(binding, "byte_lm_arithmetic_suffix")))
+    var expected_profile = shape.profile(String(py=context["byte_lm_profile"])) + suffix
+    var registry = _registry(shape)
+    var names = Python.list()
+    var shapes = Python.list()
+    var offsets = Python.list(0)
+    for i in range(len(registry)):  # driver-loop: over configured state registry captured once
+        var item = registry[i]
+        _ = py_call(names.append, item["name"])
+        _ = py_call(shapes.append, py_call(bi.list, item["shape"]))
+        _ = py_call(offsets.append, Int(py=item["offset"]) + Int(py=item["size"]))
+    if (not Bool(py=source["schema"] == PythonObject("mojolearn.small-byte-lm-state.v1"))
+            or not Bool(py=source["profile"] == PythonObject(expected_profile))
+            or not Bool(py=source["parameter_names"] == names)
+            or not Bool(py=source["parameter_shapes"] == shapes)
+            or not Bool(py=source["parameter_offsets"] == offsets)):
+        raise Error("ValueError: Byte-LM state profile/registry/mode mismatch")
+    var cfg = source["config"]
+    var config_keys = Python.list("lr", "beta1", "beta2", "eps", "weight_decay", "kind",
+        "momentum", "dampening", "nesterov", "max_norm")
+    if py_type(cfg) is not bi.dict or not Bool(py=py_call(bi.set, cfg) == py_call(bi.set, config_keys)):
+        raise Error("ValueError: Byte-LM state optimizer configuration mismatch")
+    var config = _optimizer_configuration(cfg["lr"], Python.tuple(cfg["beta1"], cfg["beta2"]),
+                                          cfg["eps"], cfg["weight_decay"], context)
+    if py_type(cfg["kind"]) is not bi.int or Int(py=cfg["kind"]) != 2 or py_type(cfg["nesterov"]) is not bi.bool or Bool(py=cfg["nesterov"]):
+        raise Error("ValueError: Byte-LM first profile supports AdamW without clipping or SGD options")
+    for name in [String("momentum"), String("dampening"), String("max_norm")]:  # small-loop(the three unused optimizer slots)
+        if training_f32_scalar(cfg[name], name, context, True) != 0:
+            raise Error("ValueError: Byte-LM first profile supports AdamW without clipping or SGD options")
+    var completed = _state_step(source["completed_steps"])
+    if _state_step(source["next_batch_index"]) != completed:
+        raise Error("ValueError: Byte-LM schedule cursor must match completed_steps")
+    var count = shape.n_total()
+    var tensors = shape.n_tensors()
+    var parameters = training_f32_owned(source["parameters"], [count], "Byte-LM parameters", context)
+    var moment = training_f32_owned(source["m"], [count], "Byte-LM m", context)
+    var variance = training_f32_owned(source["v"], [count], "Byte-LM v", context)
+    var flags = training_i32_owned(source["flags"], [tensors], "Byte-LM flags", context)
+    training_admit_moments_and_flags(Int(py=classical_address(variance)), count,
+                                    Int(py=classical_address(flags)), tensors)
+    var schedule = native_json_parse(PythonObject(training_schedule_json(source["data_schedule"], 256, 16384,
+        "Byte-LM data_schedule", context)))
+    var result = py_call(bi.dict, source)
+    py_setitem(result, "parameters", parameters)
+    py_setitem(result, "m", moment)
+    py_setitem(result, "v", variance)
+    py_setitem(result, "flags", flags)
+    py_setitem(result, "completed_steps", completed)
+    py_setitem(result, "next_batch_index", completed)
+    py_setitem(result, "config", config)
+    py_setitem(result, "data_schedule", schedule)
+    py_setitem(result, "parameter_names", names)
+    py_setitem(result, "parameter_shapes", shapes)
+    py_setitem(result, "parameter_offsets", offsets)
+    if py_contains(source, "model_shape"):
+        var dims = bi.dict()
+        var dim_names = [String("batch"), String("length"), String("d_model"), String("n_heads"), String("n_kv"),
+            String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size")]
+        for i in range(9):  # small-loop(the nine normalized model dimensions)
+            py_setitem(dims, dim_names[i], shape.d[i])
+        py_setitem(dims, "chunked_lm_head_v2", shape.chunked)
+        py_setitem(result, "model_shape", dims)
+    return result
+
+
+def byte_lm_load_state(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    if py_type(trainer) is not context["byte_lm_trainer_class"]:
+        raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
+    var fields = py_fields(trainer)
+    var lock = fields["_lock"]
+    _ = py_call(lock.acquire)
+    try:
+        var replacement = _validated_state(args[0], context)
+        _ = _mode(context)
+        var session = fields["_native_session"]
+        var binding = fields["_session_binding"]
+        var provider = _provider(fields, binding) if session is not None else PythonObject(None)
+        var handle = _session_handle(fields, binding, provider) if provider is not None else 0
+        _forget(fields, context)
+        if session is not None:
+            if provider is not None:
+                _ = neural_descriptor_execute(provider, 4, [handle], List[Int](), List[Float64]())
+                _ = session
+            else:
+                _ = py_call(_entry(binding, "byte_lm_session_close"), session)
+        py_setitem(fields, "_state", replacement)
+        py_setitem(fields, "_lost_at", PythonObject(None))
+        py_setitem(fields, "_last_export_step", replacement["completed_steps"])
+    except problem:
+        _ = py_call(lock.release)
+        raise problem
+    _ = py_call(lock.release)
+    return trainer
 
 
 def byte_lm_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject, train: Bool = True) raises -> PythonObject:
@@ -1238,6 +1378,8 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
+        if operation == "load_state":
+            return byte_lm_load_state(call[0], call[2], call[3]).steal_data()
         if operation == "construct":
             return byte_lm_construct(call[0], call[2], call[3]).steal_data()
         if operation == "train_step" or operation == "evaluate":

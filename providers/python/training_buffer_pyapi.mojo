@@ -6,21 +6,33 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_input, classical_address, classical_dtype_str
 from bindings.tsa_hw_native import tsa_array
-from core.training_input_copy import training_copy_f32
+from core.training_input_copy import training_copy_f32, training_copy_words32
 
 
 def training_f32_owned(source: PythonObject, dims: List[Int], name: String,
                        context: PythonObject) raises -> PythonObject:
+    return training_words32_owned(source, dims, name, context, False)
+
+
+def training_i32_owned(source: PythonObject, dims: List[Int], name: String,
+                       context: PythonObject) raises -> PythonObject:
+    return training_words32_owned(source, dims, name, context, True)
+
+
+def training_words32_owned(source: PythonObject, dims: List[Int], name: String,
+                           context: PythonObject, integer: Bool) raises -> PythonObject:
     classical_admit_value(source, context)
     var bi = native_loaded_module("builtins")
+    var kind = String("int32" if integer else "float32")
     if py_type(source) is bi.list or py_type(source) is bi.tuple:
-        raise Error("TypeError: " + name + " must be a float32 buffer")
+        raise Error("TypeError: " + name + " must be a " + kind + " buffer")
     var value = classical_input(source, context, name)
     var shape = value.shape
     var strides = value.strides
     var item = Int(py=value.itemsize)
-    if classical_dtype_str(value, context) != "<f4" or item != 4:
-        raise Error("TypeError: " + name + " must be a float32 buffer")
+    var dtype = String("<i4" if integer else "<f4")
+    if classical_dtype_str(value, context) != dtype or item != 4:
+        raise Error("TypeError: " + name + " must be a " + kind + " buffer")
     if len(shape) != len(dims):
         raise Error(name + " has an unexpected shape")
     var count = 1
@@ -33,7 +45,10 @@ def training_f32_owned(source: PythonObject, dims: List[Int], name: String,
         native_strides.append(Int(py=strides[i]))
         _ = py_call(output_shape.append, dims[i])
     var source_addr = Int(py=classical_address(value))
-    var output = tsa_array("f", "<f4", output_shape, count, 4, context)
-    training_copy_f32(source_addr, Int(py=classical_address(output)), dims, native_strides, name)
+    var output = tsa_array("i" if integer else "f", dtype, output_shape, count, 4, context)
+    if integer:
+        training_copy_words32(source_addr, Int(py=classical_address(output)), dims, native_strides)
+    else:
+        training_copy_f32(source_addr, Int(py=classical_address(output)), dims, native_strides, name)
     _ = value^
     return output
