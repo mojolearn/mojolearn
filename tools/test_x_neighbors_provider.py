@@ -54,7 +54,7 @@ def test_selected_public_method_bodies_have_no_python_binding_lookup():
 
 
 def test_capabilities_are_operation_local_and_do_not_mutate_cached_provider():
-    snapshot = (ROOT/'providers/python/compiled_binding_snapshot.mojo').read_text()
+    snapshot = (ROOT/'providers/python/compiled_binding_snapshot_pyapi.mojo').read_text()
     assert 'var provider: PythonObject' in snapshot and 'var capabilities: List[Int]' in snapshot
     assert 'def execute' not in snapshot and 'neural_descriptor_execute' not in snapshot
     source = (ROOT/'providers/python/x_neighbors_descriptor_pyapi.mojo').read_text()
