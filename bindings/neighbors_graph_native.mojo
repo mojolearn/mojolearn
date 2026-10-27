@@ -643,7 +643,7 @@ def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) 
 
 def neighbors_graph_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
-    args = xn_admit_arguments(args)
+    args = xn_admit_arguments(args, context)
     if operation == "family_xn_graph_pagerank_fit":
         _pagerank_fit(model, args, context)
         return model

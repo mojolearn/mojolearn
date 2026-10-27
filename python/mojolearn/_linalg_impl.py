@@ -1021,13 +1021,9 @@ def _connect_native_linalg():
     # glue: connect selected-mode images once; all public admission and binding
     # replacement checks happen in the shared native provider boundary.
     _backend.default_mode()
-    result = {}
-    for mode in ('identical', 'fast'):  # glue: two registered numeric modes
-        try:
-            result[mode] = _backend.binding(_MODULE_NAME, mode)
-        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
-            result[mode] = type(error).__name__ + ': ' + str(error)
-    return result
+    _native_family_bridge.connect_bindings(_MODULE_NAME)
+    records = _native_family_bridge.shared_context()['family_binding_connections'][_MODULE_NAME]
+    return {mode: record[0] for mode, record in records.items()}  # glue: fixed import-time mode records
 
 
 _native_connected_bindings = _connect_native_linalg()

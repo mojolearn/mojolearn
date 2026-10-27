@@ -761,7 +761,7 @@ def _lp_predict(model: PythonObject, binding: PythonObject, source: PythonObject
 
 def neighbors_semi_operation(model: PythonObject, operation: String, var args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    args = xn_admit_arguments(args)
+    args = xn_admit_arguments(args, context)
     classical_connect_numpy(context)
     if operation == "family_xn_semi_achi2_fit":
         _achi2_fit(model, args, context)

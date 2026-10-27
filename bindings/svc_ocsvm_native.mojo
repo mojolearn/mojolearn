@@ -356,7 +356,7 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
 def svc_ocsvm_operation(model: PythonObject, operation: String, var args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """OneClassSVM; args[0] is the resolved `_mojolearn_x_neighbors` binding."""
-    args = xn_admit_arguments(args)
+    args = xn_admit_arguments(args, context)
     classical_connect_numpy(context)
     if operation == "family_svc_ocsvm_fit":
         _ocsvm_fit(model, args[0], args[1], args[2], context)

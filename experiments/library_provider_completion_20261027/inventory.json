@@ -277,11 +277,13 @@
       ],
       "source_changes": [
         "providers/python/array_metadata_pyapi.mojo",
-        "bindings/family_common.mojo"
+        "bindings/family_common.mojo",
+        "Shared binding admission resolves real host modules at import, preserves static offerings/compiled mode checks, observes live module replacement"
       ],
       "remaining": [
         "f64/finite-only/target/sample-weight admission and other family consumers; input admission before captured array may still read foreign metadata",
-        "archive/type/protocol callbacks and generic resident lifetime migration"
+        "archive/type/protocol callbacks and generic resident lifetime migration",
+        "legacy CPU adapters/other loaders and numerical tables still need migration; real host admission is not full CPU runtime qualification"
       ]
     }
   ],

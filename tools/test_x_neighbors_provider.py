@@ -34,7 +34,7 @@ def test_existing_provider_is_admitted_outside_packed_operation_loops():
     assert 'neural_descriptor_execute(binding, xn_operation_id(name), a, p, f)' in execute
     for filename in ('neighbors_local_native','neighbors_semi_native','neighbors_graph_native','svc_ocsvm_native'):
         source = (ROOT / 'bindings' / (filename+'.mojo')).read_text()
-        assert source.count('args = xn_admit_arguments(args)') == 1
+        assert source.count('args = xn_admit_arguments(args, context)') == 1
         assert 'xn_execute(binding, name, addrs, ints, floats)' in source
 
 
