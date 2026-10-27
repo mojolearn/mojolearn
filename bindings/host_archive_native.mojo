@@ -511,6 +511,13 @@ def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonOb
     py_setitem(fields, "means_init", PythonObject(None))
     py_setitem(fields, "weights_init", PythonObject(None))
     py_setitem(fields, "precisions_init", PythonObject(None))
+    # Match _gmm_default_fit's solver-state initialization. The public save
+    # schema only admits this default solver. Omitting _ext on reload sent
+    # scoring through a missing-attribute lookup that returned a native
+    # SystemError on the 0.8.60 PTX verification run. A retained public
+    # fit/save/load reproduction shows all three inference outputs match
+    # once this state is restored (verify-0860-ptx-20261026/gmm-repro).
+    py_setitem(fields, "_ext", PythonObject(None))
     host_archive_mode(arrays, fields, context)
     var weights = host_archive_vector(arrays, "weights", k, where, context)
     var means = host_archive_vector(arrays, "means", k * d, where, context)
