@@ -35,6 +35,37 @@ def wheel(path, commit=COMMIT):
     return path
 
 
+
+class ImmutableCorrectedWheels(unittest.TestCase):
+    def test_corrected_unpublished_artifact_keeps_original_bytes(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            name = "mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl"
+            original = wheel(root / "linux/final" / name)
+            original_bytes = original.read_bytes()
+            corrected = wheel(root / "metadata-correction" / name, commit="b" * 40)
+            ctx = SimpleNamespace(rel=root, version="0.8.60", state={})
+            self.assertEqual(release.Release.split_final(ctx, "nvidia"), original)
+            ctx.state["final_wheel_overrides"] = {"nvidia": {
+                "path": str(corrected), "sha256": release.sha256(corrected)}}
+            self.assertEqual(release.Release.split_final(ctx, "nvidia"), corrected)
+            self.assertEqual(original.read_bytes(), original_bytes)
+            corrected.write_bytes(b"changed")
+            with self.assertRaisesRegex(release.StepFailed, "changed"):
+                release.Release.split_final(ctx, "nvidia")
+
+    def test_wrong_package_cannot_be_selected(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            wrong = wheel(root / "mojolearn_amd-0.8.60-py3-none-manylinux_2_35_x86_64.whl")
+            ctx = SimpleNamespace(rel=root, version="0.8.60", state={"final_wheel_overrides": {
+                "nvidia": {"path": str(wrong), "sha256": release.sha256(wrong)}}})
+            with self.assertRaisesRegex(release.StepFailed, "misidentified"):
+                release.Release.split_final(ctx, "nvidia")
+
+
 class Ctx:
     """The slice of Release that launch_detached uses."""
 
