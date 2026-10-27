@@ -1,0 +1,76 @@
+{
+  "status": "source_audit_not_runtime_validation",
+  "torch_version": "2.13.0",
+  "observed": [
+    {
+      "path": "python/mojolearn/importers/_program.py",
+      "operation": "_export_torch",
+      "behavior": "Calls module.eval and torch.onnx.export with do_constant_folding=True; chooses dynamo=False where supported."
+    },
+    {
+      "path": "torch/onnx/_internal/torchscript_exporter/utils.py:888",
+      "behavior": "Tracing calls torch.jit._get_trace_graph(model, args)."
+    },
+    {
+      "path": "torch/jit/_trace.py:131",
+      "behavior": "ONNXTracedModule calls self.inner(*trace_inputs)."
+    },
+    {
+      "path": "torch/nn/modules/module.py:1754",
+      "behavior": "Tracing selects _slow_forward, which invokes self.forward in Python."
+    },
+    {
+      "path": "torch/onnx/_internal/torchscript_exporter/utils.py:1164",
+      "behavior": "The exporter transforms params_dict through eval peephole and constant folding."
+    },
+    {
+      "path": "python/mojolearn/adapters/_torch_compile.py",
+      "operation": "_Compiled._import / __call__",
+      "behavior": "Lifted parameters become registered buffers in an export wrapper; any changed version causes re-export and native program reimport."
+    },
+    {
+      "path": "autograd/import_lower.mojo:1006",
+      "behavior": "Lowered weight uploads include native casts/transposes; imported program does not retain a full original-Torch-weight to folded-initializer dependency/update recipe."
+    }
+  ],
+  "constraints": [
+    {
+      "kind": "external_python_capture",
+      "scope": "Arbitrary torch.nn.Module ingestion through the currently supported exporter",
+      "conclusion": "Calling the exporter from Mojo would still execute Python forward. There is no native translation of arbitrary Python forward in this implementation. Preserving this feature requires an explicit external-capture policy decision or a new supported frontend contract; no Mojo defect is established."
+    },
+    {
+      "kind": "remaining_implementation",
+      "scope": "Torch compiled callable changed-weight refresh",
+      "conclusion": "Not claimed impossible or blocked by Mojo. Correct native refresh needs parameter provenance and recomputation of folded dependency values, or a native FX frontend covering the supported graphs. Blind original-weight replacement or dynamicizing every weight does not preserve all existing exported graphs and their arithmetic."
+    },
+    {
+      "kind": "remaining_implementation",
+      "scope": "Generic import_model source-kind and ModelProto handling",
+      "conclusion": "Public source-kind dispatch and ModelProto serialization/tempfile cleanup still execute Python. Native file/GraphIR import and separate reader/resolve are migrated; this does not qualify generic object ingestion as fully native."
+    }
+  ],
+  "not_done": [
+    "No framework behavior probe executed in this source tranche.",
+    "No compiler or runtime success is inferred.",
+    "No toolchain patches, per-operation public APIs, identity columns, GPU measurements or performance claims added."
+  ],
+  "retained_sources": [
+    {
+      "file": "version.py",
+      "sha256": "2f91d1d52c394944dfe4627d87298fff2165ffe82056b7316fbb4e4eb9ed9536"
+    },
+    {
+      "file": "onnx/_internal/torchscript_exporter/utils.py",
+      "sha256": "7a0e3246ff8dd759749a338565d42319f9a43566074e5c536d1ebf6d494f5341"
+    },
+    {
+      "file": "jit/_trace.py",
+      "sha256": "f696c3311c8c69afcdd0407e8ca0ab8aa9d3002a83ff18188ffde9d064b47bac"
+    },
+    {
+      "file": "nn/modules/module.py",
+      "sha256": "341153e4099444f923f5b0766e8e41b45fbe909b87f4737cb28c828f297b7baa"
+    }
+  ]
+}
