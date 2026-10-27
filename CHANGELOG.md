@@ -4,6 +4,10 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.62
+
+- **Decision trees.** `DecisionTreeClassifier` and `DecisionTreeRegressor` accept and forward the documented `numeric_mode` constructor parameter. Compiled kernels are unchanged.
+
 ## 0.8.61 (published 2026-10-27)
 
 - **NVIDIA PTX installations.** A standalone PTX GPU package is detected and selected automatically.

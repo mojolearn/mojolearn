@@ -183,7 +183,7 @@ def test_a_failed_recipe_upload_stops_before_the_next_recipe(tmp_path, monkeypat
     assert 'retention_failure' in state['recipes'][ids[0]]
 
 
-def test_apple_is_smoke_only_and_uses_both_modes():
+def test_apple_is_smoke_only_and_retains_legacy_plan_support():
     ident = C.selected_plan('apple', {}, 'identical', smoke=True)
     fast = C.selected_plan('apple', {}, 'fast', smoke=True)
     assert ident and isinstance(fast, list)
@@ -195,6 +195,38 @@ def test_apple_is_smoke_only_and_uses_both_modes():
     with pytest.raises(SystemExit):
         C.main(['--vendor', 'apple', '--manifest', 'm.json', '--out', 'x', '--cache', 'c',
                 '--stop-at', str(time.time() + 60)])
+
+
+@pytest.mark.parametrize('vendor', ['apple', 'nvidia', 'amd'])
+def test_smoke_cli_selects_identical_only(vendor, tmp_path, monkeypatch):
+    captured = {}
+    def run(args, plans, out, suspects=None):
+        captured.update(plans)
+        return 0
+    monkeypatch.setattr(C, 'run_smoke', run)
+    assert C.main(['--vendor', vendor, '--smoke', '--cpu-fallback',
+                   '--out', str(tmp_path), '--cache', str(tmp_path)]) == 0
+    assert set(captured) == {'identical'}
+    assert captured['identical']
+
+
+@pytest.mark.parametrize('status,expected', [('MATCHED', 0), ('STARTED', 2),
+    ('REFUSED', 1), ('FAILED', 1), ('UNSUPPORTED', 1)])
+def test_smoke_exit_requires_completed_matching_pairings(status, expected):
+    doc = dict(finished=1, expected=1, checks={'data': {'status': 'ok'}},
+               rows={'recipe': {'status': status}})
+    assert C.smoke_exit_code(doc) == expected
+
+
+def test_smoke_exit_rejects_missing_rows_checks_and_retention_failure():
+    doc = dict(finished=1, expected=1, checks={'data': {'status': 'ok'}}, rows={})
+    assert C.smoke_exit_code(doc) == 2
+    doc['rows']['recipe'] = {'status': 'MATCHED'}
+    doc['retention_failure'] = 'upload failed'
+    assert C.smoke_exit_code(doc) == 1
+    del doc['retention_failure']
+    doc['checks']['data']['status'] = 'failed'
+    assert C.smoke_exit_code(doc) == 1
 
 
 def test_smoke_selects_the_whole_plan_when_the_manifest_has_no_list_for_the_vendor():
@@ -214,6 +246,7 @@ def test_smoke_command_is_preflight_only_with_the_scorer_and_one_race_id(tmp_pat
     assert cmd[cmd.index('--measurement-source') + 1] == 's.json'
     assert cmd[cmd.index('--box-checked') + 1] == 'smoke.json'
     assert '--retime-opponents' not in cmd and '--verify-data' not in cmd
+    assert '--with-opponents' in cmd  # Both arms must be constructed and compared before timing.
 
 
 def test_run_bounded_kills_the_whole_process_group_at_the_timeout(tmp_path):
@@ -334,7 +367,7 @@ def test_smoke_writes_rows_text_and_uploads_after_every_recipe(tmp_path, monkeyp
     out = tmp_path / 'campaign'
     rc = C.main(['--vendor', 'amd', '--manifest', str(manifest), '--out', str(out), '--cache', str(tmp_path),
                  '--smoke'])
-    assert rc == 0
+    assert rc == 1
     worker = FakeWorker.instances[-1]
     assert [t for _, _, t in worker.recipes] == [5.0] * 5           # the default per-recipe timer
     assert all(argv[0] == '--vendor' for _, argv, _ in worker.recipes)  # bench_board argv, no interpreter
@@ -573,8 +606,8 @@ def test_install_mamba_ssm_does_nothing_when_both_import(monkeypatch, tmp_path):
 
 
 
-def test_apple_runs_each_numeric_mode_in_its_own_worker(tmp_path, monkeypatch):
-    # smoke-fixes 2026-10-14 (Apple b7): our bindings load one tier per process, so each mode has its own worker
+def test_apple_starts_only_identical_worker(tmp_path, monkeypatch):
+    # Owner 2026-10-22: do not start a separate Apple fast validation workstream.
     monkeypatch.setattr(C, 'SmokeWorker', FakeWorker)
     monkeypatch.setattr(C, 'smoke_checks', lambda args, plans, out, worker=None: ({}, {}))
     monkeypatch.setattr(C, 'smoke_stage', lambda *a, **k: {'status': 'ok', 'problems': []})
@@ -588,9 +621,9 @@ def test_apple_runs_each_numeric_mode_in_its_own_worker(tmp_path, monkeypatch):
     C.main(['--vendor', 'apple', '--manifest', str(manifest), '--out', str(tmp_path / 'o'), '--cache', str(tmp_path),
             '--smoke'])
     modes = [w.env.get('MOJOLEARN_NUMERIC_MODE') for w in FakeWorker.instances]
-    assert modes == ['fast', 'identical'] and [w.name for w in FakeWorker.instances] == ['worker-fast', 'worker']
+    assert modes == ['identical'] and [w.name for w in FakeWorker.instances] == ['worker']
     doc = json.loads((tmp_path / 'o' / 'smoke' / 'smoke.json').read_text())
-    assert set(doc['workers']) == {'fast', 'identical'}
+    assert set(doc['workers']) == {'identical'}
 
 
 def test_smoke_row_fails_a_recipe_whose_own_arm_did_not_import_or_construct(tmp_path):
@@ -609,3 +642,15 @@ def test_smoke_row_fails_a_recipe_whose_own_arm_did_not_import_or_construct(tmp_
     _write_board(d, race['id'], {'verdict': 'REFUSED', 'problems': ['missing parameter/version probe: sklearn-cpu']})
     row = C.smoke_row(race, 'identical', 0, 1.0, d, tmp_path / 'none.log', 5)
     assert row['status'] == 'REFUSED' and 'own_arm_not_built' not in row
+
+
+def test_smoke_local_evidence_is_explicit_and_never_admitted_before_transfer(tmp_path):
+    args = SimpleNamespace(vendor='amd', python_env='python', cache=str(tmp_path),
+                           wheel_manifest=None, smoke_verify_data=False,
+                           data_root=str(tmp_path), smoke_local_evidence=True)
+    race = C.selected_plan('amd', {}, smoke=True)[0]
+    command = C.smoke_command(args, race, tmp_path, 'identical', {})
+    assert '--evidence-local-only' in command
+    doc = dict(finished=1, expected=1, checks={'data': {'status': 'ok'}},
+               rows={'recipe': {'status': 'MATCHED'}}, retention_pending='transfer pending')
+    assert C.smoke_exit_code(doc) == 2

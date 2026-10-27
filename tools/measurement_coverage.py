@@ -102,6 +102,8 @@ NEURAL_EXTRA = {
 #: Public names whose compute a lane times through another public entry (the lane, and why). The algos
 #: driver's own list of such names is bench_board_algos.NOT_RACED; this table holds them by canonical name.
 INDIRECT = {
+    "mojolearn.importers._program.ImportedProgram": (
+        "neural/program-run", "returned imported program executes the same ops.Program kernels"),
     "mojolearn.DampedETS": ("algos/damped-ets", "ETS(model='AAN', damped=True) by construction, the model the "
                                                 "damped-ets lane races (bench_board_algos.NOT_RACED)"),
     "mojolearn.sparse_encode": ("algos/sparse-coder", "the encoder SparseCoder.transform runs, raced as "
@@ -117,6 +119,10 @@ INDIRECT = {
 #: Public names the board does not time, each with its reason (fnmatch patterns over the canonical name).
 #: Andrew 2026-10-22: every exposed API is measured "if appropriate"; these are the ones where it is not.
 NOT_MEASURED = (
+    # Owner 2026-10-24: adapters are front-ends to the same kernels, qualified
+    # by installed adapter smokes rather than duplicate arithmetic lanes.
+    ("mojolearn.adapters._torch_compile._Compiled",
+     "whole-model adapter; covered by installed adapter smoke, not a separate estimator race"),
     # multi-GPU: excluded from the board by the standing rule (Andrew 2026-09-29, COVERAGE.md)
     ("mojolearn.Parallel*", "multi-GPU, excluded from the single-GPU board (Andrew 2026-09-29, COVERAGE.md)"),
     ("mojolearn.Pooled*", "multi-GPU model pool, excluded from the single-GPU board (COVERAGE.md)"),

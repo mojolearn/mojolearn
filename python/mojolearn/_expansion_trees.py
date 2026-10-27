@@ -203,6 +203,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
         n_bins=128,
         device="gpu",
         inference_engine="auto",
+        numeric_mode=None,
     ):
         rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
         super().__init__(
@@ -213,6 +214,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
             bootstrap=False, random_state=random_state, class_weight=class_weight,
             ccp_alpha=ccp_alpha, monotonic_cst=monotonic_cst, n_bins=n_bins,
             n_streams=1, device=device, inference_engine=inference_engine,
+            numeric_mode=numeric_mode,
         )
         self.splitter = splitter
 
@@ -361,6 +363,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
         n_bins=None,
         device="gpu",
         inference_engine="auto",
+        numeric_mode=None,
     ):
         rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
         # n_bins=None: the tier's default, resolved at fit (`_dt_tier_bins`)
@@ -372,6 +375,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
             bootstrap=False, random_state=random_state, ccp_alpha=ccp_alpha,
             monotonic_cst=monotonic_cst, n_bins=128 if n_bins is None else n_bins, n_streams=1,
             device=device, inference_engine=inference_engine,
+            numeric_mode=numeric_mode,
         )
         self.splitter = splitter
 

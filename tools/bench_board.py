@@ -145,6 +145,8 @@ VENDOR_API = {"apple": "metal", "nvidia": "cuda", "amd": "hip"}
 DATA_FILES = {"taxi": "taxi/taxi_speed.npz", "istella": "istella/istella_speed.npz"}
 R2_KEYS = {"taxi": "gbm-bench/taxi/taxi_speed.npz",
            "istella": "gbm-bench/istella/istella_speed.npz"}
+DATA_FILES["higgs"] = "higgs/higgs_speed.npz"
+R2_KEYS["higgs"] = "gbm-bench/higgs/higgs_speed.npz"
 
 # ---------------------------------------------------------------------------
 # Rosters. The opponent set is per vendor AND per lane; it is never a global
@@ -752,6 +754,15 @@ def pypi_wheel_guard(args, python, vendor):
     if not args.mojolearn_version:
         args.mojolearn_version = manifest["version"]
     return pypi_wheel_record(manifest), None
+
+
+def preflight_wheel_record(args, python, vendor, box_checked):
+    """Reuse the checked wheel identity without repeating its installed probe."""
+    if not box_checked:
+        return pypi_wheel_guard(args, python, vendor)
+    if args.wheel_manifest:
+        return pypi_wheel_record(PYPI.load_manifest(args.wheel_manifest)), None
+    return None, None
 
 
 def installed_artifact_record(wheel, artifact_identity):
@@ -1450,7 +1461,8 @@ def _box_fingerprint(ctx):
     python = ctx["python"]
     pyver = capture([python, "-c", "import sys,platform;print(sys.version.split()[0], platform.python_implementation())"],
                     timeout=60)
-    mj = capture([python, "-c", "import importlib.metadata as m;print(m.version('mojolearn'))"],
+    distribution = PYPI.distributions(ctx["vendor"])[0]
+    mj = capture([python, "-c", "import importlib.metadata as m;print(m.version(%r))" % distribution],
                  timeout=60)
     script = os.path.abspath(__file__)
     return {
@@ -1877,12 +1889,13 @@ def setup_arm_venvs(args, vendor, out, log, arms=None):
 def data_needs(races, datasets=DATASETS):
     """(the R2 dataset names the races read, the algos corpus keys missing on this box).
     tools/gpu_gap_campaign.py --smoke checks the same list once for a whole manifest."""
-    # taxi and Istella-S are read by trees and classical only; a neural-only
-    # run needs no R2 data.
+    # Neural fit-recipe parameter probes read HIGGS too, even without fitting.
     needed = [ds for ds in datasets if any(r["dataset"] == ds for r in races
                                            if r["family"] != "neural")]
     needed += sorted({k for r in races if r["family"] == "trees"
                       for k in race_data_keys(r) if k not in needed})
+    if any(r["family"] == "neural" and r["dataset"] == "higgs" for r in races) and "higgs" not in needed:
+        needed.append("higgs")
     # the algos family's own taxi-derived data (taxi-hourly, taxi-zones)
     if "taxi" not in needed and any(r["family"] == "algos" and "gbm-bench/taxi/taxi_speed.npz"
                                     in ALGOS.r2_keys(r["lane"], r["dataset"]) for r in races):
@@ -1908,6 +1921,8 @@ def data_status(data_root, datasets, verify=False):
     out = {}
     for ds in datasets:
         path = os.path.join(data_root, DATA_FILES[ds])
+        if ds == "higgs":
+            path = os.environ.get("MOJOLEARN_BENCH_HIGGS") or path
         rec = {"path": path, "present": os.path.isfile(path), "r2_key": R2_KEYS[ds]}
         pin = pins.get(R2_KEYS[ds])
         if pin:
@@ -2553,6 +2568,8 @@ def neural_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec), "--keep-outputs"]
+    if race.get("dataset") == "higgs":
+        cmd += ["--higgs", race_data_files(ctx, race)[0][1]]
     n = len(race["arms"])
     ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
     cmd, ceiling = _compile_warmup(cmd, ceiling, race["arms"], rsec)
@@ -2991,6 +3008,12 @@ def race_data_files(ctx, race):
     """[(name, path)] of the data files a race reads; [] for seeded data."""
     fam, lane, ds = race["family"], race["lane"], race["dataset"]
     if fam == "neural":
+        # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: HIGGS fit
+        # recipes read pinned data, not seeded synthetic inputs. Retain the
+        # actual input hash and report missing data before parameter probes.
+        if ds == "higgs":
+            return [("higgs", os.environ.get("MOJOLEARN_BENCH_HIGGS") or
+                     os.path.join(ctx["data_root"], DATA_FILES["higgs"]))]
         return []
     if fam == "algos":
         out = []
@@ -3008,7 +3031,7 @@ def race_data_sha(ctx, race, box):
     """sha256 of what the race reads (one hash over several files); the neural
     family's inputs come from the installed wheel's sources, so its wheel; a
     seeded synthetic set is named as such. None when a file is missing."""
-    if race["family"] == "neural":
+    if race["family"] == "neural" and race.get("dataset") != "higgs":
         w = ((box.get("mojolearn") or {}).get("wheel") or {}).get("sha256")
         v = (box.get("mojolearn") or {}).get("version")
         return "mojolearn-sources:%s" % (w or v) if (w or v) else None
@@ -5032,7 +5055,11 @@ def main(argv=None):
     # preflight smoke (2026-10-14): the campaign smoke checks the PyPI wheel and our GPU set ONCE per box and
     # names its receipt here; each recipe's preflight-only process then reaches its parameter probe sooner.
     # Timed runs always check both themselves.
-    pypi_wheel, why = (None, None) if box_checked else pypi_wheel_guard(args, python, vendor)
+    # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: skipping a
+    # repeated installed-wheel check must not discard its verified identity.
+    # Linux installs mojolearn-core, so dropping this record made every neural
+    # smoke refuse with a missing input identity before constructing its arms.
+    pypi_wheel, why = preflight_wheel_record(args, python, vendor, box_checked)
     if why:
         raise SystemExit("bench_board: REFUSING to time ours: " + why)
     if pypi_wheel:

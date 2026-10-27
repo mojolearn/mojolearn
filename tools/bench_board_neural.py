@@ -1485,6 +1485,10 @@ def higgs_path():
     got = os.environ.get(HIGGS_ENV, "").strip()
     if got:
         return os.path.expanduser(got)
+    # The board's explicit data root also governs neural startup probes.
+    # An explicitly configured root must not fall back to another dataset.
+    if os.environ.get("GBM_BENCH_DATA"):
+        return os.path.join(os.path.expanduser(os.environ["GBM_BENCH_DATA"]), "higgs", "higgs_speed.npz")
     for cand in HIGGS_DEFAULTS:
         if os.path.exists(os.path.expanduser(cand)):
             return os.path.expanduser(cand)

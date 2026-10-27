@@ -359,6 +359,11 @@ def warm_box(argv, paths, arm_pythons=(), numeric_modes=()):
             ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"])))
     ctx = {"python": args.python_env, "vendor": vendor, "commit": B.repo_commit(),
            "mojolearn_version": args.mojolearn_version, "wheel": None}
+    # Warm the same fingerprint key the recipe uses after the box check.
+    # Keeping wheel=None here would repeat its subprocess probes inside the
+    # first recipe's short timer after preserving the checked wheel identity.
+    if args.wheel_manifest:
+        ctx["wheel"] = B.pypi_wheel_record(B.PYPI.load_manifest(args.wheel_manifest))
     step("box_fingerprint", lambda: B.box_fingerprint(ctx))
     t0 = time.time()
     hashed, missing = 0, []

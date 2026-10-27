@@ -32,7 +32,8 @@ def test_data_needs_matches_the_board_rules():
     needed, corpus_missing = B.data_needs(races)
     assert "taxi" in needed and isinstance(corpus_missing, list)
     neural = [r for r in races if r["family"] == "neural"]
-    assert B.data_needs(neural)[0] == []
+    assert B.data_needs(neural)[0] == ["higgs"]
+    assert B.data_needs([r for r in neural if r['dataset'] != 'higgs'])[0] == []
 
 
 def _probe(record_impl="library.mod"):
@@ -115,3 +116,35 @@ def test_cpu_tree_refusal_excludes_only_an_unbuilt_arm(monkeypatch, vendor, mode
     assert rep["verdict"] == "REFUSED"
     assert "lightgbm-cpu" not in rep.get("excluded_arms", {})
     assert any("alpha" in p for p in rep["problems"])
+
+
+def test_checked_box_retains_split_wheel_identity_for_neural_smoke(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    manifest = dict(schema=P.SCHEMA, version='0.8.61', vendor='amd', files=[
+        dict(distribution='mojolearn-core', file='core.whl', sha256='a'*64, bytes=123)])
+    path = tmp_path / 'manifest.json'
+    path.write_text(json.dumps(manifest))
+    def unexpected(*args):
+        raise AssertionError('must not repeat the installed wheel check')
+    monkeypatch.setattr(B, 'pypi_wheel_guard', unexpected)
+    wheel, why = B.preflight_wheel_record(SimpleNamespace(wheel_manifest=str(path)), 'python', 'amd', True)
+    assert why is None and wheel['sha256'] == 'a'*64
+    assert B.race_data_sha({}, {'family': 'neural'}, {'mojolearn': {'wheel': wheel}}) == 'mojolearn-sources:' + 'a'*64
+
+
+def test_neural_higgs_smoke_records_actual_data_and_refuses_missing_file(tmp_path, monkeypatch):
+    monkeypatch.delenv('MOJOLEARN_BENCH_HIGGS', raising=False)
+    race = dict(family='neural', lane='gru-fit', dataset='higgs')
+    path = tmp_path / 'higgs/higgs_speed.npz'
+    box = {'mojolearn': {'version': '0.8.61'}}
+    assert B.race_data_files({'data_root': str(tmp_path)}, race) == [('higgs', str(path))]
+    assert B.race_data_sha({'data_root': str(tmp_path)}, race, box) is None
+    path.parent.mkdir()
+    path.write_bytes(b'pinned input fixture')
+    assert B.race_data_sha({'data_root': str(tmp_path)}, race, box) == B.sha256_file(path)
+    monkeypatch.setenv('GBM_BENCH_DATA', str(tmp_path))
+    assert B.NEURAL.higgs_path() == str(path)
+    other = tmp_path / 'explicit.npz'
+    monkeypatch.setenv('MOJOLEARN_BENCH_HIGGS', str(other))
+    assert B.NEURAL.higgs_path() == str(other)
+    assert B.race_data_files({'data_root': str(tmp_path)}, race) == [('higgs', str(other))]

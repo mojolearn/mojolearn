@@ -1232,10 +1232,9 @@ class OursSVC:
         self.gamma = float(rec["svc"]["gamma"])
         self.est = None
         probe = self.make()
-        # SVC calls `_svm_impl._extension`, not `_bind`, and carries no
-        # `_BINDING`, so the mixin's witness would read the BASE binding.
-        # Point it at the extension the fit actually calls.
-        probe._BINDING = "_mojolearn_svm"
+        # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: SVC declares
+        # its compiled binding on the class. The old instance override is
+        # rejected by native metadata and prevented the parameter probe.
         self.info = _ours_info(self.ml, probe)
         self.params_obj = probe
 

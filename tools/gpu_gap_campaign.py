@@ -18,7 +18,7 @@ finishes records MATCHED/REFUSED with every problem string; an exception is
 FAILED. Nothing stops the loop: a worker that stops answering (a C call that
 never returns) is killed and restarted (recorded) and the next recipe goes on.
 Every failure is reported at the end. Apple runs --smoke only (its timing
-belongs to the M3 Ultra's own tools), identical then fast.
+belongs to the M3 Ultra's own tools). All vendors smoke identical only.
 """
 import argparse
 import json
@@ -272,11 +272,13 @@ def recipe_timeout(args, race):
 def smoke_command(args, race, directory, mode, receipts):
     """One recipe's preflight-only board command: parameter probe plus scorer preflight, nothing timed. The
     smoke worker runs it in process (bench_board.main(cmd[2:])); the stage runs it as a process."""
+    # FAIRNESS FIX (2026-10-13 audit): explicitly include opponents; the board
+    # otherwise audits only our arm and cannot establish a matched pairing.
     python = args.python_env
     cmd = [python, str(ROOT / "tools/bench_board.py"),
            "--vendor", args.vendor, "--python-env", python, "--skip-install",
            "--cache", args.cache, "--rows", "full", "--rounds", str(SMOKE_ROUNDS), "--modes", mode,
-           "--preflight-only", "--preflight-scorer", "--evidence-local-only",
+           "--preflight-only", "--preflight-scorer", "--evidence-local-only", "--with-opponents",
            "--families", race["family"], "--lanes", race["lane"], "--race-ids", race["id"],
            "--out", str(directory)]
     if not getattr(args, "cpu_fallback", False):
@@ -396,6 +398,21 @@ def problem_kind(text):
     t = re.sub(r"^<arm>( \([^)]*\))?: ", "", t).split(";")[0]
     t = ": ".join(t.split(": ")[:2])
     return re.sub(r"\d+(\.\d+)?", "<n>", t).strip()[:160]
+
+
+def smoke_exit_code(doc):
+    """Only a completed, retained smoke with every selected pairing matched passes."""
+    if doc.get("retention_failure") or not doc.get("checks"):
+        return 1
+    if any(c.get("status") != "ok" for c in doc["checks"].values()):
+        return 1
+    rows = list(doc.get("rows", {}).values())
+    if any(r.get("status") not in ("MATCHED", "STARTED") for r in rows):
+        return 1
+    if doc.get("retention_pending") or not doc.get("finished") or len(rows) != doc.get("expected") or any(
+            r.get("status") == "STARTED" for r in rows):
+        return 2
+    return 0
 
 
 def smoke_text(doc):
@@ -521,7 +538,8 @@ def smoke_checks(args, plans, out, worker=None):
     checks["gpu-set"] = dict(status="ok" if not why else "failed", problems=[str(why)[:1500]] if why else [])
     try:
         ref, inventory = E.source_snapshot(out / "source")
-        ref = E.upload(ref)
+        if not getattr(args, "smoke_local_evidence", False):
+            ref = E.upload(ref)
         E.write(out / "source.json", dict(source=ref, inventory=inventory))
         receipts["source"] = str(out / "source.json")
         checks["source-snapshot"] = dict(status="ok", problems=[], source=E.public_ref(ref))
@@ -881,6 +899,10 @@ def run_smoke(args, plans, out, suspects=None):
     if (out / "smoke.json").exists():
         raise ValueError("smoke directory already exists; preserve it and use a new --out")
     out.mkdir(parents=True, exist_ok=True)
+    def retain_smoke(archive, members):
+        if getattr(args, "smoke_local_evidence", False):
+            return E.public_ref(E.archive(str(archive), members))
+        return retain(archive, members)
     doc = dict(schema=SMOKE_SCHEMA, vendor=args.vendor, modes=sorted(plans), source_commit=B.repo_commit(),
                started=time.time(), timeout_s=args.smoke_timeout, expected=sum(len(p) for p in plans.values()),
                scope="does every recipe start: no timed work, no fits, no warm-ups", checks={}, rows={},
@@ -992,7 +1014,7 @@ def run_smoke(args, plans, out, suspects=None):
                 members["smoke.json"] = (out / "smoke.json").read_bytes()
                 members["smoke.txt"] = (out / "smoke.txt").read_bytes()
                 try:
-                    doc["retention"] = retain(out / "smoke.tar.gz", members)
+                    doc["retention"] = retain_smoke(out / "smoke.tar.gz", members)
                     doc.pop("retention_failure", None)
                 except (OSError, ValueError) as exc:
                     doc["retention_failure"] = str(exc)[:600]
@@ -1009,13 +1031,15 @@ def run_smoke(args, plans, out, suspects=None):
         if data is not None:
             members["worker/" + path.name] = data
     try:
-        doc["retention"] = retain(out / "smoke.tar.gz", members)
+        doc["retention"] = retain_smoke(out / "smoke.tar.gz", members)
         doc.pop("retention_failure", None)
     except (OSError, ValueError) as exc:
         doc["retention_failure"] = str(exc)[:600]
+    if getattr(args, "smoke_local_evidence", False):
+        doc["retention_pending"] = "copy full evidence to Mac and R2 before admission or teardown"
     write_smoke(out, doc)
     print((out / "smoke.txt").read_text().splitlines()[0])
-    return 0
+    return smoke_exit_code(doc)
 
 
 def main(argv=None):
@@ -1052,6 +1076,8 @@ def main(argv=None):
                     help="does every recipe start: everything loaded once in one worker, box checks once, then "
                          "each recipe's preflight-only check in that worker under --smoke-timeout; writes "
                          "<out>/smoke/smoke.json and smoke.txt; no timing")
+    ap.add_argument("--smoke-local-evidence", action="store_true",
+                    help="retain smoke evidence locally for explicit Mac/R2 transfer; remains incomplete until retained")
     ap.add_argument("--smoke-timeout", type=float, default=5.0,
                     help="seconds per recipe check before it is recorded STARTED (no verdict yet) and stopped")
     ap.add_argument("--smoke-grace", type=float, default=30.0,
@@ -1076,8 +1102,8 @@ def main(argv=None):
         if args.smoke_timeout <= 0 or args.smoke_grace < 0:
             ap.error("smoke-timeout must be positive and smoke-grace nonnegative")
         manifest = json.loads(Path(args.manifest).read_text()) if args.manifest else {}
-        # Apple: IDENTICAL, then FAST (Apple only) as a second pass
-        modes = ("identical", "fast") if args.vendor == "apple" else ("identical",)
+        # Owner 2026-10-22: measurement work covers identical only, including Apple.
+        modes = ("identical",)
         plans = {m: selected_plan(args.vendor, manifest, m, smoke=True, cpu_fallback=args.cpu_fallback) for m in modes}
         os.environ["MOJOLEARN_REPO_COMMIT"] = B.repo_commit()
         suspects = None
