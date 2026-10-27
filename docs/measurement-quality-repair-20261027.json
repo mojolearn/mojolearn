@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-27",
+  "scope": "Shared AMD/NVIDIA/Apple measurement harness; no product/runtime change and no release required.",
+  "changes": [
+    "Retain recurrent classifier logits and export probabilities outside timing; the existing scorer computes opponent log loss.",
+    "Reuse complete recurrent opponent quality; reselect only records missing finite log loss in fit or inference.",
+    "After execution, record missing time/quality in measurement_completion and incomplete_recipes; continue the campaign.",
+    "Smoke remains startup/settings only, with no fits."
+  ],
+  "validation": {
+    "cpu_suite": "140 passed, 14 subtests passed",
+    "apple_mps": "6 passed: actual Torch RNN/GRU/LSTM classifier and regressor fit/inference/export",
+    "amd_nvidia_gpu_execution": "Not rerun for this repair; active frozen timing campaigns left intact. New probability processing executes on the CPU after the existing device-to-host export."
+  },
+  "historical_results": {
+    "raw_records_unchanged": true,
+    "incomplete_recurrent_recipe_records": 4,
+    "review": "/Users/andrewhendel/mojolearn-evidence/recurrent-quality-repair-20261027/existing-quality-gaps.json",
+    "repair_requires": "A subsequent frozen selective run or recovery from retained probabilities; historical class labels alone cannot reconstruct log loss."
+  },
+  "logs": "/Users/andrewhendel/mojolearn-evidence/recurrent-quality-repair-20261027"
+}

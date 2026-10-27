@@ -2245,6 +2245,53 @@ def mark_not_scored(cells):
     return cells
 
 
+def measurement_completion(rec):
+    """Report missing time/quality after execution, without judging score quality.
+
+    This is not a smoke, admission gate, or reason to stop the next recipe.
+    Preserve every original timing, quality value and execution status.
+    """
+    def finite(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+    issues = []
+    checked = 0
+    for phase, field in (("fit", "cells"), ("infer", "infer_cells")):
+        cells = [c for c in rec.get(field) or []
+                 if c.get("status") in TIMED_STATUSES and c.get("mode") != "context"]
+        # Existing scorers define these metrics; requiring recorded fields does
+        # not invent a new quality threshold or hide a poor result.
+        metrics = set().union(*(set(c.get("quality") or {}) for c in cells))
+        metrics &= set(BQ.ABSOLUTE) | set(BQ.RELATIVE) | set(BQ.REFERENCE) | set(BQ.AGREEMENT)
+        if rec.get("family") == "algos" and rec.get("lane") in ("rnn-clf", "gru-clf", "lstm-clf"):
+            metrics |= {"accuracy", "logloss"}
+        for cell in cells:
+            checked += 1
+            missing = []
+            times, rounds = cell.get("times_ms"), cell.get("rounds")
+            if (not isinstance(times, list) or not times
+                    or type(rounds) is not int or rounds != len(times)
+                    or any(not finite(t) or t < 0 for t in times)):
+                missing.append("complete finite timing samples")
+            for key in ("median_ms", "warmup_ms"):
+                if not finite(cell.get(key)) or cell[key] < 0:
+                    missing.append(key)
+            quality = cell.get("quality") or {}
+            why = BQ.scorer_failure(quality)
+            if why or cell.get("status") == NOT_SCORED:
+                missing.append("quality scorer: " + str(why or cell.get("scorer_error") or "not scored"))
+            elif not any(k not in ("scorer", "reference", "rows") for k in quality):
+                missing.append("quality scores")
+            for metric in sorted(metrics):
+                if not finite(BQ.metric_value(cell, quality, metric)):
+                    missing.append("quality metric: " + metric)
+            if missing:
+                issues.append(dict(arm=cell.get("arm"), phase=phase, batch=cell.get("batch"), missing=missing))
+    return dict(status="incomplete" if issues else ("recorded" if checked else "not measured"),
+                checked_cells=checked, issues=issues,
+                scope="time and quality presence only; no quality acceptance threshold")
+
+
 def _from_wheel(path, ctx):
     if not path:
         return "UNKNOWN(no binding path)"
@@ -3417,6 +3464,19 @@ def stored_opponents(ctx, race):
             measurement = cell.get("measurement") or {}
             if not evidenced_opponent(cell):
                 continue
+            if (race.get("family") == "algos"
+                    and race.get("lane") in ("rnn-clf", "gru-clf", "lstm-clf")
+                    and arm.startswith("torch-")):
+                # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27:
+                # older recurrent opponents discarded probabilities, leaving
+                # accuracy but no log loss. Reuse complete quality evidence;
+                # select only these incomplete opponents for a fresh run.
+                # This checks metric presence, never how good the score is.
+                quality_cells = [cell, *(hit.get("infer_cells") or [])]
+                losses = [(c.get("quality") or {}).get("logloss") for c in quality_cells]
+                if any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                       or not math.isfinite(v) for v in losses):
+                    continue
             if (race.get("family") == "classical" and measurement
                     and (measurement.get("retained_outputs") or {}).get("status") != "verified"):
                 continue  # hashes/logs alone did not retain classical outputs
@@ -3743,6 +3803,9 @@ def run_race(ctx, race):
     if ctx.get("opponents_only"):
         cells = {c["arm"]: c for c in rec["cells"]}
         rec["status"] = "done" if rec["rc"] == 0 and all(successful_opponent_cell(cells.get(a, {})) for a in full["opponents"]) and (not ctx.get("infer") or successful_opponent_inference(full, full["opponents"], rec.get("infer_cells") or [])) else "failed"
+    rec["measurement_completion"] = measurement_completion(rec)
+    if rec["measurement_completion"]["status"] == "incomplete":
+        print("MEASUREMENT_INCOMPLETE " + json.dumps(dict(id=race["id"], **rec["measurement_completion"])), flush=True)
     if evidence:
         E.seal(ctx, *evidence, rec)
     rec["stored_now"] = store_opponents(ctx, full, rec)

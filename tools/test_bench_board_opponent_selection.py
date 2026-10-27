@@ -11,6 +11,33 @@ spec.loader.exec_module(board)
 
 
 class OpponentSelection(unittest.TestCase):
+    def test_recurrent_reuse_requires_quality_on_both_phases(self):
+        arm = 'torch-eager-fp32'
+        verified = dict(status='verified', sha256='hash', r2_key='key')
+        for lane, fit_loss, infer_loss, expected in [
+            ('gru-clf', None, None, False),
+            ('lstm-clf', .4, None, False),
+            ('rnn-clf', float('nan'), .4, False),
+            ('gru-clf', .4, .4, True),
+            ('gru-clf', 10., 10., True),  # poor quality is still recorded quality
+            ('gru-reg', None, None, True),
+        ]:
+            with self.subTest(lane=lane, fit_loss=fit_loss, infer_loss=infer_loss):
+                race = dict(family='algos', lane=lane, opponents=[arm])
+                hit = dict(cell=dict(status='ok', quality=dict(accuracy=.9, logloss=fit_loss),
+                                     measurement=dict(completeness='complete', source=verified,
+                                                      artifacts=verified)),
+                           infer_cells=[dict(quality=dict(accuracy=.9, logloss=infer_loss))])
+                with patch.object(board.STORE, 'load', return_value={'record': hit}), \
+                     patch.object(board.STORE, 'candidates', return_value=[hit]), \
+                     patch.object(board.STORE, 'lookup', return_value=hit), \
+                     patch.object(board, 'race_settings', return_value={}), \
+                     patch.object(board, 'race_data_sha', return_value='data'), \
+                     patch.object(board, 'opponent_key', return_value={}), \
+                     patch.object(board, 'params_probe', return_value={arm: dict(params={})}):
+                    found = board.stored_opponents(dict(store_path='store', box={'gpu': {}}, rounds=1), race)
+                self.assertEqual(arm in found, expected)
+
     def test_plan_audit_only_requires_selected_or_retained_opponents(self):
         race = dict(id='r', family='neural', lane='gemm', dataset='synthetic',
                     our_arms={'ours': 'identical'}, arms=['ours', 'torch-gpu', 'missing-lib'])

@@ -4360,8 +4360,27 @@ def _build_seqmodel(lane, arm, D):
             out = torch.cat([run(S["fwd"], Xqt[i:i + SEQ_PREDICT_CHUNK]).float()
                              for i in range(0, Xqt.shape[0], SEQ_PREDICT_CHUNK)])
         S["pred"] = out.argmax(1) if clf else out[:, 0]
+        if clf:
+            S["logits"] = out
         _torch_sync(torch, dev)
-    return Runner(info, fit, lambda: {"pred": _torch_metric_array(S["pred"])}, infer, record=rec)
+
+    def outputs():
+        result = {"pred": _torch_metric_array(S["pred"])}
+        if clf:
+            # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27:
+            # recurrent opponents discarded logits and retained only labels,
+            # so their accuracy existed but log loss could never be scored.
+            # Keep the same inference call/clock on every vendor; probabilities
+            # are derived from its retained logits in this untimed scorer export.
+            # Evidence: full-measurement-20261027-r2 AMD gru/lstm classifier rows.
+            logits = _torch_metric_array(S["logits"])
+            result["logits"] = logits
+            probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
+            probabilities /= probabilities.sum(axis=1, keepdims=True)
+            result["proba1"] = probabilities[:, 1] if probabilities.shape[1] == 2 else probabilities
+        return result
+
+    return Runner(info, fit, outputs, infer, record=rec)
 
 
 # ---- DART -----------------------------------------------------------------

@@ -55,6 +55,8 @@ def test_repair_can_reuse_a_verified_opponent_without_forcing_a_retime(tmp_path)
     ("MATCHED", 1, {"r": {"status": "failed", "evidence_failure": "incomplete worker evidence",
                            "evidence_failure_kind": "metadata"}}, 2, 1),
     ("MATCHED", 0, {"r": {"evidence_failure": "R2 retention failed"}}, 1, 1),
+    ("MATCHED", 0, {"r": {"measurement_completion": {"status": "incomplete",
+        "issues": [{"arm": "torch-eager-fp32", "missing": ["quality metric: logloss"]}]}}}, 2, 0),
     ("REFUSED", 1, {}, 2, 0),
 ])
 def test_campaign_records_failures_continues_and_stops_on_retention_failure(
@@ -85,6 +87,10 @@ def test_campaign_records_failures_continues_and_stops_on_retention_failure(
                  '--wheel-manifest', str(wheel), '--stop-at', str(time.time() + 3600)])
     assert rc == expected_exit and len(calls) == expected_calls
     state = json.loads((out / 'campaign.json').read_text())
+    if (races.get('r', {}).get('measurement_completion') or {}).get('status') == 'incomplete':
+        assert state['incomplete_recipes'] == ids
+        assert all(r['status'] == 'incomplete' for r in state['recipes'].values())
+        assert all(r['results']['r']['measurement_completion']['issues'] for r in state['recipes'].values())
     if expected_exit and expected_calls == 1:
         assert state['stop_reason']
         assert state['recipes'][ids[1]]['status'] == 'pending'

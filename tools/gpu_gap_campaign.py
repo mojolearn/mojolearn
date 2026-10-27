@@ -1194,6 +1194,7 @@ def main(argv=None):
         row.update(result_error=result_error, status="process finished", returncode=rc, finished=time.time(), board=str(boardpath),
                    preflight=(board.get("preflight") or {}).get("verdict"),
                    results={rid: {"status": r.get("status"), "audit": r.get("audit"),
+                                  "measurement_completion": r.get("measurement_completion"),
                                   "evidence_failure": r.get("evidence_failure"),
                                   "evidence_failure_kind": r.get("evidence_failure_kind")}
                             for rid, r in board.get("races", {}).items()})
@@ -1204,6 +1205,10 @@ def main(argv=None):
             state.setdefault("skipped_recipes", []).append(race["id"])
         elif rc != 0 or not board.get("races"):
             row["status"] = "failed"
+        elif any((r.get("measurement_completion") or {}).get("status") == "incomplete"
+                 for r in board.get("races", {}).values()):
+            row["status"] = "incomplete"
+            state.setdefault("incomplete_recipes", []).append(race["id"])
         E.write(path, state)
         # LOG AS WE GO (2026-10-14): every recipe, refused or timed, uploads its log, preflight.json,
         # board.json and campaign row, then campaign.json, before the next recipe starts.
