@@ -89,7 +89,7 @@ struct NativeGenerationModel(Movable):
             self.primitive_call(0, [Int(hidden.unsafe_ptr()), self.embedding, ids], [rows, self.vocab, self.width], [])
             for i in range(len(self.layers)):  # driver-loop: ordered native layer descriptors
                 self.layers[i].visited = True
-                if len(self.layers[i].failure) != 0:
+                if self.layers[i].failure.byte_length() != 0:
                     raise Error(self.layers[i].failure)
                 var next = List[Float32](length=rows * self.width, fill=0)
                 var addresses = self.layers[i].addresses.copy()
