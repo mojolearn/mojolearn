@@ -13,7 +13,7 @@ def run():
     from mojolearn import (OneClassSVM, LocalOutlierFactor, NearestCentroid,
                           KNNImputer, LabelPropagation, PageRank, _backend)
     binding = _backend.binding('_mojolearn_x_neighbors', 'identical')
-    old_entries = {name: getattr(binding, name) for name in dir(binding) if name.startswith('xn_')}
+    old_entries = {name: getattr(binding, name) for name in dir(binding) if name.startswith('xn_') or name in ('x_neighbors_ocsvm_alpha_init', 'x_neighbors_unit_ff', 'x_neighbors_ocsvm_resident_idn')}
     @contextmanager
     def arm(enabled):
         os.environ['MOJOLEARN_CLASSICAL_NATIVE_DISPATCH'] = str(enabled)
@@ -71,7 +71,7 @@ def run():
             records.append(dict(case=name,status='failed',error=traceback.format_exc()))
     return dict(scope='77 packed operations through shared provider; selected public cases',
                 records=records,full_runtime_migration_qualified=False,
-                pending=['custom resident/capability entries','full metadata admission','all algorithms/refusals',
+                pending=['remaining kernel-feature/custom capability entries','full metadata admission','all algorithms/refusals',
                          'CPU runtime unless explicitly selected','other devices','performance'])
 
 if __name__=='__main__':

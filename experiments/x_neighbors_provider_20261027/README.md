@@ -26,3 +26,11 @@ lane. No compilation, timing or device qualification is claimed.
 This tranche remains partial: custom resident/capability entry dispatch, input
 and output metadata reuse, remaining Python-owned orchestration and other public
 frontdoors need subsequent migration. The candidate is not the default yet.
+
+The subsequent auxiliary tranche adds native OneClassSVM alpha initialization
+and resident execution plus PageRank vector normalization for their existing
+CPU/GPU owners. Compile-time capability words are read once into an operation-local
+`CompiledBindingSnapshot`, which retains the existing common provider. Nested
+helpers read native words from that snapshot; no input metadata is stored in a
+persistent provider cache. The host retains its existing non-resident solver.
+The public probe also poisons the corresponding legacy auxiliary entry names.

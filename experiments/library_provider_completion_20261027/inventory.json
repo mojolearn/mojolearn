@@ -29,7 +29,8 @@
         "Shared import-connected native estimator binding admission for selected SVM/KMeans method bodies",
         "SVC shared provider now owns pair/fold/gather/weight epilogues, Platt calibration, splitmix, and mode readback",
         "SVR fit/predict typed descriptors using original native solver and output layout",
-        "77-operation shared x_neighbors CPU/GPU tables; selected local/semi/graph/OneClassSVM frontdoors and packed calls admitted once"
+        "77-operation shared x_neighbors CPU/GPU tables; selected local/semi/graph/OneClassSVM frontdoors and packed calls admitted once",
+        "Operation-local shared binding metadata snapshot; native OneClass alpha/resident and PageRank unit normalization"
       ],
       "remaining": [
         "SVC/SVR Python-owned pair/fold/input/output orchestration and remaining metadata admission",
@@ -120,7 +121,8 @@
         }
       ],
       "source_changes": [
-        "77-operation shared x_neighbors CPU/GPU tables; selected local/semi/graph/OneClassSVM frontdoors and packed calls admitted once"
+        "77-operation shared x_neighbors CPU/GPU tables; selected local/semi/graph/OneClassSVM frontdoors and packed calls admitted once",
+        "Operation-local shared binding metadata snapshot; native OneClass alpha/resident and PageRank unit normalization"
       ],
       "remaining": [
         "ordinary/resident prediction and index ownership/dispatch",
