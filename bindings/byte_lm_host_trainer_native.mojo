@@ -18,6 +18,12 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module
+from bindings.native_numpy_metadata import native_numpy_type
+from bindings.native_buffer_owner import native_storage_allocate
+from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of
+from providers.python.training_buffer_pyapi import training_f32_cast_owned
+from core.training_state_validation import training_byte_shape_validate
+from core.sha256 import sha256_hex_addr
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -78,7 +84,7 @@ def _f32_array(n: Int, context: PythonObject) raises -> PythonObject:
 def _host_provider(fields: PythonObject) raises -> PythonObject:
     var factory = neural_descriptor_entry(fields["_binding"], "byte_lm_host_api_v1")
     var provider = neural_descriptor_reuse(py_get(fields, "_native_provider"), factory,
-        "mojolearn.training.byte_lm_host.v1", 4)
+        "mojolearn.training.byte_lm_host.v1", 5)
     py_setitem(fields, "_native_provider", provider)
     return provider
 
@@ -107,6 +113,142 @@ def _host_words(fields: PythonObject, threaded: Int = 0, threads: Int = 0,
     words.append(length)
     words.append(completed)
     return words^
+
+
+def _host_shape(config: PythonObject, context: PythonObject) raises -> Tuple[_Shape, PythonObject]:
+    var bi = native_loaded_module("builtins")
+    var state = bi.dict()
+    var object = config
+    if config is not None:
+        if py_type(config) is not context["byte_lm_config_class"]:
+            raise Error("TypeError: shape must be a ByteLanguageModelConfig")
+        var fields = py_fields(config)
+        classical_admit_value(fields, context)
+        py_setitem(state, "model_shape", fields)
+    var shape = _shape_of(state)
+    training_byte_shape_validate(shape.d, shape.chunked)
+    if config is None:
+        object = native_storage_allocate(context["byte_lm_config_class"])
+        var fields = py_fields(object)
+        var names = [String("batch"), String("length"), String("d_model"), String("n_heads"), String("n_kv"),
+                     String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size")]
+        for i in range(9):  # driver-loop: over immutable default model dimensions
+            py_setitem(fields, names[i], shape.d[i])
+        py_setitem(fields, "chunked_lm_head_v2", shape.chunked)
+    return (shape^, object)
+
+
+def _host_profile(fields: PythonObject) raises -> PythonObject:
+    var provider = _host_provider(fields)
+    var result = List[String](length=1, fill=String(""))
+    _ = neural_descriptor_execute(provider, 4, [Int(result.unsafe_ptr())], _host_words(fields), List[Float64](), False)
+    return PythonObject(result[0])
+
+
+def byte_lm_host_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    if py_type(trainer) is not context["byte_lm_host_trainer_class"]:
+        raise Error("TypeError: host training requires the connected native trainer class")
+    classical_connect_numpy(context)
+    var profile = py_get(context["byte_lm_profile_defaults"], "training", PythonObject("fp32_v1"))
+    if py_type(profile) is not bi.str or not Bool(py=context["byte_lm_profiles"][profile]["training"]):
+        raise Error("NotImplementedError: the selected numeric profile is unavailable for Byte-LM training")
+    var captured = _host_shape(args[3], context)
+    var shape = captured[0]
+    var binding = context["byte_lm_host_binding"]
+    if py_type(binding) is bi.str:
+        raise Error(String(binding))
+    var entry = neural_descriptor_entry(binding, "byte_lm_host_train_step")
+    var n = shape.n_total()
+    var parameters = training_f32_cast_owned(args[0], [n], "parameters", context)
+    var moment = _f32_array(n, context) if args[1] is None else training_f32_cast_owned(args[1], [n], "m", context)
+    var variance = _f32_array(n, context) if args[2] is None else training_f32_cast_owned(args[2], [n], "v", context)
+    if py_type(args[4]) is not bi.int:
+        raise Error("completed_steps must be an int")
+    var completed = Int(py=args[4])
+    if completed < 0:
+        raise Error("completed_steps must not be negative")
+    var betas = args[6]
+    classical_admit_value(betas, context)
+    var beta_cls = py_type(betas)
+    var native_beta = beta_cls is bi.list or beta_cls is bi.tuple or beta_cls is bi.range or beta_cls is bi.memoryview or beta_cls is context["array_type"]
+    var numpy = py_get(context["modules"], "numpy")
+    if numpy is not None:
+        native_beta = native_beta or beta_cls is native_numpy_type("ndarray", context)
+    if not native_beta or len(betas) != 2:
+        raise Error("betas must contain two real numbers")
+    var values = Python.list(args[5], betas[0], betas[1], args[7], args[8])
+    classical_admit_value(values, context)
+    var names = [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]
+    var scalars = List[Float64]()
+    var scalar_objects = Python.list()
+    for i in range(5):  # driver-loop: over optimizer metadata captured once
+        var cls = py_type(values[i])
+        var floating = cls is bi.float
+        if numpy is not None:
+            floating = floating or cls is native_numpy_type("float64", context)
+        if cls is not bi.int and not floating:
+            raise Error(names[i] + " must be a real number")
+        var value = Float64(py=values[i])
+        scalars.append(value)
+        _ = py_call(scalar_objects.append, value)
+    if not (scalars[0] > 0 and scalars[3] > 0):
+        raise Error("lr and eps must be positive")
+    if not (scalars[1] >= 0 and scalars[1] < 1 and scalars[2] >= 0 and scalars[2] < 1):
+        raise Error("betas must be in [0, 1)")
+    if scalars[4] < 0:
+        raise Error("weight_decay must not be negative")
+    var fields = py_fields(trainer)
+    py_setitem(fields, "_shape", captured[1])
+    py_setitem(fields, "_native", shape.native_shape())
+    py_setitem(fields, "_binding", binding)
+    py_setitem(fields, "_train_entry", entry)
+    py_setitem(fields, "_parameters", parameters)
+    py_setitem(fields, "_m", moment)
+    py_setitem(fields, "_v", variance)
+    py_setitem(fields, "_completed", completed)
+    py_setitem(fields, "_scalars", scalar_objects)
+    py_setitem(fields, "_step_words", Python.tuple(shape.batch(), shape.length() + 1, shape.vocab(), n))
+    py_setitem(fields, "_gradient", PythonObject(None))
+    _ = _host_provider(fields)
+    return PythonObject(None)
+
+
+def byte_lm_host_from_state(cls: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if cls is not context["byte_lm_host_trainer_class"]:
+        raise Error("TypeError: host restoration requires the connected native trainer class")
+    var bi = native_loaded_module("builtins")
+    var options = args[4]
+    classical_admit_value(options, context)
+    if py_type(options) is not bi.dict:
+        raise Error("TypeError: host trainer options require native dictionary storage")
+    var keys = py_call(bi.list, options)
+    for i in range(len(keys)):  # driver-loop: over admitted constructor keyword metadata
+        var key = String(keys[i])
+        if key != "shape" and key != "lr" and key != "betas" and key != "eps" and key != "weight_decay":
+            raise Error("TypeError: host trainer received an unexpected keyword argument '" + key + "'")
+    var constructor = Python.tuple(args[0], args[1], args[2], py_get(options, "shape"), args[3],
+        py_get(options, "lr", PythonObject(.001)), py_get(options, "betas", Python.tuple(.9, .999)),
+        py_get(options, "eps", PythonObject(.00000001)), py_get(options, "weight_decay", PythonObject(.01)))
+    var result = native_storage_allocate(cls)
+    _ = byte_lm_host_construct(result, constructor, context)
+    return result
+
+
+def byte_lm_host_metadata(trainer: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
+    if py_type(trainer) is not context["byte_lm_host_trainer_class"]:
+        raise Error("TypeError: host metadata requires the connected native trainer class")
+    var fields = py_fields(trainer)
+    if operation == "profile":
+        return _host_profile(fields)
+    if operation == "parameters_sha256":
+        var value = fields["_parameters"]
+        classical_admit_value(value, context)
+        return PythonObject(sha256_hex_addr(Int(py=classical_address(value)), Int(py=value.size) * 4))
+    var name = String("_" + operation)
+    if operation == "completed_steps":
+        name = "_completed"
+    return fields[name]
 
 
 def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -177,6 +319,12 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
+        if operation == "construct":
+            return byte_lm_host_construct(call[0], call[2], call[3]).steal_data()
+        if operation == "from_state":
+            return byte_lm_host_from_state(call[0], call[2], call[3]).steal_data()
+        if operation == "shape" or operation == "profile" or operation == "completed_steps" or operation == "parameters" or operation == "m" or operation == "v" or operation == "gradient" or operation == "parameters_sha256":
+            return byte_lm_host_metadata(call[0], operation, call[3]).steal_data()
         if operation == "native_provider_info":
             return neural_descriptor_info(py_fields(call[0])["_native_provider"]).steal_data()
         if operation != "train_step" and operation != "loss":
@@ -191,6 +339,8 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if text.startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if text.startswith("NotImplementedError:"):
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if text.startswith("ImportError:"):
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

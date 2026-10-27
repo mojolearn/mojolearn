@@ -76,3 +76,26 @@ def test_host_byte_lm_uses_common_provider_and_shared_native_execution():
     assert 'byte_lm_host_api_v1' in binding
     ids = frontend.split('def _ids_i32(')[1].split('def _f32_array(')[0]
     assert ids.count('value.shape') == 1 and ids.count('value.strides') == 1
+
+
+def test_host_trainer_public_frontdoors_and_shared_metadata():
+    import ast
+    tree = ast.parse((ROOT / 'python/mojolearn/_byte_lm_host.py').read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'LanguageModelHostTrainer')
+    expected = {'__init__', 'from_state', 'shape', 'profile', 'completed_steps', 'parameters_',
+                'm_', 'v_', 'gradient_', 'parameters_sha256', 'train_step', 'loss'}
+    for method in cls.body:
+        if not isinstance(method, ast.FunctionDef) or method.name not in expected:
+            continue
+        body = method.body
+        if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            body = body[1:]
+        assert len(body) == 1 and isinstance(body[0], ast.Return), method.name
+        assert body[0].value.func.id == '_HOST_TRAIN', method.name
+        expected.remove(method.name)
+    assert not expected
+    for name in ('bindings/byte_lm_host_trainer_native.mojo', 'bindings/byte_lm_trainer_native.mojo'):
+        assert 'from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of' in (ROOT / name).read_text()
+    shared = (ROOT / 'providers/python/training_buffer_pyapi.mojo').read_text().split('def training_f32_cast_owned(')[1]
+    assert shared.count('value.shape') == 1 and shared.count('value.strides') == 1
+    assert 'native_strides, item, kind, True, pointer)' in shared

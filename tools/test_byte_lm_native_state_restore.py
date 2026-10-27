@@ -31,8 +31,9 @@ def test_buffer_copy_and_state_value_checks_are_native():
         for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
             assert forbidden not in source
     boundary = (ROOT / 'providers/python/training_buffer_pyapi.mojo').read_text()
-    assert boundary.count('var shape = value.shape') == 1
-    assert boundary.count('var strides = value.strides') == 1
+    strict = boundary.split('def training_words32_owned(')[1].split('def training_f32_cast_owned(')[0]
+    assert strict.count('var shape = value.shape') == 1
+    assert strict.count('var strides = value.strides') == 1
     assert 'training_copy_words32(' in boundary
 
 
