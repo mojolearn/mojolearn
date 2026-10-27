@@ -229,6 +229,28 @@ def _parameters(race, cell):
     return (record or {}).get("params") or {}
 
 
+def same_neural_input_bytes(race, ours, opp):
+    """Resolve old wheel-derived dataset labels with retained tensor digests."""
+    if race.get("family") != "neural":
+        return False
+    identities = [((c.get("measurement") or {}).get("dataset") or {}).get("identity")
+                  for c in (ours, opp)]
+    if not all(isinstance(i, str) and i.startswith("mojolearn-sources:") for i in identities):
+        return False
+    left = _parameters(race, ours).get("input_arrays")
+    right = _parameters(race, opp).get("input_arrays")
+    if not isinstance(left, dict) or not left or left != right:
+        return False
+    for value in left.values():
+        if (not isinstance(value, dict)
+                or not re.fullmatch(r"[0-9a-f]{64}", str(value.get("sha256", "")))
+                or not isinstance(value.get("dtype"), str) or not value["dtype"]
+                or not isinstance(value.get("shape"), list) or not value["shape"]
+                or not all(type(n) is int and n > 0 for n in value["shape"])):
+            return False
+    return True
+
+
 def _pair_problems(race, ours, opp):
     bad, missing = [], []
     if timed_not_scored(ours):
@@ -262,7 +284,12 @@ def _pair_problems(race, ours, opp):
                 missing.append("scored classical output bytes lack verified archive membership and digest")
     mo, mt = ours.get("measurement") or {}, opp.get("measurement") or {}
     if mo and mt:
-        if (mo.get("dataset") or {}).get("identity") != (mt.get("dataset") or {}).get("identity"):
+        # FAIRNESS FIX (2026-10-13 audit): neural dataset labels used the
+        # whole wheel hash, which changes for unrelated packaging/repairs.
+        # Preserve both original labels; exact typed input-array digests can
+        # prove the input bytes unchanged without reracing valid opponents.
+        if ((mo.get("dataset") or {}).get("identity") != (mt.get("dataset") or {}).get("identity")
+                and not same_neural_input_bytes(race, ours, opp)):
             bad.append("different dataset identity")
         if mo.get("shape") and mt.get("shape") and mo["shape"] != mt["shape"]:
             bad.append("different measured input shape")

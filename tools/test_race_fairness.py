@@ -32,6 +32,30 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_neural_wheel_change_reuses_only_exact_typed_input_evidence(self):
+        rr = race("gemm", [("torch-gpu", 10, {"family": "neural"})])
+        rr["family"] = "neural"
+        for i, c in enumerate(rr["cells"]):
+            c["params"]["params"]["input_arrays"] = {
+                "a": dict(sha256="a" * 64, dtype="float32", shape=[4, 4]),
+                "b": dict(sha256="b" * 64, dtype="float32", shape=[4, 4])}
+            c["measurement"] = dict(completeness="complete", source={"status": "verified"},
+                                    artifacts={"status": "verified"}, shape="4x4x4",
+                                    dataset={"identity": "mojolearn-sources:wheel" + str(i)})
+        original = copy.deepcopy(rr)
+        RF.apply(board(r=rr))
+        self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "MATCHED")
+        self.assertEqual(rr["cells"][1]["measurement"], original["cells"][1]["measurement"])
+        for change in ("digest", "missing", "dtype", "dataset"):
+            bad = copy.deepcopy(original)
+            arrays = bad["cells"][1]["params"]["params"]["input_arrays"]
+            if change == "digest": arrays["a"]["sha256"] = "c" * 64
+            elif change == "missing": del arrays["a"]["sha256"]
+            elif change == "dtype": arrays["a"]["dtype"] = "float64"
+            else: bad["cells"][1]["measurement"]["dataset"]["identity"] = "different-dataset"
+            RF.apply(board(r=bad))
+            self.assertEqual(bad["audit"]["identical/fit"]["rerace"], "x", change)
+
     def test_alternate_clock_does_not_replace_required_comparison(self):
         for lib in ("cupy", "gpytorch"):
             rr = race("solver", [(lib + "-gpu", 30, {"library": lib, "family": "algos",
