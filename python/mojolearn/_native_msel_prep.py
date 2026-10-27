@@ -92,8 +92,11 @@ def connect(context, register, registry):
             methods['decision_function'] = ('trees_boost_decision_function', (arg(0),))
         add(getattr(trees, name), trees._TREES, trees._TREES_CONTEXT, methods)
 
+    # The public SVM/kernel-method doors admit their import-connected binding
+    # inside the shared native provider. Composed calls use the same None slot,
+    # so replaced bindings and operation metadata follow that admission too.
     for cls, prefix in ((svm.SVC, 'svc'), (svm.SVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
-        native = binding('_mojolearn_svm')
+        native = constant(None)
         methods = {
             'fit': ('family_svc_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
             'predict': ('family_svc_' + prefix + '_predict', (native, arg(0))),
@@ -106,7 +109,7 @@ def connect(context, register, registry):
         add(cls, svm._NATIVE, svm._NATIVE_CONTEXT, methods)
 
     for cls, prefix in ((linear_svm.LinearSVC, 'svc'), (linear_svm.LinearSVR, 'svr')):  # glue: fixed ABI metadata connected once during package import
-        native = binding('_mojolearn_estimators')
+        native = constant(None)
         methods = {
             'fit': ('family_svc_linear_' + prefix + '_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
             'predict': ('family_svc_linear_svc_predict' if prefix == 'svc' else 'family_svm_linear_svr_predict', (native, arg(0))),
@@ -135,7 +138,7 @@ def connect(context, register, registry):
     ):
         add(cls, gp._NATIVE, gp._NATIVE_CONTEXT, {}, parameters=names)
 
-    native = binding('_mojolearn_kernel_methods')
+    native = constant(None)
     add(km.KernelRidge, km._NATIVE, km._NATIVE_CONTEXT, {
         'fit': ('family_km_krr_fit', (native, arg(0), arg(1), keyword('sample_weight'))),
         'predict': ('family_km_krr_predict', (native, arg(0))),
