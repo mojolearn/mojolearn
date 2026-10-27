@@ -67,3 +67,33 @@ The packed oracle shares the native engine: it does not alone prove equivalence
 to an older source freeze. Root owns focused Mac compilation, public execution
 and the cross-freeze bit check. No runtime or performance claim follows from
 source checks. Other vendors remain untested until their actual target builds.
+
+## Xseq extension
+
+The follow-up extends the same model table to the existing native RNN/MLP
+engines, numeric label sorting, and consumed-output helpers (argmax, minimum
+loss, binary threshold and seeded uniform initialization). There is still one
+provider implementation, shared by Sequential and xseq. The helper route keeps
+the original default-mode base-helper policy, including size limits, NaN-first
+minimum semantics, sabotage/identity switches and host fallbacks. No numerical
+kernel or seeded initialization order changes. Numeric labels are published by
+a native dtype-preserving byte gather; string/object compatibility remains
+explicitly outside the callback-free claim.
+
+The extension admits shapes/options/addresses before each engine call and uses
+only typed native lists inside the engine. MLP fitted weights remain mutable:
+every prediction repacks the current layer arrays. Original target/input/output
+owners stay alive through the synchronous native call.
+
+Five authored candidate probes cover RNN/LSTM/GRU regression and binary/multiclass
+MLP. They poison the old engine/helper entries, compare repeated seeded state,
+check consumed predictions, and use the strict runtime callback audit. These
+probes do not substitute for the frozen-source Mac bit comparison. They were
+syntax/source checked only in the lane.
+
+Remaining outside this extension: built-in optional recurrent LR schedules
+still use the optimizer schedule compiled entry through CPython; xseq scoring
+has separate metrics dispatch; custom object/string label handling still uses
+Python-compatible comparison/conversion. Program/Session scalar/protocol
+admission and Session construction remain under audit. No all-neural or
+all-supported-input qualification is claimed by this commit.

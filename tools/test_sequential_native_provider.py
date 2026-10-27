@@ -23,7 +23,7 @@ def test_sequential_no_longer_dispatches_whole_model_through_cpython():
         assert f'entries["{entry}"]' not in text
     assert 'model_counts_native(native_program, native_table)' in text
     assert 'neural_descriptor_reuse(' in text
-    assert 'String(MODEL_ABI_NAME), 4)' in text
+    assert 'String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)' in text
     for operation in ('MODEL_FIT', 'MODEL_FIT_LABELS', 'MODEL_PREDICT', 'MODEL_PREDICT_LABELS'):
         assert f'neural_descriptor_execute(provider, {operation},' in text
 
