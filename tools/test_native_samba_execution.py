@@ -46,3 +46,27 @@ def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():
     assert 'layer.tape = True' in boundary
     assert 'publication.publish_reports = False' in boundary
     assert 'neural_descriptor_construct(publication.provider' in boundary
+
+
+def test_resident_lifecycle_uses_shared_owner_and_validates_before_reserving():
+    native=(ROOT/'training/native_resident_dispatch.mojo').read_text()
+    for function in ('samba_resident_forward', 'samba_resident_train_step',
+                     'samba_resident_accumulated_step', 'resident_open',
+                     'resident_upload', 'resident_download', 'resident_close'):
+        assert f'return {function}(' in native
+    assert 'owner[].busy = True' in native and 'owner[].busy = False' in native
+    boundary=(ROOT/'providers/python/samba_resident_pyapi.mojo').read_text()
+    assert 'neural_descriptor_adopt(provider, handle, 13, [12])' in boundary
+    step=boundary.split('def samba_resident_native_step(')[1]
+    assert step.index('neural_descriptor_execute(provider, 19,') < step.index('neural_descriptor_reserved_execute(')
+    assert '[Int(py=opt["_res"]), Int(py=fields["n_total"])], [], False)' in step
+    assert 'samba_resident_native_forward(fields, config, entries, ids)' in (ROOT/'bindings/samba_inference_native.mojo').read_text()
+
+
+def test_native_lock_is_an_exact_samba_admission_owner():
+    import ast
+    source=(ROOT/'python/mojolearn/_native_samba_bridge.py').read_text()
+    ast.parse(source)
+    assert '"opaque_types": (_thread.LockType, type(_thread.RLock()), _OperationLock)' in source
+    assert 'classes = tuple(dict.fromkeys(classes))' in source
+    assert 'classes + (array_cls,)' in source

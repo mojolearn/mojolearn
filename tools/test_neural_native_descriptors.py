@@ -37,7 +37,9 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
     for family in ('embedding', 'rms_norm', 'linear'):
         for direction in ('forward', 'backward'):
             assert f'return samba_{family}_{direction}_host(' in native
-    assert native.count('Float32(f[0])') == 2
+    for op in (2, 3):
+        branch = native.split(f'    if op == {op}:')[1].split('    if op ==')[0]
+        assert branch.count('Float32(f[0])') == 1
     assert 'MojoNeuralTrainingContextIdentical' in native
     mamba = read('mamba/native_state_dispatch.mojo')
     assert '_mamba1_run(a, b, l, dm, step, position)' in mamba
@@ -48,9 +50,9 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
 def test_native_descriptors_are_checked_named_private_operations():
     abi = read('core/native_descriptor_abi.mojo')
     assert 'mojolearn.training.primitives.v1' in abi and 'mojolearn.mamba.state.v1' in abi
-    for file in ('training/native_primitive_dispatch.mojo', 'mamba/native_state_dispatch.mojo'):
+    for file, count in (('training/native_primitive_dispatch.mojo', 25), ('mamba/native_state_dispatch.mojo', 6)):
         body = read(file)
-        assert 'if op < 0 or op >= 6:' in body
+        assert f'if op < 0 or op >= {count}:' in body
         assert 'if result == 0:' in body
         assert 'native_descriptor_report(problem, context, sink)' in body
     for file in ('providers/python/neural_descriptor_pyapi.mojo', 'core/native_descriptor_call.mojo'):

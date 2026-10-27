@@ -5,6 +5,7 @@ The resident model/session remains the persistent numerical owner. Public
 classes and buffer exporters remain CPython-owned interface records; this
 module does not claim that all public state has native struct ownership.
 """
+from providers.python.samba_resident_pyapi import samba_resident_native_forward
 from std.python import Python, PythonObject
 from providers.python.samba_execution_pyapi import samba_provider_forward
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
@@ -182,6 +183,8 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
 
 
 def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject) raises -> PythonObject:
+    if py_get(fields, "_native_primitives") is not None:
+        return samba_resident_native_forward(fields, config, entries, ids)
     var bi = Python.import_module("builtins")
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)

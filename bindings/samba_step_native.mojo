@@ -4,6 +4,8 @@
 This public execution owner accepts native built-in schedule configurations;
 arbitrary Python callbacks are refused before state mutation.
 """
+from providers.python.samba_resident_pyapi import samba_resident_provider, samba_resident_session, samba_resident_native_step
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
 from std.python import Python, PythonObject
 from std.memory import memcpy
 from std.os import getenv
@@ -28,7 +30,7 @@ def _samba_moments(opt: PythonObject, context: PythonObject) raises -> PythonObj
     return result
 
 
-def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: PythonObject) raises:
+def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: PythonObject, provider: PythonObject) raises:
     if opt["_res"] is not None or opt["_resident_wanted"] is PythonObject(False):
         return
     var bi = Python.import_module("builtins")
@@ -46,10 +48,20 @@ def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: Pyt
     if py_type(owner) is not context["admission"]["module_type"]:
         raise Error("TypeError: Samba resident optimizer requires its owning native extension")
     py_setitem(opt, "_res_binding", owner)
-    py_setitem(opt, "_res", py_call(open_slot, opt["n_total"]))
+    if provider is None:
+        py_setitem(opt, "_res", py_call(open_slot, opt["n_total"]))
+    else:
+        if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not owner:
+            raise Error("Samba optimizer provider belongs to another binding")
+        py_setitem(opt, "_res", PythonObject(neural_descriptor_execute(provider, 20, [], [Int(py=opt["n_total"])], [])))
+        py_setitem(opt, "_resident_native_provider", provider)
     if not Bool(py=opt["_pristine"]):
         var moments = _samba_moments(opt, context)
-        _ = py_call(_native_function(entries, "optimizer_resident_upload"), opt["_res"], moments[0]._addr, moments[1]._addr, opt["n_total"])
+        if provider is None:
+            _ = py_call(_native_function(entries, "optimizer_resident_upload"), opt["_res"], moments[0]._addr, moments[1]._addr, opt["n_total"])
+        else:
+            _ = neural_descriptor_execute(provider, 23, [Int(py=moments[0]._addr), Int(py=moments[1]._addr)],
+                [Int(py=opt["_res"]), Int(py=opt["n_total"])], [])
         _ = moments^
     py_setitem(opt, "_host_fresh", True)
 
@@ -100,20 +112,25 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
+    var provider = samba_resident_provider(fields, entries)
     var enabled = True
     for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
         enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
-    if not enabled or not Bool(py=_native_function(entries, "samba_resident_enabled")()):
+    if not enabled:
+        return PythonObject(None)
+    if (provider is None and not Bool(py=_native_function(entries, "samba_resident_enabled")())) or (provider is not None and neural_descriptor_execute(provider, 24, [], [], [], False) == 0):
         return PythonObject(None)
     if accumulation > 1 and not Bool(py=py_call(bi.hasattr, entries, "samba_resident_accumulated_step")):
         return PythonObject(None)
-    if Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
+    if provider is None and Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
         return PythonObject(None)
-    _samba_open_optimizer(opt, entries, context)
+    _samba_open_optimizer(opt, entries, context, provider)
     if opt["_res"] is None:
         return PythonObject(None)
     var session = py_get(fields, "_resident_handle")
-    if session is None:
+    if provider is not None:
+        session = samba_resident_session(fields, config, provider)
+    elif session is None:
         var kinds = Python.list()
         for i in range(len(config["layers"])):  # driver-loop: over model layer kind metadata
             _ = py_call(kinds.append, 0 if String(config["layers"][i]) == "mamba3" else 1)
@@ -135,9 +152,12 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
     _ = py_call(args.extend, plan)
     var info = generation_array([3])
     var loss = generation_array([1])
-    _ = py_call(_native_function(entries, "samba_resident_accumulated_step" if accumulation > 1 else "samba_resident_step"), session,
-        Python.list(fields["flat"]._addr, ids._addr, targets._addr, opt["offsets"]._addr,
-                    opt["buf_initialized"]._addr, info._addr, loss._addr), args, opt["_res"])
+    if provider is not None:
+        samba_resident_native_step(fields, config, provider, opt, ids, targets, info, loss, plan, accumulation, total_count)
+    else:
+        _ = py_call(_native_function(entries, "samba_resident_accumulated_step" if accumulation > 1 else "samba_resident_step"), session,
+            Python.list(fields["flat"]._addr, ids._addr, targets._addr, opt["offsets"]._addr,
+                        opt["buf_initialized"]._addr, info._addr, loss._addr), args, opt["_res"])
     _ = loss  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     py_setitem(opt, "_host_fresh", False)
@@ -299,7 +319,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if not device_parameters:
         py_setitem(opt, "packed_", True)
     var info = generation_array([3])
-    _samba_open_optimizer(opt, entries, context)
+    _samba_open_optimizer(opt, entries, context, samba_resident_provider(fields, entries))
     if device_parameters:
         if opt["_res"] is None or not Bool(py=py_call(bi.hasattr, entries, "optimizer_resident_step_io")):
             raise Error("RuntimeError: Samba optimizer device parameters require their native resident owner")

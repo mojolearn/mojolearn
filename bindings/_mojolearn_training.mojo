@@ -1077,6 +1077,11 @@ def samba_head_loss_binding(
 # ===========================================================================
 
 
+def samba_resident_native_handle_binding(session: PythonObject) raises -> PythonObject:
+    # Checked ownership admission for sessions created by the public binding.
+    return PythonObject(Int(session.downcast_value_ptr[SambaResidentSession]()))
+
+
 def samba_resident_enabled_binding() raises -> PythonObject:
     """Whether this build carries the resident Samba entries."""
     return PythonObject(IDN_SAMBA_RESIDENT_STEP)
@@ -1460,6 +1465,7 @@ def build__mojolearn_training() -> PythonObject:
         comptime if MLP_MULTISTEP:
             m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
+        m.def_function[samba_resident_native_handle_binding]("samba_resident_native_handle_v1")
         m.def_function[small_mlp_api_binding]("small_mlp_api_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
