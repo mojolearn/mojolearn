@@ -344,7 +344,7 @@ def _provider(fields: PythonObject, binding: PythonObject) raises -> PythonObjec
     if factory is None:
         return PythonObject(None)
     var provider = neural_descriptor_reuse(py_get(fields, "_native_provider"), factory,
-        "mojolearn.training.byte_lm.v1", 11)
+        "mojolearn.training.byte_lm.v1", 12)
     py_setitem(fields, "_native_provider", provider)
     return provider
 
@@ -1365,6 +1365,90 @@ def _runtime_metadata(fields: PythonObject, shape: _Shape, context: PythonObject
     return result
 
 
+def _attention_stage_report(fields: PythonObject, shape: _Shape) raises -> PythonObject:
+    if not Bool(py=fields["_session_open"]) or fields["_native_session"] is None:
+        return PythonObject(None)
+    var binding = fields["_session_binding"]
+    var provider = _provider(fields, binding)
+    var info = List[Int]()
+    if provider is None:
+        # Retain the supported older compiled binding readback until reconnected;
+        # the current table uses the same pure-native collector directly.
+        var legacy = py_call(_entry(binding, "byte_lm_session_info"), fields["_native_session"])
+        for i in range(len(legacy)):  # driver-loop: over captured legacy compiled status metadata
+            info.append(Int(py=legacy[i]))
+    else:
+        var handle = _session_handle(fields, binding, provider)
+        var values = List[Int](length=17 + 5 * shape.layers(), fill=0)
+        var size = neural_descriptor_execute(provider, 11, [handle, Int(values.unsafe_ptr())],
+            [len(values)], List[Float64](), False)
+        for i in range(size):  # driver-loop: over completed native stage metadata
+            info.append(values[i])
+    if len(info) < 10:
+        return PythonObject(None)
+    var fwd = info[4]
+    var aexp = info[5]
+    var bwd = info[6]
+    var report = _b().dict()
+    py_setitem(report, "forward_eager_cells", fwd)
+    py_setitem(report, "forward_aexp_cells", aexp)
+    py_setitem(report, "backward_eager_cells", bwd)
+    py_setitem(report, "forward_eager_bytes", fwd * 4)
+    py_setitem(report, "forward_aexp_bytes", aexp * 4)
+    py_setitem(report, "backward_eager_bytes", bwd * 4)
+    py_setitem(report, "eager_bytes", (fwd + bwd) * 4)
+    py_setitem(report, "total_bytes", (fwd + aexp + bwd) * 4)
+    py_setitem(report, "layers_grown_forward", info[7])
+    py_setitem(report, "layers_grown_backward", info[8])
+    py_setitem(report, "layers_full_aexp", info[9])
+    var layers = shape.layers()
+    py_setitem(report, "layers", layers)
+    if len(info) >= 12:
+        var forward = info[10]
+        var backward = info[11]
+        py_setitem(report, "stage_lists", Python.tuple(forward, backward))
+        layers = min(layers, min(forward, backward))
+    if len(info) >= 12 + 3 * layers:
+        var names = [String("NOT_ATTEMPTED"), String("FUSED_RAN"), String("FUSED_REFUSED_REGIME"),
+            String("FUSED_CORNER"), String("FUSED_SKIPPED_STICKY")]
+        for offset in range(2):  # driver-loop: over forward and backward status fields
+            var values = Python.list()
+            var counts = List[Int](length=5, fill=0)
+            for layer in range(layers):  # driver-loop: over admitted layer metadata
+                var code = info[12 + 3 * layer + offset]
+                _ = py_call(values.append, code)
+                if code >= -1 and code <= 3:
+                    counts[code + 1] += 1
+            var mapped = _b().dict()
+            for i in range(5):  # driver-loop: over fixed status names
+                py_setitem(mapped, names[i], counts[i])
+            var key = String("forward_status" if offset == 0 else "backward_status")
+            py_setitem(report, key, values)
+            py_setitem(report, key + "_counts", mapped)
+        var materialized = Python.list()
+        for layer in range(layers):  # driver-loop: over admitted layer metadata
+            _ = py_call(materialized.append, Bool(info[14 + 3 * layer]))
+        py_setitem(report, "attn_materialized", materialized)
+    if len(info) > 12 + 3 * layers:
+        py_setitem(report, "exact_tail_guard", Bool(info[12 + 3 * layers]))
+    if len(info) > 14 + 3 * layers:
+        py_setitem(report, "release_eager", Bool(info[13 + 3 * layers]))
+        py_setitem(report, "released_eager_bytes", info[14 + 3 * layers] * 4)
+    if len(info) >= 16 + 4 * layers:
+        py_setitem(report, "sticky_eager", Bool(info[15 + 3 * layers]))
+        var preferred = Python.list()
+        for layer in range(layers):  # driver-loop: over admitted layer metadata
+            _ = py_call(preferred.append, Bool(info[16 + 3 * layers + layer]))
+        py_setitem(report, "layers_prefer_eager", preferred)
+    if len(info) >= 17 + 5 * layers:
+        py_setitem(report, "repair_masked_tail", Bool(info[16 + 4 * layers]))
+        var sites = Python.list()
+        for layer in range(layers):  # driver-loop: over admitted layer metadata
+            _ = py_call(sites.append, info[17 + 4 * layers + layer])
+        py_setitem(report, "backward_repair_sites", sites)
+    return report
+
+
 def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
@@ -1392,6 +1476,8 @@ def byte_lm_consume(trainer: PythonObject, operation: String, args: PythonObject
             result = native_json_parse(PythonObject(_transport_json(state["data_schedule"])))
         elif operation == "step":
             result = state["completed_steps"]
+        elif operation == "attention_stage_report":
+            result = _attention_stage_report(fields, shape)
         elif operation == "run_metadata":
             result = _runtime_metadata(fields, shape, context)
         elif operation == "export_state":
@@ -1450,7 +1536,7 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return byte_lm_train_step(call[0], call[2], call[3], operation == "train_step").steal_data()
         if operation == "logits" or operation == "next_bytes":
             return byte_lm_logits(call[0], call[2], call[3], operation == "next_bytes").steal_data()
-        if operation == "parameter_registry" or operation == "run_metadata" or operation == "export_state" or operation == "export_gradients" or operation == "close" or operation == "parameters" or operation == "step" or operation == "data_schedule":
+        if operation == "attention_stage_report" or operation == "parameter_registry" or operation == "run_metadata" or operation == "export_state" or operation == "export_gradients" or operation == "close" or operation == "parameters" or operation == "step" or operation == "data_schedule":
             return byte_lm_consume(call[0], operation, call[2], call[3]).steal_data()
         if operation == "native_provider_info":
             var fields = py_fields(call[0])

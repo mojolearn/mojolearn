@@ -52,3 +52,20 @@ def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
     assert 'return io_error.restore()' in source
     assert '_initialize_state_fields(restored, state,' in checkpoint
     assert 'py_call(trainer' not in checkpoint
+
+
+def test_attention_report_uses_one_native_status_snapshot():
+    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    report = source.split('def _attention_stage_report(')[1].split('def byte_lm_consume(')[0]
+    assert 'neural_descriptor_execute(provider, 11,' in report
+    assert 'var info = List[Int]()' in report
+    owner = (ROOT / 'training/byte_lm_native_status.mojo').read_text()
+    assert owner.count('byte_attention_eager_cells(owner.trainer.value())') == 1
+    assert 'PythonObject' not in owner and 'std.python' not in owner
+    binding = (ROOT / 'bindings/_mojolearn_byte_lm.mojo').read_text()
+    legacy = binding.split('def byte_lm_session_info_binding(')[1].split('def _byte_config(')[0]
+    assert 'byte_lm_status(owner[])' in legacy
+    tree = ast.parse((ROOT / 'python/mojolearn/_byte_lm_impl.py').read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'SmallByteLanguageModelTrainer')
+    method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'attention_stage_report')
+    assert len(method.body) == 2 and method.body[1].value.func.id == '_LM_TRAINER'
