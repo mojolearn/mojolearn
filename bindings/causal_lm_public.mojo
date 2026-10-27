@@ -144,7 +144,7 @@ def causal_lm_admit_binding(
     if requested_gpu and mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
-            _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 25)
+            _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
         py_setitem(owner_fields, "_native_primitives_provider_cache", primitive_provider)
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":

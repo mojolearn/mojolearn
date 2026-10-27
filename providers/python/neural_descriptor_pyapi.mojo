@@ -120,7 +120,7 @@ def neural_descriptor_cached(
             raise Error("TypeError: neural native ABI mode entry must be compiled")
         if Int(py=py_call(mode_entry)) == 1:
             result = neural_descriptor_connect(py_call(bi.getattr, entries, factory), name,
-                25 if factory == "neural_primitives_api_v1" else 6)
+                29 if factory == "neural_primitives_api_v1" else 6)
     py_setitem(fields, slot, result)
     py_setitem(fields, binding_key, canonical)
     return result

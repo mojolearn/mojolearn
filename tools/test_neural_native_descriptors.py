@@ -50,7 +50,7 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
 def test_native_descriptors_are_checked_named_private_operations():
     abi = read('core/native_descriptor_abi.mojo')
     assert 'mojolearn.training.primitives.v1' in abi and 'mojolearn.mamba.state.v1' in abi
-    for file, count in (('training/native_primitive_dispatch.mojo', 25), ('mamba/native_state_dispatch.mojo', 6)):
+    for file, count in (('training/native_primitive_dispatch.mojo', 29), ('mamba/native_state_dispatch.mojo', 6)):
         body = read(file)
         assert f'if op < 0 or op >= {count}:' in body
         assert 'if result == 0:' in body
