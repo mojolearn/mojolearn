@@ -4,6 +4,8 @@ from std.python import Python, PythonObject
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_training_ids_into
+from core.samba_count_impl import samba_target_count
+from providers.python.samba_execution_pyapi import samba_provider_gradients
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_from_state
@@ -38,19 +40,7 @@ def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObj
 
 
 def _samba_count(targets: PythonObject, context: PythonObject) raises -> Int:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var n = Int(py=targets.size)
-    var ignored = py_call(g[].arrays, "i", Python.list(PythonObject(-100))) * n
-    var mask = generation_array([n], "b")
-    _ = py_call(context["equal_elements"], targets._addr, ignored.buffer_info()[0], 2, n, mask._addr)
-    # The address does not retain its exporter. Keep the temporary native
-    # comparison buffer alive until the synchronous kernel has consumed it.
-    _ = ignored^
-    var count = py_call(context["reduce_stat"], mask._addr, 5, n, 5)
-    _ = mask^
-    if Int(py=count[0]) != 0 or Int(py=count[1]) != 0:
-        raise Error("Samba: ignored-target count exceeds kernel indexing")
-    return n - Int(py=count[2])
+    return samba_target_count(Int(py=targets._addr), Int(py=targets.size))
 
 
 struct SambaDropoutMetadata(Copyable, Movable):
@@ -109,6 +99,9 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
     var rows = b * l
+    var completed = samba_provider_gradients(fields, config, entries, ids, y, num_items, stream, token_offset, context["neural"])
+    if completed is not None:
+        return completed
     var count = _samba_count(y, context)
     var items = count if num_items is None else Int(py=num_items)
     var arrays = fields["arrays"]

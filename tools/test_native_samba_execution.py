@@ -30,3 +30,19 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     assert 'layer.refresh_layouts.append(pin.layout.value().copy())' in source
     public=(ROOT/'bindings/samba_inference_native.mojo').read_text()
     assert 'samba_provider_forward(fields, config, entries, ids, state, step' in public
+
+
+def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():
+    source=(ROOT/'training/native_samba_execution.mojo').read_text()
+    assert 'for reverse in range(len(self.layers))' in source
+    assert 'self.close_tapes()' in source
+    assert 'self.backward_failure.byte_length()' in source
+    assert 'self.validate_gradient and all_finite_f32' in source
+    for operation in (6,7,8,9,11):
+        assert f'self.primitive.call({operation},' in source
+    assert 'requested_items: Int, automatic_items: Bool' in source
+    boundary=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text()
+    assert 'layer.backward_failure = String(problem)' in boundary
+    assert 'layer.tape = True' in boundary
+    assert 'publication.publish_reports = False' in boundary
+    assert 'neural_descriptor_construct(publication.provider' in boundary

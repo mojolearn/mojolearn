@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_typ
 from bindings.generation_buffers import generation_address, generation_array
 from bindings.causal_lm_public import _native_function, _mutable
 from bindings.neural_block_public import neural_training_entries
-from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse
+from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.native_execution_pyapi import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi import OperationLockLease
@@ -27,6 +27,12 @@ struct SambaLayerPublication(Movable):
     var session: PythonObject
     var binding: PythonObject
     var provider: PythonObject
+    var entries: PythonObject
+    var weight_owners: List[PythonObject]
+    var weight_addresses: List[Int]
+    var gradient_shapes: List[List[Int]]
+    var gradient_names: List[String]
+    var publish_reports: Bool
     var transformer: Bool
     var restore_owned: Bool
 
@@ -40,6 +46,12 @@ struct SambaLayerPublication(Movable):
         self.session = PythonObject(None)
         self.binding = PythonObject(None)
         self.provider = PythonObject(None)
+        self.entries = PythonObject(None)
+        self.weight_owners = List[PythonObject]()
+        self.weight_addresses = List[Int]()
+        self.gradient_shapes = List[List[Int]]()
+        self.gradient_names = List[String]()
+        self.publish_reports = True
         self.restore_owned = False
 
 
@@ -104,6 +116,13 @@ struct AdmittedSambaExecution(Movable):
             var layer = NativeSambaLayer(self.owners[0].endpoint(), 0, [], [], [], 0, 0, -1, [])
             try:
                 var entries = neural_training_entries(layer_fields, context)
+                publication.entries = entries
+                var source_weights = layer_fields["_w"]
+                for j in range(len(source_weights)):  # driver-loop: retain immutable weight owners at admission
+                    publication.weight_owners.append(source_weights[j])
+                var names = block._W_NAMES
+                for j in range(len(names)):  # driver-loop: admit fixed named gradient metadata
+                    publication.gradient_names.append(String(names[j]))
                 var canonical = entries.canonical
                 if transformer:
                     var lock = OperationLockLease(layer_fields["_runtime_lock"])
@@ -111,8 +130,10 @@ struct AdmittedSambaExecution(Movable):
                         raise Error("native Samba: layer needs its admitted native operation lock")
                     var snapshot = GenerationLayerSnapshot(layer_fields, "transformer", False)
                     var weights = snapshot.weights.resolve(self.keep)
+                    publication.weight_addresses = weights.copy()
                     var optional = snapshot.optional.resolve(self.keep)
                     var provider = layer_fields["_native_block_provider_cache"]
+                    publication.provider = provider
                     var use_session = layer_state is not None or Bool(py=py_call(bi.hasattr, entries, "transformer_session_forward_fresh"))
                     var session = PythonObject(None)
                     if use_session:
@@ -182,6 +203,7 @@ struct AdmittedSambaExecution(Movable):
                         weight_addresses.append(generation_address(weights[j], self.keep))
                         if not use_owned:
                             a.append(weight_addresses[j])
+                    publication.weight_addresses = weight_addresses.copy()
                     var provider = layer_fields["_native_mamba_block_provider_cache"]
                     var session = py_get(layer_fields, "_prefill_session")
                     var use_session = use_owned or (layer_state is None and Bool(py=py_call(bi.hasattr, entries, "mamba3_prefill_session_forward")))
@@ -281,6 +303,121 @@ struct AdmittedSambaExecution(Movable):
             self.publications.append(publication^)
             self.native.layers.append(layer^)
 
+    def configure_training(mut self) raises:
+        var bi = Python.import_module("builtins")
+        for i in range(len(self.native.layers)):  # driver-loop: admit backward/tape owners before whole native execution
+            ref layer = self.native.layers[i]
+            ref publication = self.publications[i]
+            if layer.failure.byte_length() != 0:
+                continue
+            var forward_setup = False
+            try:
+                var entries = publication.entries
+                var fields = publication.fields
+                var kind = "transformer" if publication.transformer else "mamba3"
+                var tape = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
+                if tape:
+                    tape = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
+                if publication.transformer:
+                    tape = tape and fields["_int15"] is None and not Bool(py=fields["_extended"])
+                    if fields["_int15"] is not None or Bool(py=fields["_extended"]):
+                        raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options (the default block options only)")
+                if not tape and not Bool(py=py_call(bi.hasattr, entries, kind + "_backward")):
+                    raise Error("RuntimeError: loaded native training binding lacks " + kind + "_backward")
+                layer.validate_gradient = not publication.transformer and not tape
+                for j in range(len(publication.weight_owners)):  # driver-loop: snapshot each parameter's gradient shape once
+                    var shape = publication.weight_owners[j].shape
+                    var dimensions = List[Int]()
+                    var count = 1
+                    for axis in range(len(shape)):  # small-loop(parameter shape rank)
+                        var dimension = Int(py=shape[axis])
+                        dimensions.append(dimension)
+                        count *= dimension
+                    publication.gradient_shapes.append(dimensions^)
+                    layer.gradient_sizes.append(count)
+                var parameters: List[Int] = [self.batch, self.length, self.width]
+                if publication.transformer:
+                    for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # small-loop(five Transformer backward dimension words)
+                        parameters.append(Int(py=fields[name]))
+                layer.backward_parameters = parameters.copy()
+                layer.backward_weights = publication.weight_addresses.copy()
+                if tape:
+                    forward_setup = True
+                    var owner = neural_descriptor_construct(publication.provider,
+                        _native_function(entries, kind + "_tape_create_native_v1"))
+                    var handle = neural_descriptor_handle(publication.provider,
+                        _native_function(entries, kind + "_tape_handle_native_v1"), owner)
+                    var lock_owner = PythonObject(None)
+                    var lock_handle = 0
+                    if publication.transformer:
+                        var lock = OperationLockLease(fields["_runtime_lock"])
+                        lock_owner = lock.owner
+                        lock_handle = lock.handle
+                    var base = 6 if publication.transformer else 10
+                    self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, lock_owner, lock_handle))
+                    layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
+                    layer.backward_endpoint = layer.endpoint
+                    self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, PythonObject(None), 0))
+                    layer.close_endpoint = self.owners[len(self.owners) - 1].endpoint()
+                    layer.operation = base + 2
+                    layer.backward_operation = base + 3
+                    layer.close_operation = base + 4
+                    var a: List[Int] = [0]
+                    for address in publication.weight_addresses:  # driver-loop: immutable forward snapshot address slots
+                        a.append(address)
+                    a.append(0)
+                    layer.addresses = a^
+                    layer.parameters = parameters^
+                    layer.output_slot = 10
+                    layer.report_slot = -1
+                    layer.report_sizes.clear()
+                    layer.backward_parameters.clear()
+                    layer.prepare_operation = -1
+                    layer.tape = True
+                    publication.publish_reports = False
+                    publication.restore_owned = False
+                else:
+                    layer.backward_endpoint = layer.endpoint
+                    if publication.transformer:
+                        layer.backward_operation = 3 if publication.session is not None else 5
+                    elif layer.operation == 8:
+                        layer.backward_operation = 9
+                        layer.owned_backward = True
+                        layer.backward_parameters.append(layer.parameters[3])
+                    else:
+                        layer.backward_operation = 7 if publication.session is not None else 4
+            except problem:
+                if forward_setup:
+                    layer.failure = String(problem)
+                else:
+                    layer.backward_failure = String(problem)
+
+    def gradients(mut self, ids: PythonObject, targets: PythonObject, requested_items: Int,
+                  automatic_items: Bool, tied: Bool, fused: Bool, chunked: Bool,
+                  names: PythonObject) raises -> PythonObject:
+        var loss = Float64(0)
+        try:
+            loss = self.native.gradients(generation_address(ids, self.keep), generation_address(targets, self.keep),
+                requested_items, automatic_items, tied, fused, chunked)
+        except problem:
+            self.publish()
+            raise problem
+        self.publish()
+        var result = Python.dict()
+        py_setitem(result, "norm_f.weight", _samba_native_copy(self.native.norm_gradient, [self.width]))
+        py_setitem(result, "embed.weight", _samba_native_copy(self.native.embedding_gradient, [self.vocab, self.width]))
+        if not tied:
+            py_setitem(result, "lm_head.weight", _samba_native_copy(self.native.head_gradient, [self.vocab, self.width]))
+        for i in range(len(self.native.layers)):  # driver-loop: completed native gradient result publication
+            ref publication = self.publications[i]
+            for j in range(len(publication.gradient_names)):  # driver-loop: completed parameter gradient buffers
+                py_setitem(result, "layers." + String(i) + "." + publication.gradient_names[j],
+                    _samba_native_copy(self.native.layers[i].gradients[j], publication.gradient_shapes[j]))
+        var ordered = Python.list()
+        for i in range(len(names)):  # driver-loop: publish the model's admitted gradient registry order
+            _ = py_call(ordered.append, result[names[i]])
+        return Python.tuple(PythonObject(loss), ordered)
+
     def publish(mut self) raises:
         var report_names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
         for i in range(len(self.native.layers)):  # driver-loop: completed native operation publication, never execution
@@ -305,7 +442,7 @@ struct AdmittedSambaExecution(Movable):
                 else:
                     py_setattr(publication.state, "buffered_tokens", PythonObject(layer.result))
                     py_setattr(publication.state, "pending", False)
-            if not publication.transformer:
+            if not publication.transformer and publication.publish_reports:
                 for j in range(4):  # small-loop(four completed native reports)
                     var report = PythonObject(None)
                     if layer.report_sizes[j] != 0:
@@ -323,6 +460,24 @@ struct AdmittedSambaExecution(Movable):
         return _samba_native_copy(logits, [self.batch, self.length, self.vocab])
 
 
+def samba_provider_eligible(fields: PythonObject) raises -> Bool:
+    var blocks = fields["_blocks"]
+    var bi = Python.import_module("builtins")
+    for i in range(len(blocks)):  # driver-loop: route eligibility at the single operation boundary
+        var block = _samba_native_fields(blocks[i])
+        if String(block["_native_route"]) != "gpu" or String(block["numeric_mode"]) != "identical":
+            return False
+        if String(block["_native_kind"]) == "transformer":
+            if block["_int15"] is not None or getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1" or getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH", "1") == "0":
+                return False
+            var lock = OperationLockLease(block["_runtime_lock"])
+            if lock.handle == 0:
+                return False
+        elif getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
+            return False
+    return True
+
+
 def samba_provider_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject,
                            state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
     var primitive = py_get(fields, "_native_primitives")
@@ -330,20 +485,39 @@ def samba_provider_forward(fields: PythonObject, config: PythonObject, entries: 
         return PythonObject(None)
     primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 12)
     py_setitem(fields, "_native_primitives", primitive)
-    var blocks = fields["_blocks"]
-    var bi = Python.import_module("builtins")
-    for i in range(len(blocks)):  # driver-loop: route eligibility at the single operation boundary
-        var block = _samba_native_fields(blocks[i])
-        if String(block["_native_route"]) != "gpu" or String(block["numeric_mode"]) != "identical":
-            return PythonObject(None)
-        if String(block["_native_kind"]) == "transformer":
-            if block["_int15"] is not None or getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1" or getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH", "1") == "0":
-                return PythonObject(None)
-            var lock = OperationLockLease(block["_runtime_lock"])
-            if lock.handle == 0:
-                return PythonObject(None)
-        elif getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
-            return PythonObject(None)
+    if not samba_provider_eligible(fields):
+        return PythonObject(None)
     var shape = ids.shape
     var admitted = AdmittedSambaExecution(fields, config, state, primitive, Int(py=shape[0]), Int(py=shape[1]), step, context)
     return admitted.forward(ids)
+
+
+def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries: PythonObject,
+                             ids: PythonObject, targets: PythonObject, num_items: PythonObject,
+                             stream: PythonObject, token_offset: Int, context: PythonObject) raises -> PythonObject:
+    var primitive = py_get(fields, "_native_primitives")
+    if primitive is None or not samba_provider_eligible(fields):
+        return PythonObject(None)
+    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 12)
+    py_setitem(fields, "_native_primitives", primitive)
+    var shape = ids.shape
+    var admitted = AdmittedSambaExecution(fields, config, PythonObject(None), primitive,
+        Int(py=shape[0]), Int(py=shape[1]), False, context)
+    admitted.configure_training()
+    var bi = Python.import_module("builtins")
+    var fused = Bool(py=py_call(bi.hasattr, entries, "samba_head_loss"))
+    var chunked = False
+    if Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")):
+        chunked = Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")())
+    var probability = Float64(py=config["dropout"])
+    if probability > 0.0 and stream is not None:
+        var p = Float32(probability)
+        var scale = Float32(1.0 / (1.0 - Float64(p)))
+        var rng = _samba_native_fields(fields["generator"])
+        var seed = rng["seed"]
+        admitted.native.dropout = True
+        admitted.native.dropout_words = [admitted.batch * admitted.length * admitted.width, token_offset * admitted.width,
+            Int(py=seed & PythonObject(0xffffffff)), Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff)), Int(py=stream), 2]
+        admitted.native.dropout_scalars = [Float64(p), Float64(scale)]
+    return admitted.gradients(ids, targets, 0 if num_items is None else Int(py=num_items), num_items is None,
+        Bool(py=config["tie_embeddings"]), fused, chunked, fields["names"])
