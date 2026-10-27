@@ -8,7 +8,7 @@ from core.hotpath_impl import HOTPATH_SABOTAGE
 from core.hotpath_device import HPD_MAX_N, HPD_F32, device_reduce_arg, device_threshold_labels_i64, device_uniform_init_f32
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows
 from sequence.exec_device import DeviceExec
-from sequence.model_outputs_host import model_output_host
+from sequence.model_output_fallback import model_output_fallback
 from sequence.neural_model_dispatch import NeuralModelRequest, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM
 
 # Same definitions as bindings/hotpath_device.mojo; these switches describe
@@ -55,4 +55,4 @@ def model_output_device(mut ex: DeviceExec, op: Int, r: NeuralModelRequest) rais
                 var seed = (UInt64(p[2]) << 32) | UInt64(p[1])
                 device_uniform_init_f32(ex.ctx, a[0], n, lo, hi, seed, UInt64(p[3]))
                 return 0
-    return model_output_host(op, r)
+    return model_output_fallback(op, r)
