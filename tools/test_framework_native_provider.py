@@ -42,3 +42,20 @@ def test_python_export_debt_is_not_declared_migrated():
     frontend = (ROOT / 'python/mojolearn/adapters/_torch_compile.py').read_text()
     assert 'Still prohibited runtime debt' in frontend
     assert 'self._program, self._versions = self._import(gm)' in frontend
+
+
+def test_import_and_cleanup_use_the_same_session_provider():
+    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    body = source.split('def _import(')[1].split('def ops_import_model_c(')[0]
+    assert 'neural_descriptor_execute(owner[].provider, PROGRAM_IMPORT,' in body
+    assert 'py_call(entries["onnx_import' not in body
+    assert 'py_call(entries["onnx_buffers"]' not in body
+    assert 'py_call(session._session_native' not in body
+    assert 'downcast_value_ptr[NativeDescriptorResource]()[].close()' in body
+    owner = (ROOT / 'autograd/program_import_request.mojo').read_text()
+    assert 'onnx_import_file[E, KIND]' in owner and 'onnx_buffers(request[].reader)' in owner
+    assert 'ops_session_registry_token()' in owner
+    for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
+        assert forbidden not in owner
+    for filename in ('sequence/model_host_dispatch.mojo', 'sequence/model_device_dispatch.mojo'):
+        assert 'if op == PROGRAM_IMPORT:' in (ROOT / filename).read_text()

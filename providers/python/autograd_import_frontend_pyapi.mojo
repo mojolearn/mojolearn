@@ -4,14 +4,18 @@
 # Python forward. The public source-kind/export dispatcher remains separate debt.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.native_json import native_path
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from providers.python.autograd_python_errors_pyapi import graph_python_error, graph_int
-from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
+from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py, ops_session_fields
 from providers.python.autograd_ops_frontend_pyapi import _program_initialize
+from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, neural_descriptor_execute
+from providers.python.autograd_import_lower_pyapi import _import_out
+from autograd.program_import_request import NativeProgramImport
+from sequence.neural_model_dispatch import PROGRAM_IMPORT
 
 
 def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:
@@ -216,19 +220,35 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
     _ = _fields(session, context["layouts"][context["session"]])
     _ = ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], context["backend"], context["program"])
     try:
-        var result = PythonObject(None)
-        if reader is None:
-            result = py_call(entries["onnx_import_file"], path, session._id, words[0], words[1], name)
-        else:
+        var fields = ops_session_fields(session)
+        var lifetime = fields["_lifetime"]
+        var owner = lifetime.downcast_value_ptr[NativeDescriptorResource]()
+        var handle = 0
+        if reader is not None:
             var stored = _fields(reader, context["layouts"][context["reader"]])
-            if stored["b"] is not session._b:
+            if stored["b"] is not fields["_b"]:
                 raise Error("ValueError: the graph was read by another binding than this session's; pass the ONNX file's path instead")
             if py_type(stored["h"]) is not b.int:
                 raise Error("TypeError: native graph handle requires an exact integer")
-            # The native reader retains the buffers. Read its own addresses;
-            # no Python buffer_address, memoryview wrapper or iteration hook.
-            var addresses = py_call(entries["onnx_buffers"], stored["h"])
-            result = py_call(entries["onnx_import"], stored["h"], session._id, words[0], words[1], addresses, name)
+            handle = Int(py=stored["h"])
+        var names = List[String]()
+        var dimensions = List[Int]()
+        for i in range(len(words[0])):  # driver-loop: over admitted import input names
+            names.append(String(words[0][i]))
+        for i in range(len(words[1])):  # driver-loop: over admitted import rank and dimension metadata
+            dimensions.append(Int(py=words[1][i]))
+        # Stable initialized storage survives the native ABI call and owns the
+        # returned graph metadata. No CPython call is used between native owners.
+        var requests = List[NativeProgramImport]()
+        requests.append(NativeProgramImport(reader is not None, handle,
+            String("") if path is None else String(path), String(name), names^, dimensions^))
+        var scope = owner[].context.copy()
+        scope.append(owner[].handle)
+        _ = neural_descriptor_execute(owner[].provider, PROGRAM_IMPORT,
+            [Int(requests.unsafe_ptr())], scope, List[Float64](), False)
+        var result = _import_out(requests[0].result)
+        _ = reader
+        _ = lifetime
         _status(result, name, context)
         var inputs = Python.list()
         var outputs = Python.list()
@@ -242,7 +262,9 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         _initialize(program, session, result[1], inputs, outputs, entries, context)
         return program
     except error:
-        _ = py_call(session._session_native, session, "close", Python.tuple())
+        var fields = ops_session_fields(session)
+        fields["_lifetime"].downcast_value_ptr[NativeDescriptorResource]()[].close()
+        py_setitem(fields, "_id", PythonObject(None))
         raise error^
 
 

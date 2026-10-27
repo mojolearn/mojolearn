@@ -18,7 +18,8 @@ comptime MODEL_UNIFORM = 12
 comptime SESSION_OPEN = 13
 comptime SESSION_CLOSE = 14
 comptime PROGRAM_DEVICE_RUN = 15
-comptime MODEL_OPERATION_COUNT = 16
+comptime PROGRAM_IMPORT = 16
+comptime MODEL_OPERATION_COUNT = 17
 
 
 struct NeuralModelRequest(Movable):
