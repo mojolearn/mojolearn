@@ -19,16 +19,19 @@ from std.math import sqrt
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
+from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
+from providers.python.sequence_pyapi import py_ints, py_f64s
+from providers.python.autograd_pyapi import cast_in_of
+from sequence.neural_model_dispatch import RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission import opt_schedule
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.xseq_native_common import (
     XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_f32, xseq_refuse_f64, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
-    XseqStream,
+    XseqStream, xseq_neural_provider, xseq_output_provider,
 )
-from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32
+from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -100,8 +103,10 @@ def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObje
         var descriptor = sequential_descriptor(y, "y")
         var classes = sequential_array(Python.tuple(n), y.dtype, context)
         var codes = sequential_array(Python.tuple(n), context["int32"], context)
-        var count = Int(py=py_call_typed(entries["model_labels"], descriptor, sequential_address(classes),
-                                         sequential_address(codes)))
+        var source = cast_in_of(descriptor, "y")
+        var addresses: List[Int] = [Int(py=sequential_address(classes)), Int(py=sequential_address(codes))]
+        var words: List[Int] = [source.addr, source.kind, source.itemsize, source.rows, source.cols, source.s0, source.s1]
+        var count = neural_descriptor_execute(xseq_neural_provider(entries), MODEL_LABELS, addresses, words, List[Float64]())
         _ = classes  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         var selected = py_call(context["ndarray"], Python.tuple(count), dtype=y.dtype, buffer=classes)
@@ -121,8 +126,27 @@ def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObje
     return Python.tuple(py_call(context["np_asarray"], ordered), codes)
 
 
-def xseq_take(classes: PythonObject, codes: PythonObject) raises -> PythonObject:
-    """`classes[codes]` (ndarray's own C `take`)."""
+def xseq_take(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Numeric measured labels are copied natively. Preserve the existing
+    # string/object compatibility route explicitly; it is NOT callback-free.
+    var dtype = classes.dtype
+    var kind = String(py=dtype.kind)
+    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
+        var shape = classes.shape
+        var strides = classes.strides
+        var dims = List[Int]()
+        var steps = List[Int]()
+        for axis in range(len(shape)):  # driver-loop: admit class layout once
+            dims.append(Int(py=shape[axis]))
+            steps.append(Int(py=strides[axis]))
+        var rows = Int(py=codes.size)
+        var output = sequential_array(codes.shape, dtype, context)
+        xseq_take_native(Int(py=xseq_addr(classes)), dims, steps, Int(py=dtype.itemsize),
+            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(codes))), rows,
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(output))))
+        _ = classes
+        _ = codes
+        return output
     return py_call(_method(classes, "take"), codes)
 
 
@@ -131,8 +155,10 @@ def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObjec
     C-ordered float32 block, as an int64 array."""
     var codes = sequential_array(Python.tuple(rows), context["int64"], context)
     if rows:
-        _ = py_call_typed(xseq_base(context, "argmax_rows_f32"), xseq_addr(scores), PythonObject(rows),
-                          PythonObject(cols), xseq_addr(codes))
+        var addresses: List[Int] = [Int(py=xseq_addr(scores)), Int(py=xseq_addr(codes))]
+        var options: List[Int] = [rows, cols]
+        _ = neural_descriptor_execute(xseq_output_provider(context), MODEL_ARGMAX, addresses, options, List[Float64]())
+        _ = scores
         _ = codes  # keep the Python object alive through the native call above
     return codes
 
@@ -280,7 +306,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     total += outputs * hidden + outputs
     var bound = 1.0 / sqrt(xseq_float(fields["hidden_size"]))
     var params = xseq_zeros(Python.tuple(total), context)
-    stream.fill_uniform(context, xseq_addr(params), total, -bound, bound)
+    stream.fill_uniform_native(xseq_output_provider(context), Int(py=xseq_addr(params)), total, -bound, bound)
     _ = params  # keep the Python object alive through the native call above
     py_setitem(fields, "params_", params)
     # the minibatch schedule's scalars; each epoch's row order is built by rnn_fit
@@ -297,8 +323,10 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var ip = _rnn_ints(model, fields)
     _ = py_call(_method(ip, "extend"), Python.list(Int(py=_attr(py_type(model), "_TASK")), n, steps_t, epochs, batch,
                 optimizer[0], optimizer[1], 1 if shuffle else 0, Int(seed & 0xFFFFFFFF), Int(seed >> 32)))
-    _ = py_call_typed(entries["rnn_fit"], Python.list(xseq_addr(x), xseq_addr(target), xseq_addr(params),
-                      xseq_addr(losses), _buffer_address(rates)), ip, optimizer[2])
+    var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)),
+                                 Int(py=xseq_addr(losses)), Int(py=_buffer_address(rates))]
+    _ = neural_descriptor_execute(xseq_neural_provider(entries), RNN_FIT, addresses, py_ints(ip), py_f64s(optimizer[2]))
+    _ = target
     _ = params  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = losses  # keep the Python object alive through the native call above
@@ -324,7 +352,8 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var ip = _rnn_ints(model, fields)
     _ = py_call(_method(ip, "extend"), Python.list(Int(py=_attr(py_type(model), "_TASK")), n, steps_t,
                 xseq_int(fields["predict_chunk"]), 1 if want_seq else 0))
-    _ = py_call_typed(entries["rnn_predict"], Python.list(xseq_addr(x), xseq_addr(params), xseq_addr(out), xseq_addr(seq)), ip)
+    var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out)), Int(py=xseq_addr(seq))]
+    _ = neural_descriptor_execute(xseq_neural_provider(entries), RNN_PREDICT, addresses, py_ints(ip), List[Float64]())
     _ = params  # keep the Python object alive through the native call above
     _ = seq  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -374,7 +403,7 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         return out
     var rows = Int(py=out.shape[0])
     var codes = xseq_argmax(out, rows, Int(py=out.shape[1]), context)
-    return xseq_take(fields["classes_"], codes)
+    return xseq_take(fields["classes_"], codes, context)
 
 
 # ---------------------------------------------------------------- multi-layer perceptrons
@@ -461,16 +490,17 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var params = xseq_zeros(Python.tuple(total), context)
     var offset = 0
     var base = Int(py=xseq_addr(params))
+    var output_provider = xseq_output_provider(context)
     _ = params  # keep the Python object alive through the native call above
     for l in range(len(sizes) - 1):  # driver-loop: over network layers
         var fi = sizes[l]
         var fo = sizes[l + 1]
         var factor = 2.0 if logistic else 6.0
         var bound = sqrt(factor / Float64(fi + fo))
-        stream.fill_uniform(context, PythonObject(base + 4 * offset), fi * fo, -bound, bound)
+        stream.fill_uniform_native(output_provider, base + 4 * offset, fi * fo, -bound, bound)
         _ = params  # keep the Python object alive through the native call above
         offset += fi * fo
-        stream.fill_uniform(context, PythonObject(base + 4 * offset), fo, -bound, bound)
+        stream.fill_uniform_native(output_provider, base + 4 * offset, fo, -bound, bound)
         _ = params  # keep the Python object alive through the native call above
         offset += fo
     var seed = Int(stream.child_seed() % UInt64(2147483647))
@@ -500,8 +530,9 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
                          xseq_float(fields["beta_2"]), xseq_float(fields["epsilon"]), xseq_float(fields["momentum"]),
                          xseq_float(fields["power_t"]), xseq_float(fields["alpha"]), xseq_float(fields["tol"]))
     var entries = xseq_entries(fields, context)
-    var n_iter = Int(py=py_call_typed(entries["mlp_fit"], Python.list(xseq_addr(x), xseq_addr(target), xseq_addr(params),
-                                      xseq_addr(curve)), ip, fp))
+    var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(target)), Int(py=xseq_addr(params)), Int(py=xseq_addr(curve))]
+    var n_iter = neural_descriptor_execute(xseq_neural_provider(entries), MLP_FIT, addresses, py_ints(ip), py_f64s(fp))
+    _ = target
     _ = params  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = curve  # keep the Python object alive through the native call above
@@ -533,10 +564,14 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
     # the first-wins minimum of the curve (`reduce_stat` 0)
-    var best = py_call_typed(xseq_base(context, "reduce_stat"), xseq_addr(curve), PythonObject(0), PythonObject(n_iter), PythonObject(0))
+    var best_result = List[Float64](length=1, fill=0)
+    var best_addresses: List[Int] = [Int(py=xseq_addr(curve)), Int(best_result.unsafe_ptr())]
+    var best_options: List[Int] = [n_iter]
+    _ = neural_descriptor_execute(xseq_output_provider(context), MODEL_MIN, best_addresses, best_options, List[Float64]())
+    var best = best_result[0]
     _ = curve  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
-    py_setitem(fields, "best_loss_", xseq_float(best))
+    py_setitem(fields, "best_loss_", best)
     _ = curve  # keep the Python object alive through the native call above
     py_setitem(fields, "t_", n_iter * rows)
     _ = curve  # keep the Python object alive through the native call above
@@ -593,7 +628,8 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     if proba2:
         _ = py_call(_method(ip, "append"), 1)
     var entries = xseq_entries(fields, context)
-    var written = Int(py=py_call_typed(entries["mlp_predict"], Python.list(xseq_addr(x), xseq_addr(params), xseq_addr(out)), ip))
+    var addresses: List[Int] = [Int(py=xseq_addr(x)), Int(py=xseq_addr(params)), Int(py=xseq_addr(out))]
+    var written = neural_descriptor_execute(xseq_neural_provider(entries), MLP_PREDICT, addresses, py_ints(ip), List[Float64]())
     _ = params  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -644,10 +680,10 @@ def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context
         # p > 0.5 per row (`threshold_labels_i64`; NaN takes class 0)
         var codes = sequential_array(Python.tuple(rows), context["int64"], context)
         if rows:
-            _ = py_call_typed(xseq_base(context, "threshold_labels_i64"), xseq_addr(out), PythonObject(0),
-                              PythonObject(rows), PythonObject(0.5), PythonObject(1), PythonObject(0), PythonObject(1),
-                              xseq_addr(codes))
+            var addresses: List[Int] = [Int(py=xseq_addr(out)), Int(py=xseq_addr(codes))]
+            var options: List[Int] = [rows]
+            _ = neural_descriptor_execute(xseq_output_provider(context), MODEL_THRESHOLD, addresses, options, List[Float64]())
             _ = out  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
-        return xseq_take(fields["classes_"], codes)
-    return xseq_take(fields["classes_"], xseq_argmax(out, rows, Int(py=out.shape[1]), context))
+        return xseq_take(fields["classes_"], codes, context)
+    return xseq_take(fields["classes_"], xseq_argmax(out, rows, Int(py=out.shape[1]), context), context)

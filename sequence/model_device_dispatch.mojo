@@ -4,6 +4,8 @@ from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
+from sequence.neural_model_dispatch import RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.model_outputs_device import model_output_device
 from sequence.exec_device import DeviceExec
 from core.label_cast_device import device_unique_inverse_cast
 
@@ -13,16 +15,28 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
     try:
         if result == 0:
             raise Error("native model: null result")
-        var request = NativeModelRequest(op, aa, na, pp, np, ff, nf)
         var ex = DeviceExec()
         var value = 0
-        if op == MODEL_FIT_LABELS:
-            var kind = request.label_kind()
-            var codes = ex.alloc(request.sources[1].rows)
-            var count = device_unique_inverse_cast(ex.ctx, request.sources[1], kind, request.classes, Int(codes), True)
-            value = model_request_execute(ex, op, request, Int(codes), count)
+        if op >= RNN_FIT:
+            var auxiliary = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
+            if op == MODEL_LABELS:
+                var labels = auxiliary.labels()
+                value = device_unique_inverse_cast(ex.ctx, labels[0], labels[1], auxiliary.addresses[0], auxiliary.addresses[1])
+                if value == -2:
+                    raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+            elif op >= MODEL_ARGMAX:
+                value = model_output_device(ex, op, auxiliary)
+            else:
+                value = neural_model_execute(ex, op, auxiliary)
         else:
-            value = model_request_execute(ex, op, request)
+            var request = NativeModelRequest(op, aa, na, pp, np, ff, nf)
+            if op == MODEL_FIT_LABELS:
+                var kind = request.label_kind()
+                var codes = ex.alloc(request.sources[1].rows)
+                var count = device_unique_inverse_cast(ex.ctx, request.sources[1], kind, request.classes, Int(codes), True)
+                value = model_request_execute(ex, op, request, Int(codes), count)
+            else:
+                value = model_request_execute(ex, op, request)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
         return 0
     except problem:

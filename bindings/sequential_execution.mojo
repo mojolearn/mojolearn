@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from core.cast_in import CastIn
+from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
 from autograd.model_execution import model_counts_native
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
 from providers.python.autograd_pyapi import _ints, model_float64_words, model_admit_addresses
@@ -34,7 +35,7 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
     # owns the shared provider; no per-model pointer cache or Python callable is
     # used by the subsequent native fit/predict execution.
     var provider = neural_descriptor_reuse(py_get(entries, "native_model_provider"),
-        entries["model_native_api_v1"], String(MODEL_ABI_NAME), 4)
+        entries["model_native_api_v1"], String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
     py_setitem(entries, "native_model_provider", provider)
     return entries
 

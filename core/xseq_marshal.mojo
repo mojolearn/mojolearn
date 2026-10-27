@@ -146,3 +146,29 @@ def xseq_widen_f32_f64(src: _F32P, dst: MutPointer[Float64, MutUntrackedOrigin],
     """`a.astype("<f8")` of `count` float32 words: each widened exactly."""
     for i in range(count):
         dst[i] = Float64(src[i])
+
+
+def xseq_take_native(base: Int, dims: List[Int], strides: List[Int], item: Int,
+                      codes: _I64P, rows: Int, output: _U8P) raises:
+    # ndarray.take(axis=None) for native numeric class storage: flatten in C
+    # index order, preserve raw dtype bytes (including nonnative byte order).
+    # Shape/strides are captured once; no provider lookups inside either loop.
+    var total = 1
+    for size in dims:  # driver-loop: admitted class-array rank metadata
+        total *= size
+    for row in range(rows):  # native result publication: validate all class codes
+        var index = Int(codes[row])
+        if index < -total or index >= total:
+            raise Error("IndexError: class index is out of bounds")
+    for row in range(rows):  # native result publication: copy selected label bytes
+        var index = Int(codes[row])
+        if index < 0:
+            index += total
+        var address = base
+        for reverse in range(len(dims)):
+            var axis = len(dims) - reverse - 1
+            address += (index % dims[axis]) * strides[axis]
+            index //= dims[axis]
+        var source = _U8P(unsafe_from_address=address)
+        for byte in range(item):
+            output[row * item + byte] = source[byte]
