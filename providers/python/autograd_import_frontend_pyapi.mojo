@@ -12,8 +12,9 @@ from bindings.optimizer_public_words import stash_python_error, optimizer_python
 from providers.python.autograd_python_errors_pyapi import graph_python_error, graph_int
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py, ops_session_fields
 from providers.python.autograd_ops_frontend_pyapi import _program_initialize
-from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, neural_descriptor_execute, neural_descriptor_entry
 from providers.python.autograd_import_lower_pyapi import _import_out
+from providers.python.autograd_program_arrays_pyapi import program_admit_value
 from autograd.program_import_request import NativeProgramImport
 from sequence.neural_model_dispatch import PROGRAM_IMPORT
 
@@ -183,6 +184,26 @@ def _initialize(program: PythonObject, session: PythonObject, info: PythonObject
     py_setattr(target, "_run_device", entries["ops_imported_run_device"])
 
 
+def _construct(program: PythonObject, session: PythonObject, info: PythonObject,
+               inputs: PythonObject, outputs: PythonObject, context: PythonObject) raises -> PythonObject:
+    _ = _fields(program, context["layouts"][context["imported"]])
+    var fields = ops_session_fields(session)
+    program_admit_value(info)
+    program_admit_value(inputs)
+    program_admit_value(outputs)
+    var entries = Python.dict()
+    var binding = fields["_b"]
+    py_setitem(entries, "ops_imported_run", neural_descriptor_entry(binding, "ops_imported_run"))
+    py_setitem(entries, "ops_imported_run_device", neural_descriptor_entry(binding, "ops_imported_run_device", False))
+    # Build detached metadata so a failed constructor call cannot partly
+    # overwrite an already constructed public program.
+    var pending = native_storage_allocate(context["imported"])
+    _initialize(pending, session, info, inputs, outputs, entries, context)
+    _ = py_call(_fields(program, context["layouts"][context["imported"]]).update,
+                _fields(pending, context["layouts"][context["imported"]]))
+    return PythonObject(None)
+
+
 def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
             mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
@@ -271,6 +292,8 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
 def ops_import_model_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=packed)
+        if len(args) == 6:
+            return _construct(args[0], args[1], args[2], args[3], args[4], args[5]).steal_data()
         if len(args) != 5:
             raise Error("TypeError: ops_import_model expects source, label, shapes, numeric_mode and context")
         return _import(args[0], args[1], args[2], args[3], args[4]).steal_data()

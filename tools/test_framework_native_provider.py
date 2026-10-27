@@ -166,3 +166,14 @@ def test_host_checkpoint_reuses_native_codec_and_full_state_validator():
     assert 'byte_json_payload(byte_json_read(args[0], io_error))' in native
     assert '_validated_state(source, state_context)' in native
     assert 'if io_error.pending:' in native and 'return io_error.restore()' in native
+
+
+def test_imported_program_constructor_enters_native_metadata_boundary():
+    source = (ROOT / 'python/mojolearn/importers/_program.py').read_text()
+    constructor = source.split('def __init__(self, session, info, inputs, outputs):')[1].split('    def run(')[0]
+    assert '_IMPORT_NATIVE(self, session, info, inputs, outputs, _IMPORT_CONTEXT)' in constructor
+    assert 'super()' not in constructor and 'getattr' not in constructor
+    native = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    assert 'program_admit_value(info)' in native
+    assert 'neural_descriptor_entry(binding, "ops_imported_run")' in native
+    assert '_initialize(pending, session, info, inputs, outputs, entries, context)' in native
