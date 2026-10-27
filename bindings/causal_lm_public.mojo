@@ -8,7 +8,7 @@ a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
@@ -21,12 +21,13 @@ from providers.python.generation_session_pyapi import (
     generation_native_session_matches, generation_native_forward,
 )
 from core.generation_metadata import generation_transformer_addresses
+from transformer.native_generation_engine import NativeGenerationProgress, native_generation_read
 from providers.python.generation_metadata_pyapi import (
-    GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot,
+    GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission,
 )
 from std.memory import memcpy
 from bindings.generation_buffers import (
-    GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
+    GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
     generation_ids, py_ints,
 )
 from core.generation_policy_impl import generation_pick
@@ -382,46 +383,7 @@ def _mutable(
     value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
     name: String = "",
 ) raises -> Int:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var label = String("state buffer")
-    if name != "":
-        label = "state buffer " + name
-    var view = PythonObject(None)
-    var shape = PythonObject(None)
-    if value is None:
-        raise Error("CausalLM: " + label + " is missing; allocate_state() makes a complete state")
-    if py_type(value) is g[].array_cls:
-        if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
-            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
-        view = value._mv
-        shape = value.shape
-    else:
-        view = py_call(g[].bi.memoryview, value)
-        shape = view.shape
-        if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
-            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
-    var want = String("(")
-    for i in range(len(expected)):  # small-loop(state buffer shape dims)
-        if i > 0:
-            want += ", "
-        want += String(expected[i])
-    want += ")"
-    if len(shape) != len(expected):
-        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
-    var size = 1
-    for i in range(len(expected)):  # small-loop(state buffer shape dims)
-        if Int(py=shape[i]) != expected[i]:
-            raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
-        size *= expected[i]
-    if Int(py=view.nbytes) != size * 4:
-        raise Error("CausalLM: " + label + " span differs from its shape")
-    var address = _addr(value, keep)
-    if py_type(value) is not g[].array_cls:
-        var pair = g[].bi.list()
-        _ = py_call(pair.append, view)
-        _ = py_call(pair.append, keep[len(keep) - 1])
-        copies.append(pair)
-    return address
+    return generation_mutable(value, expected, keep, copies, name)
 
 
 def _writeback(mut copies: List[PythonObject]) raises:
@@ -812,7 +774,59 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
     return out
 
 
+def _engine_admission(model: PythonObject, state: PythonObject, batch: Int, length: Int) raises -> GenerationEngineAdmission:
+    # Explicit experimental route: unsupported branches refuse clearly rather
+    # than silently executing mixed orchestration in a qualifying measurement.
+    # The default public routes remain available with this experiment off.
+    _state(model, state, batch, length)
+    try:
+        var entries = model._native_entries
+        if py_get(entries, "parallel_call") is not None:
+            raise Error("CausalLM: native generation engine distributed execution is pending")
+        if _resident_forward_ok(model, state):
+            raise Error("CausalLM: native generation engine does not replace the existing resident route")
+        if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1":
+            raise Error("CausalLM: native generation engine requires the supported session setup")
+        var blocks = List[PythonObject]()
+        for i in range(len(model._blocks)):  # driver-loop: one operation's retained model owners
+            blocks.append(_block(model, i))
+        var snapshot = GenerationOperationSnapshot(model, entries, blocks)
+        return GenerationEngineAdmission(snapshot, state, batch, length)
+    except problem:
+        py_setattr(state, "_usable", PythonObject(False))
+        raise problem
+
+
+def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+    var shape = ids.shape
+    var batch = Int(py=shape[0])
+    var length = Int(py=shape[1])
+    var owner = _engine_admission(model, state, batch, length)
+    var keep = List[PythonObject]()
+    var address = _addr(ids, keep)
+    var logits = List[Float32]()
+    try:
+        owner.reserve()
+        with GILReleased(Python()):
+            logits = owner.native.forward(address, length)
+    except problem:
+        owner.release()
+        owner.publish()
+        raise problem
+    owner.release()
+    owner.publish()
+    var result = generation_array([batch, length, owner.native.vocab])
+    memcpy(dest=f32_ptr(Int(py=result._addr)), src=logits.unsafe_ptr(), count=len(logits))
+    _ = result
+    _ = logits
+    _ = owner
+    _ = keep^
+    return result
+
+
 def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
+    if getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
+        return _run_engine(model, ids, state)
     var snapshot: Optional[GenerationOperationSnapshot] = None
     return _run_prepared(model, ids, state, snapshot, remote_step)
 
@@ -1152,6 +1166,44 @@ def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: 
     return stream
 
 
+def _engine_publish_stream(mut s: GenerationHandle, progress: NativeGenerationProgress, batch: Int) raises:
+    if progress.wrote > 0:
+        var current = generation_array([batch, progress.length], "i")
+        memcpy(dest=i32_ptr(Int(py=current._addr)), src=progress.current.unsafe_ptr(), count=len(progress.current))
+        _ = current
+        s.current = current
+        s.produced = progress.produced
+    _ = progress
+
+
+def _read_engine(mut s: GenerationHandle, capacity: Int) raises -> PythonObject:
+    var batch = len(s.finished)
+    var length = Int(py=s.current.shape[1])
+    var owner = _engine_admission(s.model, s.state, batch, length)
+    var keep = List[PythonObject]()
+    var address = _addr(s.current, keep)
+    var progress = NativeGenerationProgress(address, batch, length, s.produced, capacity)
+    try:
+        owner.reserve()
+        with GILReleased(Python()):
+            native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
+                s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
+    except problem:
+        owner.release()
+        owner.publish()
+        _engine_publish_stream(s, progress, batch)
+        raise problem
+    owner.release()
+    owner.publish()
+    _engine_publish_stream(s, progress, batch)
+    var out = generation_array([batch, progress.wrote], "i")
+    causal_lm_tokens_row_major(progress.tokens, i32_ptr(Int(py=out._addr)), batch, progress.wrote)
+    _ = out
+    _ = owner
+    _ = keep^
+    return out
+
+
 def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
     if count < 1:
         raise Error("generation: read count must be positive")
@@ -1166,6 +1218,10 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
     var wrote = 0
     s.busy = True
     try:
+        if capacity > 0 and not s.done() and getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
+            var result = _read_engine(s, capacity)
+            s.busy = False
+            return result
         var snapshot: Optional[GenerationOperationSnapshot] = None
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
             var l = Int(py=s.current.shape[1])

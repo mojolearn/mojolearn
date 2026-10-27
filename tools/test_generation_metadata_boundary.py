@@ -41,9 +41,12 @@ def test_native_template_keeps_mutable_progress_out_of_snapshot():
     for assignment in ('result[0] = batch', 'result[1] = length',
                        'result[7] = capacity', 'result[8] = cached'):
         assert assignment in NATIVE
-    assert 'st.cached_tokens' not in PROVIDER
-    assert 'st.buffered_tokens' not in PROVIDER
-    assert 'st.positions' not in PROVIDER
+    # Immutable weight/dimension snapshots exclude progress. The separate
+    # operation-local engine admission reads progress once into native state.
+    snapshots = PROVIDER.split('struct GenerationEngineAdmission')[0]
+    assert 'st.cached_tokens' not in snapshots
+    assert 'st.buffered_tokens' not in snapshots
+    assert 'st.positions' not in snapshots
 
 
 def test_snapshot_is_lazy_and_scoped_to_one_public_operation():

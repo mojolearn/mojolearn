@@ -1,0 +1,267 @@
+{
+  "default": "off",
+  "switch": "MOJOLEARN_GENERATION_NATIVE_ENGINE=1",
+  "runtime": "not_run_lane_source_only",
+  "recipes": [
+    {
+      "id": "neural/lm-train-step/bytes/shape=full",
+      "lane": "lm-train-step",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/lm-forward/bytes/shape=full",
+      "lane": "lm-forward",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/gemm/gaussian/shape=full",
+      "lane": "gemm",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/transformer-forward/gaussian/shape=full",
+      "lane": "transformer-forward",
+      "status": "pending_fresh_backward_and_boundary",
+      "detail": "Carried-state session direct ABI exists. Fresh forward and backward still use CPython compiled-entry dispatch; no whole-recipe native claim.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mamba1-forward/gaussian/shape=full",
+      "lane": "mamba1-forward",
+      "status": "partial_carried_state_descriptor",
+      "detail": "Existing ordinary carried-state descriptor bypasses compiled-entry CPython call. Public metadata/fresh/backward and optional owned paths require separate coverage.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mamba2-forward/gaussian/shape=full",
+      "lane": "mamba2-forward",
+      "status": "partial_carried_state_descriptor",
+      "detail": "Existing ordinary carried-state descriptor bypasses compiled-entry CPython call. Public metadata/fresh/backward and optional owned paths require separate coverage.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mamba3-forward/gaussian/shape=full",
+      "lane": "mamba3-forward",
+      "status": "partial_carried_state_descriptor",
+      "detail": "Existing ordinary carried-state descriptor bypasses compiled-entry CPython call. Public metadata/fresh/backward and optional owned paths require separate coverage.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/samba-train-step/bytes/shape=full",
+      "lane": "samba-train-step",
+      "status": "pending_samba_repeated_orchestration",
+      "detail": "Some stateless forward/train paths use existing resident whole-native owner; decode/nonresident paths retain Python-object metadata and mixed primitive/block/tape dispatch.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/samba-forward/bytes/shape=full",
+      "lane": "samba-forward",
+      "status": "pending_samba_repeated_orchestration",
+      "detail": "Some stateless forward/train paths use existing resident whole-native owner; decode/nonresident paths retain Python-object metadata and mixed primitive/block/tape dispatch.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mlp-train-step/gaussian/shape=full",
+      "lane": "mlp-train-step",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/transformer-decode/gaussian/shape=full",
+      "lane": "transformer-decode",
+      "status": "pending_fresh_backward_and_boundary",
+      "detail": "Carried-state session direct ABI exists. Fresh forward and backward still use CPython compiled-entry dispatch; no whole-recipe native claim.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mamba1-decode/gaussian/shape=full",
+      "lane": "mamba1-decode",
+      "status": "partial_carried_state_descriptor",
+      "detail": "Existing ordinary carried-state descriptor bypasses compiled-entry CPython call. Public metadata/fresh/backward and optional owned paths require separate coverage.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mamba2-decode/gaussian/shape=full",
+      "lane": "mamba2-decode",
+      "status": "partial_carried_state_descriptor",
+      "detail": "Existing ordinary carried-state descriptor bypasses compiled-entry CPython call. Public metadata/fresh/backward and optional owned paths require separate coverage.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mamba3-decode/gaussian/shape=full",
+      "lane": "mamba3-decode",
+      "status": "partial_carried_state_descriptor",
+      "detail": "Existing ordinary carried-state descriptor bypasses compiled-entry CPython call. Public metadata/fresh/backward and optional owned paths require separate coverage.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/samba-decode/bytes/shape=full",
+      "lane": "samba-decode",
+      "status": "pending_samba_repeated_orchestration",
+      "detail": "Some stateless forward/train paths use existing resident whole-native owner; decode/nonresident paths retain Python-object metadata and mixed primitive/block/tape dispatch.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mlp-predict/gaussian/shape=full",
+      "lane": "mlp-predict",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/gemm-bf16/gaussian/shape=full",
+      "lane": "gemm-bf16",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/gemm-int8/gaussian/shape=full",
+      "lane": "gemm-int8",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/mlp-fit/higgs/shape=full",
+      "lane": "mlp-fit",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/lstm-fit/higgs/shape=full",
+      "lane": "lstm-fit",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/gru-fit/higgs/shape=full",
+      "lane": "gru-fit",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/rnn-fit/higgs/shape=full",
+      "lane": "rnn-fit",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/tape-user-model/higgs/shape=full",
+      "lane": "tape-user-model",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/sequential-fit/synthetic/shape=full",
+      "lane": "sequential-fit",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/sequential-predict/synthetic/shape=full",
+      "lane": "sequential-predict",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/ops-session-step/gaussian/shape=full",
+      "lane": "ops-session-step",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/program-run/gaussian/shape=full",
+      "lane": "program-run",
+      "status": "unchanged_other_lane_or_native_owner",
+      "detail": "Not modified by this generation tranche. Prior route evidence does not establish whole-recipe provider completion.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/causal-lm-generate/mojolearn-162m/shape=full",
+      "lane": "causal-lm-generate",
+      "status": "candidate_native_nonresident_transformer",
+      "detail": "Normless162M nonresident fp32 Transformer engine source. Exact owned Array buffers only; native token/layer loops. Runtime pending.",
+      "whole_recipe_native_qualified": false
+    },
+    {
+      "id": "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
+      "lane": "causal-lm-generate-smollm2",
+      "status": "existing_resident_or_pending_stream_route",
+      "detail": "Ordinary fixed greedy generation normally selects existing whole-native resident owner. Sampled/stream resident-forward loop remains pending; new engine refuses route replacement.",
+      "whole_recipe_native_qualified": false
+    }
+  ],
+  "routes": [
+    {
+      "route": "nonresident-fp32-transformer",
+      "status": "candidate",
+      "detail": "Exact owned Array weights/state; native loops and counters."
+    },
+    {
+      "route": "resident-whole-generation",
+      "status": "existing-native-owner",
+      "detail": "No route/math changes; retain actual runtime proof."
+    },
+    {
+      "route": "resident-per-forward-stream",
+      "status": "pending",
+      "detail": "Outer token loop currently Python-object orchestration; strict engine refuses."
+    },
+    {
+      "route": "parallel-distributed",
+      "status": "pending",
+      "detail": "Existing parallel owner untouched; engine refuses."
+    },
+    {
+      "route": "cpu",
+      "status": "pending",
+      "detail": "No current native sibling-provider admission; supported legacy route retained."
+    },
+    {
+      "route": "int15-packed",
+      "status": "pending",
+      "detail": "Different native entry contract; no conversion or math change."
+    },
+    {
+      "route": "foreign-weights-and-state",
+      "status": "pending",
+      "detail": "Copy/alias/writeback semantics retained only on default route; engine refuses."
+    },
+    {
+      "route": "mamba1-2-3",
+      "status": "partial",
+      "detail": "Existing carried-state descriptors do not make entire token owner native."
+    },
+    {
+      "route": "samba",
+      "status": "partial",
+      "detail": "Resident whole native owner exists; repeated mixed decode/nonresident remains."
+    },
+    {
+      "route": "transformer-fresh-backward",
+      "status": "pending",
+      "detail": "Must add checked native operations preserving exact fresh/backward math."
+    },
+    {
+      "route": "text-stream-tokenizer",
+      "status": "pending",
+      "detail": "Chunk/tokenizer boundary separate from numeric token engine."
+    }
+  ]
+}
