@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cluster.entries import run_entry
 from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
 from x_cluster.out import ClusterOut
-from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
+from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 
 
 def call_binding(

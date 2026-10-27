@@ -22,7 +22,7 @@ from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
 from x_cluster.minibatch_ptr import MBK_DEVSCAN_ANY, MBK_IDN_RESIDENT, MBK_NONFINITE_MSG, MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.minibatch_ptr import minibatch_entry_ptr_idn
 from x_cluster.out import ClusterOut
-from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
+from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
 
 
