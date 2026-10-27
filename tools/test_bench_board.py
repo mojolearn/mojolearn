@@ -144,7 +144,7 @@ STUB_NEURAL = textwrap.dedent(r'''
     for f in ("--lane", "--shape", "--arms", "--rounds", "--out", "--work", "--ours-python",
               "--theirs-python", "--ready-seconds", "--warmup-seconds", "--round-seconds",
               # FAIRNESS FIX (2026-10-13 audit): a compile arm's own warm-up deadline
-              "--compile-warmup-seconds"):
+              "--compile-warmup-seconds", "--higgs"):
         p.add_argument(f)
     p.add_argument("--keep-outputs", action="store_true")
     a = p.parse_args()
@@ -255,7 +255,7 @@ def env(tmp_path, monkeypatch):
     # upload evidence. Evidence/preflight integration has separate CPU tests.
     run_race = bb.run_race
     monkeypatch.setattr(bb, "run_race", lambda ctx, race: run_race(dict(ctx, capture_measurements=False), race))
-    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="MATCHED", races={}))
+    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="MATCHED", races={r["id"]: {"audit": {"verdict": "MATCHED"}} for r in races}))
     # The stub drivers stand in for our arm, so the GPU-set load probe stands in too: with the source tree's
     # mojolearn on PYTHONPATH and no built bindings (a CPU test pod) the real probe refuses every NVIDIA/AMD run.
     # The probe itself is tested in test_gpu_set_refusal_names_the_wheels_reason.
@@ -309,12 +309,12 @@ def test_detect_vendor():
 
 
 def test_full_plan_refusal_prevents_every_timed_race(env, monkeypatch):
-    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="REFUSED", races={}))
+    monkeypatch.setattr(bb, "audit_plan", lambda ctx, races: dict(verdict="REFUSED", races={r["id"]: {"audit": {"verdict": "REFUSED", "problems": ["solver differs"]}} for r in races}))
     timed = []
     monkeypatch.setattr(bb, "run_race", lambda *a: timed.append(a))
     rc = bb.main(env["base"] + ["--vendor", "amd", "--families", "trees", "--lanes", "rf",
                               "--datasets", "taxi", "--no-smoke-gate"])
-    assert rc == 1
+    assert rc == 0
     assert not timed
     assert json.loads((env["out"] / "board.json").read_text())["preflight"]["verdict"] == "REFUSED"
 
@@ -350,8 +350,7 @@ def test_plan_apple_carries_fast_and_identical_arms():
                           + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"]) + more + tasks + algos)
     for r in races:
         if r["family"] == "neural":
-            want = ({"ours-fast": "fast"} if r["lane"] in bb.NEURAL.FIT_LANES
-                    else {"ours": "identical", "ours-fast": "fast"})
+            want = {"ours": "identical", "ours-fast": "fast"}
             assert r["our_arms"] == want, r["id"]
             continue
         modes = sorted(set(r["our_arms"].values()))
@@ -1008,8 +1007,7 @@ def test_neural_command_and_settings():
 
 def _run_neural(env, *extra):
     base = list(env["base"])
-    # a neural-only run needs no taxi/Istella: point --data-root at nothing
-    base[base.index("--data-root") + 1] = str(env["tmp"] / "no-data-here")
+    # Neural fit recipes include HIGGS; use the staged fixture data root.
     return bb.main(["--vendor", "nvidia", "--families", "neural", "--neural-shape", "small"]
                    + base + list(extra))
 
