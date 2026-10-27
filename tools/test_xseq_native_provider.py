@@ -34,7 +34,8 @@ def test_native_outputs_preserve_helper_route_switches_and_nan_rule():
                  'HOTPATH_SABOTAGE', 'HPD_MAX_N', 'LRD_MAX_N'):
         assert name in source
     assert 'source[0] == source[0]' in source
-    assert 'return model_output_host(op, r)' in source
+    assert 'return model_output_fallback(op, r)' in source
+    assert 'model_outputs_host' not in source
     assert 'device_argmax_rows(ex.ctx' in source
 
 
