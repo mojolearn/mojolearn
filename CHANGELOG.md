@@ -4,6 +4,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.61 (published 2026-10-27)
+
+- **NVIDIA PTX installations.** A standalone PTX GPU package is detected and selected automatically.
+- **Gaussian mixtures.** Missing optional native state preserves the original attribute error, and loaded models initialize their default solver state correctly.
+- **Tokenizer identity.** Tokenizer fingerprints use the compiled Unicode table version rather than the host Python version when normalization is disabled.
+- **Imported graphs.** Absolute value produces canonical NaN bits consistently on Apple, NVIDIA and AMD.
+
 ## 0.8.60 (published 2026-10-26)
 
 - **Sharded forests.** A fresh process can fit a sharded forest directly from NumPy arrays, whether NumPy is imported before or after mojolearn.
