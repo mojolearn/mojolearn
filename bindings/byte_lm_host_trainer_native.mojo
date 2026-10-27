@@ -17,11 +17,14 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.byte_lm_trainer_native import _validated_state
+from bindings.byte_checkpoint_io import ByteCheckpointIOError
+from providers.python.byte_lm_json_checkpoint_pyapi import byte_json_payload, byte_json_arrays, byte_json_read
 from bindings.linalg_ops_native import linalg_ops_operation
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.native_buffer_owner import native_storage_allocate
-from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths
+from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
 from providers.python.training_buffer_pyapi import training_f32_cast_owned
 from core.training_state_validation import training_byte_shape_validate
 from core.sha256 import sha256_hex_addr
@@ -256,6 +259,32 @@ def byte_lm_host_inference_construct(model: PythonObject, args: PythonObject,
     # Publish only after admission, allocation, decoding and profile agreement.
     _ = py_call(py_fields(model).update, pending)
     return PythonObject(None)
+
+
+def byte_lm_host_inference_checkpoint(cls: PythonObject, args: PythonObject,
+        context: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
+    if cls is not context["byte_lm_host_inference_class"]:
+        raise Error("TypeError: host checkpoint restoration requires the connected native inference class")
+    classical_connect_numpy(context)
+    var source = byte_json_payload(byte_json_read(args[0], io_error))
+    var described = _shape_of(source)
+    training_byte_shape_validate(described.d, described.chunked)
+    byte_json_arrays(source, described.n_total(), described.n_tensors())
+    # This is the same complete state validator used by the GPU trainer:
+    # integrity, mode/profile, tensor registry, optimizer, cursor and schedule.
+    var state_context = context["byte_lm_checkpoint_context"]
+    classical_connect_numpy(state_context)
+    var state = _validated_state(source, state_context)
+    var shape = _host_shape_from_state(state, context)
+    var result = native_storage_allocate(cls)
+    _ = byte_lm_host_inference_construct(result,
+        Python.tuple(state["parameters"], shape, args[1], args[2]), context)
+    return result
+
+
+def _host_shape_from_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Reuse the config owner instead of invoking its Python constructor.
+    return byte_lm_config_operation(state, "config_state", Python.tuple(), context)
 
 
 def byte_lm_host_construct(trainer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -545,11 +574,14 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
 
 
 def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var io_error = ByteCheckpointIOError()
     try:
         var call = PythonObject(from_borrowed=args_ptr)
         var operation = String(py=call[1])
         if operation == "logits" or operation == "next_bytes" or operation == "loss_bits" or operation == "inference_loss":
             return byte_lm_host_infer(call[0], operation, call[2], call[3]).steal_data()
+        if operation == "inference_from_checkpoint":
+            return byte_lm_host_inference_checkpoint(call[0], call[2], call[3], io_error).steal_data()
         if operation == "inference_construct":
             return byte_lm_host_inference_construct(call[0], call[2], call[3]).steal_data()
         if operation == "construct":
@@ -567,6 +599,8 @@ def byte_lm_host_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C")
             return PythonObject(Float64(bitcast[DType.float32](UInt32(py=result)))).steal_data()
         return result.steal_data()
     except error:
+        if io_error.pending:
+            return io_error.restore()
         var text = String(error)
         if text.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)

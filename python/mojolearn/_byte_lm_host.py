@@ -249,20 +249,7 @@ class LanguageModelInference:
         -------
         LanguageModelInference
         """
-        from ._byte_lm_impl import _CHECKPOINT_LIMIT, _decode_checkpoint
-        with Path(path).open('rb') as stream:
-            encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        state, shape = _decode_checkpoint(encoded)
-        return cls(state['parameters'], shape=shape, threaded=threaded, threads=threads)
-
-    def _threads_flag(self, threaded):
-        value = self._threaded if threaded is None else threaded
-        if not isinstance(value, bool):
-            raise TypeError('threaded must be a bool or None')
-        return 1 if value else 0
-
-    def _threads_arg(self, threads):
-        return _thread_count(self._threads if threads is None else threads)
+        return _HOST_TRAIN(cls, "inference_from_checkpoint", (path, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     @property
     def shape(self):
@@ -456,6 +443,7 @@ def _connect_host_trainer():
     # is the trainer's own binding entry, retained at construction
     from .tokenizer import _binding
     from . import lowbit, _linalg_impl
+    from ._byte_lm_impl import _LM_TRAINER_CONTEXT
     from ._byte_lm_config import _DEFAULT_PROFILE
     from ._native_classical_bridge import _state_context
     context = _state_context()
@@ -464,7 +452,7 @@ def _connect_host_trainer():
         binding = _load()
     except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
         binding = type(error).__name__ + ": " + str(error)
-    context.update(byte_lm_bf16_class=lowbit.BF16Weight, byte_lm_int8_class=lowbit.Int8Weight,
+    context.update(byte_lm_checkpoint_context=_LM_TRAINER_CONTEXT, byte_lm_bf16_class=lowbit.BF16Weight, byte_lm_int8_class=lowbit.Int8Weight,
                    byte_lm_linalg_context=_linalg_impl._NATIVE_CONTEXT, byte_lm_default_profile=_DEFAULT_PROFILE,
                    byte_lm_host_trainer_class=LanguageModelHostTrainer,
                    byte_lm_host_inference_class=LanguageModelInference,

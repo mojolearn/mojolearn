@@ -155,3 +155,14 @@ def test_inference_construction_uses_native_registry_and_shared_lowbit_provider(
     assert 'linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8"' in native
     assert 'List[String](length=2' in native
     assert 'py_call(py_fields(model).update, pending)' in native
+
+
+def test_host_checkpoint_reuses_native_codec_and_full_state_validator():
+    source = (ROOT / 'python/mojolearn/_byte_lm_host.py').read_text()
+    body = source.split('def from_checkpoint(cls, path')[1].split('    @property')[0]
+    assert '_HOST_TRAIN(cls, "inference_from_checkpoint"' in body
+    assert '_decode_checkpoint' not in body
+    native = (ROOT / 'bindings/byte_lm_host_trainer_native.mojo').read_text()
+    assert 'byte_json_payload(byte_json_read(args[0], io_error))' in native
+    assert '_validated_state(source, state_context)' in native
+    assert 'if io_error.pending:' in native and 'return io_error.restore()' in native
