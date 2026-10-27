@@ -72,9 +72,9 @@ def connect_bindings(*names):
     connections = context.setdefault('family_binding_connections', {})
     context['family_mode_set_type'] = _backend._ModeSet
     context['family_mode_set_fields'] = vars(_backend._ModeSet)['__dict__'].__get__
-    for name in names:
+    for name in names:  # glue: fixed module-import binding names, never user data or product execution
         modes = {}
-        for mode in ('identical', 'fast'):
+        for mode in ('identical', 'fast'):  # glue: fixed module-import binding modes, never product execution
             try:
                 binding = _backend.binding(name, mode)
                 modes[mode] = (binding,)
