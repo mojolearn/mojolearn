@@ -8,6 +8,7 @@
 # operand layout (`_operand`, `as_*_c`) and outputs, and calls the same binding
 # entries with the same address and params lists in the same order. The same
 # kernels on the same bytes: the bits do not move.
+from providers.python.estimator_binding_pyapi import estimator_binding
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
@@ -125,13 +126,10 @@ def lin_backend_mode(context: PythonObject) raises -> String:
 
 def lin_connected_binding(context: PythonObject) raises -> PythonObject:
     var state = lin_state(context)
-    var binding = state["_binding_cache"]
-    if binding is None:
-        var mode = lin_backend_mode(context)
-        binding = state["_native_connected_bindings"][mode]
-        if py_type(binding) is native_loaded_module("builtins").str:
-            raise Error(String(py=binding))
-        py_setitem(state, "_binding_cache", binding)
+    # Resolve the live import-connected module once per operation. Linalg's
+    # own provider supplies its compile-mode/profile metadata immediately below.
+    var binding = estimator_binding(PythonObject(None), "_mojolearn_linalg", context, False)
+    py_setitem(state, "_binding_cache", binding)
     if py_get(state, "_mode_binding") is not binding:
         py_setitem(state, "_mode_binding", binding)
         py_setitem(state, "_mode_cache", PythonObject(None))

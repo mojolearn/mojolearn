@@ -901,7 +901,7 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
 
 def neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
-    args = xn_admit_arguments(args)
+    args = xn_admit_arguments(args, context)
     classical_connect_numpy(context)
     if operation == "family_xn_loc_lof_fit":
         _lof_fit(model, args, context)

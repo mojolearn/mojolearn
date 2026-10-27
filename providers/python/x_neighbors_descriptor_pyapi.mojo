@@ -9,6 +9,7 @@ from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect,
     neural_descriptor_execute,
 )
+from providers.python.estimator_binding_pyapi import estimator_binding
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT, XN_MODE_OPERATION, xn_operation_id
 
 
@@ -39,8 +40,14 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
     return provider
 
 
-def xn_admit_arguments(args: PythonObject) raises -> PythonObject:
-    var binding = xn_admit(args[0])
+def xn_admit_arguments(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var source = args[0]
+    var backend = context["backend_fields"]
+    if (py_type(source) is backend["_HostBinding"] or py_type(source) is backend["_NoGpuBinding"]):
+        # Public functional callers may still carry an import-connected host
+        # facade. Resolve its already-loaded module without invoking __getattr__.
+        source = estimator_binding(PythonObject(None), "_mojolearn_x_neighbors", context)
+    var binding = xn_admit(source)
     var result = Python.list(binding)
     for i in range(1, len(args)):  # driver-loop: over fixed public method arguments
         _ = py_call(result.append, args[i])

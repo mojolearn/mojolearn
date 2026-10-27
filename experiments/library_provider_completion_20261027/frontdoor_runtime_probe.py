@@ -8,7 +8,7 @@ import traceback
 def run():
     import numpy as np
     from mojolearn import SVC, SVR, LinearSVC, LinearSVR, KMeans
-    from mojolearn import _backend
+    from mojolearn import _backend, _native_family_bridge
     from mojolearn._mode import NumericModeMixin
     rng = np.random.default_rng(77)
     x = rng.normal(size=(16, 3)).astype('f4')
@@ -43,6 +43,28 @@ def run():
                 records.append(dict(case=label, status='failed', error=traceback.format_exc()))
     finally:
         _backend.binding, NumericModeMixin._bind = old_binding, old_bind
+    # Runtime mode readback must reject a Python replacement before invoking
+    # its hook, then recover after restoring the live native module entry.
+    module = _native_family_bridge.shared_context()['family_binding_connections']['_mojolearn']['identical'][0]
+    reader = _backend._vendor_fn('_mojolearn').removesuffix('_vendor') + '_numeric_mode'
+    saved = getattr(module, reader)
+    getter_calls = []
+    def wrong_mode():
+        getter_calls.append(True)
+        return 0
+    try:
+        setattr(module, reader, wrong_mode)
+        try:
+            cases[-1][1].predict(x)
+        except Exception as error:
+            assert 'compiled entry' in str(error)
+            assert not getter_calls
+        else:
+            raise AssertionError('Python mode getter replacement accepted')
+    finally:
+        setattr(module, reader, saved)
+    cases[-1][1].predict(x)
+    records.append(dict(case='native_mode_getter_replacement',status='passed'))
     return dict(scope='shared binding admission only', records=records, forbidden_loader_calls=calls,
                 full_native_runtime_qualified=False,
                 pending=['transitive operation dispatch', 'availability/property descriptors',
