@@ -110,6 +110,20 @@ def neural_descriptor_cached(
     return result
 
 
+def neural_descriptor_handle(provider: PythonObject, factory: PythonObject, value: PythonObject) raises -> Int:
+    # Shared setup-only admission of an engine's typed native state. The engine
+    # checks its exact value type; providers must retain value and provider for
+    # every subsequent use. No generic CPython object-layout cast is permitted.
+    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    var bi = native_loaded_module("builtins")
+    if py_type(factory) is not py_type(bi.len) or factory.__self__ is not owner[].module:
+        raise Error("TypeError: native state admission requires the provider's compiled entry")
+    var handle = Int(py=py_call(factory, value))
+    if handle == 0:
+        raise Error("native provider: state admission returned a null handle")
+    return handle
+
+
 def neural_descriptor_matches(provider: PythonObject, canonical: PythonObject) raises -> Bool:
     # Native owner identity only: no getattr, Python callback or cache lookup.
     return provider is not None and provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is canonical
