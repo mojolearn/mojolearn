@@ -7,7 +7,7 @@ from core.hostptr import f32_ptr, i32_ptr
 from max.gpu.host import DeviceContext
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from training.samba_resident import SambaResidentSession, samba_resident_forward, samba_resident_train_step, samba_resident_accumulated_step
-from training.optimizer_public import OPT_POOL, opt_pool_handle, resident_open, resident_close, resident_download, resident_upload
+from training.optimizer_public import OPT_POOL, opt_pool_handle, resident_open, resident_close, resident_download, resident_upload, per_call_step, resident_step, resident_step_io
 
 
 def native_resident_arity(op: Int, na: Int, np: Int, nf: Int) raises:
@@ -34,6 +34,14 @@ def native_resident_arity(op: Int, na: Int, np: Int, nf: Int) raises:
         valid = na == 2 and np == 2 and nf == 0
     elif op == 24:
         valid = na == 0 and np == 0 and nf == 0
+    elif op == 25:
+        valid = na == 7 and np == 5 and nf == 8
+    elif op == 26:
+        valid = na == 5 and np == 6 and nf == 8
+    elif op == 27:
+        valid = na == 5 and np == 7 and nf == 8
+    elif op == 28:
+        valid = na == 0 and np == 0 and nf == 0
     if not valid:
         raise Error("resident primitive ABI: invalid operation or descriptor arity")
 
@@ -52,6 +60,16 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
         return resident_download(ctx, p[0], a[0], a[1], p[1])
     if op == 23:
         return resident_upload(ctx, p[0], a[0], a[1], p[1])
+    if op == 25:
+        return per_call_step(ctx, f32_ptr(a[0]), f32_ptr(a[1]), f32_ptr(a[2]), f32_ptr(a[3]),
+            i32_ptr(a[4]), i32_ptr(a[5]), f32_ptr(a[6]), p[0], p[1], p[2], p[3],
+            Float32(f[0]), Float32(f[1]), Float32(f[2]), Float32(f[3]), Float32(f[4]), Float32(f[5]), Float32(f[6]), Float32(f[7]), p[4] != 0)
+    if op == 26:
+        return resident_step(ctx, p[0], f32_ptr(a[0]), f32_ptr(a[1]), i32_ptr(a[2]), i32_ptr(a[3]), f32_ptr(a[4]),
+            p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]), Float32(f[2]), Float32(f[3]), Float32(f[4]), Float32(f[5]), Float32(f[6]), Float32(f[7]), p[5] != 0)
+    if op == 27:
+        return resident_step_io(ctx, p[0], p[1], f32_ptr(a[0]), f32_ptr(a[1]), i32_ptr(a[2]), i32_ptr(a[3]), f32_ptr(a[4]),
+            p[2], p[3], p[4], p[5], Float32(f[0]), Float32(f[1]), Float32(f[2]), Float32(f[3]), Float32(f[4]), Float32(f[5]), Float32(f[6]), Float32(f[7]), p[6] != 0)
     comptime if not IDN_SAMBA_RESIDENT_STEP:
         raise Error("Samba resident operation is disabled in this build")
     else:

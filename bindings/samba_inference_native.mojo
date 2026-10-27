@@ -5,7 +5,7 @@ The resident model/session remains the persistent numerical owner. Public
 classes and buffer exporters remain CPython-owned interface records; this
 module does not claim that all public state has native struct ownership.
 """
-from providers.python.samba_resident_pyapi import samba_resident_native_forward
+from providers.python.samba_resident_pyapi import samba_resident_native_forward, samba_resident_provider
 from std.python import Python, PythonObject
 from providers.python.samba_execution_pyapi import samba_provider_forward
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
@@ -367,7 +367,12 @@ def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject,
     var unused_gradient = generation_array([1])
     var params = py_ints([rows, v, -100, 2, 0, 0])
     _ = py_call(params.append, 0.0)
-    _ = py_call(_native_function(entries, "ce_loss"), loss._addr, row_loss._addr, unused_gradient._addr, logits._addr, y._addr, params)
+    var primitive = samba_resident_provider(fields, entries)
+    if primitive is not None:
+        _ = neural_descriptor_execute(primitive, 8, [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=unused_gradient._addr),
+            Int(py=logits._addr), Int(py=y._addr)], [rows, v, -100, 2, 0, 0], [0.0])
+    else:
+        _ = py_call(_native_function(entries, "ce_loss"), loss._addr, row_loss._addr, unused_gradient._addr, logits._addr, y._addr, params)
     _ = unused_gradient  # keep the Python object alive through the native call above
     _ = row_loss  # keep the Python object alive through the native call above
     _ = loss  # keep the Python object alive through the native call above

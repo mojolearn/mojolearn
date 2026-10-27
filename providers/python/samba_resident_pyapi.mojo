@@ -14,7 +14,7 @@ def samba_resident_provider(fields: PythonObject, entries: PythonObject) raises 
     var provider = py_get(fields, "_native_primitives")
     if provider is None:
         return provider
-    provider = neural_descriptor_reuse(provider, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 25)
+    provider = neural_descriptor_reuse(provider, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
     py_setitem(fields, "_native_primitives", provider)
     return provider
 
@@ -102,3 +102,19 @@ def samba_resident_native_step(fields: PythonObject, config: PythonObject, provi
     _ = neural_descriptor_reserved_execute(provider, session, handle, 14, 15, 18 if accumulation > 1 else 17,
         [Int(py=fields["flat"]._addr), Int(py=ids._addr), Int(py=targets._addr), Int(py=opt["offsets"]._addr),
          Int(py=opt["buf_initialized"]._addr), Int(py=info._addr), Int(py=loss._addr)], p, f)
+
+
+def samba_optimizer_execute(provider: PythonObject, operation: Int, addresses: List[Int],
+                            plan: PythonObject, handle: Int, io: Int) raises -> Int:
+    var p = List[Int]()
+    if operation != 25:
+        p.append(handle)
+    if operation == 27:
+        p.append(io)
+    for i in range(4):  # small-loop(optimizer integer settings)
+        p.append(Int(py=plan[i]))
+    p.append(Int(py=plan[12]) if len(plan) == 13 else 0)
+    var f = List[Float64]()
+    for i in range(4, 12):  # driver-loop: over eight optimizer floating settings
+        f.append(Float64(py=plan[i]))
+    return neural_descriptor_execute(provider, operation, addresses, p, f)

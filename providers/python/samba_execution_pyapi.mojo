@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_typ
 from bindings.generation_buffers import generation_address, generation_array
 from bindings.causal_lm_public import _native_function, _mutable
 from bindings.neural_block_public import neural_training_entries
-from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct
+from providers.python.neural_descriptor_pyapi import neural_descriptor_handle, neural_descriptor_matches, neural_descriptor_reuse, neural_descriptor_construct, neural_descriptor_execute
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.native_execution_pyapi import AdmittedNativeExecution
 from providers.python.operation_lock_pyapi import OperationLockLease
@@ -483,7 +483,7 @@ def samba_provider_forward(fields: PythonObject, config: PythonObject, entries: 
     var primitive = py_get(fields, "_native_primitives")
     if primitive is None:
         return PythonObject(None)
-    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 25)
+    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
     py_setitem(fields, "_native_primitives", primitive)
     if not samba_provider_eligible(fields):
         return PythonObject(None)
@@ -498,7 +498,7 @@ def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries
     var primitive = py_get(fields, "_native_primitives")
     if primitive is None or not samba_provider_eligible(fields):
         return PythonObject(None)
-    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 25)
+    primitive = neural_descriptor_reuse(primitive, _native_function(entries, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
     py_setitem(fields, "_native_primitives", primitive)
     var shape = ids.shape
     var admitted = AdmittedSambaExecution(fields, config, PythonObject(None), primitive,
@@ -506,9 +506,7 @@ def samba_provider_gradients(fields: PythonObject, config: PythonObject, entries
     admitted.configure_training()
     var bi = Python.import_module("builtins")
     var fused = Bool(py=py_call(bi.hasattr, entries, "samba_head_loss"))
-    var chunked = False
-    if Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")):
-        chunked = Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")())
+    var chunked = neural_descriptor_execute(primitive, 28, [], [], [], False) != 0
     var probability = Float64(py=config["dropout"])
     if probability > 0.0 and stream is not None:
         var p = Float32(probability)

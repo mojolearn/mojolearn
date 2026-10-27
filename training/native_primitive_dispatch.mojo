@@ -11,7 +11,7 @@ from core.philox_neural import neural_rng_host
 from training.estimator import identical_ce_loss_host
 from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.chunked_lm_head_v2 import chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host
-from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
+from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_CHUNKED_LM_HEAD_V2
 from training.native_resident_dispatch import native_resident_arity, native_resident_operation
 from training.samba_ops import (
     samba_embedding_forward_host, samba_embedding_backward_host,
@@ -25,6 +25,8 @@ comptime PRIMITIVE_CONTEXT = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUME
 def native_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if op == 24:
         return Int(IDN_SAMBA_RESIDENT_STEP)
+    if op == 28:
+        return Int(IDN_CHUNKED_LM_HEAD_V2)
     var ctx = neural_ctx[PRIMITIVE_CONTEXT]()
     if op >= 12:
         return native_resident_operation(ctx, op, a, p, f)
@@ -67,7 +69,7 @@ def native_primitive_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf
                      String("rms_norm_backward"), String("linear_forward"), String("linear_backward"),
                      String("neural_rng"), String("samba_head_loss"), String("ce_loss"), String("accumulate"),
                      String("chunked_lm_head_v2_loss"), String("chunked_lm_head_v2_train")]
-        if op < 0 or op >= 25:
+        if op < 0 or op >= 29:
             raise Error("neural primitive ABI: unknown operation")
         var address_counts: List[Int] = [3, 3, 3, 5, 3, 5, 2, 7, 5, 2, 6, 8]
         var integer_counts: List[Int] = [3, 3, 2, 2, 3, 3, 6, 6, 6, 3, 3, 3]

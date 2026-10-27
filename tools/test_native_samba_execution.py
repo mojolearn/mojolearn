@@ -70,3 +70,17 @@ def test_native_lock_is_an_exact_samba_admission_owner():
     assert '"opaque_types": (_thread.LockType, type(_thread.RLock()), _OperationLock)' in source
     assert 'classes = tuple(dict.fromkeys(classes))' in source
     assert 'classes + (array_cls,)' in source
+
+
+def test_optimizer_dispatch_preserves_same_native_functions_and_float_conversions():
+    source=(ROOT/'training/native_resident_dispatch.mojo').read_text()
+    for operation, function in ((25,'per_call_step'),(26,'resident_step'),(27,'resident_step_io')):
+        branch=source.split(f'    if op == {operation}:')[1].split('    if op ==')[0]
+        assert f'return {function}(' in branch
+        for index in range(8):
+            assert f'Float32(f[{index}])' in branch
+    step=(ROOT/'bindings/samba_step_native.mojo').read_text()
+    assert 'microbatch_split_is_identical(b * length, a)' in step
+    for operation in (25,26,27):
+        assert f'samba_optimizer_execute(provider, {operation},' in step
+    assert 'neural_descriptor_execute(provider, 9,' in step
