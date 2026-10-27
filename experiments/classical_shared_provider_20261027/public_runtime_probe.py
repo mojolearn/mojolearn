@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bounded SVC public A/B; root executes rebuilt local Mac, never a timing run."""
+from contextlib import contextmanager
 import argparse
 import json
 import os
@@ -9,7 +10,7 @@ import traceback
 
 def qualify():
     import numpy as np
-    from mojolearn import SVC
+    from mojolearn import SVC, _backend
     from mojolearn._verify_native_runtime import audit_native_call
 
     rng = np.random.default_rng(421)
@@ -18,13 +19,32 @@ def qualify():
     x[:, 0] += labels.astype('f4') * np.float32(0.3)
     weights = np.linspace(0.5, 1.5, len(x), dtype='f4')
     results = []
+    binding = _backend.binding('_mojolearn_svm', 'identical')
+    @contextmanager
+    def poison_legacy(arm):
+        if not arm:
+            yield
+            return
+        names = ('svc_fit', 'svc_predict', 'svc_pair_epilogue', 'svc_platt_train',
+                 'svc_splitmix_perm', 'svm_numeric_mode')
+        saved = {name: getattr(binding, name) for name in names}
+        def refused(*args, **kwargs):
+            raise AssertionError('candidate redispatched through a legacy Python-facing entry')
+        try:
+            for name in names:
+                setattr(binding, name, refused)
+            yield
+        finally:
+            for name, value in saved.items():
+                setattr(binding, name, value)
     def equal(a, b, name):
         a, b = np.asarray(a), np.asarray(b)
         assert a.shape == b.shape and a.dtype == b.dtype, name
         assert a.tobytes() == b.tobytes(), name
     def call(arm, method, *args, **kwargs):
         os.environ['MOJOLEARN_CLASSICAL_NATIVE_DISPATCH'] = str(arm)
-        return method(*args, **kwargs)
+        with poison_legacy(arm):
+            return method(*args, **kwargs)
     for kernel, binary, probability in [('linear', True, False), ('rbf', False, True),
                                         ('poly', False, False), ('precomputed', False, True)]:
         data = (x @ x.T).astype('f4') if kernel == 'precomputed' else x
@@ -40,14 +60,18 @@ def qualify():
         fit_counts = None
         for arm, model in enumerate(models):
             os.environ['MOJOLEARN_CLASSICAL_NATIVE_DISPATCH'] = str(arm)
-            audit = audit_native_call(model.fit, data, y, sample_weight=weights)
+            with poison_legacy(arm):
+                audit = audit_native_call(model.fit, data, y, sample_weight=weights)
             audit.assert_native()
             fit_reports.append(audit.report())
             if arm:
                 name, fit_counts = vars(model)['_native_svc_dispatch']
                 assert name == 'mojolearn.svm.binary.v1'
                 assert fit_counts[0] >= (1 if binary else 3)
+                assert len(fit_counts) == 6 and fit_counts[5] == 1
+                assert fit_counts[2] > 0
                 if probability:
+                    assert fit_counts[3] > 0 and fit_counts[4] > 0
                     assert fit_counts[1] > 0  # held-out probability-fold machines
         for attr in ('classes_', 'support_', 'support_vectors_', 'dual_coef_', 'intercept_', 'n_iter_'):
             equal(getattr(models[0], attr), getattr(models[1], attr), attr)
@@ -58,6 +82,7 @@ def qualify():
             equal(a, b, method)
             name, calls = vars(models[1])['_native_svc_dispatch']
             assert name == 'mojolearn.svm.binary.v1' and calls[1] == (1 if binary else 3)
+            assert calls[5] == 1
         if probability:
             for attr in ('probA_', 'probB_'):
                 equal(getattr(models[0], attr), getattr(models[1], attr), attr)

@@ -29,16 +29,17 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
     for name in ('_run', '_pair_decisions'):
         src = body(name)
         assert src.count('_svc_predict_settings(') == 1
-        assert src.count('_svc_provider(') == 1
+        assert '_svc_provider(' not in src
     assert body('_svc_fit').count('_svc_fit_settings(') == 1
-    assert body('_svc_fit').count('_svc_provider(') == 1
+    assert '_svc_provider(' not in body('_svc_fit')
+    assert body('svc_kernel_operation').count('_svc_provider(') == 1
 
 
 def test_common_provider_is_selected_without_new_provider_type():
     src = body('_svc_provider')
     assert 'MOJOLEARN_CLASSICAL_NATIVE_DISPATCH' in src
     assert 'neural_descriptor_entry(binding, "svm_binary_api_v1", False)' in src
-    assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 2)' in src
+    assert 'neural_descriptor_connect(factory, String(SVC_ABI_NAME), 6)' in src
     assert 'return PythonObject(None)' in src
     assert 'unavailable for this binding' in src
     assert 'struct ' not in PUBLIC
@@ -64,3 +65,27 @@ def test_all_solve_and_machine_call_sites_receive_operation_snapshot():
     assert len(machines) == 3
     assert 'settings, native)' in body('_fit_ovo')
     assert 'settings, native,' in body('_platt')
+
+
+def test_pair_fold_and_calibration_calls_use_same_native_provider():
+    for operation in ('svc_pair_epilogue', 'svc_platt_train', 'svc_splitmix_perm'):
+        assert f'family_call(_entry(binding, "{operation}"' not in PUBLIC
+    for function in ('_c_rows', '_gather', '_gather_i32', '_pair_select', '_epilogue', '_platt'):
+        src = body(function)
+        assert 'native: PythonObject' in src.split('raises', 1)[0]
+        assert 'svc_epilogue_execute(binding, native,' in src
+    assert 'neural_descriptor_execute(native, 5, [], [], [])' in body('_svc_provider')
+    assert 'py_call(mode)' not in body('_svc_provider')
+
+
+def test_epilogue_typed_bridge_retains_numerical_owners():
+    old = (ROOT / 'providers/python/svm_impl_svc_epilogue_pyapi.mojo').read_text()
+    new = (ROOT / 'svm/native_epilogue_dispatch.mojo').read_text()
+    numerical = r'\b(?:device_gather|device_select|device_fold_split|device_fold_finish|device_c_rows|device_pair_epilogue|device_platt_train|device_splitmix_perm)\('
+    assert re.findall(numerical, old) == re.findall(numerical, new)
+    assert 'Python' not in new and 'py=' not in new
+    abi = re.search(r'^def svc_binary_v1\(.*?(?=^struct )', NATIVE, re.M | re.S).group()
+    assert abi.index('na != expected_a') < abi.index('native_descriptor_words(aa, na)')
+    for message in ('svc gather: an identity axis must keep its length', 'svc fold: bad fold range',
+                    'svc_pair_epilogue: needs a pair and two classes', 'svc_splitmix_perm: n exceeds int32'):
+        assert message in old and message in new

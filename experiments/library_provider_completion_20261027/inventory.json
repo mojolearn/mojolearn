@@ -26,14 +26,16 @@
       ],
       "source_changes": [
         "SVC binary solver/predict descriptors and operation settings snapshot inherited",
-        "Shared import-connected native estimator binding admission for selected SVM/KMeans method bodies"
+        "Shared import-connected native estimator binding admission for selected SVM/KMeans method bodies",
+        "SVC shared provider now owns pair/fold/gather/weight epilogues, Platt calibration, splitmix, and mode readback"
       ],
       "remaining": [
         "pair/fold/gather/calibration/epilogue orchestration",
         "SVR/OneClassSVM/LinearSVC/LinearSVR",
         "CPU native tables",
         "public mode loader callbacks",
-        "deeper algorithm operation dispatch and public availability/property descriptors remain"
+        "deeper algorithm operation dispatch and public availability/property descriptors remain",
+        "SVC gamma/class reductions/ovo-layout/coefficients and Python-owned orchestration; SVR and OneClassSVM typed tables"
       ]
     },
     {
