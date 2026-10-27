@@ -420,6 +420,8 @@ def _connect_causal_native():
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
     from .._native_neural_bridge import connect_training
     runtime = runtime_binding()._module
+    from .._native_operation_lock import connect as connect_operation_lock
+    connect_operation_lock(runtime)
     runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
     selected_mode = _backend.default_mode()
     bindings = {"cpu:identical": _causal_native_connections()}

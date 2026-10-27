@@ -6,6 +6,7 @@ from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.neural_block_public import neural_training_entries, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words, neural_mamba_session_call
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
+from providers.python.operation_lock_pyapi import OperationLockLease
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 
@@ -120,16 +121,17 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
         for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
             _ = py_call(params.append, fields[name])
         lock = fields["_runtime_lock"]
+    var lock_lease = OperationLockLease(lock)
     if lock is not None:
-        lock.acquire()
+        lock_lease.acquire()
     var handle = PythonObject(None)
     try:
         handle = py_call(_native_function(entries, kind + "_forward_tape"), addresses, params)
         if lock is not None:
-            lock.release()
+            lock_lease.release()
     except error:
         if lock is not None:
-            lock.release()
+            lock_lease.release()
         raise error
     return Python.tuple(out, Python.tuple(entries, handle, x.shape, py_call(bi.tuple, shapes)))
 
@@ -155,15 +157,16 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
     for i in range(len(gradients)):  # driver-loop: over gradient output addresses
         _ = py_call(addresses.append, gradients[i]._addr)
     var lock = fields["_runtime_lock"] if kind == "transformer" else PythonObject(None)
+    var lock_lease = OperationLockLease(lock)
     if lock is not None:
-        lock.acquire()
+        lock_lease.acquire()
     try:
         _ = py_call(_native_function(tape[0], kind + "_backward_tape"), tape[1], addresses)
         if lock is not None:
-            lock.release()
+            lock_lease.release()
     except error:
         if lock is not None:
-            lock.release()
+            lock_lease.release()
         raise error
     _ = dy^  # the backward entry read `dy` by address
     var result = bi.dict()

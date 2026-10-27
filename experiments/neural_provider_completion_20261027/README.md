@@ -45,3 +45,26 @@ The numerical loop owners remain in Mojo. Moving a file or finding zero Python
 frames alone does not prove metadata is admitted once or that all internal
 CPython dispatch is gone. Shared provider lifetime, admission and errors are
 reused; no per-model provider implementation is added.
+
+## Delivered source tranche: shared native operation lock
+
+`core/operation_lock.mojo` owns a recursive host lock with stable native words,
+thread identity, acquire/release atomics and a native contention wait. It keeps
+per-layer acquisition order and never pre-acquires a model's set of locks.
+`OperationLockLease` admits the owner once, retains it across the operation and
+reuses its handle for acquire/release without further object metadata reads.
+The Python-facing lock protocol consists of compiled instance descriptors;
+there are no Python acquire/release/context-manager implementations.
+
+Candidate identical Transformer construction creates this lock when the native
+dispatch switch is enabled. Standalone fresh/carried forward, backward and tape
+boundary calls use its lease directly. Legacy exact `_thread.RLock` instances
+remain compatible under an explicitly separate legacy path; serialized objects
+whose old `__setstate__` recreates those locks are not claimed migrated yet.
+
+`native_lock_probe.py` is authored, not executed: recursion, contended waiting,
+timeout, wrong-thread release, exception cleanup, public forward byte equality,
+poisoned Python method bypass and unsupported-lock refusal. OS-signal behavior,
+long contention and shared mixed-layer execution remain pending. The native
+wait returns cancellation on EINTR rather than running application handlers in
+native execution. No performance gain is claimed from the source change.

@@ -14,6 +14,7 @@ from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allo
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
+from providers.python.operation_lock_pyapi import OperationLockLease
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_reserved_execute,
     neural_descriptor_handle,
@@ -212,9 +213,10 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
     var e = owner._native_entries
     var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
+    var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
     if locked:
-        lock.acquire()
+        lock_lease.acquire()
     try:
         if transformer and fields["_native_session"] is not None and (not reuse or fields["_session_binding"] is not e["block_binding"]):
             _ = py_call(_native_function(fields["_session_binding"], "transformer_session_close"), fields["_native_session"])
@@ -260,7 +262,7 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
                 else:
                     _ = py_call(e["transformer_forward_fresh"], py_ints(addresses), py_ints(params))
                 if locked:
-                    lock.release()
+                    lock_lease.release()
                 _ = keep^
                 return y
         var state = supplied_state
@@ -269,11 +271,11 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
         _neural_state(owner, state, b, l)
         var result = causal_layer_run(owner, 0, x, state, step)
         if locked:
-            lock.release()
+            lock_lease.release()
         return result
     except error:
         if locked:
-            lock.release()
+            lock_lease.release()
         if supplied_state is not None and String(owner.kind) == "mamba1":
             py_setattr(supplied_state, "_nn34_usable", PythonObject(False))
         raise error
@@ -490,7 +492,8 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
         for key in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
             _ = py_call(params.append, fields[key])
         var lock = fields["_runtime_lock"]
-        lock.acquire()
+        var lock_lease = OperationLockLease(lock)
+        lock_lease.acquire()
         try:
             var session = Bool(py=py_call(bi.hasattr, entries, "transformer_session_backward")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
@@ -517,9 +520,9 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
                 else:
                     _ = py_call(_native_function(entries, name), addresses, params)
-            lock.release()
+            lock_lease.release()
         except error:
-            lock.release()
+            lock_lease.release()
             raise error
     else:
         var native = py_get(fields, "_native_mamba_block_provider_cache")

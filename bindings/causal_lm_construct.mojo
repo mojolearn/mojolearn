@@ -13,6 +13,7 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import memcpy, bitcast
 from std.os import getenv
+from providers.python.operation_lock_pyapi import operation_lock_create
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints
 from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
@@ -374,7 +375,10 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             extended = extended or tail[i] != default_tail[i]
         py_setitem(fields, "_extended", PythonObject(extended))
         py_setitem(fields, "_gated", PythonObject(gated))
-        py_setitem(fields, "_runtime_lock", context["rlock"]())
+        if String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            py_setitem(fields, "_runtime_lock", operation_lock_create())
+        else:
+            py_setitem(fields, "_runtime_lock", context["rlock"]())
         py_setitem(fields, "_native_session", PythonObject(None))
         py_setitem(fields, "_session_binding", PythonObject(None))
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
