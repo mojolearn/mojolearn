@@ -20,3 +20,16 @@ def test_state_is_read_without_executing_shell(tmp_path):
     p = tmp_path/'state.env'
     p.write_text("DROPLET_ID=123\nRENTAL_OWNER='owner $(false)'\n")
     assert state_file(p) == {'DROPLET_ID': '123', 'RENTAL_OWNER': 'owner $(false)'}
+
+
+def test_retention_dedup_preserves_every_source_path_and_byte(tmp_path):
+    from full_do_measurement_worker import deduplicate_sources
+    paths = []
+    for name, content in [('a', b'same'), ('b', b'same'), ('c', b'different')]:
+        p = tmp_path/'measured'/name/'evidence/source/source.tar.gz'
+        p.parent.mkdir(parents=True)
+        p.write_bytes(content)
+        paths.append(p)
+    assert len(deduplicate_sources(tmp_path)) == 1
+    assert paths[0].stat().st_ino == paths[1].stat().st_ino
+    assert [p.read_bytes() for p in paths] == [b'same', b'same', b'different']

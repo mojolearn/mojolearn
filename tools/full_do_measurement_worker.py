@@ -11,6 +11,21 @@ import tarfile
 import time
 
 
+def deduplicate_sources(campaign):
+    """Hardlink byte-identical retained sources before the teardown archive."""
+    seen, links = {}, []
+    for path in sorted(Path(campaign).glob('measured/*/evidence/source/source.tar.gz')):
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest not in seen:
+            seen[digest] = path
+            continue
+        temporary = path.with_suffix('.dedup')
+        os.link(seen[digest], temporary)
+        temporary.replace(path)
+        links.append({'path': str(path), 'same_bytes_as': str(seen[digest]), 'sha256': digest})
+    return links
+
+
 def run(root):
     root = Path(root)
     cfg = json.loads((root/'config.json').read_text())
@@ -97,6 +112,7 @@ def run(root):
         rc = proc.wait()
     gate = Gate.Gate(cfg['vendor'], cfg['version'], root/'runtime', profile='performance-campaign-v1')
     merged = gate.merge_boards(campaign)
+    E.write(root/'source-archive-dedup.json', deduplicate_sources(campaign))
     E.write(root/'exit.json', {'returncode': rc, 'finished': time.time(), 'board': merged})
     return rc
 
