@@ -99,3 +99,27 @@ def test_host_trainer_public_frontdoors_and_shared_metadata():
     shared = (ROOT / 'providers/python/training_buffer_pyapi.mojo').read_text().split('def training_f32_cast_owned(')[1]
     assert shared.count('value.shape') == 1 and shared.count('value.strides') == 1
     assert 'native_strides, item, kind, True, pointer)' in shared
+
+
+def test_host_inference_operations_are_one_native_call():
+    import ast
+    tree = ast.parse((ROOT / 'python/mojolearn/_byte_lm_host.py').read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'LanguageModelInference')
+    expected = {'shape', 'profile', 'parameters_sha256', 'logits', 'loss_bits', 'loss', 'next_bytes'}
+    for method in cls.body:
+        if not isinstance(method, ast.FunctionDef) or method.name not in expected:
+            continue
+        body = method.body
+        if isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+            body = body[1:]
+        assert len(body) == 1 and isinstance(body[0], ast.Return), method.name
+        assert body[0].value.func.id == '_HOST_TRAIN', method.name
+        expected.remove(method.name)
+    assert not expected
+    native = (ROOT / 'bindings/byte_lm_host_trainer_native.mojo').read_text().split('def byte_lm_host_infer(')[1].split('def byte_lm_host_train_step(')[0]
+    assert native.count('value.shape') == 1 and native.count('value.strides') == 1
+    assert 'neural_descriptor_execute(provider, 0,' in native
+    assert 'neural_descriptor_execute(provider, 1,' in native
+    assert 'neural_descriptor_execute(provider, 2,' in native
+    assert 'byte_lm_lengths(' in native and 'neural_copy_row_prefixes(' in native
+    assert 'argmax_rows_f32(' in native

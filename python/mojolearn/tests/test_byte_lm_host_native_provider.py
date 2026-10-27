@@ -77,3 +77,35 @@ def test_host_public_constructor_restore_and_consumed_metadata():
     with pytest.raises((TypeError, ValueError)):
         LanguageModelHostTrainer(expected, shape=model.shape, lr=Hook())
     assert calls == []
+
+
+def test_host_inference_native_calls_ragged_and_refreshed_inputs():
+    from mojolearn._byte_lm_host import LanguageModelInference
+    from mojolearn._verify_native_runtime import audit_native_call
+    template = _model()
+    model = LanguageModelInference(template.parameters_, shape=template.shape, threaded=False, threads=1)
+    ids = np.array([[1, 3, 5, 7], [2, 4, 6, 8]], dtype='i4')
+    actual = np.asarray(audit_native_call(model.logits, ids).assert_native())
+    expected = np.zeros_like(actual)
+    parameters = np.asarray(template.parameters_)
+    count = model._binding.byte_lm_host_logits([parameters.ctypes.data, ids.ctypes.data, expected.ctypes.data],
+                                               list(ids.shape), model._native, 0, 1)
+    assert count == expected.size and actual.tobytes() == expected.tobytes()
+    assert audit_native_call(model.next_bytes, ids).assert_native() == list(np.argmax(expected[:, -1], axis=1))
+    assert audit_native_call(model.next_bytes, ids, threaded=True, threads=1).assert_native() == list(np.argmax(expected[:, -1], axis=1))
+    padded = ids.copy()
+    padded[0, 2:] = 999
+    ragged = np.asarray(audit_native_call(model.logits, padded, lengths=[np.int64(2), np.int64(4)]).assert_native())
+    assert ragged[0, :2].tobytes() == expected[0, :2].tobytes()
+    assert ragged[0, 2:].tobytes() == np.zeros_like(ragged[0, 2:]).tobytes()
+    assert ragged[1].tobytes() == expected[1].tobytes()
+    assert audit_native_call(model.next_bytes, padded, lengths=[2, 4]).assert_native() == [int(np.argmax(expected[0, 1])), int(np.argmax(expected[1, 3]))]
+    short = ids[:, :2].astype('i8')[:, ::-1]
+    fresh = np.asarray(audit_native_call(model.logits, short).assert_native())
+    assert fresh.shape == (2, 2, template.shape.vocab_size)
+    train = np.array([[1, 3, 5, 7, -100]], dtype='i4')
+    bits = audit_native_call(model.loss_bits, train).assert_native()
+    direct = model._binding.byte_lm_host_loss([parameters.ctypes.data, train.ctypes.data], model._native, 0, 1)
+    assert bits == direct
+    import struct
+    assert struct.pack('<f', audit_native_call(model.loss, train).assert_native()) == struct.pack('<I', bits)
