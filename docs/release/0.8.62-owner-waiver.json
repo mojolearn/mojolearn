@@ -1,8 +1,17 @@
 {
   "approved_by": "Andrew Hendel, explicit conversation instruction, 2026-10-27",
-  "prefixes": ["identity-", "compile-", "candidate-", "adapters-", "multi-gpu-", "runtime-"],
+  "prefixes": [
+    "identity-",
+    "compile-",
+    "candidate-",
+    "adapters-",
+    "multi-gpu-",
+    "runtime-",
+    "coverage-source"
+  ],
   "reason": "Owner requests the constructor-only patch release without another identity campaign. Reuse the published 0.8.61 compiled payload and its retained qualification. The only product implementation change is accepting and forwarding numeric_mode in the two decision-tree constructors. No compiler, native payload, kernel, adapter, dispatch, or arithmetic changes are admitted by this exception. Broad release suites are not rerun merely for the version/assembly change; focused installed constructor and metadata readback checks must pass on Apple, AMD and NVIDIA, and every compiled wheel member must be byte-identical to 0.8.61. Waived ledger rows remain explicitly waived, never reported as freshly executed passes.",
   "source_commit": "f8bd54c02284736470b36a629a16f2f563771c49",
   "required_evidence": "~/mojolearn-evidence/release/0.8.62: *-assembly.json, startup-{apple,amd,nvidia}.json, artifact-audit-r2.log",
-  "exclusions": "No fit/performance campaign or new identity execution. Measurement-harness fixes are separately tested and do not change shipped arithmetic. Publication checks and exact artifact audits remain required."
+  "exclusions": "No fit/performance campaign or new identity execution. Measurement-harness fixes are separately tested and do not change shipped arithmetic. Publication checks and exact artifact audits remain required.",
+  "retained_scope": "The original 0.8.61 qualification limitations and legacy-ledger representation exceptions remain as recorded in docs/release/0.8.61-owner-waiver.json; this patch neither expands their coverage nor turns any prior unqualified path into a pass."
 }
