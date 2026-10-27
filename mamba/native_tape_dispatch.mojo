@@ -2,7 +2,7 @@
 # Same single-use native Mamba tape owners and numerical helpers as the public
 # binding. The common provider owns reservation, GIL lifetime and object roots.
 from mamba.impl.mamba_shell_impl import (
-    Mamba3ForwardTape, IDN_SAMBA_M3_FORWARD_TAPE, _m3_prefill_run, _m3_backward_tape_run,
+    Mamba3ForwardTape, Mamba3PrefillSession, IDN_SAMBA_M3_FORWARD_TAPE, _m3_prefill_run, _m3_backward_tape_run,
 )
 
 
@@ -21,6 +21,12 @@ def mamba_tape_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
         return 0
     if not tape[].owner.busy:
         raise Error("mamba3 forward tape: native operation requires a reserved owner")
+    if op == 5:
+        if len(a) != 0 or len(words) != 1 or not tape[].consumed:
+            raise Error("mamba3 private tape reset requires a consumed snapshot")
+        tape[] = Mamba3ForwardTape(Mamba3PrefillSession())
+        tape[].owner.busy = True
+        return 0
     if op == 4:
         tape[].consumed = True
         tape[].owner.usable = False

@@ -19,6 +19,8 @@ from transformer.transformer_binding_impl import (
 
 
 def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
+    if op == 14:
+        return transformer_tape_operation(5, a, words)
     if op == 12 or op == 13:
         if len(words) != 1 or words[0] == 0 or len(a) != 0:
             raise Error("transformer session administration: invalid native descriptor")
@@ -138,7 +140,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int]) raises 
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 14 or nf != 0 or na < 0 or na > 24 or np < 0 or np > 28:
+        if op < 0 or op >= 15 or nf != 0 or na < 0 or na > 24 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")
