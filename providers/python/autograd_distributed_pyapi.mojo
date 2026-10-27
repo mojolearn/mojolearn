@@ -13,8 +13,8 @@ from autograd.distributed_entries import (
     distributed_state_native, distributed_residency_native, distributed_save_native, distributed_ready,
     distributed_close_native,
 )
-from autograd.program_pyapi import array_input, output_array
-from autograd.program_arrays_pyapi import initialize_program_arrays, host_array_py, host_arrays_py
+from providers.python.autograd_program_pyapi import array_input, output_array
+from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays, host_array_py, host_arrays_py
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 

@@ -16,10 +16,10 @@
 #   activations. An in-place change of a bound parameter (an optimizer step, load_state_dict) bumps its
 #   version counter; the next call re-imports the graph with the new weights.
 # - Static shapes only: a symbolic size (dynamic=True, or the automatic dynamic recompile) is refused.
-# - Native buffer execution has two routes (autograd/torch_program_pyapi.mojo).
+# - Native buffer execution has two routes (providers/python/autograd_torch_program_pyapi.mojo).
 #   * device (CUDA and ROCm tensors on GPU 0, a binding with ops_imported_run_device): the program reads
 #     each input where it is, by device address, shape and dtype, and writes each output straight into a
-#     torch.empty tensor on the same device (autograd/program_device_pyapi.mojo). Nothing crosses the
+#     torch.empty tensor on the same device (providers/python/autograd_program_device_pyapi.mojo). Nothing crosses the
 #     host and no NumPy array is made. The Torch device is synchronized before the call (inputs written,
 #     output storage free) and after it; the native call drains its own queue before it returns, so the
 #     bits never depend on stream order. Same bits as the host route by construction (the same cast

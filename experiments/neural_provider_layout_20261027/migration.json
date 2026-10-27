@@ -1,0 +1,954 @@
+{
+  "base": "904bd41c93fa1cf9012f174ade1e7065d5e2beb1",
+  "method": "Static tracked-source imports and Python markers; no runtime costs inferred.",
+  "moves": [
+    {
+      "old": "autograd/control_checkpoint_pyapi.mojo",
+      "new": "providers/python/autograd_control_checkpoint_pyapi.mojo",
+      "old_module": "autograd.control_checkpoint_pyapi",
+      "new_module": "providers.python.autograd_control_checkpoint_pyapi",
+      "sha256_before": "b304422ce3ea555b4e67cca75e60302128e2025c45f0aa52ee62073ff3079fc9",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/distributed_pyapi.mojo",
+      "new": "providers/python/autograd_distributed_pyapi.mojo",
+      "old_module": "autograd.distributed_pyapi",
+      "new_module": "providers.python.autograd_distributed_pyapi",
+      "sha256_before": "4865749eb6bb19ac0e74bb3c1d7b8698910fb14de2618a450e573e19100b59d4",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/execution_profile_pyapi.mojo",
+      "new": "providers/python/autograd_execution_profile_pyapi.mojo",
+      "old_module": "autograd.execution_profile_pyapi",
+      "new_module": "providers.python.autograd_execution_profile_pyapi",
+      "sha256_before": "7ef591a309eeeaefa8cf975abb7b11c25fbde6492b952f5b550d69a868191acc",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/gradient_diagnostics_pyapi.mojo",
+      "new": "providers/python/autograd_gradient_diagnostics_pyapi.mojo",
+      "old_module": "autograd.gradient_diagnostics_pyapi",
+      "new_module": "providers.python.autograd_gradient_diagnostics_pyapi",
+      "sha256_before": "1256e175abaed47fd21272ed643266a9a58637725111d842b0c8f86e11d4dc89",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/import_frontend_pyapi.mojo",
+      "new": "providers/python/autograd_import_frontend_pyapi.mojo",
+      "old_module": "autograd.import_frontend_pyapi",
+      "new_module": "providers.python.autograd_import_frontend_pyapi",
+      "sha256_before": "586c8514dbbc2422e72a914efb1a82784ce1583ece80c0a7ee2f8c41aac64c89",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/import_lower_pyapi.mojo",
+      "new": "providers/python/autograd_import_lower_pyapi.mojo",
+      "old_module": "autograd.import_lower_pyapi",
+      "new_module": "providers.python.autograd_import_lower_pyapi",
+      "sha256_before": "d520857c5de5d50cc4b87f04951729f33dce2b24f94bda2106fcd77c0d52403d",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/import_reader_pyapi.mojo",
+      "new": "providers/python/autograd_import_reader_pyapi.mojo",
+      "old_module": "autograd.import_reader_pyapi",
+      "new_module": "providers.python.autograd_import_reader_pyapi",
+      "sha256_before": "7599477977b7fd820bba7863579906cdd451e1be3c87e9d7301bc0261900a05d",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/import_resolve_pyapi.mojo",
+      "new": "providers/python/autograd_import_resolve_pyapi.mojo",
+      "old_module": "autograd.import_resolve_pyapi",
+      "new_module": "providers.python.autograd_import_resolve_pyapi",
+      "sha256_before": "b23fc52fa75de595db10a3cf9c9a210fdefa77d02f92b0c10ac43cc7f29b9500",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/model_checkpoint_pyapi.mojo",
+      "new": "providers/python/autograd_model_checkpoint_pyapi.mojo",
+      "old_module": "autograd.model_checkpoint_pyapi",
+      "new_module": "providers.python.autograd_model_checkpoint_pyapi",
+      "sha256_before": "cfc37951cdc0627b07778af991142df5ea76a253ba674d48a6f5e159958621a5",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/model_verify_pyapi.mojo",
+      "new": "providers/python/autograd_model_verify_pyapi.mojo",
+      "old_module": "autograd.model_verify_pyapi",
+      "new_module": "providers.python.autograd_model_verify_pyapi",
+      "sha256_before": "259d6687e55ecba1e9bd3d4c4314f7427decb7bcda08576169227a7e1352f531",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/ops_frontend_pyapi.mojo",
+      "new": "providers/python/autograd_ops_frontend_pyapi.mojo",
+      "old_module": "autograd.ops_frontend_pyapi",
+      "new_module": "providers.python.autograd_ops_frontend_pyapi",
+      "sha256_before": "23a5e1d373c9ddb9cc4fba66798260a749dc46cb9db0eb21769e600668fb3c0b",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/partition_pyapi.mojo",
+      "new": "providers/python/autograd_partition_pyapi.mojo",
+      "old_module": "autograd.partition_pyapi",
+      "new_module": "providers.python.autograd_partition_pyapi",
+      "sha256_before": "3869cfd0da7797cbea1eac3e0cb13d1b3bb43e968f23071a8fb8df3c37fc19dd",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/program_arrays_pyapi.mojo",
+      "new": "providers/python/autograd_program_arrays_pyapi.mojo",
+      "old_module": "autograd.program_arrays_pyapi",
+      "new_module": "providers.python.autograd_program_arrays_pyapi",
+      "sha256_before": "dcf363ac561565d0f2ccee48e2e5c936b8f5fbb44ccbb0861ddba5ee6c497063",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/program_control_grad_pyapi.mojo",
+      "new": "providers/python/autograd_program_control_grad_pyapi.mojo",
+      "old_module": "autograd.program_control_grad_pyapi",
+      "new_module": "providers.python.autograd_program_control_grad_pyapi",
+      "sha256_before": "22b0d8c2989b8e8d8dfc442cee1d7e75569b95757675f83545b4ad1ca6aad7a5",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/program_control_pyapi.mojo",
+      "new": "providers/python/autograd_program_control_pyapi.mojo",
+      "old_module": "autograd.program_control_pyapi",
+      "new_module": "providers.python.autograd_program_control_pyapi",
+      "sha256_before": "22ca3927cb862bea080dbf3801c1af1fa5259a009f0e93b3b5fc172d038343d8",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/program_device_pyapi.mojo",
+      "new": "providers/python/autograd_program_device_pyapi.mojo",
+      "old_module": "autograd.program_device_pyapi",
+      "new_module": "providers.python.autograd_program_device_pyapi",
+      "sha256_before": "ccd6edcf4fcc7f8db9e48ca8e81fd18e2f5626c14f8552e2a3ebf37a0847bc3e",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/program_pyapi.mojo",
+      "new": "providers/python/autograd_program_pyapi.mojo",
+      "old_module": "autograd.program_pyapi",
+      "new_module": "providers.python.autograd_program_pyapi",
+      "sha256_before": "1aad97f088927b8e800e161a2c1731339bf282b0f6687fd6e4a63762ac212bbf",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/program_save_pyapi.mojo",
+      "new": "providers/python/autograd_program_save_pyapi.mojo",
+      "old_module": "autograd.program_save_pyapi",
+      "new_module": "providers.python.autograd_program_save_pyapi",
+      "sha256_before": "cdab1ed21d96cc494933842e5f213aada85a9e973fe6d7a92b73f0347284b641",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/pyapi.mojo",
+      "new": "providers/python/autograd_pyapi.mojo",
+      "old_module": "autograd.pyapi",
+      "new_module": "providers.python.autograd_pyapi",
+      "sha256_before": "94945664589ec31846331f49793986ecdcd131b87742ae8ad2b4f20b0686c6d9",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/python_errors_pyapi.mojo",
+      "new": "providers/python/autograd_python_errors_pyapi.mojo",
+      "old_module": "autograd.python_errors_pyapi",
+      "new_module": "providers.python.autograd_python_errors_pyapi",
+      "sha256_before": "5602ab9347ead9659c8b6d195912a24232009ba4193419c6b0308ea9838258b5",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/session_frontend_pyapi.mojo",
+      "new": "providers/python/autograd_session_frontend_pyapi.mojo",
+      "old_module": "autograd.session_frontend_pyapi",
+      "new_module": "providers.python.autograd_session_frontend_pyapi",
+      "sha256_before": "070db231ce92b8bd7d5fb91da0d63352cd8725cac6a2d4e3661c73ca5f024ca1",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/session_lifetime_pyapi.mojo",
+      "new": "providers/python/autograd_session_lifetime_pyapi.mojo",
+      "old_module": "autograd.session_lifetime_pyapi",
+      "new_module": "providers.python.autograd_session_lifetime_pyapi",
+      "sha256_before": "ae9a5f7f6d1addac2c3ca4284cd3055538a611e20f1749e458099954483a266b",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/torch_program_pyapi.mojo",
+      "new": "providers/python/autograd_torch_program_pyapi.mojo",
+      "old_module": "autograd.torch_program_pyapi",
+      "new_module": "providers.python.autograd_torch_program_pyapi",
+      "sha256_before": "7ddd11039c6d8fa63a5983572b3b229f12f2f37a1e2fa44723e6774517773160",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "autograd/weight_frontend_pyapi.mojo",
+      "new": "providers/python/autograd_weight_frontend_pyapi.mojo",
+      "old_module": "autograd.weight_frontend_pyapi",
+      "new_module": "providers.python.autograd_weight_frontend_pyapi",
+      "sha256_before": "096ead23f3a476687c7b0769f6b36412777690a33a5e1ef73ba6e89380e56a6f",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "core/py2mojo_rows_pyapi.mojo",
+      "new": "providers/python/core_py2mojo_rows_pyapi.mojo",
+      "old_module": "core.py2mojo_rows_pyapi",
+      "new_module": "providers.python.core_py2mojo_rows_pyapi",
+      "sha256_before": "bf7240319a5e1b4018efb189eb7ee4390110f6c125dda46b28e6d2c45c86b0b8",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/ets_team_py.mojo",
+      "new": "providers/python/sequence_ets_team_pyapi.mojo",
+      "old_module": "sequence.ets_team_py",
+      "new_module": "providers.python.sequence_ets_team_pyapi",
+      "sha256_before": "e536ef294a9c6ef4ad8fe39f7644939bdf82f76a817dd8cf7a9af41c72e22b26",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/fit_team_py.mojo",
+      "new": "providers/python/sequence_fit_team_pyapi.mojo",
+      "old_module": "sequence.fit_team_py",
+      "new_module": "providers.python.sequence_fit_team_pyapi",
+      "sha256_before": "de7488c59ee440ce70765d272e77d4479ad8b9611f1abfdf49391431fa155065",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/layernorm_dev_pyapi.mojo",
+      "new": "providers/python/sequence_layernorm_dev_pyapi.mojo",
+      "old_module": "sequence.layernorm_dev_pyapi",
+      "new_module": "providers.python.sequence_layernorm_dev_pyapi",
+      "sha256_before": "3a313b116f911dbb66b6246be7f4998f6c74975120dc38e57f2bd8155020fd93",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/moe_dev_pyapi.mojo",
+      "new": "providers/python/sequence_moe_dev_pyapi.mojo",
+      "old_module": "sequence.moe_dev_pyapi",
+      "new_module": "providers.python.sequence_moe_dev_pyapi",
+      "sha256_before": "3db335e265d7ccd2879ef03cb201c9bdfea3c030b8de0a3b6017d9a519bd5c27",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/opt_public_host_pyapi.mojo",
+      "new": "providers/python/sequence_opt_public_host_pyapi.mojo",
+      "old_module": "sequence.opt_public_host_pyapi",
+      "new_module": "providers.python.sequence_opt_public_host_pyapi",
+      "sha256_before": "e8720e984f930c01b0e4cb9deb1301c62a14996e793cc8ac32a468a637e21bed",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/opt_public_pyapi.mojo",
+      "new": "providers/python/sequence_opt_public_pyapi.mojo",
+      "old_module": "sequence.opt_public_pyapi",
+      "new_module": "providers.python.sequence_opt_public_pyapi",
+      "sha256_before": "f44dc5706f293a9397fcc769a2ca4bac829a5aceef26bb377059883ff008cc8e",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/opt_resident_pyapi.mojo",
+      "new": "providers/python/sequence_opt_resident_pyapi.mojo",
+      "old_module": "sequence.opt_resident_pyapi",
+      "new_module": "providers.python.sequence_opt_resident_pyapi",
+      "sha256_before": "5406a1839507c635338bf58c16ae43ad13f00a15c3874886285540b728c7762d",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/prophet_prep_pyapi.mojo",
+      "new": "providers/python/sequence_prophet_prep_pyapi.mojo",
+      "old_module": "sequence.prophet_prep_pyapi",
+      "new_module": "providers.python.sequence_prophet_prep_pyapi",
+      "sha256_before": "9bdd30be90b9ab124fc9d5417cc6a27d0a9d94ad5028032e6ff3ca42fb022ed6",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/pyapi.mojo",
+      "new": "providers/python/sequence_pyapi.mojo",
+      "old_module": "sequence.pyapi",
+      "new_module": "providers.python.sequence_pyapi",
+      "sha256_before": "ef2261bec920b1b3154537bd6064d47ffc31f61e96e1cafbfae92d48b2ffec87",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "sequence/seq_tensor_pyapi.mojo",
+      "new": "providers/python/sequence_seq_tensor_pyapi.mojo",
+      "old_module": "sequence.seq_tensor_pyapi",
+      "new_module": "providers.python.sequence_seq_tensor_pyapi",
+      "sha256_before": "0b2077e36c33c3d2e658aff81c0daf442bec55d9c2a82054945d37fda0030a63",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    },
+    {
+      "old": "training/samba_afn_pyapi.mojo",
+      "new": "providers/python/training_samba_afn_pyapi.mojo",
+      "old_module": "training.samba_afn_pyapi",
+      "new_module": "providers.python.training_samba_afn_pyapi",
+      "sha256_before": "11d0c245e93928301bb63ed70abdb59c75274b2f2c009ab4c5434194d7f8a2c9",
+      "classification": "python_facing_boundary_existing_native_numerical_owner",
+      "runtime_improvement_claim": false
+    }
+  ],
+  "testing_exclusions": [
+    "training/checks/cross_vendor_resume.mojo",
+    "training/checks/peer_copy_check.mojo",
+    "training/checks/train_gradient_capture.mojo"
+  ],
+  "affected_imports": [
+    {
+      "importer": "autograd/control_checkpoint_pyapi.mojo",
+      "line": 8,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/control_checkpoint_pyapi.mojo",
+      "line": 9,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "autograd/distributed_pyapi.mojo",
+      "line": 16,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/distributed_pyapi.mojo",
+      "line": 17,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/import_frontend_pyapi.mojo",
+      "line": 12,
+      "target": "autograd.python_errors_pyapi"
+    },
+    {
+      "importer": "autograd/import_frontend_pyapi.mojo",
+      "line": 13,
+      "target": "autograd.session_frontend_pyapi"
+    },
+    {
+      "importer": "autograd/import_frontend_pyapi.mojo",
+      "line": 14,
+      "target": "autograd.ops_frontend_pyapi"
+    },
+    {
+      "importer": "autograd/import_lower_pyapi.mojo",
+      "line": 11,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "autograd/model_checkpoint_pyapi.mojo",
+      "line": 7,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "autograd/model_checkpoint_pyapi.mojo",
+      "line": 8,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 6,
+      "target": "autograd.python_errors_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 10,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 12,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 13,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 14,
+      "target": "autograd.model_checkpoint_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 15,
+      "target": "autograd.program_save_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 17,
+      "target": "autograd.weight_frontend_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 19,
+      "target": "autograd.execution_profile_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 20,
+      "target": "autograd.control_checkpoint_pyapi"
+    },
+    {
+      "importer": "autograd/ops_frontend_pyapi.mojo",
+      "line": 21,
+      "target": "autograd.gradient_diagnostics_pyapi"
+    },
+    {
+      "importer": "autograd/partition_pyapi.mojo",
+      "line": 15,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/partition_pyapi.mojo",
+      "line": 16,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/program_control_grad_pyapi.mojo",
+      "line": 8,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/program_control_grad_pyapi.mojo",
+      "line": 9,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/program_control_pyapi.mojo",
+      "line": 7,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/program_control_pyapi.mojo",
+      "line": 8,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/program_device_pyapi.mojo",
+      "line": 44,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/program_pyapi.mojo",
+      "line": 10,
+      "target": "autograd.execution_profile_pyapi"
+    },
+    {
+      "importer": "autograd/program_pyapi.mojo",
+      "line": 14,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/program_pyapi.mojo",
+      "line": 18,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/program_pyapi.mojo",
+      "line": 25,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "autograd/pyapi.mojo",
+      "line": 21,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "autograd/session_frontend_pyapi.mojo",
+      "line": 5,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/session_lifetime_pyapi.mojo",
+      "line": 7,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/torch_program_pyapi.mojo",
+      "line": 24,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/weight_frontend_pyapi.mojo",
+      "line": 10,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "autograd/weight_frontend_pyapi.mojo",
+      "line": 12,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "autograd/weight_frontend_pyapi.mojo",
+      "line": 13,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_estimators.mojo",
+      "line": 26,
+      "target": "core.py2mojo_rows_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_estimators_host.mojo",
+      "line": 66,
+      "target": "core.py2mojo_rows_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_training.mojo",
+      "line": 144,
+      "target": "training.samba_afn_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_linear.mojo",
+      "line": 16,
+      "target": "core.py2mojo_rows_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_linear_host.mojo",
+      "line": 10,
+      "target": "core.py2mojo_rows_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 11,
+      "target": "autograd.python_errors_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 12,
+      "target": "autograd.ops_frontend_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 13,
+      "target": "autograd.session_frontend_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 15,
+      "target": "autograd.session_lifetime_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 20,
+      "target": "sequence.fit_team_py"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 22,
+      "target": "sequence.ets_team_py"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 23,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 25,
+      "target": "sequence.opt_public_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 35,
+      "target": "sequence.opt_resident_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 36,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 37,
+      "target": "autograd.program_device_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 38,
+      "target": "autograd.torch_program_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 39,
+      "target": "autograd.program_control_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 40,
+      "target": "autograd.distributed_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 46,
+      "target": "autograd.partition_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 52,
+      "target": "autograd.program_control_grad_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 53,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 54,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 55,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 56,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 59,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 63,
+      "target": "autograd.import_reader_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 64,
+      "target": "autograd.import_resolve_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 66,
+      "target": "autograd.import_frontend_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 67,
+      "target": "autograd.import_lower_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 68,
+      "target": "autograd.model_verify_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 69,
+      "target": "autograd.model_checkpoint_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 70,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 71,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 72,
+      "target": "sequence.opt_resident_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 73,
+      "target": "sequence.seq_tensor_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 76,
+      "target": "sequence.layernorm_dev_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 83,
+      "target": "sequence.prophet_prep_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence.mojo",
+      "line": 85,
+      "target": "sequence.moe_dev_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 15,
+      "target": "autograd.python_errors_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 16,
+      "target": "autograd.ops_frontend_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 17,
+      "target": "autograd.session_frontend_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 19,
+      "target": "autograd.session_lifetime_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 24,
+      "target": "sequence.opt_public_host_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 35,
+      "target": "sequence.prophet_prep_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 36,
+      "target": "autograd.program_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 37,
+      "target": "autograd.program_control_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 38,
+      "target": "autograd.torch_program_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 39,
+      "target": "autograd.distributed_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 45,
+      "target": "autograd.partition_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 50,
+      "target": "autograd.program_control_grad_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 51,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 52,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 53,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 54,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 56,
+      "target": "autograd.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 60,
+      "target": "autograd.import_reader_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 61,
+      "target": "autograd.import_resolve_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 63,
+      "target": "autograd.import_frontend_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 64,
+      "target": "autograd.import_lower_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 65,
+      "target": "autograd.model_verify_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 66,
+      "target": "autograd.model_checkpoint_pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 67,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "bindings/_mojolearn_x_sequence_host.mojo",
+      "line": 68,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "bindings/causal_lm_public.mojo",
+      "line": 32,
+      "target": "bindings.generation_policy"
+    },
+    {
+      "importer": "bindings/sequential_native.mojo",
+      "line": 14,
+      "target": "autograd.program_arrays_pyapi"
+    },
+    {
+      "importer": "bindings/sequential_weights.mojo",
+      "line": 10,
+      "target": "autograd.weight_frontend_pyapi"
+    },
+    {
+      "importer": "core/classical_arrays_impl.mojo",
+      "line": 4,
+      "target": "bindings.classical_cast"
+    },
+    {
+      "importer": "core/classical_pandas_impl.mojo",
+      "line": 5,
+      "target": "bindings.classical_cast"
+    },
+    {
+      "importer": "core/family_cast_impl.mojo",
+      "line": 8,
+      "target": "bindings.classical_cast"
+    },
+    {
+      "importer": "core/optimizer_state_impl.mojo",
+      "line": 5,
+      "target": "bindings.classical_cast"
+    },
+    {
+      "importer": "core/scaler_fit_impl.mojo",
+      "line": 8,
+      "target": "bindings.classical_cast"
+    },
+    {
+      "importer": "core/xseq_marshal.mojo",
+      "line": 9,
+      "target": "bindings.classical_cast"
+    },
+    {
+      "importer": "sequence/ets_team_py.mojo",
+      "line": 14,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/fit_team_py.mojo",
+      "line": 23,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/layernorm_dev_pyapi.mojo",
+      "line": 9,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/moe_dev_pyapi.mojo",
+      "line": 9,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/opt_public_host_pyapi.mojo",
+      "line": 21,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/opt_public_pyapi.mojo",
+      "line": 20,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/opt_resident_pyapi.mojo",
+      "line": 22,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "sequence/prophet_prep_pyapi.mojo",
+      "line": 10,
+      "target": "sequence.pyapi"
+    },
+    {
+      "importer": "tokenizer/checks/generation_policy_check.mojo",
+      "line": 3,
+      "target": "bindings.generation_policy"
+    },
+    {
+      "importer": "transformer/causal_lm_public_impl.mojo",
+      "line": 8,
+      "target": "bindings.generation_policy"
+    }
+  ],
+  "native_helper_ownership": [
+    {
+      "old": "bindings/classical_cast.mojo",
+      "new": "core/classical_cast.mojo",
+      "kind": "move_pure_arithmetic_owner_unchanged"
+    },
+    {
+      "old": "bindings/generation_policy.mojo",
+      "new": "core/generation_policy_impl.mojo",
+      "kind": "delete_pure_reexport_use_existing_owner"
+    }
+  ]
+}

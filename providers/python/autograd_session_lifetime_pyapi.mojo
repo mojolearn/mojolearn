@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session_open
-from autograd.program_arrays_pyapi import initialize_program_arrays
+from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays
 from autograd.session_lifetime import SessionLifetime
 
 

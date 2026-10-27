@@ -4,8 +4,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_setitem
 from sequence.exec_trait import Exec
-from autograd.program_pyapi import program_inputs, _dict, _result, _integer
-from autograd.program_arrays_pyapi import host_arrays_py
+from providers.python.autograd_program_pyapi import program_inputs, _dict, _result, _integer
+from providers.python.autograd_program_arrays_pyapi import host_arrays_py
 from autograd.program_control import control_prepare, control_run
 
 

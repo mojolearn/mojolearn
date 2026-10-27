@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The typed bodies (lane thin-neural: moved word for word out of the Python
-door `sequence/fit_team_py.mojo`; addresses and parameters as the door's
+door `providers/python/sequence_fit_team_pyapi.mojo`; addresses and parameters as the door's
 `py_ints` / `py_f64s` lists) of the GPU binding's GARCH and Prophet fit entries (lane neural-pass143): one
 series per block (`sequence/fit_team.mojo`), the whole fit in one launch on
 NVIDIA and AMD, and on Apple sliced over launches of bounded work (macOS
@@ -131,7 +131,7 @@ def _group(B: Int, shared: Int, priv: Int) -> Int:
 
 
 def garch_team_impl(mut ex: DeviceExec, addrs: List[Int], ip: List[Int]) raises -> Int:
-    """garch_py's contract (sequence/pyapi.mojo) over one block per series."""
+    """garch_py's contract (providers/python/sequence_pyapi.mojo) over one block per series."""
     if len(addrs) != 5 or (len(ip) != 7 and len(ip) != 9):
         raise Error("garch: requires 5 addresses and 7 (or 9) integer parameters")
     var B = ival(ip, 0)

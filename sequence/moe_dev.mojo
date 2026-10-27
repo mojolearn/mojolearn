@@ -19,7 +19,7 @@ values: no bit moves.
 Registered unless -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF (the grid's before
 arm); `MoEBlock.forward` uses it only when the binding has it and x is a
 resident tensor. The Python entry (`moe_forward_dev_py`) is
-`sequence/moe_dev_pyapi.mojo`'s."""
+`providers/python/sequence_moe_dev_pyapi.mojo`'s."""
 from sequence.exec_device import DeviceExec
 from sequence.moe_weights import moe_weights_ptrs
 from sequence.ops_impl import moe_forward_core

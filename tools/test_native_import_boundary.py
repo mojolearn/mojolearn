@@ -38,9 +38,9 @@ def test_artifact_setup_passes_raw_values_to_one_native_owner():
 def test_both_sequence_bindings_register_the_same_native_setup():
     for name in ('_mojolearn_x_sequence.mojo', '_mojolearn_x_sequence_host.mojo'):
         source = (ROOT / 'bindings' / name).read_text()
-        assert 'from autograd.import_frontend_pyapi import ops_import_model_c' in source
+        assert 'from providers.python.autograd_import_frontend_pyapi import ops_import_model_c' in source
         assert 'm.def_py_c_function(ops_import_model_c, "ops_import_model")' in source
-    source = (ROOT / 'autograd/import_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
     for prohibited in ('torch.onnx', 'SerializeToString', 'session._sid(', 'ImportedProgram(', 'Session(', 'buffer_address(', 'Python.import_module('):
         assert prohibited not in source
     assert 'ops_session_initialize_py(session,' in source
@@ -67,9 +67,12 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
     backend = types.ModuleType(package.__name__ + '._backend')
     family = types.ModuleType(package.__name__ + '._native_family_bridge')
     family.shared_context = lambda: {'admission': 'test'}
+    import numpy as np
+    optional_numpy = types.ModuleType(package.__name__ + '._optional_numpy')
+    optional_numpy.require_numpy = lambda _operation: np
     onnx = types.ModuleType(importers.__name__ + '.onnx')
     onnx._Native = reader
-    for module in (package, importers, ops, backend, family, onnx):
+    for module in (package, importers, ops, backend, family, optional_numpy, onnx):
         monkeypatch.setitem(sys.modules, module.__name__, module)
     package.ops, package._backend = ops, backend
     spec = importlib.util.spec_from_file_location(importers.__name__ + '.bridge', PACKAGE / 'importers/_native_import_bridge.py')
@@ -87,11 +90,11 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
 
 
 def test_native_shape_admission_precedes_protocol_sensitive_conversion():
-    source = (ROOT / 'autograd/import_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
     body = source[source.index('def _shape_words('):source.index('def _raise_object(')]
     assert 'Python mapping callbacks are unsupported' in body
     assert body.index('_scalar(key, context["shape_names"])') < body.index('py_setitem(provided, key, pair[1])')
-    assert body.index('dimensions refuse Python iteration hooks') < body.index('py_call(b.tuple.__iter__, dims)')
+    assert body.index('dimensions refuse Python iteration hooks') < body.index('py_call(b.tuple.__dict__["__iter__"], dims)')
     assert body.index('_scalar(dims[j], context["shape_scalars"])') < body.index('graph_int(dims[j])')
     assert 'context["shape_containers"]' in body
     assert 'context["shape_scalars"]' in body

@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The GPU binding's ETS entry over one block per series
 (sequence/ets_team.mojo; Apple FAST, `-D MOJOLEARN_ETS_TEAM`): `ets_py`'s
-contract (sequence/pyapi.mojo) for ETS(A, A|Ad, N). The fit is one group
+contract (providers/python/sequence_pyapi.mojo) for ETS(A, A|Ad, N). The fit is one group
 launch (sliced on Apple only where the command-buffer bound needs it,
-`sequence/fit_team_py.mojo::_run_team`) and one wait; the forecast and the
+`providers/python/sequence_fit_team_pyapi.mojo::_run_team`) and one wait; the forecast and the
 info rows come back together. Every other model, and every other build,
 keeps `ets_py`."""
 from std.python import PythonObject
 
 from sequence.exec_device import DeviceExec
 from sequence.ets_team_impl import ets_team_impl
-from sequence.pyapi import ival, py_f64s, py_ints
+from providers.python.sequence_pyapi import ival, py_f64s, py_ints
 
 
 def ets_team_applies(ip: PythonObject) raises -> Bool:

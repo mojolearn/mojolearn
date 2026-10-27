@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The typed body (lane thin-neural: moved word for word out of the Python
-door `sequence/ets_team_py.mojo`; addresses and parameters as the door's
+door `providers/python/sequence_ets_team_pyapi.mojo`; addresses and parameters as the door's
 `py_ints` / `py_f64s` lists) of the GPU binding's ETS entry over one block per series
 (sequence/ets_team.mojo; Apple FAST, `-D MOJOLEARN_ETS_TEAM`): `ets_py`'s
-contract (sequence/pyapi.mojo) for ETS(A, A|Ad, N). The fit is one group
+contract (providers/python/sequence_pyapi.mojo) for ETS(A, A|Ad, N). The fit is one group
 launch (sliced on Apple only where the command-buffer bound needs it,
-`sequence/fit_team_py.mojo::_run_team`) and one wait; the forecast and the
+`providers/python/sequence_fit_team_pyapi.mojo::_run_team`) and one wait; the forecast and the
 info rows come back together. Every other model, and every other build,
 keeps `ets_py`."""
 

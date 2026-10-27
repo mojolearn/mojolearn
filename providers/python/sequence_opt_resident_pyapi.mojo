@@ -19,7 +19,7 @@ from sequence.opt_resident import (
     opt_resident_step,
     opt_resident_step_dev,
 )
-from sequence.pyapi import py_f64s, py_ints
+from providers.python.sequence_pyapi import py_f64s, py_ints
 
 
 def _py_list(xs: List[Int]) raises -> PythonObject:

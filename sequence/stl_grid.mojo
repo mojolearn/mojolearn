@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """STL's passes as ONE THREAD PER OUTPUT POINT over every series of the batch
 (lane/apple-fast-tsa2, `-D MOJOLEARN_TSA2_STL`; FAST + Apple only, reached
-from `sequence/pyapi.mojo::stl_py` under that define). `sequence/stl.mojo`
+from `providers/python/sequence_pyapi.mojo::stl_py` under that define). `sequence/stl.mojo`
 runs a whole series on one thread: at the board's shape (64 series of 1,440
 hourly points, period 24, five inner passes) every LOESS point is a
 dependent step of one thread, 359 ms on the M3 against statsmodels' 119 ms.

@@ -122,10 +122,10 @@ class ImportedProgram(Program):
         super().__init__(session, info)
         self.inputs = list(inputs)
         self.outputs = list(outputs)
-        # the session binding's ImportedProgram.run entry (autograd/program_pyapi.mojo
+        # the session binding's ImportedProgram.run entry (providers/python/autograd_program_pyapi.mojo
         # ops_imported_run_py), retained once here: run is that one call
         self._run_native = session._b.ops_imported_run
-        # the same run on caller CUDA/ROCm device buffers (autograd/program_device_pyapi.mojo
+        # the same run on caller CUDA/ROCm device buffers (providers/python/autograd_program_device_pyapi.mojo
         # ops_imported_run_device_py; the torch.compile backend's device route). None on a binding
         # without it (the CPU-only install's host binding): callers then pass host arrays to run.
         self._run_device = getattr(session._b, "ops_imported_run_device", None)

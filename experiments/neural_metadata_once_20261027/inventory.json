@@ -314,7 +314,7 @@
       "family": "ops-program",
       "public_api": "mojolearn.ops.Session(record=True): tensor(X), tensor(y_codes), tensor(w1, b1, w2, b2, requires_grad=True); relu(linear(x, w1, b1)); linear(h, w2, b2); cross_entropy(logits, codes); backward(loss); scalar(loss); grad(p) for each parameter; step(optimizer('sgd', lr), [w1, b1, w2, b2]): the SGD update p - lr * grad in place on the device from the backward's gradients (no gradient re-upload); numpy(p) for each updated parameter",
       "sources": [
-        "autograd/program_pyapi.mojo",
+        "providers/python/autograd_program_pyapi.mojo",
         "autograd/program_io.mojo",
         "autograd/ops_api.mojo",
         "autograd/program_runtime.mojo"
@@ -333,7 +333,7 @@
       "family": "ops-program",
       "public_api": "mojolearn.ops.Session(): tensor(X), tensor(w1, b1, w2, b2); softmax(linear(relu(linear(x, w1, b1)), w2, b2)); capture(inputs=[x], outputs=[p]) before the clock; Program.run(X) inside it: X to the device, every captured operation, the probabilities back on the host, one call",
       "sources": [
-        "autograd/program_pyapi.mojo",
+        "providers/python/autograd_program_pyapi.mojo",
         "autograd/program_io.mojo",
         "autograd/ops_api.mojo",
         "autograd/program_runtime.mojo"

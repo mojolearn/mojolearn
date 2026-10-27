@@ -23,7 +23,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.dbscan_core_device import dbscan_core_arrays_device
-from core.py2mojo_rows_pyapi import py2mojo_rows_device_binding
+from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE

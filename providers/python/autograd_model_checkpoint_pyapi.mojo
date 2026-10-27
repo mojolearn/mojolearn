@@ -4,8 +4,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
-from sequence.pyapi import py_f64s, py_ints
-from autograd.pyapi import program_info
+from providers.python.sequence_pyapi import py_f64s, py_ints
+from providers.python.autograd_pyapi import program_info
 from autograd.ops_api import ops_session
 from autograd.model_checkpoint import (
     SEQ_MODEL_INTS, SEQ_OPT_INTS, SEQ_SAVE_INTS, model_checkpoint_info, model_load_checkpoint,
@@ -26,7 +26,7 @@ def model_save_checkpoint_py(
     optimizer flags, schedule, schedule step, n_iter_no_change, batch size,
     shuffle, n_features, n_outputs, y_1d, epochs run, class count]; fp =
     model_fit's fp (9 options, then one float per layer); classes = the
-    classes_ input descriptor (autograd/pyapi.mojo cast_in_of), or None
+    classes_ input descriptor (providers/python/autograd_pyapi.mojo cast_in_of), or None
     when the class count is 0. Returns the file's byte count."""
     var ipw = py_ints(ip)
     var cw = List[Int]()
@@ -121,7 +121,7 @@ def ops_load_program_py[E: Exec & Movable & Deinitable, KIND: Int](
 ) raises -> PythonObject:
     """Read a program checkpoint into session `sid`: its parameters become
     new session tensors and the program runs over them. Returns
-    program_info (autograd/pyapi.mojo)."""
+    program_info (providers/python/autograd_pyapi.mojo)."""
     var file = String(py=path)
     var pid = ops_load_program[E, KIND](Int(py=sid), file)
     var p = ops_session[E, KIND](Int(py=sid))

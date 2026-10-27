@@ -11,7 +11,7 @@ and dx are resident sequence tensors (`sequence/seq_tensor.mojo`); only the
 D-float weight and bias go up and the D-float dweight and dbias come down.
 The launches are `layer_norm_fwd_core` / `layer_norm_bwd_core`, the per-call
 entry's own, on the same values: no bit moves. The Python entry
-(`layer_norm_dev_py`) is `sequence/layernorm_dev_pyapi.mojo`'s."""
+(`layer_norm_dev_py`) is `providers/python/sequence_layernorm_dev_pyapi.mojo`'s."""
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP
 from sequence.layernorm_core import layer_norm_bwd_core, layer_norm_fwd_core

@@ -7,7 +7,7 @@ from std.python import PythonObject
 
 from sequence.exec_trait import Exec
 from sequence.prophet_prep import prophet_changepoints, prophet_days, prophet_features
-from sequence.pyapi import py_ints
+from providers.python.sequence_pyapi import py_ints
 
 
 def prophet_days_py(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:

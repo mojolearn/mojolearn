@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""ImportedProgram.run is one native call (autograd/program_pyapi.mojo
+"""ImportedProgram.run is one native call (providers/python/autograd_program_pyapi.mojo
 `ops_imported_run_py`). These tests hold it word for word to the former
 Python path, rebuilt here as an oracle (NumPy views in the session shapes,
 `Session.run`, the outputs viewed and reshaped), and hold the refusals'

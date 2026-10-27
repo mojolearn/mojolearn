@@ -9,9 +9,9 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.native_json import native_path
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
-from autograd.python_errors_pyapi import graph_python_error, graph_int
-from autograd.session_frontend_pyapi import ops_session_initialize_py
-from autograd.ops_frontend_pyapi import _program_initialize
+from providers.python.autograd_python_errors_pyapi import graph_python_error, graph_int
+from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
+from providers.python.autograd_ops_frontend_pyapi import _program_initialize
 
 
 def _fields(value: PythonObject, layout: PythonObject) raises -> PythonObject:

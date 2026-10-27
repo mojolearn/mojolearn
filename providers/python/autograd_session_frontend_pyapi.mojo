@@ -2,7 +2,7 @@
 # Native Session setup over connections established by the package importer.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setattr, py_type
-from autograd.program_arrays_pyapi import initialize_program_arrays
+from providers.python.autograd_program_arrays_pyapi import initialize_program_arrays
 
 
 def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode: PythonObject,

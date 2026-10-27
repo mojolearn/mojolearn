@@ -41,7 +41,7 @@ from autograd.program import PROGRAM_IN_IDS, same_shape, shape_text
 from autograd.program_entries import program_execute_prepare
 from autograd.program_runtime import replay_values, parameter_buffers
 from autograd.cast_ops import OP_CAST_F32, OP_CAST_I32
-from autograd.program_pyapi import _imported_repr, _imported_tuple, _imported_session_dims
+from providers.python.autograd_program_pyapi import _imported_repr, _imported_tuple, _imported_session_dims
 
 
 def _device_kind(dtype: String, what: String) raises -> Tuple[Int, Int]:

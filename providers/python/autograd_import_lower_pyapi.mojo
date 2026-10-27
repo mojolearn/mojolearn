@@ -8,7 +8,7 @@ from autograd.import_lower import (
     IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, IMPORT_READ_FAILED, OnnxImport, _Found,
     onnx_import, onnx_import_file,
 )
-from autograd.pyapi import program_info
+from providers.python.autograd_pyapi import program_info
 
 
 def _int_list(p: PythonObject) raises -> List[Int]:

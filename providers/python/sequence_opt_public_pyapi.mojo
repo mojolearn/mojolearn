@@ -17,7 +17,7 @@ from sequence.opt_public_device import (
     seq_optimizer_state_device,
     seq_optimizer_step_device,
 )
-from sequence.pyapi import py_f64s, py_ints
+from providers.python.sequence_pyapi import py_f64s, py_ints
 
 
 def seq_optimizer_init_py(words: PythonObject, ip: PythonObject) raises -> PythonObject:

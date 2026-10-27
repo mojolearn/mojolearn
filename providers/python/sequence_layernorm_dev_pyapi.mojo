@@ -6,7 +6,7 @@ the typed result back. Nothing else."""
 from std.python import PythonObject
 
 from sequence.layernorm_dev import layer_norm_dev
-from sequence.pyapi import py_f64s, py_ints
+from providers.python.sequence_pyapi import py_f64s, py_ints
 
 
 def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
