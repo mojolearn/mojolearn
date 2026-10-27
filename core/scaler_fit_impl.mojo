@@ -5,7 +5,7 @@ Fit arithmetic remains in preprocessing.estimator and x_prep's existing kernels.
 These routines preserve the former buffer casts and public validation semantics.
 """
 from std.memory import bitcast
-from bindings.classical_cast import classical_f32_bits
+from core.classical_cast import classical_f32_bits
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 

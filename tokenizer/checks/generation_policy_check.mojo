@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from std.testing import assert_equal
-from bindings.generation_policy import generation_pick
+from core.generation_policy_impl import generation_pick
 
 
 def main() raises:
