@@ -19,6 +19,7 @@ def record():
     return dict(format=light.FORMAT, numeric_mode=1, status='CAPTURED',
                 expected_cases=list(light.EXPECTED_CASES),
                 digest_protocol='sha256-raw-shape-dtype-v1',
+                case_source_protocol='python-tokens-v1',
                 case_sources={n:'a'*64 for n in light.EXPECTED_CASES},
                 bindings=[dict(sha256='b'*64)],
                 cases={n:dict(status='captured',outputs=[dict(output) for _ in range(light.OUTPUT_COUNTS[n])])
@@ -65,3 +66,12 @@ def test_source_changes_require_new_fixture_evidence_but_labels_do_not():
     assert not light.compare(original, renamed)
     renamed['case_sources'][light.EXPECTED_CASES[0]] = 'c'*64
     assert 'different numerical fixture source' in light.compare(original, renamed)
+
+
+def test_fingerprint_ignores_comments_but_catches_changed_arithmetic(monkeypatch):
+    monkeypatch.setattr(light.inspect, 'getsource', lambda f: 'def f(x):\n    return x + 1\n')
+    baseline = light.case_fingerprint(None)
+    monkeypatch.setattr(light.inspect, 'getsource', lambda f: 'def f(x):\n    # explanation\n    return x+1\n')
+    assert light.case_fingerprint(None) == baseline
+    monkeypatch.setattr(light.inspect, 'getsource', lambda f: 'def f(x):\n    return x + 2\n')
+    assert light.case_fingerprint(None) != baseline

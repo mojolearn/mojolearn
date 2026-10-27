@@ -5,12 +5,14 @@ optimizer. These fixtures have their own references: shrinking a historical
 fixture must never silently reuse its hashes. Python here is test control.
 """
 import hashlib
-import ast
 import inspect
+import io
 import json
 import re
 from pathlib import Path
 import tempfile
+import token
+import tokenize
 
 FORMAT = 'mojolearn.light-identity.v1'
 EXPECTED_CASES = ('tape_elementwise', 'tape_layout', 'tape_gradients',
@@ -18,6 +20,16 @@ EXPECTED_CASES = ('tape_elementwise', 'tape_layout', 'tape_gradients',
                   'tape_losses')
 OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (43, 23, 8, 15, 8, 7, 5, 9)))
 MAX_INPUT_ELEMENTS = 16
+
+
+def case_fingerprint(function):
+    # ast.dump changes between supported Python versions (including empty
+    # fields). Token names and lexemes compare source consistently on all
+    # hosts without making whitespace/comments invalidate numerical evidence.
+    tokens = tokenize.generate_tokens(io.StringIO(inspect.getsource(function)).readline)
+    parts = [(token.tok_name[t.type], '' if t.type in (token.INDENT, token.DEDENT, token.NEWLINE) else t.string)
+             for t in tokens if t.type not in (tokenize.COMMENT, tokenize.NL, token.ENDMARKER)]
+    return hashlib.sha256(json.dumps(parts, separators=(',', ':')).encode()).hexdigest()
 
 
 def tape_elementwise():
@@ -201,8 +213,9 @@ def capture(cases=EXPECTED_CASES):
     binding = _backend.binding('_mojolearn_x_sequence', 'identical')
     report = dict(format=FORMAT, version=__version__,
                   source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  case_sources={name: hashlib.sha256(ast.dump(ast.parse(inspect.getsource(globals()[name]))).encode()).hexdigest()
+                  case_sources={name: case_fingerprint(globals()[name])
                                 for name in cases},
+                  case_source_protocol='python-tokens-v1',
                   digest_protocol='sha256-raw-shape-dtype-v1',
                   vendor=str(binding.x_sequence_vendor()), numeric_mode=int(binding.x_sequence_numeric_mode()),
                   expected_cases=list(cases), cases={}, max_input_elements=MAX_INPUT_ELEMENTS)
@@ -261,6 +274,8 @@ def compare(actual, expected):
                 or any(not re.fullmatch(r'[0-9a-f]{64}', str(h)) for h in report.get('case_sources', {}).values())
                 or report.get('digest_protocol') != 'sha256-raw-shape-dtype-v1'):
             errors.append(label + ': missing fixture contract')
+        if report.get('case_source_protocol') != 'python-tokens-v1':
+            errors.append(label + ': unsupported fixture fingerprint protocol')
     if actual.get('case_sources') != expected.get('case_sources'):
         errors.append('different numerical fixture source')
     if not errors:
