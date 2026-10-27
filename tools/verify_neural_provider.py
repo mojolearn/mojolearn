@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SUITES = (
     'test_generation_metadata_boundary.py', 'test_neural_metadata_boundary.py',
     'test_generation_native_abi.py', 'test_neural_native_descriptors.py',
+    'test_neural_provider_layout.py',
     'test_neural_provider_reuse.py', 'test_native_execution_boundary.py',
     'test_native_metadata_snapshot.py', 'test_native_prep_plans.py',
     'test_runtime_fallback_scope.py', 'test_verify_neural_provider.py',
