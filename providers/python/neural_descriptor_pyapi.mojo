@@ -4,8 +4,8 @@
 from std.ffi import c_int
 from std.os import getenv
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from std.python._cpython import GILReleased, PyObjectPtr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
@@ -19,13 +19,13 @@ struct NeuralDescriptorProvider(Movable, Writable):
     var entry: NativeDescriptorCall
     var calls: List[Int]
 
-    def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall):
+    def __init__(out self, module: PythonObject, capsule: PythonObject, factory: PythonObject, var name: String, entry: NativeDescriptorCall, operation_count: Int = 6):
         self.module = module
         self.capsule = capsule
         self.factory = factory
         self.name = name^
         self.entry = entry
-        self.calls = List[Int](length=6, fill=0)
+        self.calls = List[Int](length=operation_count, fill=0)
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("NeuralDescriptorProvider(", self.name, ", calls=", self.calls, ")")
@@ -34,7 +34,38 @@ struct NeuralDescriptorProvider(Movable, Writable):
         self.write_to(writer)
 
 
-def neural_descriptor_connect(factory: PythonObject, var name: String) raises -> PythonObject:
+def neural_descriptor_capsule(name: String, entries: List[NativeDescriptorCall]) raises -> PythonObject:
+    # Shared table export for every engine. The caller MUST retain the name
+    # and entries in module-global native storage for the entire image lifetime;
+    # PyCapsule borrows both addresses and does not own or free either allocation.
+    if len(entries) != 1:
+        raise Error("native provider: a v1 descriptor table has one dispatch entry")
+    ref cpy = Python().cpython()
+    var capsule = cpy.lib.get_function[PyObjectPtr]("PyCapsule_New")(
+        entries.unsafe_ptr(), name.as_c_string_slice().unsafe_ptr(), PyObjectPtr())
+    if not capsule:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=capsule)
+
+
+def neural_descriptor_entry(module: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
+    # Read an exact module dictionary, never its optional Python __getattr__.
+    # Metadata/ownership doors must be compiled entries too; provider execution
+    # alone would not prevent callbacks during admission or readback.
+    var bi = native_loaded_module("builtins")
+    if py_type(module) is not py_type(bi):
+        raise Error("TypeError: native provider requires an exact compiled module")
+    var entry = py_get(py_fields(module), name)
+    if entry is None and not required:
+        return entry
+    if entry is None or py_type(entry) is not py_type(bi.len) or entry.__self__ is not module:
+        raise Error("TypeError: native provider requires compiled entry " + name)
+    return entry
+
+
+def neural_descriptor_connect(factory: PythonObject, var name: String, operation_count: Int = 6) raises -> PythonObject:
+    if operation_count < 1:
+        raise Error("native provider: operation_count must be positive")
     var bi = native_loaded_module("builtins")
     if py_type(factory) is not py_type(bi.len):
         raise Error("TypeError: neural native ABI factory must be a compiled extension entry")
@@ -51,18 +82,20 @@ def neural_descriptor_connect(factory: PythonObject, var name: String) raises ->
     if not raw:
         raise cpy.unsafe_get_error()
     var table = MutPointer[NativeDescriptorCall, MutUntrackedOrigin](unsafe_from_address=Int(raw.value()))
-    return PythonObject(alloc=NeuralDescriptorProvider(module, capsule, factory, name^, table[0]))
+    return PythonObject(alloc=NeuralDescriptorProvider(module, capsule, factory, name^, table[0], operation_count))
 
 
-def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name: String) raises -> PythonObject:
+def neural_descriptor_reuse(previous: PythonObject, factory: PythonObject, name: String, operation_count: Int = 6) raises -> PythonObject:
+    if operation_count < 1:
+        raise Error("native provider: operation_count must be positive")
     # Caller admits this exact compiled factory before entering here. Retain
     # factory identity as well as its module: swapping an ABI entry on the same
     # module must reconnect, even if the facade/canonical module did not change.
     if previous is not None:
         var held = previous.downcast_value_ptr[NeuralDescriptorProvider]()
-        if held[].factory is factory and held[].module is factory.__self__ and held[].name == name:
+        if held[].factory is factory and held[].module is factory.__self__ and held[].name == name and len(held[].calls) == operation_count:
             return previous
-    return neural_descriptor_connect(factory, name)
+    return neural_descriptor_connect(factory, name, operation_count)
 
 
 def neural_descriptor_cached(
@@ -92,6 +125,30 @@ def neural_descriptor_cached(
     return result
 
 
+def _neural_descriptor_admit_entry(provider: PythonObject, factory: PythonObject) raises:
+    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    var bi = native_loaded_module("builtins")
+    if py_type(factory) is not py_type(bi.len) or factory.__self__ is not owner[].module:
+        raise Error("TypeError: native state admission requires the provider's compiled entry")
+
+
+def neural_descriptor_construct(provider: PythonObject, factory: PythonObject) raises -> PythonObject:
+    # A no-argument compiled state constructor is lifetime admission only;
+    # subsequent computation uses the descriptor table rather than this door.
+    _neural_descriptor_admit_entry(provider, factory)
+    return py_call(factory)
+
+
+def neural_descriptor_handle(provider: PythonObject, factory: PythonObject, value: PythonObject) raises -> Int:
+    # The engine checks the exact value type. Retain value and provider for each
+    # subsequent handle use; never unwrap a generic extension object layout.
+    _neural_descriptor_admit_entry(provider, factory)
+    var handle = Int(py=py_call(factory, value))
+    if handle == 0:
+        raise Error("native provider: state admission returned a null handle")
+    return handle
+
+
 def neural_descriptor_matches(provider: PythonObject, canonical: PythonObject) raises -> Bool:
     # Native owner identity only: no getattr, Python callback or cache lookup.
     return provider is not None and provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is canonical
@@ -99,13 +156,19 @@ def neural_descriptor_matches(provider: PythonObject, canonical: PythonObject) r
 
 def neural_descriptor_execute(
     provider: PythonObject, operation: Int, addresses: List[Int], ints: List[Int], floats: List[Float64],
+    release_gil: Bool = True,
 ) raises -> Int:
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     if operation < 0 or operation >= len(owner[].calls):
         raise Error("neural native ABI: unknown operation")
     owner[].calls[operation] += 1
     var result = 0
-    with GILReleased(Python()):
+    if release_gil:
+        with GILReleased(Python()):
+            result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
+    else:
+        # Only resource finalization whose existing ownership contract requires
+        # the admission lock uses this branch; native computation keeps True.
         result = native_descriptor_call(owner[].entry, operation, addresses, ints, floats)
     _ = provider
     return result
@@ -116,6 +179,6 @@ def neural_descriptor_info(provider: PythonObject) raises -> PythonObject:
     # executor itself. Counts record attempts, including refused native calls.
     var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var counts = Python.list()
-    for value in owner[].calls:  # small-loop(six named native operations)
+    for value in owner[].calls:  # small-loop(the admitted table's named native operations)
         _ = py_call(counts.append, value)
     return Python.tuple(PythonObject(owner[].name), counts)
