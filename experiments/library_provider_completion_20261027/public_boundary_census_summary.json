@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "kind": "source_census_not_runtime_evidence",
+  "commit": "78df028ef9076722a4d78d380cad93dd4f8d31b1",
+  "summary": {
+    "files": 863,
+    "candidate_bodies": 7840,
+    "classifications": {
+      "requires_manual_or_transitive_audit": 7654,
+      "allowed_sklearn_tag_metadata_only": 11,
+      "single_known_native_call_body": 175
+    },
+    "bodies_with_loader_calls": 244,
+    "bodies_with_metadata_expressions": 838,
+    "bodies_with_decorators": 1848,
+    "unresolved_parse_failures": 0
+  },
+  "limitations": [
+    "Candidate bodies include private modules/base classes; public reexports and inheritance require resolution.",
+    "One native call body does not audit descriptors, constructors, native transitive callees, or ownership.",
+    "Metadata syntax and calls are candidates for inspection, not proof of runtime execution or a violation.",
+    "Compiled/runtime-generated methods and callbacks may be absent from AST; this is not exhaustive runtime coverage."
+  ],
+  "full_report": "/Users/andrewhendel/mojolearn-evidence/library-provider-completion-20261027/public-boundary-census.json",
+  "largest_candidate_modules": [
+    {
+      "path": "python/mojolearn/_expansion_decomp.py",
+      "candidate_bodies": 200
+    },
+    {
+      "path": "python/mojolearn/_expansion_prep.py",
+      "candidate_bodies": 162
+    },
+    {
+      "path": "python/mojolearn/ops.py",
+      "candidate_bodies": 140
+    },
+    {
+      "path": "python/mojolearn/_expansion_cnn.py",
+      "candidate_bodies": 111
+    },
+    {
+      "path": "python/mojolearn/_expansion_metrics.py",
+      "candidate_bodies": 100
+    },
+    {
+      "path": "python/mojolearn/_expansion_trees.py",
+      "candidate_bodies": 97
+    },
+    {
+      "path": "python/mojolearn/model_selection.py",
+      "candidate_bodies": 82
+    },
+    {
+      "path": "python/mojolearn/tests/test_verify_all.py",
+      "candidate_bodies": 72
+    },
+    {
+      "path": "python/mojolearn/_expansion_neighbors.py",
+      "candidate_bodies": 66
+    },
+    {
+      "path": "python/mojolearn/_training_impl.py",
+      "candidate_bodies": 61
+    },
+    {
+      "path": "python/mojolearn/_expansion_linear.py",
+      "candidate_bodies": 56
+    },
+    {
+      "path": "python/mojolearn/_mamba_impl.py",
+      "candidate_bodies": 54
+    },
+    {
+      "path": "python/mojolearn/_verify_all.py",
+      "candidate_bodies": 53
+    },
+    {
+      "path": "python/mojolearn/tests/test_verify_par.py",
+      "candidate_bodies": 49
+    },
+    {
+      "path": "python/mojolearn/tests/test_host_kde_native.py",
+      "candidate_bodies": 44
+    },
+    {
+      "path": "python/mojolearn/_classical_host.py",
+      "candidate_bodies": 43
+    },
+    {
+      "path": "python/mojolearn/_array.py",
+      "candidate_bodies": 42
+    },
+    {
+      "path": "python/mojolearn/host_surface.py",
+      "candidate_bodies": 42
+    },
+    {
+      "path": "python/mojolearn/tests/test_verify_reference_admit.py",
+      "candidate_bodies": 42
+    },
+    {
+      "path": "python/mojolearn/linear_model.py",
+      "candidate_bodies": 37
+    }
+  ]
+}
