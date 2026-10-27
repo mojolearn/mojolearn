@@ -51,6 +51,7 @@ def test_repair_can_reuse_a_verified_opponent_without_forcing_a_retime(tmp_path)
     ("MATCHED", 1, {}, 2, 1),
     ("MATCHED", 0, {}, 2, 1),
     (None, 1, {}, 2, 1),
+    ("CORRUPT", 1, {}, 2, 1),
     ("MATCHED", 0, {"r": {"evidence_failure": "R2 retention failed"}}, 1, 1),
     ("REFUSED", 1, {}, 2, 0),
 ])
@@ -66,7 +67,10 @@ def test_campaign_records_failures_continues_and_stops_on_retention_failure(
         out = C.Path(cmd[cmd.index('--out') + 1]); out.mkdir(parents=True)
         # A retained raw scored output must survive an unexpected driver exit.
         (out / 'scored-output.bin').write_bytes(b'original scored bytes')
-        C.E.write(out / 'board.json', {'preflight': {'verdict': preflight}, 'races': races})
+        if preflight == 'CORRUPT':
+            (out / 'board.json').write_text('{interrupted write')
+        else:
+            C.E.write(out / 'board.json', {'preflight': {'verdict': preflight}, 'races': races})
         return returncode
     monkeypatch.setattr(C, 'logged', execute)
     monkeypatch.setattr(C, 'retain', lambda archive, members: {'sha256': 'fixture', 'status': 'verified'})

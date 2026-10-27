@@ -4,7 +4,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
-## 0.8.62
+## 0.8.62 (published 2026-10-27)
 
 - **Decision trees.** `DecisionTreeClassifier` and `DecisionTreeRegressor` accept and forward the documented `numeric_mode` constructor parameter. Compiled kernels are unchanged.
 

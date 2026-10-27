@@ -1169,8 +1169,14 @@ def main(argv=None):
         E.write(path, state)
         rc = logged(cmd, out / (race["id"].replace("/", ".") + ".log"))
         boardpath = directory / "board.json"
-        board = json.loads(boardpath.read_text()) if boardpath.exists() else {}
-        row.update(status="process finished", returncode=rc, finished=time.time(), board=str(boardpath),
+        result_error = None
+        try:
+            board = json.loads(boardpath.read_text()) if boardpath.exists() else {}
+            if not isinstance(board, dict):
+                raise ValueError("recipe result is not a JSON object")
+        except (OSError, ValueError) as exc:
+            board, result_error = {}, "cannot read recipe result: %s" % exc
+        row.update(result_error=result_error, status="process finished", returncode=rc, finished=time.time(), board=str(boardpath),
                    preflight=(board.get("preflight") or {}).get("verdict"),
                    results={rid: {"status": r.get("status"), "audit": r.get("audit"),
                                   "evidence_failure": r.get("evidence_failure")}
@@ -1191,6 +1197,8 @@ def main(argv=None):
             state["stop_reason"] = "recipe evidence upload failed (local bytes kept): " + failure
             controller_failed = True
             break
+        print("CAMPAIGN_RECIPE_DONE " + json.dumps({"id": race["id"], "directory": str(directory),
+              "status": row["status"], "returncode": rc}), flush=True)
         if any(r.get("evidence_failure") for r in board.get("races", {}).values()):
             state["stop_reason"] = "retention failed; retry upload without rerunning completed measurements"
             controller_failed = True
