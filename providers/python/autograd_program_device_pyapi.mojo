@@ -29,18 +29,10 @@
 # caller routes only tensors on that GPU here.
 from std.python import Python, PythonObject
 from std.sys.info import has_apple_gpu_accelerator
-from max.gpu.host import DeviceBuffer, DeviceContext
 from bindings.py_balanced import py_call
-from sequence.ops import FP, Args
-from sequence.exec_device import DeviceExec
 from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
 from autograd.rankn import ShapeN
-from autograd.tape import Tape
-from autograd.ops_api import ops_session
-from autograd.program import PROGRAM_IN_IDS, same_shape, shape_text
-from autograd.program_entries import program_execute_prepare
-from autograd.program_runtime import replay_values, parameter_buffers
-from autograd.cast_ops import OP_CAST_F32, OP_CAST_I32
+from autograd.program_device_execution import program_device_execute
 from providers.python.autograd_program_pyapi import _imported_repr, _imported_tuple, _imported_session_dims
 
 
@@ -67,61 +59,6 @@ def _device_kind(dtype: String, what: String) raises -> Tuple[Int, Int]:
         return (CAST_KIND_BOOL, 1)
     raise Error("TypeError: " + what + ": dtype " + dtype + " is not supported; pass a float16, float32, "
                 + "float64, integer or bool tensor")
-
-
-def _words_view(ex: DeviceExec, p: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
-    """The view of n words at p, a buffer this executor allocated."""
-    var found = ex._find(p, n)
-    return ex._sub(found[0], found[1], n)
-
-
-def _foreign_words(ctx: DeviceContext, addr: Int, n: Int) -> DeviceBuffer[DType.float32]:
-    """A non-owning view of n words at a caller's device address."""
-    return DeviceBuffer[DType.float32](ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr), n, owning=False)
-
-
-def _device_input(mut ex: DeviceExec, dst: FP, src: CastIn, ids: Bool) raises:
-    """dst = the caller's device array `src` as the program reads it: the
-    host path's upload_cast (ids: upload_cast_i32) with the upload as one
-    device-to-device copy."""
-    var n = src.count()
-    if ids:
-        if src.kind != CAST_KIND_SIGNED and src.kind != CAST_KIND_UNSIGNED:
-            raise Error("TypeError: program input holds ids and must be integers (an integer tensor)")
-    var plain = (src.kind == CAST_KIND_SIGNED and src.itemsize == 4) if ids else src.is_f32_c()
-    if plain:
-        var view = _words_view(ex, dst, n)
-        ex.ctx.enqueue_copy(dst_buf=view, src_buf=_foreign_words(ex.ctx, src.addr, n))
-        _ = view^
-        return
-    # the span's bytes into zero-filled words (alloc zero-fills before the copy, in queue order)
-    var raw = ex.alloc(src.words())
-    try:
-        var nbytes = src.nbytes()
-        var bytes_dst = DeviceBuffer[DType.uint8](
-            ex.ctx, MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=Int(raw)), nbytes, owning=False)
-        var bytes_src = DeviceBuffer[DType.uint8](
-            ex.ctx, MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=src.start()), nbytes, owning=False)
-        ex.ctx.enqueue_copy(dst_buf=bytes_dst, src_buf=bytes_src)
-        _ = bytes_dst^
-        _ = bytes_src^
-        var a = Args()
-        a.p0 = raw
-        a.p1 = dst
-        a.i0 = src.kind
-        a.i1 = src.itemsize
-        a.i2 = src.cols
-        a.i3 = src.s0
-        a.i4 = src.s1
-        a.i5 = src.origin()
-        if ids:
-            ex.launch[OP_CAST_I32](a, n)
-        else:
-            ex.launch[OP_CAST_F32](a, n)
-    except error:
-        ex.free(raw)
-        raise error
-    ex.free(raw)
 
 
 def ops_imported_run_device_py[KIND: Int](
@@ -175,6 +112,7 @@ def ops_imported_run_device_py[KIND: Int](
         shapes.append(sh)
     var out_counts = List[Int]()
     var out_addrs = List[Int]()
+    var out_texts = List[String]()
     for k in range(len(declared_out)):  # driver-loop: over the model's declared outputs
         var shape = py_call(b.tuple, declared_out[k][1])
         var count = 1
@@ -185,67 +123,10 @@ def ops_imported_run_device_py[KIND: Int](
             raise Error("ValueError: output buffer " + String(k) + " has a null device address")
         out_counts.append(count)
         out_addrs.append(addr)
+        out_texts.append(_imported_repr(shape))
     var session = program._s
     if session._id is None:
         raise Error("ValueError: this session is closed")
     var sid = Int(py=session._id)
-    var plan = program_execute_prepare[DeviceExec, KIND](sid, Int(py=program._id), sid, False, False)
-    if len(declared) != plan.program.n_in:
-        raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
-    for k in range(len(shapes)):  # driver-loop: over the model's declared inputs
-        if not same_shape(shapes[k], plan.program.in_shapes[k]):
-            raise Error("ValueError: input " + String(k) + " must keep its captured shape "
-                        + shape_text(plan.program.in_shapes[k]) + "; got " + shape_text(shapes[k]))
-    var s = ops_session[DeviceExec, KIND](sid)
-    var p = plan.program.copy()
-    var params = parameter_buffers(s[], p)
-    var trainable = List[Bool](length=len(params), fill=False)
-    var buffers = List[FP]()
-    try:
-        for k in range(len(srcs)):  # driver-loop: over the model's declared inputs (device copies)
-            var buf = s[].ex.alloc(shapes[k].count())
-            buffers.append(buf)
-            _device_input(s[].ex, buf, srcs[k], p.in_kinds[k] == PROGRAM_IN_IDS)
-    except err:
-        for k in range(len(buffers)):  # driver-loop: over owners acquired before a failed copy
-            s[].ex.free(buffers[k])
-        raise err
-    var held = Tape()
-    swap(held, s[].prog_tape)
-    swap(held, s[].tape)
-    var temps = List[Int]()
-    var phs = List[Int]()
-    try:
-        s[].tape.no_grad()
-        s[].tape.reset()
-        var outs = replay_values(s[], p, buffers, shapes, params, trainable, temps, phs)
-        if len(outs) != len(out_addrs):
-            raise Error("ValueError: the program returned " + String(len(outs)) + " outputs, the model declares "
-                        + String(len(out_addrs)))
-        for k in range(len(outs)):  # driver-loop: over the program's outputs (device copies, no data on the host)
-            var slot = s[]._slot(outs[k])
-            var sh = s[].shapes[slot]
-            if out_counts[k] != sh.count():
-                raise Error("ValueError: cannot reshape output " + String(k) + " of shape " + shape_text(sh)
-                            + " into shape " + _imported_repr(py_call(b.tuple, declared_out[k][1])))
-            if out_counts[k] == 0:
-                continue
-            var src = s[].tape.value_of(s[].ex, s[].tensors[slot])
-            var view = _words_view(s[].ex, src, out_counts[k])
-            s[].ex.ctx.enqueue_copy(dst_buf=_foreign_words(s[].ex.ctx, out_addrs[k], out_counts[k]), src_buf=view)
-            _ = view^
-        # the outputs are written when this returns
-        s[].ex.sync()
-    except err:
-        s[]._drop_temps(temps)
-        swap(held, s[].tape)
-        swap(held, s[].prog_tape)
-        for k in range(len(buffers)):  # driver-loop: over input owners
-            s[].ex.free(buffers[k])
-        raise err
-    s[]._drop_temps(temps)
-    swap(held, s[].tape)
-    swap(held, s[].prog_tape)
-    for k in range(len(buffers)):  # driver-loop: over input owners
-        s[].ex.free(buffers[k])
+    program_device_execute[KIND](sid, Int(py=program._id), srcs, shapes, out_counts, out_addrs, out_texts)
     return PythonObject(None)

@@ -11,7 +11,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_fields, py_type, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_torch_admission import (
-    native_torch_admit, native_torch_modes_admit, native_torch_device, native_torch_metadata,
+    native_torch_admit, native_torch_modes_admit, native_torch_device, native_torch_storage_metadata,
     native_torch_contiguous, native_torch_to,
 )
 from sequence.exec_trait import Exec
@@ -22,6 +22,7 @@ from autograd.program import PROGRAM_IN_IDS, same_shape
 from autograd.program_io import ProgramInput
 from autograd.program_entries import program_execute_prepare, program_execute_run
 from providers.python.autograd_program_pyapi import _imported_session_dims
+from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -54,34 +55,55 @@ def _torch_kind(dtype: String) raises -> Tuple[Int, Int]:
 
 
 def _torch_describe(value: PythonObject) raises -> PythonObject:
-    var info = native_torch_metadata(value)
-    return Python.tuple(info[4], info[2], String(info[0]).removeprefix("torch."))
+    var info = native_torch_storage_metadata(value)
+    var dims = py_call(native_loaded_module("builtins").tuple, info[1])
+    return Python.tuple(info[3], dims, String(info[0]).removeprefix("torch."))
 
 
-def _torch_route(program: PythonObject, inputs: PythonObject) raises -> PythonObject:
-    # Native device metadata is read only after Python mode/subclass admission.
-    # This entry also answers the test controller's route diagnostic.
+struct TorchDeviceSnapshot(Movable):
+    var owner: PythonObject
+    var kind: String
+    var index: Int
+
+    def __init__(out self, owner: PythonObject) raises:
+        self.owner = owner
+        self.kind = String(owner.type)
+        var index = owner.index
+        self.index = -1 if index is None else Int(py=index)
+
+
+def _torch_devices(inputs: PythonObject) raises -> List[TorchDeviceSnapshot]:
     var b = native_loaded_module("builtins")
     if py_type(inputs) is not b.list and py_type(inputs) is not b.tuple:
         raise Error("TypeError: Torch program inputs require a native list or tuple")
-    if len(inputs) == 0:
+    var devices = List[TorchDeviceSnapshot]()
+    for i in range(len(inputs)):  # driver-loop: over input device metadata, once per public operation
+        devices.append(TorchDeviceSnapshot(native_torch_device(inputs[i])))
+    return devices^
+
+
+def _torch_route_with_devices(program: PythonObject, devices: List[TorchDeviceSnapshot]) raises -> PythonObject:
+    if len(devices) == 0:
         return Python.tuple("host", "the graph has no tensor inputs")
-    for i in range(len(inputs)):  # driver-loop: tensor metadata, no Python dispatch
-        native_torch_admit(inputs[i])
-    var device = native_torch_device(inputs[0])
-    if String(device.type) == "mps":
+    ref device = devices[0]
+    if device.kind == "mps":
         return Python.tuple("host", "PyTorch exposes no supported raw pointer for an MPS tensor; Apple inputs are copied through the host")
-    if String(device.type) != "cuda":
-        return Python.tuple("host", "the inputs are on the " + String(device.type))
-    if Int(py=device.index) != 0:
+    if device.kind != "cuda":
+        return Python.tuple("host", "the inputs are on the " + device.kind)
+    if device.index != 0:
         return Python.tuple("host", "mojolearn runs on GPU 0 and the input is on another visible GPU")
-    for i in range(len(inputs)):  # driver-loop: exact native device metadata
-        var other = native_torch_device(inputs[i])
-        if String(other.type) != "cuda" or Int(py=other.index) != 0:
+    for i in range(1, len(devices)):  # driver-loop: over remaining admitted native device metadata
+        ref other = devices[i]
+        if other.kind != "cuda" or other.index != 0:
             return Python.tuple("host", "the inputs use different devices")
     if py_get(py_fields(program), "_run_device") is None:
         return Python.tuple("host", "this mojolearn binding takes no device buffers")
     return Python.tuple("device", "")
+
+
+def _torch_route(program: PythonObject, inputs: PythonObject) raises -> PythonObject:
+    # Untimed route diagnostic uses the same operation-local device snapshot.
+    return _torch_route_with_devices(program, _torch_devices(inputs))
 
 
 def _torch_run_host[E: Exec & Movable & Deinitable, KIND: Int](
@@ -147,13 +169,14 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     var free = context["free"]
     for i in range(len(free)):  # driver-loop: graph input selection
         py_call(inputs.append, args[Int(py=free[i])])
-    var route = _torch_route(program, inputs)
+    var devices = _torch_devices(inputs)
+    var route = _torch_route_with_devices(program, devices)
     if Bool(py=py_get(context, "force_host", False)):
         route = Python.tuple("host", "host route selected by the transfer test controller")
     var on_device = String(route[0]) == "device"
     var target = context["cpu"]
     if len(inputs) > 0:
-        target = native_torch_device(inputs[0])
+        target = devices[0].owner
     var prepared = Python.list()
     for k in range(len(inputs)):  # driver-loop: native framework buffer preparation
         py_call(prepared.append, native_torch_contiguous(inputs[k], not on_device))
@@ -187,7 +210,7 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
             if py_type(run) is not py_type(b.len):
                 raise Error("TypeError: Torch execution requires the compiled device program entry")
             ready = perf_counter_ns() if profile else 0
-            py_call(run, program, descriptors, addresses)
+            imported_device_provider_run(program, descriptors, addresses)
             ran = perf_counter_ns() if profile else 0
             py_call(_torch_entry(context, "synchronize"))
         finally:
@@ -199,7 +222,7 @@ def ops_torch_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
         var copied = Python.list()
         for k in range(len(outputs)):  # driver-loop: native framework device transfer
             py_call(copied.append, native_torch_to(outputs[k], target))
-        if String(target.type) == "mps":
+        if len(devices) > 0 and devices[0].kind == "mps":
             py_call(_torch_entry(context, "synchronize_mps"))
         outputs = copied
     _ = prepared  # contiguous copies stay alive until native replay completes

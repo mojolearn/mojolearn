@@ -17,7 +17,8 @@ comptime MODEL_THRESHOLD = 11
 comptime MODEL_UNIFORM = 12
 comptime SESSION_OPEN = 13
 comptime SESSION_CLOSE = 14
-comptime MODEL_OPERATION_COUNT = 15
+comptime PROGRAM_DEVICE_RUN = 15
+comptime MODEL_OPERATION_COUNT = 16
 
 
 struct NeuralModelRequest(Movable):
