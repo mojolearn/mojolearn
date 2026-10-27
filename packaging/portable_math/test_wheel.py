@@ -7,6 +7,17 @@ import sys
 
 import pytest
 
+
+def test_optional_python314_stdlib_requires_importerror_guard(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, 'stdlib_module_names', sys.stdlib_module_names - {'compression'})
+    path = tmp_path / 'module.py'
+    path.write_text('try:\n    from compression import zstd\nexcept ImportError:\n    zstd = None\n')
+    assert audit.dependency_errors(path, 'mojolearn/module.py') == []
+    path.write_text('from compression import zstd\n')
+    assert audit.dependency_errors(path, 'mojolearn/module.py')
+    path.write_text('try:\n    from compression import zstd\nexcept ValueError:\n    zstd = None\n')
+    assert audit.dependency_errors(path, 'mojolearn/module.py')
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from stage import build
@@ -298,6 +309,23 @@ def test_baseline_manifest_is_rechecked_against_final_bytes(payload):
     assert report['ptx_sets'][0]['schema'] == 'mojolearn.ptx-set.v2'
     assert report['ptx_sets'][0]['code_format'] == 'ptx'
     assert 'identical_qualified' not in report['ptx_sets'][0]
-    binary.write_bytes(binary.read_bytes() + b'changed')
+    manifest['component_sources'] = {'probe.so': {
+        'binary_sha256': manifest['files'][0]['sha256'],
+        'source_commit': 'b' * 40, 'source_closure_sha256': 'c' * 64,
+        'source_closure_ref': 'retained/source.json'}}
+    (directory / 'PTX_BASELINE.json').write_text(json.dumps(manifest))
+    audit.audit_tree(payload)
+    manifest['unexpected'] = True
+    (directory / 'PTX_BASELINE.json').write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match='final bytes differ'):
+        audit.audit_tree(payload)
+    del manifest['unexpected']
+    manifest['component_sources']['probe.so']['binary_sha256'] = 'd' * 64
+    (directory / 'PTX_BASELINE.json').write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match='component source evidence'):
+        audit.audit_tree(payload)
+    del manifest['component_sources']
+    (directory / 'PTX_BASELINE.json').write_text(json.dumps(manifest))
+    binary.write_bytes(binary.read_bytes() + b'changed')
+    with pytest.raises(ValueError, match='complete GPU binding bytes'):
         audit.audit_tree(payload)

@@ -152,6 +152,16 @@ def dependency_errors(path, relative):
     errors = []
     tree = ast.parse(path.read_bytes(), filename=relative)
     sparse_adapters = sparse_output_adapter_imports(tree, relative)
+    # Python 3.14's optional stdlib zstd reader is guarded on older supported
+    # interpreters. The audit interpreter's stdlib list must not turn that
+    # explicit ImportError fallback into a missing third-party dependency.
+    optional_stdlib = set()
+    for block in ast.walk(tree):
+        if isinstance(block, ast.Try) and any(isinstance(h.type, ast.Name)
+                and h.type.id == 'ImportError' for h in block.handlers):
+            for statement in block.body:
+                if isinstance(statement, ast.ImportFrom) and statement.module == 'compression':
+                    optional_stdlib.add(id(statement))
     lazy = set()
     for fn in ast.walk(tree):
         if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
@@ -166,6 +176,8 @@ def dependency_errors(path, relative):
         for name in names:
             top = name.split(".")[0]
             if top in allowed or top.startswith("_mojolearn"):
+                continue
+            if top == 'compression' and id(node) in optional_stdlib:
                 continue
             if top in OPTIONAL_LAZY_IMPORTS and id(node) in lazy:
                 continue
@@ -343,7 +355,18 @@ def audit_tree(root, python_only=False):
                 report = ptx_baseline.audit_tree(directory, manifest["source_commit"],
                                                 manifest["mojo_version"], manifest.get("source_dirty", False))
                 errors.extend(report["errors"])
-                if report != manifest:
+                # Independently recompute every byte/target/arithmetic field.
+                # Retained component origins are additional provenance, not a
+                # different binary format. Validate them against the recomputed
+                # bytes before projecting just those known annotations away.
+                import runpy
+                plugins = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'python/mojolearn/gpu_plugins.py'))
+                plugins['validate_baseline_manifest'](manifest,
+                    {r['file']:r['sha256'] for r in report['files']},
+                    {r['file']:r['sha256'] for r in report.get('indexes', [])})
+                format_manifest = {k:v for k,v in manifest.items()
+                                   if k not in ('component_sources', 'assembly_scope', 'base_source_commit')}
+                if report != format_manifest:
                     errors.append("portable PTX final bytes differ from their build manifest")
                 baseline_reports.append(report)
             except (OSError, ValueError, KeyError) as exc:
