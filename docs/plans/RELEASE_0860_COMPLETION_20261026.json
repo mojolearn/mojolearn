@@ -1,6 +1,6 @@
 {
   "version": "0.8.60",
-  "status": "in-progress",
+  "status": "published",
   "owner_order": "2026-10-26: include everything remaining in the next release; finish 0.8.59 publication first; defer post-publication verification until afterward.",
   "previous_publication": "bench/results/release_verification/2026-10-26_pypi_0859/publication.json",
   "source_audit_revision": "8a21d5899f12d38e0b6142bed0745f6a8f8d4b42",
@@ -100,8 +100,8 @@
     {
       "id": "publish",
       "task": "Publish 0.8.60 with every remaining in-flight item accounted for; do not silently carry unfinished items forward.",
-      "status": "pending",
-      "evidence": null
+      "status": "complete",
+      "evidence": "bench/results/release_verification/2026-10-26_pypi_0860/publication.json"
     },
     {
       "id": "post-publication",
@@ -631,6 +631,8 @@
     "native_recompiled_for_fixture_repair": false,
     "apple_changed_fixtures": "2/2 STABLE; original output hashes unchanged",
     "previous_clean_records_retained": true,
-    "release_status": "Final source 667ed9fdd163: both candidate gates pass, Apple adapter evidence reused, final installed verifier checks pass. Ready to publish all six wheels."
-  }
+    "release_status": "Final source 667ed9fdd163 published in all six wheels; exact PyPI hashes and successful publication workflows confirmed."
+  },
+  "publication_record": "bench/results/release_verification/2026-10-26_pypi_0860/publication.json",
+  "publication_scope": "All six wheels published and exact PyPI hashes confirmed. Publication completion does not resolve the separate retained source inventory findings."
 }

@@ -2,5 +2,8 @@
   "wheels": "measurements/verification/0.8.60/final-0860-wheels.tgz",
   "fixture_sources_and_original_miss": "measurements/verification/0.8.60/verifier-fixture-update.tgz",
   "full_local_evidence": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026",
-  "scope": "All final native bytes unchanged from the qualified pre-fixture package. New fixtures pass installed CPU and Apple execution. Original comparator and fault-injection evidence retained."
+  "scope": "All final native bytes unchanged from the qualified pre-fixture package. New fixtures pass installed CPU and Apple execution. Original comparator and fault-injection evidence retained.",
+  "wheels_scope": "Original archive contains final core, AMD, Linux metapackage and macOS bytes; its NVIDIA and PTX wheels are historical. Use the corrected archive for final NVIDIA and PTX bytes.",
+  "corrected_nvidia_ptx_wheels": "measurements/verification/0.8.60/final-nvidia-ptx-metadata-fix-r2.tgz",
+  "publication_archive": "measurements/verification/0.8.60/publication-complete-20261027.tgz"
 }

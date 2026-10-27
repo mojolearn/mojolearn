@@ -1,0 +1,120 @@
+{
+  "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+  "selected_corrections": {
+    "nvidia": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final-corrected/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "d84fc78a074e27a8830248642d29eda3b5fabbb026375f856ccada487573c5af"
+    },
+    "nvidia-ptx": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final-corrected/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "e0b390090eebd5ac4ec07f4708212448a077291d0da6063ecc90f758a74691da"
+    }
+  },
+  "original_paths_restored": true,
+  "packaging_audit_sha256": "42cd42b147e2f2e9e365793bc47ba836058b2018904f7817ecbcf43a87de6237",
+  "artifact_archive": "measurements/verification/0.8.60/final-nvidia-ptx-metadata-fix-r2.tgz",
+  "current_repack": {
+    "source_commit": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
+    "previous_source": "0cd9de91ca915563a7b86b4bd03712cd359b6de5",
+    "compiler_invoked": false,
+    "wheels": [
+      {
+        "before": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "0bf4085224fecc75783b4fcc03942ffc2525961e5851bd6e9de97956a8c86dca"
+        },
+        "after": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "9bb4f209c11447a9059b19af693d8d3749f372d963a74502f6e439a234375150"
+        },
+        "changed": [
+          "mojolearn-VERSION.dist-info/LINUX_PAYLOAD.json",
+          "mojolearn-VERSION.dist-info/RECORD"
+        ]
+      },
+      {
+        "before": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_amd-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "e76e4a0680dea8a3dc7ec0e4be49ecd76816f582d95a0eb0a6eb232524511e75"
+        },
+        "after": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_amd-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "76e87cb17ecf29e6276e26b8bac572e74072a7749499b0c85709f0d065dc87b6"
+        },
+        "changed": [
+          "mojolearn_amd-VERSION.dist-info/LINUX_PAYLOAD.json",
+          "mojolearn_amd-VERSION.dist-info/RECORD"
+        ]
+      },
+      {
+        "before": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "8b84a6ba57c9c7af140d504fe216b0a6a1b4f37febe41ed41988362a375d8112"
+        },
+        "after": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final/mojolearn_core-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "790fd8bb15322d40713ba745b00ae6c58a391fb42cff42ae8794bcee375920c8"
+        },
+        "changed": [
+          "mojolearn/_identity_break.py",
+          "mojolearn/_identity_lane_neighbors.py",
+          "mojolearn/identity_columns/COMMIT",
+          "mojolearn_core-VERSION.dist-info/LINUX_PAYLOAD.json",
+          "mojolearn_core-VERSION.dist-info/RECORD"
+        ]
+      },
+      {
+        "before": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "79e260ff0445724ce197918f95d954ecbf110d7da4a22da304b54849fe4fff2d"
+        },
+        "after": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final-corrected/mojolearn_nvidia-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "d84fc78a074e27a8830248642d29eda3b5fabbb026375f856ccada487573c5af"
+        },
+        "changed": [
+          "mojolearn_nvidia-VERSION.dist-info/LINUX_PAYLOAD.json",
+          "mojolearn_nvidia-VERSION.dist-info/RECORD",
+          "mojolearn_nvidia-VERSION.dist-info/gpu_plugin.json"
+        ]
+      },
+      {
+        "before": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/linux/final/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "1e4021aff073067a333104752b203339923e35de1cf618b8f37a149903fe546e"
+        },
+        "after": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/linux/final-corrected/mojolearn_nvidia_ptx-0.8.60-py3-none-manylinux_2_35_x86_64.whl",
+          "sha256": "e0b390090eebd5ac4ec07f4708212448a077291d0da6063ecc90f758a74691da"
+        },
+        "changed": [
+          "mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json",
+          "mojolearn_nvidia_ptx-VERSION.dist-info/LINUX_PAYLOAD.json",
+          "mojolearn_nvidia_ptx-VERSION.dist-info/RECORD",
+          "mojolearn_nvidia_ptx-VERSION.dist-info/gpu_plugin.json"
+        ]
+      },
+      {
+        "before": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/0cd9de91ca91/macos/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+          "sha256": "e5eab5693d610533693e787e50f5245ceff336f913edfdf4edae82f9ec065b79"
+        },
+        "after": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/release/0.8.60/667ed9fdd163/macos/mojolearn-0.8.60-py3-none-macosx_26_0_arm64.whl",
+          "sha256": "52b12974cb11ee92f1ec17830b18895ce743b001c3c5bf705964421304e9424b"
+        },
+        "changed": [
+          "mojolearn-VERSION.dist-info/RECORD",
+          "mojolearn/_identity_break.py",
+          "mojolearn/_identity_lane_neighbors.py",
+          "mojolearn/identity_columns/COMMIT"
+        ]
+      }
+    ],
+    "verifier_update": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/release-0860-verifiers-20261026/verifier-fixture-update/update.json",
+      "sha256": "35bb864111d95a2f3c59ffd900b632c374fda8d666f955d9990aede51d121896"
+    }
+  },
+  "admission": "Both vendor candidate gates pass; unchanged AMD admission reused. No new native execution or compilation."
+}

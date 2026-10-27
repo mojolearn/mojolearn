@@ -3,8 +3,8 @@
   "requirement_id": "candidate-nvidia",
   "kind": "candidate",
   "source_revision": "667ed9fdd1638644a73f547e70b0f376ea1246f0",
-  "input_fingerprint": "90792a0590b680ab605a741d3a9fbf8d5f96edc416124edd12a2781ff90f62da",
-  "report_sha256": "45c595eed2f789e387726cd2caed13eda49f85679214a341f4117894cec981ee",
-  "run_id": "b6b2fdfa4a4108863570704be6f16344f7666ffd93cafea7e00c3a6c6a9ef1ca",
+  "input_fingerprint": "e4f074aef6a3c50ced9d9eb75237f84fa378e9b459c1207c36ef475329f19579",
+  "report_sha256": "78f00c2b93f4d61b52e5c763ca9257b8916cdf9b5d582f199e340ae8bc609ef3",
+  "run_id": "b54209f2e956bda0b6f4980e64f75c365ec70e82928064bb9a04e2c726ed3746",
   "admission": "Retained exact runtime bytes and original results; two changed verifier fixtures have separately recorded caught-and-restored proofs. No new native execution claimed."
 }

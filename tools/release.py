@@ -2174,6 +2174,17 @@ class Release:
         """A final split wheel: package 'linux' (mojolearn-core), a plugin
         ('nvidia', 'nvidia-ptx', 'amd') or 'linux-meta' (the Linux mojolearn)."""
         prefix = SPLIT_PACKAGES[package][1]
+        # A corrected unpublished artifact gets a new immutable path. Original
+        # candidate receipts must still resolve the exact bytes they admitted;
+        # overwriting linux/final would destroy their historical provenance.
+        retained = (getattr(self, "state", {}).get("final_wheel_overrides") or {}).get(package)
+        if retained:
+            path = Path(retained["path"])
+            if (not path.is_file() or not path.name.startswith(f"{prefix}-{self.version}-")
+                    or not path.name.endswith(".whl") or "-manylinux" not in path.name
+                    or sha256(path) != retained.get("sha256")):
+                raise StepFailed(f"corrected {package} artifact is missing, changed, or misidentified")
+            return path
         found = sorted((self.rel / "linux" / "final").glob(f"{prefix}-*-manylinux*.whl"))
         return found[-1] if found else None
 
