@@ -37,6 +37,18 @@ import smoke_inproc as SI
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def configure_checkpoint_cache(cache, environ=None):
+    """Keep generation fixtures with this campaign's installed runtime cache."""
+    environ = os.environ if environ is None else environ
+    key = "MOJOLEARN_BOARD_LM_CHECKPOINTS"
+    # The Mac's legacy ~/mojolearn-data path can point at an unmounted drive.
+    # Reuse --cache/hf-checkpoints for smoke AND measurements; preserve an
+    # explicit checkpoint root and let the existing pinned-file checks run.
+    if not environ.get(key, "").strip():
+        environ[key] = str(Path(cache).expanduser().resolve() / "hf-checkpoints")
+    return environ[key]
+
+
 def selected_plan(vendor, manifest, mode="identical", smoke=False, cpu_fallback=False):
     """The manifest's recipes for `vendor` and `mode`. Apple is allowed for --smoke only (Andrew 2026-10-14:
     the M4 runs smoke and identity; Apple timing is the M3 Ultra's). In a smoke, a manifest without this
@@ -1105,6 +1117,7 @@ def main(argv=None):
         "GBM_BENCH_DATA", os.path.join(os.path.expanduser("~"), "datasets", "gbm-bench")),
         help="the board's --data-root (the smoke's data check)")
     args = ap.parse_args(argv)
+    configure_checkpoint_cache(args.cache)
     if args.smoke:
         if args.smoke_timeout <= 0 or args.smoke_grace < 0:
             ap.error("smoke-timeout must be positive and smoke-grace nonnegative")
