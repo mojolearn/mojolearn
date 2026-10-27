@@ -4,7 +4,7 @@ from std.memory import memcpy
 from core.host_helpers_impl import all_finite_f32
 
 
-def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[Int], name: String) raises:
+def training_copy_words32(source: Int, target: Int, shape: List[Int], strides: List[Int]):
     var count = 1
     var contiguous = True
     var stride = 4
@@ -30,6 +30,13 @@ def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[
                 index //= shape[axis]
             var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
             dst[i] = UInt32(bytes[0]) | (UInt32(bytes[1]) << 8) | (UInt32(bytes[2]) << 16) | (UInt32(bytes[3]) << 24)
+
+
+def training_copy_f32(source: Int, target: Int, shape: List[Int], strides: List[Int], name: String) raises:
+    training_copy_words32(source, target, shape, strides)
+    var count = 1
+    for width in shape:
+        count *= width
     # Same native predicate as the original Array.all_finite boundary.
     if all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=target), count) == 0:
         raise Error(name + " must be finite float32")

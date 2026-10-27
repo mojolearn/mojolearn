@@ -1071,14 +1071,7 @@ class SmallByteLanguageModelTrainer:
         state : dict
             A state from :meth:`export_state` (or :meth:`state_dict`).
         """
-        with self._lock:
-            replacement = _validate_state(state)
-            _mode()
-            self._release_session()
-            self._state = replacement
-            self._lost_at = None
-            self._last_export_step = replacement['completed_steps']
-        return self
+        return _LM_TRAINER(self, "load_state", (state,), _LM_TRAINER_CONTEXT)
 
     def _binding(self):
         binding = _load(state_shape(self._state))
