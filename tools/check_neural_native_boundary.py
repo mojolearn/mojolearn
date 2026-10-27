@@ -40,6 +40,7 @@ def audit(root=ROOT, roots=NATIVE_ROOTS):
         for imported in imports(path.read_text()):
             if (imported == 'std.python' or imported.startswith('std.python.')
                     or imported == 'bindings' or imported.startswith('bindings.')
+                    or imported == 'providers' or imported.startswith('providers.')
                     or imported.startswith('adapters.') or imported.endswith('_pyapi')):
                 failures.append({'chain': chain + [imported], 'reason': 'provider or CPython dependency'})
                 continue

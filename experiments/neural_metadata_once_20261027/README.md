@@ -51,7 +51,7 @@ outside this product-runtime restriction.
 | Responsibility | Existing location | Staged destination/rule |
 | --- | --- | --- |
 | Python user API and packaging | `python/mojolearn/` | thin public one-binding-call API; packaging/import setup separate from execution |
-| Python input admission, opaque owner retention, output wrapping | `bindings/sequential_*`, `bindings/*_native`, `autograd/*_pyapi.mojo` | consolidate verified provider functions into `bindings/providers/python/` as a later mechanical integration step; do not move mixed execution there and call it compliant |
+| Python input admission, opaque owner retention, output wrapping | `bindings/sequential_*`, `bindings/*_native`, `autograd/*_pyapi.mojo` | consolidate verified provider functions into the existing `providers/python/` edge as a later verified integration step; do not move mixed execution there and call it compliant |
 | Torch/MAX whole-model admission/output | existing `adapters/` and shipped `_adapters/` | reuse existing framework adapters and `adapters/native/abi.h`; retain caller owners through synchronous return; no per-operation adapter API |
 | Shared native tensor metadata | `core/cast_in.mojo`, `autograd/rankn.mojo`, `autograd/program_io.mojo` | retain these native-only implementations; any future dedicated metadata directory must preserve the same one-way dependencies, not invent a duplicate ABI |
 | Persistent model state | `core/small_mlp_state_impl.mojo`, native model/program/session records | constructors, import/load, refit and setters rebuild native state; caller-owned mutable weights require explicit refresh/versioning |
@@ -61,9 +61,9 @@ No directories were moved in this lane. `bindings/` is still mixed provider and
 orchestration code; `autograd/` still contains both pure execution and `_pyapi`
 edge modules. A folder name does not prove isolation. The new checker protects
 six concrete descriptor/execution roots and their 79-module dependency closure.
-It rejects direct or transitive `std.python`, `bindings`, adapter and `_pyapi`
+It rejects direct or transitive `std.python`, `bindings`, provider, adapter and `_pyapi`
 imports, plus unresolved repository dependencies. It has no allowlist of debt,
-no numeric baseline and no bypass. Negative controls inject four distinct
+no numeric baseline and no bypass. Negative controls inject five distinct
 provider dependencies through an intermediate module. This is a source import
 guard, not a complete transitive callback or runtime proof for mixed paths.
 
