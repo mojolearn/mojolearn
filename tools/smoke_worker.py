@@ -107,6 +107,8 @@ def preload(report, libraries=LIBRARIES, modules=MODULES, drivers=DRIVER_SCRIPTS
             sys.path.insert(0, p)
     import smoke_inproc
     t0 = time.time()
+    from bench_board_torch_rocm import capture_caller_override
+    capture_caller_override()
     imports = report.setdefault("imports", {})
     for name in libraries:
         imports[name] = import_one(name, "library")

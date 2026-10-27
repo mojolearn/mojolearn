@@ -5820,6 +5820,8 @@ def quality(lane, data, outs, *, shape="full"):
 def _worker_env(arm):
     ctd = _load("classical_two_datasets")
     env = dict(os.environ)
+    if arm.startswith("torch-"):
+        _load("bench_board_torch_rocm").torch_worker_environment(env)
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
     ctd.apply_cpu_quota(env)

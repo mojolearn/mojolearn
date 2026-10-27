@@ -38,3 +38,15 @@ class TorchRocmEnvironmentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_preloaded_library_default_is_not_a_caller_override():
+    from bench_board_torch_rocm import capture_caller_override, torch_worker_environment
+    for original in (None, "", "/user/assets"):
+        env = {} if original is None else {"HIPBLASLT_TENSILE_LIBPATH": original}
+        capture_caller_override(env)
+        env.setdefault("HIPBLASLT_TENSILE_LIBPATH", "/opt/rocm/lib/hipblaslt/library")
+        capture_caller_override(env)  # repeated preloads preserve original provenance
+        child = torch_worker_environment(dict(env))
+        assert child.get("HIPBLASLT_TENSILE_LIBPATH") == original
+        assert env["HIPBLASLT_TENSILE_LIBPATH"] == (original if original is not None else "/opt/rocm/lib/hipblaslt/library")

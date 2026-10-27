@@ -1,4 +1,5 @@
 """Supported environment setup for Torch's bundled ROCm runtime assets."""
+import json
 import os
 from pathlib import Path
 
@@ -21,3 +22,25 @@ def configure_hipblaslt(torch, environ=None):
     assets = lib / "hipblaslt" / "library"
     if (lib / "libhipblaslt.so").is_file() and assets.is_dir():
         env[key] = str(assets)
+
+
+_CALLER_OVERRIDE = "MOJOLEARN_SMOKE_HIPBLASLT_CALLER_OVERRIDE"
+
+
+def capture_caller_override(environ=None):
+    """Save the caller setting before optional libraries mutate the smoke environment."""
+    env = os.environ if environ is None else environ
+    env.setdefault(_CALLER_OVERRIDE, json.dumps(env.get("HIPBLASLT_TENSILE_LIBPATH")))
+
+
+def torch_worker_environment(env):
+    # pylibraft.__init__ sets a system ROCm path on import. The shared smoke
+    # loads pylibraft for HipVS, but that library's default is not a user
+    # override for a separate Torch worker with its own bundled runtime.
+    if _CALLER_OVERRIDE in env:
+        original = json.loads(env.pop(_CALLER_OVERRIDE))
+        if original is None:
+            env.pop("HIPBLASLT_TENSILE_LIBPATH", None)
+        else:
+            env["HIPBLASLT_TENSILE_LIBPATH"] = original
+    return env
