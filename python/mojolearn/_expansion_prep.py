@@ -2398,6 +2398,7 @@ class Normalizer(_PrepBase):
         self.norm = norm
         self.copy = copy
 
+    @_native_robust_method
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
@@ -2405,6 +2406,7 @@ class Normalizer(_PrepBase):
     def transform(self, X, copy=None):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
 
+    @_native_robust_method
     def fit_transform(self, X, y=None, **fit_params):
         """Fit to ``X``, then transform ``X``.
 

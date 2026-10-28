@@ -8,17 +8,19 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_arrays import classical_input, classical_is_array, classical_typed, classical_address
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_locations
 from bindings.classical_validate import RESHAPE_HINT
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of, sequential_admit_value
 from bindings.sequential_inputs import _promote
 from bindings.x_prep_native_inputs import _rows_fields
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once, array_slot_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_slot_once
+from providers.python.prep_metadata_pyapi import _array_snapshot, _pandas_empty_shape, _description, prep_numeric_vector
+from providers.python.prep_category_pyapi import prep_ndarray_backed, prep_category_array
 from providers.python.preprocessing_input_pyapi import _frozen_values
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT
 from core.scaler_fit_impl import scaler_cast
-from core.prep_boundary_impl import prep_float_finite, prep_gather_rows
-from core.classical_pandas_impl import pd_mask_check, pd_scatter_numeric
+from core.prep_boundary_impl import prep_float_finite, prep_gather_rows, prep_mask_any, prep_mask_export
+from core.classical_pandas_impl import pd_scatter_numeric
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -52,22 +54,23 @@ def prep_finite(snapshot: ArrayMetadata, name: String) raises:
         raise Error("Input X contains NaN or infinity (" + name + ").")
 
 
-def _array_snapshot(value: PythonObject, context: PythonObject) raises -> ArrayMetadata:
-    classical_admit_value(value, context)
-    var shape = array_shape_once(value, context)
-    var result = array_metadata_once(value, shape^, "input", context, allow_non_native=True, allow_unsupported=True)
-    if result.is_array:
-        var view = result.owner[3]
-        if py_type(view) is not native_loaded_module("builtins").memoryview:
-            raise Error("TypeError: preprocessing Array storage requires an exact native memoryview")
-        sequential_admit_value(view, context)
-    return result^
-
-
-def _pandas_block(value: PythonObject, series: Bool, context: PythonObject) raises -> Tuple[ArrayMetadata, Bool]:
+def _pandas_block(value: PythonObject, single: Bool, context: PythonObject) raises -> Tuple[ArrayMetadata, Bool]:
     if py_type(value) is context["ndarray"]:
         return (_array_snapshot(value, context), False)
     var cls = py_type(value)
+    if cls is _pd_class("pandas.core.arrays.categorical", "Categorical"):
+        return (prep_category_array(value, context), not single)
+    var backed = prep_ndarray_backed(value)
+    if backed is not value:
+        var opaque = cls is _pd_class("pandas.core.arrays.period", "PeriodArray")
+        if cls is _pd_class("pandas.core.arrays.datetimes", "DatetimeArray"):
+            var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", value)
+            opaque = py_type(dtype) is _pd_class("pandas.core.dtypes.dtypes", "DatetimeTZDtype")
+        if py_type(backed) is not context["ndarray"]:
+            raise Error("TypeError: pandas extension requires native ndarray storage")
+        var data = _array_snapshot(backed, context)
+        data.owner = Python.tuple(value, data.owner)
+        return (data^, opaque)
     if cls is not _pd_class("pandas.core.arrays.integer", "IntegerArray") and cls is not _pd_class("pandas.core.arrays.floating", "FloatingArray") and cls is not _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
         raise Error("TypeError: pandas input requires ordinary numeric storage without extension callbacks")
     var fields = _pd_fields(value)
@@ -77,12 +80,36 @@ def _pandas_block(value: PythonObject, series: Bool, context: PythonObject) rais
         raise Error("TypeError: pandas nullable storage requires exact native arrays")
     var data = _array_snapshot(data_value, context)
     var mask = _array_snapshot(mask_value, context)
-    if len(data.shape) != 1 or len(mask.shape) != 1 or data.count != mask.count or mask.dtype_number != 0 or not mask.castable:
+    if len(data.shape) != 1 or len(mask.shape) != 1 or data.count != mask.count or mask.dtype_number != 0 or mask.source.itemsize != 1 or not mask.castable:
         raise Error("TypeError: pandas nullable storage metadata differs")
-    pd_mask_check(mask.source.addr, mask.count, mask.source.s0, mask.source.itemsize, mask.native_byte_order)
+    var missing = prep_mask_any(mask.source, mask.count)
     data.owner = Python.tuple(data.owner, mask.keep, mask.owner, value)
+    # A single extension block (also Series) exports its inferred native
+    # numeric dtype. Mixed-block extension promotion remains object dtype.
+    # pandas/core/arrays/_utils.py::to_numpy_dtype_inference is the source
+    # contract: missing integers become float64, missing bool stays object.
+    if not single or (missing and data.dtype_number == 0):
+        return (data^, True)
+    if not missing:
+        return (data^, False)
+    if not data.castable:
+        raise Error("TypeError: pandas nullable storage requires a native numeric dtype")
+    var number = 12 if data.dtype_number >= 1 and data.dtype_number <= 10 else data.dtype_number
+    var width = 8 if number == 12 else data.source.itemsize
+    var output = prep_numeric_vector(data.count, number, width, Python.tuple(data.keep, data.owner), context)
+    prep_mask_export(data.source, mask.source, data.count, data.native_byte_order, output.source, number)
     _ = mask^
-    return (data^, not series)
+    _ = data^
+    return (output^, False)
+
+
+def _pandas_admit_block(block: PythonObject) raises:
+    var cls = py_type(block)
+    var admitted = False
+    for name in ["NumpyBlock", "NumericBlock", "ObjectBlock", "ExtensionBlock", "DatetimeLikeBlock", "DatetimeTZBlock", "CategoricalBlock"]:  # small-loop(pandas native block layouts)
+        admitted = admitted or cls is _pd_class("pandas.core.internals.blocks", name)
+    if not admitted:
+        raise Error("TypeError: pandas requires ordinary native blocks without subclass hooks")
 
 
 def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: Bool,
@@ -102,30 +129,10 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
     if py_type(blocks) is not b.tuple or (series and len(blocks) != 1):
         raise Error("pandas input is empty or has invalid block metadata")
     if len(blocks) == 0:
-        var axes = _pd_get("pandas._libs.internals", "BlockManager", "axes", manager)
-        if py_type(axes) is not b.list or len(axes) != 2:
-            raise Error("TypeError: pandas native axes are unavailable")
-        var empty_shape = List[Int]()
-        for axis in [1, 0]:  # small-loop(metadata: dataframe rows and columns)
-            var index = axes[axis]
-            if py_type(index) is _pd_class("pandas.core.indexes.range", "RangeIndex"):
-                var span = py_get(_pd_fields(index), "_range")
-                if py_type(span) is not b.range:
-                    raise Error("TypeError: pandas range index requires native range storage")
-                empty_shape.append(len(span))
-            elif py_type(index) is _pd_class("pandas.core.indexes.base", "Index"):
-                var storage = py_get(_pd_fields(index), "_data")
-                if py_type(storage) is not context["ndarray"]:
-                    raise Error("TypeError: empty pandas axes require native array storage")
-                var dims = array_shape_once(storage, context)
-                if len(dims) != 1:
-                    raise Error("TypeError: pandas index must be one-dimensional")
-                empty_shape.append(dims[0])
-            else:
-                raise Error("TypeError: empty pandas axes require ordinary native index metadata")
+        var empty_shape = _pandas_empty_shape(manager, context)
         if validate:
             prep_shape(empty_shape, True, name)
-        raise Error("Scaler requires a nonempty two-dimensional input")
+        return _description(source, empty_shape^, 12, Python.tuple(source, manager, blocks))
     var snapshots = List[ArrayMetadata]()
     var placements = List[PythonObject]()
     var original_owners = Python.list()
@@ -136,12 +143,12 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
     var objects = False
     var booleans = False
     var numbers = False
+    var complex = False
+    var long_width = 0
     for k in range(len(blocks)):  # driver-loop: admitted pandas block owners and placement metadata
         var block = blocks[k]
-        var cls = py_type(block)
-        if cls is not _pd_class("pandas.core.internals.blocks", "NumpyBlock") and cls is not _pd_class("pandas.core.internals.blocks", "NumericBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ObjectBlock") and cls is not _pd_class("pandas.core.internals.blocks", "ExtensionBlock"):
-            raise Error("TypeError: pandas requires ordinary native blocks without subclass hooks")
-        var pair = _pandas_block(_pd_get("pandas._libs.internals", "Block", "values", block), series, context)
+        _pandas_admit_block(block)
+        var pair = _pandas_block(_pd_get("pandas._libs.internals", "Block", "values", block), len(blocks) == 1, context)
         var data = pair[0].copy()
         var rank = len(data.shape)
         if rank != 1 and rank != 2:
@@ -156,14 +163,16 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
         if len(positions) != d:
             raise Error("pandas block column positions differ from numeric storage")
         placements.append(positions)
-        if data.dtype_number == 14 or data.dtype_number == 15 or data.dtype_number == 16:
-            raise Error("Complex data not supported: " + name + " got a complex X.")
-        objects = objects or pair[1] or not data.castable
+        var complex_block = data.dtype_number == 14 or data.dtype_number == 15 or data.dtype_number == 16
+        complex = complex or complex_block
+        objects = objects or pair[1] or (not data.castable and not complex_block and data.dtype_number != 13)
+        booleans = booleans or data.dtype_number == 0
+        numbers = numbers or data.dtype_number != 0
+        if data.dtype_number == 13:
+            long_width = data.source.itemsize
         if data.castable:
             var kind = String("b") if data.dtype_number == 0 else (String("f") if data.source.kind == CAST_KIND_FLOAT else (String("i") if data.source.kind == 1 else String("u")))
             _promote(common_kind, common_size, kind, data.source.itemsize)
-            booleans = booleans or data.dtype_number == 0
-            numbers = numbers or data.dtype_number != 0
         _ = py_call(original_owners.append, Python.tuple(data.keep, data.owner))
         snapshots.append(data^)
     var shape = List[Int]()
@@ -171,18 +180,21 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
     if not series:
         shape.append(cols)
     objects = objects or (booleans and numbers)
+    if complex and not objects:
+        raise Error("Complex data not supported: " + name + " got a complex X.")
     if validate:
         prep_shape(shape, not objects, name)
+        if scan and not objects and long_width > 0:
+            raise Error("TypeError: mojolearn: unsupported buffer format 'g'")
         if scan and not objects and common_kind == "f" and (common_size == 4 or common_size == 8):
             for k in range(len(snapshots)):  # driver-loop: validate original block words before narrowing
                 prep_finite(snapshots[k], name)
-    if len(shape) != 2:
-        raise Error("MaxAbsScaler requires a nonempty two-dimensional input")
-    if rows < 1 or cols < 1 or rows > 2147483647 // cols:
-        raise Error("Scaler requires a nonempty two-dimensional input")
-    if objects:
-        _ = cast_in_kind(17, 8, "input")
-        raise Error("TypeError: pandas object storage is not a numeric input")
+    if objects or long_width > 0 or len(shape) != 2 or rows < 1 or cols < 1 or rows > 2147483647 // cols:
+        var description = _description(source, shape^, 17 if objects else (13 if long_width > 0 else 12),
+                                       Python.tuple(source, manager, blocks, original_owners))
+        if not objects and long_width > 0:
+            description.source.itemsize = long_width
+        return description^
     var output = classical_typed(Python.tuple(rows) if series else Python.tuple(rows, cols), "<f4", context["output_context"])
     var address = Int(py=classical_address(output))
     var dest = F32P(unsafe_from_address=address)
@@ -269,15 +281,19 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         if validate:
             prep_shape(snapshot.shape, True, name)
         return snapshot^
-    # Normalizer is absent from _ACCEPTS_SPARSE: its outer wrapper rejects
-    # sparse first unless an explicit static class tag enables it.
     # Match loaded native sparse class identities before general admission.
     # Reading an unadmitted class's __module__ could invoke metaclass or
     # descriptor hooks even on this refusal path.
     if host_sparse_format(source).byte_length() > 0:
         if check_sparse and not allow_sparse:
             raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + name + " takes dense X only.)")
-        raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (MaxAbsScaler takes dense X only.)")
+        var raw = py_get(_sparse_fields(source), "_shape")
+        if py_type(raw) is not b.tuple or len(raw) != 2 or py_type(raw[0]) is not b.int or py_type(raw[1]) is not b.int:
+            raise Error("TypeError: sparse input requires native shape metadata")
+        var shape = List[Int]()
+        shape.append(Int(py=raw[0]))
+        shape.append(Int(py=raw[1]))
+        return _description(source, shape^, -101, Python.tuple(source, raw))
     classical_admit_value(source, context)
     if native_pandas_exact(source):
         return _pandas_snapshot(source, name, validate, scan, context)
@@ -288,8 +304,9 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
     if _one_of(cls, context["scalar_types"]) and String(prepared.dtype.kind) == "c":
         raise Error("Complex data not supported: " + name + " got a complex X.")
     var scan_sequence = True
+    var dimensions = List[Int]()
+    var numeric_sequence = False
     if sequence:
-        var dimensions = List[Int]()
         var first = prepared
         while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: native sequence rank, matching describe's first branch
             dimensions.append(len(first))
@@ -300,7 +317,7 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         if cls is b.complex:
             raise Error("Complex data not supported: " + name + " got a complex X.")
         scan_sequence = cls is b.float
-        var numeric_sequence = cls is b.int or cls is b.bool or cls is b.float or cls is b.list or cls is b.tuple
+        numeric_sequence = cls is b.int or cls is b.bool or cls is b.float or cls is b.list or cls is b.tuple
         if _one_of(cls, context["scalar_types"]):
             var kind = String(first.dtype.kind)
             if kind == "c":
@@ -309,7 +326,19 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
             numeric_sequence = kind == "f" or kind == "i" or kind == "u" or kind == "b"
         if validate:
             prep_shape(dimensions, numeric_sequence, name)
-    var value = prepared if classical_is_array(prepared, context) else classical_input(prepared, context)
+    var value = PythonObject(None)
+    try:
+        value = prepared if classical_is_array(prepared, context) else classical_input(prepared, context)
+    except error:
+        # _check_X only materialized floating lists for its finite scan.
+        # Other sequence/scalar conversion failures belong to the inner fit,
+        # after y validation and inside the old small-fit error context.
+        if (sequence and not (validate and scan and scan_sequence)) or not described:
+            var refused = _description(prepared, dimensions^, -103 if sequence and numeric_sequence else -102,
+                                       Python.tuple(source, prepared))
+            refused.dtype_name = String(error)
+            return refused^
+        raise error^
     var snapshot = _array_snapshot(value, context)
     if snapshot.dtype_number == 14 or snapshot.dtype_number == 15 or snapshot.dtype_number == 16:
         raise Error("Complex data not supported: " + name + " got a complex X.")
@@ -321,6 +350,10 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
 
 
 def prep_transform_values(mut snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+    if snapshot.dtype_number == -102 or snapshot.dtype_number == -103:
+        raise Error(snapshot.dtype_name)
+    if snapshot.dtype_number == -101:
+        raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (MaxAbsScaler takes dense X only.)")
     if len(snapshot.shape) != 2:
         raise Error("MaxAbsScaler requires a nonempty two-dimensional input")
     var n = snapshot.source.rows

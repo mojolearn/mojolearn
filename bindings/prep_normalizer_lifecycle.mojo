@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Normalizer.transform owns the complete previously decorated public call.
+# Normalizer operations own their complete previously decorated public calls.
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -143,6 +143,38 @@ def _native_entries(mode: PythonObject, context: PythonObject) raises -> PythonO
     return captured
 
 
+def _normalizer_norm(norm: PythonObject) raises -> Int:
+    var b = native_loaded_module("builtins")
+    var code = -1
+    if py_type(norm) is b.str:
+        var word = String(norm)
+        code = 0 if word == "l1" else (1 if word == "l2" else (2 if word == "max" else -1))
+    if code < 0:
+        raise Error("mojolearn: invalid norm " + _safe_repr(norm))
+    return code
+
+
+def _normalizer_apply(values: PythonObject, n: Int, d: Int, code: Int,
+                      entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Same normalization stage, arena operands, large-output rule and native
+    # transport as the preexisting _transform branch. No model math moves.
+    var words = n * d
+    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var host = words + (0 if dev_out else words)
+    if host + (words if dev_out else 0) > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var arena = xprep_storage(host, context)
+    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+    var program = List[Int32]()
+    _stage(program, 47, n, 0, n, d, code, host if dev_out else words)
+    var inputs = Python.list(Python.tuple(0, Python.tuple(0, values, PythonObject(None), n, d)))
+    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else words, n, d, context["output_context"])
+    _ = values
+    _ = arena^
+    return result
+
+
 def normalizer_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     # _fields admits an exact native dictionary and exact string keys. Its
@@ -176,7 +208,7 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
     var sparse = _truth(py_get(tags, "sparse", False))
     var snapshot = prep_transform_snapshot(source, name, validate, scan, context, sparse, not nested)
-    var numeric = (snapshot.dtype_number >= 0 and snapshot.dtype_number <= 13) or snapshot.dtype_number == 23
+    var numeric = (snapshot.dtype_number >= 0 and snapshot.dtype_number <= 13) or snapshot.dtype_number == 23 or snapshot.dtype_number == -103
     if validate and numeric and not precomputed and len(snapshot.shape) == 2:
         if py_type(fitted) is b.int and Int(py=fitted) != snapshot.source.cols:
             raise Error("X has " + String(snapshot.source.cols) + " features, but " + name + " is expecting " + String(Int(py=fitted)) + " features as input.")
@@ -199,27 +231,7 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
         raise Error("mojolearn: X has " + String(d) + " features, " + name + " was fitted with " + text)
     if norm is missing:
         norm = fields["norm"]
-    var code = -1
-    if py_type(norm) is b.str:
-        var word = String(norm)
-        code = 0 if word == "l1" else (1 if word == "l2" else (2 if word == "max" else -1))
-    if code < 0:
-        raise Error("mojolearn: invalid norm " + _safe_repr(norm))
-    # Same normalization stage, arena operands, large-output rule and native
-    # transport as the preexisting _transform branch. No model math moves.
-    var words = n * d
-    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
-    var host = words + (0 if dev_out else words)
-    if host + (words if dev_out else 0) > 2147483647:
-        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
-    var arena = xprep_storage(host, context)
-    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
-    var program = List[Int32]()
-    _stage(program, 47, n, 0, n, d, code, host if dev_out else words)
-    var inputs = Python.list(Python.tuple(0, Python.tuple(0, values, PythonObject(None), n, d)))
-    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
-    var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else words, n, d, context["output_context"])
+    var result = _normalizer_apply(values, n, d, _normalizer_norm(norm), entries, context)
     _ = values^
     _ = snapshot^
-    _ = arena^
     return parallel_public_result(result, "transform", PythonObject(None), context)

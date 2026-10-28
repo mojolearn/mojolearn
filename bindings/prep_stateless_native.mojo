@@ -25,6 +25,7 @@ from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_support_native import prep_support
 from bindings.prep_normalizer_lifecycle import normalizer_transform
+from bindings.prep_normalizer_fit import normalizer_fit
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -866,6 +867,8 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
             result = prep_support(model, args[0], context)
         elif operation == "transform" and kind == "normalizer":
             result = normalizer_transform(model, args[0], context)
+        elif (operation == "fit" or operation == "fit_transform") and kind == "normalizer":
+            result = normalizer_fit(model, args[0], args[1], operation == "fit_transform", context)
         elif operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
             var fields = py_fields(model)
             if not py_contains(fields, "n_features_in_"):
