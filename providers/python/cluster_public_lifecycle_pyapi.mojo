@@ -5,9 +5,9 @@
 # their legacy extension dispatch remains separately tracked migration debt.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.public_attributes_native import _plan, _lookup
+from bindings.public_attributes_native import _plan, _lookup, _string_keys
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_kind
@@ -28,7 +28,12 @@ from providers.python.estimator_lifecycle_pyapi import estimator_outside, estima
 
 def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
-    var attributes = native_loaded_module("mojolearn._native_public_attributes")._CONTEXT
+    var module_fields = py_fields(native_loaded_module("mojolearn._native_public_attributes"))
+    _string_keys(module_fields)
+    var attributes = py_get(module_fields, "_CONTEXT")
+    if py_type(attributes) is not b.dict:
+        raise Error("TypeError: native cluster attribute metadata requires its connected dictionary")
+    _string_keys(attributes)
     var plan = _plan(model, attributes)
     var fields = _fields(model)
     var ancestry = _type_mro(py_type(model))
