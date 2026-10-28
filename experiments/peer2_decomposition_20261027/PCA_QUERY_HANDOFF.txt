@@ -80,3 +80,12 @@ preserves sparse support and does not claim that remaining debt is complete. The
 output ownership still need final integration coverage when requested. The
 CPython packed compiled-entry ABI remains in use; there is no new raw numerical
 descriptor table or independent arithmetic implementation in this chunk.
+
+Independent coordinator review follow-up:
+Query binding dictionaries are now copied only after exact dict/string-key
+admission. All six required/optional consumed entries are compared with the
+import-connected immutable identity records and checked as named compiled
+module functions before vendor/mode readback executes. Optional whitening
+None/missing entries retain their existing later NotImplementedError behavior.
+Mutable native container truth (bytearray/list/tuple/dict) is frozen to Bool
+while original references remain in scalar_owners. No verification was run.

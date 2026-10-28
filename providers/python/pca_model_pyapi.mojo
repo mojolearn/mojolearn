@@ -7,16 +7,20 @@ from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer_dtype
 from bindings.classical_exceptions import classical_not_fitted_class
+from bindings.native_loaded_module import native_loaded_module
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 
 
 def _native_number(value: PythonObject, context: PythonObject, truth: Bool) raises -> PythonObject:
     var cls = py_type(value)
+    if truth and (cls is context["native_bytearray_type"] or cls is py_type(Python.list()) or cls is py_type(Python.tuple()) or cls is py_type(Python.dict())):
+        # Native container truth is its length, not its contents. Freeze it
+        # before any compiled reader/input work can release the GIL; the
+        # original reference remains in the operation's scalar owner ledger.
+        return PythonObject(len(value) != 0)
     # Exact builtin values have no application conversion hooks. Retain
     # their established Int/Bool behavior, including primitive error cases.
     if value is None or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject("")) or cls is context["native_bytes_type"] or cls is context["native_bytearray_type"]:
-        return value
-    if truth and (cls is py_type(Python.list()) or cls is py_type(Python.tuple()) or cls is py_type(Python.dict())):
         return value
     var array = cls is py_get(context, "ndarray")
     var scalar = _one_of(cls, context["scalar_types"])
@@ -90,13 +94,51 @@ def pca_query_fields(model: PythonObject, context: PythonObject) raises -> Pytho
     return fields
 
 
+def _entry_dictionary(value: PythonObject) raises -> PythonObject:
+    if py_type(value) is not py_type(Python.dict()):
+        raise Error("TypeError: PCA binding tables require native dictionaries")
+    var keys = py_call(py_type(Python.list()), value)
+    for index in range(len(keys)):  # driver-loop: string-key admission before keyed table access
+        if py_type(keys[index]) is not py_type(PythonObject("")):
+            raise Error("TypeError: PCA binding tables require native string keys")
+    return py_call(py_type(Python.dict()).__dict__["copy"], value)
+
+
 def pca_query_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("numeric_mode must be identical, fast or None")
-    var entries = context["pca_bindings"][mode]
-    if py_type(entries) is py_type(PythonObject("")):
-        raise Error("ImportError: " + String(entries))
+    var bindings = _entry_dictionary(context["pca_bindings"])
+    var selected = bindings[mode]
+    if py_type(selected) is py_type(PythonObject("")):
+        raise Error("ImportError: " + String(selected))
+    var entries = _entry_dictionary(selected)
+    var records = context["pca_query_connections"]
+    if py_type(records) is not py_type(Python.tuple()):
+        raise Error("TypeError: PCA query connections require their import-time tuple")
+    var connected = PythonObject(None)
+    for index in range(len(records)):  # driver-loop: the two import-connected numeric modes
+        var record = records[index]
+        if py_type(record) is not py_type(Python.tuple()) or len(record) != 2 or py_type(record[0]) is not py_type(PythonObject("")) or py_type(record[1]) is not py_type(Python.tuple()) or len(record[1]) != 6:
+            raise Error("TypeError: PCA query connections require native mode/entry records")
+        if String(record[0]) == String(mode):
+            connected = record[1]
+    if connected is None:
+        raise Error("TypeError: PCA query mode was not connected at import")
+    var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform",
+                             "pca_whiten_transform", "pca_whiten_inverse_transform")
+    var builtin_type = py_type(native_loaded_module("builtins").len)
+    var module_type = py_type(native_loaded_module("sys"))
+    for index in range(6):  # small-loop(all consumed compiled entries, before either reader executes)
+        var entry = py_get(entries, names[index])
+        if index >= 4 and entry is None:
+            # Missing or explicitly None whitening exports keep the existing
+            # optional-pair refusal at pca_whiten_entries when whitening runs.
+            continue
+        if entry is None or py_type(entry) is not builtin_type or entry is not connected[index]:
+            raise Error("TypeError: PCA query requires its connected compiled entry " + String(names[index]))
+        if py_type(entry.__self__) is not module_type or String(entry.__name__) != String(names[index]):
+            raise Error("TypeError: PCA query requires a compiled module entry " + String(names[index]))
     if String(py_call(entries["estimators_vendor"])) != String(context["vendor"]):
         raise Error("RuntimeError: PCA native vendor differs from selected execution")
     if Int(py=py_call(entries["estimators_numeric_mode"])) != (1 if String(mode) == "identical" else 0):

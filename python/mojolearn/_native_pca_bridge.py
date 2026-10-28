@@ -20,6 +20,7 @@ def connect(pca_class):
     if type(pca_class) is not type or type(descriptor) is not GetSetDescriptorType:
         raise TypeError("PCA owner requires a standard native instance dictionary")
     connected = {}
+    query_connections = []
     selected = _backend.default_mode()
     required = ("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform")
     # Additive exports: a build without one refuses the option that needs it
@@ -41,11 +42,16 @@ def connect(pca_class):
                     raise TypeError(f"PCA owner requires compiled {name}")
                 entries[name] = entry
             connected[mode] = entries
+            # glue: immutable identities for the query's six compiled entries;
+            # runtime table replacement is admitted before any reader runs.
+            query_connections.append((mode, tuple(entries.get(name) for name in
+                required + ("pca_whiten_transform", "pca_whiten_inverse_transform"))))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     # A densified SciPy sparse X is written as an Array (host_sparse_native).
     context["output_context"] = _numpy_free_context()
     context.update(pca_class=pca_class, pca_dictionary_descriptor=descriptor, pca_bindings=connected,
+                   pca_query_connections=tuple(query_connections),
                    pca_parameters=("copy", "iterated_power", "n_components", "n_oversamples",
                                    "numeric_mode", "power_iteration_normalizer", "random_state",
                                    "svd_solver", "tol", "whiten"),
