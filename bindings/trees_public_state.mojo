@@ -70,6 +70,9 @@ def _release_tree_values(values: PythonObject, retained: PythonObject,
         elif py_type(cls) is b.type and py_contains(context["trees_constructors"], cls):
             classical_check_layout(item, context)
             _ = py_call(todo.append, _fields(item))
+        elif py_type(cls) is b.type and py_contains(context["trees_state_layouts"], cls):
+            classical_check_layout(item, context["trees_state_layouts"][cls])
+            _ = py_call(todo.append, _fields(item))
         else:
             native_release_admit(item, context)
 

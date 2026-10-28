@@ -1,0 +1,10 @@
+{
+  "python_syntax": "pass",
+  "one_call_source_check": "get_params, set_params, installed constructor thunk",
+  "files": {
+    "python/mojolearn/_gbdt_adapters.py": "8321a34dabfa031df23130140597405c93053af65a4f8cda067a1c71d2880201",
+    "python/mojolearn/_native_trees_bridge.py": "bf81261b55fcdf0809d1df3571723c91ee99763683412e6edeb6beb5cce6fa0e"
+  },
+  "runtime_executed": false,
+  "import_executed": false
+}
