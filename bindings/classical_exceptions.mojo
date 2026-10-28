@@ -22,7 +22,7 @@ def _exception_class(cls: PythonObject, first: PythonObject, second: PythonObjec
     var fields = _class_fields(cls)
     var hooks = Python.tuple("__new__", "__init__", "__init_subclass__", "__getattribute__",
                              "__getattr__", "__setattr__", "__delattr__", "__del__", "args")
-    for i in range(len(hooks)):  # driver-loop: fixed exception construction and storage hooks
+    for i in range(len(hooks)):  # driver-loop: over fixed exception construction and storage hooks
         if py_contains(fields, hooks[i]):
             raise Error("TypeError: NotFittedError may not install Python runtime hooks")
 
@@ -39,7 +39,7 @@ def classical_not_fitted_class(context: PythonObject) raises -> PythonObject:
         raise Error("TypeError: fitted-state checks require the standard sklearn exceptions module")
     var fields = py_call(bi.object.__getattribute__, module, "__dict__")
     var names = py_call(bi.list, fields.keys())
-    for i in range(len(names)):  # driver-loop: admit module names before dictionary lookup
+    for i in range(len(names)):  # driver-loop: over module names before dictionary lookup
         if py_type(names[i]) is not bi.str:
             raise Error("TypeError: sklearn exception metadata requires exact string keys")
     var base = py_get(fields, "NotFittedError")
@@ -51,7 +51,7 @@ def classical_not_fitted_class(context: PythonObject) raises -> PythonObject:
     if py_type(bridges) is not bi.dict:
         raise Error("TypeError: NotFittedError bridges require ordinary native dictionary storage")
     var keys = py_call(bi.list, bridges.keys())
-    for i in range(len(keys)):  # driver-loop: bridge keys before native dictionary lookup
+    for i in range(len(keys)):  # driver-loop: over bridge keys before native dictionary lookup
         if py_type(keys[i]) is not bi.type:
             raise Error("TypeError: NotFittedError bridge keys require native metaclasses")
     var bridge = py_get(bridges, base)
@@ -96,7 +96,7 @@ def classical_error_reduce(error: PythonObject, context: PythonObject) raises ->
     if py_type(bridges) is not bi.dict:
         raise Error("TypeError: NotFittedError bridges require ordinary native dictionary storage")
     var keys = py_call(bi.list, bridges.keys())
-    for k in range(len(keys)):  # driver-loop: admit all registry keys before any keyed read
+    for k in range(len(keys)):  # driver-loop: over all registry keys before any keyed read
         if py_type(keys[k]) is not bi.type:
             raise Error("TypeError: NotFittedError bridge keys require native metaclasses")
     for k in range(len(keys)):  # driver-loop: over native-owned fitted-error bridge identities

@@ -86,5 +86,13 @@
     "Runtime rejection controls and public API compatibility not executed by owner direction",
     "GPU and installed-wheel loading not checked",
     "Other shared exception and warning paths are outside this repair"
-  ]
+  ],
+  "post_compile_comment_only_change": {
+    "path": "bindings/classical_exceptions.mojo",
+    "compiled_sha256": "abb8d5b4acf26033330af5d70fd246fc0012ddcdd3bfdaee557211a58900c949",
+    "final_sha256": "247840871f23e51b78ead1c76c0dc7b05fb070750eb3f2a481505cf671eae9f4",
+    "executable_source_unchanged": true,
+    "reason": "Align four truthful native metadata loop comments with source guard driver-loop: over grammar",
+    "patch": "/Users/andrewhendel/mojolearn-evidence/classical-exception-admission-20261027/source-annotations.patch"
+  }
 }
