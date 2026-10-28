@@ -235,6 +235,9 @@ struct NativeIdentityKey(Movable, Writable):
                 if py_type(keys[j]) is not self.str_type:
                     raise Error("native identity snapshot: class namespace needs exact string keys")
                 native_keys.append(keys[j])
+            # Admit the entire live key set before the first keyed lookup:
+            # another colliding key could otherwise invoke a foreign hook.
+            for j in range(len(keys)):  # driver-loop: over admitted exact namespace keys
                 native_values.append(row[keys[j]])
             self.array_row_keys.append(native_keys^)
             self.array_row_values.append(native_values^)
@@ -249,6 +252,24 @@ struct NativeIdentityKey(Movable, Writable):
             var row = self.array_rows[i]
             if len(row) != self.array_row_sizes[i]:
                 return False
+            # A same-size edit can insert a foreign key whose equality hook
+            # collides with an admitted string. Inspect the full live key set
+            # before any lookup. The retained row is an exact mappingproxy
+            # produced by type.__dict__; its iterator is CPython's native
+            # dictionary-key iterator, never a caller-defined protocol.
+            var iterator_raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(row._obj_ptr)
+            if not iterator_raw:
+                cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                return False
+            var iterator = PythonObject(from_owned=iterator_raw)
+            for j in range(len(self.array_row_keys[i])):  # driver-loop: over live namespace key identities before lookup
+                var key_raw = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")(iterator._obj_ptr)
+                if not key_raw:
+                    cpy.lib.get_function[NoneType]("PyErr_Clear")()
+                    return False
+                var key = PythonObject(from_owned=key_raw)
+                if py_type(key) is not self.str_type or key is not self.array_row_keys[i][j]:
+                    return False
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over retained native namespace keys
                 var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
                 if not raw:

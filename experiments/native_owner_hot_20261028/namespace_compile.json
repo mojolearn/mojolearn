@@ -1,0 +1,8 @@
+{
+  "compile_exit": 0,
+  "runtime_executed": false,
+  "scope": "NativeIdentityKey full helper methods, including live mappingproxy key admission before lookup",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/identity_namespace.log",
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-owner-hot-20261028/compile_identity_namespace",
+  "command": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh pixi run -e default mojo build --optimization-level 0 -I . -I bindings experiments/native_owner_hot_20261028/compile_identity.mojo -o <evidence>/compile_identity_namespace"
+}
