@@ -2,6 +2,7 @@
 """Validate scoped reference admission without importing or running the product."""
 import argparse
 import ast
+import hashlib
 import json
 import os
 import subprocess
@@ -240,6 +241,39 @@ def publish(candidate_path, base_path, destination, lanes):
     return report
 
 
+def repository_inputs(root, incoming, preview_dir=None):
+    """Reuse repository copies or retain returned columns, without a Git commit.
+
+    A check-only invocation owns a temporary preview directory in the record
+    tree and removes it on exit. Ordinary admission keeps immutable copies.
+    """
+    from retain_run_summary import read_bytes, immutable_bytes, retain_identity, destination
+    root = Path(root).resolve()
+    base = root / 'bench/results/identity_break'
+    if preview_dir is not None:
+        preview_dir = Path(preview_dir).absolute()
+        if preview_dir.resolve() != preview_dir or not preview_dir.is_relative_to(base):
+            raise ValueError('preview records must be inside the repository record directory')
+    resolved = []
+    for filename in incoming:
+        path = Path(filename).absolute()
+        if path.resolve() != path or not path.name.endswith('.identical.json'):
+            raise ValueError('expected a regular *.identical.json record without symlinks: ' + str(path))
+        data = read_bytes(path)
+        matches = [path] if path.is_relative_to(base) else sorted(base.rglob(path.name))
+        match = next((p for p in matches if p.resolve() == p and p.is_file()
+                      and not any(part.startswith('.admission-preview-') for part in p.parts)
+                      and p.stat().st_size == len(data) and read_bytes(p) == data), None)
+        if match is None:
+            if preview_dir is None:
+                match = retain_identity(path, repo=root)
+            else:
+                match = destination(root, preview_dir.relative_to(root) / hashlib.sha256(data).hexdigest() / path.name)
+                immutable_bytes(match, data)
+        resolved.append(match)
+    return resolved
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -248,6 +282,10 @@ def main(argv=None):
     selection = sub.add_parser("lanes")
     selection.add_argument("--lanes", default="")
     selection.add_argument("records", nargs="+")
+    inputs = sub.add_parser('inputs')
+    inputs.add_argument('--source-root', type=Path, default=HERE.parent)
+    inputs.add_argument('--preview-dir', type=Path)
+    inputs.add_argument('records', nargs='+')
     for name in ("check", "publish"):
         check = sub.add_parser(name)
         check.add_argument("--base", required=True)
@@ -257,6 +295,10 @@ def main(argv=None):
             check.add_argument("--destination", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == 'inputs':
+            for path in repository_inputs(args.source_root, args.records, args.preview_dir):
+                sys.stdout.buffer.write(str(path).encode() + b'\0')
+            return 0
         if args.command == "host-only":
             print(json.dumps(sorted(host_only_declarations(args.source_root / "tools"))))
             return 0
@@ -271,8 +313,9 @@ def main(argv=None):
                               json.loads(Path(args.candidate).read_text()), lanes)
         print(json.dumps(report, sort_keys=True))
         return 0 if report["admissible"] else 1
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        print(json.dumps({"admissible": False, "problems": [str(exc)]}))
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        print(json.dumps({"admissible": False, "problems": [str(exc)]}),
+              file=sys.stderr if args.command == 'inputs' else sys.stdout)
         return 1
 
 

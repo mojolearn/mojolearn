@@ -1,0 +1,79 @@
+{
+  "scope": "lane nv-occupancy: MOJOLEARN_IDN_SSD_OCCUPANCY (Mamba-2 SSD S10/S12/S18 device arms); compile only, no runtime/identity/GPU execution",
+  "source_commit": "2d46a290007a (code 87595704da; worktree dirty tracked files 0)",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "results": [
+    {
+      "name": "mamba_host_cpu_mac",
+      "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+      "target": "cpu (Mac, apple-m1 host)",
+      "jobs": 10,
+      "command": "bash tools/compile_slot.sh bash ~/mojolearn-evidence/nv-occupancy-20261028/mac-cpu/compile.sh (mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -D MOJOLEARN_IDN_SSD_OCCUPANCY=1 -I . -I bindings bindings/entry/entry__mojolearn_mamba_host.mojo)",
+      "exit": 0,
+      "seconds": 103,
+      "binary_sha256": "626f57157730a9d0e0fea528b87b0a3d6a149d6d8e1873179b4450139a06442d",
+      "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/mac-cpu/build.log"
+    },
+    {
+      "name": "mamba_sm89_armA",
+      "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
+      "target": "x86-64-v3 + sm_89, COLUMN_NVIDIA",
+      "jobs": 16,
+      "command": "pixi run -e default mojo build --optimization-level 0 -j 16 --emit shared-lib --target-cpu x86-64-v3 --target-accelerator sm_89 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_NVIDIA -I . -I bindings bindings/entry/entry__mojolearn_mamba.mojo",
+      "exit": 0,
+      "seconds": 153,
+      "binary_sha256": "5a69c6c6516ec401194028ee858563f24fcbbf9f920f06dd75e88696c00c4147",
+      "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/pod-run/remote/leg_out/mamba_sm89_armA.log"
+    },
+    {
+      "name": "mamba_sm89_armB",
+      "entry": "bindings/entry/entry__mojolearn_mamba.mojo",
+      "target": "x86-64-v3 + sm_89, COLUMN_NVIDIA",
+      "jobs": 16,
+      "command": "(armA command) -D MOJOLEARN_IDN_SSD_OCCUPANCY=1",
+      "exit": 0,
+      "seconds": 155,
+      "binary_sha256": "d6658c9971863b1e60be605546b9ba089c26bd1a73e054ebd2a2ac09121fe232",
+      "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/pod-run/remote/leg_out/mamba_sm89_armB.log"
+    }
+  ],
+  "pod": {
+    "id": "da4gpnflf5li82",
+    "vcpu": 32,
+    "affinity": 32,
+    "cgroup_cpu_max": "max",
+    "parallel_builds": 2,
+    "jobs_per_build": 16,
+    "reaped_verified": true,
+    "spend_usd": 0.0997
+  },
+  "not_covered": [
+    "AMD (gfx942) and Apple (metal) device targets",
+    "other bindings importing ssd_minimal (_mojolearn_neural_host, _mojolearn_training_host, mamba_public_native merged roots)",
+    "any runtime, identity or timing"
+  ],
+  "post_merge": {
+    "merge": "8824981251 (origin/main 45b0630582 merged; mamba_host_gen --check rc 0)",
+    "results": [
+      {
+        "name": "mamba_host_cpu_mac_armA",
+        "entry": "bindings/entry/entry__mojolearn_mamba_host.mojo",
+        "jobs": 10,
+        "exit": 0,
+        "seconds": 243,
+        "binary_sha256": "9ccc90611dc88ffa76c00d8c877aba8a8330a48788014707a2d6105643bee344",
+        "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/mac-cpu2/build_A.log"
+      },
+      {
+        "name": "mamba_host_cpu_mac_armB",
+        "flags": "-D MOJOLEARN_IDN_SSD_OCCUPANCY=1",
+        "jobs": 10,
+        "exit": 0,
+        "seconds": 21,
+        "binary_sha256": "70bd8fea7b117e16cebea6e00165662be2187df70b799a692cf883383dc67232",
+        "log": "/Users/andrewhendel/mojolearn-evidence/nv-occupancy-20261028/mac-cpu2/build_B.log"
+      }
+    ],
+    "note": "CPU column gates the define off; sm_89 arms not re-run after the merge (lane files unchanged by it)"
+  }
+}

@@ -652,7 +652,13 @@ class RefusedArm:
 LM_SHAPES = {
     "full": [1, 2048, 384, 6, 6, 64, 1024, 8, 8192],   # torch_lm_step_opponent.SHAPES['control']
     "small": [2, 64, 64, 4, 2, 16, 128, 2, 256],
+    # torch_lm_step_opponent.SHAPES['target']: the 162.15 M-parameter realistic-size model (Andrew,
+    # 2026-10-28), so speed defines are not judged only on the 20 M control model. An LM shape only:
+    # the other neural models have no target dimensions (bench_board plans it for LM lanes alone).
+    "target": [1, 2048, 768, 12, 12, 64, 2048, 12, 50257],
 }
+#: neural shapes that exist for the LM model only (MODEL_OF[lane] == "lm")
+LM_ONLY_SHAPES = ("target",)
 LM_FIELDS = ("batch", "length", "d_model", "n_heads", "n_kv", "head_dim",
              "intermediate", "n_layers", "vocab_size")
 GEMM_SHAPES = {"full": (4096, 4096, 4096), "small": (256, 256, 256)}   # m, n, k

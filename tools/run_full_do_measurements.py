@@ -16,6 +16,8 @@ import sys
 import tarfile
 import time
 
+from retain_run_summary import retain_campaign, try_retain
+
 
 def state_file(path):
     values = {}
@@ -51,6 +53,26 @@ def transport(owned):
     flags = parts[:-1]
     scp_flags = ['-P' if flag == '-p' else flag for flag in flags]
     return host, flags, scp_flags, shlex.join(parts)
+
+
+def publish_campaign(config, summaries, command):
+    """Existing commit_boards opt-in, scoped to final retained campaign files."""
+    repo = Path(config['repo']).resolve()
+    paths = [str(path.relative_to(repo)) for path in summaries]
+    paths += ['bench/results/bench_board/main-' + v['board_column'] for v in config['vendors']
+              if (repo / ('bench/results/bench_board/main-' + v['board_column'])).exists()]
+    branch = subprocess.check_output(['git', 'branch', '--show-current'], cwd=repo, text=True).strip()
+    if branch != 'main':
+        raise RuntimeError('results retained; commit_boards requires the main branch')
+    command(['git', 'add', '--', *paths], 'board-publish.log')
+    changed = subprocess.run(['git', 'diff', '--cached', '--quiet', '--', *paths], cwd=repo)
+    if changed.returncode not in (0, 1):
+        changed.check_returncode()
+    if changed.returncode:
+        command(['git', 'commit', '--only', '-m',
+                 'Record measurement campaign ' + config['source_commit'][:9], '--', *paths],
+                'board-publish.log')
+        command(['git', 'push', 'origin', 'main'], 'board-publish.log')
 
 
 def run(config):
@@ -159,30 +181,30 @@ def run(config):
             command(['bash', 'tools/box_archive.sh', 'full-measure-'+name, *ssh_flags, target], name+'-archive.log')
             if not record['complete']:
                 raise RuntimeError(name+' has pending work or a shared failure; box preserved for recovery')
-            if config.get('commit_boards'):
-                board_dir = 'bench/results/bench_board/main-'+vendor['board_column']
-                command(['git', 'add', board_dir], name+'-board-publish.log', check=False)
-                changed = subprocess.run(['git', 'diff', '--cached', '--quiet', '--', board_dir], cwd=repo).returncode
-                if changed:
-                    record['board_commit_rc'] = command(['git', 'commit', '--only', board_dir, '-m',
-                        'Record full '+name+' measurement campaign '+config['source_commit'][:9]],
-                        name+'-board-publish.log', check=False)
-                    if record['board_commit_rc'] == 0:
-                        record['board_push_rc'] = command(['git', 'push', 'origin', 'main'], name+'-board-publish.log', check=False)
+            record.update(status='complete', finished=time.time(), failed=doc.get('failed_recipes', []))
+            save()
+            try_retain(retain_campaign, config, journal)
             # Results are already archived on the Mac and R2. Never release another owner.
             # Keep the box until large scored/model/binary archives have also
             # been checked off-box; box_archive intentionally skips >50 MB.
             if vendor.get('release_after_archive', False):
                 command(provider_command(vendor, 'down'), name+'-down.log',
                         dict(env, MOJOLEARN_DOWN_NO_ARCHIVE='1'))
-            record.update(status='complete', finished=time.time(), failed=doc.get('failed_recipes', []))
             save()
         journal.update(status='complete', finished=time.time())
     except Exception as exc:
         journal.update(status='needs-attention', error=str(exc), stopped=time.time())
         save()
         raise
+    finally:
+        # Also keep failure/partial state. Bulk archives and their teardown
+        # guards remain independent of this small repository snapshot.
+        summaries = try_retain(retain_campaign, config, journal)
     save()
+    if config.get('commit_boards') and summaries:
+        # Publish the final controller state with its boards, and never include
+        # another staged edit. Existing opt-in; retention itself does not push.
+        publish_campaign(config, summaries, command)
 
 
 if __name__ == '__main__':
