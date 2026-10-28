@@ -7,13 +7,14 @@ from providers.python.autograd_python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
-from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py
+from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
 from providers.python.autograd_pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
 from providers.python.autograd_model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_native_py
-from providers.python.autograd_program_owner_pyapi import program_initialize_owner, program_new_owner
+from providers.python.autograd_program_owner_pyapi import program_initialize_owner, program_new_owner, program_owner_fields
+from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_create_request_py
 from providers.python.autograd_program_public_dispatch_pyapi import ops_program_public_execute_py
 from bindings.native_json import native_path
 from providers.python.autograd_weight_frontend_pyapi import ops_weights_native_py
@@ -143,6 +144,18 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
     if _nil(fields["_id"]):
         raise Error("ValueError: this session is closed")
     var sid = fields["_id"]
+    if name == "load_partitioned" or name == "load_distributed":
+        return ops_owned_program_create_request_py(fields, 0, name, args)
+    if name == "program_run":
+        if len(args) != 4:
+            raise Error("TypeError: Session.run requires a Program, arrays and two flags")
+        var program = program_owner_fields(args[0])
+        if program["_s"] is not session:
+            raise Error("ValueError: Program belongs to another Session")
+        if not program_numeric_scalar(args[2]) or not program_numeric_scalar(args[3]):
+            raise Error("TypeError: Program flags require native boolean or numeric scalars")
+        var pid = _integer(program["_id"], "program", 1)
+        return ops_program_execute_py[E, KIND](sid, PythonObject(pid), sid, args[1], args[2], args[3], PythonObject(False))
     var s = ops_session[E, KIND](Int(py=sid))
     if name == "fit" or name == "fit_if":
         var program = args[0]

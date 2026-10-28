@@ -10,7 +10,8 @@ def test_program_methods_do_not_resolve_mutable_instance_callables():
     module = ast.parse((ROOT / 'python/mojolearn/ops.py').read_text())
     cls = next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == 'Program')
     expected = {'__init__', 'run', 'profile', 'run_dynamic', 'inspect', 'run_if',
-                'while_loop', 'vjp_if', 'vjp_while', 'fit', 'fit_if', 'save', 'save_control', 'free'}
+                'while_loop', 'vjp_if', 'vjp_while', 'fit', 'fit_if', 'save', 'save_control', 'free',
+                'partition', 'distribute'}
     checked = set()
     for method in cls.body:
         if not isinstance(method, ast.FunctionDef) or method.name not in expected:

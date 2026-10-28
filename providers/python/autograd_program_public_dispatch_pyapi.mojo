@@ -13,6 +13,7 @@ from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_
 from providers.python.autograd_program_control_pyapi import ops_program_control_py
 from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_fields_py
+from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_create_request_py
 
 
 def _option(value: PythonObject) raises:
@@ -68,6 +69,9 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: this session is closed")
     var sid = state["_id"]
     var pid = PythonObject(_integer(fields["_id"], "program", 1))
+    if name == "partition" or name == "distribute":
+        _arguments(args, 2)
+        return ops_owned_program_create_request_py(state, Int(py=pid), name, args)
     if name == "run" or name == "profile" or name == "run_dynamic":
         _arguments(args, 4)
         program_native_sequence(args[0])
