@@ -223,13 +223,13 @@ class Session:
     # ------------------------------------------------------------ lifetime
     def close(self):
         """Free every tensor of the session and its device memory."""
-        return self._session_native(self, "close", ())
+        return _SESSION_CALL(self, "close", ())
 
     def __enter__(self):
-        return self._session_native(self, "enter", ())
+        return _SESSION_CALL(self, "enter", ())
 
     def __exit__(self, *exc):
-        return self._session_native(self, "exit", ())
+        return _SESSION_CALL(self, "exit", ())
 
     def _sid(self):
         if self._id is None:
@@ -240,32 +240,32 @@ class Session:
         """Drop every computed tensor (and the recorded graph); tensors made
         with :meth:`tensor` stay valid. Call it between independent passes to
         reuse their memory."""
-        return self._session_native(self, "reset", ())
+        return _SESSION_CALL(self, "reset", ())
 
     def free(self, h):
         """Release tensor ``h``; its memory is reused after :meth:`reset`."""
-        return self._session_native(self, "free", (h,))
+        return _SESSION_CALL(self, "free", (h,))
 
     def gradient_report(self, handles, *, values=True):
         """Explain gradient availability and report nonfinite or zero values for tensors."""
-        return self._session_native(self, "gradient_report", (handles, values))
+        return _SESSION_CALL(self, "gradient_report", (handles, values))
 
     def execution_profile_begin(self):
         """Begin executor allocation, transfer, synchronization and operation accounting."""
-        return self._session_native(self, "execution_profile_begin", ())
+        return _SESSION_CALL(self, "execution_profile_begin", ())
 
     def execution_profile_end(self):
         """Drain the executor and return counters for the active profiling interval."""
-        return self._session_native(self, "execution_profile_end", ())
+        return _SESSION_CALL(self, "execution_profile_end", ())
 
     def profile_reset(self):
         """Clear the process-wide launch profile (recorded when the
         MOJOLEARN_AG_PROFILE environment variable is set)."""
-        return self._session_native(self, "profile_reset", ())
+        return _SESSION_CALL(self, "profile_reset", ())
 
     def profile_report(self):
         """The process-wide launch profile as text: launches per operation."""
-        return self._session_native(self, "profile_report", ())
+        return _SESSION_CALL(self, "profile_report", ())
 
     # ------------------------------------------------------------ data
     def tensor(self, x, requires_grad=False):
@@ -280,7 +280,7 @@ class Session:
         trainable input whose gradient :meth:`grad` returns after
         :meth:`backward`.
         """
-        return self._session_native(self, "tensor", (x, requires_grad))
+        return _SESSION_CALL(self, "tensor", (x, requires_grad))
 
     def ids(self, x):
         """Copy an array of integer ids to the device; returns its handle.
@@ -305,7 +305,7 @@ class Session:
         ...     model = s.capture(inputs=[tokens], outputs=[h])
         ...     rows = model.run(np.array([[2, 7, 1], [8, 2, 8]]))
         """
-        return self._session_native(self, "ids", (x,))
+        return _SESSION_CALL(self, "ids", (x,))
 
     @staticmethod
     def _is_handle(v):
@@ -314,29 +314,29 @@ class Session:
     def shape(self, h):
         """The shape of tensor ``h`` as a tuple: ``(rows, cols)`` for a
         matrix, every dimension for a tensor of another rank."""
-        return self._session_native(self, "shape", (h,))
+        return _SESSION_CALL(self, "shape", (h,))
 
     def numpy(self, h):
         """Tensor ``h``'s values as a new float32 array of its shape."""
-        return self._session_native(self, "numpy", (h,))
+        return _SESSION_CALL(self, "numpy", (h,))
 
     def scalar(self, h):
         """The value of a ``(1, 1)`` tensor as a Python float, for branching
         in your code on a computed value."""
-        return self._session_native(self, "scalar", (h,))
+        return _SESSION_CALL(self, "scalar", (h,))
 
     def full(self, shape, value):
         """A new tensor of ``shape`` (up to 8 dimensions) with every
         element ``value``."""
-        return self._session_native(self, "full", (shape, value))
+        return _SESSION_CALL(self, "full", (shape, value))
 
     def copy(self, x):
         """A copy of ``x`` that carries no gradient."""
-        return self._session_native(self, "copy", (x,))
+        return _SESSION_CALL(self, "copy", (x,))
 
     def detach(self, x):
         """``x`` as a constant: later operations pass no gradient back to it."""
-        return self._session_native(self, "detach", (x,))
+        return _SESSION_CALL(self, "detach", (x,))
 
     # ------------------------------------------------------------ the call
     # ------------------------------------------------------------ elementwise and products
@@ -347,59 +347,59 @@ class Session:
         ``(batch, heads, m, k)`` tensor times a ``(batch, heads, k, n)`` or
         a ``(k, n)`` tensor gives ``(batch, heads, m, n)``.
         """
-        return self._session_native(self, "matmul", (a, b))
+        return _SESSION_CALL(self, "matmul", (a, b))
 
     def add(self, a, b):
         """``a + b`` with NumPy broadcasting: shapes are aligned on the
         right and an axis of length 1 stretches. For matrices, a ``(1, 1)``,
         ``(1, cols)`` or ``(rows, 1)`` operand broadcasts."""
-        return self._session_native(self, "add", (a, b))
+        return _SESSION_CALL(self, "add", (a, b))
 
     def sub(self, a, b):
         """``a - b`` with the broadcasting of :meth:`add`."""
-        return self._session_native(self, "sub", (a, b))
+        return _SESSION_CALL(self, "sub", (a, b))
 
     def mul(self, a, b):
         """``a * b`` elementwise with the broadcasting of :meth:`add`."""
-        return self._session_native(self, "mul", (a, b))
+        return _SESSION_CALL(self, "mul", (a, b))
 
     def div(self, a, b):
         """``a / b`` elementwise with the broadcasting of :meth:`add`."""
-        return self._session_native(self, "div", (a, b))
+        return _SESSION_CALL(self, "div", (a, b))
 
     def relu(self, x):
         """``max(x, 0)``."""
-        return self._session_native(self, "relu", (x,))
+        return _SESSION_CALL(self, "relu", (x,))
 
     def sigmoid(self, x):
         """``1 / (1 + exp(-x))``."""
-        return self._session_native(self, "sigmoid", (x,))
+        return _SESSION_CALL(self, "sigmoid", (x,))
 
     def tanh(self, x):
         """The hyperbolic tangent."""
-        return self._session_native(self, "tanh", (x,))
+        return _SESSION_CALL(self, "tanh", (x,))
 
     def exp(self, x):
         """The natural exponential."""
-        return self._session_native(self, "exp", (x,))
+        return _SESSION_CALL(self, "exp", (x,))
 
     def log(self, x):
         """The natural logarithm."""
-        return self._session_native(self, "log", (x,))
+        return _SESSION_CALL(self, "log", (x,))
 
     def sqrt(self, x):
         """The square root."""
-        return self._session_native(self, "sqrt", (x,))
+        return _SESSION_CALL(self, "sqrt", (x,))
 
     def scale(self, x, factor):
         """``factor * x``."""
-        return self._session_native(self, "scale", (x, factor))
+        return _SESSION_CALL(self, "scale", (x, factor))
 
     # ------------------------------------------------------------ shape and reductions
     def transpose(self, x, a=-2, b=-1):
         """``x`` with axes ``a`` and ``b`` swapped; the matrix transpose by
         default."""
-        return self._session_native(self, "transpose", (x, a, b))
+        return _SESSION_CALL(self, "transpose", (x, a, b))
 
     def permute(self, x, axes):
         """``x`` with its axes reordered: output axis ``k`` is input axis
@@ -412,26 +412,26 @@ class Session:
         ...     s.shape(s.permute(x, (2, 0, 1)))
         (4, 2, 3)
         """
-        return self._session_native(self, "permute", (x, axes))
+        return _SESSION_CALL(self, "permute", (x, axes))
 
     def reshape(self, x, shape):
         """``x``'s elements, row-major, in a new ``shape`` with the same
         number of elements; one dimension may be -1 and is inferred."""
-        return self._session_native(self, "reshape", (x, shape))
+        return _SESSION_CALL(self, "reshape", (x, shape))
 
     def flatten(self, x, start=1, end=-1):
         """``x`` with axes ``start`` to ``end`` (inclusive) merged into
         one; by default every axis after the first."""
-        return self._session_native(self, "flatten", (x, start, end))
+        return _SESSION_CALL(self, "flatten", (x, start, end))
 
     def squeeze(self, x, axis=None):
         """``x`` without its length-1 axes (all of them, or those listed in
         ``axis``)."""
-        return self._session_native(self, "squeeze", (x, axis))
+        return _SESSION_CALL(self, "squeeze", (x, axis))
 
     def unsqueeze(self, x, axis):
         """``x`` with a new length-1 axis at position ``axis``."""
-        return self._session_native(self, "unsqueeze", (x, axis))
+        return _SESSION_CALL(self, "unsqueeze", (x, axis))
 
     def sum(self, x, axis=None, keepdims=None):
         """The sum over ``axis``.
@@ -443,32 +443,32 @@ class Session:
         matrix and removes it otherwise, so ``sum(x, axis=0)`` of an
         ``(n, k)`` matrix is ``(1, k)``.
         """
-        return self._session_native(self, "sum", (x, axis, keepdims))
+        return _SESSION_CALL(self, "sum", (x, axis, keepdims))
 
     def mean(self, x, axis=None, keepdims=None):
         """The mean over ``axis``, with the axes and shapes of :meth:`sum`."""
-        return self._session_native(self, "mean", (x, axis, keepdims))
+        return _SESSION_CALL(self, "mean", (x, axis, keepdims))
 
     def max(self, x, axis=None, keepdims=None):
         """The largest value over ``axis``, with the axes and shapes of
         :meth:`sum`. A NaN is larger than any number; among equal values the
         first position wins, and the gradient flows to that position only."""
-        return self._session_native(self, "max", (x, axis, keepdims))
+        return _SESSION_CALL(self, "max", (x, axis, keepdims))
 
     def softmax(self, x, axis=-1):
         """The softmax along ``axis``; by default the last axis (each row
         of a matrix)."""
-        return self._session_native(self, "softmax", (x, axis))
+        return _SESSION_CALL(self, "softmax", (x, axis))
 
     def log_softmax(self, x, axis=-1):
         """The log-softmax along ``axis``; by default the last axis."""
-        return self._session_native(self, "log_softmax", (x, axis))
+        return _SESSION_CALL(self, "log_softmax", (x, axis))
 
     # ------------------------------------------------------------ joining, splitting, picking
     def concat(self, xs, axis=0):
         """The tensors ``xs`` joined along ``axis``; every other axis must
         match."""
-        return self._session_native(self, "concat", (xs, axis))
+        return _SESSION_CALL(self, "concat", (xs, axis))
 
     def split(self, x, sizes_or_sections, axis=0):
         """``x`` cut along ``axis`` into a list of tensors.
@@ -478,7 +478,7 @@ class Session:
         ``x`` (no copy); in a recording session the gradients of the pieces
         flow back into their places in ``x``'s gradient.
         """
-        return self._session_native(self, "split", (x, sizes_or_sections, axis))
+        return _SESSION_CALL(self, "split", (x, sizes_or_sections, axis))
 
     def take(self, x, indices, axis=0):
         """The slices of ``x`` at ``indices`` along ``axis``.
@@ -490,7 +490,7 @@ class Session:
         gradient of ``x`` sums the gradients of every slice taken from each
         position, in ascending index position.
         """
-        return self._session_native(self, "take", (x, indices, axis))
+        return _SESSION_CALL(self, "take", (x, indices, axis))
 
     # ------------------------------------------------------------ convolution and pooling
     def conv2d(self, x, weight, bias=None, stride=1, padding=0, groups=1):
@@ -509,165 +509,165 @@ class Session:
 
             y = s.conv2d(x, w, stride=1, padding=1, groups=4)
         """
-        return self._session_native(self, "conv2d", (x, weight, bias, stride, padding, groups))
+        return _SESSION_CALL(self, "conv2d", (x, weight, bias, stride, padding, groups))
 
     def max_pool2d(self, x, kernel_size, stride=None):
         """The largest value of each ``kernel_size`` window of an
         ``(N, C, H, W)`` tensor, windows ``stride`` apart (by default
         ``kernel_size``)."""
-        return self._session_native(self, "max_pool2d", (x, kernel_size, stride))
+        return _SESSION_CALL(self, "max_pool2d", (x, kernel_size, stride))
 
     def avg_pool2d(self, x, kernel_size, stride=None):
         """The mean of each ``kernel_size`` window of an ``(N, C, H, W)``
         tensor, windows ``stride`` apart (by default ``kernel_size``)."""
-        return self._session_native(self, "avg_pool2d", (x, kernel_size, stride))
+        return _SESSION_CALL(self, "avg_pool2d", (x, kernel_size, stride))
 
     # ------------------------------------------------------------ more elementwise math
     def erf(self, x):
         """The error function."""
-        return self._session_native(self, "erf", (x,))
+        return _SESSION_CALL(self, "erf", (x,))
 
     def gelu(self, x, approximate="none"):
         """The Gaussian error linear unit ``x * Phi(x)``, with ``Phi`` the
         standard normal distribution function; ``approximate='tanh'`` uses
         the tanh approximation
         ``0.5 * x * (1 + tanh(sqrt(2 / pi) * (x + 0.044715 * x**3)))``."""
-        return self._session_native(self, "gelu", (x, approximate))
+        return _SESSION_CALL(self, "gelu", (x, approximate))
 
     def softplus(self, x):
         """``log(1 + exp(x))``."""
-        return self._session_native(self, "softplus", (x,))
+        return _SESSION_CALL(self, "softplus", (x,))
 
     def silu(self, x):
         """``x * sigmoid(x)`` (also called swish)."""
-        return self._session_native(self, "silu", (x,))
+        return _SESSION_CALL(self, "silu", (x,))
 
     def leaky_relu(self, x, alpha=0.01):
         """``x`` where ``x >= 0``, else ``alpha * x``."""
-        return self._session_native(self, "leaky_relu", (x, alpha))
+        return _SESSION_CALL(self, "leaky_relu", (x, alpha))
 
     def elu(self, x, alpha=1.0):
         """``x`` where ``x >= 0``, else ``alpha * (exp(x) - 1)``."""
-        return self._session_native(self, "elu", (x, alpha))
+        return _SESSION_CALL(self, "elu", (x, alpha))
 
     def hard_sigmoid(self, x, alpha=0.2, beta=0.5):
         """``alpha * x + beta`` clipped to ``[0, 1]``."""
-        return self._session_native(self, "hard_sigmoid", (x, alpha, beta))
+        return _SESSION_CALL(self, "hard_sigmoid", (x, alpha, beta))
 
     def hard_swish(self, x):
         """``x * hard_sigmoid(x, alpha=1/6, beta=0.5)``."""
-        return self._session_native(self, "hard_swish", (x,))
+        return _SESSION_CALL(self, "hard_swish", (x,))
 
     def clip(self, x, min=None, max=None):
         """``x`` limited to ``[min, max]``; a bound left as None does not
         limit. A NaN stays NaN."""
-        return self._session_native(self, "clip", (x, min, max))
+        return _SESSION_CALL(self, "clip", (x, min, max))
 
     def abs(self, x):
         """The absolute value."""
-        return self._session_native(self, "abs", (x,))
+        return _SESSION_CALL(self, "abs", (x,))
 
     def floor(self, x):
         """The largest integer not above ``x``. No gradient flows through it."""
-        return self._session_native(self, "floor", (x,))
+        return _SESSION_CALL(self, "floor", (x,))
 
     def ceil(self, x):
         """The smallest integer not below ``x``. No gradient flows through it."""
-        return self._session_native(self, "ceil", (x,))
+        return _SESSION_CALL(self, "ceil", (x,))
 
     def round(self, x):
         """``x`` rounded to the nearest integer, a half to the even one (as
         ``numpy.round``). No gradient flows through it."""
-        return self._session_native(self, "round", (x,))
+        return _SESSION_CALL(self, "round", (x,))
 
     def sin(self, x):
         """The sine."""
-        return self._session_native(self, "sin", (x,))
+        return _SESSION_CALL(self, "sin", (x,))
 
     def cos(self, x):
         """The cosine."""
-        return self._session_native(self, "cos", (x,))
+        return _SESSION_CALL(self, "cos", (x,))
 
     def sign(self, x):
         """-1, 0 or 1 by the sign of ``x``. No gradient flows through it."""
-        return self._session_native(self, "sign", (x,))
+        return _SESSION_CALL(self, "sign", (x,))
 
     def reciprocal(self, x):
         """``1 / x``."""
-        return self._session_native(self, "reciprocal", (x,))
+        return _SESSION_CALL(self, "reciprocal", (x,))
 
     def pow(self, x, exponent):
         """``x ** exponent`` elementwise, ``exponent`` a tensor that
         broadcasts with ``x`` as in :meth:`add`. A negative ``x`` takes an
         integer exponent. For a number exponent use :meth:`pow_scalar`."""
-        return self._session_native(self, "pow", (x, exponent))
+        return _SESSION_CALL(self, "pow", (x, exponent))
 
     def pow_scalar(self, x, exponent):
         """``x ** exponent`` for a number ``exponent``. A negative ``x``
         takes an integer exponent."""
         # a handle is an int too, so the number form is its own method
-        return self._session_native(self, "pow_scalar", (x, exponent))
+        return _SESSION_CALL(self, "pow_scalar", (x, exponent))
 
     def minimum(self, a, b):
         """The smaller of ``a`` and ``b`` elementwise, with the broadcasting
         of :meth:`add`. A NaN in either gives NaN; ``-0.0`` is below ``0.0``."""
-        return self._session_native(self, "minimum", (a, b))
+        return _SESSION_CALL(self, "minimum", (a, b))
 
     def maximum(self, a, b):
         """The larger of ``a`` and ``b`` elementwise, with the broadcasting
         of :meth:`add`. A NaN in either gives NaN; ``0.0`` is above ``-0.0``."""
-        return self._session_native(self, "maximum", (a, b))
+        return _SESSION_CALL(self, "maximum", (a, b))
 
     def where(self, condition, a, b):
         """``a`` where ``condition`` is nonzero, else ``b``; the three
         broadcast together as in NumPy. The gradient flows to ``a`` and
         ``b``."""
-        return self._session_native(self, "where", (condition, a, b))
+        return _SESSION_CALL(self, "where", (condition, a, b))
 
     def _compare(self, a, b, kind):
         return self._op("compare", (a, b), [_COMPARE[kind]])
 
     def equal(self, a, b):
         """1.0 where ``a == b``, else 0.0, with the broadcasting of :meth:`add`."""
-        return self._session_native(self, "equal", (a, b))
+        return _SESSION_CALL(self, "equal", (a, b))
 
     def not_equal(self, a, b):
         """1.0 where ``a != b``, else 0.0."""
-        return self._session_native(self, "not_equal", (a, b))
+        return _SESSION_CALL(self, "not_equal", (a, b))
 
     def greater(self, a, b):
         """1.0 where ``a > b``, else 0.0."""
-        return self._session_native(self, "greater", (a, b))
+        return _SESSION_CALL(self, "greater", (a, b))
 
     def greater_equal(self, a, b):
         """1.0 where ``a >= b``, else 0.0."""
-        return self._session_native(self, "greater_equal", (a, b))
+        return _SESSION_CALL(self, "greater_equal", (a, b))
 
     def less(self, a, b):
         """1.0 where ``a < b``, else 0.0."""
-        return self._session_native(self, "less", (a, b))
+        return _SESSION_CALL(self, "less", (a, b))
 
     def less_equal(self, a, b):
         """1.0 where ``a <= b``, else 0.0."""
-        return self._session_native(self, "less_equal", (a, b))
+        return _SESSION_CALL(self, "less_equal", (a, b))
 
     def logical_not(self, x):
         """1.0 where ``x`` is zero, else 0.0."""
-        return self._session_native(self, "logical_not", (x,))
+        return _SESSION_CALL(self, "logical_not", (x,))
 
     def logical_and(self, a, b):
         """1.0 where both ``a`` and ``b`` are nonzero, else 0.0."""
-        return self._session_native(self, "logical_and", (a, b))
+        return _SESSION_CALL(self, "logical_and", (a, b))
 
     def logical_or(self, a, b):
         """1.0 where ``a`` or ``b`` is nonzero, else 0.0."""
-        return self._session_native(self, "logical_or", (a, b))
+        return _SESSION_CALL(self, "logical_or", (a, b))
 
     def expand(self, x, shape):
         """``x`` broadcast to ``shape`` as NumPy broadcasts it (the result's
         shape is the broadcast of the two). The gradient sums back over the
         broadcast axes."""
-        return self._session_native(self, "expand", (x, shape))
+        return _SESSION_CALL(self, "expand", (x, shape))
 
     def argmax(self, x, axis=-1, keepdims=False, int32=False):
         """The position of the largest value along ``axis``. A NaN is larger
@@ -678,7 +678,7 @@ class Session:
         with ``s.numpy(h).view(np.int32)``. ``keepdims=True`` keeps the axis
         with length 1. No gradient flows through it.
         """
-        return self._session_native(self, "argmax", (x, axis, keepdims, int32))
+        return _SESSION_CALL(self, "argmax", (x, axis, keepdims, int32))
 
     def pad(self, x, pads, value=0.0):
         """``x`` padded with ``value``.
@@ -687,19 +687,19 @@ class Session:
         axis's count before its first element, then every axis's count after
         its last one. A negative count removes elements instead.
         """
-        return self._session_native(self, "pad", (x, pads, value))
+        return _SESSION_CALL(self, "pad", (x, pads, value))
 
     def any(self, x, axis=None, keepdims=None):
         """1.0 where some element over ``axis`` is nonzero, else 0.0, with
         the axes and shapes of :meth:`sum`. A NaN counts as nonzero. No
         gradient flows through it."""
-        return self._session_native(self, "any", (x, axis, keepdims))
+        return _SESSION_CALL(self, "any", (x, axis, keepdims))
 
     def all(self, x, axis=None, keepdims=None):
         """1.0 where every element over ``axis`` is nonzero, else 0.0, with
         the axes and shapes of :meth:`sum`. A NaN counts as nonzero. No
         gradient flows through it."""
-        return self._session_native(self, "all", (x, axis, keepdims))
+        return _SESSION_CALL(self, "all", (x, axis, keepdims))
 
     def cumsum(self, x, axis, exclusive=False, reverse=False):
         """The running sum of ``x`` along ``axis``; the result has ``x``'s shape.
@@ -714,7 +714,7 @@ class Session:
         >>> s.numpy(h)[0]
         array([1., 2., 3., 4.], dtype=float32)
         """
-        return self._session_native(self, "cumsum", (x, axis, exclusive, reverse))
+        return _SESSION_CALL(self, "cumsum", (x, axis, exclusive, reverse))
 
     def index(self, x, indices, axes=None):
         """``x`` picked at several index tensors at once, as ``x[i, j]`` with
@@ -735,7 +735,7 @@ class Session:
         >>> s.numpy(s.index(x, (i, j)))
         array([[ 1., 11.]], dtype=float32)
         """
-        return self._session_native(self, "index", (x, indices, axes))
+        return _SESSION_CALL(self, "index", (x, indices, axes))
 
     # ------------------------------------------------------------ layers
     def linear(self, x, weight, bias=None, activation=None):
@@ -747,39 +747,39 @@ class Session:
         ``(1, outputs)`` tensor, ``activation`` one of None, ``'relu'``,
         ``'sigmoid'``, ``'tanh'`` or ``'softmax'``.
         """
-        return self._session_native(self, "linear", (x, weight, bias, activation))
+        return _SESSION_CALL(self, "linear", (x, weight, bias, activation))
 
     def layer_norm(self, x, weight, bias, eps=1e-5):
         """Normalize along the last axis to zero mean and unit variance,
         then scale by ``weight`` and shift by ``bias`` (both ``(1, features)``,
         the last axis's length)."""
-        return self._session_native(self, "layer_norm", (x, weight, bias, eps))
+        return _SESSION_CALL(self, "layer_norm", (x, weight, bias, eps))
 
     def dropout(self, x, p, seed=0, counter=0):
         """Zero each element with probability ``p`` and scale the rest by
         ``1 / (1 - p)``. The mask depends only on ``seed``, ``counter`` and
         the element position: use a new ``counter`` for every step."""
-        return self._session_native(self, "dropout", (x, p, seed, counter))
+        return _SESSION_CALL(self, "dropout", (x, p, seed, counter))
 
     def _transformer_softmax(self, x):
-        return self._session_native(self, "transformer_softmax", (x,))
+        return _SESSION_CALL(self, "transformer_softmax", (x,))
 
     def _transformer_linear(self, x, weight):
-        return self._session_native(self, "transformer_linear", (x, weight))
+        return _SESSION_CALL(self, "transformer_linear", (x, weight))
 
     def rms_norm(self, x, weight, eps=1e-6):
         """Normalize each last-axis row by its root mean square, then scale by weight."""
-        return self._session_native(self, "rms_norm", (x, weight, eps))
+        return _SESSION_CALL(self, "rms_norm", (x, weight, eps))
 
     def rotary(self, x, head_dim, *, offset=0, theta=10000.0):
         """Apply full-width rotary embeddings to sequence-by-concatenated-head features."""
-        return self._session_native(self, "rotary", (x, head_dim, offset, theta))
+        return _SESSION_CALL(self, "rotary", (x, head_dim, offset, theta))
 
     # ------------------------------------------------------------ data steps
     def permutation(self, n, seed=0, epoch=0):
         """A random order of the rows ``0 .. n-1`` as an ``(n, 1)`` tensor,
         determined by ``seed`` and ``epoch``."""
-        return self._session_native(self, "permutation", (n, seed, epoch))
+        return _SESSION_CALL(self, "permutation", (n, seed, epoch))
 
     def gather_rows(self, x, indices, start=0, count=None):
         """The rows of ``x`` listed in ``indices[start:start + count]``.
@@ -787,7 +787,7 @@ class Session:
         ``indices`` is a :meth:`permutation` of at most ``x``'s row count.
         The result carries no gradient.
         """
-        return self._session_native(self, "gather_rows", (x, indices, start, count))
+        return _SESSION_CALL(self, "gather_rows", (x, indices, start, count))
 
     def embedding(self, table, ids, padding_idx=None):
         """Rows of ``table`` picked by integer ``ids``: ``table[ids]``.
@@ -810,31 +810,31 @@ class Session:
         ...     s.backward(s.sum(x))
         ...     g = s.grad(w)
         """
-        return self._session_native(self, "embedding", (table, ids, padding_idx))
+        return _SESSION_CALL(self, "embedding", (table, ids, padding_idx))
 
     # ------------------------------------------------------------ losses (differentiable)
     def mse(self, prediction, target, reduction="mean"):
         """The squared error, averaged or summed: a ``(1, 1)`` tensor."""
-        return self._session_native(self, "mse", (prediction, target, reduction))
+        return _SESSION_CALL(self, "mse", (prediction, target, reduction))
 
     def mae(self, prediction, target, reduction="mean"):
         """The absolute error, averaged or summed."""
-        return self._session_native(self, "mae", (prediction, target, reduction))
+        return _SESSION_CALL(self, "mae", (prediction, target, reduction))
 
     def huber(self, prediction, target, delta=1.0, reduction="mean"):
         """The Huber loss with threshold ``delta``, averaged or summed."""
-        return self._session_native(self, "huber", (prediction, target, delta, reduction))
+        return _SESSION_CALL(self, "huber", (prediction, target, delta, reduction))
 
     def bce_with_logits(self, logits, target, reduction="mean"):
         """Binary cross-entropy of ``sigmoid(logits)`` against targets in
         ``[0, 1]``, computed stably from the logits."""
-        return self._session_native(self, "bce_with_logits", (logits, target, reduction))
+        return _SESSION_CALL(self, "bce_with_logits", (logits, target, reduction))
 
     def cross_entropy(self, logits, codes, reduction="mean"):
         """Softmax cross-entropy of ``(..., classes)`` logits against class
         codes (the class index as a float), one per position of the leading
         axes: ``(rows, 1)`` codes for ``(rows, classes)`` logits."""
-        return self._session_native(self, "cross_entropy", (logits, codes, reduction))
+        return _SESSION_CALL(self, "cross_entropy", (logits, codes, reduction))
 
     # ------------------------------------------------------------ metrics (values)
     def accuracy(self, y_true, prediction):
@@ -842,18 +842,18 @@ class Session:
 
         ``y_true`` holds class codes ``(n, 1)``; ``prediction`` holds codes
         ``(n, 1)`` or scores ``(n, classes)`` (the first highest wins)."""
-        return self._session_native(self, "accuracy", (y_true, prediction))
+        return _SESSION_CALL(self, "accuracy", (y_true, prediction))
 
     def log_loss(self, y_true, probability):
         """The mean negative log-likelihood of the class codes ``(n, 1)``
         under the probabilities ``(n, classes)`` (or ``(n, 1)``, the
         positive class), as a float."""
-        return self._session_native(self, "log_loss", (y_true, probability))
+        return _SESSION_CALL(self, "log_loss", (y_true, probability))
 
     def roc_auc(self, y_true, scores):
         """The area under the ROC curve of binary labels ``(n, 1)`` (1
         positive) against scores ``(n, 1)``, as a float."""
-        return self._session_native(self, "roc_auc", (y_true, scores))
+        return _SESSION_CALL(self, "roc_auc", (y_true, scores))
 
     # ------------------------------------------------------------ gradients
     def backward(self, loss, accumulate=False, create_graph=False):
@@ -885,12 +885,12 @@ class Session:
         ...     s.backward(s.grad_tensor(x))
         ...     d2 = s.grad(x)
         """
-        return self._session_native(self, "backward", (loss, accumulate, create_graph))
+        return _SESSION_CALL(self, "backward", (loss, accumulate, create_graph))
 
     def grad(self, h):
         """The gradient of tensor ``h`` from the last :meth:`backward`, as a
         float32 array of its shape."""
-        return self._session_native(self, "grad", (h,))
+        return _SESSION_CALL(self, "grad", (h,))
 
     def grad_tensor(self, h):
         """The gradient of tensor ``h`` from the last
@@ -902,7 +902,7 @@ class Session:
         get second derivatives. Raises if the last backward did not record
         its gradients.
         """
-        return self._session_native(self, "grad_tensor", (h,))
+        return _SESSION_CALL(self, "grad_tensor", (h,))
 
     def vjp(self, output, inputs, v, create_graph=False):
         """The vector-Jacobian products of ``output`` for the seed ``v``.
@@ -936,7 +936,7 @@ class Session:
         ...     (jt_v,) = s.vjp(y, [x], s.full((3, 2), 1.0))
         ...     values = s.numpy(jt_v)
         """
-        return self._session_native(self, "vjp", (output, inputs, v, create_graph))
+        return _SESSION_CALL(self, "vjp", (output, inputs, v, create_graph))
 
     def jvp(self, output, inputs, u):
         """The Jacobian-vector product of ``output`` along the directions ``u``.
@@ -966,7 +966,7 @@ class Session:
         ...     y = s.tanh(x)
         ...     j_u = s.numpy(s.jvp(y, [x], [s.full((3, 2), 1.0)]))
         """
-        return self._session_native(self, "jvp", (output, inputs, u))
+        return _SESSION_CALL(self, "jvp", (output, inputs, u))
 
     def hvp(self, loss, params, v):
         """The Hessian-vector products of a scalar ``loss`` along ``v``.
@@ -1000,7 +1000,7 @@ class Session:
         ...     (hv,) = s.hvp(loss, [w], [s.full((3, 1), 1.0)])
         ...     values = s.numpy(hv)
         """
-        return self._session_native(self, "hvp", (loss, params, v))
+        return _SESSION_CALL(self, "hvp", (loss, params, v))
 
     @staticmethod
     def _handles(hs):
@@ -1050,7 +1050,7 @@ class Session:
         ...     model = s.capture(inputs=[x], outputs=[p])
         ...     probs = model.run(rng.standard_normal((16, 4), dtype=np.float32))
         """
-        return self._session_native(self, "capture", (inputs, outputs))
+        return _SESSION_CALL(self, "capture", (inputs, outputs))
 
     def run(self, program, *arrays, dynamic_shapes=False, optimize=False):
         """Run ``program`` on new input arrays: one call that uploads them,
@@ -1084,7 +1084,7 @@ class Session:
 
     def load_control(self, path):
         """Load control components and shared parameters from one checkpoint."""
-        return self._session_native(self, "load_control", (path,))
+        return _SESSION_CALL(self, "load_control", (path,))
 
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
@@ -1093,7 +1093,7 @@ class Session:
         not record. A program saved on one install loads on any other,
         a GPU install or the CPU-only install, and gives the same outputs.
         """
-        return self._session_native(self, "load_program", (path,))
+        return _SESSION_CALL(self, "load_program", (path,))
 
     # ------------------------------------------------------------ checkpoints
     def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
@@ -1131,7 +1131,7 @@ class Session:
         ...     opt = s.optimizer("adam", lr=1e-3)
         ...     s.save_state("state.ckpt", [w], optimizer=opt, seed=0, epoch=3, step=120)
         """
-        return self._session_native(self, "save_state", (path, params, optimizer, seed, epoch, step))
+        return _SESSION_CALL(self, "save_state", (path, params, optimizer, seed, epoch, step))
 
     def load_state(self, path, optimizer=None, requires_grad=True):
         """Load a file written by :meth:`save_state`.
@@ -1165,7 +1165,7 @@ class Session:
         ...     state = s.load_state("state.ckpt", optimizer=opt)
         ...     (w,) = state["params"]
         """
-        return self._session_native(self, "load_state", (path, optimizer, requires_grad))
+        return _SESSION_CALL(self, "load_state", (path, optimizer, requires_grad))
     def load_weights(self, path, names, *, source=None):
         """Load named tensors from a safetensors checkpoint (or a PyTorch
         state_dict) into tensors of this session.
@@ -1215,7 +1215,7 @@ class Session:
         ...     x = s.tensor(rng.standard_normal((8, 4), dtype=np.float32))
         ...     probs = s.numpy(s.linear(x, w, b, activation="softmax"))
         """
-        return self._session_native(self, "load_weights", (path, names, source))
+        return _SESSION_CALL(self, "load_weights", (path, names, source))
 
     def zero_grad(self):
         """Clear the gradient of every tensor made with ``requires_grad=True``.
@@ -1225,7 +1225,7 @@ class Session:
         before one :meth:`step`; a plain :meth:`backward` already replaces
         the previous gradients.
         """
-        return self._session_native(self, "zero_grad", ())
+        return _SESSION_CALL(self, "zero_grad", ())
 
     # ------------------------------------------------------------ optimizers
     def optimizer(self, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False, beta1=0.9, beta2=0.999,
@@ -1266,7 +1266,7 @@ class Session:
         >>> with ops.Session(record=True) as s:
         ...     opt = s.optimizer("sgd", lr=0.1, momentum=0.9, nesterov=True)
         """
-        return self._session_native(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma))
+        return _SESSION_CALL(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma))
 
     def _kind_of(self, optimizer):
         optimizer = _int(optimizer, "optimizer", 1)
@@ -1284,15 +1284,15 @@ class Session:
         Nothing is read back. Call :meth:`reset` before recording the next
         forward pass.
         """
-        return self._session_native(self, "step", (optimizer, params))
+        return _SESSION_CALL(self, "step", (optimizer, params))
 
     def scheduler_step(self, optimizer):
         """Advance ``optimizer``'s learning-rate schedule by one epoch."""
-        return self._session_native(self, "scheduler_step", (optimizer,))
+        return _SESSION_CALL(self, "scheduler_step", (optimizer,))
 
     def learning_rate(self, optimizer):
         """``optimizer``'s current learning rate, as a float."""
-        return self._session_native(self, "learning_rate", (optimizer,))
+        return _SESSION_CALL(self, "learning_rate", (optimizer,))
 
     def optimizer_state(self, optimizer, param):
         """The optimizer's state for one parameter, as a dict.
@@ -1305,7 +1305,7 @@ class Session:
         :meth:`reset`: read them with :meth:`numpy` to save a checkpoint,
         and restore it with :meth:`load_optimizer_state`.
         """
-        return self._session_native(self, "optimizer_state", (optimizer, param))
+        return _SESSION_CALL(self, "optimizer_state", (optimizer, param))
 
     def load_optimizer_state(self, optimizer, param, state):
         """Restore the state :meth:`optimizer_state` returned.
@@ -1315,7 +1315,7 @@ class Session:
         values are copied on the device; the next :meth:`step` continues
         exactly where the saved run stopped.
         """
-        return self._session_native(self, "load_optimizer_state", (optimizer, param, state))
+        return _SESSION_CALL(self, "load_optimizer_state", (optimizer, param, state))
 
 
 class Program:
@@ -1560,6 +1560,7 @@ def _connect_session_mode(mode):
     admission.update(ops_session_class=Session, ops_program_class=Program,
                      ops_connection_type=SimpleNamespace, ops_session_layout=layout)
     result.native_module = module.model_native_api_v1.__self__
+    result.public_provider = module.ops_session_public_connect(result.native_module)
     result.native_provider = result.initialize(None, None, None, result.native_module, None, admission)
     return result
 
@@ -1579,3 +1580,5 @@ if isinstance(_session_connected, str):
 if isinstance(_session_connected, str):
     raise ImportError(_session_connected)
 _SESSION_INITIALIZE = _session_connected.initialize
+
+_SESSION_CALL = _session_connected.call
