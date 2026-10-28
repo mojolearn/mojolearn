@@ -1,0 +1,43 @@
+{
+  "lane": "lifecycle-neighbors-cluster-20261028",
+  "branch": "lane/lifecycle-neighbors-cluster-20261028",
+  "machine": "Mac (local), tools/compile_slot.sh nice 19, -j 10, --target-cpu apple-m1",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "flags": "--optimization-level 0 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings",
+  "command": "bash tools/compile_slot.sh bash experiments/lifecycle_neighbors_cluster_20261028/compile-command.sh <entry> <out> <name>",
+  "compiles": [
+    {
+      "entry": "checks/svm_public_lifecycle_compile.mojo",
+      "closure": "bindings/family_native.mojo family_operation (svc_native incl. svc_linear/ocsvm, svm_mixture_native, kmeans_native, neighbors_native incl. neighbors_semi/graph/local/knn/ann/kde, providers/python/family_public_lifecycle_pyapi.mojo) + public_attribute_c",
+      "source_commit": "a10f3e834a5f26615a3735ad041527d4428897b8",
+      "source_status": "clean",
+      "exit_code": 0,
+      "seconds": 149,
+      "binary_sha256": "4caaddbdf943b097011fa53b754c49d4924776c2661540eb49e7b6c42cf1ae27",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-neighbors-cluster-20261028/attempt3-family/compile.log"
+    },
+    {
+      "entry": "experiments/purge_decomp_manifold_20261028/compile_decomp.mojo",
+      "closure": "bindings/decomp_native.mojo decomp_c (KernelPCA lifecycle, NotFittedError door mapping, family_public_lifecycle_pyapi)",
+      "source_commit": "d052b1e5c658d72252b197936d7849b25a6d2a3c",
+      "source_status": "clean",
+      "exit_code": 0,
+      "seconds": 17,
+      "binary_sha256": "1d7b85749cd41bb52ee3f3b06e1031d9201a2a7f4e5dc7cc1f6e54d94543422c",
+      "log": "/Users/andrewhendel/mojolearn-evidence/lifecycle-neighbors-cluster-20261028/attempt2-decomp/compile.log",
+      "note": "no file in this closure changed between d052b1e5c6 and a10f3e834a (only the five family sub-owners changed)"
+    }
+  ],
+  "failed_attempts": [
+    {
+      "dir": "/Users/andrewhendel/mojolearn-evidence/lifecycle-neighbors-cluster-20261028/attempt1-family",
+      "cause": "compiler hang (0 errors, log idle at 419020 bytes, all threads semaphore_wait) with the lifecycle inside family_operation (recursion family_operation->_family_route->_family_par_run->family_operation through try/finally); killed"
+    },
+    {
+      "dir": "/Users/andrewhendel/mojolearn-evidence/lifecycle-neighbors-cluster-20261028/attempt2-family",
+      "cause": "same hang after the origin/main merge; killed; fixed by moving the wrapper into the five sub-owners (a10f3e834a)"
+    }
+  ],
+  "not_covered": "GPU targets, fast mode, full binding roots/packaging, any runtime, Python tests, identity",
+  "runtime": "NOT_RUN"
+}

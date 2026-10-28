@@ -28,6 +28,8 @@ from bindings.family_common import (
 )
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
 #: `_expansion_neighbors._U_LOG`, the unary op code of `log(a * x + b)`.
 comptime _SEMI_U_LOG = 1
@@ -779,8 +781,8 @@ def _lp_predict(model: PythonObject, binding: PythonObject, source: PythonObject
 # ---------------------------------------------------------------- dispatch
 
 
-def neighbors_semi_operation(model: PythonObject, operation: String, var args: PythonObject,
-                             context: PythonObject) raises -> PythonObject:
+def _neighbors_semi_operation_route(model: PythonObject, operation: String, var args: PythonObject,
+                                    context: PythonObject) raises -> PythonObject:
     args = xn_admit_arguments(args, context)
     classical_connect_numpy(context)
     if operation == "family_xn_semi_achi2_fit":
@@ -810,3 +812,24 @@ def neighbors_semi_operation(model: PythonObject, operation: String, var args: P
         var prediction = _lp_predict(model, args[0], args[1], context)
         return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), context))
     raise Error("RuntimeError: unknown neighbors operation " + operation)
+
+
+def neighbors_semi_operation(model: PythonObject, operation: String, args: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    """The public operation: the estimators that formerly took the `_mode`
+    class-creation wrappers run their whole lifecycle around the owner
+    (providers/python/family_public_lifecycle_pyapi.mojo); every other
+    operation goes straight to the owner."""
+    var lifecycle = family_lifecycle_spec(operation)
+    if lifecycle.method.byte_length() == 0:
+        return _neighbors_semi_operation_route(model, operation, args, context)
+    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    var result = PythonObject(None)
+    try:
+        result = _neighbors_semi_operation_route(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        neighbors_public_end(model, call)
+    return family_lifecycle_finish(model, lifecycle, result, call, context)
