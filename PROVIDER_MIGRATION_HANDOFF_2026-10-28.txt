@@ -1,5 +1,18 @@
 PROVIDER MIGRATION — ROOT HANDOFF FOR COMPACTION — 2026-10-28
 
+CPU GBDT INTEGRATION ADDENDUM (supersedes CTR/ranking READY entries below)
+The compiled CTR and ranking sets are integrated in this history:
+  CTR: 9d910269bf, ab0e2f3d2c, 9fe236a49f.
+  Ranking: f368c3c564, 3eb5489ff8, eb94eed000.
+Main checkpoint ed012ba767 is preserved through merge 9a89f43283.
+Only stale verifier-comment conflicts needed resolution; no arithmetic rewrite.
+Six source-only registration tests, docs_facts and lane_accounting pass on the
+combined tree. Existing per-batch compilation evidence is reused. Runtime,
+identity, negative-control execution and new QueryRMSE references remain pending.
+Do not cherry-pick these source sets again. Confirm origin/main and the CPU
+thread's completion notice before taking the next serialized main window.
+Full integration/push logs: ~/mojolearn-evidence/gbdt-cpu-ranking-compile-20261028/.
+
 READ THIS FIRST
 This is the current root handoff. PROVIDER_MIGRATION_HANDOFF_2026-10-27.txt
 contains retained earlier checkpoints/history and is not the current merge queue.
@@ -328,9 +341,13 @@ All3 are now pushed with required guards0; coherent set ready for main. Full CPU
 x86-64-v3/O0/-j32,48.7s on Peer2's serial batch7 lease; source/binary verified.
   docs/plans/gbdt-cpu-ctr-eval-20261027.md and20261028-compile.json
   ~/mojolearn-evidence/peer2-native-boundary-20261027/cpu-batch-7/remote/leg_out/gbdt-ctr
-RANKING8dc73e4c13 now has a reported full local CPU binding compile pass
-(O0/apple-m1/-j10,137s), but STILL HOLD OFF MAIN until CPU peer records the
-compile receipt and updates stale UNCOMPILED notes into a coherent handoff.
+RANKING8dc73e4c13 now has a full local CPU binding compile pass
+(O0/apple-m1/-j10,137s). FINAL coherent set is now pushed and ready:
+8dc73e4c130425bc9a60a8004b9d9ef2e5343a04, then verifier
+b16c6374a03ad9739253c438fcab4998e7044b66 (or equivalent cherry972917b058),
+then receipt/comments/docs33fa14748f4ebd743f13e8c19febe0ce4630b37c.
+Apply after CTR; preserve weighted Logloss/CTR overlap, regenerate docs on the
+integrated tree. No duplicate native compilation merely for comment/docs merges.
 Evidence: ~/mojolearn-evidence/gbdt-cpu-ranking-compile-20261028/.
 Verifier followupb16c6374a03ad9739253c438fcab4998e7044b66 is pushed with6static
 checks; native source unchanged. Static census572lanes,0unaccounted,1OWED(newQuery).
@@ -462,8 +479,7 @@ Already merged source20ab and earlier: do not redo them.
   Public-entry alias-memoized snapshots are compiling separately; pandas gaps
   still pending. No runtime/GPU qualification.
 HOLD: prep late9608
-until corrected freeze passes; ranking8dc73e4 coherent receipt/annotation delivery despite compile pass;
-Peer3 coherent full closure until
+until corrected freeze passes; Peer3 coherent full closure until
 explicit green handoff; Peer4 new shared public drafts; all live uncommitted
 IVF/Radius/PCS and other unqualified branches. New messages may supersede this
 queue; exact peer brief and receipts take precedence over stale snapshot heads.
@@ -493,12 +509,102 @@ END OF ROOT HANDOFF. Final peer messages received while writing may be appended
 below before the handoff commit; check for an addendum and current git status.
 
 LAST QUEUE UPDATE BEFORE HANDOFF COMMIT
-Peer6 VAR/STL e456212ca7 is GREEN/PUSHED after ARIMA executionf160: full
+Peer6 VAR/STL e456212ca7 was compiled/pushed but is NOW HELD (see final
+addendum): missing entry/lazy-context corrections must accompany it. It follows
+ARIMA executionf160 and initially covered full
 VAR/VARResults and STL/DecomposeResult lifecycle, actual xseq dispatcher70.575s,
 CPU/O0/identical/-j10. Receipt experiments/peer6_var_stl_20261028/HANDOFF.txt
-and public_source_inventory.json. Add it afterf160 in the pending main queue.
+and public_source_inventory.json. Do NOT merge it alone afterf160.
 Croston/Theta/ETS/GARCH direct fit/predict ownership follow-up is reported
 compiled but handoff/push still pending; wait for exact accepted head.
 Peer1 owns next XN descriptor generator/schema/host+device tables and aux
 registrations for appended PCS draw, preserving existing IDs0..81 and existing
 algorithm owners. It is unqualified source work separate from green33a63.
+
+FINAL ADDENDUM — HANDOFF PUSH / LATE HOLDS / INTEGRATION WINDOW
+Root handoff commit780cd217d6 was successfully pushed, including the compiled
+source through20ab53ec02. This addendum is a documentation-only successor.
+Do not merge additional migration source just to make this checkpoint current.
+
+IMPORTANT MAIN MUTATION COORDINATION AFTER THIS FINAL PUSH
+After this addendum push, root will explicitly grant CPU coverage thread
+01a18061-a347-72a3-849f-5197e96ca16f the next serialized main window for its
+coherent compiled CTR+ranking sets ONLY. It has prepared branch
+integration/gbdt-main-ready-20261028 at eb94eed000 from origin/main780cd217,
+with six source/receipt/verifier/docs commits and only obsolete-comment conflict
+resolutions. It will incorporate this final checkpoint before pushing main.
+Root/resumed agents MUST CHECK that thread's completion/window status before
+other main mutations. After its completion notice, root owns the remaining
+provider queue again. CPU peer must not sweep other uncompiled work.
+
+Critical holds discovered after the initial handoff snapshot:
+- Prophet b00f153308 MUST NOT MERGE ALONE. Mixed-depth fallback data such as
+  [[], complex_scalar] could reserve zero capacity and write one scalar. The
+  companion adds exact leaf-depth/product-capacity admission plus lazy-context
+  correction. Its final compile was interrupted by ENOSPC and is retrying.
+- VAR/STL e456212ca7 MUST NOT MERGE ALONE. var_forecast is missing from imported
+  _SEQUENCE_ENTRIES and forecast ops need classical_connect_numpy on their
+  lifecycle context. Corrective companion awaits recovered-space compile.
+- No artifact/result from an ENOSPC-interrupted build counts as a compile pass.
+
+Late green/active source updates (separate from this main checkpoint):
+- SVM targeted state/coef7cacec39bafb8ae8c34b956ca75b5a0382f0b115 is GREEN and
+  remote ls-remote confirmed. Source03464a024afb5e865aafb44ea55c1702dd6be2ee;
+  actual state+svc_kernel_operation+provider+attribute root37.14s CPU/O0-j10.
+  Source guards passed; only local tracking writes failed ENOSPC and recovered.
+  experiments/cluster_density_linalg_20261027/SVM_STATE_COEF.txt. Whole SVM,
+  spectral and expansion-linear lifecycle still incomplete.
+- Peer4 backend4ce6e5c2e7 and numeric profiles82fde80801 are GREEN/PUSHED child
+  commits; focused compiles20.50s and22.276s,j10. Receipts under
+  experiments/peer4_backend_public_20261028 and peer4_numeric_profile_20261028.
+  Parent equivalents fcee3d4bfc+ff81abe394 retain adjacent tokenizer/__init__
+  additions from both. Parent Array final mmap/scalar source still unqualified:
+  its attempt4 hit ENOSPC and no binary/result was produced. Mode work active.
+- Peer2 batch8 at36a66a6885: manifold37.34s,umap_init16.30s,arena_rows24.57s
+  passed on32-core RunPod. Green PRODUCT commits c7694b3277 (timedelta Int64
+  range) and9a0f043190 (UMAP native scalar decode);36a66 compile root may accompany.
+  Receipt commit forthcoming. EXCLUDE prep e8a10 and temporal helper808a23
+  (no caller coverage yet). Normalizer/PCA fit and UMAP categorical/lifecycle
+  still pending. cpu-batch-8 full source/log/binaries retained Mac+R2; pod
+  z57soy9pyz7nhl deleted verified,$0.0628.
+- Peer1 new osk7s6ype0o51m rental is active in the latest report: frozen
+  0a98da2dca17, two actual IVF/Radius/PCS owner roots,32 requested CPUs with
+  actual allocation recorded,60-minute deadman. Controller recovered Mac
+  readiness-write ENOSPC, SSH/on-pod watchdog confirmed, source staging resumed.
+  ~/mojolearn-evidence/peer1-ivf-radius-pcs-20261028/ is the controller record.
+- Peer3 codec root passed at ed35e27cd9 after current-main merge; neural LLVM
+  compile failed ENOSPC, not a source diagnostic. It resumed after recovery.
+  Constructor60594f0c11/tokenizer7d435efeba source complete; parallel snapshot
+  reread correction/final coherent compile still needed. Do not sweep its tip.
+
+Additional exact shared ownership assigned during handoff:
+- Peer6 owns arena_prog_native._metrics_run_fields(fields,mode,context)
+  extraction for metrics; existing Prog wrapper must keep its API. This is
+  distinct from Program lane's parallel-byte trainer scope. Actual metrics
+  owner compile needed; avoid constructing mutable Python _Prog for these calls.
+- Peer2 owns narrow prep_stateless_c/_kind provider/context type/descriptor
+  admission. Do NOT assume shared _state_context ownership connection alone
+  provides this frontdoor validation. Existing numerical entry tables already
+  have identity checks. Call-scoped input metadata must stay captured once.
+- Classical parent owns shared classical_labels.mojo label-kind/sorted/flatten/
+  list protocol repair, plus SVM-local numbers.Real/Integral ABC callback
+  removal. Preserve Peer5's gp_label/classifier-label helpers; source findings
+  have no runtime proof. Dedicated compile and receipt required.
+
+Disk incident and retention:
+Mac reached ENOSPC, causing compiler crashes, controller JSON-write failures
+and Git tracking failures across lanes. Complete failures remain in their
+evidence roots; do not promote old passes to changed failed source.
+Root removed ONLY its clean fully merged/pushed classical-exception-admission
+worktree; branchf0b80 and full source/binary/log archives remain. Thus the old
+worktree path above is historical, not currently present. Peer6 removed ONLY
+its completed clean/pushed CV worktree at4aa; its branch/evidence remain.
+Other owners likewise remove only their own clean/retained duplicates or use
+sparse checkouts. Root observed16GiB free after recovery; that is a momentary
+reading, not a storage guarantee. Do not delete authoritative evidence or other
+agents' worktrees. Inspect space before new local compiles/large checkouts.
+
+Late-message scratch notes also live at:
+~/mojolearn-evidence/provider-migration-resume-20261027/ROOT_HANDOFF_LATE_UPDATES_20261028.txt
+The source/checkpoint/queue above is intentionally frozen at handoff time.
+Read current peer briefs and ownership status on resume for subsequent updates.
