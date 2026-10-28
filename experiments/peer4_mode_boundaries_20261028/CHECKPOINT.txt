@@ -1,0 +1,23 @@
+2026-10-28 peer4 mode boundary assignment
+Branch lane/peer4-mode-boundaries-20261028
+Worktree /Users/andrewhendel/CascadeProjects/mojolearn-peer4-mode
+Base 20ab53ec02ff58a34146568a2105994a2b66605e (parent lane/peer4-public-boundaries-20261028)
+Sparse checkout excludes bench/results. Full initial checkout failed for disk;
+removed only own clean pushed MoE/MLP/xseq worktrees, retaining their git branches
+and complete evidence. Approximately10GiB available after setup.
+
+Scope: _mode.py PublicOutputsMixin.__getattribute__ and ParamsMixin.set_params,
+necessary native owners only. Peer1 owns estimator_checked_mode; leave untouched.
+No product changes or compilation yet. Static trace underway; no runtime imports.
+Known live paths: _native_full_reset_params._install explicitly preserves old
+ParamsMixin.set_params on deferred_host_classes. _native_public_attributes keeps
+old getter for pending property classes. Most concrete classes already replace
+these bodies through import-time native installers. Candidate property gaps:
+ARIMA parameter properties (already one-call TSA wrappers, but getter slot still
+needs native property schema), SkewedChi2Sampler.random_weights_, random projection
+components_, bagging.estimators_; confirm per-class bridge installation before
+editing. Host classes have independent native attribute slots and two custom
+native constructors (KDE/IsolationForest); preserve their contracts when repairing
+set_params. Continue source trace, implement concrete live operations, compile
+selected native owners on CPU with10workers, retain full logs/source/binary and
+push guards. Parent owns integration.
