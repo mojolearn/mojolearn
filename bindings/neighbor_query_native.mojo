@@ -21,6 +21,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.neighbors_knn_native import knn_door
 from bindings.neighbors_ann_native import _ivf_metric, _ann_release
+from bindings.neighbors_ann_query_native import ann_pq_materialize
 from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, _i32_vector, _flag
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.parallel_public_result import parallel_public_result
@@ -127,13 +128,21 @@ def _ivf_materialize(fields: PythonObject, context: PythonObject) raises:
     var cached = py_get(fields, "_resident")
     if cached is None:
         raise Error("RuntimeError: resident IVF index was released before its list data was read")
+    var key = cached[0]
+    var tuple_type = native_loaded_module("builtins").tuple
+    if py_type(key) is not tuple_type or len(key) != 7 or py_type(key[0]) is not tuple_type or len(key[0]) != 5:
+        raise Error("TypeError: resident IVF index requires its native storage key")
     var n = Int(py=fields["n_rows_"])
     var dim = Int(py=fields["n_features_in_"])
     var data = family_array(Python.tuple(n, dim), "<f4", context)
     _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1], classical_address(data), PythonObject(n * dim))
     py_setitem(fields, "list_data_", data)
     _ = py_call(fields.pop, "_device_list_data")
-    py_setitem(fields, "_resident", Python.tuple(_ivf_key(fields, cached[2]), cached[1], cached[2]))
+    # Export changes only the device-data marker. Preserve every other saved
+    # key so a caller's replaced centers/offsets still invalidate this handle.
+    var arrays = Python.tuple(key[0][0], key[0][1], key[0][2], key[0][3], _ivf_key_entry(fields, "list_data_"))
+    var replacement = Python.tuple(arrays, key[1], key[2], key[3], key[4], key[5], key[6])
+    py_setitem(fields, "_resident", Python.tuple(replacement, cached[1], cached[2]))
 
 
 def _ivf_addresses(fields: PythonObject) raises -> PythonObject:
@@ -406,6 +415,8 @@ def neighbor_query_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         if String(kind[0]) == "ivf" and text == "list_data_":
             _admit_state(model, kind, context)
             _ivf_materialize(fields, context)
+        if String(kind[0]) == "ann_pq" and text == "codes_":
+            _ = ann_pq_materialize(model, context)
         if String(kind[0]) == "knn":
             if text == "_resident":
                 return py_get(py_get(fields, "_resident_holder", Python.dict()), "index").steal_data()

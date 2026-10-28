@@ -144,9 +144,7 @@ class _AnnResident:
     def __getstate__(self):
         """No handle crosses a pickle or a deepcopy: it means something only
         in the process and registry that minted it."""
-        state = self.__dict__.copy()
-        state.pop("_resident", None)
-        return state
+        return _FAMILY(self, "family_xn_ann_getstate", (), _FAMILY_CONTEXT)
 
 
 class _AnnSaved:
@@ -363,8 +361,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return "codes_" in d or "_device_codes" in d
 
     def __getstate__(self):
-        self._materialize_device_arrays()
-        return super().__getstate__()
+        return _FAMILY(self, "family_xn_ann_getstate", (), _FAMILY_CONTEXT)
 
     # IVFPQIndex's save is the shared native one: a resident fit's `codes_`,
     # held only on the device, is exported into the file by the binding's
@@ -411,6 +408,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         """
         return _FAMILY(self, "family_xn_ann_pq_fit", (None, X, y), _FAMILY_CONTEXT)
 
+    @_native_ann_method
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
 
@@ -437,34 +435,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             If the index is not fitted, the queries have a different number of
             features, or `filter` has the wrong shape or dtype.
         """
-        if not self._is_built():
-            raise ValueError("mojolearn IVFPQIndex: call fit before search")
-        q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input
-        if dim != self.n_features_in_:
-            raise ValueError(f"mojolearn IVFPQIndex: queries have {dim} features, the index has {self.n_features_in_}")
-        k, n_probes = self._p("n_neighbors"), self._p("n_probes")
-        n, pq_dim = self.n_rows_, self.pq_dim_
-        dist = empty((m * k,), "<f4")
-        idx = empty((m * k,), "<i4")
-        cand = empty((m,), "<i4")
-        native = self._bind()
-        if self._resident_search(native, "IVFPQIndex", filter, q, dist, idx, cand, [m, k, n_probes]):
-            return dist.reshape((m, k)), idx.reshape((m, k))
-        mask = _ann_mask("IVFPQIndex", filter, n)  # held: the binding reads it after this line
-        native.x_ann_ivf_pq_search(
-            # centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n
-            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-             addr_ro(self.codebooks_.reshape((pq_dim * (1 << self.pq_bits_) * self.pq_len_,)), name="codebooks_"),
-             addr_ro(self.codes_.reshape((n * pq_dim,)), name="codes_"), addr_ro(q, name="queries"),
-             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_"),
-             addr_ro(mask, name="filter")],
-            # n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes
-            [n, dim, self.n_lists_, pq_dim, self.pq_bits_, m, k, n_probes],
-        )
-        self.n_candidates_ = cand
-        return dist.reshape((m, k)), idx.reshape((m, k))
+        return _FAMILY(self, "family_xn_ann_pq_search", (None, queries, filter), _FAMILY_CONTEXT)
 
 
 # IDENTICAL by construction (x_ann/tsne_core.mojo): exact k-NN affinities
@@ -750,6 +721,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         """
         return _FAMILY(self, "family_xn_ann_cagra_fit", (None, X, y), _FAMILY_CONTEXT)
 
+    @_native_ann_method
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
 
@@ -780,11 +752,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             If the index is not fitted, the queries have a different number of
             features, or `filter` has the wrong shape or dtype.
         """
-        if not hasattr(self, "graph_"):
-            raise ValueError("mojolearn CagraIndex: call fit before search")
-        if filter is not None:
-            return self._search_filtered(queries, filter)
-        return self._search_k(queries, self._p("n_neighbors"))
+        return _FAMILY(self, "family_xn_ann_cagra_search", (None, queries, filter), _FAMILY_CONTEXT)
 
     def _search_k(self, queries, k):
         """The traversal, returning the first `k` itopk entries."""
@@ -975,6 +943,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         """
         return _FAMILY(self, "family_xn_ann_sq_fit", (None, X, y), _FAMILY_CONTEXT)
 
+    @_native_ann_method
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
 
@@ -1001,33 +970,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             If the index is not fitted, the queries have a different number of
             features, or `filter` has the wrong shape or dtype.
         """
-        if not hasattr(self, "codes_"):
-            raise ValueError("mojolearn IVFSQIndex: call fit before search")
-        q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input
-        if dim != self.n_features_in_:
-            raise ValueError(f"mojolearn IVFSQIndex: queries have {dim} features, the index has {self.n_features_in_}")
-        k, n = self._p("n_neighbors"), self.n_rows_
-        dist = empty((m * k,), "<f4")
-        idx = empty((m * k,), "<i4")
-        cand = empty((m,), "<i4")
-        native = self._bind()
-        if self._resident_search(native, "IVFSQIndex", filter, q, dist, idx, cand, [m, k, self._p("n_probes")]):
-            return dist.reshape((m, k)), idx.reshape((m, k))
-        mask = _ann_mask("IVFSQIndex", filter, n)  # held: the binding reads it after this line
-        native.x_ann_ivf_sq_search(
-            # centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n
-            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-             addr_ro(self.sq_vmin_, name="sq_vmin_"), addr_ro(self.sq_delta_, name="sq_delta_"),
-             addr_ro(self.codes_.reshape((n * dim,)), name="codes_"),
-             addr_ro(mask, name="filter"), addr_ro(q, name="queries"),
-             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")],
-            # n, dim, n_lists, m, k, n_probes
-            [n, dim, self.n_lists_, m, k, self._p("n_probes")],
-        )
-        self.n_candidates_ = cand
-        return dist.reshape((m, k)), idx.reshape((m, k))
+        return _FAMILY(self, "family_xn_ann_sq_search", (None, queries, filter), _FAMILY_CONTEXT)
 
 
 # IDENTICAL by construction (x_ann/ivf_rabitq_core.mojo).
@@ -1153,6 +1096,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         """
         return _FAMILY(self, "family_xn_ann_rabitq_fit", (None, X, y), _FAMILY_CONTEXT)
 
+    @_native_ann_method
     def search(self, queries, filter=None):
         """Find the approximate nearest indexed rows of each query.
 
@@ -1179,34 +1123,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             If the index is not fitted, the queries have a different number of
             features, or `filter` has the wrong shape or dtype.
         """
-        if not hasattr(self, "codes_"):
-            raise ValueError("mojolearn IVFRaBitQIndex: call fit before search")
-        q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input
-        if dim != self.n_features_in_:
-            raise ValueError(f"mojolearn IVFRaBitQIndex: queries have {dim} features, the index has {self.n_features_in_}")
-        k, n = self._p("n_neighbors"), self.n_rows_
-        dist = empty((m * k,), "<f4")
-        idx = empty((m * k,), "<i4")
-        cand = empty((m,), "<i4")
-        words = int(self.codes_.shape[1])
-        native = self._bind()
-        if self._resident_search(native, "IVFRaBitQIndex", filter, q, dist, idx, cand, [m, k, self._p("n_probes")]):
-            return dist.reshape((m, k)), idx.reshape((m, k))
-        mask = _ann_mask("IVFRaBitQIndex", filter, n)  # held: the binding reads it after this line
-        native.x_ann_ivf_rabitq_search(
-            # centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n
-            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-             addr_ro(self.codes_.reshape((n * words,)), name="codes_"), addr_ro(self.norms_, name="norms_"),
-             addr_ro(self.ip_factors_, name="ip_factors_"),
-             addr_ro(mask, name="filter"), addr_ro(q, name="queries"),
-             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")],
-            # n, dim, n_lists, seed, m, k, n_probes
-            [n, dim, self.n_lists_, self.seed_, m, k, self._p("n_probes")],
-        )
-        self.n_candidates_ = cand
-        return dist.reshape((m, k)), idx.reshape((m, k))
+        return _FAMILY(self, "family_xn_ann_rabitq_search", (None, queries, filter), _FAMILY_CONTEXT)
 
 
 # metric='euclidean' is cuVS L2SqrtExpanded: the selection runs on the squared
@@ -1337,3 +1254,11 @@ _native_archive_bridge.lifetime(_AnnResident, "x_ann_index_release")
 
 # Import-time connection; native operations select the live configured binding.
 _native_family_bridge.connect_bindings("_mojolearn_x_ann")
+
+# Import-time native attribute ownership replaces PQ's lazy Python __getattr__.
+# The native slot exports device codes on demand and publishes the completed
+# Array/ndarray under the same public attribute, retaining the device owner.
+from ._native_neighbor_queries import connect as _connect_ann_attributes
+del IVFPQIndex.__getattr__
+_ANN_ATTRIBUTE_CALL, _ANN_ATTRIBUTE_CONTEXT = _connect_ann_attributes(
+    {IVFPQIndex: "ann_pq"}, _FAMILY_CONTEXT, _ARCHIVE_CONTEXT, ())

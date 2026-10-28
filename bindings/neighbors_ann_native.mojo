@@ -8,7 +8,7 @@
 # or vendor identity lane is introduced by these boundary repairs.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
 from bindings.classical_arrays import classical_address, classical_kind, classical_is_array
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
@@ -23,6 +23,7 @@ from bindings.family_common import (
 )
 from core.neighbors_ann_impl import ann_candidates_i32
 from bindings.parallel_public_result import parallel_public_result
+from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize
 from bindings.mode_metadata_native import _fields
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
 from providers.python.neighbors_public_lifecycle_pyapi import (
@@ -99,16 +100,20 @@ def _ann_as_array(x: PythonObject, context: PythonObject) raises -> PythonObject
     the caller's buffer (`Array.from_buffer`)."""
     if classical_is_array(x, context):
         return x
-    var b = native_loaded_module("builtins")
-    var pin = py_call(b.memoryview, x)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
+    return _ann_buffer_array(x, Int(py=x.shape[0]), Int(py=x.shape[1]), Int(py=classical_address(x)), context)
+
+
+def _ann_buffer_array(x: PythonObject, rows: Int, cols: Int, address: Int,
+                      context: PythonObject) raises -> PythonObject:
+    # The native buffer export pins storage only; dtype, shape and address
+    # come from the operation's captured descriptor rather than Python fields.
+    var pin = native_buffer_view(x)
     var array = native_storage_allocate(context["array_class"])
     py_setattr(array, "_store", x)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", pin)
     py_setattr(array, "_mv", py_call(py_call(pin.cast, "B").cast, "f"))
-    py_setattr(array, "_addr", classical_address(x))
+    py_setattr(array, "_addr", PythonObject(address))
     py_setattr(array, "_readonly", pin.readonly)
     py_setattr(array, "shape", Python.tuple(rows, cols))
     py_setattr(array, "dtype", PythonObject("<f4"))
@@ -540,7 +545,9 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                     Python.list(PythonObject(n), PythonObject(d), PythonObject(kdeg), PythonObject(deg)))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = graph  # keep the Python object alive through the native call above
-    py_setitem(fields, "dataset_", ann_keep_array(args[1], x, context))
+    var dataset = x_snapshot.keep if x_snapshot.is_array else _ann_buffer_array(
+        x_snapshot.keep, n, d, x_snapshot.source.addr, context)
+    py_setitem(fields, "dataset_", dataset)
     py_setitem(fields, "graph_", _ann_view(graph, Python.tuple(n, deg), context))
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "n_rows_", PythonObject(n))
@@ -549,6 +556,19 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 # ---------------------------------------------------------------- refine
+
+
+def _ann_bool_sequence(value: PythonObject) raises -> Bool:
+    var b = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if cls is b.bool:
+        return True
+    if cls is not b.list and cls is not b.tuple:
+        return False
+    for i in range(len(value)):  # driver-loop: exact native sequence boolean admission
+        if not _ann_bool_sequence(value[i]):
+            return False
+    return True
 
 
 def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -581,7 +601,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("mojolearn refine: candidates must be an integer array")
     # Without NumPy the native sequence owner represents a bool sequence as
     # int8. Retain asarray's boolean refusal while accepting real int8 buffers.
-    if (py_type(args[3]) is b.list or py_type(args[3]) is b.tuple) and c.source.itemsize == 1:
+    if (py_type(args[3]) is b.list or py_type(args[3]) is b.tuple) and _ann_bool_sequence(args[3]):
         raise Error("mojolearn refine: candidates must be an integer array")
     var k_o = _ann_int("refine", "k", args[4])
     var k = Int(py=k_o)
@@ -625,12 +645,28 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
     # NumPy's connected types first, so an ndarray input is read as one
     # buffer whichever door ran first in the process.
     classical_connect_numpy(context)
+    if operation == "family_xn_ann_getstate":
+        var fields = _fields(model)
+        if py_contains(fields, "_device_codes"):
+            _ = ann_pq_materialize(model, context)
+        var state = py_call(fields.copy)
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+        _ = py_call(state.pop, "_device_codes", PythonObject(None))
+        return state
     if model is not None:
         classical_check_layout(model, context)
         var name = String("_mojolearn_ivf") if operation == "family_xn_ann_ivf_fit" else String("_mojolearn_x_ann")
         args = estimator_arguments(model, name, args, context)
     if operation == "family_xn_ann_refine":
         return _refine(args, context)
+    if operation == "family_xn_ann_pq_search":
+        return neighbors_ann_search(model, 0, args, context)
+    if operation == "family_xn_ann_sq_search":
+        return neighbors_ann_search(model, 1, args, context)
+    if operation == "family_xn_ann_rabitq_search":
+        return neighbors_ann_search(model, 2, args, context)
+    if operation == "family_xn_ann_cagra_search":
+        return neighbors_ann_search(model, 3, args, context)
     if not operation.endswith("_fit"):
         raise Error("RuntimeError: unknown neighbors operation " + operation)
     # The fit envelope owns the former _mode fitted/input/output decorators.
