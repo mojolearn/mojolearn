@@ -19,6 +19,7 @@ from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
 np = require_numpy('_x_sequence_mlp')
 
 from . import _native_xseq_bridge
+from ._native_full_reset_params import _INIT_ENTRY as _FULL_RESET_INIT, _CONTEXT as _FULL_RESET_CONTEXT
 
 # Package-import connection: fit, predict and predict_proba are ONE call each
 # into the compiled owner (bindings/xseq_neural_native.mojo): input casts,
@@ -42,30 +43,10 @@ class _BaseMLP(ParamsMixin):
                  momentum=0.9, nesterovs_momentum=True, early_stopping=False, validation_fraction=0.1,
                  beta_1=0.9, beta_2=0.999, epsilon=1e-8, n_iter_no_change=10, max_fun=15000,
                  numeric_mode=None):
-        self.hidden_layer_sizes = hidden_layer_sizes
-        self.activation = activation
-        self.solver = solver
-        self.alpha = alpha
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
-        self.learning_rate_init = learning_rate_init
-        self.power_t = power_t
-        self.max_iter = max_iter
-        self.shuffle = shuffle
-        self.random_state = random_state
-        self.tol = tol
-        self.verbose = verbose
-        self.warm_start = warm_start
-        self.momentum = momentum
-        self.nesterovs_momentum = nesterovs_momentum
-        self.early_stopping = early_stopping
-        self.validation_fraction = validation_fraction
-        self.beta_1 = beta_1
-        self.beta_2 = beta_2
-        self.epsilon = epsilon
-        self.n_iter_no_change = n_iter_no_change
-        self.max_fun = max_fun
-        self.numeric_mode = numeric_mode
+        # One native call: the full-reset owner replays this constructor's field
+        # writes (bindings/full_reset_constructor_native.mojo). connect_module
+        # installs the same entry as each concrete class's __init__.
+        return _FULL_RESET_INIT(self, (), {"hidden_layer_sizes": hidden_layer_sizes, "activation": activation, "solver": solver, "alpha": alpha, "batch_size": batch_size, "learning_rate": learning_rate, "learning_rate_init": learning_rate_init, "power_t": power_t, "max_iter": max_iter, "shuffle": shuffle, "random_state": random_state, "tol": tol, "verbose": verbose, "warm_start": warm_start, "momentum": momentum, "nesterovs_momentum": nesterovs_momentum, "early_stopping": early_stopping, "validation_fraction": validation_fraction, "beta_1": beta_1, "beta_2": beta_2, "epsilon": epsilon, "n_iter_no_change": n_iter_no_change, "max_fun": max_fun, "numeric_mode": numeric_mode}, _FULL_RESET_CONTEXT, type(self))
 
 
 class MLPRegressor(RegressorScoreMixin, _BaseMLP):

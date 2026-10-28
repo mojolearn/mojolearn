@@ -32,7 +32,8 @@ from bindings.trees_public_inputs import (
     trees_f32, trees_f32_view, trees_view, trees_check_rank, trees_forest_layout, trees_all_finite,
     trees_check_sample_weight, trees_call, trees_encode_labels,
 )
-from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr
+from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.trees_boost_constructor_native import tree_constructor_storage
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 
 comptime _UNSET = -1.0
@@ -1174,6 +1175,103 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     )
     for i in range(len(stored)):  # driver-loop: over the constructor's stored fields
         py_setitem(fields, stored[i][0], stored[i][1])
+    return PythonObject(None)
+
+
+# ------------------------------------------- OrderedRMSE / FeatureFreq constructors
+
+
+def _gbdt_base_args(model: PythonObject, overrides: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The argument tuple a GradientBoosting subclass's constructor hands
+    `GradientBoosting.__init__`: the connected base's defaults, with
+    `overrides` for the parameters the subclass passes."""
+    var b = _b()
+    var classes = context["trees_classes"]
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    var defaults = PythonObject(None)
+    for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
+        if defaults is None:
+            var kind = py_get(classes, ancestry[i])
+            if kind is not None and String(kind) == "gbdt":
+                defaults = context["trees_defaults"][ancestry[i]]
+    if defaults is None:
+        raise Error("TypeError: native GBDT constructors require the connected GradientBoosting base")
+    var names = _tables(context)["init_names"]
+    var args = Python.list()
+    for i in range(len(names)):  # driver-loop: over the constructor parameter names
+        _ = py_call(args.append, py_get(overrides, names[i], defaults[names[i]]))
+    return py_call(b.tuple, args)
+
+
+def _gbdt_subclass_storage(model: PythonObject, extra: PythonObject, context: PythonObject) raises:
+    """Storage admission before the subclass constructor writes any field."""
+    var names = py_call(_b().list, _tables(context)["init_names"])
+    _ = py_call(names.extend, extra)
+    tree_constructor_storage(model, names)
+
+
+def _gbdt_default_mode(model: PythonObject) raises:
+    """What `GradientBoosting.__init__`'s numeric-mode wrapper does after the
+    constructor: `numeric_mode = None` unless the model already has one."""
+    var missing = Python.tuple()
+    var fields = py_fields(model)
+    if not py_contains(fields, "numeric_mode") and _resolved(py_type(model), "numeric_mode", missing) is missing:
+        py_setitem(fields, "numeric_mode", PythonObject(None))
+
+
+def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`OrderedRMSE.__init__(n_estimators, max_depth, learning_rate,
+    l2_leaf_reg, border_count)`: the ordered settings' checks, then the
+    GradientBoosting constructor with loss RMSE, no boost-from-average and
+    nan_mode Forbidden."""
+    if py_type(args) is not _b().tuple or len(args) != 5:
+        raise Error("TypeError: the OrderedRMSE constructor takes its five parameters")
+    ordered_option_values(Python.tuple(args[0], args[1], args[4], args[2], args[3]), context)
+    _gbdt_subclass_storage(model, Python.tuple("numeric_mode"), context)
+    var overrides = Python.dict()
+    py_setitem(overrides, "loss", PythonObject("RMSE"))
+    py_setitem(overrides, "n_estimators", args[0])
+    py_setitem(overrides, "max_depth", args[1])
+    py_setitem(overrides, "learning_rate", args[2])
+    py_setitem(overrides, "l2_leaf_reg", args[3])
+    py_setitem(overrides, "border_count", args[4])
+    py_setitem(overrides, "boost_from_average", PythonObject(False))
+    py_setitem(overrides, "nan_mode", PythonObject("Forbidden"))
+    _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
+    _gbdt_default_mode(model)
+    return PythonObject(None)
+
+
+def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`ExperimentalTwoLevelFeatureFreq.__init__(sources, learning_rate,
+    l2_leaf_reg, random_state)`: the GradientBoosting constructor (one
+    depth-two RMSE tree), then the sources: at least two distinct integers."""
+    var b = _b()
+    if py_type(args) is not b.tuple or len(args) != 4:
+        raise Error("TypeError: the FeatureFreq constructor takes its four parameters")
+    _gbdt_subclass_storage(model, Python.tuple("numeric_mode", "sources"), context)
+    var overrides = Python.dict()
+    py_setitem(overrides, "loss", PythonObject("RMSE"))
+    py_setitem(overrides, "n_estimators", PythonObject(1))
+    py_setitem(overrides, "max_depth", PythonObject(2))
+    py_setitem(overrides, "learning_rate", args[1])
+    py_setitem(overrides, "l2_leaf_reg", args[2])
+    py_setitem(overrides, "random_state", args[3])
+    _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
+    _gbdt_default_mode(model)
+    var parsed = Python.list()
+    try:
+        var items = py_call_typed(b.tuple, args[0])
+        for i in range(len(items)):  # driver-loop: over the sources argument's column indices
+            _ = py_call(parsed.append, py_call_typed(b.int, items[i]))
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError:") or message.startswith("ValueError:"):
+            raise Error("mojolearn: sources must be integer indices")
+        raise error^
+    if len(parsed) < 2 or len(py_call(b.set, parsed)) != len(parsed):
+        raise Error("mojolearn: sources need at least two unique indices")
+    py_setitem(py_fields(model), "sources", py_call(b.tuple, parsed))
     return PythonObject(None)
 
 

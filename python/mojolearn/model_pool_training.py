@@ -14,16 +14,17 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
     """
 
     def __init__(self, state, *, devices=(0,), logical_shards=1):
-        # One native admission for every byte-LM schedule; "model_pool"
-        # selects the layer-owner session (bindings/parallel_byte_native.mojo).
-        return _native_parallel_byte("init", (self, state, devices, logical_shards, False, "model_pool"))
+        # One native admission for every byte-LM schedule; this exact class,
+        # admitted at import, selects the layer-owner session
+        # (bindings/parallel_byte_native.mojo).
+        return _native_parallel_byte("init", (self, state, devices, logical_shards, False))
 
     def _open(self):
         return _native_parallel_byte("open", (self,))
 
     def state_dict(self, *, rank=0):
         """Export the complete canonical state; there are no model replicas."""
-        return super().state_dict(rank=rank)
+        return _native_parallel_byte("state", (self, rank))
 
     def model_ownership(self):
         """Actual canonical parameter/state allocations for each owned chunk.
@@ -31,11 +32,15 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
         Counts exclude copied kernel weights, activations and workspaces;
         they are not a total GPU-memory estimate.
         """
-        return _native_parallel_byte("ownership", (self,))
+        return _native_parallel_byte("model_ownership", (self,))
 
     def optimizer_ownership(self):
-        return self.model_ownership()
+        """The same native records as model_ownership()."""
+        return _native_parallel_byte("model_ownership", (self,))
 
     @classmethod
     def from_checkpoint(cls, checkpoint, *, devices=(0,)):
-        return _native_parallel_byte("from_checkpoint", (cls, checkpoint, devices, False, "model_pool"))
+        return _native_parallel_byte("from_checkpoint", (cls, checkpoint, devices, False))
+
+
+_native_parallel_byte("admit_class", (PooledByteLanguageModelTrainer, "model_pool"))  # glue: import-time class admission

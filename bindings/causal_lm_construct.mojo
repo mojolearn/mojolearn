@@ -5,6 +5,7 @@ Module connection metadata is supplied once by package import. Runtime route,
 profile, layout, shape admission, packing and layer construction live here.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -14,11 +15,15 @@ from std.math import isfinite
 from std.memory import memcpy, bitcast
 from std.os import getenv
 from providers.python.operation_lock_pyapi import operation_lock_create
-from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints
-from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
-from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
-from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding
+from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_array_snapshot, generation_address, py_ints
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard
+from bindings.causal_operation_owner import _causal_namespace, causal_snapshot_fields
+from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_checkpoint_names_snapshot, _model_layer_weights, model_plain, model_record_fields
+from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
 from bindings.native_json import native_path, native_path_exists
+from bindings.mode_metadata_native import _fields, _class_fields
+from bindings.neural_block_admission import neural_block_f32, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
+from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from core.hostptr import f32_ptr
@@ -26,6 +31,7 @@ from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm
 
 
 def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
+    _causal_array_guard()
     if len(value.shape) != len(shape):
         raise Error("CausalLM: " + name + " has the wrong rank")
     for i in range(len(shape)):  # driver-loop: over tensor shape metadata
@@ -46,91 +52,109 @@ def _model_dtype_refusal(name: String, code: String) -> String:
 
 
 def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    if py_type(value) is context["array_class"]:
-        if String(value.dtype) != "<f4":
-            raise Error(_model_dtype_refusal(name, String(value.dtype)))
-        if String(value.order) == "C":
-            return value
-        var dims = List[Int]()
-        var strides = List[Int]()
-        for i in range(len(value.shape)):  # driver-loop: over tensor shape metadata
-            dims.append(Int(py=value.shape[i]))
-            strides.append(Int(py=value.strides[i]))
-        var result = generation_array(dims)
-        var source = f32_ptr(Int(py=value._addr))
-        var target = f32_ptr(Int(py=result._addr))
-        _ = result  # keep the Python object alive through the native call above
-        causal_lm_gather_f32(source, target, Int(py=value.size), dims, strides)
-        _ = result  # keep the Python object alive through the native call above
-        return result
-    var view = py_call(bi.memoryview, value)
-    var format = String(view.format)
-    if format != "f" and format != "<f" and format != "=f" and format != "@f":
-        raise Error(_model_dtype_refusal(name, format))
-    return checkpoint_array(view.tobytes(), view.shape, "f", context["array_class"])
+    # Shared native admission captures the original Array slots/export once,
+    # retains their owner and preserves C-view versus F/foreign-copy behavior.
+    return neural_block_f32(value, name, context)
 
 
 def _model_native_buffer(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
     if py_type(value) is context["array_class"]:
+        var captured = neural_array_snapshot(value, context)
         var dtype = "<u2" if code == "H" else ("<i1" if code == "b" else "<i4")
-        if String(value.dtype) != dtype or String(value.order) != "C":
+        if String(captured.dtype) != dtype or String(captured.order) != "C":
             raise Error("TypeError: CausalLM packed storage requires matching dtype and C layout")
-        return value
-    var view = py_call(bi.memoryview, value)
-    if String(view.format) != code:
+        return captured
+    admit_native_buffer_exporter(value)
+    var pin = AdmittedBorrowedBuffer(value)
+    if pin.format != code:
         raise Error("TypeError: CausalLM packed storage has the wrong dtype")
-    return checkpoint_array(view.tobytes(), view.shape, code, context["array_class"])
+    var layout = pin.layout.value().copy()
+    var size = 2 if code == "H" else (1 if code == "b" else 4)
+    if layout.itemsize != size:
+        raise Error("TypeError: CausalLM packed storage has the wrong item size")
+    _ = neural_array_slots(context)
+    var bi = native_loaded_module("builtins")
+    var result = checkpoint_array(py_call(bi.bytes, layout.count * size),
+        py_ints(layout.shape), code, context["array_class"])
+    layout.copy_to(Int(py=result._addr))
+    _ = pin^
+    return result
+
+
+def _model_packed_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var cls = py_type(value)
+    if cls is not context["bf16_class"] and cls is not context["int8_class"]:
+        raise Error("TypeError: packed weights require their exact connected class")
+    var names = Python.tuple("shape", "bits", "codes", "exponents")
+    var fields = model_record_fields(value, cls, names)
+    var shape = fields["shape"]
+    var bi = native_loaded_module("builtins")
+    if (py_type(shape) is not bi.tuple and py_type(shape) is not bi.list) or len(shape) != 2:
+        raise Error("TypeError: packed projection shape requires two native dimensions")
+    var dims = List[Int]()
+    var count = 1
+    for i in range(2):  # small-loop(packed projection metadata captured before storage)
+        if py_type(shape[i]) is not bi.int:
+            raise Error("TypeError: packed projection dimensions require native integers")
+        var n = Int(py=shape[i])
+        if n < 0 or (n != 0 and count > 2147483647 // n):
+            raise Error("CausalLM: packed projection dimensions exceed native indexing")
+        count *= n
+        dims.append(n)
+    var result = py_call(bi.dict, fields)
+    py_setitem(result, "shape", py_call(bi.tuple, py_ints(dims)))
+    return result
 
 
 def _model_pack(value: PythonObject, format: String, linalg: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    _causal_array_guard()
+    var bi = native_loaded_module("builtins")
     if format == "float32":
         return value
     if len(value.shape) != 2:
         raise Error("CausalLM: packed projection weights require two dimensions")
     var rows = Int(py=value.shape[0])
     var cols = Int(py=value.shape[1])
-    var packed = py_call(bi.object.__new__, context["bf16_class"] if format == "bfloat16" else context["int8_class"])
-    py_setattr(packed, "shape", value.shape)
+    var cls = context["bf16_class"] if format == "bfloat16" else context["int8_class"]
+    var packed = py_call(bi.object.__new__, cls)
+    var fields = model_record_fields(packed, cls, Python.tuple("shape", "bits", "codes", "exponents"))
+    py_setitem(fields, "shape", value.shape)
     if format == "bfloat16":
         var bits = checkpoint_array(py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
         _ = py_call(_native_function(linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
         _ = bits  # keep the Python object alive through the native call above
-        py_setattr(packed, "bits", bits)
+        py_setitem(fields, "bits", bits)
     else:
         var codes = generation_array([rows, cols], "b")
         var exponents = generation_array([rows], "i")
         _ = py_call(_native_function(linalg, "quantize_int8"), codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
         _ = exponents  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
-        py_setattr(packed, "codes", codes)
-        py_setattr(packed, "exponents", exponents)
+        py_setitem(fields, "codes", codes)
+        py_setitem(fields, "exponents", exponents)
     return packed
 
 
 def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObject, name: String = "weight") raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var bf16 = py_type(value) is context["bf16_class"]
     var int8 = py_type(value) is context["int8_class"]
     if not bf16 and not int8:
         return _model_f32(value, name, context)
-    if len(value.shape) != 2:
-        raise Error("CausalLM: packed projection weights require two dimensions")
-    var rows = Int(py=value.shape[0])
-    var cols = Int(py=value.shape[1])
+    var fields = _model_packed_fields(value, context)
+    var rows = Int(py=fields["shape"][0])
+    var cols = Int(py=fields["shape"][1])
     var out = generation_array([rows, cols])
     if bf16:
-        var bits = _model_native_buffer(value.bits, "H", context)
+        var bits = _model_native_buffer(fields["bits"], "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
         _ = py_call(_native_function(linalg, "from_bf16"), out._addr, bits._addr, py_ints([rows * cols]))
         _ = bits  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
         _ = bits^  # read by address above
     else:
-        var codes = _model_native_buffer(value.codes, "b", context)
-        var exponents = _model_native_buffer(value.exponents, "i", context)
+        var codes = _model_native_buffer(fields["codes"], "b", context)
+        var exponents = _model_native_buffer(fields["exponents"], "i", context)
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
         _ = py_call(_native_function(linalg, "dequantize_int8"), out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
@@ -143,6 +167,7 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
 
 
 def _model_quantize15(value: PythonObject, linalg: PythonObject) raises -> PythonObject:
+    _causal_array_guard()
     var rows = Int(py=value.shape[0])
     var cols = Int(py=value.shape[1])
     var hi = generation_array([rows, cols], "b")
@@ -152,15 +177,15 @@ def _model_quantize15(value: PythonObject, linalg: PythonObject) raises -> Pytho
     _ = exponents  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
-    var out = Python.import_module("builtins").list()
+    var out = native_loaded_module("builtins").list()
     _ = py_call(out.append, hi)
     _ = py_call(out.append, lo)
     _ = py_call(out.append, exponents)
-    return py_call(Python.import_module("builtins").tuple, out)
+    return py_call(native_loaded_module("builtins").tuple, out)
 
 
 def _model_profile(requested: PythonObject, family: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var profiles = context["profiles"]
     var defaults = context["profile_defaults"]
     var selected = requested
@@ -197,7 +222,7 @@ def _model_profile_named(requested: PythonObject, context: PythonObject) raises:
     """The family-free half of `_model_profile` for a NAMED profile: an
     unknown name or one unavailable for inference is refused before any
     path is read."""
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(requested) is not bi.str:
         raise Error("TypeError: numeric_profile must be a profile name")
     var selected = requested.strip()
@@ -210,6 +235,8 @@ def _model_profile_named(requested: PythonObject, context: PythonObject) raises:
 
 
 def _model_route(device: PythonObject, context: PythonObject) raises -> PythonObject:
+    if py_type(device) is not native_loaded_module("builtins").str:
+        raise Error("TypeError: CausalLM device requires an ordinary route name")
     var route = String(device)
     if route == "auto":
         route = "cpu" if context["selected_vendor"] is None or String(context["selected_vendor"]) == "cpu" else "gpu"
@@ -219,13 +246,18 @@ def _model_route(device: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def _model_bindings(route: PythonObject, kind: String, context: PythonObject, requested_mode: PythonObject) raises -> PythonObject:
-    var mode = PythonObject("identical") if String(route) == "cpu" else (context["backend"]._DEFAULT_MODE if requested_mode is None else requested_mode.strip().lower())
+    var bi = native_loaded_module("builtins")
+    if requested_mode is not None and py_type(requested_mode) is not bi.str:
+        raise Error("TypeError: CausalLM numeric mode requires an ordinary string")
+    var mode = PythonObject("identical") if String(route) == "cpu" else (_native_entry_fields(context["backend"])["_DEFAULT_MODE"] if requested_mode is None else requested_mode.strip().lower())
+    if py_type(mode) is not bi.str:
+        raise Error("TypeError: CausalLM connected numeric mode requires an ordinary string")
     var key = route + PythonObject(":") + mode
     var entries = py_get(context["bindings"], key)
     if entries is None:
         raise Error("CausalLM: native binding connection is unavailable for " + String(key))
     var block = entries[kind]
-    if py_type(block) is Python.import_module("builtins").str:
+    if py_type(block) is native_loaded_module("builtins").str:
         raise Error("CausalLM: " + String(block))
     var prefix = ("transformer" if kind == "transformer" else "mamba") if String(route) == "gpu" else "neural_host"
     var vendor = String(_native_function(block, prefix + "_vendor")())
@@ -237,7 +269,7 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject, re
     if mode_code != (1 if String(mode) == "identical" else 0):
         raise Error("CausalLM: binding numeric mode differs from requested mode")
     var arithmetic = entries["linalg"]
-    if py_type(arithmetic) is not Python.import_module("builtins").str:
+    if py_type(arithmetic) is not native_loaded_module("builtins").str:
         if String(_native_function(arithmetic, "linalg_vendor")()) != vendor or Int(py=_native_function(arithmetic, "linalg_numeric_mode")()) != mode_code:
             raise Error("CausalLM: packed weight binding vendor or mode differs from model")
     return entries
@@ -247,8 +279,11 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject) ra
     return _model_bindings(route, kind, context, PythonObject(None))
 
 
-def _model_bits(value: PythonObject, name: String) raises -> Int:
-    var number = Float64(py=py_call(Python.import_module("builtins").float, value))
+def _model_bits(value: PythonObject, name: String, context: PythonObject) raises -> Int:
+    var bi = native_loaded_module("builtins")
+    if py_type(value) is not bi.str and not neural_native_scalar(value, context):
+        raise Error("TypeError: CausalLM " + name + " requires an ordinary numeric scalar")
+    var number = Float64(py=py_call(bi.float, value))
     if not isfinite(number) or number <= 0:
         raise Error("CausalLM: " + name + " must be finite and positive")
     var rounded = Float32(number)
@@ -257,14 +292,74 @@ def _model_bits(value: PythonObject, name: String) raises -> Int:
     return Int(bitcast[DType.uint32](rounded))
 
 
-def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObject, route: PythonObject, bindings: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    var kind = String(plan.kind)
+def _model_block_plan(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Standalone blocks supply a private namespace; whole models pass their
+    # operation snapshot dictionary. Both routes avoid plan attribute hooks.
+    var bi = native_loaded_module("builtins")
+    var names = Python.tuple("kind", "d_model", "n_heads", "block_options", "block_kwargs")
+    var source = PythonObject(None)
+    if py_type(value) is bi.dict:
+        neural_string_keys(value)
+        source = value
+    elif py_type(value) is native_loaded_module("types").SimpleNamespace:
+        source = _native_entry_fields(value)
+    else:
+        source = model_record_fields(value, context["config_context"]["plan_class"], names)
+    var result = Python.dict()
+    for i in range(len(names)):  # small-loop(only the plan fields consumed by one block)
+        if py_contains(source, names[i]):
+            neural_plain_value(source[names[i]], 0, context)
+            py_setitem(result, names[i], neural_metadata_snapshot(source[names[i]]))
+    return result
+
+
+def _model_options_snapshot(options: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    if (py_type(options) is not bi.tuple and py_type(options) is not bi.list) or len(options) != 4:
+        raise Error("TypeError: CausalLM constructor requires its four native options")
+    neural_plain_value(options, 0, context)
+    var captured = neural_metadata_snapshot(options)
+    if py_type(captured[0]) is not bi.str or py_type(captured[2]) is not bi.str:
+        raise Error("TypeError: CausalLM weight format and device require ordinary strings")
+    if captured[1] is not None and py_type(captured[1]) is not bi.str and not neural_native_scalar(captured[1], context):
+        raise Error("TypeError: CausalLM maximum positions require a native scalar")
+    return captured
+
+
+def _model_weights_snapshot(weights: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Capture all caller tensor/exporter metadata before constructor packing or
+    # finite-value kernels can release the GIL. Prepared snapshots retain owners.
+    neural_string_keys(weights)
+    var bi = native_loaded_module("builtins")
+    var result = Python.dict()
+    for name in ["embed", "norm", "head"]:  # small-loop(top-level model weights)
+        if py_contains(weights, name):
+            py_setitem(result, name, _model_f32(weights[name], name, context))
+    var layers = weights["layers"]
+    if py_type(layers) is not bi.list and py_type(layers) is not bi.tuple:
+        raise Error("TypeError: CausalLM layers require an ordinary weight-map sequence")
+    var copied = Python.list()
+    for i in range(len(layers)):  # driver-loop: capture each complete layer weight map
+        _ = py_call(copied.append, neural_model_weights(layers[i], context))
+    py_setitem(result, "layers", copied)
+    var unused = py_get(weights, "unused", Python.tuple())
+    neural_plain_value(unused, 0, context)
+    if py_type(unused) is not bi.list and py_type(unused) is not bi.tuple:
+        raise Error("TypeError: CausalLM unused tensor names require an ordinary sequence")
+    py_setitem(result, "unused", neural_metadata_snapshot(unused))
+    return result
+
+
+def _model_block(weights: PythonObject, input_plan: PythonObject, profile: PythonObject, route: PythonObject, bindings: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    var plan = _model_block_plan(input_plan, context)
+    neural_string_keys(weights)
+    var kind = String(plan["kind"])
     var cls = context["block_classes"][route][kind]
     var block = py_call(bi.object.__new__, cls)
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
-    py_setitem(fields, "numeric_mode", PythonObject("identical") if String(route) == "cpu" else context["backend"]._DEFAULT_MODE)
-    var names = cls._W_NAMES
+    var fields = neural_block_fields(block, context, False)
+    py_setitem(fields, "numeric_mode", PythonObject("identical") if String(route) == "cpu" else _native_entry_fields(context["backend"])["_DEFAULT_MODE"])
+    var names = neural_block_weight_names(block)
     var w = bi.dict()
     var keys = py_call(bi.list, weights)
     var format = "float32"
@@ -276,10 +371,11 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
                 raise Error("CausalLM: mixed packed weight formats")
             format = tag
         py_setitem(w, keys[i], _model_unpack(v, bindings["linalg"], context, String(keys[i])))
+    _causal_array_guard()
     py_setitem(fields, "weight_format", PythonObject(format))
-    py_setitem(fields, "_native_kind", plan.kind)
+    py_setitem(fields, "_native_kind", plan["kind"])
     py_setitem(fields, "_native_route", route)
-    var dm = Int(py=plan.d_model)
+    var dm = Int(py=plan["d_model"])
     var base = bi.list()
     var optional = bi.list()
     var expected = bi.set()
@@ -288,8 +384,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
     var it = 0
     if kind == "transformer":
         var options = py_call(bi.dict, context["config_context"]["defaults"])
-        _ = py_call(options.update, plan.block_options)
-        var nh = Int(py=plan.n_heads)
+        _ = py_call(options.update, plan["block_options"])
+        var nh = Int(py=plan["n_heads"])
         if nh < 1:
             raise Error("CausalLM: n_heads must be positive")
         var nkv = nh if options["n_kv_heads"] is None else Int(py=options["n_kv_heads"])
@@ -318,7 +414,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             raise Error("CausalLM: projection must have positive intermediate size")
         it = Int(py=source.shape[0])
         var tail = List[Int](length=17, fill=0)
-        tail[0] = _model_bits(options["rope_theta"], "rope_theta")
+        tail[0] = _model_bits(options["rope_theta"], "rope_theta", context)
         tail[2] = 0x3f800000
         tail[3] = 0x3f800000
         tail[4] = 0x40800000
@@ -330,10 +426,10 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
                 raise Error("CausalLM: unsupported rope_scaling type " + String(py_call(bi.repr, PythonObject(sk)))
                             + "; the types are 'linear' and 'llama3'")
             tail[1] = 1 if sk == "linear" else 2
-            tail[2] = _model_bits(scaling["factor"], "rope_scaling factor")
+            tail[2] = _model_bits(scaling["factor"], "rope_scaling factor", context)
             if sk == "llama3":
-                tail[3] = _model_bits(scaling["low_freq_factor"], "low_freq_factor")
-                tail[4] = _model_bits(scaling["high_freq_factor"], "high_freq_factor")
+                tail[3] = _model_bits(scaling["low_freq_factor"], "low_freq_factor", context)
+                tail[4] = _model_bits(scaling["high_freq_factor"], "high_freq_factor", context)
                 tail[5] = Int(py=scaling["original_max_position_embeddings"])
                 if Float64(py=scaling["high_freq_factor"]) <= Float64(py=scaling["low_freq_factor"]) or tail[5] < 1:
                     raise Error("CausalLM: llama3 rope_scaling needs high_freq_factor > low_freq_factor "
@@ -346,12 +442,12 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         tail[8] = Int(Bool(py=options["qkv_bias"]))
         tail[9] = Int(Bool(py=options["o_bias"]))
         tail[10] = nk
-        tail[11] = _model_bits(options["norm_eps"], "norm_eps")
+        tail[11] = _model_bits(options["norm_eps"], "norm_eps", context)
         tail[12] = Int(Bool(py=options["norm_bias"]))
         tail[13] = mk
         tail[14] = Int(Bool(py=options["mlp_bias"]))
         tail[15] = Int(Bool(py=options["qk_norm"]))
-        tail[16] = 0 if options["attn_softcap"] is None else _model_bits(options["attn_softcap"], "attn_softcap")
+        tail[16] = 0 if options["attn_softcap"] is None else _model_bits(options["attn_softcap"], "attn_softcap", context)
         if tail[7] < 1:
             raise Error("CausalLM: max_positions must be positive")
         if tail[12] != 0 and nk != 1:
@@ -382,13 +478,13 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var session = PythonObject(None)
         var session_binding = PythonObject(None)
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
-            if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_session_create")):
+            if _native_has_entry(bindings[kind], "transformer_session_create"):
                 session = _native_function(bindings[kind], "transformer_session_create")()
                 session_binding = bindings[kind]
         py_setitem(fields, "_native_session", session)
         py_setitem(fields, "_session_binding", session_binding)
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
-        if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_arithmetic_profile")):
+        if _native_has_entry(bindings[kind], "transformer_arithmetic_profile"):
             py_setitem(fields, "_arithmetic_profile", _native_function(bindings[kind], "transformer_arithmetic_profile")())
             py_setitem(fields, "_arithmetic_profile_mode", fields["numeric_mode"])
             py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
@@ -448,7 +544,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             var defaults = bi.list()
             _ = py_call(defaults.append, 0.0)
             _ = py_call(defaults.append, py_call(bi.float, "inf"))
-            var limit = py_get(plan.block_kwargs, "dt_limit", defaults)
+            var limit = py_get(plan["block_kwargs"], "dt_limit", defaults)
             var pair = bi.list()
             _ = py_call(pair.append, py_call(bi.float, limit[0]))
             _ = py_call(pair.append, py_call(bi.float, limit[1]))
@@ -512,7 +608,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
-            if Bool(py=py_call(bi.hasattr, bindings[kind], "mamba3_prefill_session_create")):
+            if _native_has_entry(bindings[kind], "mamba3_prefill_session_create"):
                 py_setitem(fields, "_prefill_session", _native_function(bindings[kind], "mamba3_prefill_session_create")())
                 py_setitem(fields, "_prefill_binding", bindings[kind])
         _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
@@ -520,36 +616,89 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
     return block
 
 
-def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+def _model_construction_set(live: PythonObject, captured: PythonObject, name: String, value: PythonObject) raises:
+    # The caller-visible record keeps its incremental construction updates.
+    # Execution only reads the separate retained record after native calls.
+    neural_string_keys(live)
+    py_setitem(captured, name, value)
+    var published = value
+    var bi = native_loaded_module("builtins")
+    if (name == "_embed" or name == "_norm" or name == "_head") and value is not None:
+        # Caller-visible Array slots must not be the metadata traversed by
+        # subsequent constructor kernels. Retain the same live storage and
+        # preserve the tied head/embedding object's public identity.
+        var buffers = py_get(captured, "_construction_published_buffers")
+        if buffers is None:
+            buffers = Python.dict()
+            py_setitem(captured, "_construction_published_buffers", buffers)
+        var identity = py_call(bi.id, value)
+        published = py_get(buffers, identity)
+        if published is None:
+            published = generation_array_snapshot(value)
+            py_setitem(buffers, identity, published)
+    elif name == "_blocks" or name == "unused_names":
+        published = py_call(bi.list, value)
+    elif name == "_block_kwargs":
+        published = py_call(bi.dict, value)
+    py_setitem(live, name, published)
+
+
+def _model_construction_admission(live: PythonObject, admitted: PythonObject) raises:
+    neural_string_keys(live)
+    for name in ["_native_vendor", "_native_numeric_mode", "_native_entries", "_causal_entries_owner"]:  # small-loop(native admission fields published on success and error)
+        if py_contains(admitted, name):
+            py_setitem(live, name, admitted[name])
+
+
+def causal_model_prepare(model: PythonObject, input_plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+    causal_public_connect(context)
+    var live = _causal_model_fields(model)
+    var captured = Python.dict()
+    var plan = model_plan_snapshot(input_plan)
+    var options = _model_options_snapshot(input_options, context)
+    var weights = _model_weights_snapshot(input_weights, context)
+    return _causal_model_prepare_snapshot(model, input_plan, plan, weights, options, context, live, captured)
+
+
+def _causal_model_prepare_snapshot(model: PythonObject, input_plan: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Preserve the parallel constructor's six-argument native entry contract.
+    var live = _causal_model_fields(model)
+    var captured = Python.dict()
+    return _causal_model_prepare_snapshot(model, input_plan, plan, weights, options, context, live, captured)
+
+
+def _causal_model_prepare_snapshot(model: PythonObject, input_plan: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject, live: PythonObject, captured: PythonObject) raises -> PythonObject:
     # Shared native admission and host metadata ownership. Parallel models
     # construct their layer owners in the assigned child processes afterward.
-    var bi = Python.import_module("builtins")
-    _ = generation_initialize_binding(context["generation_classes"])
+    var bi = native_loaded_module("builtins")
+    causal_public_connect(context)
+    neural_string_keys(live)
+    neural_string_keys(captured)
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
-    var profile = _model_profile(options[3], String(plan.kind), context)
-    var bindings = _model_bindings(route, String(plan.kind), context)
-    py_setattr(model, "_runtime", context["runtime"])
-    py_setattr(model, "plan", plan)
-    py_setattr(model, "config", plan.config)
-    py_setattr(model, "kind", plan.kind)
-    py_setattr(model, "d_model", plan.d_model)
-    py_setattr(model, "vocab_size", plan.vocab_size)
-    py_setattr(model, "n_layers", plan.n_layers)
-    py_setattr(model, "norm_eps", plan.norm_eps)
-    py_setattr(model, "numeric_profile", profile)
-    py_setattr(model, "device", route)
-    py_setattr(model, "weight_format", options[0])
-    py_setattr(model, "unused_names", py_call(bi.list, py_get(weights, "unused", bi.tuple())))
-    var dm = Int(py=plan.d_model)
-    var vocab = Int(py=plan.vocab_size)
-    if dm < 1 or vocab < 1 or Int(py=plan.n_layers) < 1:
+    var profile = _model_profile(options[3], String(plan["kind"]), context)
+    var bindings = _model_bindings(route, String(plan["kind"]), context)
+    _model_construction_set(live, captured, "_runtime", context["runtime"])
+    _model_construction_set(live, captured, "plan", input_plan)
+    _model_construction_set(live, captured, "config", plan["config"])
+    _model_construction_set(live, captured, "kind", plan["kind"])
+    _model_construction_set(live, captured, "d_model", plan["d_model"])
+    _model_construction_set(live, captured, "vocab_size", plan["vocab_size"])
+    _model_construction_set(live, captured, "n_layers", plan["n_layers"])
+    _model_construction_set(live, captured, "norm_eps", plan["norm_eps"])
+    _model_construction_set(live, captured, "numeric_profile", profile)
+    _model_construction_set(live, captured, "device", route)
+    _model_construction_set(live, captured, "weight_format", options[0])
+    _model_construction_set(live, captured, "unused_names", py_call(bi.list, py_get(weights, "unused", bi.tuple())))
+    var dm = Int(py=plan["d_model"])
+    var vocab = Int(py=plan["vocab_size"])
+    if dm < 1 or vocab < 1 or Int(py=plan["n_layers"]) < 1:
         raise Error("CausalLM: model dimensions and layer count must be positive")
     var positions = options[1]
-    if String(plan.kind) == "transformer":
-        var config_cap = 8192 if plan.max_position_embeddings is None else Int(py=plan.max_position_embeddings)
+    if String(plan["kind"]) == "transformer":
+        var config_cap = 8192 if plan["max_position_embeddings"] is None else Int(py=plan["max_position_embeddings"])
         var cap = min(config_cap, 8192)
         if positions is None:
             positions = PythonObject(cap)
@@ -561,87 +710,119 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
         positions = PythonObject(mp)
     elif positions is not None:
         positions = py_call(bi.int, positions)
-    py_setattr(model, "max_positions", positions)
-    py_setattr(model, "_embed", _model_f32(weights["embed"], String(plan.embed_name), context))
-    if not Bool(py=model._embed.shape == py_call(bi.tuple, py_ints([vocab, dm]))):
-        raise Error("UnsupportedModel: model_type " + String(plan.model_type) + ": vocab_size=" + String(vocab) + " and hidden_size=" + String(dm) + " but " + String(plan.embed_name) + " has shape " + String(py_call(bi.str, model._embed.shape)))
-    py_setattr(model, "_norm", PythonObject(None))
-    if plan.norm_name is not None:
-        py_setattr(model, "_norm", _model_f32(weights["norm"], String(plan.norm_name), context))
-        if not Bool(py=model._norm.shape == py_call(bi.tuple, py_ints([dm]))):
-            raise Error("UnsupportedModel: tensor " + String(plan.norm_name) + " has shape " + String(py_call(bi.str, model._norm.shape)) + ", want hidden_size=" + String(dm))
-    py_setattr(model, "_head", model._embed if plan.head_name is None else _model_f32(weights["head"], String(plan.head_name), context))
-    if not Bool(py=model._head.shape == py_call(bi.tuple, py_ints([vocab, dm]))):
-        raise Error("UnsupportedModel: tensor " + String(plan.head_name) + " has shape " + String(py_call(bi.str, model._head.shape)) + ", want vocab_size=" + String(vocab) + " and hidden_size=" + String(dm))
-    for value in [model._embed, model._norm, model._head]:  # driver-loop: over the three top-level tensors
+    _model_construction_set(live, captured, "max_positions", positions)
+    _model_construction_set(live, captured, "_embed", _model_f32(weights["embed"], String(plan["embed_name"]), context))
+    _causal_array_guard()
+    if not Bool(py=captured["_embed"].shape == py_call(bi.tuple, py_ints([vocab, dm]))):
+        raise Error("UnsupportedModel: model_type " + String(plan["model_type"]) + ": vocab_size=" + String(vocab) + " and hidden_size=" + String(dm) + " but " + String(plan["embed_name"]) + " has shape " + String(py_call(bi.str, captured["_embed"].shape)))
+    _model_construction_set(live, captured, "_norm", PythonObject(None))
+    if plan["norm_name"] is not None:
+        _model_construction_set(live, captured, "_norm", _model_f32(weights["norm"], String(plan["norm_name"]), context))
+        _causal_array_guard()
+        if not Bool(py=captured["_norm"].shape == py_call(bi.tuple, py_ints([dm]))):
+            raise Error("UnsupportedModel: tensor " + String(plan["norm_name"]) + " has shape " + String(py_call(bi.str, captured["_norm"].shape)) + ", want hidden_size=" + String(dm))
+    _model_construction_set(live, captured, "_head", captured["_embed"] if plan["head_name"] is None else _model_f32(weights["head"], String(plan["head_name"]), context))
+    _causal_array_guard()
+    if not Bool(py=captured["_head"].shape == py_call(bi.tuple, py_ints([vocab, dm]))):
+        raise Error("UnsupportedModel: tensor " + String(plan["head_name"]) + " has shape " + String(py_call(bi.str, captured["_head"].shape)) + ", want vocab_size=" + String(vocab) + " and hidden_size=" + String(dm))
+    for value in [captured["_embed"], captured["_norm"], captured["_head"]]:  # driver-loop: over the three top-level tensors
         if value is not None:
+            _causal_array_guard()
             var ptr = f32_ptr(Int(py=value._addr))
             causal_lm_check_finite(ptr, Int(py=value.size))
     var layers = weights["layers"]
-    if len(layers) != Int(py=plan.n_layers):
+    if len(layers) != Int(py=plan["n_layers"]):
         raise Error("CausalLM: layer dict count differs from num_hidden_layers")
     return bindings
 
 
-def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bindings = causal_model_prepare(model, plan, weights, options, context)
-    var bi = Python.import_module("builtins")
+def causal_model_init_binding(model: PythonObject, input_plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+    causal_public_connect(context)
+    var live = _causal_model_fields(model)
+    var captured = Python.dict()
+    var plan = model_plan_snapshot(input_plan)
+    var options = _model_options_snapshot(input_options, context)
+    var weights = _model_weights_snapshot(input_weights, context)
+    var bindings = _causal_model_prepare_snapshot(model, input_plan, plan, weights, options, context, live, captured)
+    var bi = native_loaded_module("builtins")
     var format = String(options[0])
-    var route = model.device
-    var profile = model.numeric_profile
+    var route = captured["device"]
+    var profile = captured["numeric_profile"]
     var layers = weights["layers"]
-    py_setattr(model, "_blocks", bi.list())
+    _model_construction_set(live, captured, "_blocks", bi.list())
     for i in range(len(layers)):  # driver-loop: over the model layer definitions
         var block = _model_block(layers[i], plan, profile, route, bindings, context)
-        var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+        var fields = neural_block_fields(block, context)
         if String(fields["weight_format"]) != format:
             raise Error("CausalLM: layer reports a different weight_format than requested")
-        _ = py_call(model._blocks.append, block)
-    py_setattr(model, "_block_class", context["block_classes"][route][plan.kind])
-    py_setattr(model, "_block_kwargs", py_call(bi.dict, plan.block_options if String(plan.kind) == "transformer" else plan.block_kwargs))
-    if String(plan.kind) == "transformer":
-        py_setitem(model._block_kwargs, "n_heads", plan.n_heads)
-        py_setitem(model._block_kwargs, "numeric_profile", profile)
-    py_setattr(model, "_prims", py_call(bi.object.__new__, context["primitive_classes"][route]))
+        _ = py_call(captured["_blocks"].append, block)
+        _model_construction_set(live, captured, "_blocks", captured["_blocks"])
+    _model_construction_set(live, captured, "_block_class", context["block_classes"][route][plan["kind"]])
+    _model_construction_set(live, captured, "_block_kwargs", py_call(bi.dict, plan["block_options"] if String(plan["kind"]) == "transformer" else plan["block_kwargs"]))
+    if String(plan["kind"]) == "transformer":
+        py_setitem(captured["_block_kwargs"], "n_heads", plan["n_heads"])
+        py_setitem(captured["_block_kwargs"], "numeric_profile", profile)
+        _model_construction_set(live, captured, "_block_kwargs", captured["_block_kwargs"])
+    var primitive_class = context["primitive_classes"][route]
+    var primitive = py_call(bi.object.__new__, primitive_class)
+    var primitive_fields = model_record_fields(primitive, primitive_class, Python.tuple("_T", "_ext"))
     if String(route) == "gpu":
-        py_setattr(model._prims, "_T", context["training_module"])
+        py_setitem(primitive_fields, "_T", context["training_module"])
     else:
-        py_setattr(model._prims, "_ext", bindings["primitives"])
-    py_setattr(model, "_head_int15", PythonObject(None))
+        py_setitem(primitive_fields, "_ext", bindings["primitives"])
+    _model_construction_set(live, captured, "_prims", primitive)
+    _model_construction_set(live, captured, "_head_int15", PythonObject(None))
     if String(profile) == "fixed15_v1":
-        py_setattr(model, "_head_int15", _model_quantize15(model._head, bindings["linalg"]))
-    _ = causal_lm_admit_binding(model, bindings[plan.kind], bindings["primitives"], bindings["linalg"] if model._head_int15 is not None else PythonObject(None))
+        _model_construction_set(live, captured, "_head_int15", _model_quantize15(captured["_head"], bindings["linalg"]))
+    # Admission may call sibling native entries. Give it the private record;
+    # a replaced public model descriptor cannot run after those calls.
+    py_setitem(captured, "_native_context", context)
+    var admission = _causal_namespace(captured)
+    var admitted = causal_snapshot_fields(admission)
+    try:
+        _ = causal_lm_admit_binding(admission, bindings[plan["kind"]], bindings["primitives"], bindings["linalg"] if captured["_head_int15"] is not None else PythonObject(None))
+    except problem:
+        _model_construction_admission(live, admitted)
+        raise problem
+    _model_construction_admission(live, admitted)
     return PythonObject(None)
 
 
-def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    _ = generation_initialize_binding(context["generation_classes"])
+def causal_model_read_weights_binding(checkpoint: PythonObject, input_plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    causal_public_connect(context)
+    var plan = model_plan_snapshot(input_plan)
+    if py_type(format) is not bi.str:
+        raise Error("TypeError: CausalLM weight format requires an ordinary string")
     var ck = context["checkpoint_context"]
     var infos = checkpoint_index_binding(checkpoint, ck)
-    var need = model_checkpoint_names_binding(plan)
+    var captured_infos = Python.dict()
+    var info_names = py_call(bi.list, infos.keys())
+    for i in range(len(info_names)):  # driver-loop: retain checkpoint shape/dtype metadata before execution
+        py_setitem(captured_infos, info_names[i], _info_snapshot(infos[info_names[i]]))
+    var need = model_checkpoint_names_snapshot(plan)
     for i in range(len(need)):  # driver-loop: over checkpoint tensor names
         if not py_contains(infos, need[i]):
             raise Error("UnsupportedModel: checkpoint lacks tensor " + String(need[i]))
     var out = bi.dict()
-    py_setitem(out, "embed", checkpoint_read_binding(checkpoint, plan.embed_name, PythonObject("widen"), ck))
-    if plan.norm_name is not None:
-        py_setitem(out, "norm", checkpoint_read_binding(checkpoint, plan.norm_name, PythonObject("widen"), ck))
-    if plan.head_name is not None:
-        py_setitem(out, "head", checkpoint_read_binding(checkpoint, plan.head_name, PythonObject("widen"), ck))
-    var bindings = _model_bindings(route, String(plan.kind), context)
-    var projections = context["projections"][plan.kind]
+    py_setitem(out, "embed", checkpoint_read_binding(checkpoint, plan["embed_name"], PythonObject("widen"), ck))
+    if plan["norm_name"] is not None:
+        py_setitem(out, "norm", checkpoint_read_binding(checkpoint, plan["norm_name"], PythonObject("widen"), ck))
+    if plan["head_name"] is not None:
+        py_setitem(out, "head", checkpoint_read_binding(checkpoint, plan["head_name"], PythonObject("widen"), ck))
+    var bindings = _model_bindings(route, String(plan["kind"]), context)
+    var projections = context["projections"][plan["kind"]]
     var layers = bi.list()
-    for i in range(Int(py=plan.n_layers)):  # driver-loop: over checkpoint layers
+    for i in range(Int(py=plan["n_layers"])):  # driver-loop: over checkpoint layers
         var weights = bi.dict()
-        var mapping = model_layer_weights_binding(plan, PythonObject(i))
+        var mapping = _model_layer_weights(plan, i)
         for j in range(len(mapping)):  # driver-loop: over named layer tensor entries
             var entry = mapping[j]
             var key = entry[0]
             var name = entry[1]
             var rows = entry[2]
             var packed = String(format) != "float32" and py_contains(projections, key)
-            if packed and String(format) == "bfloat16" and String(infos[name].dtype) == "BF16" and rows is None and len(infos[name].shape) == 2:
+            if packed and String(format) == "bfloat16" and String(captured_infos[name]["dtype"]) == "BF16" and rows is None and len(captured_infos[name]["shape"]) == 2:
                 py_setitem(weights, key, checkpoint_read_binding(checkpoint, name, PythonObject("bits"), ck))
                 continue
             var value = _model_f32(checkpoint_read_binding(checkpoint, name, PythonObject("widen"), ck), String(name), context)
@@ -679,8 +860,9 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
     return out
 
 
-def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = native_loaded_module("builtins")
+    var options = _model_options_snapshot(input_options, context)
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
@@ -692,7 +874,8 @@ def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, optio
         raise Error("FileNotFoundError: CausalLM.load requires a checkpoint directory")
     var config = config_load_binding(context["config_context"]["config_class"], path)
     var plan = model_plan_for_binding(config, context["config_context"])
-    _ = _model_profile(options[3], String(plan.kind), context)
+    var plan_fields = model_plan_snapshot(plan)
+    _ = _model_profile(options[3], String(plan_fields["kind"]), context)
     var ck = context["checkpoint_context"]
     var checkpoint = checkpoint_open_binding(ck["checkpoint_class"], path, ck)
     var weights = PythonObject(None)

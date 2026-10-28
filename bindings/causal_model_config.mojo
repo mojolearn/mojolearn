@@ -110,7 +110,34 @@ def _config_fields(value: PythonObject) raises -> PythonObject:
 
 def _plan_fields(value: PythonObject) raises -> PythonObject:
     return model_record_fields(value, _model_context()["plan_class"],
-        Python.tuple("_layer_map", "embed_name", "norm_name", "head_name", "n_layers", "model_type", "kind", "d_model", "vocab_size"))
+        Python.tuple("_layer_map", "embed_name", "norm_name", "head_name", "n_layers", "model_type", "kind", "d_model", "vocab_size", "n_heads", "n_kv_heads", "head_dim", "intermediate", "tie_embeddings", "norm_eps", "max_position_embeddings", "block_options", "block_kwargs", "config", "family"))
+
+
+def model_plan_snapshot(value: PythonObject) raises -> PythonObject:
+    """Captured plan dictionary for complete native CausalLM construction."""
+    var fields = _plan_fields(value)
+    var result = Python.dict()
+    var names = py_call(native_loaded_module("builtins").list, fields.keys())
+    for i in range(len(names)):  # driver-loop: capture every passive plan member before model construction
+        var name = model_string(names[i])
+        var item = native_instance_item(fields, names[i])
+        if name == "config":
+            var source = _config_fields(item)
+            var captured = py_call(native_loaded_module("builtins").object.__new__, _model_context()["config_class"])
+            _ = config_init_binding(captured, native_instance_item(source, PythonObject("_d")), native_instance_item(source, PythonObject("path")))
+            py_setitem(result, names[i], captured)
+        elif name == "family":
+            model_sequence(item)
+            if len(item) != 3:
+                raise Error("TypeError: model family metadata requires its three-word row")
+            _ = model_string(item[1])
+            _ = model_string(item[2])
+            # Historical first item is an opaque planner function identity.
+            # Native consumers dispatch by kind; they never call that item.
+            py_setitem(result, names[i], Python.tuple(item[0], item[1], item[2]))
+        else:
+            py_setitem(result, names[i], model_plain(item))
+    return result
 
 
 def model_config_connect(context: PythonObject) raises -> PythonObject:
@@ -236,8 +263,8 @@ def model_layer_weights_binding(plan: PythonObject, layer: PythonObject) raises 
     return _model_layer_weights(_plan_fields(plan), model_integer(layer))
 
 
-def model_checkpoint_names_binding(plan: PythonObject) raises -> PythonObject:
-    var fields = _plan_fields(plan)
+def model_checkpoint_names_snapshot(fields: PythonObject) raises -> PythonObject:
+    model_dict(fields)
     var names = Python.list()
     for field in [String("embed_name"), String("norm_name"), String("head_name")]:  # small-loop(three outer checkpoint weight names)
         var name = native_instance_item(fields, PythonObject(field))
@@ -255,6 +282,10 @@ def model_checkpoint_names_binding(plan: PythonObject) raises -> PythonObject:
             if not py_contains(names, name):
                 _ = py_call(names.append, name)
     return names
+
+
+def model_checkpoint_names_binding(plan: PythonObject) raises -> PythonObject:
+    return model_checkpoint_names_snapshot(model_plan_snapshot(plan))
 
 
 def model_config_repr(value: PythonObject, plan_value: PythonObject) raises -> PythonObject:

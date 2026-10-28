@@ -43,7 +43,9 @@ def test_reservations_and_outputs_remain_at_checked_boundary():
     assert '-1 if cpu else 0, -1 if cpu else 1, lock_owner, lock.handle)' in provider
     assert 'self.reserved' not in provider
     assert 'native_layer.failure = String(problem)' in provider
-    assert 'py_setattr(self.states[i], counter, PythonObject(self.native.layers[i].cached))' in provider
+    assert 'counter_value = self.native.state_counters[identity]' in provider
+    assert 'py_setitem(self.states[i], counter, PythonObject(counter_value))' in provider
+    assert 'py_setattr(self.states[i]' not in provider
     assert '"_usable", PythonObject(False)' in provider
     assert 'if self.published:' in provider
     public = text('bindings/causal_lm_public.mojo')
@@ -61,7 +63,9 @@ def test_experiment_never_silently_relabels_unsupported_routes():
     assert 'MOJOLEARN_GENERATION_NATIVE_ENGINE' in public
     provider = text('providers/python/generation_metadata_pyapi.mojo')
     assert '_generation_engine_weights(snapshot.embedding' in provider
-    assert 'AdmittedBorrowedBuffer(value, True)' in provider
+    state = provider.split('def _generation_engine_state(', 1)[1].split('struct GenerationEngineAdmission', 1)[0]
+    assert state.index('generation_buffer_view(value)') < state.index('AdmittedBorrowedBuffer(view, True)')
+    assert 'keep.append(view)' in state
     assert 'foreign-weight descriptor admission is pending' not in provider
 
 
@@ -84,7 +88,13 @@ def test_delayed_foreign_copies_preserve_layer_order_and_alias_counters():
     assert body.index('embedding_refresh[i].copy_to(') < body.index('self.primitive_call(0,')
     assert body.index('head_refresh[i].copy_to(') < body.index('self.primitive_call(2,')
     provider=text('providers/python/generation_metadata_pyapi.mojo')
-    assert 'self.state_keys[index] is st' in provider
+    assert 'identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))' in provider
+    assert 'self.state_keys[index] is identity' in provider
+    assert 'self.state_keys.append(identity)' in provider
+    weights = provider.split('def _generation_engine_weights(', 1)[1].split('def _generation_engine_state(', 1)[0]
+    assert 'snapshot.layouts[k].copy()' in weights
+    assert 'AdmittedBorrowedBuffer(' not in weights and 'generation_buffer_view(' not in weights
+    assert 'snapshot.failures[k]' in weights
     assert 'var pins: List[AdmittedBorrowedBuffer]' in provider
     assert 'var storage: List[List[Float32]]' in provider
 

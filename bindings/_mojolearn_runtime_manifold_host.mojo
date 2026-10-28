@@ -11,6 +11,7 @@ from bindings.runtime_manifold_entry import (
     runtime_manifold_c, RUNTIME_MANIFOLD_SABOTAGE,
 )
 from bindings.manifold_storage_native import ManifoldMatrix, ManifoldDevice
+from bindings.manifold_scalar_native import ManifoldScalarSnapshot
 
 
 def runtime_manifold_host_numeric_mode_binding() raises -> PythonObject:
@@ -40,6 +41,7 @@ def build__mojolearn_runtime_manifold_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_runtime_manifold_host")
         _ = module.add_type[ManifoldMatrix]("_ManifoldMatrix")
         _ = module.add_type[ManifoldDevice]("_ManifoldDevice")
+        _ = module.add_type[ManifoldScalarSnapshot]("_ManifoldScalarSnapshot")
         module.def_py_c_function(runtime_manifold_c, "manifold_native_call")
         module.def_function[runtime_manifold_host_numeric_mode_binding]("runtime_manifold_host_numeric_mode")
         module.def_function[runtime_manifold_host_vendor_binding]("runtime_manifold_host_vendor")

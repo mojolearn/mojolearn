@@ -1659,36 +1659,20 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
 
-    # Under lane/apple-fast-gap-cls2's LAZY switch the fit leaves the matrix
-    # on the device and the first read downloads it once (the same words).
+    # The fitted matrix lives in the native owner's `_rp_components` field
+    # (bindings/rp_native.mojo); reading, assigning and pickling it are each
+    # one native call.
     @property
     def components_(self):
         """The random projection matrix, shape (n_components, n_features)."""
-        dct = self.__dict__
-        v = dct.get("_rp_components")
-        if v is None and "_rp_lazy" in dct:
-            k, C, kc, d = dct.pop("_rp_lazy")
-            res = array.array("f", [0.0]) * (kc * d)
-            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
-            v = dct["_rp_components"] = Array._owned(res, (kc, d), "<f4", "C")
-        if v is None:
-            raise AttributeError("components_")
-        return v
+        return _DECOMP_CALL(self, "components", (), _DECOMP_CONTEXT)
 
     @components_.setter
     def components_(self, v):
-        self.__dict__.pop("_rp_lazy", None)
-        self.__dict__["_rp_components"] = v
-
-    def _check(self, attr="components_"):
-        if attr == "components_" and "_rp_lazy" in self.__dict__:
-            return
-        super()._check(attr)
+        return _DECOMP_CALL(self, "set_components", (v,), _DECOMP_CONTEXT)
 
     def __getstate__(self):
-        if "_rp_lazy" in self.__dict__:
-            _ = self.components_
-        return dict(self.__dict__)
+        return _DECOMP_CALL(self, "getstate", (), _DECOMP_CONTEXT)
 
     def fit(self, X, y=None):
         """Draw the projection matrix for X's shape.

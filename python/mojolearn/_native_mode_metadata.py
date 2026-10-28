@@ -14,6 +14,26 @@ def connect():
                        plans={})
 
 
+def connect_generic_attributes():
+    # glue: the generic attribute slot's entry; its admission context is the
+    # public attributes context, linked by _native_public_attributes.connect_classes.
+    from .tokenizer import _binding
+    entry = _binding()._module.public_attribute_generic_native_call
+    if type(entry) is not BuiltinFunctionType:
+        raise TypeError('generic public attributes require a compiled native entry')
+    return entry, dict(attributes=None)
+
+
+def connect_generic_params():
+    # glue: the generic parameter setter shares the full-reset owner's entry
+    # and context; _native_full_reset_params fills the context at package import.
+    from .tokenizer import _binding
+    entry = _binding()._module.full_reset_params_native_call
+    if type(entry) is not BuiltinFunctionType:
+        raise TypeError('generic parameter setters require a compiled native entry')
+    return entry, dict(plans={}, missing=object(), ready=False, originals={}, generic_setter=None)
+
+
 def connect_classes(context, package):
     # glue: called once after package classes and their native descriptors exist
     import sys
