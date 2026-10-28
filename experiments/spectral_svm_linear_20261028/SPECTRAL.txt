@@ -1,0 +1,11 @@
+Spectral public lifecycle (2026-10-28), lane/spectral-public-lifecycle-20261028.
+Native cfb_spectral_operation now owns estimator admission (spectral_admit: exact parameter schema, learned scalar/buffer
+admission and release admission on refit, no _mojolearn_after_fit callbacks), dense input validation (spectral_input),
+fitted checks, target/feature-width checks, fit-depth bookkeeping, refusal shaping and ndarray output conversion.
+SpectralClustering/SpectralEmbedding declare _mojolearn_native_public (no Python _mode wrappers). predict keeps its
+available_if identity only as the import-time key for the native 'spectral_predict' availability schema (SVM batch 7cacec39ba).
+Merged origin/main 4771b55daa and 7cacec39ba.
+Compile: actual cluster_fit_b_operation route (DBSCAN/Agglomerative/Spectral owners) via checks/spectral_public_lifecycle_compile.mojo,
+Apple CPU O0 identical -j10, exit 0; receipt spectral_public_lifecycle_compile.json; full log, source manifest/bytes and .so under
+~/mojolearn-evidence/spectral-svm-linear-20261028/spectral-compile-3/. Earlier failed attempt (spectral-compile-1) retained.
+Not covered: full family_native/classical_native_call binding, runtime, identity, GPU.
