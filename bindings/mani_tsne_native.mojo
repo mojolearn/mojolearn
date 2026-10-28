@@ -8,10 +8,11 @@
 # argument lists it always took and stores the fitted attributes. The same
 # entries on the same operands: the bits do not move.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
-from providers.python.estimator_binding_pyapi import estimator_binding
+from providers.python.estimator_binding_pyapi import estimator_binding_mode
+from bindings.manifold_settings_native import ManifoldSettings
 from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
 from core.family_cast_impl import family_all_finite_f32
 from bindings.family_common import (
@@ -71,14 +72,14 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     return z
 
 
-def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`TSNE.fit(X)`; returns the embedding."""
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var op = Python.import_module("operator")
-    var binding = estimator_binding(model, "_mojolearn_x_ann", context) if args[0] is None else args[0]
-    var estimators = estimator_binding(model, "_mojolearn_estimators", context) if args[1] is None else args[1]
-    var fields = py_fields(model)
+    var binding = estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
+    var estimators = estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
+    var fields = settings.values
     # Reject nonfinite coordinates before PCA initialization reaches its
     # eigensolver; preserve TSNE's public input refusal for every init mode.
     var snapshot = family_f32_snapshot(args[2], 2, "X", context)
@@ -172,11 +173,11 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = snapshot
     _ = x^
     _ = y0^
-    py_setitem(fields, "embedding_", embedding)
-    py_setitem(fields, "kl_divergence_", PythonObject(classical_word(kl)))
-    py_setitem(fields, "n_iter_", max_iter)
-    py_setitem(fields, "learning_rate_", PythonObject(lr))
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+    py_setitem(settings.fields, "embedding_", embedding)
+    py_setitem(settings.fields, "kl_divergence_", PythonObject(classical_word(kl)))
+    py_setitem(settings.fields, "n_iter_", max_iter)
+    py_setitem(settings.fields, "learning_rate_", PythonObject(lr))
+    py_setitem(settings.fields, "n_features_in_", PythonObject(d))
     return embedding
 
 
@@ -185,12 +186,12 @@ def _tsne_is_bool(value: PythonObject) raises -> Bool:
                            Python.import_module("builtins").bool))
 
 
-def tsne_operation(model: PythonObject, operation: String, args: PythonObject,
+def tsne_operation(model: PythonObject, settings: ManifoldSettings, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """TSNE: args = (x_ann binding, estimators binding, X)."""
     if operation == "family_mani_tsne_fit":
-        _ = _tsne_fit(model, args, context)
+        _ = _tsne_fit(model, settings, args, context)
         return model
     if operation == "family_mani_tsne_fit_transform":
-        return _tsne_fit(model, args, context)
+        return _tsne_fit(model, settings, args, context)
     raise Error("RuntimeError: unknown TSNE operation " + operation)

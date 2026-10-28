@@ -21,18 +21,17 @@ def test_route_connections_are_import_time_and_cover_both_families():
 def test_native_manifold_selects_fitted_and_default_modes():
     source = _source("bindings/mani_decomp_native.mojo")
     selection = source.split("def _mani_arguments(", 1)[1].split("def mani_decomp_operation(", 1)[0]
-    assert 'operation.endswith("_fit_transform")' in selection
-    assert 'PythonObject("numeric_mode_")' in selection
     assert 'estimator_binding_mode(requested, "_mojolearn_x_decomp", context)' in selection
-    assert 'estimator_binding_mode(PythonObject(None), "_mojolearn_x_decomp", context)' in selection
-    assert 'args = _mani_arguments(model, operation, args, context)' in source
+    assert 'estimator_binding_mode(settings.default_mode, "_mojolearn_x_decomp", context)' in selection
+    assert 'args = _mani_arguments(settings, operation, args, context)' in source
+    assert 'var requested = settings.mode' in selection
     assert '.hasattr' not in source.split("def _mani_check(", 1)[1].split("def _mani_seed(", 1)[0]
 
 
 def test_native_tsne_resolves_both_optional_binding_slots():
     source = _source("bindings/mani_tsne_native.mojo")
-    assert 'estimator_binding(model, "_mojolearn_x_ann", context) if args[0] is None else args[0]' in source
-    assert 'estimator_binding(model, "_mojolearn_estimators", context) if args[1] is None else args[1]' in source
+    assert 'estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]' in source
+    assert 'estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]' in source
     assert 'spectral_umap_optional_entry(estimators, "pca_fit_owned", context)' in source
 
 
@@ -67,3 +66,22 @@ def test_tsne_pca_and_optimizer_share_one_x_snapshot():
     assert "x.shape" not in source
     assert "classical_address(x)" not in source
     assert "_ = snapshot" in source
+
+
+def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
+    source = _source("bindings/manifold_settings_native.mojo")
+    assert source.index('self.fields = classical_family_admit(model)') < source.index('self.values = py_call(b.dict, self.fields)')
+    assert source.count('context["backend_fields"]["_DEFAULT_MODE"]') == 1
+    assert 'operation.endswith("_fit_transform")' in source
+    assert 'self.fitted = py_get(self.values, "numeric_mode_")' in source
+    assert 'if not operation.startswith("family_mani_umap_")' in source
+    assert '_setting(flat[i], context, depth + 1)' in source
+    assert '_setting(value[keys[i]], context, depth + 1)' in source
+    dispatch = _source("bindings/manifold_native.mojo")
+    assert dispatch.count('ManifoldSettings(model, operation, context)') == 1
+    for owner in ('mani_decomp_native', 'mani_tsne_native', 'mani_umap_native'):
+        implementation = _source(f"bindings/{owner}.mojo")
+        for forbidden in ('py_fields(model)', '_fields(model)', '_DEFAULT_MODE', 'family_raw_get(model', '_mani_mode('):
+            assert forbidden not in implementation, (owner, forbidden)
+        assert 'settings.values' in implementation
+        assert 'py_setitem(settings.fields,' in implementation
