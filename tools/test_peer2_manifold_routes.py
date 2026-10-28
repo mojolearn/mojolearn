@@ -75,8 +75,11 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
     assert 'operation.endswith("_fit_transform")' in source
     assert 'self.fitted = py_get(self.values, "numeric_mode_")' in source
     assert 'if not operation.startswith("family_mani_umap_")' in source
-    assert '_setting(flat[i], context, depth + 1)' in source
-    assert '_setting(value[keys[i]], context, depth + 1)' in source
+    assert '_setting(flat[i], context, depth + 1, freeze_buffers)' in source
+    assert '_setting(value[keys[i]], context, depth + 1, freeze_buffers)' in source
+    assert 'native_array_from_bytes(String("B"), py_call(buffer.tobytes, "C"))' in source
+    assert 'py_setitem(output, i, item)' in source
+    assert 'return py_call(cls, shape, dtype=dtype, buffer=store)' in source
     dispatch = _source("bindings/manifold_native.mojo")
     assert dispatch.count('ManifoldSettings(model, operation, context)') == 1
     for owner in ('mani_decomp_native', 'mani_tsne_native', 'mani_umap_native'):
