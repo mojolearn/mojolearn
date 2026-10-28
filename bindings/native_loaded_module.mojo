@@ -134,6 +134,8 @@ struct _AdmittedModules(Defaultable, Movable):
         self.entries = List[_AdmittedModule]()
 
 
+# The named global may be shared by every Mojo extension in the process:
+# bump the name's version whenever _AdmittedModule's layout changes.
 comptime _ADMITTED_MODULES = _Global[
     StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV1",
     init_fn=_AdmittedModules.__init__,
