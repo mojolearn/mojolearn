@@ -859,8 +859,8 @@ def _gmm_public_initialize(model: PythonObject, values: PythonObject, context: P
         if py_type(names[i]) is not b.str:
             raise Error("TypeError: GaussianMixture parameter names require exact strings")
         var value = values[i]
-        if String(names[i]) == "numeric_mode" and value is None and py_contains(fields, names[i]):
-            value = fields[names[i]]
+        if String(names[i]) == "numeric_mode" and value is None:
+            value = _get_or(model, "numeric_mode", PythonObject(None))
         if py_contains(fields, names[i]) and fields[names[i]] is not value:
             native_release_admit(fields[names[i]], context)
         _ = py_call(replacements.append, value)
@@ -885,6 +885,11 @@ def _gmm_public_ext(ext: PythonObject, context: PythonObject, releasing: Bool) r
     for mode in ["identical", "fast"]:  # driver-loop: the two import-connected provider identities
         var record = connections[mode]
         connected = connected or binding is record[0]
+    var retained = context["gmm_retained_cluster_bindings"]
+    if py_type(retained) is not b.list:
+        raise Error("TypeError: GaussianMixture requires its native retained-provider list")
+    for i in range(len(retained)):  # driver-loop: native modules previously selected for this family's extended solver
+        connected = connected or binding is retained[i]
     if not connected or py_type(binding) is not py_type(b):
         raise Error("TypeError: GaussianMixture state requires its retained compiled cluster provider")
     # The connection keeps this exact module alive when an old state dictionary
@@ -996,7 +1001,20 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
         estimator_feature_check(model, fields, source, context)
     var prepared = PythonObject(None)
     if fitting:
-        prepared = Python.tuple(binding, estimator_binding(model, "_mojolearn_x_cluster", context), x)
+        var cluster_binding = estimator_binding(model, "_mojolearn_x_cluster", context)
+        _ = neural_descriptor_entry(cluster_binding, "x_cluster_call")
+        var retained = context["gmm_retained_cluster_bindings"]
+        if py_type(retained) is not py_type(Python.list()):
+            raise Error("TypeError: GaussianMixture requires its native retained-provider list")
+        var held = False
+        for i in range(len(retained)):  # driver-loop: pin each selected native image once across legitimate provider replacement
+            held = held or retained[i] is cluster_binding
+        if not held:
+            # Extended fitted state stores this exact module. Retaining it at
+            # import-context lifetime also prevents its destruction while a
+            # later fit replaces the old extension-state dictionary.
+            _ = py_call(retained.append, cluster_binding)
+        prepared = Python.tuple(binding, cluster_binding, x)
     else:
         prepared = Python.tuple(binding, x)
     var depth = estimator_fit_begin(fields) if fitting else 0
