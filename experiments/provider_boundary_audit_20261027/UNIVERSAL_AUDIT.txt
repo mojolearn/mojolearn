@@ -34,7 +34,7 @@ Full endpoint source inventory and logs remain in:
   worklist-generation.log / worklist-tests-final.log
 The inventory gate remains exit 1 (1189 alias-inclusive endpoint classifications).
 Worklist generation: exit 0, zero AST mismatches against this frozen source.
-Worklist tests: 5 source-only tests; result recorded in worklist-tests-final.log.
+Worklist tests: 6 source-only tests; result recorded in worklist-tests-final.log.
 
 Concrete outstanding paths sent to repair owners
 ------------------------------------------------
