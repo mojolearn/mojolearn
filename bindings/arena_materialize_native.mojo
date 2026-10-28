@@ -317,7 +317,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
     return _owned(store,shape,target,context)
 
 
-def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def _prepare(value: PythonObject, context: PythonObject, snapshot: Bool = False) raises -> PythonObject:
     var metadata = arena_array_metadata(value,context)
     var b = context["arena_native_types"]
     if py_type(value) is context["array_class"]:
@@ -335,7 +335,33 @@ def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
         if String(view.format) != code or not Bool(py=view.c_contiguous) or Int(py=view.nbytes) != Int(py=metadata["size"])*Int(py=metadata["itemsize"]):
             raise Error("TypeError: native row materialization requires a complete typed Array backing buffer")
         if String(order) == "C":
-            return value
+            if not snapshot:
+                return value
+            # A public operation may retain this view across native calls.
+            # Capture the caller's metadata and independent backing owners once;
+            # retaining only the mutable Array object would permit its slots to
+            # replace the buffer/shape while the operation still uses them.
+            var slots = context["owner_array_slots"]
+            var cls = context["array_class"]
+            var store = py_call(slots["_store"].__get__,value,cls)
+            var pin = py_call(slots["_pin"].__get__,value,cls)
+            var base = py_call(slots["_base"].__get__,value,cls)
+            var readonly = py_call(slots["_readonly"].__get__,value,cls)
+            if py_type(readonly) is not b["bool"]:
+                raise Error("TypeError: native row materialization requires boolean Array readonly metadata")
+            # A reference to the caller's memoryview alone is insufficient:
+            # memoryview.release() can invalidate that exact view. Independent
+            # native exports keep the original storage pinned until completion.
+            var snapshot_view = native_buffer_view(view)
+            if py_type(store) is b["memoryview"]:
+                store = native_buffer_view(store)
+            if py_type(pin) is b["memoryview"]:
+                pin = native_buffer_view(pin)
+            if py_type(base) is b["memoryview"]:
+                base = native_buffer_view(base)
+            var output = _array(metadata["shape"],dtype,snapshot_view,store,pin,context,Python.tuple(value,base))
+            _ = py_call(slots["_readonly"].__set__,output,PythonObject(Bool(py=readonly) or Bool(py=view.readonly)))
+            return output
         var shape = metadata["shape"]
         var nonunit = 0
         for i in range(len(shape)):  # driver-loop: preserve _as_c's zero-copy view when C and F layouts coincide

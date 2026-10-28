@@ -1,0 +1,25 @@
+Peer6 CV Array input snapshot — 2026-10-27
+Branch: lane/peer6-timeseries-metrics-cv-20261027
+Parent: 27f8218c597daa0df23a9015fabe9a97971c5b43
+
+CV input materialization now requests an operation-local metadata/owner view
+for C-contiguous mojolearn Array inputs. The shared arena preparer exposes a
+snapshot option (default false, unchanged behavior for existing callers).
+The snapshot copies native shape/dtype/order/readonly metadata and retains
+original store, pin and base independently from the caller's mutable slots.
+It also acquires independent native memoryviews: retaining the same view
+object would not protect against the caller explicitly releasing it.
+No input data copy or numerical change is introduced by this C-layout path.
+
+Final compile attempt2: full runtime_model_selection host, Mac ARM CPU column,
+identical, O0, 10 configured workers, exit0. First compile passed before the
+independent-memoryview source-review correction; both complete logs retained.
+No runtime, GPU or identity checks. Receipt: compile.json. Full source/log/
+binary: ~/mojolearn-evidence/peer6-cv-array-snapshot-20261027/.
+Read-only environment provenance (manifest/lock/installed-package metadata)
+for all parent CV compiles: build_environment.json; full dependency bytes at
+~/mojolearn-evidence/peer6-cv-build-environment-20261027/.
+
+Pending: public split input reuse and invalid scalar/label paths are the next
+coherent batch; search scalar admission is a separate lane. No whole-library
+or transitive runtime-completeness claim follows from compilation.
