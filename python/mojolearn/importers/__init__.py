@@ -11,7 +11,7 @@ attribute values each accepts. A model that uses anything else raises
 """
 from __future__ import annotations
 
-from ._graph import UnsupportedModel
+from ._graph import UnsupportedModel, _READER_NATIVE, _READER_CONTEXT
 
 UnsupportedModel.__module__ = __name__  # documented as mojolearn.importers.UnsupportedModel
 
@@ -29,8 +29,7 @@ def supported_ops():
     >>> ops = dict(importers.supported_ops())
     """
     # the table of autograd/import_lower.mojo's ops and checks (importers/_table.py)
-    from ._table import SUPPORTED_OPS
-    return list(SUPPORTED_OPS)
+    return _READER_NATIVE("supported_ops", None, None, _READER_CONTEXT)
 
 
 def __getattr__(name):

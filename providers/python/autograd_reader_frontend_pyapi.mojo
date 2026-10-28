@@ -9,6 +9,7 @@ from bindings.native_json import native_path
 from providers.python.autograd_import_metadata_pyapi import _fields, _shape_words, _unsupported, _status
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_reuse, neural_descriptor_entry, neural_descriptor_execute, neural_descriptor_adopt
 from autograd.import_reader_dispatch import NativeReaderRequest
+from providers.python.autograd_graph_metadata_pyapi import graph_metadata_operation
 
 
 struct _Cursor(Movable):
@@ -295,4 +296,4 @@ def reader_frontend_operation(operation: PythonObject, value: PythonObject, opti
         return reader_read(value, options, context)
     if op == "reader_resolve" or op == "resolve" or op == "resolve_shapes":
         return reader_resolve(value, options, context, op == "resolve_shapes", op == "reader_resolve")
-    raise Error("ValueError: unknown ONNX reader operation")
+    return graph_metadata_operation(op, value, options, context)

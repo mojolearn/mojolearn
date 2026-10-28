@@ -4,8 +4,11 @@ from types import BuiltinFunctionType
 from ._native_import_bridge import _layout
 
 
-def connect(graph, reader, node, tensor, resolved, unsupported):
+def connect(graph, reader, node, tensor, resolved, unsupported, attrs_default, dtype_names, refused_names):
     # glue: connect the reader's own native table, not an execution Session.
+    from types import MethodType
+    from dataclasses import FrozenInstanceError
+    from ._table import SUPPORTED_OPS
     import ctypes
     import pathlib
     from array import array
@@ -15,6 +18,7 @@ def connect(graph, reader, node, tensor, resolved, unsupported):
     scalars = (str, bytes, bool, int, float)
     containers = (list, range, str, bytes, bytearray, memoryview, array,
                   type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([])))
+    np = None
     try:
         import numpy as np
     except ModuleNotFoundError as error:
@@ -44,9 +48,32 @@ def connect(graph, reader, node, tensor, resolved, unsupported):
             bindings[mode] = type(error).__name__ + ': ' + str(error)
     if entry is None:
         entry = _unavailable(ImportError('rebuild x_sequence with onnx_native_api_v1'))
-    return entry, dict(shape_scalars=scalars, shape_names=scalars, shape_containers=containers,
+    context = dict(shape_scalars=scalars, shape_names=scalars, shape_containers=containers,
                       shape_mappings=(dict, OrderedDict, defaultdict), bindings=bindings, aliases=tuple(aliases),
                       backend=vars(_backend), graph=graph, reader=reader, node=node, tensor=tensor,
                       resolved=resolved, unsupported=unsupported, byte_type=ctypes.c_ubyte,
                       dtypes=('f32', 'f16', 'bf16', 'f64', 'i64', 'i32', 'bool'), providers={},
-                      layouts={cls: _layout(cls) for cls in (graph, reader)})  # glue: fixed native storage layouts
+                      layouts={}, records={
+                          tensor: ('name', 'dtype', 'shape', 'data'),
+                          node: ('op', 'domain', 'name', 'inputs', 'outputs', 'attrs'),
+                          graph: ('opset', 'inputs', 'outputs', 'nodes', 'initializers', 'source'),
+                          resolved: ('shapes', 'dtypes', 'folded', 'no_rule', 'problems')},
+                      attrs_default=attrs_default, dtype_names=dtype_names, refused_names=refused_names,
+                      method_type=MethodType, native_entry=entry,
+                      supported_ops=SUPPORTED_OPS, numpy=np, frozen_error=FrozenInstanceError, array_type=array,
+                      record_names={cls: cls.__qualname__ for cls in (tensor, node, graph, resolved)},  # glue: native record names
+                      numpy_array_interface=None if np is None else vars(np.ndarray)["__array_interface__"].__get__,
+                      numpy_frombuffer=None if np is None else np.frombuffer, numpy_uint8=None if np is None else np.uint8)  # glue: fixed native storage layouts
+
+    if type(entry) is BuiltinFunctionType:
+        for cls in (tensor, node, graph, resolved):  # glue: compiled native metadata protocols
+            names = ('__repr__', '__eq__', '__hash__', '__setattr__', '__delattr__') if cls in (tensor, node) else ('__repr__', '__eq__')
+            for name in names:  # glue: native hooks replace generated Python dataclass methods
+                bound = MethodType(entry, (name, context))
+                setattr(cls, name, entry('record_descriptor', bound, None, context))
+    context['layouts'] = {cls: _layout(cls) for cls in (graph, reader, node, tensor, resolved)}  # glue: pin final native record storage
+    for cls in (graph, reader, node, tensor, resolved):  # glue: pin record protocols and fields after native hook setup
+        layout = context['layouts'][cls]
+        names = context['records'].get(cls, ('b', 'h', 'views')) + ('__repr__', '__eq__', '__hash__', '__delattr__')
+        layout['hooks'] += tuple((base, name, vars(base).get(name)) for base in cls.__mro__ for name in names)  # glue: fixed record hooks
+    return entry, context

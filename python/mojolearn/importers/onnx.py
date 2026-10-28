@@ -22,7 +22,7 @@ import ctypes
 import os
 import weakref
 
-from ._graph import GraphIR, Node, Resolved, TensorInfo, UnsupportedModel
+from ._graph import GraphIR, Node, Resolved, TensorInfo, UnsupportedModel, _Native, _READER_NATIVE, _READER_CONTEXT
 
 OPSET_MIN = 13
 
@@ -145,18 +145,6 @@ def _views(b, h, c, owner):
     return views
 
 
-class _Native:
-    """The Mojo reader's handle of one graph, released with its GraphIR."""
-
-    def __init__(self, b, h, views=()):
-        # views: one memoryview per buffer the graph's byte ranges point into
-        # (importers.import_model hands their addresses to the Mojo lowering)
-        self.b, self.h, self.views = b, h, tuple(views)
-
-    def resolve(self, shapes=None):
-        """importers._graph.resolve of this graph, by the Mojo rules."""
-        return _READER_NATIVE("reader_resolve", self, shapes, _READER_CONTEXT)
-
 
 def read(path, binding=None):
     """Read the ONNX model at ``path`` into an import graph.
@@ -170,15 +158,3 @@ def read(path, binding=None):
     ``ValueError`` when the file is not an ONNX model.
     """
     return _READER_NATIVE("reader_read", path, binding, _READER_CONTEXT)
-
-
-def _connect_reader():
-    # glue: fixed metadata classes and native provider connections at import.
-    from ._native_reader_bridge import connect
-    from . import _graph
-    entry, context = connect(GraphIR, _Native, Node, TensorInfo, Resolved, UnsupportedModel)
-    _graph._READER_NATIVE, _graph._READER_CONTEXT = entry, context
-    return entry, context
-
-
-_READER_NATIVE, _READER_CONTEXT = _connect_reader()

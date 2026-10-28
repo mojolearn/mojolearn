@@ -3,6 +3,7 @@
 # export is deliberately absent: a native call to that exporter still runs
 # Python forward. The public source-kind/export dispatcher remains separate debt.
 from std.python import Python, PythonObject
+from providers.python.autograd_graph_metadata_pyapi import graph_record_bound
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from providers.python.framework_metadata_pyapi import framework_metadata_operation
 from providers.python.autograd_reader_frontend_pyapi import reader_frontend_operation
@@ -149,10 +150,13 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         raise error^
 
 
+
 def ops_import_model_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
     var io_error = ByteCheckpointIOError()
     try:
         var args = PythonObject(from_borrowed=packed)
+        if len(args) >= 2 and py_type(args[0]) is native_loaded_module("builtins").tuple:
+            return graph_record_bound(args).steal_data()
         if len(args) == 4:
             return reader_frontend_operation(args[0], args[1], args[2], args[3]).steal_data()
         if len(args) == 3:
