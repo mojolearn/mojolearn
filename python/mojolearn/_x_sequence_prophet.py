@@ -190,7 +190,9 @@ _register_xseq(xseq_prophet_class=ProphetForecaster,
 if "xseq_unavailable" not in _XSEQ_CONTEXT:
     if type(np.promote_types) is not type(len):
         raise TypeError("Prophet temporal metadata requires native NumPy dtype promotion")
-    _register_xseq(xseq_prophet_complex_warning=np.exceptions.ComplexWarning,
+    _register_xseq(xseq_prophet_complex_warning=getattr(np, "exceptions", np).ComplexWarning,
+                   xseq_prophet_scalar_inputs=(bytes, np.str_, np.bytes_, np.longdouble),
+                   xseq_prophet_string_type=np.str_,
                    xseq_prophet_datetime_type=np.datetime64,
                    xseq_prophet_timedelta_type=np.timedelta64,
                    xseq_prophet_datetime_ns=np.dtype('datetime64[ns]'),
