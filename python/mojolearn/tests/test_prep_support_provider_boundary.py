@@ -46,6 +46,32 @@ def test_public_support_retains_unfitted_error(public_classes):
             cls().get_support()
 
 
+def test_public_support_retains_missing_mask_error(public_classes):
+    for cls in public_classes:
+        model = cls()
+        model.n_features_in_ = 3
+        with pytest.raises(AttributeError) as error:
+            model.get_support()
+        assert str(error.value) == f"'{cls.__name__}' object has no attribute '_mask'"
+
+
+def test_public_support_mask_copy_does_not_truth_test_items(public_classes):
+    calls = []
+
+    class Passive:
+        def __bool__(self):
+            calls.append('bool')
+            raise AssertionError('passive support value was truth-tested')
+
+    value = Passive()
+    for cls in public_classes:
+        model = _fitted(cls)
+        model._mask = [value, False, True]
+        result = model.get_support()
+        assert result[0] is value
+        assert calls == []
+
+
 @pytest.mark.parametrize('location', ['indices', 'mask', 'item'])
 def test_public_support_refuses_protocols_without_calling_them(public_classes, location):
     calls = []
