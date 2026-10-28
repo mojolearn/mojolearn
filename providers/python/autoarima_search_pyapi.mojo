@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_input, classical_typed, classical_address, classical_i64
+from bindings.classical_arrays import classical_input, classical_typed, classical_address
 from bindings.classical_pandas import classical_admit_value
 from bindings.sequential_admission import sequential_integer
 from bindings.sequential_arrays import sequential_array
@@ -14,6 +14,28 @@ from bindings.tsa_arima_native import arima_fit, _arima_entries
 from providers.python.autoarima_lifecycle_pyapi import _fields, _integer, _integer_object, _number, _packed, _buffer
 from x_metrics.epilogue import portable_log_c
 from providers.python.autoarima_owner_pyapi import autoarima_commit
+
+
+struct _Candidate(Copyable, Movable):
+    # Private operation-owned metadata: the search loops never need Python
+    # tuple indexing or integer conversion to recover a candidate's order.
+    var p: Int
+    var q: Int
+    var seasonal_p: Int
+    var seasonal_q: Int
+    var period: Int
+    var intercept: Int
+    var penalty: Float64
+
+    def __init__(out self, p: Int, q: Int, seasonal_p: Int, seasonal_q: Int,
+                 period: Int, intercept: Int, penalty: Float64):
+        self.p = p
+        self.q = q
+        self.seasonal_p = seasonal_p
+        self.seasonal_q = seasonal_q
+        self.period = period
+        self.intercept = intercept
+        self.penalty = penalty
 
 
 def _array(count: Int, code: Int, context: PythonObject) raises -> PythonObject:
@@ -182,6 +204,14 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                               Python.list(batch, n_obs, seasonal_d, period, ds[len(ds) - 1], 0.05))
     var dser = _cast(d32, 2, 3, batch, context)
     var dcounts = _counts(d32, 2, batch, 3, context)
+    # These options are invariant across differencing groups. Keep the native
+    # decision once; d only changes the candidate penalty and intercept options.
+    var plain = period == 0 and seasonal_d == 0
+    for p in ps:  # driver-loop: over AR candidate metadata once per search
+        plain = plain and p != 4
+    for q in qs:  # driver-loop: over MA candidate metadata once per search
+        plain = plain and q != 4
+    var dcount_words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(dcounts)))
     var models = Python.list()
     var ids_all = Python.list()
     var reuse_all = Python.list()
@@ -189,7 +219,7 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
     var order_out = classical_typed(Python.tuple(batch, 8), "<i8", context)
     var ic_out = classical_typed(Python.tuple(batch), "<f8", context)
     for d in range(3):  # driver-loop: over the three differencing groups
-        var count = classical_i64(dcounts, d)
+        var count = Int(dcount_words[d])
         if count == 0:
             continue
         var ids = _where(d32, d, batch, count, context)
@@ -204,15 +234,10 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 if fast_mode & 8:
                     ks.append(0)
                 ks.append(1)
-        var grid = Python.list()
+        var grid = List[_Candidate]()
         var table = Python.list()
         var packed = Python.list()
         var pens = Python.list()
-        var plain = period == 0 and seasonal_d == 0
-        for p in ps:  # driver-loop: over AR candidate metadata
-            plain = plain and p != 4
-        for q in qs:  # driver-loop: over MA candidate metadata
-            plain = plain and q != 4
         for p in ps:  # driver-loop: over AR candidate metadata
             for q in qs:  # driver-loop: over MA candidate metadata
                 for P in Ps:  # driver-loop: over seasonal AR candidate metadata
@@ -221,10 +246,11 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                             if p + q + P + Q + k == 0:
                                 continue
                             var s = period if P + seasonal_d + Q else 0
-                            _ = py_call(grid.append, Python.tuple(p, q, P, Q, s, k))
+                            var penalty = _penalty(p + q + P + Q + k + 1, criterion, n_obs, d, seasonal_d, s)
+                            grid.append(_Candidate(p, q, P, Q, s, k, penalty))
                             _ = py_call(table.append, Python.list(p, d, q, P, seasonal_d, Q, s, k))
                             _ = py_call(packed.extend, Python.tuple(p, q, P, Q, k))
-                            _ = py_call(pens.append, _penalty(p + q + P + Q + k + 1, criterion, n_obs, d, seasonal_d, s))
+                            _ = py_call(pens.append, penalty)
         var trials = len(grid)
         if trials == 0:
             raise Error("ValueError: AutoARIMA: no (p, q, P, Q, k) order to try")
@@ -256,10 +282,10 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 var offsets = Python.list()
                 var off = 0
                 for trial in range(trials):  # driver-loop: over candidate search plan metadata
-                    var order = grid[trial]
-                    _ = py_call(compact.extend, Python.tuple(order[0], order[1], order[5]))
+                    ref order = grid[trial]
+                    _ = py_call(compact.extend, Python.tuple(order.p, order.q, order.intercept))
                     _ = py_call(offsets.append, off)
-                    off += count * (3 * (Int(py=order[0]) + Int(py=order[1]) + Int(py=order[5]) + 1) + 1)
+                    off += count * (3 * (order.p + order.q + order.intercept + 1) + 1)
                 grouped_ll = _array(trials * count, 0, context)
                 var written = 0
                 if _optional(entries, "arima_search_reuse_enabled"):
@@ -278,21 +304,30 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 elif written != trials * count:
                     raise Error("RuntimeError: AutoARIMA: incomplete grouped likelihood output")
         if not chosen:
+            # All owners stay live through this loop, and these private output
+            # buffers are not resized or replaced by an individual candidate.
+            # Resolve their addresses and the IC binding once per group.
+            var ic_entry = _base(context, "ic_running_min_f32" if device_ic else "ic_running_min_f64")
+            var ic_k_address = classical_address(ic_k)
+            var best_ic_address = classical_address(best_ic)
+            var best_address = classical_address(best)
+            var grouped_address = 0 if grouped_ll is None else Int(py=classical_address(grouped_ll))
+            var arima_class = context["arima_class"]
             for trial in range(trials):  # driver-loop: over candidate order fits and compiled IC folds
-                var order = grid[trial]
+                ref order = grid[trial]
                 var llf = PythonObject(None)
                 var address = 0
                 if grouped_ll is None:
-                    var m = _new_arima(Python.tuple(order[0], d, order[1]),
-                        Python.tuple(order[2], seasonal_d, order[3], order[4]), Int(py=order[5]), maxiter, context)
+                    var m = _new_arima(Python.tuple(order.p, d, order.q),
+                        Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept, maxiter, context)
                     _ = arima_fit(m, Python.tuple(sub, PythonObject(None)), context)
-                    var state = _fields(m, context["arima_class"])
+                    var state = _fields(m, arima_class)
                     llf = _cast(state["llf_"], 1, 0, count, context)
                     address = Int(py=classical_address(llf))
                 else:
-                    address = Int(py=classical_address(grouped_ll)) + trial * count * 4
-                _ = py_call_typed(_base(context, "ic_running_min_f32" if device_ic else "ic_running_min_f64"),
-                    address, count, pens[trial], trial, classical_address(ic_k), classical_address(best_ic), classical_address(best))
+                    address = grouped_address + trial * count * 4
+                _ = py_call_typed(ic_entry, address, count, order.penalty, trial,
+                                  ic_k_address, best_ic_address, best_address)
                 _ = llf
         var table_array = classical_input(table, context, "order table")
         var selected_orders = _take(table_array, best, trials, count, 8, 3, context)
@@ -301,18 +336,21 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
         _put(ic_out, ids, wide_ic, batch, count, 8, context)
         var bcounts = _counts(best, 3, count, trials, context)
         var best32 = _cast(best, 3, 2, count, context)
+        var bcount_words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bcounts)))
         for trial in range(trials):  # driver-loop: over selected candidate model groups
-            var selected_count = classical_i64(bcounts, trial)
+            var selected_count = Int(bcount_words[trial])
             if selected_count == 0:
                 continue
             var local = _where(best32, trial, count, selected_count, context)
             var selected = _take(ids, local, count, selected_count, 1, 3, context)
-            var order = grid[trial]
-            _ = py_call(models.append, Python.tuple(Python.tuple(order[0], d, order[1]),
-                         Python.tuple(order[2], seasonal_d, order[3], order[4]), order[5]))
+            ref order = grid[trial]
+            _ = py_call(models.append, Python.tuple(Python.tuple(order.p, d, order.q),
+                         Python.tuple(order.seasonal_p, seasonal_d, order.seasonal_q, order.period), order.intercept))
             _ = py_call(ids_all.append, selected)
             _ = py_call(reuse_all.append, PythonObject(None) if search_fit is None else Python.tuple(search_fit, trial, local))
             _ = py_call(fitted.append, PythonObject(None))
+        _ = bcounts
+    _ = dcounts
     # Commit finished search state only after every native candidate group returns.
     var updates = Python.dict()
     py_setitem(updates, "d_", dser)

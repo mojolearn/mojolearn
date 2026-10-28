@@ -1,0 +1,41 @@
+AutoARIMA candidate metadata and loop setup, 2026-10-28
+
+Branch: lane/classical-loop-hoist-20261028 (base dde8d170c4).
+
+Repeated work removed:
+- Candidate order tuples, their Python grid/list appends and repeated tuple
+  indexing / integer decoding are replaced by a native List of borrowed
+  _Candidate records. Each penalty is computed once and retained natively.
+- The invariant plain-order decision is computed once per search instead of
+  once per differencing group.
+- Candidate IC folding resolves its selected binding, private output addresses,
+  grouped likelihood address and model class once per group, not per trial.
+- Differencing and candidate count reads use one captured private-buffer pointer
+  per loop, not repeated classical_address/module/Array metadata lookups.
+
+Setup/reuse and invalidation:
+All metadata is private to one autoarima_search call. No persistent cache is
+introduced; every operation still admits current public arguments/model state.
+Each candidate is built from that call's normalized native options. Output/count
+arrays remain owned through the final native read. The existing selected-order
+publication, candidate ordering and numerical kernels/formulae remain intact.
+
+Compilation:
+checks/peer6_autoarima_lifecycle_compile.mojo (actual TSA public dispatcher,
+including AutoARIMA search) compiled successfully, Apple CPU identical O0, ten
+workers, under tools/compile_slot.sh. See compile.json. The initial parse attempt
+failed because native records require explicit borrowing; replaced implicit
+copies with ref borrows and compiled successfully. Both full logs and source
+snapshots are retained. No runtime, identity or performance execution; no
+measured speed claim; no rented box.
+
+Remaining limits:
+Public boundary admission, compiled-kernel call envelopes, table/packed/penalty
+marshalling and finished public result containers still use Python objects.
+This is a structural reduction in repeated work, not a Python-free search claim.
+GPU compilation and runtime behavior are not qualified by this batch.
+
+Evidence: ~/mojolearn-evidence/classical-loop-hoist-20261028/
+Failed attempt: attempt1-compile.log/json and attempt1-source-bytes.tgz.
+Successful artifact: _autoarima_loop_hoist.so. Full source manifest/archive and
+compiler/artifact hashes are in compile.json. No new dependency was added.
