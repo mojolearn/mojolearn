@@ -119,7 +119,11 @@ from max.gpu.sync import barrier
 from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from core.device_scan import (
     NONFINITE_NONE,
+    SCAN_BLOCKS,
+    SCAN_TPB,
+    _scan_blocks,
     device_first_nonfinite,
+    min_partials_kernel,
     nonfinite_partial_kernel,
 )
 from checks.kernel_matrix import (
@@ -2577,6 +2581,265 @@ def regime_product_ok(hd: Int, a_max: Float64, b_max: Float64) -> Bool:
 def regime_finite(x_max: Float64) -> Bool:
     var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
     return x_max < inf
+
+
+# ===========================================================================
+# Deferred host checks (lane decode-resident, 2026-10-28)
+# ===========================================================================
+
+comptime IDN_DECODE_RESIDENT_IO = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_DECODE_RESIDENT_IO"
+]()
+"""Default OFF experiment, `-D MOJOLEARN_IDN_DECODE_RESIDENT_IO`.
+
+A resident decode step (`TransformerDecodeSession`) waits ONCE: the call's
+non-finite refusal scans and the fused attention's regime scan and corner
+flag are enqueued into a `LlamaDeferredChecks` window and read back with
+the output, behind the step's one completion wait. When every check is
+clean the step's bytes are the bytes today's step keeps: the same kernels
+ran on the same inputs (the regime scan reads q_rope, k_cache and v_cache,
+which the fused kernels never write, so it reads what the scan in front of
+the kernels reads). When any check is not clean the session restores the
+cache it snapshotted before the call and replays the step with the window
+disarmed, which is today's path: today's refusal message, today's eager
+fallback, today's bits. No arithmetic moves, so no bit moves on any column.
+The earlier per-call attention window (MOJOLEARN_IDN_ATTN_DEFER_REGIME,
+tombstoned) evaluated the regime on the device and changed the stash
+launcher for forward-only calls; this keeps the launcher, the host fold
+and the host bound exactly as they are."""
+
+comptime IDN_TRAIN_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
+    "MOJOLEARN_IDN_TRAIN_ONE_WAIT"
+]()
+"""Default OFF experiment, `-D MOJOLEARN_IDN_TRAIN_ONE_WAIT` (training/byte_lm.mojo):
+the byte-LM resident train step defers its per-layer call refusals, the
+per-layer waits, the loss read and the post-update state scans into one
+readback at the step end, and replays the synchronous step after a rollback
+when any deferred check is not clean. Declared here because the per-layer
+refusal deferral uses `LlamaDeferredChecks`."""
+
+comptime DEFER_NF_SLOTS = 64
+"""Non-finite refusal scans one deferred window holds (four per decoder
+layer call: hidden states, rotary table, key and value caches). A call
+that does not fit is checked synchronously, as today."""
+comptime DEFER_ATTN_SLOTS = 32
+"""Fused attention forwards one deferred window holds (one per layer)."""
+comptime _DEFER_FLAG_WORDS = 3
+"""Words copied from each forward's corner flag buffer (1 or 3)."""
+comptime _DEFER_AMAX_FLOATS = DEFER_ATTN_SLOTS * 3 * ABSMAX_BLOCKS
+
+
+struct LlamaDeferredChecks(Movable):
+    """One deferred window: device scratch for the checks a step defers, a
+    pinned host mirror, and the host bookkeeping that folds them after the
+    caller's wait. Allocated once by its owner (a decode session or a
+    trainer) and reused every step; `begin` empties it.
+
+    Every scan is the shipped kernel at the shipped grid: the refusal scans
+    are `nonfinite_partial_kernel` + `min_partials_kernel`
+    (`DeviceNonfiniteBatch`'s pair), the regime scans `absmax_partial_kernel`
+    with the host max fold of `_device_absmax4_cached`, and the corner flag
+    is the forward kernel's own flag buffer, copied before the next forward
+    reuses it. Nothing here reaches an output."""
+
+    var nf_part: DeviceBuffer[DType.int32]
+    var nf_res: DeviceBuffer[DType.int32]
+    var amax_part: DeviceBuffer[DType.float32]
+    var flags: DeviceBuffer[DType.float32]
+    var host_i: HostBuffer[DType.int32]
+    var host_f: HostBuffer[DType.float32]
+    var refusal: Bool
+    var attention: Bool
+    var nf_used: Int
+    var attn_used: Int
+    var amax_used: Int
+    var attn_hd: List[Int]
+    var attn_blocks: List[Int]
+    var read_queued: Bool
+
+    def __init__(out self, ctx: DeviceContext, refusal: Bool, attention: Bool) raises:
+        step_count_device_alloc()
+        self.nf_part = ctx.enqueue_create_buffer[DType.int32](DEFER_NF_SLOTS * SCAN_BLOCKS)
+        step_count_device_alloc()
+        self.nf_res = ctx.enqueue_create_buffer[DType.int32](DEFER_NF_SLOTS)
+        step_count_device_alloc()
+        self.amax_part = ctx.enqueue_create_buffer[DType.float32](_DEFER_AMAX_FLOATS)
+        step_count_device_alloc()
+        self.flags = ctx.enqueue_create_buffer[DType.float32](DEFER_ATTN_SLOTS * _DEFER_FLAG_WORDS)
+        step_count_host_alloc()
+        self.host_i = ctx.enqueue_create_host_buffer[DType.int32](DEFER_NF_SLOTS)
+        step_count_host_alloc()
+        self.host_f = ctx.enqueue_create_host_buffer[DType.float32](
+            _DEFER_AMAX_FLOATS + DEFER_ATTN_SLOTS * _DEFER_FLAG_WORDS
+        )
+        self.refusal = refusal
+        self.attention = attention
+        self.nf_used = 0
+        self.attn_used = 0
+        self.amax_used = 0
+        self.attn_hd = List[Int]()
+        self.attn_blocks = List[Int]()
+        self.read_queued = False
+
+    def begin(mut self):
+        """Empty the window for a new step. Host bookkeeping only: every
+        device word a later fold reads is written by this step's launches."""
+        self.nf_used = 0
+        self.attn_used = 0
+        self.amax_used = 0
+        self.attn_hd.clear()
+        self.attn_blocks.clear()
+        self.read_queued = False
+
+    def can_defer_nonfinite(self, count: Int) -> Bool:
+        """Room for `count` more refusal scans (a call defers all of its
+        scans or none, so its names keep their order on the replay)."""
+        return self.refusal and self.nf_used + count <= DEFER_NF_SLOTS
+
+    def add_nonfinite(
+        mut self, ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+    ) raises:
+        """Enqueue `device_first_nonfinite(buf, n)` into the next slot; the
+        slot's word is the first non-finite index or `NONFINITE_NONE`."""
+        if self.nf_used >= DEFER_NF_SLOTS:
+            raise Error("deferred checks: refusal slots exhausted")
+        if n < 0 or n > Int(NONFINITE_NONE) or n > len(buf):
+            raise Error("deferred checks: refusal length outside the buffer")
+        var slot = self.nf_used
+        var blocks = 0
+        if n > 0:
+            blocks = _scan_blocks(n)
+            step_count_launch()
+            ctx.enqueue_function[nonfinite_partial_kernel](
+                self.nf_part.unsafe_ptr() + slot * SCAN_BLOCKS, buf.unsafe_ptr(),
+                Int32(n), grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+            )
+        step_count_launch()
+        ctx.enqueue_function[min_partials_kernel](
+            self.nf_res.unsafe_ptr() + slot, self.nf_part.unsafe_ptr() + slot * SCAN_BLOCKS,
+            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+        self.nf_used += 1
+
+    def can_defer_attention(self) -> Bool:
+        return self.attention and self.attn_used < DEFER_ATTN_SLOTS
+
+    def add_attention(
+        mut self,
+        ctx: DeviceContext,
+        hd: Int,
+        q_p: MutPointer[Float32, MutAnyOrigin],
+        nq: Int,
+        k_p: MutPointer[Float32, MutAnyOrigin],
+        nk: Int,
+        v_p: MutPointer[Float32, MutAnyOrigin],
+        nv: Int,
+        mut corner: DeviceBuffer[DType.float32],
+    ) raises:
+        """Behind a fused forward's kernels: its regime scan (the
+        `device_absmax4` launches over q_rope, k_cache and v_cache, at the
+        same grids) into this window's partials, and a copy of its corner
+        flag words. Read on the host by `clean_after_wait`."""
+        if self.attn_used >= DEFER_ATTN_SLOTS:
+            raise Error("deferred checks: attention slots exhausted")
+        var k0 = _absmax_blocks(nq)
+        var k1 = _absmax_blocks(nk)
+        var k2 = _absmax_blocks(nv)
+        if self.amax_used + k0 + k1 + k2 > _DEFER_AMAX_FLOATS:
+            raise Error("deferred checks: regime partials exhausted")
+        var base = self.amax_part.unsafe_ptr() + self.amax_used
+        if k0 > 0:
+            step_count_launch()
+            ctx.enqueue_function[absmax_partial_kernel](
+                base, q_p, Int32(nq), grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+            )
+        if k1 > 0:
+            step_count_launch()
+            ctx.enqueue_function[absmax_partial_kernel](
+                base + k0, k_p, Int32(nk), grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+            )
+        if k2 > 0:
+            step_count_launch()
+            ctx.enqueue_function[absmax_partial_kernel](
+                base + k0 + k1, v_p, Int32(nv), grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+            )
+        var words = len(corner)
+        if words > _DEFER_FLAG_WORDS:
+            words = _DEFER_FLAG_WORDS
+        if words < 1:
+            raise Error("deferred checks: empty corner flag")
+        var dst = self.flags.create_sub_buffer[DType.float32](
+            self.attn_used * _DEFER_FLAG_WORDS, words
+        )
+        var src = corner.create_sub_buffer[DType.float32](0, words)
+        ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+        _ = dst^
+        _ = src^
+        self.attn_hd.append(hd)
+        self.attn_blocks.append(k0)
+        self.attn_blocks.append(k1)
+        self.attn_blocks.append(k2)
+        self.amax_used += k0 + k1 + k2
+        self.attn_used += 1
+
+    def enqueue_readback(mut self, ctx: DeviceContext) raises:
+        """Copy every word this window wrote into the pinned mirror. The
+        caller's next wait covers it; `clean_after_wait` reads it."""
+        if self.nf_used > 0:
+            var res = self.nf_res.create_sub_buffer[DType.int32](0, self.nf_used)
+            step_count_d2h()
+            ctx.enqueue_copy(dst_ptr=self.host_i.unsafe_ptr(), src_buf=res)
+            _ = res^
+        if self.amax_used > 0:
+            var part = self.amax_part.create_sub_buffer[DType.float32](0, self.amax_used)
+            step_count_d2h()
+            ctx.enqueue_copy(dst_ptr=self.host_f.unsafe_ptr(), src_buf=part)
+            _ = part^
+        if self.attn_used > 0:
+            var fl = self.flags.create_sub_buffer[DType.float32](
+                0, self.attn_used * _DEFER_FLAG_WORDS
+            )
+            step_count_d2h()
+            ctx.enqueue_copy(dst_ptr=self.host_f.unsafe_ptr() + _DEFER_AMAX_FLOATS, src_buf=fl)
+            _ = fl^
+        self.read_queued = True
+
+    def clean_after_wait(mut self) raises -> Bool:
+        """True when every deferred check passed: no refusal hit, every
+        regime inside the bound `fused_forward_launch_ran` applies (the
+        same max fold of the same partials, the same Float64 bound) and no
+        corner flag set. Call only after the wait that covers
+        `enqueue_readback`; a window with nothing deferred is clean."""
+        if not self.read_queued:
+            raise Error("deferred checks: readback not enqueued before the wait")
+        var hi = self.host_i.unsafe_ptr()
+        for slot in range(self.nf_used):  # small-loop(nf_used: deferred refusal slots, at most DEFER_NF_SLOTS)
+            if hi.unsafe_load(slot) != NONFINITE_NONE:
+                return False
+        var hf = self.host_f.unsafe_ptr()
+        var lo = 0
+        for a in range(self.attn_used):  # small-loop(attn_used: deferred fused forwards, one per layer)
+            var maxima = StaticTuple[Float64, 3](0.0, 0.0, 0.0)
+            for which in range(3):  # small-loop(3: q_rope, k_cache, v_cache partial slices)
+                var kb = self.attn_blocks[a * 3 + which]
+                var m = Float32(0.0)
+                for i in range(lo, lo + kb):  # small-loop(kb: one operand partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
+                    var v = hf.unsafe_load(i)
+                    if v > m:
+                        m = v
+                maxima[which] = Float64(m)
+                lo += kb
+            if not regime_product_ok(self.attn_hd[a], maxima[0], maxima[1]) or not regime_finite(maxima[2]):
+                return False
+            if hf.unsafe_load(_DEFER_AMAX_FLOATS + a * _DEFER_FLAG_WORDS) != Float32(0.0):
+                return False
+        return True
+
+
+def deferred_checks_at(addr: Int) -> MutPointer[LlamaDeferredChecks, MutAnyOrigin]:
+    """The window a stages record points at (`LlamaDeviceStages.defer_addr`,
+    nonzero only while its owner's deferred step runs)."""
+    return MutPointer[LlamaDeferredChecks, MutAnyOrigin](unsafe_from_address=addr)
 
 
 comptime IDN_ATTN_BWD_SCAN_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
@@ -8109,6 +8372,7 @@ def fused_forward_launch(
     key_lo: Int,
     window: Int,
     scale: Float32,
+    deferred: Int = 0,
 ) raises -> Int:
     """The fused forward: `ctxv`, `amax` and `denom` are written on
     `FUSED_RAN`; on any other status nothing the caller reads is defined
@@ -8119,6 +8383,7 @@ def fused_forward_launch(
     return fused_forward_launch_arm(
         ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
         hd, s, pos0, key_lo, window, scale, fused_attention_arm_from_env(),
+        deferred=deferred,
     )
 
 
@@ -8141,6 +8406,7 @@ def fused_forward_launch_arm(
     window: Int,
     scale: Float32,
     arm: Int,
+    deferred: Int = 0,
 ) raises -> Int:
     """`fused_forward_launch` with the arm given (the harness alternates
     arms inside one process). A candidate arm's kernels exist on a
@@ -8152,7 +8418,7 @@ def fused_forward_launch_arm(
     var ran = ATTN_ARM_BASELINE
     return fused_forward_launch_ran(
         ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
-        hd, s, pos0, key_lo, window, scale, arm, ran,
+        hd, s, pos0, key_lo, window, scale, arm, ran, deferred=deferred,
     )
 
 
@@ -8176,6 +8442,7 @@ def fused_forward_launch_ran(
     scale: Float32,
     arm: Int,
     mut ran: Int,
+    deferred: Int = 0,
 ) raises -> Int:
     """`fused_forward_launch_arm`, also reporting in `ran` the arm word of
     the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
@@ -8190,7 +8457,15 @@ def fused_forward_launch_ran(
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
     var speculative = _attn_speculative()
-    if not speculative:
+    # IDN_DECODE_RESIDENT_IO: inside an armed deferred window the regime
+    # scan runs BEHIND the kernels into the window (`add_attention` below)
+    # and its owner folds it after the step's one wait; a refused regime or
+    # a corner there replays the step with the window disarmed.
+    var defer_now = False
+    comptime if IDN_DECODE_RESIDENT_IO or IDN_TRAIN_ONE_WAIT:
+        if deferred != 0 and deferred_checks_at(deferred)[].can_defer_attention():
+            defer_now = True
+    if not speculative and not defer_now:
         var amx = device_absmax4(
             ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
@@ -8408,6 +8683,15 @@ def fused_forward_launch_ran(
                 grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
             )
         _attn_tick(ctx, ton, tk, "fwd_kernel")
+    comptime if IDN_DECODE_RESIDENT_IO or IDN_TRAIN_ONE_WAIT:
+        if defer_now:
+            deferred_checks_at(deferred)[].add_attention(
+                ctx, hd, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+                k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd, corner,
+            )
+            _ = corner^
+            return FUSED_RAN
     if speculative:
         # The scan behind the kernels: its one wait covers them, and the
         # flag read after it finds nothing pending.
@@ -10929,6 +11213,7 @@ def fused_forward_launch_estash_ran(
     arm: Int,
     mut ran: Int,
     mut kept_cells: Int,
+    deferred: Int = 0,
 ) raises -> Int:
     """`fused_forward_launch_ran`, and under an `_estash` arm this build runs
     (`fused_attention_arm_estash_runs`, head_dim 64) the same forward
@@ -10943,7 +11228,7 @@ def fused_forward_launch_estash_ran(
     comptime if ATTN_V1_RECOMPUTE_BACKWARD:
         return fused_forward_launch_ran(
             ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
-            hd, s, pos0, key_lo, window, scale, arm, ran,
+            hd, s, pos0, key_lo, window, scale, arm, ran, deferred=deferred,
         )
     comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
         if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD:
@@ -10953,7 +11238,13 @@ def fused_forward_launch_estash_ran(
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
             var speculative = _attn_speculative()
-            if not speculative:
+            # IDN_DECODE_RESIDENT_IO: the deferred window, as in
+            # `fused_forward_launch_ran`.
+            var defer_now = False
+            comptime if IDN_DECODE_RESIDENT_IO or IDN_TRAIN_ONE_WAIT:
+                if deferred != 0 and deferred_checks_at(deferred)[].can_defer_attention():
+                    defer_now = True
+            if not speculative and not defer_now:
                 var amx = device_absmax4(
                     ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                     b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
@@ -11038,6 +11329,16 @@ def fused_forward_launch_estash_ran(
             # estash slot either, and the backward's word carries the bit
             # for both directions (the map is one arm bit, not two).
             ran = _attn_fwd_r2_ran_word(arm, 32)
+            comptime if IDN_DECODE_RESIDENT_IO or IDN_TRAIN_ONE_WAIT:
+                if defer_now:
+                    deferred_checks_at(deferred)[].add_attention(
+                        ctx, hd, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+                        k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd, corner,
+                    )
+                    _ = corner^
+                    kept_cells = cells
+                    return FUSED_RAN
             if speculative:
                 var amx2 = device_absmax4(
                     ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -11071,7 +11372,7 @@ def fused_forward_launch_estash_ran(
             return FUSED_RAN
     return fused_forward_launch_ran(
         ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
-        hd, s, pos0, key_lo, window, scale, arm, ran,
+        hd, s, pos0, key_lo, window, scale, arm, ran, deferred=deferred,
     )
 
 
