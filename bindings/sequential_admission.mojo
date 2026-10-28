@@ -52,46 +52,80 @@ def _ordinary_torch(cls: PythonObject, context: PythonObject) raises -> Bool:
     return native_torch_exact(cls)
 
 
-def sequential_admit_value(mut mods: NativeModules, value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+struct _SequentialValueTypes(Movable):
+    # Capture fixed import-time admission metadata once per public scan. Nested
+    # lists used to allocate two empty Python containers and reread the same
+    # context dictionaries for every element. Native identity vectors avoid
+    # both costs; public values are still visited and admitted on every scan.
+    var list_type: PythonObject
+    var tuple_type: PythonObject
+    var memoryview_type: PythonObject
+    var defaultdict_type: PythonObject
+    var native_types: List[PythonObject]
+    var scalar_types: List[PythonObject]
+    var mapping_types: List[PythonObject]
+    var factory_types: List[PythonObject]
+    var buffer_types: List[PythonObject]
+
+    def __init__(out self, mut mods: NativeModules, context: PythonObject) raises:
+        var b = mods.module("builtins")
+        self.list_type = b.list
+        self.tuple_type = b.tuple
+        self.memoryview_type = b.memoryview
+        self.defaultdict_type = py_get(context, "defaultdict_class")
+        self.native_types = _value_types(py_get(context, "native_value_types"))
+        self.scalar_types = _value_types(py_get(context, "scalar_types"))
+        self.mapping_types = _value_types(py_get(context, "mapping_types"))
+        self.factory_types = _value_types(py_get(context, "native_default_factories"))
+        self.buffer_types = _value_types(py_get(context, "buffer_owner_types"))
+
+
+def _value_types(values: PythonObject) raises -> List[PythonObject]:
+    var result = List[PythonObject]()
+    if values is not None:
+        for i in range(len(values)):  # driver-loop: capture fixed connected admission type identities once
+            result.append(values[i])
+    return result^
+
+
+def _native_one_of(cls: PythonObject, types: List[PythonObject]) -> Bool:
+    for i in range(len(types)):  # driver-loop: compare native retained type identities
+        if cls is types[i]:
+            return True
+    return False
+
+
+def _sequential_admit_value(mut mods: NativeModules, value: PythonObject, context: PythonObject,
+                            types: _SequentialValueTypes, depth: Int) raises:
     if depth > 64:
         raise Error("TypeError: Sequential input containers exceed the supported nesting depth")
-    if depth == 0:
-        # The connected-builtins check once per admitted value, not once per
-        # element: re-validating every builtins export for each of a list's
-        # 20000 labels made a forest fit on a Python-list y ~35 s slower
-        # (L4, tools/repro_par_forest.py --direct --inputs pool).
-        _ = mods.module("builtins")
     var cls = py_type(value)
-    if cls is py_type(Python.list()) or cls is py_type(Python.tuple()):
+    if cls is types.list_type or cls is types.tuple_type:
         for k in range(len(value)):  # driver-loop: over native input container owners and metadata
-            sequential_admit_value(mods, value[k], context, depth + 1)
+            _sequential_admit_value(mods, value[k], context, types, depth + 1)
         return
-    # Exact native values and scalars first (no memoryview is in either
-    # table, so the order of these checks does not change any outcome).
-    var native_values = py_get(context, "native_value_types")
-    var scalars = py_get(context, "scalar_types")
-    if (native_values is not None and _one_of(cls, native_values)) or (scalars is not None and _one_of(cls, scalars)):
+    if _native_one_of(cls, types.native_types) or _native_one_of(cls, types.scalar_types):
         return
-    var b = mods.module("builtins")
-    if _one_of(cls, context["mapping_types"]):
-        if cls is context["defaultdict_class"]:
+    if _native_one_of(cls, types.mapping_types):
+        if cls is types.defaultdict_type:
             # An exact C defaultdict can still call a Python default_factory
             # on a later missing lookup. Admit only connected C constructors.
             var factory = value.default_factory
-            if factory is not None and not _one_of(factory, context["native_default_factories"]) and not _one_of(factory, context["scalar_types"]):
+            if factory is not None and not _native_one_of(factory, types.factory_types) and not _native_one_of(factory, types.scalar_types):
                 raise Error("TypeError: Sequential defaultdict requires a native builtin default factory or None")
-        var pairs = py_call(py_type(Python.list()), value.items())
+        var pairs = py_call(types.list_type, value.items())
         mods.released()
         for k in range(len(pairs)):  # driver-loop: over native mapping keys and buffer owners
-            sequential_admit_value(mods, pairs[k][0], context, depth + 1)
-            sequential_admit_value(mods, pairs[k][1], context, depth + 1)
+            var pair = pairs[k]
+            _sequential_admit_value(mods, pair[0], context, types, depth + 1)
+            _sequential_admit_value(mods, pair[1], context, types, depth + 1)
         return
-    if cls is b.memoryview:
+    if cls is types.memoryview_type:
         # A custom Python exporter may carry release callbacks. The standard
         # buffer types connected at import expose their buffers in native C.
         var owner = value.obj
         var owner_type = py_type(owner)
-        if not _one_of(owner_type, context["buffer_owner_types"]) and not _ctypes_array_owner(mods, owner_type, context):
+        if not _native_one_of(owner_type, types.buffer_types) and not _ctypes_array_owner(mods, owner_type, context):
             raise Error("TypeError: Sequential requires a memoryview over a native buffer owner")
         return
     if _ordinary_torch(cls, context):
@@ -101,6 +135,11 @@ def sequential_admit_value(mut mods: NativeModules, value: PythonObject, context
         return
     mods.released()
     raise Error("TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported")
+
+
+def sequential_admit_value(mut mods: NativeModules, value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    var types = _SequentialValueTypes(mods, context)
+    _sequential_admit_value(mods, value, context, types, depth)
 
 
 def sequential_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -193,7 +232,7 @@ comptime _SEQUENTIAL_ADMIT_SLOT = "sequential_admit_v3"
 
 
 def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
-    var b = mods.module("builtins")
+    var types = _SequentialValueTypes(mods, context)
     if operation == "load_checkpoint":
         if model is not context["sequential_class"]:
             raise Error("TypeError: Sequential checkpoint loading requires the native Sequential class")
@@ -248,7 +287,7 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
                 stable = False
             for k in range(len(names)):  # driver-loop: over model metadata and native buffer owners used by execution
                 if py_contains(fields, names[k]):
-                    sequential_admit_value(mods, fields[names[k]], context)
+                    _sequential_admit_value(mods, fields[names[k]], context, types, 0)
             var factory_class = py_get(context, "defaultdict_class")
             for k in range(len(key.objects)):  # driver-loop: over captured field ownership references
                 if factory_class is not None and py_type(key.objects[k]) is factory_class:
@@ -260,4 +299,4 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
                 var admitted = cache.downcast_value_ptr[SequentialAdmissions]()
                 admitted[].operations[operation] = PythonObject(alloc=key^)
                 prepared_put(mods, _SEQUENTIAL_ADMIT_SLOT, model, cache)
-    sequential_admit_value(mods, args, context)
+    _sequential_admit_value(mods, args, context, types, 0)

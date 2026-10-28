@@ -3,7 +3,9 @@
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python import Python, PythonObject
 from bindings.sequential_admission import sequential_integer, sequential_admit_value
-from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem, py_type
+from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_prepared_owner import prepared_get, prepared_put
 
 
 def sequential_fields(value: PythonObject) raises -> PythonObject:
@@ -172,6 +174,96 @@ def sequential_compile(mut mods: NativeModules, model: PythonObject, options: Py
     var fields = sequential_fields(model)
     py_setitem(fields, "_options", out)
     return model
+
+
+struct SequentialDescription(Movable, Writable):
+    # The execution ABI owns native words. Retain them across calls rather than
+    # rebuilding Python lists and immediately copying their elements back into
+    # Mojo. The public description methods keep their existing Python results.
+    var identities: NativeIdentityKey
+    var input_width: Int
+    var cacheable: Bool
+    var program: List[Int]
+    var scalars: List[Float64]
+
+    def __init__(out self, mut mods: NativeModules, layers: PythonObject,
+                 width: Int, sample: PythonObject) raises:
+        self.identities = NativeIdentityKey(mods)
+        self.cacheable = True
+        try:
+            self.identities.add(layers)
+            self.identities.add(sample)
+        except:
+            # Uncacheable extra metadata must not change ordinary execution.
+            self.cacheable = False
+        var b = mods.module("builtins")
+        var int_type = b.int
+        var float_type = b.float
+        var bool_type = b.bool
+        for i in range(len(self.identities.objects)):  # driver-loop: establish immutable scalar ownership once on cache miss
+            var value = self.identities.objects[i]
+            var cls = py_type(value)
+            if value is not None and cls is not self.identities.list_type and cls is not self.identities.tuple_type and cls is not int_type and cls is not float_type and cls is not bool_type:
+                # Writable native buffers can convert to scalars while retaining
+                # their identity. Preserve that behavior by rebuilding for those
+                # descriptions, rather than caching their converted contents.
+                self.cacheable = False
+                break
+        self.input_width = width
+        self.program = List[Int]()
+        self.scalars = List[Float64]()
+        var count = len(layers)
+        if sample is None:
+            self.program.append(1)
+            self.program.append(width)
+            self.program.append(count)
+        else:
+            var rank = len(sample)
+            self.program.append(2)
+            self.program.append(rank)
+            for k in range(rank):  # driver-loop: capture sample dimensions in native ABI words
+                self.program.append(Int(py=sample[k]))
+            for k in range(rank, 8):  # driver-loop: fill unused native sample dimension slots
+                self.program.append(1)
+            self.program.append(count)
+        for k in range(count):  # driver-loop: capture admitted layer metadata once per changed description
+            var layer = layers[k]
+            self.program.append(Int(py=layer[0]))
+            if sample is None:
+                self.program.append(Int(py=layer[1]))
+                self.program.append(Int(py=layer[2]))
+            else:
+                var args = layer[4]
+                for j in range(len(args)):  # driver-loop: capture rank-aware native layer arguments
+                    self.program.append(Int(py=args[j]))
+            self.program.append(0)
+            self.scalars.append(Float64(py=layer[3]))
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("SequentialDescription(native)")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def sequential_native_description(mut mods: NativeModules, model: PythonObject,
+                                  n_features: PythonObject, sample: PythonObject) raises -> PythonObject:
+    var layers = sequential_fields(model)["_layers"]
+    # Rank-aware programs do not consume n_features. This also preserves the
+    # public description's behavior when sample is present and width is None.
+    var width = 0 if sample is not None else Int(py=n_features)
+    var cached = prepared_get(mods, "sequential_description_v1", model)
+    if cached is not None:
+        var retained = cached.downcast_value_ptr[SequentialDescription]()
+        var offset = 0
+        if retained[].input_width == width and retained[].identities.matches(layers, offset) and retained[].identities.matches(sample, offset) and retained[].identities.complete(offset):
+            return cached
+    var description = SequentialDescription(mods, layers, width, sample)
+    var stable = description.cacheable and not description.identities.retains(model)
+    var result = PythonObject(alloc=description^)
+    if stable:
+        prepared_put(mods, "sequential_description_v1", model, result)
+    return result
 
 
 def sequential_program(mut mods: NativeModules, model: PythonObject, n_features: PythonObject, sample: PythonObject) raises -> PythonObject:

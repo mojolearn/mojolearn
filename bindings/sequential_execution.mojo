@@ -9,7 +9,7 @@ from autograd.model_execution import model_counts_native
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
 from providers.python.autograd_pyapi import _ints, model_float64_words, model_admit_addresses
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
-from bindings.sequential_description import sequential_fields, sequential_sample_shape, sequential_program, sequential_table, _integer
+from bindings.sequential_description import sequential_fields, sequential_sample_shape, sequential_native_description, SequentialDescription, _integer
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x_snapshot, sequential_curve
 
 
@@ -104,12 +104,12 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var warm = not resume and Bool(py=py_get(fields, "_imported", False))
     if warm and (d != Int(py=fields["n_features_in_"]) or not Bool(py=sample == py_get(fields, "_sample_shape"))):
         raise Error("X has a different feature count or sample shape from the imported weights")
-    var program = sequential_program(mods, model, PythonObject(d), sample)
-    var table = sequential_table(model)
+    var description_owner = sequential_native_description(mods, model, PythonObject(d), sample)
+    var description = description_owner.downcast_value_ptr[SequentialDescription]()
     var entries = sequential_entries(model, context)
     mods.released()
-    var native_program = _ints(program)
-    var native_table = model_float64_words(table)
+    ref native_program = description[].program
+    ref native_table = description[].scalars
     var counts = model_counts_native(native_program, native_table)
     var n_params = counts[0]
     var n_out = counts[1]
@@ -221,6 +221,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         _ = variance  # keep the Python object alive through the native call above
         _ = moment  # keep the Python object alive through the native call above
         _ = params  # keep the Python object alive through the native call above
+    _ = description_owner^
     # Raw addresses never own data. Keep every source alive through the
     # synchronous native model call, including temporary sequence buffers.
     _ = x^
@@ -287,8 +288,10 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
     if not Bool(py=PythonObject(x_snapshot.source.cols) == fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
     var params = fields["params_"]
-    var native_program = _ints(sequential_program(mods, model, fields["n_features_in_"], sample))
-    var native_table = model_float64_words(sequential_table(model))
+    var description_owner = sequential_native_description(mods, model, fields["n_features_in_"], sample)
+    var description = description_owner.downcast_value_ptr[SequentialDescription]()
+    ref native_program = description[].program
+    ref native_table = description[].scalars
     var sources: List[CastIn] = [x_snapshot.source]
     var provider = entries["native_model_provider"]
     var out: PythonObject
@@ -301,6 +304,7 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
         var words = model_descriptor_words(native_program, options, sources)
         _ = neural_descriptor_execute(provider, MODEL_PREDICT_LABELS, addresses, words, native_table)
         mods.released()
+        _ = description_owner^
         _ = params  # keep the Python object alive through the native call above
         _ = x^
         _ = params^
@@ -312,6 +316,7 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
     var words = model_descriptor_words(native_program, options, sources)
     _ = neural_descriptor_execute(provider, MODEL_PREDICT, addresses, words, native_table)
     mods.released()
+    _ = description_owner^
     _ = x^
     _ = params^
     return out
