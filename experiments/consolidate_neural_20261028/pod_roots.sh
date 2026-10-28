@@ -14,7 +14,7 @@ sh tokenizer/tools/gen_unicode_table.sh > "$OUT/logs/gen_unicode.log" 2>&1; echo
 PAR=4; JOBS=$(( CORES / PAR )); [ $JOBS -lt 1 ] && JOBS=1
 echo "parallel=$PAR jobs=$JOBS" >> "$OUT/resources.txt"
 export OUT JOBS SET
-if [ "$SET" = cpu ]; then
+if [ "$SET" = cpu ] && [ -z "${SKIP_FAMILIES:-}" ]; then
   export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS=$JOBS MOJOLEARN_COMPILE_JOBS=$JOBS MOJOLEARN_LINUX_CPU=x86-64-v3 MOJOLEARN_BINCACHE_OUT="$OUT/bincache"
   fam() { local f=$1 t0=$(date +%s); MOJOLEARN_BINCACHE_OUTPUTS="python/mojolearn/host/_mojolearn_${f}_host.so" pixi run -e default python tools/bincache.py build bindings/build_${f}_host.sh > "$OUT/logs/host_$f.log" 2>&1; printf 'FAMILY\t%s\trc=%s\t%ss\n' "$f" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/families.tsv"; }
   export -f fam
@@ -54,7 +54,8 @@ root() { # tag kind entry defines...
   printf 'ROOT\t%s\t%s\t%s\trc=%s\t%ss\tjobs=%s\topt=%s\tdefines=%s\tsha256=%s\n' "$SET" "$tag" "$e" "$rc" "$(( $(date +%s)-t0 ))" "$JOBS" "${ol:-default}" "$*" "$sha" >> "$OUT/roots.tsv"
 }
 export -f root
-awk -F'\t' -v s="$SET" '$1==s {d=$5; printf "root %s %s %s %s\n", $2, $3, $4, d}' experiments/consolidate_neural_20261028/roots.tsv > "$OUT/root_plan.txt"
+# no trailing blank on a define-off line: xargs -L treats a trailing blank as a line continuation
+awk -F'\t' -v s="$SET" '$1==s {d=$5; if (d == "") printf "root %s %s %s\n", $2, $3, $4; else printf "root %s %s %s %s\n", $2, $3, $4, d}' experiments/consolidate_neural_20261028/roots.tsv > "$OUT/root_plan.txt"
 xargs -P $PAR -L 1 bash -c '"$@"' _ < "$OUT/root_plan.txt"
 nr=$(wc -l < "$OUT/root_plan.txt"); okr=$(grep -c 'rc=0' "$OUT/roots.tsv" 2>/dev/null)
 echo "ROOTS set=$SET total=$nr ok=$okr" >> "$OUT/summary.txt"
