@@ -1,0 +1,11 @@
+cores_affinity=32
+cgroup_cpu_max=max 100000
+parallel=6
+jobs=5
+mojo_version=Mojo 1.0.0 (ed45d567)
+gen_unicode_rc=0
+build_rc=0 seconds=1262
+families=46 missing=0
+import_rc=0
+probe_deadline=1526
+probe_rc=0 total_seconds=1344

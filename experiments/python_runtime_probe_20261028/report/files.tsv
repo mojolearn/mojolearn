@@ -1,0 +1,75 @@
+file	endpoints	calls	functions	owner
+python/mojolearn/_mode.py	271	1859	14	peer4
+python/mojolearn/_buffer.py	201	11131	15	
+python/mojolearn/_sk_validate.py	198	7411	26	
+python/mojolearn/_array.py	191	370	9	peer4
+python/mojolearn/_backend.py	109	8174	17	peer4
+python/mojolearn/_expansion_prep.py	89	127	11	
+python/mojolearn/_merged.py	77	864	4	
+stdlib:json/__init__.py	72	72	1	
+stdlib:json/encoder.py	72	216	3	
+python/mojolearn/_expansion_decomp.py	65	90	11	peer2
+python/mojolearn/neural_inference.py	42	42	1	
+python/mojolearn/_cpu_reference.py	41	41	1	
+python/mojolearn/_mamba_impl.py	36	36	1	
+stdlib:contextlib.py	36	102	5	
+stdlib:importlib/__init__.py	35	43	1	
+stdlib:inspect.py	31	22136	15	
+python/mojolearn/_expansion_neighbors.py	29	31	6	peer1
+python/mojolearn/tokenizer.py	29	127	3	
+stdlib:annotationlib.py	27	386	2	
+stdlib:enum.py	27	4304	2	
+python/mojolearn/_expansion_sequence.py	26	26	1	
+python/mojolearn/_native_classical_bridge.py	26	1941	5	
+python/mojolearn/_native_family_layouts.py	26	46063	3	
+python/mojolearn/_native_mode_properties.py	26	49	1	
+python/mojolearn/_native_mode_reconstruction.py	26	4654	4	
+python/mojolearn/_native_params_metadata.py	26	94124	5	
+python/mojolearn/_native_public_attributes.py	26	144361	9	
+python/mojolearn/_native_backend_public.py	25	25	1	
+python/mojolearn/_native_owner_lifetime.py	25	400	2	
+python/mojolearn/__init__.py	24	24	1	
+python/mojolearn/_native_full_reset_params.py	23	18812	5	
+python/mojolearn/_optional_numpy.py	23	83	1	
+python/mojolearn/_native_family_bridge.py	22	66	2	
+python/mojolearn/_native_runtime_sequential_bridge.py	22	22	1	
+python/mojolearn/_native_xseq_bridge.py	22	94	2	
+python/mojolearn/_x_sequence_model.py	22	528	3	
+stdlib:functools.py	18	36	2	
+python/mojolearn/_transformer_impl.py	16	24	2	
+python/mojolearn/cluster.py	7	7	4	
+python/mojolearn/exceptions.py	7	7	1	
+python/mojolearn/_x_sequence_rnn.py	6	1716	11	peer4
+python/mojolearn/_x_sequence_theta.py	5	25	5	
+python/mojolearn/decomposition.py	5	7	5	
+python/mojolearn/svm.py	5	5	1	
+python/mojolearn/_umap_impl.py	4	4	3	
+python/mojolearn/neighbors.py	4	4	1	peer1
+python/mojolearn/randomforest.py	4	4	1	
+python/mojolearn/_byte_lm_config.py	3	24	5	
+python/mojolearn/_byte_lm_impl.py	3	222	5	
+python/mojolearn/_byte_lm_trainer_host.py	3	3	1	
+python/mojolearn/_native_classical_warnings.py	3	180	2	
+python/mojolearn/_native_numeric_profile.py	3	3	1	
+python/mojolearn/_native_optimizer_bridge.py	3	96	2	
+python/mojolearn/_x_sequence_croston.py	3	12	4	
+python/mojolearn/_x_sequence_sched.py	3	15	5	
+python/mojolearn/host_surface.py	3	3	1	
+python/mojolearn/kernel_methods.py	3	3	1	
+stdlib:encodings/cp437.py	3	3	1	
+stdlib:linecache.py	3	6	2	
+stdlib:pathlib/__init__.py	3	93	17	
+stdlib:threading.py	3	3	1	
+python/mojolearn/_expansion_trees.py	2	2	1	peer5
+python/mojolearn/_x_sequence_ets.py	2	4	2	
+python/mojolearn/_x_sequence_mlp.py	2	6	3	peer4
+python/mojolearn/ensemble.py	2	2	1	peer5
+python/mojolearn/extratrees.py	2	2	1	
+python/mojolearn/_hierarchy_impl.py	1	1	1	
+python/mojolearn/_ivf_impl.py	1	1	1	
+python/mojolearn/_x_sequence_autoarima.py	1	1	1	
+python/mojolearn/_x_sequence_garch.py	1	1	1	
+python/mojolearn/_x_sequence_prophet.py	1	67	2	
+python/mojolearn/_x_sequence_stl.py	1	2	2	peer6
+python/mojolearn/_x_sequence_var.py	1	2	2	peer6
+python/mojolearn/models/parallel_causal_lm.py	1	13	1	

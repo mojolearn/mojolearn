@@ -1,0 +1,2930 @@
+[
+ {
+  "public": "mojolearn.ARDRegression",
+  "exit": 0,
+  "seconds": 2.9,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.ARIMA",
+  "exit": 0,
+  "seconds": 1.96,
+  "rows": 22
+ },
+ {
+  "public": "mojolearn.AdaBoostClassifier",
+  "exit": 0,
+  "seconds": 2.36,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.AdaBoostRegressor",
+  "exit": 0,
+  "seconds": 2.42,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.Adafactor",
+  "exit": 0,
+  "seconds": 1.61,
+  "rows": 8
+ },
+ {
+  "public": "mojolearn.Adagrad",
+  "exit": 0,
+  "seconds": 1.31,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.Adam",
+  "exit": 0,
+  "seconds": 2.51,
+  "rows": 26
+ },
+ {
+  "public": "mojolearn.AdamW",
+  "exit": 0,
+  "seconds": 2.41,
+  "rows": 26
+ },
+ {
+  "public": "mojolearn.Adamax",
+  "exit": 0,
+  "seconds": 1.8,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.AdaptiveAvgPool2d",
+  "exit": 0,
+  "seconds": 1.7,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.AdaptiveMaxPool2d",
+  "exit": 0,
+  "seconds": 1.6,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.AdditiveChi2Sampler",
+  "exit": 0,
+  "seconds": 2.21,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.AffinityPropagation",
+  "exit": 0,
+  "seconds": 2.35,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.AgglomerativeClustering",
+  "exit": 0,
+  "seconds": 2.58,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.AlternatingLeastSquares",
+  "exit": 0,
+  "seconds": 2.7,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.Array",
+  "exit": 0,
+  "seconds": 1.41,
+  "rows": 25
+ },
+ {
+  "public": "mojolearn.AutoARIMA",
+  "exit": 0,
+  "seconds": 2.17,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.AutoTheta",
+  "exit": 0,
+  "seconds": 1.96,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.AvgPool1d",
+  "exit": 0,
+  "seconds": 1.7,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.AvgPool2d",
+  "exit": 0,
+  "seconds": 1.85,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.BaggingClassifier",
+  "exit": 0,
+  "seconds": 2.87,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.BaggingRegressor",
+  "exit": 0,
+  "seconds": 2.87,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.BasicBlock",
+  "exit": 0,
+  "seconds": 2.77,
+  "rows": 8
+ },
+ {
+  "public": "mojolearn.BatchNorm1d",
+  "exit": 0,
+  "seconds": 1.71,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.BatchNorm2d",
+  "exit": 0,
+  "seconds": 2.02,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.BayesianGaussianMixture",
+  "exit": 0,
+  "seconds": 2.92,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.BayesianRidge",
+  "exit": 0,
+  "seconds": 3.14,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.BernoulliNB",
+  "exit": 0,
+  "seconds": 2.82,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.Binarizer",
+  "exit": 0,
+  "seconds": 2.57,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.BisectingKMeans",
+  "exit": 0,
+  "seconds": 2.54,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.BpeTokenizer",
+  "exit": 0,
+  "seconds": 2.89,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.CCA",
+  "exit": 0,
+  "seconds": 2.17,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.CNNClassifier",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.CagraIndex",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.CalibratedClassifierCV",
+  "exit": 0,
+  "seconds": 2.63,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.CategoricalNB",
+  "exit": 0,
+  "seconds": 2.04,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.Cholesky",
+  "exit": 0,
+  "seconds": 1.33,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.ClassicalMDS",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.ComplementNB",
+  "exit": 0,
+  "seconds": 2.19,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.ConstantKernel",
+  "exit": 0,
+  "seconds": 1.19,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.Conv1d",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.Conv2d",
+  "exit": 0,
+  "seconds": 1.94,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.CrostonClassic",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.CrostonOptimized",
+  "exit": 0,
+  "seconds": 1.93,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.CrostonSBA",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.DARTClassifier",
+  "exit": 0,
+  "seconds": 2.08,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.DARTRegressor",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.DBSCAN",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 17
+ },
+ {
+  "public": "mojolearn.DampedETS",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.DecisionTreeClassifier",
+  "exit": 0,
+  "seconds": 2.63,
+  "rows": 22
+ },
+ {
+  "public": "mojolearn.DecisionTreeRegressor",
+  "exit": 0,
+  "seconds": 2.43,
+  "rows": 21
+ },
+ {
+  "public": "mojolearn.DictionaryLearning",
+  "exit": 0,
+  "seconds": 2.83,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.DistributedIVFIndex",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 6
+ },
+ {
+  "public": "mojolearn.Dropout2d",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.DynamicOptimizedTheta",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.DynamicTheta",
+  "exit": 0,
+  "seconds": 2.29,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.ETS",
+  "exit": 0,
+  "seconds": 2.08,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.ElasticNet",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.ElasticNetCV",
+  "exit": 0,
+  "seconds": 3.03,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.EllipticEnvelope",
+  "exit": 0,
+  "seconds": 2.53,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.Embedding",
+  "exit": 0,
+  "seconds": 1.83,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.ExperimentalTwoLevelFeatureFreq",
+  "exit": 0,
+  "seconds": 2.38,
+  "rows": 18
+ },
+ {
+  "public": "mojolearn.ExponentialLR",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.ExponentialSmoothing",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.ExtraTreesClassifier",
+  "exit": 0,
+  "seconds": 2.28,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.ExtraTreesRegressor",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.FactorAnalysis",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.FastICA",
+  "exit": 0,
+  "seconds": 2.09,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.GARCH",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.GCNConv",
+  "exit": 0,
+  "seconds": 1.27,
+  "rows": 3
+ },
+ {
+  "public": "mojolearn.GRUClassifier",
+  "exit": 0,
+  "seconds": 3.83,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.GRURegressor",
+  "exit": 0,
+  "seconds": 3.64,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.GammaRegressor",
+  "exit": 0,
+  "seconds": 2.48,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.GaussianMixture",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.GaussianNB",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.GaussianProcessClassifier",
+  "exit": 0,
+  "seconds": 1.93,
+  "rows": 17
+ },
+ {
+  "public": "mojolearn.GaussianProcessRegressor",
+  "exit": 0,
+  "seconds": 1.84,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.GaussianRandomProjection",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.GradientBoosting",
+  "exit": 0,
+  "seconds": 3.03,
+  "rows": 18
+ },
+ {
+  "public": "mojolearn.GradientBoostingClassifier",
+  "exit": 0,
+  "seconds": 3.55,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.GradientBoostingRegressor",
+  "exit": 0,
+  "seconds": 3.64,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.HDBSCAN",
+  "exit": 0,
+  "seconds": 2.24,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.HostForest",
+  "exit": 0,
+  "seconds": 1.72,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.HostGBDT",
+  "exit": 0,
+  "seconds": 1.44,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.HuberRegressor",
+  "exit": 0,
+  "seconds": 2.38,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.IVFIndex",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.IVFPQIndex",
+  "exit": 0,
+  "seconds": 2.68,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.IVFRaBitQIndex",
+  "exit": 0,
+  "seconds": 2.15,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.IVFSQIndex",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.IncrementalPCA",
+  "exit": 0,
+  "seconds": 2.08,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.IsolationForest",
+  "exit": 0,
+  "seconds": 2.29,
+  "rows": 17
+ },
+ {
+  "public": "mojolearn.Isomap",
+  "exit": 0,
+  "seconds": 1.87,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.IsotonicRegression",
+  "exit": 0,
+  "seconds": 1.93,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.IterativeImputer",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.KBinsDiscretizer",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.KMeans",
+  "exit": 0,
+  "seconds": 2.28,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.KNNImputer",
+  "exit": 0,
+  "seconds": 2.09,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.KNeighborsClassifier",
+  "exit": 0,
+  "seconds": 2.4,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.KNeighborsRegressor",
+  "exit": 0,
+  "seconds": 2.24,
+  "rows": 18
+ },
+ {
+  "public": "mojolearn.KernelDensity",
+  "exit": 0,
+  "seconds": 2.13,
+  "rows": 18
+ },
+ {
+  "public": "mojolearn.KernelExplainer",
+  "exit": 0,
+  "seconds": 2.07,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.KernelPCA",
+  "exit": 0,
+  "seconds": 2.78,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.KernelRidge",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 17
+ },
+ {
+  "public": "mojolearn.LAMB",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.LSTMClassifier",
+  "exit": 0,
+  "seconds": 3.9,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.LSTMRegressor",
+  "exit": 0,
+  "seconds": 3.64,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.LabelBinarizer",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.LabelEncoder",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.LabelPropagation",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.LabelSpreading",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.LanguageModelConfig",
+  "exit": 0,
+  "seconds": 1.47,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.LanguageModelHostTrainer",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.LanguageModelInference",
+  "exit": 0,
+  "seconds": 1.28,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.LanguageModelTrainer",
+  "exit": 0,
+  "seconds": 1.79,
+  "rows": 22
+ },
+ {
+  "public": "mojolearn.Lars",
+  "exit": 0,
+  "seconds": 2.79,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.Lasso",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.LassoCV",
+  "exit": 0,
+  "seconds": 2.54,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.LassoLars",
+  "exit": 0,
+  "seconds": 3.08,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.LatentDirichletAllocation",
+  "exit": 0,
+  "seconds": 2.99,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.LayerNorm",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.LinearDiscriminantAnalysis",
+  "exit": 0,
+  "seconds": 2.33,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.LinearRegression",
+  "exit": 0,
+  "seconds": 1.93,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.LinearSVC",
+  "exit": 0,
+  "seconds": 2.78,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.LinearSVR",
+  "exit": 0,
+  "seconds": 2.78,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.Lion",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.LocalOutlierFactor",
+  "exit": 0,
+  "seconds": 2.63,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.LocallyLinearEmbedding",
+  "exit": 0,
+  "seconds": 2.34,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.LogisticRegression",
+  "exit": 0,
+  "seconds": 2.58,
+  "rows": 17
+ },
+ {
+  "public": "mojolearn.LogisticRegressionCV",
+  "exit": 0,
+  "seconds": 3.23,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.Louvain",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.MDS",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.MLPClassifier",
+  "exit": 0,
+  "seconds": 4.24,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.MLPInference",
+  "exit": 0,
+  "seconds": 1.82,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.MLPRegressor",
+  "exit": 0,
+  "seconds": 4.09,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.Mamba1Block",
+  "exit": 0,
+  "seconds": 2.93,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.Mamba1BlockInference",
+  "exit": 0,
+  "seconds": 3.18,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.Mamba1State",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.Mamba2Block",
+  "exit": 0,
+  "seconds": 2.79,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.Mamba2BlockInference",
+  "exit": 0,
+  "seconds": 2.94,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.Mamba2State",
+  "exit": 0,
+  "seconds": 1.57,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.Mamba3Block",
+  "exit": 0,
+  "seconds": 3.54,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.Mamba3BlockInference",
+  "exit": 0,
+  "seconds": 3.19,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.Mamba3State",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 2
+ },
+ {
+  "public": "mojolearn.Matern",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.MaxAbsScaler",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.MaxPool1d",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.MaxPool2d",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.MeanShift",
+  "exit": 0,
+  "seconds": 1.99,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.MinCovDet",
+  "exit": 0,
+  "seconds": 1.98,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.MinMaxScaler",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.MiniBatchDictionaryLearning",
+  "exit": 0,
+  "seconds": 2.58,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.MiniBatchKMeans",
+  "exit": 0,
+  "seconds": 1.98,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.MiniBatchSparsePCA",
+  "exit": 0,
+  "seconds": 2.49,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.MoEBlock",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.MultiLabelBinarizer",
+  "exit": 0,
+  "seconds": 1.98,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.MultiOutputClassifier",
+  "exit": 0,
+  "seconds": 3.08,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.MultiOutputRegressor",
+  "exit": 0,
+  "seconds": 2.49,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.MultinomialNB",
+  "exit": 0,
+  "seconds": 2.48,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.NAdam",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.NMF",
+  "exit": 0,
+  "seconds": 2.02,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.NearestCentroid",
+  "exit": 0,
+  "seconds": 2.13,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.NearestNeighbors",
+  "exit": 0,
+  "seconds": 2.33,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.Normalizer",
+  "exit": 0,
+  "seconds": 2.28,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.Nystroem",
+  "exit": 0,
+  "seconds": 2.13,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.OPTICS",
+  "exit": 0,
+  "seconds": 2.69,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.OffloadedByteLanguageModelTrainer",
+  "exit": 0,
+  "seconds": 2.08,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.OneClassSVM",
+  "exit": 0,
+  "seconds": 2.49,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.OneCycleLR",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.OneHotEncoder",
+  "exit": 0,
+  "seconds": 2.14,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.OneVsRestClassifier",
+  "exit": 0,
+  "seconds": 2.77,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.OptimizedTheta",
+  "exit": 0,
+  "seconds": 2.17,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.OrderedRMSE",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 18
+ },
+ {
+  "public": "mojolearn.OrdinalEncoder",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.PCA",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.PLSCanonical",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.PLSRegression",
+  "exit": 0,
+  "seconds": 1.83,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.PageRank",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.ParallelByteLanguageModelTrainer",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.ParallelNeuralTrainer",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 8
+ },
+ {
+  "public": "mojolearn.PassiveAggressiveClassifier",
+  "exit": 0,
+  "seconds": 2.78,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.PassiveAggressiveRegressor",
+  "exit": 0,
+  "seconds": 2.79,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.Perceptron",
+  "exit": 0,
+  "seconds": 2.79,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.PermutationExplainer",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.PoissonRegressor",
+  "exit": 0,
+  "seconds": 2.33,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.PolynomialCountSketch",
+  "exit": 0,
+  "seconds": 1.82,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.PolynomialFeatures",
+  "exit": 0,
+  "seconds": 2.13,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.PooledByteLanguageModelTrainer",
+  "exit": 0,
+  "seconds": 1.57,
+  "rows": 21
+ },
+ {
+  "public": "mojolearn.PowerTransformer",
+  "exit": 0,
+  "seconds": 2.75,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.ProphetForecaster",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.QNRegressor",
+  "exit": 0,
+  "seconds": 1.33,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.QuadraticDiscriminantAnalysis",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.QuantileRegressor",
+  "exit": 0,
+  "seconds": 2.58,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.QuantileTransformer",
+  "exit": 0,
+  "seconds": 2.39,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.RBF",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.RBFSampler",
+  "exit": 0,
+  "seconds": 1.97,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.RFE",
+  "exit": 0,
+  "seconds": 2.94,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.RMSprop",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.RNNClassifier",
+  "exit": 0,
+  "seconds": 4.14,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.RNNRegressor",
+  "exit": 0,
+  "seconds": 4.29,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.RadiusNeighbors",
+  "exit": 0,
+  "seconds": 2.6,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.RandomForestClassifier",
+  "exit": 0,
+  "seconds": 2.74,
+  "rows": 20
+ },
+ {
+  "public": "mojolearn.RandomForestRegressor",
+  "exit": 0,
+  "seconds": 2.84,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.RandomTreesEmbedding",
+  "exit": 0,
+  "seconds": 2.99,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.Ridge",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.RidgeCV",
+  "exit": 0,
+  "seconds": 3.03,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.RidgeClassifier",
+  "exit": 0,
+  "seconds": 3.2,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.RobustScaler",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.SAGEConv",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 3
+ },
+ {
+  "public": "mojolearn.SGD",
+  "exit": 0,
+  "seconds": 2.33,
+  "rows": 26
+ },
+ {
+  "public": "mojolearn.SGDClassifier",
+  "exit": 0,
+  "seconds": 3.44,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.SGDOneClassSVM",
+  "exit": 0,
+  "seconds": 2.59,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.SGDRegressor",
+  "exit": 0,
+  "seconds": 3.03,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.STL",
+  "exit": 0,
+  "seconds": 2.33,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.SVC",
+  "exit": 0,
+  "seconds": 2.74,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.SVGP",
+  "exit": 0,
+  "seconds": 2.23,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.SVR",
+  "exit": 0,
+  "seconds": 2.54,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.SambaConfig",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.SambaInference",
+  "exit": 0,
+  "seconds": 3.13,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.SambaStack",
+  "exit": 0,
+  "seconds": 3.03,
+  "rows": 13
+ },
+ {
+  "public": "mojolearn.SelectKBest",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.Sequential",
+  "exit": 0,
+  "seconds": 1.52,
+  "rows": 26
+ },
+ {
+  "public": "mojolearn.SimpleImputer",
+  "exit": 0,
+  "seconds": 1.82,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.SkewedChi2Sampler",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.SmallMLPTrainer",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.SparseCoder",
+  "exit": 0,
+  "seconds": 2.13,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.SparsePCA",
+  "exit": 0,
+  "seconds": 2.38,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.SparseRandomProjection",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.SpectralClustering",
+  "exit": 0,
+  "seconds": 2.24,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.SpectralEmbedding",
+  "exit": 0,
+  "seconds": 1.87,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.SplineTransformer",
+  "exit": 0,
+  "seconds": 1.97,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.StackingClassifier",
+  "exit": 0,
+  "seconds": 4.7,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.StackingRegressor",
+  "exit": 0,
+  "seconds": 3.59,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.StandardScaler",
+  "exit": 0,
+  "seconds": 1.57,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.StepLR",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.TSNE",
+  "exit": 0,
+  "seconds": 2.18,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.TargetEncoder",
+  "exit": 0,
+  "seconds": 1.97,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.Theta",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.TransformerBlock",
+  "exit": 0,
+  "seconds": 3.34,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.TransformerBlockInference",
+  "exit": 0,
+  "seconds": 4.24,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.TransformerState",
+  "exit": 0,
+  "seconds": 1.77,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.TreeExplainer",
+  "exit": 0,
+  "seconds": 2.73,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.TruncatedSVD",
+  "exit": 0,
+  "seconds": 2.12,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.TweedieRegressor",
+  "exit": 0,
+  "seconds": 2.73,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.UMAP",
+  "exit": 0,
+  "seconds": 2.93,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.VAR",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 8
+ },
+ {
+  "public": "mojolearn.VarianceThreshold",
+  "exit": 0,
+  "seconds": 1.98,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.VotingClassifier",
+  "exit": 0,
+  "seconds": 3.29,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.VotingRegressor",
+  "exit": 0,
+  "seconds": 2.54,
+  "rows": 14
+ },
+ {
+  "public": "mojolearn.WhiteKernel",
+  "exit": 0,
+  "seconds": 1.13,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.chi2",
+  "exit": 0,
+  "seconds": 1.33,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.clip_grad_norm_",
+  "exit": 0,
+  "seconds": 1.27,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.connected_components",
+  "exit": 0,
+  "seconds": 1.12,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.cross_entropy",
+  "exit": 0,
+  "seconds": 1.17,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.cross_val_score",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.ensemble.catboost_auto_learning_rate",
+  "exit": 0,
+  "seconds": 1.27,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.f_classif",
+  "exit": 0,
+  "seconds": 1.23,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.f_regression",
+  "exit": 0,
+  "seconds": 1.13,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.gpu_arch",
+  "exit": 0,
+  "seconds": 1.23,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.gpu_arch_how",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.host_model",
+  "exit": 0,
+  "seconds": 1.23,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.host_predict",
+  "exit": 0,
+  "seconds": 1.28,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.host_predict_proba",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.import_model",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.importers._program.ImportedProgram",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 17
+ },
+ {
+  "public": "mojolearn.johnson_lindenstrauss_min_dim",
+  "exit": 0,
+  "seconds": 1.23,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.kpss_test",
+  "exit": 0,
+  "seconds": 1.49,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.layer_norm_backward",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.layer_norm_forward",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.dequantize_int15",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.dequantize_int8",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.eigh",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.from_bf16",
+  "exit": 0,
+  "seconds": 1.47,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.matmul_bf16",
+  "exit": 0,
+  "seconds": 1.42,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.matmul_int15",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.matmul_int8",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.numeric_mode",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.profile",
+  "exit": 0,
+  "seconds": 1.44,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.qr",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.quantize_int15",
+  "exit": 0,
+  "seconds": 1.64,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.quantize_int8",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.require_identical",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.svd",
+  "exit": 0,
+  "seconds": 1.74,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.svdvals",
+  "exit": 0,
+  "seconds": 1.74,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.linalg.to_bf16",
+  "exit": 0,
+  "seconds": 1.59,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.lstsq",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.lu_factor",
+  "exit": 0,
+  "seconds": 1.57,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.lu_solve",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.manifold.spectral_embedding",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.matmul",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.accuracy_score",
+  "exit": 0,
+  "seconds": 2.13,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.adjusted_mutual_info_score",
+  "exit": 0,
+  "seconds": 1.87,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.adjusted_rand_score",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.auc",
+  "exit": 0,
+  "seconds": 2.03,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.average_precision_score",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.balanced_accuracy_score",
+  "exit": 0,
+  "seconds": 2.04,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.brier_score_loss",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.calinski_harabasz_score",
+  "exit": 0,
+  "seconds": 1.99,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.class_likelihood_ratios",
+  "exit": 0,
+  "seconds": 1.83,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.classification_report",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.cohen_kappa_score",
+  "exit": 0,
+  "seconds": 1.72,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.completeness_score",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.confusion_matrix",
+  "exit": 0,
+  "seconds": 1.92,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.contingency_matrix",
+  "exit": 0,
+  "seconds": 1.84,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.coverage_error",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.d2_absolute_error_score",
+  "exit": 0,
+  "seconds": 1.69,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.d2_brier_score",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.d2_log_loss_score",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.d2_pinball_score",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.d2_tweedie_score",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.davies_bouldin_score",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.dcg_score",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.det_curve",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.entropy",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.explained_variance_score",
+  "exit": 0,
+  "seconds": 1.65,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.f1_score",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.fbeta_score",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.fowlkes_mallows_score",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.hamming_loss",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.hinge_loss",
+  "exit": 0,
+  "seconds": 1.72,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.homogeneity_completeness_v_measure",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.homogeneity_score",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.jaccard_score",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.kl_divergence",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.label_ranking_average_precision_score",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.label_ranking_loss",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.log_loss",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.matthews_corrcoef",
+  "exit": 0,
+  "seconds": 1.94,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.max_error",
+  "exit": 0,
+  "seconds": 1.82,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_absolute_error",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_absolute_percentage_error",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_gamma_deviance",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_pinball_loss",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_poisson_deviance",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_squared_error",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_squared_log_error",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mean_tweedie_deviance",
+  "exit": 0,
+  "seconds": 1.83,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.median_absolute_error",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.multilabel_confusion_matrix",
+  "exit": 0,
+  "seconds": 1.88,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.mutual_info_score",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.ndcg_score",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.normalized_mutual_info_score",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.pair_confusion_matrix",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.precision_recall_curve",
+  "exit": 0,
+  "seconds": 1.64,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.precision_recall_fscore_support",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.precision_score",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.r2_score",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.rand_score",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.recall_score",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.roc_auc_score",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.roc_curve",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.root_mean_squared_error",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.root_mean_squared_log_error",
+  "exit": 0,
+  "seconds": 1.49,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.silhouette_samples",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.silhouette_score",
+  "exit": 0,
+  "seconds": 1.42,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.top_k_accuracy_score",
+  "exit": 0,
+  "seconds": 1.33,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.trustworthiness",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.v_measure_score",
+  "exit": 0,
+  "seconds": 1.33,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.metrics.zero_one_loss",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.GridSearchCV",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.model_selection.GroupKFold",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.GroupShuffleSplit",
+  "exit": 0,
+  "seconds": 1.77,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.KFold",
+  "exit": 0,
+  "seconds": 1.52,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.LeaveOneGroupOut",
+  "exit": 0,
+  "seconds": 1.54,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.model_selection.LeaveOneOut",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.model_selection.LeavePGroupsOut",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.LeavePOut",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.ParameterGrid",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.model_selection.ParameterSampler",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 3
+ },
+ {
+  "public": "mojolearn.model_selection.PredefinedSplit",
+  "exit": 0,
+  "seconds": 1.54,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.RandomizedSearchCV",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.model_selection.RepeatedKFold",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.model_selection.RepeatedStratifiedKFold",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.model_selection.ShuffleSplit",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.StratifiedGroupKFold",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.StratifiedKFold",
+  "exit": 0,
+  "seconds": 1.57,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.StratifiedShuffleSplit",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.TimeSeriesSplit",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.model_selection.check_cv",
+  "exit": 0,
+  "seconds": 1.57,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.cross_val_predict",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.cross_validate",
+  "exit": 0,
+  "seconds": 1.69,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.get_scorer",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.get_scorer_names",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.learning_curve",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.make_scorer",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.permutation_test_score",
+  "exit": 0,
+  "seconds": 1.52,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.split_descriptor",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.train_test_split",
+  "exit": 0,
+  "seconds": 1.52,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.model_selection.validation_curve",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.models.CausalLM",
+  "exit": 0,
+  "seconds": 13.02,
+  "rows": 15
+ },
+ {
+  "public": "mojolearn.models.CausalLMState",
+  "exit": 0,
+  "seconds": 2.83,
+  "rows": 2
+ },
+ {
+  "public": "mojolearn.models.Checkpoint",
+  "exit": 0,
+  "seconds": 2.78,
+  "rows": 10
+ },
+ {
+  "public": "mojolearn.models.GenerationStream",
+  "exit": 0,
+  "seconds": 3.94,
+  "rows": 3
+ },
+ {
+  "public": "mojolearn.models.HFConfig",
+  "exit": 0,
+  "seconds": 1.99,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.models.ModelPlan",
+  "exit": 0,
+  "seconds": 5.0,
+  "rows": 4
+ },
+ {
+  "public": "mojolearn.models.ParallelCausalLM",
+  "exit": 0,
+  "seconds": 34.41,
+  "rows": 19
+ },
+ {
+  "public": "mojolearn.models.SafetensorsFile",
+  "exit": 0,
+  "seconds": 2.94,
+  "rows": 9
+ },
+ {
+  "public": "mojolearn.models.Tokenizer",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.models.catalog",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.models.plan_for",
+  "exit": 0,
+  "seconds": 2.59,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.models.verify_catalog_entry",
+  "exit": 0,
+  "seconds": 1.84,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.mutual_info_classif",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.mutual_info_regression",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.numeric_mode",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.numeric_profile",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.numeric_profile_measured",
+  "exit": 0,
+  "seconds": 1.54,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.numeric_profiles",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.ops.Program",
+  "exit": 0,
+  "seconds": 2.19,
+  "rows": 16
+ },
+ {
+  "public": "mojolearn.ops.Session",
+  "exit": 0,
+  "seconds": 1.74,
+  "rows": 124
+ },
+ {
+  "public": "mojolearn.parallel_classical.apply_kernel_method",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.bootstrap",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_arima",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_cholesky",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_coordinate_descent",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_dbscan",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_exponential_smoothing",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_gaussian_mixture",
+  "exit": 0,
+  "seconds": 1.83,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_gaussian_process",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_gram_estimator",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_hdbscan",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_kernel_method",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_kmeans",
+  "exit": 0,
+  "seconds": 1.34,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_logistic",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.fit_svm",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.monte_carlo_integrate",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.permutation_test",
+  "exit": 0,
+  "seconds": 1.77,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.predict_gaussian_mixture",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.predict_gaussian_process",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.predict_svm",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.solve_cholesky",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_classical.transform_rbf_sampler",
+  "exit": 0,
+  "seconds": 1.62,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.ParallelForestPredictor",
+  "exit": 0,
+  "seconds": 1.82,
+  "rows": 6
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.fit_boosting",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.fit_feature_freq",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.fit_forest",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.fit_isolation_forest",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.fit_ordered_rmse",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_ensemble.score_isolation_forest",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_forecasting.forecast_arima",
+  "exit": 0,
+  "seconds": 1.73,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_forecasting.forecast_exponential_smoothing",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_forecasting.predict_arima",
+  "exit": 0,
+  "seconds": 1.83,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_forecasting.predict_exponential_smoothing",
+  "exit": 0,
+  "seconds": 1.74,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_gaussian_process.fit_gaussian_process_classifier",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_gaussian_process.predict_gaussian_process_classifier",
+  "exit": 0,
+  "seconds": 1.72,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_graph.fit_graph",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_graph.transform_umap",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_model_selection.cross_val_score",
+  "exit": 0,
+  "seconds": 1.63,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_neighbors.ParallelQueries",
+  "exit": 0,
+  "seconds": 1.68,
+  "rows": 5
+ },
+ {
+  "public": "mojolearn.parallel_neighbors_reference.ReferenceShardedNeighbors",
+  "exit": 0,
+  "seconds": 1.67,
+  "rows": 7
+ },
+ {
+  "public": "mojolearn.parallel_preprocessing.fit_scaler",
+  "exit": 0,
+  "seconds": 1.58,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_preprocessing.transform_scaler",
+  "exit": 0,
+  "seconds": 1.33,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.parallel_training.ordered_sum_gradients",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.r_regression",
+  "exit": 0,
+  "seconds": 1.28,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.randomized_svd",
+  "exit": 0,
+  "seconds": 1.07,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.refine",
+  "exit": 0,
+  "seconds": 1.13,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.BootstrapResult",
+  "exit": 0,
+  "seconds": 1.28,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.MonteCarloResult",
+  "exit": 0,
+  "seconds": 1.12,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.PermutationTestResult",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.bootstrap",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.monte_carlo_integrate",
+  "exit": 0,
+  "seconds": 1.27,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.permutation_test",
+  "exit": 0,
+  "seconds": 1.27,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.resample",
+  "exit": 0,
+  "seconds": 1.28,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.resample.resample_indices",
+  "exit": 0,
+  "seconds": 1.22,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.select_d",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.set_numeric_mode",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.set_numeric_profile",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.solve",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.sparse_encode",
+  "exit": 0,
+  "seconds": 1.52,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.tokenizer.BpeVocabularyTrainer",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 3
+ },
+ {
+  "public": "mojolearn.tokenizer.TrainedBpeVocabulary",
+  "exit": 0,
+  "seconds": 1.78,
+  "rows": 11
+ },
+ {
+  "public": "mojolearn.training.ConstantLR",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 6
+ },
+ {
+  "public": "mojolearn.training.Generator",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 12
+ },
+ {
+  "public": "mojolearn.training.WarmupCosineLR",
+  "exit": 0,
+  "seconds": 1.47,
+  "rows": 6
+ },
+ {
+  "public": "mojolearn.training.WarmupLinearLR",
+  "exit": 0,
+  "seconds": 1.53,
+  "rows": 6
+ },
+ {
+  "public": "mojolearn.training.accumulate_grads",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.accumulation_is_aligned",
+  "exit": 0,
+  "seconds": 1.42,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.chunked_lm_head_loss",
+  "exit": 0,
+  "seconds": 1.48,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.embedding_backward",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.embedding_forward",
+  "exit": 0,
+  "seconds": 1.37,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.linear_backward",
+  "exit": 0,
+  "seconds": 1.43,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.linear_forward",
+  "exit": 0,
+  "seconds": 1.38,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.mlp_inference_sessions",
+  "exit": 0,
+  "seconds": 1.32,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.numeric_mode_used",
+  "exit": 0,
+  "seconds": 1.27,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.residual_dropout",
+  "exit": 0,
+  "seconds": 1.17,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.residual_dropout_backward",
+  "exit": 0,
+  "seconds": 1.17,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.rms_norm_backward",
+  "exit": 0,
+  "seconds": 1.17,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.rms_norm_forward",
+  "exit": 0,
+  "seconds": 1.12,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.training.vendor_used",
+  "exit": 0,
+  "seconds": 1.02,
+  "rows": 1
+ },
+ {
+  "public": "mojolearn.vendor",
+  "exit": 0,
+  "seconds": 1.07,
+  "rows": 1
+ }
+]
