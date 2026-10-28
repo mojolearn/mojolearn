@@ -5,6 +5,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
+from bindings.native_owner_lifetime import native_release_admit
 
 
 def classical_parameter_names(ridge: Bool) raises -> PythonObject:
@@ -13,21 +14,32 @@ def classical_parameter_names(ridge: Bool) raises -> PythonObject:
     return Python.tuple("fit_intercept", "numeric_mode")
 
 
-def classical_initialize(model: PythonObject, args: PythonObject, ridge: Bool) raises -> PythonObject:
+def classical_initialize(model: PythonObject, args: PythonObject, ridge: Bool,
+                         context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
-    if ridge:
-        # Explicit ABI order follows Ridge's public signature.
-        py_setitem(fields, "alpha", args[0])
-        py_setitem(fields, "solver", args[1])
-        py_setitem(fields, "fit_intercept", args[2])
-        py_setitem(fields, "normalize", args[3])
-        if args[4] is not None or not py_contains(fields, "numeric_mode"):
-            py_setitem(fields, "numeric_mode", args[4])
-    else:
-        py_setitem(fields, "fit_intercept", args[0])
-        if args[1] is not None or not py_contains(fields, "numeric_mode"):
-            py_setitem(fields, "numeric_mode", args[1])
+    # Explicit ABI order follows each public constructor signature.
+    var names = Python.tuple("alpha", "solver", "fit_intercept", "normalize", "numeric_mode") if ridge else Python.tuple("fit_intercept", "numeric_mode")
+    if len(args) != len(names):
+        raise Error("TypeError: native linear constructor requires its complete configuration")
+    for k in range(len(names)):  # driver-loop: admit every old owner before publishing any constructor field
+        var name = names[k]
+        var replacing = String(name) != "numeric_mode" or args[k] is not None or not py_contains(fields, name)
+        if replacing and py_contains(fields, name) and fields[name] is not args[k]:
+            native_release_admit(fields[name], context)
+    for k in range(len(names)):  # driver-loop: preserve numeric_mode on repeated construction with None
+        var name = names[k]
+        if String(name) != "numeric_mode" or args[k] is not None or not py_contains(fields, name):
+            py_setitem(fields, name, args[k])
     return PythonObject(None)
+
+
+def classical_fit_replacements_admit(fields: PythonObject, ridge: Bool, context: PythonObject) raises:
+    var names = Python.tuple("coef_", "intercept_", "_x_mean", "_y_mean", "n_features_in_", "input_copied_", "_mojolearn_fitted")
+    for k in range(len(names)):  # driver-loop: refit replaces these retained scalar/buffer owners
+        if py_contains(fields, names[k]):
+            native_release_admit(fields[names[k]], context)
+    if ridge and py_contains(fields, "solver_"):
+        native_release_admit(fields["solver_"], context)
 
 
 def classical_get_params(model: PythonObject, ridge: Bool) raises -> PythonObject:
@@ -42,7 +54,8 @@ def classical_get_params(model: PythonObject, ridge: Bool) raises -> PythonObjec
     return result
 
 
-def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool) raises -> PythonObject:
+def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool,
+                         context: PythonObject) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     if py_type(params) is not bi.dict:
         raise Error("TypeError: parameter keywords must be a native dict")
@@ -66,6 +79,15 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool)
         py_setitem(values, name, params[key])
     # Match ParamsMixin: only a successful parameter update resets fit state.
     var fields = sequential_fields(model)
+    var old = py_call(bi.list, fields.items())
+    for k in range(len(old)):  # driver-loop: reset removes all state, including user-added owners outside the fitted schema
+        var key = old[k][0]
+        if py_type(key) is not bi.str:
+            raise Error("TypeError: native linear state requires exact string keys")
+    for k in range(len(old)):  # driver-loop: unchanged parameter owners stay retained by values throughout clear/update
+        var key = old[k][0]
+        if not py_contains(values, key) or values[key] is not old[k][1]:
+            native_release_admit(old[k][1], context)
     fields.clear()
     py_call(fields.update, values)
     return model

@@ -21,7 +21,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_get
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_require_fitted, classical_not_fitted_class
 from bindings.classical_metadata import classical_is_fitted
-from bindings.logistic_admission import logistic_storage, logistic_fields, logistic_initialize, logistic_get_params, logistic_set_params
+from bindings.logistic_admission import logistic_storage, logistic_fields, logistic_initialize, logistic_get_params, logistic_set_params, logistic_fit_replacements_admit
 from bindings.prep_lda_admission import lda_native_context, lda_native_labels
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native import _public_result
@@ -223,6 +223,7 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
 def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = _builtins()
     var fields = logistic_fields(model, context, False)
+    logistic_fit_replacements_admit(fields, context)
     var l1_ratio = _validate_params(fields)
     var x = classical_host_f32(args[0], 2, "X", context)
     py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
