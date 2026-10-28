@@ -356,7 +356,7 @@ def ops_torch_program_run_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) a
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 4:
             raise Error("TypeError: ops_torch_program_run expects 4 arguments")
-        var result = ops_torch_program_run_py[HostExec, OPS_HOST](args[0], args[1], args[2], Bool(py=args[3]))
+        var result = ops_torch_program_run_py(args[0], args[1], args[2], Bool(py=args[3]))
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -368,7 +368,7 @@ def ops_imported_run_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_imported_run expects 3 arguments")
-        var result = ops_imported_run_py[HostExec, OPS_HOST](args[0], args[1], args[2])
+        var result = ops_imported_run_py(args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
