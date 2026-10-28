@@ -1954,8 +1954,14 @@ class ClassHookWrappers:
                 return
         outputs = index.resolve_name(mode.name, "PublicOutputsMixin")
         tags = index.resolve_name(mode.name, "SklearnTagsMixin")
+        numeric = index.resolve_name(mode.name, "NumericModeMixin")
         if not outputs or not tags or outputs[0] != "class" or tags[0] != "class":
             return
+        self.numeric = numeric[1] if numeric and numeric[0] == "class" else None
+        # _mode._install_numeric_mode (NumericModeMixin.__init_subclass__): the class's own
+        # fit-like methods get _guard_cpu_training, its own __init__ the numeric_mode wrapper
+        self.numeric_names = frozenset(("fit", "partial_fit", "fit_predict", "fit_transform",
+                                        "_fit_with_tree_start", "__init__"))
         self.names, self.outputs, self.tags, self.ready = names, outputs[1], tags[1], True
 
     def _flagged(self, cls):
@@ -1968,11 +1974,12 @@ class ClassHookWrappers:
                     return not (isinstance(node.value, ast.Constant) and not node.value.value)
         return False
 
-    def _reaches_hooks(self, klass):
+    def _reaches_hooks(self, klass, hooks=None):
         """Creating `klass` runs the _mode hooks: every `__init_subclass__` before them on
         the MRO hands on with `super().__init_subclass__(...)`."""
+        hooks = hooks or (self.outputs, self.tags)
         for base in self.index.mro(klass)[1:]:
-            if base in (self.outputs, self.tags):
+            if base in hooks:
                 return True
             hook = next((n for n in base.node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
                          and n.name == "__init_subclass__"), None)
@@ -1993,6 +2000,10 @@ class ClassHookWrappers:
         names = self.names
         for klass in self.index.mro(owner):
             chain = self.index.mro(klass)
+            if (self.numeric is not None and klass is not self.numeric and self.numeric in chain
+                    and name in self.numeric_names and func.cls is klass and not self._flagged(klass)
+                    and self._reaches_hooks(klass, (self.numeric,))):
+                return klass
             if klass in (self.outputs, self.tags) or self.outputs not in chain:
                 continue
             if self._flagged(klass) or not self._reaches_hooks(klass):
@@ -2118,7 +2129,8 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                         unresolved_calls=facts.unresolved, shell_calls=facts.shell)
             item["runtime_status"] = ("native_boundary" if item["static_verdict"] == "native" else
                                       "unresolved" if item["static_verdict"] == "unresolved" else "prohibited_source")
-            wrapped = wrappers.wrapper(owner, method, func) if kind in ("method", "method_alias") and not replacement else None
+            wrapped = (wrappers.wrapper(owner, method, func)
+                       if kind in ("method", "method_alias", "constructor") and not replacement else None)
             if wrapped is not None:
                 # the installed callable is a _mode Python wrapper around this body
                 item.update(static_verdict="python", runtime_status="prohibited_source",
