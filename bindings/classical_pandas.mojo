@@ -169,7 +169,14 @@ def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonOb
     return result
 
 
-def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False, allow_nonfinite: Bool = False) raises -> PythonObject:
+def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False, allow_nonfinite: Bool = False,
+                      refuse_double: String = "") raises -> PythonObject:
+    """One C-ordered float32 copy of an exact pandas DataFrame or Series.
+    A nonempty `refuse_double` is the refusal raised, before any conversion,
+    when the storage's common dtype is not float32-or-narrower (float64, or
+    object promotion of object/nullable-frame/bool-with-number blocks): the
+    dtype `np.asarray` would give, so float64-refusing callers keep their
+    rule while integer, half and float32 storage is still admitted."""
     var b = native_loaded_module("builtins")
     if not native_pandas_exact(value):
         raise Error("TypeError: pandas input requires an exact DataFrame or Series")
@@ -229,6 +236,8 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         raise Error("TypeError: Scaler input must have dtype float32")
     # pandas deliberately uses object promotion for bool mixed with numbers.
     var double_round = objects or (booleans and numbers) or (common_kind == "f" and common_size == 8)
+    if double_round and refuse_double.byte_length() > 0:
+        raise Error(refuse_double)
     var result = sequential_array(Python.tuple(rows) if series else Python.tuple(rows, cols), context["float32"], context)
     var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
     var seen = List[Bool](length=cols, fill=False)

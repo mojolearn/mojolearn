@@ -14,7 +14,7 @@ is kept as it was.
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.classical_pandas import classical_admit_value
+from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 from providers.python.autoarima_lifecycle_pyapi import _fields
@@ -46,7 +46,12 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
     row); `copy` keeps a private copy."""
     var lifecycle = context["xseq_lifecycle_context"]
     classical_admit_value(source, lifecycle)
-    var y = xseq_input(source, context)
+    var prepared = source
+    if native_pandas_exact(source):
+        # Native pandas block storage as one float32 copy; storage pandas
+        # promotes to float64 or object keeps this operation's refusal.
+        prepared = native_pandas_f32(source, lifecycle, False, True, "TypeError: " + label + ": " + message)
+    var y = xseq_input(prepared, context)
     var shape = array_shape_once(y, lifecycle)
     if len(shape) != 1 and len(shape) != 2:
         raise Error(label + ": input must be one series or a matrix of series")
