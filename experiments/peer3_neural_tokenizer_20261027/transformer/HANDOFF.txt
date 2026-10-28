@@ -131,10 +131,26 @@ experiment policy rather than requiring retention to be enabled.
 Coordinator compile targets (lane performed NO compilation):
 - experiments/peer3_neural_tokenizer_20261027/compile_transformer.mojo
   reaches the changed public boundary and provider transport.
-- experiments/peer3_neural_tokenizer_20261027/compile_transformer_session_tape_host.mojo
+- experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_transformer_session_tape_host.mojo
   exports the actual CPU native descriptor dispatch and numerical closure.
-- experiments/peer3_neural_tokenizer_20261027/compile_transformer_session_tape_gpu.mojo
+- experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_transformer_session_tape_gpu.mojo
   exports the GPU native descriptor dispatch and numerical closure.
 The raw ABI compile probes must never execute as runtime tests. Small local
 compile success precedes main merge. Actual public runtime, failure fixtures,
 installed loading and cross-vendor verification remain pending integration.
+
+Compile-probe path correction
+-----------------------------
+Coordinator public Transformer probe passed. The first CPU dispatch compile
+failed before reaching its source closure: unable to locate transformer.host.
+Existing transformer/host/__init__.mojo is tracked, and standard host binding
+imports already use this qualified package path. The original probe directory
+also contains transformer/ evidence, which can shadow the top-level source
+package. Both dispatch probes now live under compile_roots/ without that
+sibling. Product imports and numerical code are unchanged. Coordinator owns
+the compile retry; this path correction is not compile success.
+Original failure evidence retained at:
+/Users/andrewhendel/mojolearn-evidence/peer3-corpus-tape-moe-20261027/transformer-tape-host-compile-1.log
+Only the affected probe-path source control reran: 1 passed, exit0;
+source-test-session-tape-probe-path.log. Other unchanged source checks retain
+source-tests-session-tape.log. No lane compilation or runtime execution.

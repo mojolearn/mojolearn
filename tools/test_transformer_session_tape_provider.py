@@ -59,7 +59,7 @@ def test_append_only_table_wiring_and_cpu_compile_probe_reach_numerical_dispatch
         assert f"return {helper}(op - 36, {args})" in source
         assert "op >= 41" in source
         assert "TRANSFORMER_BLOCK_ABI_NAME" in source
-    probe = (ROOT / "experiments/peer3_neural_tokenizer_20261027/compile_transformer_session_tape_host.mojo").read_text()
+    probe = (ROOT / "experiments/peer3_neural_tokenizer_20261027/compile_roots/compile_transformer_session_tape_host.mojo").read_text()
     assert "from transformer.host.native_block_dispatch import transformer_host_block_v1" in probe
     assert "return transformer_host_block_v1(op, aa, na, pp, np, ff, nf, result, context, sink)" in probe
 
