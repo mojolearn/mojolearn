@@ -14,6 +14,9 @@ from bindings.neural_block_public import neural_block_fields, neural_block_snaps
 from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields, neural_string_keys
 from bindings.causal_lm_construct import _model_shape
 from providers.python.operation_lock_pyapi import OperationLockLease
+from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_construct, neural_descriptor_handle
+from providers.python.transformer_session_tape_pyapi import transformer_session_tape_forward, transformer_session_tape_backward, transformer_session_tape_discard
+from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 
 
 def _transformer_fields(value: PythonObject, cls: PythonObject, names: PythonObject) raises -> PythonObject:
@@ -251,8 +254,8 @@ struct TransformerPublicTapeOwner(Movable, Writable):
     var block: PythonObject
     var session: PythonObject
     var binding: PythonObject
-    var backward: PythonObject
-    var discard: PythonObject
+    var provider: PythonObject
+    var handle: Int
     var token: List[Int]
     var shape: List[Int]
     var configuration: List[Int]
@@ -262,14 +265,14 @@ struct TransformerPublicTapeOwner(Movable, Writable):
     var consumed: Bool
 
     def __init__(out self, block: PythonObject, session: PythonObject, binding: PythonObject,
-                 backward: PythonObject, discard: PythonObject, var token: List[Int],
+                 provider: PythonObject, handle: Int, var token: List[Int],
                  var shape: List[Int], var configuration: List[Int], var profile: String,
                  var numeric_profile: String, var weight_shapes: List[List[Int]]):
         self.block = block
         self.session = session
         self.binding = binding
-        self.backward = backward
-        self.discard = discard
+        self.provider = provider
+        self.handle = handle
         self.token = token^
         self.shape = shape^
         self.configuration = configuration^
@@ -339,6 +342,19 @@ def _transformer_native_entry(entries: PythonObject, name: String) raises -> Pyt
     return entry
 
 
+def _transformer_tape_provider(entries: PythonObject) raises -> PythonObject:
+    # The ticket retains this provider through backward/discard. Keep it out
+    # of model state: ordinary getstate/setstate remains unchanged, and the
+    # existing 36-operation block caches need not be resized or invalidated.
+    return neural_descriptor_connect(_transformer_native_entry(entries, "transformer_block_api_v1"),
+        String(TRANSFORMER_BLOCK_ABI_NAME), 41)
+
+
+def _transformer_tape_handle(provider: PythonObject, entries: PythonObject, session: PythonObject) raises -> Int:
+    return neural_descriptor_handle(provider,
+        _transformer_native_entry(entries, "transformer_native_session_handle_v1"), session)
+
+
 def _transformer_old_binding(binding: PythonObject, neural: PythonObject) raises -> PythonObject:
     # Session cache fields are mutable. A replaced binding must not reach
     # _native_function's attribute lookup before proving it is connected.
@@ -370,7 +386,8 @@ def _transformer_tape_entries(block: PythonObject, fields: PythonObject, neural:
 
 
 def _transformer_tape_publish(tape: PythonObject, block: PythonObject, fields: PythonObject,
-                               entries: PythonObject, token_value: PythonObject, var shape: List[Int],
+                               entries: PythonObject, provider: PythonObject, handle: Int,
+                               token_value: PythonObject, var shape: List[Int],
                                var weight_shapes: List[List[Int]], context: PythonObject) raises:
     var slots = _transformer_fields(tape, context["tape_class"], context["tape_fields"])
     var bi = Python.import_module("builtins")
@@ -385,8 +402,7 @@ def _transformer_tape_publish(tape: PythonObject, block: PythonObject, fields: P
     if py_type(profile) is not bi.str:
         raise Error("TypeError: Transformer tape requires a native arithmetic profile")
     var owner = TransformerPublicTapeOwner(block, fields["_native_session"], entries.canonical,
-        _transformer_native_entry(entries, "transformer_session_backward_tape"),
-        _transformer_native_entry(entries, "transformer_session_discard_tape"), token.copy(), shape.copy(),
+        provider, handle, token.copy(), shape.copy(),
         _transformer_configuration(fields), String(profile), String(fields["numeric_profile"]), weight_shapes^)
     py_setitem(slots, "_native_owner", PythonObject(alloc=owner^))
     py_setitem(slots, "_block", block)
@@ -431,6 +447,7 @@ def transformer_forward_with_tape(block: PythonObject, input: PythonObject, budg
     var fields = _transformer_block_snapshot(block, neural)
     var entries = _transformer_tape_entries(block, fields, neural)
     var live = fields["_neural_live_fields"]
+    var provider = _transformer_tape_provider(entries)
     var budget = _transformer_int(budget_value, "activation_budget_bytes", neural)
     var cost = _transformer_int(cost_value, "minimum_replay_ops_per_byte", neural)
     if budget < 0 or cost < 0:
@@ -456,23 +473,23 @@ def transformer_forward_with_tape(block: PythonObject, input: PythonObject, budg
         var binding = live["_session_binding"]
         if session is not None and binding is not entries.canonical:
             var previous = _transformer_old_binding(binding, neural)
+            # Lifetime cleanup remains this admitted native entry: its close is
+            # idempotent, while the existing GPU handle-admission entry rejects
+            # closed owners. No numerical work uses this compiled close door.
             _ = py_call(_transformer_native_entry(previous, "transformer_session_close"), session)
             session = PythonObject(None)
             py_setitem(live, "_native_session", session)
             py_setitem(live, "_session_binding", PythonObject(None))
         if session is None:
-            session = _transformer_native_entry(entries, "transformer_session_create")()
+            session = neural_descriptor_construct(provider, _transformer_native_entry(entries, "transformer_session_create"))
             py_setitem(live, "_native_session", session)
             py_setitem(live, "_session_binding", entries.canonical)
         py_setitem(fields, "_native_session", session)
-        # Preserve the budget-aware session ticket route. The descriptor table
-        # currently exposes standalone retained tapes, which have different
-        # activation-budget/replay semantics; substituting it would change the
-        # algorithm route. This verified native entry owns its numerical run.
-        var token = py_call(_transformer_native_entry(entries, "transformer_session_forward_tape"),
-            fields["_native_session"], py_ints(addresses), py_ints(params))
+        var handle = _transformer_tape_handle(provider, entries, session)
+        var report = transformer_session_tape_forward(provider, session, handle, addresses, params)
         tape = py_call(Python.import_module("builtins").object.__new__, context["tape_class"])
-        _transformer_tape_publish(tape, block, fields, entries, token, shape.copy(), weight_shapes^, context)
+        _transformer_tape_publish(tape, block, fields, entries, provider, handle,
+            py_ints(report), shape.copy(), weight_shapes^, context)
         lease.release()
     except problem:
         lease.release()
@@ -519,7 +536,10 @@ def transformer_tape_init(tape: PythonObject, values: PythonObject, context: Pyt
     var keep = List[PythonObject]()
     var addresses = List[Int]()
     var weight_shapes = _transformer_weight_shapes(fields["_w"], expected, neural, keep, addresses)
-    _transformer_tape_publish(tape, block, fields, entries, values[3], shape^, weight_shapes^, context)
+    var provider = _transformer_tape_provider(entries)
+    var handle = _transformer_tape_handle(provider, entries, fields["_native_session"])
+    _transformer_tape_publish(tape, block, fields, entries, provider, handle,
+        values[3], shape^, weight_shapes^, context)
     _ = keep^
     return PythonObject(None)
 
@@ -560,8 +580,8 @@ def transformer_backward_from_tape(block: PythonObject, tape: PythonObject, inpu
             keep.append(gradient)
         owner[].consumed = True
         py_setitem(slots, "_consumed", PythonObject(True))
-        _ = py_call(owner[].backward, owner[].session, py_ints(addresses),
-            py_ints([owner[].token[0], owner[].token[1]]))
+        transformer_session_tape_backward(owner[].provider, owner[].session, owner[].handle,
+            addresses, owner[].token[0], owner[].token[1])
         _ = keep^
         lease.release()
     except problem:
@@ -582,7 +602,8 @@ def transformer_tape_close(tape: PythonObject, context: PythonObject, neural: Py
     lease.acquire()
     try:
         if not owner[].consumed and owner[].session is fields["_native_session"]:
-            _ = py_call(owner[].discard, owner[].session, py_ints([owner[].token[0], owner[].token[1]]))
+            transformer_session_tape_discard(owner[].provider, owner[].session, owner[].handle,
+                owner[].token[0], owner[].token[1])
         owner[].consumed = True
         py_setitem(slots, "_consumed", PythonObject(True))
         lease.release()
