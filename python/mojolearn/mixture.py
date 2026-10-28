@@ -414,6 +414,7 @@ _connect_gmm_owner_context(_NATIVE_CONTEXT)
 _native_family_bridge.connect_bindings("_mojolearn_mixture", "_mojolearn_x_cluster")
 _native_family_bridge.tables(
     gmm_public_class=GaussianMixture,
+    gmm_retained_cluster_bindings=[],
     gmm_public_parameters=(
         "n_components", "covariance_type", "tol", "reg_covar", "max_iter",
         "init_params", "random_state", "n_init", "warm_start", "means_init",
