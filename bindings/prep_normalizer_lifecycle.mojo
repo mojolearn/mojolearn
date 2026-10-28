@@ -57,6 +57,12 @@ def _repr_admit(value: PythonObject, depth: Int = 0) raises:
         for i in range(len(value)):  # driver-loop: admit native invalid-setting repr before formatting
             _repr_admit(value[i], depth + 1)
         return
+    if depth < 64 and cls is b.dict:
+        var pairs = py_call(b.list, value.items())
+        for i in range(len(pairs)):  # driver-loop: native invalid-setting keys/values before repr
+            _repr_admit(pairs[i][0], depth + 1)
+            _repr_admit(pairs[i][1], depth + 1)
+        return
     raise Error("TypeError: native Normalizer settings cannot invoke Python representation or conversion hooks")
 
 
@@ -166,7 +172,8 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
     var n = snapshot.source.rows
     var d = snapshot.source.cols
     if py_type(fitted) is not b.int or Int(py=fitted) != d:
-        var text = String(py_call(b.str, fitted)) if py_type(fitted) is b.int or py_type(fitted) is b.bool or py_type(fitted) is b.float else _safe_repr(fitted)
+        _repr_admit(fitted)
+        var text = String(py_call(b.str, fitted))
         raise Error("mojolearn: X has " + String(d) + " features, " + name + " was fitted with " + text)
     if norm is missing:
         norm = fields["norm"]
