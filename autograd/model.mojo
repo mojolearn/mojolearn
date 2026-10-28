@@ -18,6 +18,7 @@ from sequence.ops import (
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent import OptConfig, OptState, opt_step
+from sequence.gemm_split import gemm_split_shape
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, AUTOGRAD_CURVE_WORD
@@ -56,6 +57,32 @@ comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
 # column-sum bias gradient sum in a different order than the composed ops);
 # -D MOJOLEARN_AUTOGRAD_MODEL_UNFUSED keeps the composed nodes, for checks.
 comptime MODEL_UNFUSED = is_defined["MOJOLEARN_AUTOGRAD_MODEL_UNFUSED"]()
+
+# ---------------------------------------------------------------- whole-set predict (lane seq-predict-tiled, 2026-10-28)
+#: -D MOJOLEARN_IDN_SEQ_TILED_PREDICT (default OFF, A/B pending on NVIDIA; REPORT idea 7): model_predict
+#: runs the rows in one chunk (one launch chain: one fused GEMM per Linear, the activations, the output
+#: transform) instead of the caller's 4096-row chunks (sequential_execution.mojo passes 4096), as long as
+#: the inference scratch fits PREDICT_WHOLE_SET_BYTES. At 4096 rows a 64 x 64 micro-tiled GEMM is 64
+#: blocks a 64-wide output, under one block per multiprocessor on a 142-SM / 304-CU part, and every
+#: chunk repeats the launches; one chunk fills the device and launches each op once.
+#: SAME BITS (identical, every column): every row's values come from per-row chains. The GEMM routes
+#: (cell, 16 x 16 tile, 64 x 64 micro-tile, thin tiles, coop) all fold acc = fma3(A(m, k), B(k, n), acc),
+#: k ascending from +0.0 (sequence/gemm_tiled.mojo), so the row count only picks the schedule; the one
+#: shape-keyed fold is the split-K order (sequence/gemm_split.mojo gemm_split_shape, a function of M as
+#: well), so predict_chunk_rows keeps the caller's chunk unless every Linear takes the same split
+#: decision at the old full chunk, the old last chunk, the new chunk and the new last chunk. The
+#: activations, LayerNorm forward (one row a thread or a coop cell, the same chain), residual adds and
+#: the transforms are per row or per element. Version-2 descriptions (conv2d, pools: row counts become
+#: B H W inside) keep the caller's chunk.
+#: The budget is cost/hardware reasoning, never a shape: 1 GiB of float32 scratch is a third of the
+#: sequence pool's cap (SEQ_POOL_BYTES 3 GiB, so a predict never evicts the pooled fit buffers), a small
+#: share of every supported GPU's memory, and keeps every buffer under 2^28 floats so the kernels' Int32
+#: element offsets cannot overflow.
+#: MOJOLEARN_IDN_ALL_OFF also forces it off.
+comptime SEQ_TILED_PREDICT = is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"]() and not is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
+comptime PREDICT_WHOLE_SET_BYTES = 1 << 30
 
 # ---------------------------------------------------------------- description
 comptime SPEC_VERSION = 1
@@ -1200,6 +1227,52 @@ def model_fit_state[E: Exec](
     return n_iter
 
 
+def _predict_split_same(spec: ModelSpec, rows_a: Int, rows_b: Int) -> Bool:
+    """True when every Linear of `spec` takes the same split-K decision at
+    rows_a and rows_b output rows (rows <= 0: no such chunk, always same)."""
+    if rows_a <= 0 or rows_b <= 0:
+        return True
+    for i in range(spec.n_layers()):  # driver-loop: over layers (shape rule only, no data)
+        if spec.kinds[i] != LAYER_LINEAR:
+            continue
+        var fi = spec.in_width[i]
+        var fo = spec.arg0[i]
+        if gemm_split_shape(rows_a, fo, fi) != gemm_split_shape(rows_b, fo, fi):
+            return False
+    return True
+
+
+def predict_chunk_rows(spec: ModelSpec, N: Int, chunk: Int) -> Int:
+    """The rows model_predict runs a chunk: the caller's `chunk` (capped at
+    N), or with MOJOLEARN_IDN_SEQ_TILED_PREDICT the most rows whose
+    inference scratch fits PREDICT_WHOLE_SET_BYTES (all N for most models)
+    when no row's GEMM fold can move (see SEQ_TILED_PREDICT above)."""
+    var bs = chunk if chunk < N else N
+    comptime if not SEQ_TILED_PREDICT:
+        return bs
+    if bs >= N or spec.version == SPEC2_VERSION:
+        return bs
+    # float32 words a row: every layer's output (absorbed activations
+    # counted anyway), LayerNorm's mean and rstd, the output, the transform
+    # output and the (N, 2) probabilities (an over-estimate, never under)
+    var per_row = 4 * spec.out_features()
+    for i in range(spec.n_layers()):  # driver-loop: over layers (scratch estimate, no data)
+        per_row += spec.out_width[i] + 2
+    var cap = PREDICT_WHOLE_SET_BYTES // (4 * per_row)
+    if cap <= bs:
+        return bs
+    var c = N if cap >= N else cap
+    var old_tail = N - (N // bs) * bs
+    var new_tail = N - (N // c) * c
+    if not (
+        _predict_split_same(spec, bs, c)
+        and _predict_split_same(spec, bs, new_tail)
+        and _predict_split_same(spec, bs, old_tail)
+    ):
+        return bs
+    return c
+
+
 def model_predict[E: Exec](
     mut ex: E, spec: ModelSpec, X: CastIn, N: Int, Pin: FP, dst: FP, chunk: Int, transform: Int,
     classes_addr: Int = 0, n_classes: Int = 0, class_itemsize: Int = 0,
@@ -1224,7 +1297,7 @@ def model_predict[E: Exec](
         raise Error("model predict: binary probabilities and labels need a model with one output")
     var D = spec.n_inputs
     var O = spec.out_features()
-    var bs = chunk if chunk < N else N
+    var bs = predict_chunk_rows(spec, N, chunk)
     if X.rows != N or X.cols != D:
         raise Error("model predict: X must be (n_samples, " + String(D) + ")")
     var dX = ex.alloc(N * D)
