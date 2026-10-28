@@ -71,6 +71,27 @@ class TokenizerPublicSource(unittest.TestCase):
         for expected in ("PyBytes_FromStringAndSize", "PyUnicode_AsUTF8String", "stash_python_error()",
                          "optimizer_python_error(error)", "_trained_finish(", "with open(String(path), \"w\")"):
             self.assertIn(expected, source)
+        connect = source.split("def _connect_error_handlers(", 1)[1].split("\n\ndef ", 1)[0]
+        for metadata in ("entry.__self__ is not None", "entry.__module__ is not None",
+                         'entry.__name__', '"strict_errors"', '"replace_errors"',
+                         '"ignore_errors"', '"backslashreplace_errors"',
+                         '"surrogateescape"', '"surrogatepass"'):
+            self.assertIn(metadata, connect)
+        self.assertLess(connect.index("_native(entry)"), connect.index("entry.__self__"))
+        self.assertLess(connect.index("entry.__name__"), connect.index("state[].error_handlers = handlers"))
+        self.assertLess(connect.index("_native(lookup)"), connect.index("lookup.__self__"))
+        self.assertIn("lookup.__self__ is not codecs", connect)
+        self.assertIn("state[].error_lookup = lookup", connect)
+        decode = source.split("def tokenizer_decode_utf8(", 1)[1].split("\n\ndef ", 1)[0]
+        self.assertLess(decode.index("py_type(raw) is not bi.bytes"), decode.index("raw.decode"))
+        self.assertLess(decode.index("entry is not expected"), decode.index("raw.decode"))
+        self.assertNotIn("_native(entry)", decode)
+        self.assertNotIn("codecs.lookup_error", decode)
+        self.assertIn("var lookup = state[].error_lookup", decode)
+        self.assertIn("py_call(lookup, errors)", decode)
+        self.assertIn('Python.tuple("utf-8", errors)', decode)
+        dispatch = source.split("def tokenizer_public_call(", 1)[1]
+        self.assertEqual(dispatch.count("_connect_error_handlers()"), 2)
 
     def test_legacy_generation_consumers_have_a_connected_native_entry(self):
         source = NATIVE.read_text()
