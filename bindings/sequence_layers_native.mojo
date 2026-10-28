@@ -17,6 +17,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_device_native import device_shape, shape_count
+from bindings.optimizer_admission import opt_scalar, opt_value
+from core.scaler_fit_impl import scaler_fill
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format
 from bindings.sequence_optimizer_native import seq_binding, seq_device, seq_device_get, seq_cast
 from bindings.sequence_device_native import seq_device_make, seq_device_input
@@ -101,8 +103,8 @@ def _addr_or_zero(value: PythonObject) raises -> PythonObject:
 
 # ---------------------------------------------------------------- LayerNorm
 
-def _norm_d(normalized_shape: PythonObject, context: PythonObject) raises -> Int:
-    """`_D(normalized_shape)[1]`."""
+def _norm_shape(normalized_shape: PythonObject, context: PythonObject) raises -> List[Int]:
+    opt_scalar(normalized_shape, context)
     var b = _b()
     var input = context["input_context"]
     classical_connect_numpy(input)
@@ -110,13 +112,53 @@ def _norm_d(normalized_shape: PythonObject, context: PythonObject) raises -> Int
     var shape = Python.tuple(normalized_shape) if integer else py_call(b.tuple, normalized_shape)
     if len(shape) == 0:
         raise Error("ValueError: normalized_shape must be positive")
-    var d = 1
-    for i in range(len(shape)):  # driver-loop: over normalized shape words
+    var dimensions = List[Int]()
+    for i in range(len(shape)):  # small-loop(normalized shape words)
         var v = Int(py=py_call_typed(b.int, shape[i]))
         if v < 1:
             raise Error("ValueError: normalized_shape must be positive")
-        d *= v
-    return d
+        dimensions.append(v)
+    return dimensions^
+
+
+def _norm_d(normalized_shape: PythonObject, context: PythonObject) raises -> Int:
+    return shape_count(_norm_shape(normalized_shape, context))
+
+
+def _ln_fields(owner: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = _b()
+    var layout = context["seqln_layout"]
+    var cls = py_type(owner)
+    if cls is not layout[0] or py_type(cls) is not b.type:
+        raise Error("TypeError: LayerNorm requires its connected native storage class")
+    if py_call(b.type.__dict__["__mro__"].__get__, cls) is not layout[1]:
+        raise Error("TypeError: LayerNorm class ancestry changed")
+    var hooks = layout[3]
+    for i in range(len(hooks)):  # small-loop(connected native storage hooks)
+        var row = py_call(b.type.__dict__["__dict__"].__get__, hooks[i][0])
+        if py_get(row, hooks[i][1]) is not hooks[i][2]:
+            raise Error("TypeError: LayerNorm refuses replaced Python storage hooks")
+    var fields = py_call(layout[2], owner, cls)
+    var keys = py_call(b.list, fields)
+    for i in range(len(keys)):  # small-loop(instance metadata keys)
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: LayerNorm fields require exact string names")
+    return fields
+
+
+def _ln_device_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    if Bool(py=context["seqln_class_device_io_off"]):
+        return PythonObject(None)
+    try:
+        var entries = seq_binding(py_get(fields, "numeric_mode"), context, PythonObject(None))
+        for name in ["seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "layer_norm_dev"]:  # small-loop(required resident native entries)
+            if py_get(entries, name) is None:
+                return PythonObject(None)
+        return entries
+    except:
+        # Preserve the existing class-level host fallback on installations
+        # without a resident binding. This performs no Python computation.
+        return PythonObject(None)
 
 
 def _param(value: PythonObject, name: String, d: Int, context: PythonObject) raises -> PythonObject:
@@ -148,6 +190,9 @@ def _ln_run_dev(x: PythonObject, d: Int, weight: PythonObject, bias: PythonObjec
     var handles = Python.list()
     var stat_flag = Python.list()
     if stats is not None:
+        var b = _b()
+        if (py_type(stats) is not b.tuple and py_type(stats) is not b.list) or len(stats) != 2:
+            raise Error("TypeError: layer_norm stats require two native tensor handles")
         var ok = (seq_device(stats[0], context) and seq_device(stats[1], context)
                   and seq_device_get(stats[0], "b", context) is binding and seq_device_get(stats[1], "b", context) is binding
                   and shape_count(_shape(stats[0], context)) == m and shape_count(_shape(stats[1], context)) == m)
@@ -272,6 +317,10 @@ def _ln_width(x: PythonObject, normalized_shape: PythonObject, context: PythonOb
 def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     var b = _b()
+    if operation == "seqln_forward" or operation == "seqln_backward":
+        for i in range(len(values)):  # small-loop(functional layer arguments)
+            if not seq_device(values[i], context):
+                opt_value(values[i], context)
     if operation == "seqln_forward":
         # values: (x, normalized_shape, weight, bias, eps)
         var x = _ln_x(values[0], context)
@@ -286,8 +335,66 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
                              mode, PythonObject(None), context)
         return Python.tuple(result[1], PythonObject(None) if values[3] is None else result[2],
                             PythonObject(None) if values[4] is None else result[3])
+    var fields = _ln_fields(owner, context)
+    if operation == "seqln_initialize":
+        opt_scalar(values, context)
+        opt_scalar(mode, context)
+        var shape = _norm_shape(values[0], context)
+        var d = shape_count(shape)
+        var affine = Bool(py=values[2])
+        var with_bias = affine and Bool(py=values[3])
+        var weight = PythonObject(None)
+        var bias = PythonObject(None)
+        if affine:
+            weight = _host(shape, context)
+            scaler_fill(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(weight))), d, Float32(1))
+        if with_bias:
+            bias = _host(shape, context)
+        py_setitem(fields, "normalized_shape", _ints(shape))
+        py_setitem(fields, "_D", d)
+        py_setitem(fields, "eps", Float64(py=values[1]))
+        py_setitem(fields, "elementwise_affine", affine)
+        py_setitem(fields, "weight", weight)
+        py_setitem(fields, "bias", bias)
+        py_setitem(fields, "numeric_mode", mode)
+        for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # small-loop(initial native state fields)
+            py_setitem(fields, name, PythonObject(None))
+        return PythonObject(None)
+    if operation == "seqln_device_binding" or operation == "seqln_device_io":
+        var entries = _ln_device_entries(fields, context)
+        if operation == "seqln_device_io":
+            return PythonObject(entries is not None)
+        return PythonObject(None) if entries is None else entries["module"]
+    if operation == "seqln_to_device":
+        if seq_device(values[0], context):
+            return values[0]
+        opt_value(values[0], context)
+        var input = _f32(values[0], "x", context)
+        var entries = _ln_device_entries(fields, context)
+        return input if entries is None else _wrap(entries, input, context)
+    for name in ["normalized_shape", "_D", "eps", "numeric_mode"]:  # small-loop(layer configuration metadata)
+        opt_scalar(fields[PythonObject(name)], context)
+    if Int(py=fields["_D"]) <= 0:
+        raise Error("ValueError: normalized_shape must be positive")
+    opt_value(fields["weight"], context)
+    opt_value(fields["bias"], context)
+    if operation == "seqln_layer_backward":
+        var x = py_get(fields, "_x")
+        if x is None:
+            raise Error("RuntimeError: LayerNorm.backward: call forward first")
+        if not seq_device(x, context):
+            opt_value(x, context)
+        if not seq_device(values[0], context):
+            opt_value(values[0], context)
+        var shape = device_shape(fields["normalized_shape"], context)
+        var result = _ln_run(x, Int(py=fields["_D"]), fields["weight"], fields["bias"], Float64(py=fields["eps"]),
+                             values[0], py_get(fields, "numeric_mode"), py_get(fields, "_stats"), context)
+        py_setitem(fields, "weight_grad", PythonObject(None) if fields["weight"] is None else _reshape(result[2], shape))
+        py_setitem(fields, "bias_grad", PythonObject(None) if fields["bias"] is None else _reshape(result[3], shape))
+        return result[1]
     # `LayerNorm.forward(x)`
-    var fields = py_fields(owner)
+    if not seq_device(values[0], context):
+        opt_value(values[0], context)
     var x = _ln_x(values[0], context)
     var xs = _shape(x, context)
     var ns = fields["normalized_shape"]
