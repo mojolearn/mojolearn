@@ -27,6 +27,15 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import _type_mro
+from bindings.mode_metadata_native import _class_fields
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_error_boundary import classical_python_error
+from bindings.classical_arrays import classical_typed, classical_address
+from bindings.native_array_view import native_array_ndarray_view
+from providers.python.array_metadata_pyapi import array_slot_once
+from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.classical_arrays import classical_wrap_array
 from bindings.classical_score import classical_r2_score
 from bindings.classical_warnings import classical_warning
@@ -36,6 +45,7 @@ from bindings.classical_labels import (
     LabelsMatrix, ClassicalLabels, labels_f32, labels_view, labels_check_rank, labels_f32_view,
     labels_check_sample_weight, labels_vector, labels_empty, labels_full_f32, labels_address, labels_cast, labels_reshape,
     labels_shape_of, labels_env, classical_encode_labels, classical_decode_labels, classical_accuracy, labels_r2,
+    labels_type_name, labels_real_type, labels_integral_type,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -136,7 +146,7 @@ def _is_int(value: PythonObject) raises -> Bool:
 
 
 def _name(model: PythonObject) raises -> String:
-    return String(py=py_type(model).__name__)
+    return labels_type_name(py_type(model))
 
 
 def _class_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -1525,8 +1535,9 @@ def _xl_helper(context: PythonObject, name: String) raises -> PythonObject:
 
 
 def _xl_is_int_cv(cv: PythonObject, context: PythonObject) raises -> Bool:
-    """`_is_int_cv`: an Integral that is not a bool."""
-    return _isinstance(cv, context["labels_integral_type"]) and not _isinstance(cv, _b().bool)
+    """`_is_int_cv`: an exact native integer that is not a bool (identity,
+    never the numbers.Integral ABC hook)."""
+    return labels_integral_type(py_type(cv), context)
 
 
 def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -2026,7 +2037,9 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
     if grid < 1:
         raise Error("mojolearn " + name + ": at least one alpha is required")
     var sample_weight = args[2]
-    if _isinstance(sample_weight, context["xl_number_type"]):
+    # A plain number is no weight vector (the former numbers.Number test,
+    # by exact native type identity).
+    if labels_real_type(py_type(sample_weight), context) or py_type(sample_weight) is _b().complex:
         sample_weight = PythonObject(None)
     var addrs = List[Int]()
     var counts = List[Int]()
@@ -2325,6 +2338,29 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
         var args = call[2]
         var context = call[3]
         classical_connect_numpy(context)
+        var result = _xl_public_operation(model, operation, args, context)
+        return result.steal_data()
+    except error:
+        if String(error).startswith("NotFittedError:"):
+            return classical_python_error(error^, args_ptr)
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
+        if String(error).startswith("TypeError:"):
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        if String(error).startswith("NotImplementedError:"):
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
+        if String(error).startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
+        if String(error).startswith("ImportError:"):
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        if String(error).startswith("RuntimeError:"):
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+
+
+def _xl_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
         var result = PythonObject(None)
         if operation == "regressor_predict":
             result = xl_regressor_predict(model, args, context)
@@ -2376,7 +2412,7 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             result = xl_isotonic(model, "fit", args, context)
         elif operation == "isotonic_fit_transform":
             result = xl_isotonic(model, "fit_transform", args, context)
-        elif operation == "isotonic_transform":
+        elif operation == "isotonic_transform" or operation == "isotonic_predict":
             result = xl_isotonic(model, "transform", args, context)
         elif operation == "isotonic_score":
             # RegressorScoreMixin.score: metrics.r2_score(y, predict(X),
@@ -2401,20 +2437,106 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             result = xl_cd_score(model, args, context)
         else:
             raise Error("unknown native x_linear operation " + operation)
-        return result.steal_data()
-    except error:
-        if String(error) == PYTHON_ERROR_PENDING:
-            return optimizer_python_error(error^)
-        if String(error).startswith("TypeError:"):
-            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
-        if String(error).startswith("NotImplementedError:"):
-            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
-        if String(error).startswith("AttributeError:"):
-            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
-        if String(error).startswith("ImportError:"):
-            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
-        if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
-        if String(error).startswith("ZeroDivisionError:"):
-            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
-        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
+        return result
+
+
+def _xl_method(operation: String) -> String:
+    """The public method an x_linear operation serves ("" for operations
+    another owner's lifecycle wraps: the coordinate-descent door)."""
+    if operation.startswith("fit_") or operation == "isotonic_fit":
+        return "fit"
+    if operation == "isotonic_fit_transform":
+        return "fit_transform"
+    if operation == "regressor_predict" or operation == "classifier_predict" or operation == "one_class_predict" or operation == "isotonic_predict":
+        return "predict"
+    if operation == "decision_function" or operation == "one_class_decision_function":
+        return "decision_function"
+    if operation == "classifier_score" or operation == "isotonic_score":
+        return "score"
+    if operation == "sgd_predict_proba" or operation == "lrcv_predict_proba":
+        return "predict_proba"
+    if operation == "one_class_score_samples":
+        return "score_samples"
+    if operation == "isotonic_transform":
+        return "transform"
+    return ""
+
+
+def _xl_lifecycle_admit(model: PythonObject, fields: PythonObject) raises:
+    var b = native_loaded_module("builtins")
+    if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
+        raise Error("TypeError: linear fitting depth requires an exact integer")
+    var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
+        raise Error("TypeError: linear fitted state requires a native boolean or integer")
+    var ancestry = _type_mro(py_type(model))
+    for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from native fit
+        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+            raise Error("TypeError: linear fitting cannot invoke Python completion callbacks")
+    if py_contains(fields, "_mojolearn_after_fit"):
+        raise Error("TypeError: linear fitting cannot invoke Python completion callbacks")
+
+
+def _xl_widen(result: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A float32 Array widened exactly to float64 (scikit-learn's dtype for
+    regression predictions and outlier scores); other Arrays as views."""
+    if String(py=array_slot_once(result, "dtype", context)) != "<f4":
+        return native_array_ndarray_view(result, context)
+    var shape = array_slot_once(result, "shape", context)
+    var count = 1
+    for i in range(len(shape)):  # driver-loop: over admitted result rank metadata
+        count *= Int(py=shape[i])
+    var wide = classical_typed(shape, "<f8", context)
+    labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8", count, context)
+    _ = result
+    return wide
+
+
+def _xl_public_operation(model: PythonObject, operation: String, args: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    """The linear expansion estimators' whole public operation: fitted and
+    feature-name checks, fit bookkeeping (depth, fitted flag, feature names,
+    public class labels), the algorithm, and NumPy results for callers
+    outside the package (the former Python `_mode` wrappers)."""
+    var method = _xl_method(operation)
+    if method.byte_length() == 0:
+        return _xl_dispatch(model, operation, args, context)
+    var fields = py_fields(model)
+    _xl_lifecycle_admit(model, fields)
+    var fitting = method == "fit" or method == "fit_transform"
+    var depth = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
+    if not fitting:
+        classical_require_fitted(model, False, method, context)
+        if depth == 0:
+            estimator_feature_check(model, fields, args[0], context)
+    var initial_depth = estimator_fit_begin(fields) if fitting else 0
+    var result = PythonObject(None)
+    try:
+        result = _xl_dispatch(model, operation, args, context)
+    finally:
+        if fitting:
+            estimator_fit_end(model, initial_depth)
+    if fitting:
+        var classifier = (operation == "fit_sgd_classifier" or operation == "fit_perceptron"
+                          or operation == "fit_pa_classifier" or operation == "fit_ridge_classifier"
+                          or operation == "fit_logistic_cv")
+        estimator_fit_complete(model, args[0], classifier, context)
+        if method == "fit":
+            return result
+    if method == "score" or not estimator_outside() or py_get(context, "ndarray") is None:
+        return result
+    var b = native_loaded_module("builtins")
+    if py_type(result) is b.tuple:
+        # predict(X, return_std=True): each Array member as a NumPy view.
+        var members = Python.list()
+        for i in range(len(result)):  # driver-loop: over the members of a result tuple
+            var member = result[i]
+            _ = py_call(members.append, native_array_ndarray_view(member, context)
+                        if py_type(member) is context["array_class"] else member)
+        return py_call(b.tuple, members)
+    if py_type(result) is not context["array_class"]:
+        return result
+    if (method == "predict" and (operation == "regressor_predict" or operation == "isotonic_predict")) or (
+            operation == "one_class_decision_function" or operation == "one_class_score_samples"):
+        return _xl_widen(result, context)
+    return native_array_ndarray_view(result, context)

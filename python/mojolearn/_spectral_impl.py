@@ -254,6 +254,7 @@ class SpectralClustering(ParamsMixin):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    _mojolearn_native_public = True
 
     def __init__(
         self,
@@ -324,7 +325,7 @@ class SpectralClustering(ParamsMixin):
         TypeError
             If ``prediction_data`` is not a bool.
         """
-        return _NATIVE(self, "family_cfb_sc_fit", (X,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_sc_fit", (X, y), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit to ``X`` and return the training labels.
@@ -340,7 +341,7 @@ class SpectralClustering(ParamsMixin):
         labels : Array of shape (n_samples,), int32
             Same as ``labels_``.
         """
-        return _NATIVE(self, "family_cfb_sc_fit_predict", (X,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_sc_fit_predict", (X, y), _NATIVE_CONTEXT)
 
     # predict, maintainer notes (DEVIATION 2860). Nystrom extension of Bengio,
     # Paiement, Vincent, Delalleau, Le Roux and Ouimet (NIPS 2003), as Fowlkes
@@ -361,6 +362,7 @@ class SpectralClustering(ParamsMixin):
     # column with |mu_c| < 1e-3 is refused by name. How often
     # predict(X_train) == labels_ holds is measured in
     # bench/results/identity_break/2026-09-15_spectral-predict/.
+    # Import-only availability identity; the native 'spectral_predict' schema decides it.
     @available_if(lambda self: bool(self.prediction_data) or getattr(self, "_fit_X", None) is not None)
     def predict(self, X):
         r"""Assign new rows to the fitted clusters.
@@ -602,6 +604,7 @@ class SpectralEmbedding(ParamsMixin):
     >>> Y = mojolearn.SpectralEmbedding(n_components=2).fit_transform(X)
     """
 
+    _mojolearn_native_public = True
     _drop_first = True
     _norm_laplacian = True
 
@@ -656,7 +659,7 @@ class SpectralEmbedding(ParamsMixin):
             a negative or repeated entry, or ``n_components`` needs as many
             eigenpairs as there are samples.
         """
-        return _NATIVE(self, "family_cfb_se_fit", (X,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_se_fit", (X, y), _NATIVE_CONTEXT)
 
     def _precomputed_knn_affinity(self, X):
         """scikit-learn's affinity='precomputed_nearest_neighbors' of a
@@ -680,7 +683,7 @@ class SpectralEmbedding(ParamsMixin):
         embedding : Array of shape (n_samples, n_components), float32
             Same as ``embedding_``.
         """
-        return _NATIVE(self, "family_cfb_se_fit_transform", (X,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfb_se_fit_transform", (X, y), _NATIVE_CONTEXT)
 
 
 def spectral_embedding(
@@ -730,3 +733,12 @@ def spectral_embedding(
     return _NATIVE(None, "family_cfb_spectral_embedding", (
         SpectralEmbedding, A, n_components, affinity, random_state, n_neighbors,
         norm_laplacian, drop_first), _NATIVE_CONTEXT)
+
+
+# Import-only constructor schemas; native owners preserve the public signatures.
+_native_family_bridge.tables(
+    spectral_clustering_parameters=("n_clusters", "n_components", "random_state", "n_neighbors", "n_init",
+        "eigen_tol", "affinity", "gamma", "assign_labels", "prediction_data", "eigen_solver",
+        "degree", "coef0", "kernel_params", "n_jobs", "verbose"),
+    spectral_embedding_parameters=("n_components", "affinity", "random_state", "n_neighbors", "gamma",
+        "eigen_solver", "eigen_tol", "n_jobs", "verbose"))

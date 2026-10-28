@@ -31,6 +31,13 @@ from bindings.native_owner_lifetime import native_release_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import _type_mro
+from bindings.mode_metadata_native import _class_fields
+from bindings.classical_exceptions import classical_require_fitted
+from bindings.classical_arrays import classical_typed
+from bindings.classical_labels import labels_cast, labels_real_type
+from bindings.native_array_view import native_array_ndarray_view
+from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
     family_call, family_entry, family_array, family_sample_weight_snapshot,
@@ -607,7 +614,7 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
         return Python.tuple(PythonObject(None), classes, codes)
     var real = True
     for i in range(len(classes)):  # small-loop(classes: the two labels)
-        if not family_isinstance(classes[i], context["family_svc_real"]):
+        if not labels_real_type(py_type(classes[i]), context):
             real = False
     if not real:
         # non-numeric labels: the solver sees each row's code, 0.0 or 1.0
@@ -1233,7 +1240,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]
     # `_as_targets`: no finiteness check here (svr_fit names the index)
-    var shape = svc_shape_of(args[2])
+    var shape = svc_shape_of(args[2], context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
     var targets = svc_f32(args[2], 1, "y", False, context)[0]
@@ -1364,7 +1371,7 @@ def _svr_score(fields: PythonObject, binding: PythonObject, source: PythonObject
                context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVR.score`: R^2, 1.0 for a perfect constant fit, 0.0 otherwise."""
     var pred = _svr_predict(fields, binding, source, context, native)
-    var shape = svc_shape_of(y)
+    var shape = svc_shape_of(y, context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
     var n = Int(py=pred.shape[0])
@@ -1444,15 +1451,91 @@ def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
 # ---------------------------------------------------------------- dispatch
 
 
+def _svm_lifecycle_admit(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    """Fit bookkeeping read by the public lifecycle: exact native values,
+    and no Python completion callback a native fit could be asked to run."""
+    var b = native_loaded_module("builtins")
+    if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
+        raise Error("TypeError: SVM fitting depth requires an exact integer")
+    var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))
+    if py_type(fitted) is not b.bool and py_type(fitted) is not b.int:
+        raise Error("TypeError: SVM fitted state requires a native boolean or integer")
+    var ancestry = _type_mro(py_type(model))
+    for i in range(len(ancestry)):  # driver-loop: no completion callback may execute from native fit
+        if py_contains(_class_fields(ancestry[i]), "_mojolearn_after_fit"):
+            raise Error("TypeError: SVM fitting cannot invoke Python completion callbacks")
+    if py_contains(fields, "_mojolearn_after_fit"):
+        raise Error("TypeError: SVM fitting cannot invoke Python completion callbacks")
+
+
 def svc_kernel_operation(model: PythonObject, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """The kernel machines; admit one provider for the complete SVC operation."""
+    """The kernel machines' whole public operation: argument admission, the
+    fitted and feature-name checks, fit bookkeeping (depth, fitted flag,
+    feature names, public class labels), the algorithm through one admitted
+    provider, and NumPy results for callers outside the package."""
     classical_connect_numpy(context)
+    var b = native_loaded_module("builtins")
+    if py_type(args) is not b.tuple:
+        raise Error("TypeError: SVM public arguments require an exact tuple")
     var fields = py_fields(model)
+    var classifier = operation.startswith("family_svc_svc_")
+    if operation == "family_svc_svc_validate" or operation == "family_svc_svr_validate":
+        _svm_validate(model, fields, classifier, context)
+        return PythonObject(None)
+    var fitting = operation == "family_svc_svc_fit" or operation == "family_svc_svr_fit"
+    var public = (operation == "family_svc_svc_decision" or operation == "family_svc_svc_predict"
+                  or operation == "family_svc_svc_proba" or operation == "family_svc_svc_log_proba"
+                  or operation == "family_svc_svc_score" or operation == "family_svc_svr_predict"
+                  or operation == "family_svc_svr_score")
+    if not fitting and not public:
+        # coef_ (the native property schema) and composed callers: algorithm only.
+        var native_only = _svc_provider(args[0])
+        var plain = _svc_kernel_operation(model, operation, args, context, fields, native_only)
+        _svc_publish_dispatch(fields, native_only, context)
+        return plain
+    _svm_lifecycle_admit(model, fields, context)
+    var method = String("fit")
+    if operation.endswith("_decision"):
+        method = "decision_function"
+    elif operation.endswith("_log_proba"):
+        method = "predict_log_proba"
+    elif operation.endswith("_proba"):
+        method = "predict_proba"
+    elif operation.endswith("_predict"):
+        method = "predict"
+    elif operation.endswith("_score"):
+        method = "score"
+    var depth = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
+    if public:
+        classical_require_fitted(model, False, method, context)
+        if depth == 0:
+            estimator_feature_check(model, fields, args[1], context)
     var native = _svc_provider(args[0])
-    var result = _svc_kernel_operation(model, operation, args, context, fields, native)
+    var initial_depth = estimator_fit_begin(fields) if fitting else 0
+    var result = PythonObject(None)
+    try:
+        result = _svc_kernel_operation(model, operation, args, context, fields, native)
+    finally:
+        if fitting:
+            estimator_fit_end(model, initial_depth)
+    # A nested set_params may have replaced the dictionary's contents.
+    fields = py_fields(model)
     _svc_publish_dispatch(fields, native, context)
-    return result
+    if fitting:
+        estimator_fit_complete(model, args[1], classifier, context)
+        return result
+    if (method == "score" or not estimator_outside() or py_get(context, "ndarray") is None
+            or py_type(result) is not context["array_class"]):
+        return result
+    if not classifier and method == "predict":
+        # scikit-learn's regression predictions are float64: widened exactly.
+        var wide = classical_typed(result.shape, "<f8", context)
+        labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8",
+                    Int(py=result.size), context)
+        _ = result^
+        return wide
+    return native_array_ndarray_view(result, context)
 
 
 def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonObject,

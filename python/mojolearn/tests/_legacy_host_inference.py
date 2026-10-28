@@ -257,7 +257,8 @@ def logistic(model, X, method):
 def svr(model, X):
     """Frozen 32011bb32 SVR's complete input/kernel/gather call layout."""
     from mojolearn._buffer import as_f32_dense_c
-    from mojolearn._svm_impl import _precomputed_columns, _SVR_KERNELS
+    from mojolearn._svm_impl import _SVR_KERNELS
+    from mojolearn.tests._svm_reference import _precomputed_columns
     binding = model._bind("_mojolearn_svm")
     q, _ = as_f32_dense_c(X, ndim=2, name="X")
     if q.shape[1] != model.n_features_in_:

@@ -74,6 +74,8 @@ _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
 
 
 class _LinearClassifierMixin(NativeParamsSetter):
+    # One-call native public methods: x_linear_native owns the lifecycle.
+    _mojolearn_native_public = True
     _estimator_type = "classifier"
 
     def decision_function(self, X):
@@ -138,6 +140,8 @@ class _LinearClassifierMixin(NativeParamsSetter):
 
 
 class _LinearRegressorMixin(NativeParamsSetter):
+    # One-call native public methods: x_linear_native owns the lifecycle.
+    _mojolearn_native_public = True
     _estimator_type = "regressor"
     _link = LINK_IDENTITY
 
@@ -299,7 +303,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
                  epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.0,
                  power_t=0.5, early_stopping=False, n_iter_no_change=5,
-                 class_weight=None, average=False, warm_start=False, batch_size="auto"):
+                 class_weight=None, average=False, warm_start=False, batch_size="auto", numeric_mode=None):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
@@ -307,6 +311,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.n_iter_no_change, self.class_weight, self.average = n_iter_no_change, class_weight, average
         self.warm_start = warm_start
         self.batch_size = batch_size
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -441,13 +446,14 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, loss="squared_error", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, epsilon=0.1,
                  random_state=None, learning_rate="invscaling", eta0=0.01, power_t=0.25,
-                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size="auto"):
+                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size="auto", numeric_mode=None):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
         self.eta0, self.power_t, self.early_stopping = eta0, power_t, early_stopping
         self.n_iter_no_change, self.average, self.warm_start = n_iter_no_change, average, warm_start
         self.batch_size = batch_size
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -574,8 +580,9 @@ class PoissonRegressor(_GLMBase):
     _sklearn_target_tags = {"positive_only": True}
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
-                 warm_start=False, verbose=0):
+                 warm_start=False, verbose=0, numeric_mode=None):
         _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
+        self.numeric_mode = numeric_mode
 
     _loss_name = "HalfPoissonLoss"
 
@@ -632,8 +639,9 @@ class GammaRegressor(_GLMBase):
     _sklearn_target_tags = {"positive_only": True}
 
     def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
-                 warm_start=False, verbose=0):
+                 warm_start=False, verbose=0, numeric_mode=None):
         _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
+        self.numeric_mode = numeric_mode
 
     _loss_name = "HalfGammaLoss"
 
@@ -695,9 +703,10 @@ class TweedieRegressor(_GLMBase):
     """
 
     def __init__(self, *, power=0.0, alpha=1.0, fit_intercept=True, link="auto", solver="lbfgs",
-                 max_iter=100, tol=1e-4, warm_start=False, verbose=0):
+                 max_iter=100, tol=1e-4, warm_start=False, verbose=0, numeric_mode=None):
         self.power, self.link = power, link
         _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
+        self.numeric_mode = numeric_mode
 
 
     def _sklearn_instance_target_tags(self):
@@ -770,9 +779,10 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
     _BINDING = _BINDING
 
     def __init__(self, *, epsilon=1.35, max_iter=100, alpha=0.0001, warm_start=False,
-                 fit_intercept=True, tol=1e-05):
+                 fit_intercept=True, tol=1e-05, numeric_mode=None):
         self.epsilon, self.max_iter, self.alpha = epsilon, max_iter, alpha
         self.warm_start, self.fit_intercept, self.tol = warm_start, fit_intercept, tol
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -867,10 +877,11 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
 
     def __init__(self, *, max_iter=300, tol=1e-3, alpha_1=1e-6, alpha_2=1e-6, lambda_1=1e-6,
                  lambda_2=1e-6, alpha_init=None, lambda_init=None, compute_score=False,
-                 fit_intercept=True, copy_X=True, verbose=False):
+                 fit_intercept=True, copy_X=True, verbose=False, numeric_mode=None):
         self.max_iter, self.tol, self.alpha_1, self.alpha_2 = max_iter, tol, alpha_1, alpha_2
         self.lambda_1, self.lambda_2, self.alpha_init, self.lambda_init = lambda_1, lambda_2, alpha_init, lambda_init
         self.compute_score, self.fit_intercept, self.copy_X, self.verbose = compute_score, fit_intercept, copy_X, verbose
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -976,11 +987,12 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
 
     def __init__(self, *, max_iter=300, tol=1e-3, alpha_1=1e-6, alpha_2=1e-6, lambda_1=1e-6,
                  lambda_2=1e-6, compute_score=False, threshold_lambda=1e4, fit_intercept=True,
-                 copy_X=True, verbose=False):
+                 copy_X=True, verbose=False, numeric_mode=None):
         self.max_iter, self.tol, self.alpha_1, self.alpha_2 = max_iter, tol, alpha_1, alpha_2
         self.lambda_1, self.lambda_2, self.compute_score = lambda_1, lambda_2, compute_score
         self.threshold_lambda, self.fit_intercept, self.copy_X, self.verbose = (
             threshold_lambda, fit_intercept, copy_X, verbose)
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y):
         """Fit the model.
@@ -1086,10 +1098,11 @@ class Lars(_LinearRegressorMixin, NumericModeMixin):
     _BINDING = _BINDING
 
     def __init__(self, *, fit_intercept=True, verbose=False, precompute="auto", n_nonzero_coefs=500,
-                 eps=2.220446049250313e-16, copy_X=True, fit_path=True, jitter=None, random_state=None):
+                 eps=2.220446049250313e-16, copy_X=True, fit_path=True, jitter=None, random_state=None, numeric_mode=None):
         self.fit_intercept, self.verbose, self.precompute = fit_intercept, verbose, precompute
         self.n_nonzero_coefs, self.eps, self.copy_X = n_nonzero_coefs, eps, copy_X
         self.fit_path, self.jitter, self.random_state = fit_path, jitter, random_state
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y):
         """Fit the model.
@@ -1173,10 +1186,11 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
 
     def __init__(self, alpha=1.0, *, fit_intercept=True, verbose=False, precompute="auto", max_iter=500,
                  eps=2.220446049250313e-16, copy_X=True, fit_path=True, positive=False, jitter=None,
-                 random_state=None):
+                 random_state=None, numeric_mode=None):
         self.alpha, self.fit_intercept, self.verbose, self.precompute = alpha, fit_intercept, verbose, precompute
         self.max_iter, self.eps, self.copy_X, self.fit_path = max_iter, eps, copy_X, fit_path
         self.positive, self.jitter, self.random_state = positive, jitter, random_state
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y):
         """Fit the model.
@@ -1260,9 +1274,10 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
     _BINDING = _BINDING
 
     def __init__(self, *, quantile=0.5, alpha=1.0, fit_intercept=True, solver="highs",
-                 solver_options=None, max_iter=5000, tol=1e-4):
+                 solver_options=None, max_iter=5000, tol=1e-4, numeric_mode=None):
         self.quantile, self.alpha, self.fit_intercept = quantile, alpha, fit_intercept
         self.solver, self.solver_options, self.max_iter, self.tol = solver, solver_options, max_iter, tol
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -1375,13 +1390,14 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
-                 warm_start=False, batch_size="auto"):
+                 warm_start=False, batch_size="auto", numeric_mode=None):
         self.batch_size = batch_size
         self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
         self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0
         self.n_jobs, self.random_state, self.early_stopping = n_jobs, random_state, early_stopping
         self.validation_fraction, self.n_iter_no_change = validation_fraction, n_iter_no_change
         self.class_weight, self.warm_start = class_weight, warm_start
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -1492,13 +1508,14 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
                  n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False,
-                 batch_size="auto"):
+                 batch_size="auto", numeric_mode=None):
         self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
         self.n_jobs, self.random_state, self.warm_start = n_jobs, random_state, warm_start
         self.class_weight, self.average = class_weight, average
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y):
         """Fit the model.
@@ -1599,12 +1616,13 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
                  loss="epsilon_insensitive", epsilon=0.1, random_state=None, warm_start=False,
-                 average=False, batch_size="auto"):
+                 average=False, batch_size="auto", numeric_mode=None):
         self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
         self.epsilon, self.random_state, self.warm_start, self.average = epsilon, random_state, warm_start, average
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y):
         """Fit the model.
@@ -1636,6 +1654,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
 # intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
 
 class SGDOneClassSVM(NumericModeMixin):
+    _mojolearn_native_public = True
     """Linear one-class SVM trained by stochastic gradient descent.
 
     Follows scikit-learn's SGDOneClassSVM for outlier detection.
@@ -1703,7 +1722,7 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
-                 average=False, batch_size=None):
+                 average=False, batch_size=None, *, numeric_mode=None):
         # batch_size=None (fix-l1-linear, from lane/neural-pass139): "auto".
         # IDENTICAL builds fit the fixed-order minibatch at 4096 (the mean
         # step, a float-float intercept and an IMPLICIT intercept step,
@@ -1718,6 +1737,7 @@ class SGDOneClassSVM(NumericModeMixin):
         self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
         self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
         self.warm_start, self.average = warm_start, average
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the model.
@@ -1852,10 +1872,11 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
     _BINDING = _BINDING
 
     def __init__(self, alpha=1.0, *, fit_intercept=True, copy_X=True, max_iter=None, tol=1e-4,
-                 class_weight=None, solver="auto", positive=False, random_state=None):
+                 class_weight=None, solver="auto", positive=False, random_state=None, numeric_mode=None):
         self.alpha, self.fit_intercept, self.copy_X, self.max_iter = alpha, fit_intercept, copy_X, max_iter
         self.tol, self.class_weight, self.solver, self.positive = tol, class_weight, solver, positive
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -1949,9 +1970,10 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     _BINDING = _BINDING
 
     def __init__(self, alphas=(0.1, 1.0, 10.0), *, fit_intercept=True, scoring=None, cv=None,
-                 gcv_mode=None, store_cv_results=False, alpha_per_target=False):
+                 gcv_mode=None, store_cv_results=False, alpha_per_target=False, numeric_mode=None):
         self.alphas, self.fit_intercept, self.scoring, self.cv = alphas, fit_intercept, scoring, cv
         self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model and select ``alpha``.
@@ -2065,11 +2087,12 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
 
     def __init__(self, *, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
                  precompute="auto", max_iter=1000, tol=1e-4, copy_X=True, cv=None, verbose=False,
-                 n_jobs=None, positive=False, random_state=None, selection="cyclic"):
+                 n_jobs=None, positive=False, random_state=None, selection="cyclic", numeric_mode=None):
         self.eps, self.n_alphas, self.alphas, self.fit_intercept = eps, n_alphas, alphas, fit_intercept
         self.precompute, self.max_iter, self.tol, self.copy_X = precompute, max_iter, tol, copy_X
         self.cv, self.verbose, self.n_jobs, self.positive = cv, verbose, n_jobs, positive
         self.random_state, self.selection = random_state, selection
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model and select ``alpha``.
@@ -2181,11 +2204,12 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
 
     def __init__(self, *, l1_ratio=0.5, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
                  precompute="auto", max_iter=1000, tol=1e-4, cv=None, copy_X=True, verbose=0,
-                 n_jobs=None, positive=False, random_state=None, selection="cyclic"):
+                 n_jobs=None, positive=False, random_state=None, selection="cyclic", numeric_mode=None):
         self.l1_ratio, self.eps, self.n_alphas, self.alphas = l1_ratio, eps, n_alphas, alphas
         self.fit_intercept, self.precompute, self.max_iter, self.tol = fit_intercept, precompute, max_iter, tol
         self.cv, self.copy_X, self.verbose, self.n_jobs = cv, copy_X, verbose, n_jobs
         self.positive, self.random_state, self.selection = positive, random_state, selection
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model and select ``l1_ratio`` and ``alpha``.
@@ -2310,11 +2334,12 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
     def __init__(self, *, Cs=10, fit_intercept=True, cv=None, dual=False, penalty="l2", scoring=None,
                  solver="lbfgs", tol=1e-4, max_iter=100, class_weight=None, n_jobs=None, verbose=0,
-                 refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None):
+                 refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None, numeric_mode=None):
         self.Cs, self.fit_intercept, self.cv, self.dual, self.penalty = Cs, fit_intercept, cv, dual, penalty
         self.scoring, self.solver, self.tol, self.max_iter = scoring, solver, tol, max_iter
         self.class_weight, self.n_jobs, self.verbose, self.refit = class_weight, n_jobs, verbose, refit
         self.intercept_scaling, self.random_state, self.l1_ratios = intercept_scaling, random_state, l1_ratios
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model and select ``C``.
@@ -2366,6 +2391,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
 
 class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
+    _mojolearn_native_public = True
     """Isotonic regression: the best monotone fit of one feature.
 
     Follows scikit-learn's IsotonicRegression: fits a non-decreasing (or
@@ -2420,8 +2446,9 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
     # scikit-learn's IsotonicRegression tags: X is one feature, 1-D
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
 
-    def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan"):
+    def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan", numeric_mode=None):
         self.y_min, self.y_max, self.increasing, self.out_of_bounds = y_min, y_max, increasing, out_of_bounds
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         """Fit the monotone function.
@@ -2461,7 +2488,7 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
         y_pred : float32 array of shape (n_samples,)
             Interpolated fitted values.
         """
-        return _XL_CALL(self, "isotonic_transform", (T,), _XL_CONTEXT)
+        return _XL_CALL(self, "isotonic_predict", (T,), _XL_CONTEXT)
 
     def transform(self, T):
         """Interpolate the fitted function at ``T``.

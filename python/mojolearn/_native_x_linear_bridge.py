@@ -81,7 +81,6 @@ def connect(tables, solver=None):
         raise TypeError("the linear estimators require a compiled x_linear_native_call")
     import os
     import decimal
-    import numbers
     from ._buffer import _native
     from ._portable_math import _POW_CONTEXT
     from ._expansion_metrics import UndefinedMetricWarning
@@ -91,7 +90,11 @@ def connect(tables, solver=None):
             helpers[name] = _native(name)
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
             helpers[name] = _refusal(error)
-    context.update(xl_helpers=helpers, xl_number_type=numbers.Number, xl_undefined_warning=UndefinedMetricWarning,
+    from ._labels import ClassLabels
+    # The connected public class-label type native classifier fits publish.
+    context.update(classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
+                   classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
+    context.update(xl_helpers=helpers, xl_undefined_warning=UndefinedMetricWarning,
                    xl_decimal=decimal.Decimal, xl_pow_context=_POW_CONTEXT)
     context.update(xl_bindings=linear, classical_metrics=metrics, cd_solver=cd,
                    cd_host_predict=host_predict, environment=os.environ._data,

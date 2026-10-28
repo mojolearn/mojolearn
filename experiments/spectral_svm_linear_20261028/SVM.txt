@@ -1,0 +1,19 @@
+SVM whole public lifecycle + shared label protocol repair (2026-10-28), lane/spectral-public-lifecycle-20261028.
+- SVC/SVR declare _mojolearn_native_public and take numeric_mode in their own constructors (no _mode wrappers).
+  bindings/svc_kernel_native.mojo svc_kernel_operation owns: exact-tuple args, fit bookkeeping admission (no
+  _mojolearn_after_fit callbacks), NotFittedError, feature-name check, fit depth, estimator_fit_complete (classes_ as
+  connected ClassLabels, feature_names_in_, fitted flag), NumPy views for outside callers (SVR predict widened to f8).
+- _validate_params is one native call (family_svc_svc_validate / family_svc_svr_validate). Dead runtime Python
+  (_dual_times_sv, _i32, _gather, _precomputed_columns, _native_perm, _native_sigmoid_train) removed; test/tool glue moved
+  to python/mojolearn/tests/_svm_reference.py.
+- numbers.Real/Integral removed from the SVM context; svc_common/svc_kernel/svc_linear and classical_labels admit exact
+  native label types (int/float/bool/str + connected NumPy scalar/str_ types) by identity. No isinstance/issubclass on user
+  objects, no arbitrary tolist/.shape/__len__, no list/tuple subclass flattening, no metaclass __name__, no repr of user
+  labels, exact dict class_weight with admitted keys, exact-str numeric_mode parsing in metrics label mode.
+- coef_ properties: native property schemas from 7cacec39ba (merged); unchanged here.
+Compile: actual family_operation (whole family dispatcher incl. svc/cfb/spectral and classical_labels consumers) + public_attribute_c,
+Apple CPU O0 identical -j10, exit 0, 140.6 s; receipt svm_public_lifecycle_compile.json; log/source/so under
+~/mojolearn-evidence/spectral-svm-linear-20261028/svm-compile-2/. Failed attempt svm-compile-1 (Mojo syntax) retained.
+Not covered: other label consumers outside family_operation (x_linear, prep_labels, trees, msel) beyond module compile via
+shared imports; host_inference root; runtime/identity/GPU. Non-SVM numbers.Real users (x_linear_native, neighbors_local_native,
+prep_labels_native, _native_labels_bridge labels_real_type) remain for their owners.

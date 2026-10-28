@@ -44,21 +44,14 @@ That property belongs to `MOJOLEARN_NUMERIC_MODE=identical`. The FAST
 build, which is the default, makes no cross-vendor claim at all.
 """
 
-import array
-import importlib.machinery
-import importlib.util
-import os
-import sys
 
-from . import _portable_math as math
-import numbers
 
 from . import _backend
 from . import _native_archive_bridge
 from . import _native_family_bridge
-from ._array import Array
-from ._buffer import _native, addr, addr_ro, empty, zeros
-from ._mode import NumericModeMixin, available_if, is_fitted as _is_fitted
+from ._buffer import _native
+from ._labels import ClassLabels
+from ._mode import NumericModeMixin, available_if
 
 #: `SVC.save`'s format tag (the kde svc host lane, 2026-09-14).
 _SVC_FORMAT = "mojolearn-svc-1"
@@ -165,49 +158,7 @@ def _extension(mode=None):
     return _backend.binding(_EXT_NAME, mode)
 
 
-def _i32(values):
-    """`values` (an int32 Array or a sequence of ints) as an int32 Array."""
-    if isinstance(values, Array):
-        return values
-    # lane py-runtime-b: array('i') converts the ints in C (no Python
-    # comprehension over the indices); integral floats take int() as before
-    try:
-        store = array.array("i", values)
-    except TypeError:
-        store = array.array("i", map(int, values))
-    return Array._owned(store, (len(store),), "<i4", "C")
 
-
-def _gather(binding, x, rows=None, cols=None):
-    """`x[rows][:, cols]`, an exact copy of float32 cells, gathered in the
-    binding (on the device on a GPU install; cgfin-c-svm). An absent index
-    list keeps that axis whole."""
-    n_rows, n_cols = x.shape
-    ra = None if rows is None else _i32(rows)
-    ca = None if cols is None else _i32(cols)
-    nor = n_rows if ra is None else ra.shape[0]
-    noc = n_cols if ca is None else ca.shape[0]
-    out = empty((nor, noc), "<f4")
-    if nor and noc:
-        binding.svc_pair_epilogue(
-            addr_ro(x, name="x"),
-            0 if ra is None else addr_ro(ra, name="row indices"),
-            0 if ca is None else addr_ro(ca, name="column indices"),
-            addr(out, name="gathered"),
-            [_GLUE_GATHER, n_rows, n_cols, nor, noc])
-    return out
-
-
-def _precomputed_columns(binding, q, support):
-    """kernel='precomputed' at predict: `X[:, support_]`, the query's
-    cross-kernel columns at the support vectors, copied exactly (float32
-    bytes, no arithmetic). What the solver's decision reads as its kernel
-    tile."""
-    # `support` is the fitted int32 Array (a fit's own rows, or a load's,
-    # checked against n_features_in_ by the native loader); q has
-    # n_features_in_ columns (`_query`), so every index is in range and no
-    # per-predict Python pass over it runs (lane cpu2-l10-linear)
-    return _gather(binding, q, None, _i32(support))
 
 
 #: `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo): the epilogues
@@ -216,27 +167,6 @@ def _precomputed_columns(binding, q, support):
  _GLUE_GATHER, _GLUE_SELECT, _GLUE_C_ROWS, _GLUE_FOLD, _GLUE_FOLD_FINISH) = range(11)
 
 
-def _native_perm(binding, n, seed):
-    """`tests/_svm_reference.py::_splitmix_perm(n, seed)` in Mojo (`svc_splitmix_perm`): the same
-    integers, an int32 `array.array`."""
-    out = array.array("i", bytes(4 * n))
-    seed &= 0xFFFFFFFFFFFFFFFF
-    if n:
-        binding.svc_splitmix_perm(out.buffer_info()[0], n, seed & 0xFFFFFFFF, seed >> 32)
-    return out
-
-
-def _native_sigmoid_train(binding, dec, labels):
-    """`tests/_svm_reference.py::_sigmoid_train(dec, labels)` in Mojo (`svc_platt_train`): the same
-    binary64 operations in the same order, the same `(A, B)` bits."""
-    d = array.array("d", dec)
-    lab = array.array("d", labels)
-    if len(d) != len(lab):
-        raise ValueError("decision values and labels differ in length")
-    ab = array.array("d", [0.0, 0.0])
-    binding.svc_platt_train(d.buffer_info()[0] if len(d) else 0,
-                            lab.buffer_info()[0] if len(lab) else 0, ab.buffer_info()[0], len(d))
-    return ab[0], ab[1]
 
 
 # Maintainer notes (moved verbatim from the SVC docstring):
@@ -544,6 +474,7 @@ class SVC(NumericModeMixin):
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "classifier"
+    _mojolearn_native_public = True
 
     #: This family's binding, for `NumericModeMixin._bind` (the kde svc host
     #: lane, 2026-09-14: `fit` and `_run` bind through `self._bind`, the same
@@ -571,6 +502,7 @@ class SVC(NumericModeMixin):
         decision_function_shape="ovr",
         probability=False,
         break_ties=False,
+        numeric_mode=None,
     ):
         # Stored verbatim (scikit-learn's convention); `_validate_params`
         # checks them when `fit` (or `load`) runs and keeps the checked
@@ -591,188 +523,14 @@ class SVC(NumericModeMixin):
         self.decision_function_shape = decision_function_shape
         self.probability = probability
         self.break_ties = break_ties
+        self.numeric_mode = numeric_mode
 
     def __setstate__(self, state):
         return _NATIVE(self, "family_svc_public_svc_setstate", (state,), _NATIVE_CONTEXT)
 
     def _validate_params(self):
         """The constructor checks, run at the start of `fit` and in `load`."""
-        C = self.C
-        kernel = self.kernel
-        degree = self.degree
-        gamma = self.gamma
-        coef0 = self.coef0
-        tol = self.tol
-        cache_size = self.cache_size
-        max_iter = self.max_iter
-        nochange_steps = self.nochange_steps
-        verbose = self.verbose
-        output_type = self.output_type
-        random_state = self.random_state
-        class_weight = self.class_weight
-        decision_function_shape = self.decision_function_shape
-        probability = self.probability
-        break_ties = self.break_ties
-
-        if not isinstance(kernel, str):
-            raise ValueError("mojolearn SVC: kernel is a name")
-        # The caller's own string object when it is already lower case, so
-        # `get_params` hands `clone` back the object it was given.
-        k = kernel if kernel == kernel.lower() else kernel.lower()
-        if k in _SVC_REFUSED_KERNELS:
-            raise NotImplementedError(
-                f"mojolearn SVC: kernel={kernel!r} is refused; "
-                + _SVC_REFUSED_KERNELS[k]
-            )
-        if k not in _SVC_KERNELS:
-            raise ValueError(
-                f"mojolearn SVC: kernel={kernel!r} is not a kernel name; "
-                f"this implementation carries {sorted(_SVC_KERNELS)} and refuses "
-                f"the others by name ({sorted(_SVC_REFUSED_KERNELS)})"
-            )
-        if isinstance(gamma, str):
-            g = gamma if gamma == gamma.lower() else gamma.lower()
-            if g not in ("auto", "scale"):
-                raise ValueError(
-                    f"mojolearn SVC: gamma={gamma!r} is not a name; it is "
-                    "'auto', 'scale' or a float"
-                )
-            gamma = g
-        else:
-            gamma = float(gamma)
-            if not math.isfinite(gamma) or gamma < 0.0:
-                raise ValueError(
-                    "mojolearn SVC: gamma must be finite and >= 0 for the RBF "
-                    f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
-                    "constraint is gamma >= 0)"
-                )
-        if k == "poly":
-            if isinstance(degree, bool) or not isinstance(degree, numbers.Integral):
-                raise TypeError(
-                    f"mojolearn SVC: degree={degree!r} must be an integer; the "
-                    "polynomial power is an ascending repeated product (DEVIATION 1663)"
-                )
-            degree = int(degree)
-            if not 0 <= degree <= _MAX_POLY_DEGREE:
-                raise ValueError(
-                    f"mojolearn SVC: degree must be in [0, {_MAX_POLY_DEGREE}], got "
-                    f"{degree!r} (DEVIATION 1663)"
-                )
-            coef0 = float(coef0)
-            if not math.isfinite(coef0):
-                raise ValueError(
-                    f"mojolearn SVC: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
-                )
-        elif k == "sigmoid":
-            # tanh(gamma * K + coef0), the kernel_methods lane's TANH epilogue.
-            if degree != 3:
-                raise NotImplementedError(
-                    f"mojolearn SVC: degree={degree!r} is refused with kernel='sigmoid'; "
-                    "it is read only by kernel='poly'"
-                )
-            coef0 = float(coef0)
-            if not math.isfinite(coef0):
-                raise ValueError(
-                    f"mojolearn SVC: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
-                )
-        else:
-            if degree != 3:
-                raise NotImplementedError(
-                    f"mojolearn SVC: degree={degree!r} is refused with kernel={k!r}; "
-                    "it is read only by kernel='poly'. Passing it with another kernel "
-                    "would be a parameter accepted and ignored"
-                )
-            if coef0 != 0.0:
-                raise NotImplementedError(
-                    f"mojolearn SVC: coef0={coef0!r} is refused with kernel={k!r}; it "
-                    "is read only by kernel='poly' and kernel='sigmoid'"
-                )
-        C = float(C)
-        if not math.isfinite(C):
-            raise ValueError(
-                f"mojolearn SVC: C must be finite, got {C!r} (DEVIATION 636)"
-            )
-        if C <= 0.0:
-            raise ValueError(f"mojolearn SVC: C must be positive, got {C!r}")
-        tol = float(tol)
-        if not math.isfinite(tol):
-            raise ValueError(
-                f"mojolearn SVC: tol must be finite, got {tol!r} (DEVIATION 636)"
-            )
-        if tol <= 0.0:
-            raise ValueError(f"mojolearn SVC: tol must be positive, got {tol!r}")
-        cache_size = float(cache_size)
-        if not (cache_size > 0.0) or not math.isfinite(cache_size):
-            raise ValueError(
-                "mojolearn SVC: cache_size is the prediction buffer here "
-                f"(DEVIATION 871) and must be a positive finite MiB, got "
-                f"{cache_size!r}"
-            )
-        max_iter = int(max_iter)
-        if max_iter == 0 or max_iter < -1:
-            raise ValueError(
-                "mojolearn SVC: max_iter is a positive cap or -1 for no "
-                f"limit (cuML's default), got {max_iter!r}"
-            )
-        nochange_steps = int(nochange_steps)
-        if nochange_steps < 0:
-            raise ValueError(
-                "mojolearn SVC: nochange_steps cannot be negative, got "
-                f"{nochange_steps!r}"
-            )
-        if verbose:
-            raise NotImplementedError(
-                "mojolearn SVC: verbose is refused; upstream it selects "
-                "CUML_LOG_DEBUG lines and this implementation prints none, so honoring "
-                "it is impossible and accepting it would be accepting-and-"
-                "ignoring"
-            )
-        if output_type is not None:
-            raise NotImplementedError(
-                "mojolearn SVC: output_type is a cuML-internal array-type "
-                "selector; this package returns mojolearn Arrays"
-            )
-        probability = bool(probability)
-        if not probability:
-            # scikit-learn accepts random_state always and reads it only for
-            # probability's cross-validation folds; the C-SVC solver draws no
-            # random numbers, so without probability it is accepted and unused
-            random_state = None
-        if random_state is not None and (
-                isinstance(random_state, bool) or not isinstance(random_state, numbers.Integral)
-                or not 0 <= int(random_state) < 2 ** 64):
-            raise ValueError(
-                "mojolearn SVC: random_state must be None or an int in [0, 2**64) "
-                f"(the key of probability's fold shuffle), got {random_state!r}"
-            )
-        if class_weight is not None and not isinstance(class_weight, (dict, str)):
-            raise ValueError(
-                "mojolearn SVC: class_weight is a dict, 'balanced' or None, "
-                f"got {type(class_weight).__name__}"
-            )
-        if decision_function_shape not in ("ovo", "ovr"):
-            raise ValueError(
-                "mojolearn SVC: decision_function_shape is 'ovo' or 'ovr', got "
-                f"{decision_function_shape!r}"
-            )
-        break_ties = bool(break_ties)
-        if break_ties and decision_function_shape == "ovo":
-            raise ValueError(
-                "mojolearn SVC: break_ties must be False when "
-                "decision_function_shape is 'ovo' (scikit-learn's rule)"
-            )
-        self._hp_C = C
-        self._hp_kernel = k
-        self._hp_degree = degree
-        self._hp_gamma = gamma
-        self._hp_coef0 = coef0
-        self._hp_tol = tol
-        self._hp_cache_size = cache_size
-        self._hp_max_iter = max_iter
-        self._hp_nochange_steps = nochange_steps
-        self._hp_random_state = None if random_state is None else int(random_state)
-        self._hp_probability = probability
-        self._hp_break_ties = break_ties
+        return _NATIVE(self, "family_svc_svc_validate", (None,), _NATIVE_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the support vector classifier.
@@ -794,22 +552,6 @@ class SVC(NumericModeMixin):
             The fitted estimator.
         """
         return _NATIVE(self, "family_svc_svc_fit", (None, X, y, sample_weight), _NATIVE_CONTEXT)
-
-    def _dual_times_sv(self, dual_coef, support_vectors, out=None, row=0, negate=False):
-        """`dual_coef_ @ support_vectors_` in the binding (`svc_dual_gemv`,
-        on the device on a GPU install: an ascending binary64 chain per
-        feature), into row `row` of `out` (a new (1, d) Array when None),
-        negated when `negate` (exact)."""
-        native = self._bind(_EXT_NAME)
-        n_sv, n_features = support_vectors.shape
-        if out is None:
-            out = empty((1, n_features), "<f4")
-        if n_features:
-            native.svc_dual_gemv(
-                addr_ro(dual_coef, name="dual_coef_") if n_sv else 0,
-                addr_ro(support_vectors, name="support_vectors_") if n_sv else 0,
-                [n_sv, n_features, 1 if negate else 0], addr(out, name="coef_") + 4 * row * n_features)
-        return out
 
     @property
     def coef_(self):
@@ -1252,6 +994,7 @@ class SVR(NumericModeMixin):
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "regressor"
+    _mojolearn_native_public = True
 
     #: This family's binding, for `NumericModeMixin._bind`
     #: (lane/inference-svm, 2026-09-15): `predict` binds through
@@ -1274,6 +1017,7 @@ class SVR(NumericModeMixin):
         max_iter=-1,
         nochange_steps=1000,
         output_type=None,
+        numeric_mode=None,
     ):
         # Stored verbatim (scikit-learn's convention); `_validate_params`
         # checks them when `fit` (or `load`) runs and keeps the checked
@@ -1290,150 +1034,14 @@ class SVR(NumericModeMixin):
         self.max_iter = max_iter
         self.nochange_steps = nochange_steps
         self.output_type = output_type
+        self.numeric_mode = numeric_mode
 
     def __setstate__(self, state):
         return _NATIVE(self, "family_svc_public_svr_setstate", (state,), _NATIVE_CONTEXT)
 
     def _validate_params(self):
         """The constructor checks, run at the start of `fit` and in `load`."""
-        kernel = self.kernel
-        degree = self.degree
-        gamma = self.gamma
-        coef0 = self.coef0
-        tol = self.tol
-        C = self.C
-        epsilon = self.epsilon
-        cache_size = self.cache_size
-        verbose = self.verbose
-        max_iter = self.max_iter
-        nochange_steps = self.nochange_steps
-        output_type = self.output_type
-
-        if not isinstance(kernel, str):
-            raise ValueError("mojolearn SVR: kernel is a name")
-        # The caller's own string object when it is already lower case, so
-        # `get_params` hands `clone` back the object it was given.
-        k = kernel if kernel == kernel.lower() else kernel.lower()
-        if k in _SVR_REFUSED_KERNELS:
-            raise NotImplementedError(
-                f"mojolearn SVR: kernel={kernel!r} is refused; "
-                + _SVR_REFUSED_KERNELS[k]
-            )
-        if k not in _SVR_KERNELS:
-            raise ValueError(
-                f"mojolearn SVR: kernel={kernel!r} is not a kernel name; "
-                f"this implementation carries {sorted(_SVR_KERNELS)} and refuses "
-                f"the others by name ({sorted(_SVR_REFUSED_KERNELS)})"
-            )
-        if isinstance(gamma, str):
-            g = gamma if gamma == gamma.lower() else gamma.lower()
-            if g not in ("auto", "scale"):
-                raise ValueError(
-                    f"mojolearn SVR: gamma={gamma!r} is not a name; it is "
-                    "'auto', 'scale' or a float"
-                )
-            gamma = g
-        else:
-            gamma = float(gamma)
-            if not math.isfinite(gamma) or gamma < 0.0:
-                raise ValueError(
-                    "mojolearn SVR: gamma must be finite and >= 0 for the RBF "
-                    f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
-                    "constraint is gamma >= 0)"
-                )
-        if k == "poly":
-            if isinstance(degree, bool) or not isinstance(degree, numbers.Integral):
-                raise TypeError(
-                    f"mojolearn SVR: degree={degree!r} must be an integer; the "
-                    "polynomial power is an ascending repeated product (DEVIATION 1663)"
-                )
-            degree = int(degree)
-            if not 0 <= degree <= _MAX_POLY_DEGREE:
-                raise ValueError(
-                    f"mojolearn SVR: degree must be in [0, {_MAX_POLY_DEGREE}], got "
-                    f"{degree!r} (DEVIATION 1663)"
-                )
-        elif degree != 3:
-            raise NotImplementedError(
-                f"mojolearn SVR: degree={degree!r} is refused with kernel={k!r}; it "
-                "is read only by kernel='poly'. Passing it with another kernel "
-                "would be a parameter accepted and ignored"
-            )
-        if k in ("poly", "sigmoid"):
-            coef0 = float(coef0)
-            if not math.isfinite(coef0):
-                raise ValueError(
-                    f"mojolearn SVR: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
-                )
-        elif coef0 != 0.0:
-            raise NotImplementedError(
-                f"mojolearn SVR: coef0={coef0!r} is refused with kernel={k!r}; it "
-                "is read only by kernel='poly' and kernel='sigmoid'"
-            )
-        C = float(C)
-        if not math.isfinite(C):
-            raise ValueError(
-                f"mojolearn SVR: C must be finite, got {C!r} (DEVIATION 636)"
-            )
-        if C <= 0.0:
-            raise ValueError(f"mojolearn SVR: C must be positive, got {C!r}")
-        tol = float(tol)
-        if not math.isfinite(tol):
-            raise ValueError(
-                f"mojolearn SVR: tol must be finite, got {tol!r} (DEVIATION 636)"
-            )
-        if tol <= 0.0:
-            raise ValueError(f"mojolearn SVR: tol must be positive, got {tol!r}")
-        # EPSILON IS NOT VALIDATED HERE, ON PURPOSE. `float()` is a
-        # conversion, not a policy: a string that is not a number still
-        # raises here, and every value that IS a number goes to the Mojo
-        # side unchanged so that `check_rung1_scope`'s "must be finite" and
-        # "must be non-negative" refusals stay reachable from Python. That
-        # is the same rule that keeps the non-finite-X refusal reachable.
-        epsilon = float(epsilon)
-        cache_size = float(cache_size)
-        if not (cache_size > 0.0) or not math.isfinite(cache_size):
-            raise ValueError(
-                "mojolearn SVR: cache_size is the prediction buffer here "
-                f"(DEVIATION 871) and must be a positive finite MiB, got "
-                f"{cache_size!r}"
-            )
-        max_iter = int(max_iter)
-        if max_iter == 0 or max_iter < -1:
-            raise ValueError(
-                "mojolearn SVR: max_iter is a positive cap or -1 for no "
-                f"limit (cuML's default), got {max_iter!r}"
-            )
-        nochange_steps = int(nochange_steps)
-        if nochange_steps < 0:
-            raise ValueError(
-                "mojolearn SVR: nochange_steps cannot be negative, got "
-                f"{nochange_steps!r}"
-            )
-        if verbose:
-            raise NotImplementedError(
-                "mojolearn SVR: verbose is refused; upstream it selects "
-                "CUML_LOG_DEBUG lines and this implementation prints none, so honoring "
-                "it is impossible and accepting it would be accepting-and-"
-                "ignoring"
-            )
-        if output_type is not None:
-            raise NotImplementedError(
-                "mojolearn SVR: output_type is a cuML-internal array-type "
-                "selector; this package returns mojolearn Arrays"
-            )
-        self._hp_kernel = k
-        self._hp_degree = degree
-        self._hp_gamma = gamma
-        self._hp_coef0 = coef0
-        self._hp_tol = tol
-        self._hp_C = C
-        self._hp_epsilon = epsilon
-        self._hp_cache_size = cache_size
-        self._hp_max_iter = max_iter
-        self._hp_nochange_steps = nochange_steps
-
-    _dual_times_sv = SVC._dual_times_sv
+        return _NATIVE(self, "family_svc_svr_validate", (None,), _NATIVE_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the support vector regressor.
@@ -1633,9 +1241,11 @@ _native_archive_bridge.register(
 # The compiled SVM family owner (bindings/svc_native.mojo) reads these fixed
 # tables: the base binding's host-helper resolver (`_buffer._native`, the
 # entries `gather_i64`, `threshold_labels_i64`, ... the Python called) and
-# the number ABCs of the label and class-weight checks.
-_native_family_bridge.tables(family_svc_native=_native, family_svc_real=numbers.Real,
-                             family_svc_integral=numbers.Integral, family_svc_kernels=dict(_SVC_KERNELS),
+# the connected public class-label type the native fit publishes `classes_` as.
+_native_family_bridge.tables(family_svc_native=_native, family_svc_kernels=dict(_SVC_KERNELS),
+                             classifier_labels_class=ClassLabels,
+                             classifier_labels_namespace=dict(vars(ClassLabels)),
+                             classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
                              family_svc_refused=dict(_SVC_REFUSED_KERNELS),
                              family_svr_refused=dict(_SVR_REFUSED_KERNELS))
 

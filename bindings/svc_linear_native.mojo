@@ -19,6 +19,7 @@ from bindings.family_common import (
 )
 from bindings.svm_mixture_native import _qn_scores
 from core.family_weights_impl import family_fill_f32
+from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_base, svc_mode, svc_binding, svc_zero_division, svc_f32, svc_shape_of, svc_labels_1d,
@@ -74,7 +75,8 @@ def _linear_strengths(fields: PythonObject) raises -> PythonObject:
 def _class_weight_message(model: PythonObject, class_weight: PythonObject) raises -> String:
     return ("The 'class_weight' parameter of " + svc_name(model) + " must be an "
             + "instance of 'dict', a str among {'balanced'} or None. "
-            + "Got " + family_repr(class_weight) + " instead.")
+            + "Got " + (family_repr(class_weight) if py_type(class_weight) is svc_builtins().str
+                        else "a " + labels_type_name(py_type(class_weight))) + " instead.")
 
 
 def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes: PythonObject,
@@ -87,7 +89,7 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
     var n = Int(py=codes.size)
     var k = len(classes)
     var values: PythonObject
-    if family_isinstance(class_weight, b.str):
+    if py_type(class_weight) is b.str:
         var counts = family_array(Python.tuple(PythonObject(k)), "<i4", context)
         _ = family_call(family_entry(xbind, "x_trees_code_counts", context),
                         classical_address(codes) if n > 0 else PythonObject(0), classical_address(counts),
@@ -112,15 +114,22 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
             _ = py_call(values.append, PythonObject(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(w64)))[i]))
             _ = w64  # keep the Python object alive through the native call above
     else:
-        var unknown = family_call(family_call(b.set, class_weight).difference, classes)
+        if py_type(class_weight) is not b.dict:
+            raise Error("TypeError: class_weight must be 'balanced', None or a dict")
+        var keys = py_call(b.list, class_weight)
+        for i in range(len(keys)):  # driver-loop: over user class_weight keys, admitted before hashing/comparison
+            var kt = py_type(keys[i])
+            if not labels_text_type(kt, context) and not labels_real_type(kt, context):
+                raise Error("TypeError: class_weight keys must be native numbers or strings")
+        var unknown = family_call(family_call(b.set, keys).difference, classes)
         if len(unknown) > 0:
             raise Error("class_weight contains labels absent from y")
         values = family_call(b.list, family_call(b.map, class_weight.get, classes, family_call(itertools.repeat, PythonObject(1.0))))
     var all_one = True
     for i in range(k):  # driver-loop: over the classes (the class weight argument checks)
         var v = values[i]
-        var boolean = family_isinstance(v, b.bool) or String(py_type(v).__name__) == "bool_"
-        if boolean or not family_isinstance(v, context["family_svc_real"]):
+        var vt = py_type(v)
+        if labels_bool_type(vt, context) or not labels_real_type(vt, context):
             raise Error("class weights must be finite nonnegative real numbers")
         var f = svc_float(v)
         if not svc_isfinite(f) or f < 0:
@@ -172,10 +181,10 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
         sw = family_sample_weight(sample_weight, n, False, context)
     if class_weight is None:
         return sw
-    if family_isinstance(class_weight, b.str):
+    if py_type(class_weight) is b.str:
         if String(class_weight) != "balanced":
             raise Error(_class_weight_message(model, class_weight))
-    elif not family_isinstance(class_weight, b.dict):
+    elif py_type(class_weight) is not b.dict:
         raise Error(_class_weight_message(model, class_weight))
     var xb = svc_binding("_mojolearn_x_trees", svc_mode(fields), context)
     var cw = _class_weight_rows(class_weight, family_call(b.list, classes), codes, xb, context)
@@ -244,7 +253,7 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     # `_target_1d`
-    if len(svc_shape_of(args[2])) != 1:
+    if len(svc_shape_of(args[2], context)) != 1:
         raise Error("mojolearn LinearSVR requires a 1-D y")
     var t = svc_f32(args[2], 1, "y", False, context)[0]
     if Int(py=t.shape[0]) != rows:

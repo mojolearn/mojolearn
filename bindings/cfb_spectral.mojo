@@ -28,6 +28,14 @@ from bindings.spectral_umap_routes import (
 from bindings.cfb_dbscan import cfb_borrow_copy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
+from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_validate import classical_estimator_name, classical_check_width
+from bindings.classical_exceptions import classical_require_fitted
+from bindings.native_array_view import native_array_ndarray_view
+from bindings.native_owner_lifetime import native_release_admit
+from providers.python.spectral_lifecycle_pyapi import spectral_admit, spectral_input
+from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
+from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 
 comptime _DENSE_EMPTY = -1
 comptime _DENSE_NONFINITE = -2
@@ -95,9 +103,11 @@ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises ->
     return out
 
 
-def _tocoo(obj: PythonObject) raises -> PythonObject:
+def _tocoo(obj: PythonObject, context: PythonObject) raises -> PythonObject:
     """`getattr(obj, "tocoo", None)` when it is callable, else None."""
     var b = _builtins()
+    if py_type(obj) is context["array_class"] or py_type(obj) is py_get(context, "ndarray"):
+        return PythonObject(None)
     var tocoo = py_call(b.getattr, obj, PythonObject("tocoo"), PythonObject(None))
     if tocoo is None or not Bool(py=family_call(b.callable, tocoo)):
         return PythonObject(None)
@@ -134,7 +144,7 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
     one through the base binding's float64 nonzero scan (exact zeros
     dropped, as `sp.coo_matrix(dense)` drops them)."""
     var b = _builtins()
-    var tocoo = _tocoo(source)
+    var tocoo = _tocoo(source, context)
     if tocoo is not None:
         var coo = family_call(tocoo)
         var shape = family_call(b.tuple, coo.shape)
@@ -328,7 +338,7 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     symmetrized 0.5 (C + C^T), by the base binding's `knn_affinity_f32`.
     Sets and returns `affinity_matrix_`."""
     var b = _builtins()
-    var tocoo = _tocoo(source)
+    var tocoo = _tocoo(source, context)
     var n: Int
     var nnz = 0
     var dense = PythonObject(None)
@@ -599,7 +609,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var coo_source = source
     if affinity == "precomputed":
         py_setitem(fields, "affinity_matrix_", source)
-        if dense_fn is not None and _tocoo(source) is None:
+        if dense_fn is not None and _tocoo(source, context) is None:
             var shape = _shape_of(source)
             if not _square(shape):
                 raise Error("mojolearn SpectralClustering: with affinity='precomputed', X "
@@ -923,7 +933,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
     if affinity == "precomputed_nearest_neighbors":
         dense = _knn_affinity(fields, source, False, args[2], context)
         from_matrix = True
-    if affinity == "precomputed" and dense_fn is not None and _tocoo(source) is None:
+    if affinity == "precomputed" and dense_fn is not None and _tocoo(source, context) is None:
         var shape = _shape_of(source)
         if not _square(shape):
             raise Error("mojolearn SpectralEmbedding: with affinity='precomputed', X "
@@ -1069,7 +1079,7 @@ def _spectral_embedding(args: PythonObject, context: PythonObject) raises -> Pyt
     return fields["embedding_"]
 
 
-def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonObject,
+def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     """Fit/predict shells pass (X,); route selection belongs to this owner."""
     if operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict":
@@ -1115,3 +1125,60 @@ def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonO
             args[1], args[2], args[3], args[4], args[5], args[6], args[7])
         return _spectral_embedding(routed, context)
     raise Error("RuntimeError: unknown spectral operation " + operation)
+
+
+def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+    classical_connect_numpy(context)
+    var b = _builtins()
+    if py_type(args) is not b.tuple:
+        raise Error("TypeError: spectral public arguments require an exact tuple")
+    var clustering = operation.startswith("family_cfb_sc_")
+    if model is None:
+        return _cfb_spectral_algorithm_operation(model, operation, args, context)
+    var fitting = operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict" or operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform"
+    var fields = spectral_admit(model, clustering, fitting, context)
+    if operation == "family_cfb_se_validate":
+        for name in ["_n_components", "_n_neighbors", "_seed", "_gamma"]:  # small-loop(private validation output fields)
+            if py_contains(fields, name):
+                native_release_admit(fields[name], context)
+        return _cfb_spectral_algorithm_operation(model, operation, args, context)
+    var method = String("fit_predict") if operation.endswith("_fit_predict") else (String("fit_transform") if operation.endswith("_fit_transform") else (String("fit") if fitting else String("predict")))
+    var public_prediction = operation == "family_cfb_sc_predict"
+    if public_prediction:
+        classical_require_fitted(model, False, method, context)
+    if operation == "family_cfb_se_knn_affinity" and py_contains(fields, "affinity_matrix_"):
+        native_release_admit(fields["affinity_matrix_"], context)
+    var source = args[0]
+    var name = classical_estimator_name(model)
+    var prepared = spectral_input(source, name, context)
+    var rows = Int(py=prepared.shape[0])
+    var columns = Int(py=prepared.shape[1])
+    var depth = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
+    if depth == 0:
+        if fitting:
+            _target(args[1], rows, name, context)
+        elif public_prediction:
+            var width = py_get(fields, "n_features_in_")
+            if py_type(width) is b.int:
+                classical_check_width(columns, Int(py=width), name)
+            estimator_feature_check(model, fields, source, context)
+    var initial_depth = estimator_fit_begin(fields) if fitting else 0
+    var outside = estimator_outside()
+    var result = PythonObject(None)
+    try:
+        result = _cfb_spectral_algorithm_operation(model, operation, Python.tuple(prepared), context)
+    except error:
+        var refusal = _refusal(error, fitting, depth > 0, rows, columns, name)
+        raise refusal^
+    finally:
+        if fitting:
+            estimator_fit_end(model, initial_depth)
+    if fitting:
+        if not py_contains(fields, "n_features_in_"):
+            py_setitem(fields, "n_features_in_", PythonObject(columns))
+        estimator_fit_complete(model, source, False, context)
+    if (outside and (fitting or public_prediction)
+            and py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None):
+        return native_array_ndarray_view(result, context)
+    return result
