@@ -24,6 +24,7 @@ from bindings.cluster_native import cluster_operation
 from bindings.mixture_native import mixture_operation
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
+from providers.python.cluster_constructor_pyapi import cluster_initialize_py
 
 
 def _scalar_state(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -168,6 +169,8 @@ def _refusal(error: Error, fitting: Bool, nested: Bool, rows: Int, columns: Int,
 
 def cluster_public_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
+    if operation == "family_xc_initialize":
+        return cluster_initialize_py(model, args[1], context)
     classical_connect_numpy(context)
     var fields = _admit_model(model, context)
     var method = _method(operation)
