@@ -40,21 +40,81 @@ cannot fail proves nothing; the sabotage step is how you know this one can.
 Time: under an hour of free runner minutes. What it does not prove: anything
 about the GPU columns themselves; those are inputs here.
 
-## Recipe 2, one supported GPU: reproduce one column from the PyPI wheel
+## Recipe 2, one supported GPU: reproduce one column
 
-You need one of: an Apple silicon Mac, an NVIDIA GPU of compute capability 8.9
-or 9.0 (RTX 4090, H100), or an AMD MI300 series (gfx942). Other architectures
-are not in the wheel and the import refuses by name.
+Use hardware supported by the selected package, as listed in
+[SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md). The source, package and reference
+record must describe the same evaluated version. Choose the record explicitly
+for a paper or release; the default is the newest retained `*-lanes` directory,
+which is historical evidence and need not qualify the latest release.
+
+### Install from PyPI
 
 ```sh
 git clone https://github.com/mojolearn/mojolearn.git && cd mojolearn
 sh tools/verify_external.sh <box-label>       # e.g. nvidia-rtx4090-sm_89
+# Pin the evidence and version explicitly:
+sh tools/verify_external.sh <box-label> <record-dir> <version>
 ```
 
-The script installs the wheel the record was made with, checks out the commit
+This default path installs the wheel the record was made with, clones the
+public GitHub repository into its output directory, and checks out the commit
 the record's columns ran (so the lane list matches), runs every lane on the nine
 fixtures twice under `MOJOLEARN_NUMERIC_MODE=identical`, and diffs your JSON
-against the committed Apple, NVIDIA and AMD columns. Expected output ends in
+against the retained Apple, NVIDIA and AMD columns.
+
+### Use local wheels or an existing installation
+
+These alternatives do not install from PyPI or clone/fetch the public repository:
+
+```sh
+# A local directory containing the platform's release wheels and dependencies:
+sh tools/verify_external.sh <box-label> ./record \
+  --wheelhouse ./wheels --source ./source --output ./verification-result
+
+# Already installed from supplied wheels or a supported native build:
+sh tools/verify_external.sh <box-label> ./record \
+  --installed --source ./source --output ./verification-result
+```
+
+Use a fresh virtual environment. The wheelhouse installer uses `pip --isolated`
+with `--no-index`, `--find-links`, and `--only-binary=:all:`. Supply NumPy and
+all dependencies of the selected platform's `mojolearn` package, including
+the split Linux distributions where applicable; missing wheels fail installation.
+`--installed` skips installation entirely and checks the active environment.
+To select a particular interpreter, set `PYTHON=/path/to/venv/bin/python` before
+the shell command. A source checkout alone does not supply the compiled bindings;
+`pip install .` does not compile them.
+
+Both local options require `--source`. It can name a clean checkout at the
+record's commit or an unpacked source archive with that full 40-character
+revision in a root `COMMIT` (or `commit.txt`) file. For example, an artifact
+maintainer can prepare an archive from the evaluated revision:
+
+```sh
+git archive --format=tar <record-commit> -o source.tar
+mkdir source
+tar -xf source.tar -C source
+git rev-parse <record-commit> > source/COMMIT
+```
+
+Keep the complete source needed by `tools/identity_break.py` and its imports.
+The runner checks source identity before setting the harness's commit witness;
+it never changes a supplied checkout. A witness in an archive is declared
+provenance, not proof that its bytes equal a Git revision. Retain the archive's
+checksum and document any anonymization separately. The installed package must
+match the record's version and, when present, its packaged commit witness.
+The same comparison and failure rules apply to all three installation paths.
+These options change artifact access; they do not anonymize files or metadata.
+
+### Results and failure reporting
+
+The runner retains complete installation, package-probe, execution and comparison
+logs, the resulting column JSON, the selected reference hashes, the source
+witness and the harness hash. It prints exit statuses and evidence paths rather
+than streaming full logs. Each default run gets a new timestamped directory
+under `verify_external_out/`; `--output` must name an empty directory so prior
+evidence is not overwritten. The comparison log contains summaries such as
 
 ```
 summary: IDENTICAL=<n>
@@ -62,13 +122,12 @@ summary (infer/model): IDENTICAL=<m>, N/A=<k>
 diff exit 0
 ```
 
-and a last line `VERDICT: PASS`. The verdict is positive: the script exits 0
+The terminal summary ends with `VERDICT: PASS` on success. The verdict is positive: the script exits 0
 only when your column has no REFUSED and no MOVED cell and the diff found every
 compared cell identical. A diff that reports nothing divergent over a column of
 refusals is not a pass; the first outsider run (an H100 on 2026-09-14,
 `bench/results/verify_external/`) had six refused radius cells behind a clean
-diff, which is why the verdict is computed from your column too. Run the
-script from a git clone, never from a source archive. Time: about an hour on
+diff, which is why the verdict is computed from your column too. Time: about an hour on
 an H100 or an M4; longer on a 4090.
 
 To do it by hand instead of through the script:
@@ -80,12 +139,12 @@ MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py --vendor <box-l
 python3 tools/identity_break.py --diff bench/results/identity_break/<record>/*.json mybox.json
 ```
 
-The record and the wheel must come from the same commit. The script checks
-the harness out at the record's commit so the lanes are the record's; a wheel
+The record and the wheel must come from the same commit. In the default path,
+the script checks the harness out at the record's commit; local paths check
+the supplied source witness instead. A wheel
 built from an older commit can refuse a lane the newer harness calls, which
 reads REFUSED and fails the verdict. That is a real mismatch and the script
-has no switch to hide it; it warns when the record's commit is not the wheel's
-release tag. The two outsider runs on 2026-09-14 (`bench/results/verify_external/`)
+has no switch to hide it. The two outsider runs on 2026-09-14 (`bench/results/verify_external/`)
 show exactly this against the 0.8.5 wheel: six radius cells refused. From 0.8.7
 the wheel ships the columns of a record taken at its own commit, so the recipe
 is one command with no skew. (0.8.6 would have been the first to do so; it was
