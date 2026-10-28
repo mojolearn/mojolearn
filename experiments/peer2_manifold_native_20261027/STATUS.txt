@@ -108,3 +108,11 @@ whole-operation fitted/feature-name checks and public result completion;
 UMAP categorical labels; MKit _M/_DevBuf state and Python destructor cleanup;
 remaining mutable fitted-state/scalar reads in manifold numerical orchestration.
 The constructor source repair does not qualify those operations or any vendor.
+
+Constructor error-category review repair
+- Exact ndarray rank/dtype failures now translate to the constructor's original
+  integer/finite-float ValueError messages, before reading object elements or
+  invoking conversion hooks. Added wrong-rank, complex/object dtype, NaN/inf and
+  object-element protocol negative controls to the public runtime fixture.
+- Public runtime cases remain UNRUN. Focused source test/syntax evidence:
+  umap-constructor-array-errors-source.log (exit 0, 2 passed, 102 deselected).

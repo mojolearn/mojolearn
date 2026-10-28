@@ -107,3 +107,33 @@ def test_zero_dimensional_native_arrays_remain_supported_constructor_scalars():
     model = UMAP(n_neighbors=np.array(3, dtype=np.int64), min_dist=np.array(0.2, dtype='>f8'))
     assert model.n_neighbors == 3
     assert model.min_dist == 0.2
+
+
+@pytest.mark.parametrize('field, value, message', [
+    ('n_neighbors', np.array([3, 4]), 'n_neighbors must be an integer'),
+    ('n_neighbors', np.array(3.0), 'n_neighbors must be an integer'),
+    ('n_neighbors', np.array(3j), 'n_neighbors must be an integer'),
+    ('n_neighbors', np.array(3, dtype=object), 'n_neighbors must be an integer'),
+    ('min_dist', np.array([0.1, 0.2]), 'min_dist must be a finite float32 value'),
+    ('min_dist', np.array(0.2j), 'min_dist must be a finite float32 value'),
+    ('min_dist', np.array('invalid', dtype=object), 'min_dist must be a finite float32 value'),
+    ('min_dist', np.array(float('nan')), 'min_dist must be a finite float32 value'),
+    ('min_dist', np.array(float('inf')), 'min_dist must be a finite float32 value'),
+])
+def test_constructor_array_failures_keep_public_value_errors(field, value, message):
+    with pytest.raises(ValueError, match='^UMAP ' + message + '$'):
+        UMAP(**{field: value})
+
+
+@pytest.mark.parametrize('field, hook', [('n_neighbors', '__index__'), ('min_dist', '__float__')])
+def test_constructor_object_scalar_arrays_do_not_invoke_contained_hooks(field, hook):
+    calls = []
+
+    def invoked(self):
+        calls.append(hook)
+        return 3 if hook == '__index__' else 0.2
+
+    value = np.array(type('Element', (), {hook: invoked})(), dtype=object)
+    with pytest.raises(ValueError, match='^UMAP ' + field + ' must be'):
+        UMAP(**{field: value})
+    assert calls == []
