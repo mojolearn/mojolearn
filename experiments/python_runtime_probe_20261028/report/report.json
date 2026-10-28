@@ -1,0 +1,305 @@
+{
+ "allowed_tag_metadata_with_python_inside": 183,
+ "child_exits": {
+  "0": 488
+ },
+ "endpoints": 3769,
+ "findings_with_product_python_inside": 369,
+ "findings_with_python_inside": 446,
+ "findings_with_python_inside_own_entry": 38,
+ "fixture_errors": 0,
+ "frame_kinds": "entry = the public frame; inside/callback = op work in Python (finding); import = lazy first-use import machinery and module bodies (reported apart)",
+ "publics": 488,
+ "schema": "mojolearn.python-runtime-probe.v1",
+ "scope": "CPU column (MOJOLEARN_VENDOR=cpu), numeric_mode=identical, tiny verifier fixtures; frames observed, not a proof of absence on other inputs; no identity, GPU or timing claim",
+ "seconds": 58.8,
+ "status": {
+  "errored": 92,
+  "harness_assertion": 32,
+  "not_probed": 200,
+  "probed": 2142,
+  "refused": 1303
+ },
+ "top_non_product": [
+  {
+   "calls": 72,
+   "category": "stdlib",
+   "endpoints": 72,
+   "file": "stdlib:json/__init__.py",
+   "function": "dumps"
+  },
+  {
+   "calls": 72,
+   "category": "stdlib",
+   "endpoints": 72,
+   "file": "stdlib:json/encoder.py",
+   "function": "__init__"
+  },
+  {
+   "calls": 72,
+   "category": "stdlib",
+   "endpoints": 72,
+   "file": "stdlib:json/encoder.py",
+   "function": "encode"
+  },
+  {
+   "calls": 72,
+   "category": "stdlib",
+   "endpoints": 72,
+   "file": "stdlib:json/encoder.py",
+   "function": "iterencode"
+  },
+  {
+   "calls": 43,
+   "category": "stdlib",
+   "endpoints": 35,
+   "file": "stdlib:importlib/__init__.py",
+   "function": "import_module"
+  },
+  {
+   "calls": 666,
+   "category": "stdlib",
+   "endpoints": 31,
+   "file": "stdlib:inspect.py",
+   "function": "isfunction"
+  },
+  {
+   "calls": 6464,
+   "category": "stdlib",
+   "endpoints": 27,
+   "file": "stdlib:inspect.py",
+   "function": "name"
+  },
+  {
+   "calls": 2345,
+   "category": "stdlib",
+   "endpoints": 27,
+   "file": "stdlib:inspect.py",
+   "function": "<genexpr>"
+  },
+  {
+   "calls": 2345,
+   "category": "stdlib",
+   "endpoints": 27,
+   "file": "stdlib:inspect.py",
+   "function": "__init__"
+  },
+  {
+   "calls": 2152,
+   "category": "stdlib",
+   "endpoints": 27,
+   "file": "stdlib:enum.py",
+   "function": "__call__"
+  }
+ ],
+ "top_offenders": [
+  {
+   "calls": 361,
+   "category": "product",
+   "endpoints": 195,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_get",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 3250,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "<genexpr>",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 1274,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "_device_array_kind",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 1274,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "release",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 858,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_names",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 701,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_input_tag",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 665,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "input_tag_overrides",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 637,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "__del__",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 637,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "__enter__",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 637,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "__exit__",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 637,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "__init__",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 637,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "_contiguity",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 637,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "_fill",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 440,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_format_kind",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 440,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_is_sparse",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 440,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "describe",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 338,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_array_like",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 236,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "__init__",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 236,
+   "category": "product",
+   "endpoints": 179,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_check_X",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 329,
+   "category": "product",
+   "endpoints": 160,
+   "file": "python/mojolearn/_buffer.py",
+   "function": "_native",
+   "owner": "shared:8-families"
+  },
+  {
+   "calls": 291,
+   "category": "product",
+   "endpoints": 153,
+   "file": "python/mojolearn/_mode.py",
+   "function": "_caller_outside",
+   "owner": "peer4"
+  },
+  {
+   "calls": 291,
+   "category": "product",
+   "endpoints": 153,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "after_call",
+   "owner": "family:preprocessing"
+  },
+  {
+   "calls": 172,
+   "category": "product",
+   "endpoints": 152,
+   "file": "python/mojolearn/_mode.py",
+   "function": "public",
+   "owner": "peer4"
+  },
+  {
+   "calls": 193,
+   "category": "product",
+   "endpoints": 149,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_allows_nan_now",
+   "owner": "shared:6-families"
+  },
+  {
+   "calls": 193,
+   "category": "product",
+   "endpoints": 149,
+   "file": "python/mojolearn/_sk_validate.py",
+   "function": "_scans_x",
+   "owner": "shared:6-families"
+  }
+ ],
+ "with_any_frame_inside": 659,
+ "with_lazy_import_only": 30,
+ "with_native_callback": 16,
+ "with_numpy_c_calls": 179,
+ "with_product_python_inside": 552,
+ "with_python_inside": 629,
+ "with_python_inside_own_entry": 221,
+ "workers": 32
+}

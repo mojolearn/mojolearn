@@ -101,7 +101,11 @@ class Tracer:
                     kind = 'callback' if self.cstack.get(id(back)) and \
                         self.cstack[id(back)][-1] == 'native' else 'inside'
                     entry = parent[1]
-                    self.state[id(frame)] = ('inside', entry)
+                    # A lazy first-use import and everything it runs (module
+                    # bodies, finders) is charged as 'import', not as op work.
+                    if parent[0] == 'import' or category(rel, code.co_name) == 'import':
+                        kind = 'import'
+                    self.state[id(frame)] = ('import' if kind == 'import' else 'inside', entry)
                     self.frames[(kind, entry, rel, code.co_name, code.co_firstlineno)] += 1
                 elif where == 'product':
                     entry = rel + ':' + code.co_name
@@ -114,9 +118,9 @@ class Tracer:
             elif event == 'c_call':
                 st = self.state.get(id(frame))
                 if st is not None:
-                    category, name = c_category(arg)
-                    self.cstack.setdefault(id(frame), []).append(category)
-                    self.ccalls[(category, st[1], name)] += 1
+                    ccat, name = c_category(arg)
+                    self.cstack.setdefault(id(frame), []).append(ccat)
+                    self.ccalls[(ccat, st[1], name)] += 1
             elif event in ('c_return', 'c_exception'):
                 stack = self.cstack.get(id(frame))
                 if stack:
@@ -130,6 +134,23 @@ class Tracer:
         self.frames = Counter()
         self.ccalls = Counter()
         self.entries = []
+
+
+IMPORT_FUNCS = frozenset(('<module>', 'find_spec', 'find_module', 'exec_module', 'create_module',
+                          '_find_and_load', '__import__'))
+
+
+def category(rel, func):
+    """import | product | numpy | stdlib | other, for an inside frame."""
+    if rel.startswith('<frozen') or func in IMPORT_FUNCS:
+        return 'import'
+    if rel.startswith('python/mojolearn/'):
+        return 'product'
+    if rel.startswith('numpy'):
+        return 'numpy'
+    if rel.startswith(('stdlib:', '<')):
+        return 'stdlib'
+    return 'other'
 
 
 def short_path(filename):
@@ -513,11 +534,16 @@ def run_child(public, rows, out_dir, args, deadline=None):
 
 def aggregate(results, out_dir):
     owners = owner_table()
+    family_of = {}
+    inventory = out_dir / 'inventory-endpoints.json'
+    if inventory.exists():
+        family_of = {e['endpoint']: e.get('family') or '?' for e in json.loads(inventory.read_text())['endpoints']}
+    families = defaultdict(Counter)
     endpoint_rows, frame_rows = [], []
     offenders = defaultdict(lambda: dict(calls=0, endpoints=set(), kinds=Counter()))
     files = defaultdict(lambda: dict(calls=0, endpoints=set(), functions=set()))
     status = Counter()
-    with_inside = with_inside_target = with_callback = 0
+    counts = Counter()
     fixture_errors = []
     for result in results:  # driver-loop: over child results
         for row in result['rows']:
@@ -526,27 +552,43 @@ def aggregate(results, out_dir):
                 continue
             status[row['status']] += 1
             targets = target_names(row['method'])
+            for f in row['frames']:  # retained rows predate the tracer's import kind
+                if f[0] in ('inside', 'callback') and category(f[2], f[3]) == 'import':
+                    f[0] = 'import'
             inside = [f for f in row['frames'] if f[0] in ('inside', 'callback')]
             entry_funcs = {f[3] for f in row['frames'] if f[0] == 'entry'}
             own_entries = {f[1] for f in row['frames'] if f[0] == 'entry' and
                            (not targets or f[3] in targets)}
             inside_target = [f for f in inside if f[1] in own_entries]
-            with_inside += bool(inside)
-            with_inside_target += bool(inside_target)
-            with_callback += any(f[0] == 'callback' for f in row['frames'])
+            product = [f for f in inside if category(f[2], f[3]) == 'product']
+            counts['with_any_frame_inside'] += any(f[0] != 'entry' for f in row['frames'])
+            counts['with_python_inside'] += bool(inside)
+            counts['with_python_inside_own_entry'] += bool(inside_target)
+            counts['with_product_python_inside'] += bool(product)
+            counts['with_native_callback'] += any(f[0] == 'callback' for f in row['frames'])
+            counts['with_lazy_import_only'] += bool(not inside and any(f[0] == 'import' for f in row['frames']))
+            counts['with_numpy_c_calls'] += any(c[0] == 'numpy' for c in row['ccalls'])
             numpy_calls = sum(c[3] for c in row['ccalls'] if c[0] == 'numpy')
             native_calls = sum(c[3] for c in row['ccalls'] if c[0] == 'native')
             endpoint_rows.append([row['endpoint'], row['kind'], row.get('static_status') or '',
                                   row['status'], row.get('via', ''), len(entry_funcs),
                                   sum(f[5] for f in inside), sum(f[5] for f in inside_target),
                                   sum(f[5] for f in row['frames'] if f[0] == 'callback'),
+                                  sum(f[5] for f in row['frames'] if f[0] == 'import'),
                                   native_calls, numpy_calls, (row.get('error') or '').replace('\t', ' ')
                                   .replace('\n', ' ')[:200]])
+            allowed = row.get('static_status') == 'allowed_tag_metadata'
+            counts['allowed_tag_metadata_with_python_inside'] += bool(allowed and inside)
+            if not allowed:
+                counts['findings_with_python_inside'] += bool(inside)
+                counts['findings_with_product_python_inside'] += bool(product)
+                counts['findings_with_python_inside_own_entry'] += bool(inside_target)
             for f in row['frames']:
                 kind, entry, rel, func, line, count = f
                 frame_rows.append([row['endpoint'], kind, entry, rel, func, line, count])
-                if kind == 'entry':
+                if kind in ('entry', 'import') or allowed:
                     continue
+                families[(rel, func)][family_of.get(row['endpoint'], '?')] += 1
                 key = (rel, func)
                 offenders[key]['calls'] += count
                 offenders[key]['endpoints'].add(row['endpoint'])
@@ -555,8 +597,13 @@ def aggregate(results, out_dir):
                 files[rel]['endpoints'].add(row['endpoint'])
                 files[rel]['functions'].add(func)
 
-    def owner(rel):
-        return owners.get(rel, '')
+    def owner(rel, func=None):
+        if rel in owners:
+            return owners[rel]
+        fam = families.get((rel, func)) if func is not None else None
+        if not fam:
+            return ''
+        return ('family:' + fam.most_common(1)[0][0]) if len(fam) <= 2 else 'shared:%d-families' % len(fam)
 
     def write_tsv(name, header, rows):
         with (out_dir / name).open('w') as stream:
@@ -565,14 +612,14 @@ def aggregate(results, out_dir):
                 stream.write('\t'.join(str(c) for c in r) + '\n')
 
     write_tsv('endpoints.tsv', ['endpoint', 'kind', 'static_status', 'status', 'via', 'entry_functions',
-              'inside_frames', 'inside_frames_own_entry', 'callback_frames', 'native_c_calls',
+              'inside_frames', 'inside_frames_own_entry', 'callback_frames', 'import_frames', 'native_c_calls',
               'numpy_c_calls', 'error'], sorted(endpoint_rows))
     write_tsv('frames.tsv', ['endpoint', 'kind', 'entry', 'file', 'function', 'first_line', 'count'],
               sorted(frame_rows, key=lambda r: (r[0], r[1], r[3], r[5])))
     ranked = sorted(offenders.items(), key=lambda kv: (-len(kv[1]['endpoints']), -kv[1]['calls'], kv[0]))
-    write_tsv('offenders.tsv', ['file', 'function', 'endpoints', 'calls', 'callback_calls', 'owner'],
-              [[k[0], k[1], len(v['endpoints']), v['calls'], v['kinds'].get('callback', 0), owner(k[0])]
-               for k, v in ranked])
+    write_tsv('offenders.tsv', ['file', 'function', 'category', 'endpoints', 'calls', 'callback_calls', 'owner'],
+              [[k[0], k[1], category(*k), len(v['endpoints']), v['calls'], v['kinds'].get('callback', 0),
+                owner(*k)] for k, v in ranked])
     write_tsv('files.tsv', ['file', 'endpoints', 'calls', 'functions', 'owner'],
               [[k, len(v['endpoints']), v['calls'], len(v['functions']), owner(k)] for k, v in
                sorted(files.items(), key=lambda kv: (-len(kv[1]['endpoints']), kv[0]))])
@@ -580,12 +627,17 @@ def aggregate(results, out_dir):
                   'verifier fixtures; frames observed, not a proof of absence on other inputs; no identity, '
                   'GPU or timing claim',
                   publics=len(results), endpoints=sum(status.values()), status=dict(status),
-                  with_python_inside=with_inside, with_python_inside_own_entry=with_inside_target,
-                  with_native_callback=with_callback,
+                  **dict(counts),
                   child_exits=dict(Counter(str(r['exit']) for r in results)),
                   fixture_errors=len(fixture_errors),
-                  top_offenders=[dict(file=k[0], function=k[1], endpoints=len(v['endpoints']),
-                                      calls=v['calls'], owner=owner(k[0])) for k, v in ranked[:25]])
+                  frame_kinds='entry = the public frame; inside/callback = op work in Python (finding); '
+                  'import = lazy first-use import machinery and module bodies (reported apart)',
+                  top_offenders=[dict(file=k[0], function=k[1], category=category(*k),
+                                      endpoints=len(v['endpoints']), calls=v['calls'], owner=owner(*k))
+                                 for k, v in ranked if category(*k) == 'product'][:25],
+                  top_non_product=[dict(file=k[0], function=k[1], category=category(*k),
+                                        endpoints=len(v['endpoints']), calls=v['calls'])
+                                   for k, v in ranked if category(*k) != 'product'][:10])
     (out_dir / 'report.json').write_text(json.dumps(report, indent=1, sort_keys=True) + '\n')
     return report
 
