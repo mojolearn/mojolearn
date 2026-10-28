@@ -101,12 +101,12 @@ def prepared_key_add(mut mods: NativeModules, key: PythonObject, value: PythonOb
     var bi = mods.module("builtins")
     var cls = py_type(value)
     if cls is bi.list or cls is bi.tuple:
-        for i in range(len(value)):  # driver-loop: over a retained container's items, identity only
+        for i in range(len(value)):  # small-loop(value: retained container items): identity only, no hooks
             prepared_key_add(mods, key, value[i], depth + 1)
     elif cls is bi.dict:
         # items() of an exact dict never hashes or compares keys.
         var items = py_call(bi.list, py_call(value.items))
-        for i in range(len(items)):  # driver-loop: over a retained mapping's items, identity only
+        for i in range(len(items)):  # small-loop(items: retained mapping items): identity only, no hooks
             _ = py_call(key.append, items[i][0])
             prepared_key_add(mods, key, items[i][1], depth + 1)
 
@@ -115,12 +115,12 @@ def prepared_key_fields(mut mods: NativeModules, key: PythonObject, fields: Pyth
     """Append an exact field dictionary's items except the runtime-owned `skip` names."""
     var bi = mods.module("builtins")
     var items = py_call(bi.list, py_call(fields.items))
-    for i in range(len(items)):  # driver-loop: over the owner's stored field items, identity only
+    for i in range(len(items)):  # small-loop(items: stored owner fields): identity only, no hooks
         var name = items[i][0]
         if py_type(name) is bi.str:
             var text = String(name)
             var skipped = False
-            for j in range(len(skip)):  # small-loop(fixed runtime-owned field names)
+            for j in range(len(skip)):  # small-loop(skip: runtime-owned field names): fixed name list only
                 if skip[j] == text:
                     skipped = True
                     break
@@ -133,7 +133,7 @@ def prepared_key_fields(mut mods: NativeModules, key: PythonObject, fields: Pyth
 def prepared_key_same(a: PythonObject, b: PythonObject) raises -> Bool:
     if len(a) != len(b):
         return False
-    for i in range(len(a)):  # driver-loop: over the prepared key's retained objects, identity only
+    for i in range(len(a)):  # small-loop(a: prepared key objects): pointer identity compare only
         if a[i] is not b[i]:
             return False
     return True

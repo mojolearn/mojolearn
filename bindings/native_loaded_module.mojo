@@ -122,7 +122,7 @@ struct _AdmittedModule(Copyable, Movable):
         self.key_ptrs = List[PyObjectPtr]()
         self.value_ptrs = List[PyObjectPtr]()
         # driver-loop: over the registered exports, once per admission
-        for j in range(len(keys)):  # small-loop(exports: registered native names): retains admitted pointers
+        for j in range(len(keys)):  # small-loop(keys: registered export names): retains admitted export pointers
             self.key_ptrs.append(keys[j]._obj_ptr)
             self.value_ptrs.append(values[j]._obj_ptr)
 
@@ -167,7 +167,7 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     var lookup = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")
     var count = len(entry.key_ptrs)
     # driver-loop: over the admitted export identities of one module (pointer compares)
-    for j in range(count):  # small-loop(exports: registered native names): identity stamp, no namespace walk
+    for j in range(count):  # small-loop(count: registered export names): pointer identity stamp, no namespace walk
         var current = lookup(fields, entry.key_ptrs[j])
         if not current or current != entry.value_ptrs[j]:
             cpy.lib.get_function[NoneType]("PyErr_Clear")()
@@ -186,20 +186,20 @@ def _admit_module(name: String, module: PythonObject) raises:
     var keys = Python.list()
     var values = Python.list()
     # driver-loop: over the fixed import-time module inventory, once per process
-    for i in range(len(connections)):  # small-loop(connections: registered modules): finds the admitted record
+    for i in range(len(connections)):  # small-loop(connections: registered modules): finds the admitted record once
         var record = connections[i]
         if String(record[0]) != name or record[1] is not module:
             continue
         var exports = record[2]
         # driver-loop: over the registered exports, once per process
-        for j in range(len(exports)):  # small-loop(exports: registered native names): retains admitted identities
+        for j in range(len(exports)):  # small-loop(exports: registered native names): retains admitted export identities
             _ = keys.append(exports[j][0])
             _ = values.append(exports[j][1])
         var size = cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
         var cls = PythonObject(from_owned=cpy.PyObject_Type(module._obj_ptr))
         var g = _ADMITTED_MODULES.get_or_create_ptr()
         # driver-loop: over the few admitted connections
-        for k in range(len(g[].entries)):  # small-loop(admitted connections): replaces a stale admission
+        for k in range(len(g[].entries)):  # small-loop(entries: admitted connections): replaces a stale admission
             if g[].entries[k].name == name:
                 g[].entries[k] = _AdmittedModule(name, module, cls, fields, size, keys, values)
                 return
@@ -215,7 +215,7 @@ def native_loaded_module(name: String) raises -> PythonObject:
     # unchanged admitted connection costs one pointer-compare stamp.
     var g = _ADMITTED_MODULES.get_or_create_ptr()
     # driver-loop: over the few admitted connections
-    for k in range(len(g[].entries)):  # small-loop(admitted connections): finds this name's admission
+    for k in range(len(g[].entries)):  # small-loop(entries: admitted connections): finds this name's admission
         if g[].entries[k].name == name:
             if _admitted_stamp(g[].entries[k]):
                 return g[].entries[k].module
