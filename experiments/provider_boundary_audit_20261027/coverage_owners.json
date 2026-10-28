@@ -30,12 +30,13 @@
       "Session scalar/container protocol admission review remains pending",
       "shared array/backend/mode/native profile boundary"
     ],
-    "root/public_wrapper_repairs": [
+    "root/program_dispatch_finish": [
       "Program serialization metadata admission",
       "Program public dispatch",
       "distributed and partitioned execution",
       "model-pool and offload training"
     ]
   },
-  "delivery": "small affected compile -> coherent main merge/push; no runtime verification campaign"
+  "delivery": "small affected compile -> coherent main merge/push; no runtime verification campaign",
+  "program_lane_reassignment": "Previous Program agent hit model capacity after delivering compiled serialization repair; fresh program_dispatch_finish owns retained public-dispatch draft and pending distributed/training work."
 }

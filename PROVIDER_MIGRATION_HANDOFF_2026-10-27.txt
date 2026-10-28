@@ -1,5 +1,32 @@
 PROVIDER MIGRATION HANDOFF — 2026-10-27
 
+LATEST PROGRESS CHECKPOINT — 2026-10-27 23:29 ET
+Root is serializing incremental main merges after focused compile evidence.
+Main before this checkpoint commit: 47a88274c747273ab783eb429d7dc3eb8a5984c0.
+Accepted source batches now include Session native dispatch; exact Program save
+metadata admission; metric binding selection; AutoARIMA constructor/forecast;
+CV constructors, public metadata and search replacement lifetime admission;
+Cholesky full public boundary plus constructor/fit owner-release repair;
+six-cluster constructors; numerical resampling; forecast convenience operations;
+PLS/manifold/UMAP/random projection admission; repaired scaler snapshots and
+registration; and corpus/tokenizer/configuration/Transformer session-tape work.
+Each accepted scope has a compile receipt under its experiments directory.
+No runtime, installed-wheel, GPU identity or benchmark verification was run.
+The scaler registration helper was compiled in a module-init probe; production
+received its same import/call without a full classical-module rebuild.
+
+Pending separate batches must remain separate: uncompiled newer manifold/PCA/
+Normalizer work; TSNE four-argument lifecycle companion until its native bridge
+compiles; CNN combined final source pending matching compile; resampling result
+constructor replacement-owner fix; AutoARIMA constructor replacement-owner fix;
+Program public dispatch/distributed execution; GP/tree and other owned work.
+The broad migration is incomplete. Current native arithmetic entry transports
+and older transitive helper paths remain explicit follow-up debt per lane.
+All59 source files marked prohibited in the historical audit have assigned
+owners. These are ownership records, not a current count of defects or proof
+that every transitive path is repaired. Six independent peer threads plus root
+repair lanes are active; peers report coherent green batches for root merging.
+
 CURRENT RESUME — 2026-10-27 22:51 ET
 This section supersedes the historical checkpoint/policy/status below. The
 historical record is retained; it is not the current build or work queue.
@@ -29,8 +56,10 @@ No GPU or runtime result is claimed by that receipt.
 
 Remaining ownership (assigned is not the same as completed):
 - Root: Session provider boundary and serialized main integration.
-- Root public_wrapper_repairs: Program serialization exact metadata admission;
-  Program public dispatch; distributed and partitioned execution.
+- Root program_dispatch_finish: Program public dispatch; distributed and
+  partitioned execution, model-pool/offload training. Previous lane delivered
+  compiled serialization admission then hit model capacity; its draft is
+  preserved and actively continued by the fresh lane.
 - Root provider_boundary_audit: targeted source inventory of remaining families,
   with an owner/status ledger. No runtime verification campaign.
 - Peer1 lane/peer1-neighbors-kernels-20261027: neighbors, kernels and hierarchy,
