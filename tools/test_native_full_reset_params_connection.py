@@ -12,6 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CONNECTOR = ROOT / 'python/mojolearn/_native_full_reset_params.py'
+RECONSTRUCTION = ROOT / 'python/mojolearn/_native_mode_reconstruction.py'
 PROOF = json.loads((ROOT / 'tools/native_full_reset_constructor_schemas.json').read_text())
 ROWS = PROOF['classes']
 
@@ -31,7 +32,9 @@ def fixture():
     attributes._CONTEXT = {}
     host = ModuleType('full_reset_fixture._classical_host')
     package = ModuleType('full_reset_fixture')
+    package.__path__ = []
     package._classical_host = host
+    package._mode = mode
     classes = []
     for row in ROWS:
         definition = ast.parse(row['signature_source'] + ':\n    pass').body[0]
@@ -56,20 +59,28 @@ def fixture():
     calls = []
     hooks = next(ast.literal_eval(n.value) for n in source.body
                  if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CONSTRUCTOR_HOOKS')
-    ns = {'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
+    # The connector and the inherited-setter reconstruction recipes are real
+    # fixture modules: install/connect import them relative to the package.
+    connector = ModuleType('full_reset_fixture._native_full_reset_params')
+    reconstruction = ModuleType('full_reset_fixture._native_mode_reconstruction')
+    reconstruction.__package__ = package.__name__
+    exec(compile(RECONSTRUCTION.read_text(), str(RECONSTRUCTION), 'exec'), vars(reconstruction))
+    ns = vars(connector)
+    ns.update({'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
           '_DEFERRED_MODULES': deferred,
           'BuiltinFunctionType': BuiltinFunctionType, '_ENTRY': lambda *args: calls.append(args),
           '_INIT_ENTRY': lambda *args: calls.append(('init',) + args), '_CONSTRUCTOR_HOOKS': hooks,
-          '_CONTEXT': dict(plans={}, missing=object(), ready=False, originals={})}
+          '_CONTEXT': dict(plans={}, missing=object(), ready=False, originals={})})
     exec(compile(ast.Module(body=body, type_ignores=[]), str(CONNECTOR), 'exec'), ns)
-    modules = {module.__name__: module for module in (mode, attributes, package, host)}
+    modules = {module.__name__: module for module in (mode, attributes, package, host, connector, reconstruction)}
     return ns, modules, calls
 
 
 def connected():
     ns, modules, calls = fixture()
+    host = modules['full_reset_fixture._classical_host'].HostKernelRidge
     metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
-                          for cls in ns['_CLASSES']}}
+                          for cls in ns['_CLASSES'] + (host,)}}
     with patch.dict('sys.modules', modules):
         ns['install']()
         ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
@@ -79,9 +90,13 @@ def connected():
 def test_install_preserves_78_signatures_defaults_and_one_call_boundary():
     ns, modules, calls = fixture()
     originals = {cls: (cls.__init__, inspect.signature(cls.__init__)) for cls in ns['_CLASSES']}
+    host = modules['full_reset_fixture._classical_host'].HostKernelRidge
     with patch.dict('sys.modules', modules):
         ns['install']()
-    assert len(ns['_CONTEXT']['plans']) == 78
+    # The 78 schema classes plus the passive host subclass that the
+    # inherited-setter reconstruction connects to its ancestor's schema.
+    assert set(ns['_CONTEXT']['plans']) == set(ns['_CLASSES']) | {host}
+    assert len(ns['_CLASSES']) == 78 and not ns['_CONTEXT']['reconstruction_pending']
     for cls, (constructor, signature) in originals.items():
         # The public constructor is now one native call; the original body
         # is retained only as the test oracle, never called by the product.
@@ -115,16 +130,40 @@ def test_install_preserves_78_signatures_defaults_and_one_call_boundary():
     assert len(calls) == 2 * 78
 
 
-def test_host_inheritance_stays_on_original_pending_contract():
-    ns, modules, _ = fixture()
+def test_host_inheritance_reconstructs_through_the_inherited_native_schema():
+    ns, modules, calls = fixture()
     host = modules['full_reset_fixture._classical_host'].HostKernelRidge
-    original = host.set_params
+    base = host.__mro__[1]
     with patch.dict('sys.modules', modules):
         ns['install']()
-    assert host.set_params is original
+    # The full-reset install first pins the original contract on the host
+    # subclass, then the reconstruction recipes replace it with the same one
+    # native setter, replaying the ancestor's audited constructor schema.
     assert host in ns['_CONTEXT']['deferred_host_classes']
-    assert host not in ns['_CONTEXT']['plans']
-    assert host.__mro__[1].set_params is ns['NativeFullResetParams'].set_params
+    assert host in ns['_CONTEXT']['reconstruction_classes']
+    assert host.set_params is base.set_params is ns['NativeFullResetParams'].set_params
+    plan, inherited = ns['_CONTEXT']['plans'][host], ns['_CONTEXT']['plans'][base]
+    assert plan is not inherited and plan['class_name'] == 'HostKernelRidge'
+    assert plan['events'] == inherited['events'] and 'native_constructor' not in plan
+    assert '__init__' not in vars(host) and host not in ns['_CONTEXT']['originals']
+    obj = object.__new__(host)
+    marker = object()
+    obj.set_params(alpha=marker)
+    assert calls[-1][0] is obj and calls[-1][1] == {'alpha': marker} and calls[-1][2] is ns['_CONTEXT']
+
+
+def test_host_reconstruction_keeps_original_setter_without_a_getter_schema():
+    ns, modules, _ = fixture()
+    host = modules['full_reset_fixture._classical_host'].HostKernelRidge
+    original = modules['full_reset_fixture._mode'].ParamsMixin.set_params
+    metadata = {'plans': {cls: {'names': tuple(inspect.signature(cls.__init__).parameters)[1:]}
+                          for cls in ns['_CLASSES']}}
+    with patch.dict('sys.modules', modules):
+        ns['install']()
+        ns['connect'](metadata, {'plans': {}}, {'plans': {}}, {'family_msel_estimators': {}})
+    assert host.set_params is original
+    assert host not in ns['_CONTEXT']['plans'] and host not in ns['_CONTEXT']['reconstruction_classes']
+    assert ns['_CONTEXT']['reconstruction_pending'][host] == 'no connected native parameter getter schema'
 
 
 @pytest.mark.parametrize('kind', ['setter', 'variadic', 'missing_field'])
@@ -306,9 +345,19 @@ def ns_deferred():
 @pytest.mark.parametrize('module', sorted(ns_deferred()))
 def test_each_deferred_module_connects_itself_as_its_last_statement(module):
     tree = ast.parse((ROOT / 'python/mojolearn' / (module + '.py')).read_text())
-    tail = [ast.unparse(node) for node in tree.body[-3:]]
-    assert tail == ['from ._native_full_reset_params import connect_module as _connect_full_reset',
-                    '_connect_full_reset(globals())', 'del _connect_full_reset']
+    body = [ast.unparse(node) for node in tree.body]
+    connect = ['from ._native_full_reset_params import connect_module as _connect_full_reset',
+               '_connect_full_reset(globals())', 'del _connect_full_reset']
+    at = next(i for i in range(len(body)) if body[i:i + 3] == connect)
+    # Every declaration precedes the connection; after it come only the
+    # sequence bridge registrations that reuse the connected owner context.
+    after = tree.body[at + 3:]
+    assert after and all(
+        ast.unparse(node) == 'from ._native_full_reset_params import _CONTEXT as _XSEQ_OWNER_CONTEXT'
+        or (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+            and ast.unparse(node.value.func) == '_native_xseq_bridge.register')
+        for node in after), body[at + 3:]
+    assert not any(isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.Assign)) for node in after)
 
 
 def test_deferred_module_connects_after_package_in_package_order():
