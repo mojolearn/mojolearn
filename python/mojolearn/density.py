@@ -524,9 +524,7 @@ class KernelDensity(NumericModeMixin):
         """A pickle or a deepcopy carries no device handle (the integer is
         meaningful only in the process and registry that minted it); the
         copy uploads its own fit set at its first call."""
-        state = self.__dict__.copy()
-        state.pop("_resident", None)
-        return state
+        return _NATIVE(self, "family_xn_kde_getstate", (), _NATIVE_CONTEXT)
 
     @_native_kde_method
     def fit(self, X, y=None, sample_weight=None):
