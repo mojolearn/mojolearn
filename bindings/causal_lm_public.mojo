@@ -1552,10 +1552,12 @@ def _generate_complete(model: PythonObject, value: PythonObject, maximum: Python
             return resident
     var admission: Optional[NativeArrayAdmission] = None
     var continuation = _read_admitted(s, max(1, s.max_new), admission)
-    # The decode loop already re-checked after its last GIL-release window
-    # (nothing releases since); the engine route and an empty loop leave no
-    # admission and keep the full guard.
-    if not admission:
+    # Per call, before the continuation is joined: the decode loop's admitted
+    # snapshot makes this a cheap re-check; the engine route and an empty loop
+    # leave no admission and keep the full guard.
+    if admission:
+        admission.value().recheck(generation_array_context())
+    else:
         _causal_array_guard()
     var b = len(s.lengths)
     var l = Int(py=s.prompt.shape[1])
