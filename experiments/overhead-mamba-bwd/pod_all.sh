@@ -5,6 +5,7 @@
 # fixture, (3) the two scripted gates. Exit codes land in $LEG_OUT/lane.rc.
 set -u
 OUT=${LEG_OUT:?}
+rm -f python/mojolearn/host/*.so
 bash experiments/overhead-mamba-bwd/pod_smoke_5b.sh > "$OUT/smoke.out" 2>&1
 echo "smoke_rc=$?" >> "$OUT/lane.rc"
 bash experiments/overhead-mamba-bwd/pod_fixture.sh > "$OUT/fixture.out" 2>&1
