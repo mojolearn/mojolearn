@@ -153,16 +153,16 @@ struct _AdmittedModule(Copyable, Movable):
 
 
 struct _AdmittedModules(Defaultable, Movable):
-    var entries: List[_AdmittedModule]
+    var entries: Dict[String, _AdmittedModule]
 
     def __init__(out self):
-        self.entries = List[_AdmittedModule]()
+        self.entries = Dict[String, _AdmittedModule]()
 
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever _AdmittedModule's layout changes.
 comptime _ADMITTED_MODULES = _Global[
-    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV2",
+    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV3",
     init_fn=_AdmittedModules.__init__,
 ]
 
@@ -239,12 +239,9 @@ def _admit_module(name: String, module: PythonObject) raises:
         var size = cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
         var cls = PythonObject(from_owned=cpy.PyObject_Type(module._obj_ptr))
         var g = _ADMITTED_MODULES.get_or_create_ptr()
-        # driver-loop: over the few admitted connections
-        for k in range(len(g[].entries)):  # small-loop(entries: admitted connections): replaces a stale admission
-            if g[].entries[k].name == name:
-                g[].entries[k] = _AdmittedModule(name, module, cls, fields, size, keys, values)
-                return
-        g[].entries.append(_AdmittedModule(name, module, cls, fields, size, keys, values))
+        # Native names index the retained connections directly. Replacing a
+        # stale admission preserves the same complete module/export check.
+        g[].entries[name] = _AdmittedModule(name, module, cls, fields, size, keys, values)
         return
 
 
@@ -255,12 +252,9 @@ def native_loaded_module(name: String) raises -> PythonObject:
     # stamp differs, so a refusal keeps its type, message and position. An
     # unchanged admitted connection costs one pointer-compare stamp.
     var g = _ADMITTED_MODULES.get_or_create_ptr()
-    # driver-loop: over the few admitted connections
-    for k in range(len(g[].entries)):  # small-loop(entries: admitted connections): finds this name's admission
-        if g[].entries[k].name == name:
-            if _admitted_stamp(g[].entries[k]):
-                return g[].entries[k].module
-            break
+    if name in g[].entries:
+        if _admitted_stamp(g[].entries[name]):
+            return g[].entries[name].module
     var module = _native_loaded_module_full(name)
     _admit_module(name, module)
     return module
@@ -285,25 +279,21 @@ struct NativeModules(Movable):
     # once per process, and the full check only when the stamp differs.
     # A handle never outlives its operation and is never shared across
     # threads. Callers outside the neural bindings keep native_loaded_module().
-    var _names: List[String]
-    var _modules: List[PythonObject]
+    var _modules: Dict[String, PythonObject]
 
     def __init__(out self):
-        self._names = List[String]()
-        self._modules = List[PythonObject]()
+        self._modules = Dict[String, PythonObject]()
 
     def module(mut self, name: String) raises -> PythonObject:
-        # driver-loop: over the few modules this operation already admitted
-        for i in range(len(self._names)):  # small-loop(admitted: at most a handful of module names): reuses an admitted connection
-            if self._names[i] == name:
-                return self._modules[i]
+        # No repeated linear name search or Python-object dispatch. The map
+        # belongs to this operation and is invalidated after every GIL window.
+        if name in self._modules:
+            return self._modules[name]
         var module = native_loaded_module(name)
-        self._names.append(name)
-        self._modules.append(module)
+        self._modules[name] = module
         return module
 
     def released(mut self):
         # A GIL release window ended: forget every admission so the next
         # request re-runs the full native_loaded_module() check.
-        self._names.clear()
         self._modules.clear()

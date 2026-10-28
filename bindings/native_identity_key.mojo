@@ -61,8 +61,7 @@ struct NativeIdentityKey(Movable, Writable):
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
 
-    def _size(self, value: PythonObject, depth: Int, limit: Int) raises -> Int:
-        var cls = py_type(value)
+    def _size(self, value: PythonObject, cls: PythonObject, depth: Int, limit: Int) raises -> Int:
         if cls is not self.list_type and cls is not self.tuple_type and cls is not self.dict_type:
             return -1
         if depth >= limit:
@@ -89,50 +88,58 @@ struct NativeIdentityKey(Movable, Writable):
         return False
 
     def add(mut self, value: PythonObject, depth: Int = 0, limit: Int = 64) raises:
-        var size = self._size(value, depth, limit)
+        var cls = py_type(value)
+        var size = self._size(value, cls, depth, limit)
         self.objects.append(value)
         self.sizes.append(size)
         if size < 0:
             return
         ref cpy = Python().cpython()
-        var cls = py_type(value)
         if cls is self.dict_type:
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
+            var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
             for _ in range(size):  # driver-loop: over exact dictionary metadata
-                if not cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+                if not next_item(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
                     raise Error("native identity snapshot: dictionary changed during capture")
                 self.add(PythonObject(from_borrowed=key), depth + 1, limit)
                 self.add(PythonObject(from_borrowed=item), depth + 1, limit)
         else:
+            # Container kind is stable during this GIL-held native walk; choose
+            # the supported accessor once, outside the item loop.
+            var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem" if cls is self.list_type else "PyTuple_GetItem")
             for i in range(size):  # driver-loop: over retained exact container metadata
-                var item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(value._obj_ptr, i) if cls is self.list_type else cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(value._obj_ptr, i)
+                var item = get_item(value._obj_ptr, i)
                 self.add(PythonObject(from_borrowed=item), depth + 1, limit)
 
     def matches(self, value: PythonObject, mut offset: Int, depth: Int = 0, limit: Int = 64) raises -> Bool:
         if offset >= len(self.objects) or self.objects[offset] is not value:
             return False
-        var size = self._size(value, depth, limit)
+        var cls = py_type(value)
+        var size = self._size(value, cls, depth, limit)
         if self.sizes[offset] != size:
             return False
         offset += 1
         if size < 0:
             return True
         ref cpy = Python().cpython()
-        var cls = py_type(value)
         if cls is self.dict_type:
             var pos = Int(0)
             var key = PyObjectPtr()
             var item = PyObjectPtr()
+            var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
             for _ in range(size):  # driver-loop: over exact dictionary metadata
-                if not cpy.lib.get_function[Int32]("PyDict_Next")(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+                if not next_item(value._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
                     raise Error("native identity snapshot: dictionary changed during capture")
                 if not self.matches(PythonObject(from_borrowed=key), offset, depth + 1, limit) or not self.matches(PythonObject(from_borrowed=item), offset, depth + 1, limit):
                     return False
         else:
+            # Container kind is stable during this GIL-held native walk; choose
+            # the supported accessor once, outside the item loop.
+            var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem" if cls is self.list_type else "PyTuple_GetItem")
             for i in range(size):  # driver-loop: over live retained container pointers
-                var item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")(value._obj_ptr, i) if cls is self.list_type else cpy.lib.get_function[PyObjectPtr]("PyTuple_GetItem")(value._obj_ptr, i)
+                var item = get_item(value._obj_ptr, i)
                 if not self.matches(PythonObject(from_borrowed=item), offset, depth + 1, limit):
                     return False
         return True
@@ -152,8 +159,9 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
+        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
         for _ in range(len(fields)):  # driver-loop: over admitted instance fields
-            if not cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+            if not next_item(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
                 raise Error("native identity snapshot: fields changed during capture")
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
@@ -171,8 +179,9 @@ struct NativeIdentityKey(Movable, Writable):
         var pos = Int(0)
         var key = PyObjectPtr()
         var item = PyObjectPtr()
+        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
         for _ in range(len(fields)):  # driver-loop: over admitted instance fields
-            if not cpy.lib.get_function[Int32]("PyDict_Next")(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
+            if not next_item(fields._obj_ptr, MutPointer(to=pos), MutPointer(to=key), MutPointer(to=item)):
                 raise Error("native identity snapshot: fields changed during capture")
             var name = PythonObject(from_borrowed=key)
             if not self._skip(name, skip):
@@ -248,6 +257,9 @@ struct NativeIdentityKey(Movable, Writable):
         if context["array_class"] is not self.array_class or py_call(self.array_mro_getter, self.array_class) is not self.array_mro:
             return False
         ref cpy = Python().cpython()
+        var get_iterator = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")
+        var next_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")
+        var get_item = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")
         for i in range(len(self.array_rows)):  # small-loop(self.array_rows: Array namespaces): fixed storage class hierarchy not tensor rows
             var row = self.array_rows[i]
             if len(row) != self.array_row_sizes[i]:
@@ -257,13 +269,13 @@ struct NativeIdentityKey(Movable, Writable):
             # before any lookup. The retained row is an exact mappingproxy
             # produced by type.__dict__; its iterator is CPython's native
             # dictionary-key iterator, never a caller-defined protocol.
-            var iterator_raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")(row._obj_ptr)
+            var iterator_raw = get_iterator(row._obj_ptr)
             if not iterator_raw:
                 cpy.lib.get_function[NoneType]("PyErr_Clear")()
                 return False
             var iterator = PythonObject(from_owned=iterator_raw)
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over live namespace key identities before lookup
-                var key_raw = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")(iterator._obj_ptr)
+                var key_raw = next_key(iterator._obj_ptr)
                 if not key_raw:
                     cpy.lib.get_function[NoneType]("PyErr_Clear")()
                     return False
@@ -271,7 +283,7 @@ struct NativeIdentityKey(Movable, Writable):
                 if py_type(key) is not self.str_type or key is not self.array_row_keys[i][j]:
                     return False
             for j in range(len(self.array_row_keys[i])):  # driver-loop: over retained native namespace keys
-                var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
+                var raw = get_item(row._obj_ptr, self.array_row_keys[i][j]._obj_ptr)
                 if not raw:
                     cpy.lib.get_function[NoneType]("PyErr_Clear")()
                     return False

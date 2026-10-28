@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Capture native Array slots and retained buffer metadata without input hooks."""
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.mode_metadata_native import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -177,10 +178,11 @@ struct NativeArrayAdmission(Copyable, Movable):
     var cls: PythonObject
     var mro: PythonObject
     var slots: PythonObject
-    var rows: PythonObject
+    var rows: List[PythonObject]
+    var slot_names: List[PythonObject]
+    var slot_values: List[PythonObject]
     var type_cls: PythonObject
     var str_cls: PythonObject
-    var list_fn: PythonObject
     var mro_get: PythonObject
     var dict_get: PythonObject
     var object_getattribute: PythonObject
@@ -192,19 +194,31 @@ struct NativeArrayAdmission(Copyable, Movable):
         self.cls = context["array_class"]
         self.type_cls = b.type
         self.str_cls = b.str
-        self.list_fn = b.list
         self.mro_get = b.type.__dict__["__mro__"].__get__
         self.dict_get = b.type.__dict__["__dict__"].__get__
         self.object_getattribute = b.object.__dict__["__getattribute__"]
         self.object_setattr = b.object.__dict__["__setattr__"]
         self.mro = py_call(self.mro_get, self.cls)
-        self.rows = Python.list()
+        self.rows = List[PythonObject]()
+        self.slot_names = List[PythonObject]()
+        self.slot_values = List[PythonObject]()
         ref cpy = Python().cpython()
+        # Retain the fixed descriptor schema once. The private slots dictionary
+        # was created by native_array_slots; no caller can mutate this record.
+        var position = Int(0)
+        var key = PyObjectPtr()
+        var value = PyObjectPtr()
+        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+        for i in range(len(self.slots)):  # small-loop(slots: fixed Array descriptor schema): cold native capture
+            if next_item(self.slots._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
+                raise Error("native Array descriptor schema changed during capture")
+            self.slot_names.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
+            self.slot_values.append(PythonObject(from_owned=cpy.Py_NewRef(value)))
         for i in range(len(self.mro)):  # small-loop(self.mro: Array ancestry): fixed native storage class hierarchy
             # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
             var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(self.mro[i]._obj_ptr)
             if (flags & UInt64(1 << 8)) == 0:
-                _ = py_call(self.rows.append, self.mro[i])
+                self.rows.append(self.mro[i])
 
     def _unchanged(self, context: PythonObject) raises -> Bool:
         var cls = context["array_class"]
@@ -212,11 +226,27 @@ struct NativeArrayAdmission(Copyable, Movable):
             return False
         if py_call(self.mro_get, cls) is not self.mro:
             return False
+        ref cpy = Python().cpython()
+        var get_iterator = cpy.lib.get_function[PyObjectPtr]("PyObject_GetIter")
+        var next_key = cpy.lib.get_function[PyObjectPtr]("PyIter_Next")
         for i in range(len(self.rows)):  # small-loop(self.rows: Array namespaces): fixed native storage class hierarchy
             var row = py_call(self.dict_get, self.rows[i])
-            var keys = py_call(self.list_fn, row.keys())
-            for k in range(len(keys)):  # small-loop(keys: class namespace): validate storage metadata names only
-                if py_type(keys[k]) is not self.str_cls:
+            var raw_iterator = get_iterator(row._obj_ptr)
+            if not raw_iterator:
+                raise cpy.unsafe_get_error()
+            var iterator = PythonObject(from_owned=raw_iterator)
+            # Admit ALL live keys before keyed reads, including keys inserted
+            # after the last GIL window. Native iteration avoids constructing a
+            # Python keys view and list on every check; exact strings still
+            # prevent foreign hash/equality hooks during the later lookups.
+            for k in range(len(row)):  # small-loop(row: class namespace): validate every live metadata name first
+                var raw_key = next_key(iterator._obj_ptr)
+                if not raw_key:
+                    if cpy.PyErr_Occurred():
+                        raise cpy.unsafe_get_error()
+                    return False
+                var key = PythonObject(from_owned=raw_key)
+                if py_type(key) is not self.str_cls:
                     return False
             if py_contains(row, "__getattr__") or py_contains(row, "__del__"):
                 return False
@@ -227,9 +257,8 @@ struct NativeArrayAdmission(Copyable, Movable):
             if own is not None and own is not self.object_setattr:
                 return False
             if self.rows[i] is self.cls:
-                var names = py_call(self.list_fn, self.slots.keys())
-                for j in range(len(names)):  # small-loop(names: native Array slots): fixed storage descriptor schema only
-                    if py_get(row, names[j]) is not self.slots[names[j]]:
+                for j in range(len(self.slot_names)):  # small-loop(slot_names: native Array slots): reuse retained descriptor vectors
+                    if py_get(row, self.slot_names[j]) is not self.slot_values[j]:
                         return False
         return True
 
