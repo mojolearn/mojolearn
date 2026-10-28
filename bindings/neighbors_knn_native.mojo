@@ -625,7 +625,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _nn_fit(model, args[1], context)
     var fields = py_fields(model)
     var target = family_f32_snapshot(args[2], -1, "y", context)
-    var shape = target.shape
+    var shape = target.shape.copy()
     if len(shape) != 1 and len(shape) != 2:
         raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
     var n_fit = Int(py=family_field(fields, "n_samples_fit_"))
@@ -916,7 +916,8 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
 def neighbors_knn_operation(model: PythonObject, operation: String, args: PythonObject,
                                 context: PythonObject) raises -> PythonObject:
     if operation == "family_xn_knn_getstate":
-        var state = py_call(_fields(model).copy)
+        var fields = _fields(model)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident", PythonObject(None))
         _ = py_call(state.pop, "_resident_holder", PythonObject(None))
         return state
@@ -939,7 +940,8 @@ def neighbors_knn_operation(model: PythonObject, operation: String, args: Python
     try:
         result = _neighbors_knn_operation(model, operation, call.args, context)
     except error:
-        raise neighbors_public_refusal(error, call, model)
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
     finally:
         neighbors_public_end(model, call)
     return neighbors_public_finish(model, operation, result, call, context)

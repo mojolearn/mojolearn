@@ -51,7 +51,7 @@ struct NeighborPublicCall(Movable):
         self.columns = columns
 
 
-def _method(operation: String) -> String:
+def _method(operation: String) raises -> String:
     var names = ["fit_predict", "fit_transform", "predict_log_proba", "predict_proba", "score_samples",
                  "decision_function", "transform", "predict", "score", "fit"]
     for suffix in names:  # small-loop(public neighbor operation names)

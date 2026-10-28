@@ -389,7 +389,8 @@ def _neighbors_kde_operation(model: PythonObject, operation: String, var args: P
 def neighbors_kde_operation(model: PythonObject, operation: String, args: PythonObject,
                                 context: PythonObject) raises -> PythonObject:
     if operation == "family_xn_kde_getstate":
-        var state = py_call(_fields(model).copy)
+        var fields = _fields(model)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
         _ = py_call(state.pop, "_resident", PythonObject(None))
         return state
     if operation == "family_xn_kde_release":
@@ -399,7 +400,8 @@ def neighbors_kde_operation(model: PythonObject, operation: String, args: Python
     try:
         result = _neighbors_kde_operation(model, operation, call.args, context)
     except error:
-        raise neighbors_public_refusal(error, call, model)
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
     finally:
         neighbors_public_end(model, call)
     return neighbors_public_finish(model, operation, result, call, context)

@@ -103,3 +103,14 @@ Keep logs out of context: save complete output to files, use targeted rg/grep
 with bounded surrounding lines and short tails, and summarize exit status,
 coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
 never hide failures or infer full success from filtered output.
+
+Compile repair follow-up (parent-owned local attempt 2)
+- Parent retained compile failure in
+  ~/mojolearn-evidence/peer1-neighbors-kernels-20261027/local-compile/attempt2.log.
+- Repaired all eight reported errors in this lane's files: two ambiguous
+  dictionary-copy calls, three raise/result alias errors, explicit List.copy,
+  the operation-name helper's raises effect, and NC uniform-check context.
+- The repair uses an exact native dictionary constructor for shallow state
+  copies, and separate moved Error temporaries. No runtime behavior was added.
+- Parent must recompile the integrated source. This lane ran no compilation or
+  runtime verification for this follow-up; no passing-compile claim is made.
