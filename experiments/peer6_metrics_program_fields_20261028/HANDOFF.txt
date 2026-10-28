@@ -1,0 +1,11 @@
+Peer6 metrics program fields, 2026-10-28. Branch lane/peer6-metrics-20261027.
+Contents beyond green 74c1e58ebe: de7fea9506 public-entry alias-memoized snapshots;
+e26b84da4a arena_prog_native._metrics_run_fields(fields, mode, context): metric owners
+(mcls_common.mc_run, metrics_exp_common.mx_run, metrics_reg_native._reg_run) pass an
+exact native field dictionary instead of allocating a mutable Python Prog; _metrics_run
+keeps the Prog wrapper API and returns prog. Merges: origin/main (1c311ac20d, lane side
+kept for cherry-picked resample/metric files) and linalg helper a3a8150111 (6592b962e2).
+Compile: checks/metrics_program_fields_compile.mojo (metrics_boundaries closure + Prog
+wrapper) exit0 42s CPU/O0/identical/-j10 at 6592b962e2; compile.json here, log/binary in
+~/mojolearn-evidence/peer6-forecast-pandas-20261028/metrics-program-fields/.
+No runtime/identity/GPU.
