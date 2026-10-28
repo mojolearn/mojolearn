@@ -1,0 +1,23 @@
+Native module namespace admission and cache ownership repair, 2026-10-28.
+Base db1c55a976 (setup-once batches 1-3). Scope:
+- Module connection export and namespace key retention uses native Mojo Lists;
+  unchanged namespaces compare raw pointers via public PyDict_Next. No temporary
+  Python key/item lists. Same-size delete/insert now invalidates admission.
+- Descriptor namespace key admission walks live keys natively. The former
+  dictionary-identity+size cache was unsound and its Python record is removed.
+- Remove global descriptor/XN weak-key caches: their values retained their own
+  keys through provider.factory or snapshot.module, preventing weakref cleanup.
+  Execution-owner scoped neural_descriptor_reuse and admitted XN snapshots remain.
+  Callers without an execution owner still reconnect; migration to retained owners
+  is remaining work, not replaced with a process-wide lifetime extension.
+Validation: focused shared-library compile rc=0 on Mac arm64, Mojo default env,
+  command: bash tools/compile_slot.sh pixi run mojo build --emit shared-lib -I .
+  -I bindings experiments/native_registry_20261028/compile.mojo -o <evidence>/compile.dylib
+  probe reaches native_loaded_module, descriptor entry/connect and XN admission.
+Logs/binary/probe: ~/mojolearn-evidence/native-registry-20261028/
+  compile.log retains initial List implicit-copy compile failure; compile2.log
+  is successful after explicit native List copies. No runtime/identity/timing run.
+Remaining: generic PreparedOwners registry still Python dict/list-backed because
+  replacing its weakref cleanup requires a supported native lifetime mechanism.
+  Class identity stamp is still a Python list; native owner identity repair is a
+  separate lane. These changes do not establish Python-free product execution.

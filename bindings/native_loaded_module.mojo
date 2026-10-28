@@ -17,6 +17,23 @@ def _loaded_lookup(mapping: PyObjectPtr, var name: String) raises -> PyObjectPtr
     return result
 
 
+def native_namespace_string_keys(fields: PyObjectPtr, string_type: PythonObject) raises -> Bool:
+    # GIL held; public dictionary iteration neither hashes keys nor executes
+    # Python protocols. No temporary Python key/item list is constructed.
+    ref cpy = Python().cpython()
+    var position = Int(0)
+    var key = PyObjectPtr()
+    var value = PyObjectPtr()
+    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+    while next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: admitted namespace keys
+        var cls = cpy.PyObject_Type(key)
+        var same = cls == string_type._obj_ptr
+        cpy.Py_DecRef(cls)
+        if not same:
+            return False
+    return True
+
+
 def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> PythonObject:
     ref cpy = Python().cpython()
     var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
@@ -29,15 +46,9 @@ def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> Py
         raise Error("TypeError: native module connection cannot use a module subclass")
     # Keys are checked before keyed reads: foreign hash/equality hooks must
     # not run even if a module namespace acquired a non-string key.
-    var raw_keys = cpy.lib.get_function[PyObjectPtr]("PyDict_Keys")(fields)
-    if not raw_keys:
-        raise cpy.unsafe_get_error()
-    var keys = PythonObject(from_owned=raw_keys)
     var string_type = _loaded_type(PythonObject(""))
-    # driver-loop: over module namespace field names, before metadata lookups
-    for i in range(len(keys)):  # small-loop(keys: module field names): validates namespace metadata before attribute lookup
-        if _loaded_type(keys[i]) is not string_type:
-            raise Error("TypeError: native module connection requires ordinary string fields")
+    if not native_namespace_string_keys(fields, string_type):
+        raise Error("TypeError: native module connection requires ordinary string fields")
     # `pinned_hook`: an import-time connection that retained CPython's own
     # module-level __getattr__ as a pinned export (_native_loaded_modules.
     # stdlib_module_hook); its identity is checked with the other exports and
@@ -104,20 +115,29 @@ struct _AdmittedModule(Copyable, Movable):
     var module_type: PythonObject
     var fields: PythonObject
     var size: Int
-    var keys: PythonObject
-    var values: PythonObject
+    var keys: List[PythonObject]
+    var values: List[PythonObject]
+    var namespace_keys: List[PythonObject]
     var key_ptrs: List[PyObjectPtr]
     var value_ptrs: List[PyObjectPtr]
 
     def __init__(out self, name: String, module: PythonObject, module_type: PythonObject, fields: PythonObject,
-                 size: Int, keys: PythonObject, values: PythonObject) raises:
+                 size: Int, keys: List[PythonObject], values: List[PythonObject]) raises:
         self.name = name
         self.module = module
         self.module_type = module_type
         self.fields = fields
         self.size = size
-        self.keys = keys
-        self.values = values
+        self.keys = keys.copy()
+        self.values = values.copy()
+        self.namespace_keys = List[PythonObject]()
+        ref cpy = Python().cpython()
+        var position = Int(0)
+        var key = PyObjectPtr()
+        var value = PyObjectPtr()
+        var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+        while next_item(fields._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: capture admitted namespace keys
+            self.namespace_keys.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
         # Raw pointers of the retained lists' items (kept alive by them).
         self.key_ptrs = List[PyObjectPtr]()
         self.value_ptrs = List[PyObjectPtr]()
@@ -137,7 +157,7 @@ struct _AdmittedModules(Defaultable, Movable):
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever _AdmittedModule's layout changes.
 comptime _ADMITTED_MODULES = _Global[
-    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV1",
+    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV2",
     init_fn=_AdmittedModules.__init__,
 ]
 
@@ -145,10 +165,9 @@ comptime _ADMITTED_MODULES = _Global[
 def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
     # Identity stamp of an admitted connection: the registered module is
     # still the loaded one, with its type, its namespace dictionary and that
-    # dictionary's size (an inserted key, such as a module __getattr__ or a
-    # non-string key, changes it), and every registered export still has its
-    # admitted identity. Pointer comparisons only: no namespace key walk, no
-    # registry scan, no Python object created per export.
+    # dictionary's size, every namespace key, and every registered export
+    # still have their admitted identities. Native pointer comparisons only:
+    # no registry scan or temporary Python containers.
     ref cpy = Python().cpython()
     var modules = cpy.lib.get_function[PyObjectPtr]("PyImport_GetModuleDict")()
     if not modules:
@@ -165,6 +184,19 @@ def _admitted_stamp(entry: _AdmittedModule) raises -> Bool:
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
         return False
     if cpy.lib.get_function[Int]("PyDict_Size")(fields) != entry.size:
+        return False
+    # Size alone misses delete+insert edits. Compare every admitted key by
+    # pointer before any hash lookup, including an added __getattr__ key.
+    var position = Int(0)
+    var key = PyObjectPtr()
+    var value = PyObjectPtr()
+    var index = 0
+    var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
+    while next_item(fields, Pointer(to=position), Pointer(to=key), Pointer(to=value)) != 0:  # driver-loop: native namespace identity check
+        if index >= len(entry.namespace_keys) or key != entry.namespace_keys[index]._obj_ptr:
+            return False
+        index += 1
+    if index != len(entry.namespace_keys):
         return False
     var lookup = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")
     var count = len(entry.key_ptrs)
@@ -185,8 +217,8 @@ def _admit_module(name: String, module: PythonObject) raises:
     var connections = PythonObject(from_owned=cpy.Py_NewRef(
         _loaded_lookup(cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(metadata._obj_ptr), "CONNECTIONS")))
     var fields = PythonObject(from_owned=cpy.Py_NewRef(cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)))
-    var keys = Python.list()
-    var values = Python.list()
+    var keys = List[PythonObject]()
+    var values = List[PythonObject]()
     # driver-loop: over the fixed import-time module inventory, once per process
     for i in range(len(connections)):  # small-loop(connections: registered modules): finds the admitted record once
         var record = connections[i]
@@ -195,8 +227,8 @@ def _admit_module(name: String, module: PythonObject) raises:
         var exports = record[2]
         # driver-loop: over the registered exports, once per process
         for j in range(len(exports)):  # small-loop(exports: registered native names): retains admitted export identities
-            _ = keys.append(exports[j][0])
-            _ = values.append(exports[j][1])
+            keys.append(exports[j][0])
+            values.append(exports[j][1])
         var size = cpy.lib.get_function[Int]("PyDict_Size")(fields._obj_ptr)
         var cls = PythonObject(from_owned=cpy.PyObject_Type(module._obj_ptr))
         var g = _ADMITTED_MODULES.get_or_create_ptr()
