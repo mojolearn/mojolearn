@@ -623,10 +623,15 @@ class QRResult(tuple):
     __slots__ = ()
 
     def __new__(cls, Q, R):
-        return tuple.__new__(cls, (Q, R))
+        return _NATIVE(None, "family_lin_result_new", (cls, (Q, R)), _NATIVE_CONTEXT)
 
-    Q = property(lambda self: self[0])
-    R = property(lambda self: self[1])
+    @property
+    def Q(self):
+        return _NATIVE(None, "family_lin_result_item", (self, 0), _NATIVE_CONTEXT)
+
+    @property
+    def R(self):
+        return _NATIVE(None, "family_lin_result_item", (self, 1), _NATIVE_CONTEXT)
 
 
 class SVDResult(tuple):
@@ -634,11 +639,19 @@ class SVDResult(tuple):
     __slots__ = ()
 
     def __new__(cls, U, S, Vh):
-        return tuple.__new__(cls, (U, S, Vh))
+        return _NATIVE(None, "family_lin_result_new", (cls, (U, S, Vh)), _NATIVE_CONTEXT)
 
-    U = property(lambda self: self[0])
-    S = property(lambda self: self[1])
-    Vh = property(lambda self: self[2])
+    @property
+    def U(self):
+        return _NATIVE(None, "family_lin_result_item", (self, 0), _NATIVE_CONTEXT)
+
+    @property
+    def S(self):
+        return _NATIVE(None, "family_lin_result_item", (self, 1), _NATIVE_CONTEXT)
+
+    @property
+    def Vh(self):
+        return _NATIVE(None, "family_lin_result_item", (self, 2), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -928,7 +941,13 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
 # function is one native call; that boundary admits the connected binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.tables(family_lin_state=globals())
+_native_family_bridge.tables(
+    family_lin_state=globals(),
+    family_lin_result_schemas={
+        QRResult: (QRResult.__mro__, dict(vars(QRResult)), 2),
+        SVDResult: (SVDResult.__mro__, dict(vars(SVDResult)), 3),
+    },
+)
 
 
 def _connect_native_linalg():
