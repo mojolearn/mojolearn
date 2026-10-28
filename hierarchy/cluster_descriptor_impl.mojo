@@ -13,7 +13,7 @@ def hierarchy_cluster_fit[O: ClusterOps](mut ops: O, a: List[Int], p: List[Int],
     if floats == 0:
         raise Error("hierarchy cluster provider: null scalar span")
     var fp = f64_ptr(floats)
-    var scalars = List[Float64](fp[0], fp[1])
+    var scalars: List[Float64] = [fp[0], fp[1]]
     var x = read_f32(a[0], p[0]) if p[0] > 0 else List[Float32]()
     var edges = read_f32(a[1], p[1]) if p[1] > 0 else List[Float32]()
     var ip = List[Int]()

@@ -247,11 +247,11 @@ def _agglo_x(fields: PythonObject, settings: PythonObject, args: PythonObject, x
     var cut = 0
     if full:
         cut = 1 if thr is not None else requested_clusters
-    var ip = List[Int](x_snapshot.count, aux.count, n, d,
-                       Int(py=context["family_cfb_agglo_linkages"][family_field(settings, "linkage")]),
-                       metric, aux.edges, n_merges, aux.mode, cut,
-                       1 if (full and thr is not None) else 0)
-    var fp = List[Float64](2.0, Float64(py=family_call(b.float, thr)) if thr is not None else 0.0)
+    var ip: List[Int] = [x_snapshot.count, aux.count, n, d,
+                         Int(py=context["family_cfb_agglo_linkages"][family_field(settings, "linkage")]),
+                         metric, aux.edges, n_merges, aux.mode, cut,
+                         1 if (full and thr is not None) else 0]
+    var fp: List[Float64] = [2.0, Float64(py=family_call(b.float, thr)) if thr is not None else 0.0]
     var provider = hierarchy_cluster_admit(args[2])
     # Capture each fresh output address once. The descriptor copies the typed
     # ClusterOut slots directly; no array.array/result-list extension ABI.
