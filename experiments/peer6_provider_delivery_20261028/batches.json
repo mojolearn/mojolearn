@@ -1,0 +1,260 @@
+{
+  "as_of": "2026-10-28",
+  "integration_owner": "root thread 01a18001-c4b5-7ba2-a735-6250b366b07e",
+  "runtime_identity_gpu_campaigns": "not run by owner direction",
+  "rented_boxes": [],
+  "batches": [
+    {
+      "batch": "cv_splitter_construction",
+      "commit": "f9ad32a50ad4df41a5bfa4a34d267017cdf42b7a",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_public_metadata",
+      "commit": "a9eaa0001d1730f0b2dd6b056c3a2113dce3027c",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_flags",
+      "commit": "27f8218c597daa0df23a9015fabe9a97971c5b43",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_array_snapshots",
+      "commit": "377d9445cdaebaad7f495f047bf1fe1cebc1ef08",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_split_inputs",
+      "commit": "fcc6e653487faa086ad88a067ebdc2cc0cf2458e",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_search_lifetimes",
+      "commit": "dcb4433dc41a2b65f1e55621702a72518dd7e557",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_search_scalars",
+      "commit": "e7188f24f2e6215aa60bfe59e587163b0ecae373",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "cv_final_boundaries",
+      "commit": "4aa0b89a0e135e64d4335ed05e0b428b1c20167a",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "legacy_tsa",
+      "commit": "cc33f276f1d1e54a538cf909e41079ac0daa18d1",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "autoarima_lifecycle",
+      "commit": "e12e1212d5bfede2ab259be0c50702a9e98dd4b1",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "forecast_convenience",
+      "commit": "127d3ee93fdb77405158c1f8bc15e2968f989257",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "forecast_initialization",
+      "commit": "b9d86435b6313a2bdbc54c0fe65a14e1c0137891",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "forecast_owner_correction",
+      "commit": "e89bfc1b2db5144c9a64588f82d6a4f940ac4300",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "autoarima_search",
+      "commit": "a1755b5b79f32f3bc122677cbb05e9b036634af1",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "arima_metadata",
+      "commit": "cd0b47726452baed97a3e64e3fa9d32d9a0cc163",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "arima_execution",
+      "commit": "f160cd1283d9e1ca961effb1918f5b44e39d644d",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "var_stl",
+      "commit": "e456212ca75c146771b26a21e4d756ac7d18d88b",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered with required corrective companion4b9999bee4"
+    },
+    {
+      "batch": "metrics_public",
+      "commit": "3e1defd3a0f7633057f6d098a23a8c1d303d4fda",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "resample_public",
+      "commit": "726fae5ad74a40e67edc43fcc0c89e8a6f6652f0",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "resample_result_construction",
+      "commit": "d2277027102ee3136c1132ef2d4646223c4ab7cd",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "metrics_reports",
+      "commit": "0061f44ad5a0f514e2ce5227d86f6402191025c5",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "resample_result_owner_correction",
+      "commit": "d20b608bbf13e79d6eec7303a975eda7bed8ec80",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "metric_empty_labels",
+      "commit": "20f03e29390fa27e4cacedf782de3f4dbdd74b2d",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "resample_pandas_reader",
+      "commit": "32276a868c42696c9ffd958b0e438ca6fcfead74",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "resample_rows",
+      "commit": "cca559b8a01ed0b258867f7414c36c475187c5a5",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "metric_vector_snapshots",
+      "commit": "6be526212ef9cdf4fbc891284a5e0ad2aa645106",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "metric_matrix_snapshots",
+      "commit": "74c1e58ebea71213f5880bc8f83d43fe09c1bdbe",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "prophet_lifecycle",
+      "commit": "70bf41dce308994731a140a127a581aa35decc36",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator"
+    },
+    {
+      "batch": "prophet_operations_held_for_companion",
+      "commit": "b00f153308481bcb6b360b25f48bd06e4c5509dc",
+      "compile": "passed affected CPU scope; see per-batch receipt",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered as one unit with companion 2a63c7c545; never integrate alone"
+    },
+    {
+      "batch": "forecast_state_and_var_correction",
+      "commit": "4b9999bee47ddaa0191dc929e28066a985f70bfc",
+      "compile": "actual xseq dispatcher CPU/O0/identical/-j10 exit0",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered to serialized root integrator; clears VAR hold"
+    },
+    {
+      "batch": "prophet_admission_companion",
+      "commit": "2a63c7c5454b85c90751d5159fd4e07c655220a9",
+      "compile": "full actual xseq dispatcher CPU/O0/identical -j10 exit0 233.30s (attempt7); experiments/peer6_prophet_admission_20261028/compile.json",
+      "push_guards": "passed",
+      "runtime_executed": false,
+      "status": "delivered with b00f153308 as one ordered pair; clears Prophet hold"
+    }
+  ],
+  "active": [
+    "Metric entry snapshots and native program dictionary execution",
+    "Shared pandas storage coverage repairs"
+  ]
+}
