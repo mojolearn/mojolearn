@@ -3,7 +3,8 @@
 # This admits connected class/storage identities, not the arithmetic or every
 # legacy transitive call. Existing owner-specific scalar/buffer checks remain.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
@@ -47,6 +48,16 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
                 start = i
     if plan is None:
         raise Error("TypeError: native family operation requires a connected estimator class")
+    # Prepared class admission: the ancestry, storage-hook and descriptor
+    # checks below depend only on the class rows; they run on first use and
+    # again whenever any mutable row's namespace changed (identity stamp of
+    # every key and value, no descriptor resolution). Instance storage is
+    # admitted on every call.
+    var mods = NativeModules()
+    var stamp = _family_class_stamp(b, layouts, plan, ancestry)
+    var admitted = prepared_get(mods, _FAMILY_CLASS_SLOT, cls)
+    if admitted is not None and prepared_key_same(admitted, stamp):
+        return _family_instance_fields(b, model, cls, plan)
     var connected = plan["mro"]
     if len(ancestry) - start != len(connected):
         raise Error("TypeError: native family estimator ancestry changed after connection")
@@ -96,6 +107,11 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
                 continue
             elif py_get(names, name) is not member:
                 raise Error("TypeError: native family operation refuses overridden Python descriptors")
+    prepared_put(mods, _FAMILY_CLASS_SLOT, cls, stamp)
+    return _family_instance_fields(b, model, cls, plan)
+
+
+def _family_instance_fields(b: PythonObject, model: PythonObject, cls: PythonObject, plan: PythonObject) raises -> PythonObject:
     var fields = py_call(plan["fields_get"], model, cls)
     if py_type(fields) is not b.dict:
         raise Error("TypeError: native family estimator requires an ordinary instance dictionary")
@@ -104,3 +120,30 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
         if py_type(keys[k]) is not b.str:
             raise Error("TypeError: native family estimator state requires exact string keys")
     return fields
+
+
+comptime _FAMILY_CLASS_SLOT = "classical_family_class_v1"
+
+
+def _family_class_stamp(b: PythonObject, layouts: PythonObject, plan: PythonObject, ancestry: PythonObject) raises -> PythonObject:
+    # Identity stamp of everything the class admission reads: the layout
+    # table and plan, the ancestry tuple, and every key and value of each
+    # mutable ancestry row (immutable builtin rows cannot change).
+    ref cpy = Python().cpython()
+    var stamp = b.list()
+    _ = py_call(stamp.append, layouts)
+    _ = py_call(stamp.append, plan)
+    _ = py_call(stamp.append, ancestry)
+    var dict_get = b.type.__dict__["__dict__"].__get__
+    for i in range(len(ancestry)):  # driver-loop: over the estimator class ancestry rows
+        var row = ancestry[i]
+        _ = py_call(stamp.append, row)
+        # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
+        var flags = cpy.lib.get_function[UInt64]("PyType_GetFlags")(row._obj_ptr)
+        if (flags & UInt64(1 << 8)) != 0:
+            continue
+        var items = py_call(b.list, py_call(py_call(dict_get, row).items))
+        for k in range(len(items)):  # driver-loop: over one class namespace, identity only
+            _ = py_call(stamp.append, items[k][0])
+            _ = py_call(stamp.append, items[k][1])
+    return stamp
