@@ -143,6 +143,7 @@ def _parallel_pool_capture(mut mods: NativeModules, pool: PythonObject) raises -
         var socket = worker["socket"]
         if socket is not None:
             _ = _transport_state(socket, False)
+            mods.released()
         py_setitem(item, "socket", socket)
         var group = worker["devices"]
         model_sequence(mods, group)
@@ -382,11 +383,17 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
             py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, world["bindings"]["linalg"]))
         return top._head_int15
     if operation == "embedding":
-        return causal_model_embedding(top, args)
+        var windowed_result12 = causal_model_embedding(top, args)
+        mods.released()
+        return windowed_result12^
     if operation == "final":
-        return causal_model_head(top, args)
+        var windowed_result11 = causal_model_head(top, args)
+        mods.released()
+        return windowed_result11^
     if operation == "head" or operation == "head_int15":
-        return causal_model_head(top, args, False, operation == "head_int15")
+        var windowed_result10 = causal_model_head(top, args, False, operation == "head_int15")
+        mods.released()
+        return windowed_result10^
     if operation == "norm":
         var x = args[0]
         var dims = List[Int]()
@@ -397,6 +404,7 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         var params = py_ints([Int(py=x.size) // Int(py=top.d_model), Int(py=top.d_model)])
         _ = py_call(params.append, args[1])
         _ = py_call(top._native_entries["rms_norm_forward"], py_ints([generation_address(out, keep), generation_address(x, keep), generation_address(top._norm, keep)]), params)
+        mods.released()
         _ = keep^
         return out
     if operation == "route":
@@ -469,22 +477,30 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
     for i in range(len(argv)):  # cpu-route: admit native startup argument strings before worker connection
         _ = model_string(mods, argv[i])
     var socket = process_worker_connect(argv)
+    mods.released()
     var world = PARALLEL_CAUSAL.get_or_create_ptr()[].bi.dict()
     try:
         while True:  # driver-loop: over native remote model/layer/state requests
             var request = process_worker_next(socket)
+            mods.released()
             if request is None:
                 break
             var sequence = Int(py=request[0]["sequence"])
             try:
                 var result = _parallel_causal_worker_request(mods, world, String(request[1][0]), request[1][1])
                 process_send(socket, "result", sequence, result)
+                mods.released()
             except error:
+                mods.released()
                 process_send(socket, "error", sequence, PythonObject(String(error)))
+                mods.released()
     except error:
+        mods.released()
         transport_close(socket)
+        mods.released()
         raise error
     transport_close(socket)
+    mods.released()
 
 
 def _parallel_causal_usable(fields: PythonObject) raises:
@@ -523,7 +539,9 @@ def _parallel_causal_rpc(mut mods: NativeModules, owner: PythonObject, device: P
     var result = PythonObject(None)
     try:
         result = process_pool_call(pool, index, Python.list(PythonObject(operation), args))
+        mods.released()
     except error:
+        mods.released()
         _parallel_pool_publish(mods, fields)
         if len(pool["workers"]) == 0:
             py_setitem(fields, "_failed", True)
@@ -553,7 +571,9 @@ def _parallel_causal_close(mut mods: NativeModules, owner: PythonObject) raises:
         py_setitem(captured, "_native_parallel_pool_live", live)
         try:
             process_pool_close(pool)
+            mods.released()
         except error:
+            mods.released()
             _parallel_pool_publish(mods, captured)
             raise error
         _parallel_pool_publish(mods, captured)
@@ -643,6 +663,7 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
     py_setitem(live, "_worker_index", py_call(bi.dict, indices))
     py_setitem(fields, "_worker_index", indices)
     var pool = process_pool_create(py_call(bi.tuple, unique), False, child_module)
+    mods.released()
     _model_construction_set(mods, live, fields, "_pool", pool)
     var pools = Python.dict()
     for i in range(len(unique)):  # driver-loop: selected process ownership aliases
@@ -656,6 +677,7 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
     var captured = _causal_namespace(mods, fields)
     try:
         process_pool_start(fields["_pool"])
+        mods.released()
         _parallel_pool_publish(mods, fields)
         var metadata = Python.dict()
         for key in ["device", "kind", "d_model", "vocab_size", "norm_eps", "numeric_profile"]:  # small-loop(six captured model primitive metadata words)
@@ -676,6 +698,7 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
         model_dict(mods, live)
         py_setitem(live, "_head_int15", packed)
     except error:
+        mods.released()
         _parallel_pool_publish(mods, fields)
         try:
             _parallel_causal_close(mods, owner)
@@ -708,7 +731,9 @@ def _parallel_causal_load(mut mods: NativeModules, cls: PythonObject, path_value
         raise Error("ParallelCausalLM: unsupported weight_format")
     var path = native_path(path_value)
     if not native_path_exists(path, True):
+        mods.released()
         raise Error("FileNotFoundError: ParallelCausalLM.load requires a checkpoint directory")
+    mods.released()
     var config = config_load_binding(mods, context["config_context"]["config_class"], path)
     var plan = model_plan_for_binding(mods, config, context["config_context"])
     var plan_fields = model_plan_snapshot(mods, plan)
@@ -720,6 +745,7 @@ def _parallel_causal_load(mut mods: NativeModules, cls: PythonObject, path_value
     try:
         weights = causal_model_read_weights_binding(mods, checkpoint, plan, admitted_options[0], route, context)
     except error:
+        mods.released()
         _ = checkpoint_close_binding(mods, checkpoint)
         raise error
     _ = checkpoint_close_binding(mods, checkpoint)
@@ -935,6 +961,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         try:
             result = causal_lm_parameters_binding(mods, model)
         except error:
+            mods.released()
             causal_model_publish(mods, model)
             raise error
         causal_model_publish(mods, model)
@@ -994,6 +1021,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
                 var fields = causal_snapshot_fields(mods, layers[i])
                 _parallel_causal_release(mods, fields["_causal_original"], layers[i])
             except error:
+                mods.released()
                 if failure == "":
                     failure = String(error)
         if failure != "":

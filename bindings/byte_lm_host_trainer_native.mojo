@@ -147,8 +147,10 @@ def _host_shape(mut mods: NativeModules, config: PythonObject, context: PythonOb
 
 def _host_profile_pair(mut mods: NativeModules, fields: PythonObject) raises -> List[String]:
     var provider = _host_provider(fields)
+    mods.released()
     var result = List[String](length=2, fill=String(""))
     _ = neural_descriptor_execute(provider, 4, [Int(result.unsafe_ptr())], _host_words(mods, fields), List[Float64](), False)
+    mods.released()
     return result^
 
 
@@ -216,8 +218,10 @@ def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape: 
         var item = owners[i]
         if formats[i] == 1:
             item = linalg_ops_operation(PythonObject(None), "family_lin_from_bf16", item, context["byte_lm_linalg_context"])
+            mods.released()
         elif formats[i] == 2:
             item = linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8", item, context["byte_lm_linalg_context"])
+            mods.released()
         var owned = training_f32_cast_owned(item, shapes[i], names[i], context)
         var count = 1
         for j in range(len(shapes[i])):  # driver-loop: over admitted tensor shape metadata
@@ -267,15 +271,18 @@ def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject
         raise Error("TypeError: host checkpoint restoration requires the connected native inference class")
     classical_connect_numpy(context)
     var source = byte_json_payload(byte_json_read(args[0], io_error))
+    mods.released()
     var described = _shape_of(source)
     training_byte_shape_validate(described.d, described.chunked)
     byte_json_arrays(source, described.n_total(), described.n_tensors())
+    mods.released()
     # This is the same complete state validator used by the GPU trainer:
     # integrity, mode/profile, tensor registry, optimizer, cursor and schedule.
     var state_context = context["byte_lm_checkpoint_context"]
     classical_connect_numpy(state_context)
     var state = _validated_state(mods, source, state_context)
     var shape = _host_shape_from_state(state, context)
+    mods.released()
     var result = native_storage_allocate(cls)
     _ = byte_lm_host_inference_construct(mods, result,
         Python.tuple(state["parameters"], shape, args[1], args[2]), context)
@@ -353,6 +360,7 @@ def byte_lm_host_construct(mut mods: NativeModules, trainer: PythonObject, args:
     py_setitem(fields, "_step_words", Python.tuple(shape.batch(), shape.length() + 1, shape.vocab(), n))
     py_setitem(fields, "_gradient", PythonObject(None))
     _ = _host_provider(fields)
+    mods.released()
     return PythonObject(None)
 
 
@@ -418,6 +426,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     var threaded = _host_threads(mods, fields, args[2], args[3])
     var words = _host_words(mods, fields, threaded[0], threaded[1])
     var provider = _host_provider(fields)
+    mods.released()
     var is_loss = operation == "loss_bits" or operation == "inference_loss"
     classical_admit_value(args[0], context)
     classical_admit_value(args[1], context)
@@ -444,6 +453,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     var sizes = List[Int](length=batch, fill=length)
     if args[1] is not None:
         sizes = byte_lm_lengths(args[1], batch, length, context)
+        mods.released()
         var padded = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
         neural_copy_row_prefixes(Int(py=classical_address(padded)), token_address, sizes, batch, length, 1)
         tokens = padded
@@ -460,6 +470,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     words[13] = length
     if is_loss:
         var bits = neural_descriptor_execute(provider, 2, addresses, words, List[Float64](), False)
+        mods.released()
         _ = tokens
         _ = parameters
         if operation == "inference_loss":
@@ -470,6 +481,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
         var next_address = Int(py=classical_address(next))
         addresses.append(next_address)
         var written = neural_descriptor_execute(provider, 1, addresses, words, List[Float64](), False)
+        mods.released()
         if written != batch:
             raise Error("RuntimeError: byte LM host wrote an unexpected number of next bytes")
         var output = Python.list()
@@ -486,6 +498,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     var out_address = Int(py=classical_address(out))
     addresses.append(out_address)
     var written = neural_descriptor_execute(provider, 0, addresses, words, List[Float64](), False)
+    mods.released()
     if written != batch * length * vocab:
         raise Error("RuntimeError: byte LM host wrote an unexpected number of logits")
     _ = tokens
@@ -537,6 +550,7 @@ def byte_lm_host_train_step(mut mods: NativeModules, trainer: PythonObject, args
     var post_v = _f32_array(n, context)
     py_setitem(fields, "_gradient", PythonObject(None))
     var provider = _host_provider(fields)
+    mods.released()
     var descriptors: List[Int] = [Int(py=classical_address(fields["_parameters"])),
         Int(py=classical_address(fields["_m"])), Int(py=classical_address(fields["_v"])),
         Int(py=classical_address(tokens)), Int(py=classical_address(grad)),
@@ -554,6 +568,7 @@ def byte_lm_host_train_step(mut mods: NativeModules, trainer: PythonObject, args
     var native = _host_words(mods, fields, completed=Int(py=completed))
     # Preserve the old GIL-held host operation and transactional output publish.
     var bits = neural_descriptor_execute(provider, 3, descriptors, native, scalars, False)
+    mods.released()
     _ = grad  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native call above
     _ = post_v  # keep the Python object alive through the native call above

@@ -185,9 +185,13 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     var block_prefix = ("transformer" if kind == "transformer" else "mamba") if requested_gpu else "neural_host"
     var primitive_prefix = "training" if requested_gpu else "neural_host"
     var vendor = String(_native_function(mods, block_binding, block_prefix + "_vendor")())
+    mods.released()
     var primitive_vendor = String(_native_function(mods, primitives, primitive_prefix + "_vendor")())
+    mods.released()
     var mode = Int(py=_native_function(mods, block_binding, block_prefix + "_numeric_mode")())
+    mods.released()
     var primitive_mode = Int(py=_native_function(mods, primitives, primitive_prefix + "_numeric_mode")())
+    mods.released()
     if requested_gpu:
         if vendor != "metal" and vendor != "cuda" and vendor != "hip":
             raise Error("CausalLM: requested GPU execution but native block reports " + vendor)
@@ -197,7 +201,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         raise Error("CausalLM: native block and model primitives differ in vendor or numeric mode")
     if int15_binding is not None:
         var packed_vendor = String(_native_function(mods, int15_binding, "linalg_vendor")())
+        mods.released()
         var packed_mode = Int(py=_native_function(mods, int15_binding, "linalg_numeric_mode")())
+        mods.released()
         if packed_vendor != vendor or packed_mode != mode:
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
     py_setattr(model, "_native_vendor", PythonObject(vendor))
@@ -229,6 +235,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         # generation. No performance default changes with this migration.
         if _native_has_entry(mods, block_binding, "causal_lm_session_run"):
             py_setitem(entries, "resident_vendor", _native_function(mods, block_binding, "transformer_vendor")())
+            mods.released()
             for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),  # small-loop(resident entry names)
                          String("transformer_decode_session_close"), String("causal_lm_session_create"),
                          String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
@@ -246,6 +253,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         var profile = 1
         if _native_has_entry(mods, block_binding, "mamba1_profile"):
             profile = Int(py=_native_function(mods, block_binding, "mamba1_profile")())
+            mods.released()
         py_setitem(entries, "mamba1_profile", PythonObject(profile))
     elif kind == "mamba2":
         py_setitem(entries, "forward", _native_function(mods, block_binding, "mamba2_forward"))
@@ -262,22 +270,26 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         var provider = generation_reuse_native_provider(py_get(owner_fields, "_native_session_provider_cache"), block_binding,
             _native_function(mods, block_binding, "transformer_native_api_v1"),
             _native_function(mods, block_binding, "transformer_native_session_handle_v1"))
+        mods.released()
         py_setitem(owner_fields, "_native_session_provider_cache", provider)
         py_setitem(entries, "native_session_provider", provider)
     if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var owner_fields = neural_block_fields(mods, model._blocks[0], _causal_context_for(mods, model))
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
             _native_function(mods, primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
+        mods.released()
         py_setitem(owner_fields, "_native_primitives_provider_cache", primitive_provider)
         py_setitem(entries, "native_primitives", primitive_provider)
         if kind == "transformer":
             var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
                 _native_function(mods, block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+            mods.released()
             py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
             py_setitem(entries, "native_block_operations", block_provider)
         if kind == "mamba1" or kind == "mamba2":
             var mamba_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_mamba_provider_cache"),
                 _native_function(mods, block_binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
+            mods.released()
             py_setitem(owner_fields, "_native_mamba_provider_cache", mamba_provider)
             py_setitem(entries, "native_mamba", mamba_provider)
     py_setattr(model, "_native_entries", entries)
@@ -295,7 +307,9 @@ def _block(mut mods: NativeModules, model: PythonObject, index: Int) raises -> P
         return local[index]
     var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
-        return py_call(parallel, "block_fields", Python.list(causal_model_origin(mods, model), index, model))
+        var windowed_result6 = py_call(parallel, "block_fields", Python.list(causal_model_origin(mods, model), index, model))
+        mods.released()
+        return windowed_result6^
     return neural_block_fields(mods, model._blocks[index], _causal_context_for(mods, model))
 
 
@@ -487,11 +501,14 @@ def causal_lm_allocate_binding(mut mods: NativeModules, model: PythonObject, bat
         for i in range(len(model._blocks)):  # driver-loop: over model layer state owners
             _ = py_call(state.layers.append, causal_layer_allocate(mods, model, i, b, cap) if parallel is None else
                         py_call(parallel, "allocate_layer", Python.list(causal_model_origin(mods, model), i, b, cap, model)))
+            mods.released()
     except error:
+        mods.released()
         if parallel is not None:
             try:
                 var captured = causal_state_capture(mods, state, model, _causal_context_for(mods, model))
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), state, model, captured))
+                mods.released()
             except cleanup_error:
                 raise Error("CausalLM: state allocation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
@@ -528,10 +545,13 @@ def causal_lm_reset_binding(mut mods: NativeModules, model: PythonObject, state:
     if parallel is not None:
         try:
             _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, state), model, state))
+            mods.released()
         except error:
+            mods.released()
             py_setattr(state, "_usable", PythonObject(False))
             try:
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, fresh), model, fresh))
+                mods.released()
             except cleanup_error:
                 raise Error("CausalLM: state reset failed: " + String(error) + "; fresh-state cleanup also failed: " + String(cleanup_error))
             raise error
@@ -619,12 +639,16 @@ def causal_transformer_admin(mut mods: NativeModules, binding: PythonObject, ses
     if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
         var provider = neural_descriptor_reuse(PythonObject(None),
             _native_function(mods, binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+        mods.released()
         var handle = neural_descriptor_handle(provider,
             _native_function(mods, binding, "transformer_native_session_handle_v1"), session)
+        mods.released()
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
+        mods.released()
     else:
         var name = "transformer_session_invalidate_tape" if operation == 12 else "transformer_session_close"
         _ = py_call(_native_function(mods, binding, name), session)
+        mods.released()
 
 def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
     # Standalone public block calls retain their existing ABI and admit anew.
@@ -638,6 +662,7 @@ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: Py
     var profile = kind == "transformer" and model._head_int15 is not None
     var planes = profile and py_contains(entries, "forward15")
     var layer = GenerationLayerSnapshot(_block(mods, model, i), kind, planes)
+    mods.released()
     return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
 
 
@@ -683,46 +708,61 @@ def _causal_layer_run_prepared(mut mods: NativeModules,
         if Bool(py=e["cpu"]) and block_provider is not None:
             py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_execute(block_provider,
                 34 if head_profile else 33, a_words, p_words, [])))
+            mods.released()
         elif device15 and block_provider is not None:
             if blk["_native_session"] is None:
                 causal_block_cache_set(mods, blk, "_native_session", e["create"]())
+                mods.released()
                 causal_block_cache_set(mods, blk, "_session_binding", e["block_binding"])
             var session = blk["_native_session"]
             var handle = neural_descriptor_handle(block_provider,
                 e["transformer_native_session_handle_v1"], session)
+            mods.released()
             py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_reserved_execute(block_provider,
                 session, handle, 0, 1, 35, a_words, p_words, [])))
+            mods.released()
         elif native_provider is not None and not head_profile and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
             if blk["_native_session"] is None:
                 causal_block_cache_set(mods, blk, "_native_session", e["create"]())
+                mods.released()
                 causal_block_cache_set(mods, blk, "_session_binding", e["block_binding"])
             var session = blk["_native_session"]
             var linked = py_get(blk, "_native_forward_owner")
             if linked is None or not generation_native_session_matches(linked, native_provider, session):
+                mods.released()
                 linked = generation_connect_native_session(native_provider, session)
+                mods.released()
                 causal_block_cache_set(mods, blk, "_native_forward_owner", linked)
+            mods.released()
             # Native vectors cross directly. No Python argument-list packing
             # or CPython callable dispatch occurs in this repeated layer call.
             py_setattr(st, "cached_tokens", PythonObject(generation_native_forward(linked, a_words, p_words)))
+            mods.released()
         else:
             addresses = py_ints(a_words)
             params = py_ints(p_words)
             if device15:
                 if blk["_native_session"] is None:
                     causal_block_cache_set(mods, blk, "_native_session", e["create"]())
+                    mods.released()
                     causal_block_cache_set(mods, blk, "_session_binding", e["block_binding"])
                 py_setattr(st, "cached_tokens", py_call(e["forward15"], blk["_native_session"], addresses, params))
+                mods.released()
             elif head_profile:
                 py_setattr(st, "cached_tokens", py_call(e["forward15_host"], addresses, params))
+                mods.released()
             elif py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
                 if blk["_native_session"] is None:
                     causal_block_cache_set(mods, blk, "_native_session", e["create"]())
+                    mods.released()
                     causal_block_cache_set(mods, blk, "_session_binding", e["block_binding"])
                 py_setattr(st, "cached_tokens", py_call(e["forward_session"], blk["_native_session"], addresses, params))
+                mods.released()
             else:
                 if step:
                     _ = py_call(params.pop, 1)
                 py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
+                mods.released()
     else:
         if py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
             raise Error("neural block: state is owned by a resident decode session")
@@ -751,8 +791,10 @@ def _causal_layer_run_prepared(mut mods: NativeModules,
             var native = py_get(e, "native_mamba")
             if native is not None and profile == 1:
                 _ = neural_descriptor_execute(native, 1 if step else 0, m_addresses, m_params, [])
+                mods.released()
             else:
                 _ = py_call(e["decode" if step else "forward"], py_ints(m_addresses), py_ints(m_params))
+                mods.released()
             _ = y  # keep the Python object alive through the native call above
             py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
         else:
@@ -777,10 +819,12 @@ def _causal_layer_run_prepared(mut mods: NativeModules,
             if native is not None:
                 py_setattr(st, "buffered_tokens", PythonObject(neural_descriptor_execute(native, 3 if step else 2,
                     m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
+                mods.released()
             else:
                 params = py_ints(m_params)
                 _ = py_call(params.extend, Python.list(PythonObject(layer.words.dt_low), PythonObject(layer.words.dt_high)))
                 py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], py_ints(m_addresses), params))
+                mods.released()
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
             causal_block_cache_set(mods, blk, "h_last_", last)
@@ -948,10 +992,12 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             lm = kept[1]
             sessions = kept[2]
             _resident_load_states(e, sessions, state, keep)
+            mods.released()
         else:
             if kept is not None:
                 causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
                 _resident_close(e, kept[1], kept[2])
+                mods.released()
             var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep)
             lm = opened[0]
             sessions = opened[1]
@@ -959,8 +1005,10 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
         var cached = PythonObject(None)
         if provider is not None:
             cached = PythonObject(transformer_resident_lm_run(provider, lm, sessions, False, [_addr(ids, keep), _addr(out, keep)], [l]))
+            mods.released()
         else:
             cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
+            mods.released()
         _ = out  # keep the Python object alive through the native call above
         for i in range(len(sessions)):  # driver-loop: over layer decode sessions
             var blk = _block(mods, model, i)
@@ -972,23 +1020,28 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             var provider = py_get(e, "native_block_operations")
             if provider is not None:
                 _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
+                mods.released()
             else:
                 _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
+                mods.released()
             py_setattr(st, "cached_tokens", cached)
             _ = out  # keep the Python object alive through the native call above
         _writeback(copies)
     except error:
+        mods.released()
         if persist:
             causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
             causal_model_cache_set(mods, model, fields, "_resident_busy", False)
         if lm is not None:
             _resident_close(e, lm, sessions)
+            mods.released()
         raise error
     if persist:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
         causal_model_cache_set(mods, model, fields, "_resident_busy", False)
     else:
         _resident_close(e, lm, sessions)
+        mods.released()
     _ = keep^
     return out
 
@@ -1010,8 +1063,12 @@ def _engine_admission(mut mods: NativeModules, model: PythonObject, state: Pytho
         for i in range(len(model._blocks)):  # driver-loop: one operation's retained model owners
             blocks.append(_block(mods, model, i))
         var snapshot = GenerationOperationSnapshot(model, entries, blocks)
-        return GenerationEngineAdmission(snapshot, state, batch, length)
+        mods.released()
+        var windowed_result5 = GenerationEngineAdmission(snapshot, state, batch, length)
+        mods.released()
+        return windowed_result5^
     except problem:
+        mods.released()
         py_setattr(state, "_usable", PythonObject(False))
         raise problem
 
@@ -1029,7 +1086,9 @@ def _run_engine(mut mods: NativeModules, model: PythonObject, ids: PythonObject,
         # Common endpoints own per-call GIL release, lock acquisition and
         # session reservation. The native layer loop enters GIL-held.
         logits = owner.native.forward(address, length)
+        mods.released()
     except problem:
+        mods.released()
         owner.publish()
         raise problem
     owner.publish()
@@ -1060,7 +1119,9 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
     var parallel = py_get(entries, "parallel_call")
     try:
         if parallel is not None:
-            return py_call(parallel, "run", Python.list(causal_model_origin(mods, model), ids, causal_state_origin(mods, state), remote_step, model, state))
+            var windowed_result4 = py_call(parallel, "run", Python.list(causal_model_origin(mods, model), ids, causal_state_origin(mods, state), remote_step, model, state))
+            mods.released()
+            return windowed_result4^
         if _resident_forward_ok(mods, model, state):
             var logits = _resident_forward(mods, model, ids, state)
             py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
@@ -1072,10 +1133,12 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
             for i in range(len(model._blocks)):  # driver-loop: capture layer owners once per operation
                 blocks.append(_block(mods, model, i))
             snapshot = GenerationOperationSnapshot(model, entries, blocks)
+            mods.released()
         var out = _run_snapshot(mods, snapshot.value(), ids, state, b, l)
         py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
         return out
     except error:
+        mods.released()
         py_setattr(state, "_usable", PythonObject(False))
         raise error
 
@@ -1084,10 +1147,12 @@ def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot
                   b: Int, l: Int) raises -> PythonObject:
     var x = _causal_model_embedding_prepared(snapshot.entries, snapshot.native, snapshot.width, snapshot.vocab,
                                             b, l, False, snapshot.embedding, ids)
+    mods.released()
     for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
         x = _causal_layer_run_prepared(mods, snapshot.entries, snapshot.kind, snapshot.width, b, l,
             snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False)
     var out = _causal_model_head_prepared(snapshot.head, x, b, l, False)
+    mods.released()
     _ = snapshot  # pins model and all captured weight owners until computation finishes
     return out
 
@@ -1105,14 +1170,17 @@ def causal_lm_forward_binding(mut mods: NativeModules, model: PythonObject, valu
     try:
         out = _run(mods, model, ids, state, one)
     except error:
+        mods.released()
         if supplied_state is None and parallel is not None:
             try:
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, state), model, state))
+                mods.released()
             except cleanup_error:
                 raise Error("CausalLM: forward failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if supplied_state is None and parallel is not None:
         _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, state), model, state))
+        mods.released()
     if one:
         _causal_array_guard()
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
@@ -1152,6 +1220,7 @@ def _resident_open_all(mut mods: NativeModules,
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var sessions = g[].bi.list()
     var lm = e["causal_lm_session_create"]()
+    mods.released()
     try:
         for i in range(len(model._blocks)):  # driver-loop: over model layers
             var blk = _block(mods, model, i)
@@ -1168,13 +1237,16 @@ def _resident_open_all(mut mods: NativeModules,
                 if j != 1:
                     _ = py_call(open_p.append, p[j])
             var ss = e["transformer_decode_session_create"]()
+            mods.released()
             _ = py_call(sessions.append, ss)
             var provider = py_get(e, "native_block_operations")
             if provider is not None:
                 _ = transformer_resident_decode_call(provider, ss, 19 if int15 else 18,
                     transformer_resident_words(open_a), transformer_resident_words(open_p))
+                mods.released()
             else:
                 _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
+                mods.released()
         var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
@@ -1187,10 +1259,14 @@ def _resident_open_all(mut mods: NativeModules,
         if provider is not None:
             transformer_resident_lm_open(provider, lm, int15, transformer_resident_words(top),
                 [b, Int(py=model.vocab_size), Int(py=model.d_model)], Float64(py=model.norm_eps))
+            mods.released()
         else:
             _ = py_call(e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"], lm, top, tp)
+            mods.released()
     except error:
+        mods.released()
         _resident_close(e, lm, sessions)
+        mods.released()
         raise error
     return Python.tuple(lm, sessions)
 
@@ -1264,10 +1340,12 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
             lm = kept[1]
             sessions = kept[2]
             _resident_load_states(e, sessions, state, keep)
+            mods.released()
         else:
             if kept is not None:
                 causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
                 _resident_close(e, kept[1], kept[2])
+                mods.released()
             var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep)
             lm = opened[0]
             sessions = opened[1]
@@ -1275,22 +1353,27 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
         if provider is not None:
             _ = transformer_resident_lm_run(provider, lm, sessions, True,
                 [_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)], [l, n, 0])
+            mods.released()
         else:
             _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
+            mods.released()
         _ = out  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
     except error:
+        mods.released()
         if persist:
             causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
             causal_model_cache_set(mods, model, fields, "_resident_busy", False)
         if lm is not None:
             _resident_close(e, lm, sessions)
+            mods.released()
         raise error
     if persist:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
         causal_model_cache_set(mods, model, fields, "_resident_busy", False)
     else:
         _resident_close(e, lm, sessions)
+        mods.released()
     var result = generation_array([b, l + n], "i")
     var dst = i32_ptr(Int(py=result._addr))
     _ = result  # keep the Python object alive through the native call above
@@ -1419,10 +1502,12 @@ def causal_lm_stream_binding(mut mods: NativeModules, model: PythonObject, value
     try:
         _options(mods, handle, options)
     except error:
+        mods.released()
         var parallel = py_get(model._native_entries, "parallel_call")
         if parallel is not None:
             try:
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, handle.state), model, handle.state))
+                mods.released()
             except cleanup_error:
                 raise Error("generation: option validation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
@@ -1462,6 +1547,7 @@ def _read_engine(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int
         native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
             s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
     except problem:
+        mods.released()
         owner.publish()
         _engine_publish_stream(s, progress, batch)
         raise problem
@@ -1525,6 +1611,7 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int) raises -
         s.busy = False
         return out
     except error:
+        mods.released()
         s.busy = False
         s.usable = False
         raise error
@@ -1567,7 +1654,9 @@ def causal_lm_read_binding(mut mods: NativeModules, stream: PythonObject, count:
     var owner = native.downcast_value_ptr[GenerationHandle]()
     var ids = _read(mods, owner[], _public_int(mods, count, "generation: max_tokens must be an integer"))
     if owner[].tokenizer is not None:
-        return _decode_chunk(owner[], ids)
+        var windowed_result3 = _decode_chunk(owner[], ids)
+        mods.released()
+        return windowed_result3^
     return ids
 
 
@@ -1634,14 +1723,17 @@ def causal_lm_generate_binding(mut mods: NativeModules, model: PythonObject, val
     try:
         result = _generate_complete(mods, model, value, maximum, s[])
     except error:
+        mods.released()
         if parallel is not None:
             try:
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, s[].state), model, s[].state))
+                mods.released()
             except cleanup_error:
                 raise Error("CausalLM: generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if parallel is not None:
         _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, s[].state), model, s[].state))
+        mods.released()
     return result
 
 
@@ -1653,11 +1745,13 @@ def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum
 
 def causal_lm_text_stream_binding(mut mods: NativeModules, model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var ids = tokenizer_vocab_encode(tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
+    mods.released()
     var prompt = generation_array([1, len(ids)], "i")
     var ptr = i32_ptr(Int(py=prompt._addr))
     _ = prompt  # keep the Python object alive through the native call above
     # The CPython array constructor unpacks the id list to native int64 storage.
     var packed = py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].arrays, "q", ids)
+    mods.released()
     causal_lm_store_ids(ptr, MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed.buffer_info()[0])), len(ids))
     _ = packed  # keep the Python object alive through the native call above
     _ = prompt  # keep the Python object alive through the native call above
@@ -1682,15 +1776,19 @@ def causal_lm_generate_text_binding(mut mods: NativeModules, model: PythonObject
     try:
         var ids = _read(mods, owner[], max(1, owner[].max_new))
         result = _decode_chunk(owner[], ids)
+        mods.released()
     except error:
+        mods.released()
         if parallel is not None:
             try:
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, owner[].state), model, owner[].state))
+                mods.released()
             except cleanup_error:
                 raise Error("CausalLM: text generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if parallel is not None:
         _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, owner[].state), model, owner[].state))
+        mods.released()
     return result
 
 
@@ -1822,6 +1920,7 @@ def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, na
     py_setitem(result, "tokenizer", PythonObject(None))
     if s[].tokenizer is not None:
         py_setitem(result, "tokenizer", tokenizer_vocab_fingerprint(s[].tokenizer))
+        mods.released()
     py_setitem(result, "pending_bytes", py_call(g[].bi.bytes, s[].pending_bytes))
     var options = g[].bi.list()
     _ = py_call(options.append, s[].greedy)
@@ -1843,6 +1942,7 @@ def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, na
         var parallel = py_get(s[].model._native_entries, "parallel_call")
         if parallel is not None:
             st = py_call(parallel, "state_snapshot", Python.list(causal_state_origin(mods, st), st))
+            mods.released()
             st = causal_layer_capture(mods, st, s[].model.kind, _causal_context_for(mods, s[].model))
         var entry = g[].bi.dict()
         for j in range(len(arrays)):  # driver-loop: over layer state arrays
@@ -1878,6 +1978,7 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
         raise Error("generation: a text checkpoint requires its tokenizer")
     if Bool(py=checkpoint["text"]):
         var fingerprint = tokenizer_vocab_fingerprint(tokenizer)
+        mods.released()
         if not Bool(py=checkpoint["tokenizer"] == fingerprint):
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(mods, model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
@@ -1898,7 +1999,9 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
         py_setattr(s[].state, "positions", PythonObject(position))
         # The CPython array constructor unpacks the per-row lists to native storage.
         var packed_lengths = py_call(g[].arrays, "q", checkpoint["lengths"])
+        mods.released()
         var packed_finished = py_call(g[].arrays, "b", py_call(g[].bi.map, g[].bi.bool, checkpoint["finished"]))
+        mods.released()
         causal_lm_restore_rows(
             MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_lengths.buffer_info()[0])),
             MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_finished.buffer_info()[0])),
@@ -1918,6 +2021,7 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
             var parallel = py_get(model._native_entries, "parallel_call")
             if parallel is not None:
                 dest = py_call(parallel, "state_snapshot", Python.list(causal_state_origin(mods, dest), dest))
+                mods.released()
                 dest = causal_layer_capture(mods, dest, model.kind, _causal_context_for(mods, model))
             var source = checkpoint["layers"][i]
             for j in range(len(arrays)):  # driver-loop: over layer state arrays
@@ -1941,16 +2045,19 @@ def causal_lm_resume_binding(mut mods: NativeModules, model: PythonObject, check
             if parallel is not None:
                 causal_layer_publish(mods, dest)
                 _ = py_call(parallel, "state_publish", Python.list(causal_state_origin(mods, s[].state.layers[i]), causal_state_origin(mods, dest), s[].state.layers[i]))
+                mods.released()
         s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
         s[].pending_bytes = py_call(g[].bi.bytearray, checkpoint["pending_bytes"])
         return stream
     except error:
+        mods.released()
         # These caches belong only to this attempted restore. Existing live
         # streams retain their own worker tokens and are never touched.
         var parallel = py_get(model._native_entries, "parallel_call")
         if parallel is not None:
             try:
                 _ = py_call(parallel, "release_layers", Python.list(causal_model_origin(mods, model), causal_state_origin(mods, s[].state), model, s[].state))
+                mods.released()
             except cleanup_error:
                 raise Error("generation: checkpoint restore failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
@@ -2018,6 +2125,7 @@ def _causal_owner_unusable(mut mods: NativeModules, args_ptr: PyObjectPtr) -> Bo
         var fields = neural_record_fields(mods, args[0], Python.tuple("_closed", "_failed"))
         return _truth(py_get(fields, "_closed")) or _truth(py_get(fields, "_failed"))
     except:
+        mods.released()
         return False
 
 

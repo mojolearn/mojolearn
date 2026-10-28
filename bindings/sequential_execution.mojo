@@ -107,6 +107,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
     var program = sequential_program(mods, model, PythonObject(d), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
+    mods.released()
     var native_program = _ints(program)
     var native_table = model_float64_words(table)
     var counts = model_counts_native(native_program, native_table)
@@ -187,6 +188,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         _ = val_curve  # keep the Python object alive through the native call above
         _ = py_call(ip.append, 1 if restore_best else 0)
     var native_inputs = model_admit_addresses(addresses, target, False, x_snapshot.source)
+    mods.released()
     var native_options = _ints(ip)
     var native_scalars = model_float64_words(fp)
     for scalar in native_table:  # driver-loop: reuse already admitted native layer options
@@ -198,6 +200,7 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         var words = model_descriptor_words(native_program, native_options, native_inputs[1],
             Int(py=sequential_address(classes_full)), n_out, target, Int(class_count.unsafe_ptr()))
         n_iter = neural_descriptor_execute(provider, MODEL_FIT_LABELS, native_inputs[0], words, native_scalars)
+        mods.released()
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
         _ = state  # keep the Python object alive through the native call above
@@ -207,9 +210,11 @@ def sequential_fit(mut mods: NativeModules, model: PythonObject, args: PythonObj
         _ = classes_full  # keep the Python object alive through the native call above
         var count = class_count[0]
         py_setitem(fields, "classes_", py_call(context["ndarray"], Python.tuple(count), dtype=classes_full.dtype, buffer=classes_full))
+        mods.released()
     else:
         var words = model_descriptor_words(native_program, native_options, native_inputs[1])
         n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_inputs[0], words, native_scalars)
+        mods.released()
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
         _ = state  # keep the Python object alive through the native call above
@@ -276,7 +281,9 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
         for k in range(1, rank):  # driver-loop: over the prediction input sample rank
             _ = py_call(actual.append, PythonObject(x_snapshot.shape[k]))
         if not Bool(py=py_call(Python.import_module("builtins").tuple, actual) == sample):
+            mods.released()
             raise Error("X samples have a different shape from the fitted model")
+        mods.released()
     if not Bool(py=PythonObject(x_snapshot.source.cols) == fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
     var params = fields["params_"]
@@ -293,6 +300,7 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
         var options: List[Int] = [x_snapshot.source.rows, 4096, transform, Int(py=classes.shape[0]), Int(py=classes.dtype.itemsize)]
         var words = model_descriptor_words(native_program, options, sources)
         _ = neural_descriptor_execute(provider, MODEL_PREDICT_LABELS, addresses, words, native_table)
+        mods.released()
         _ = params  # keep the Python object alive through the native call above
         _ = x^
         _ = params^
@@ -303,6 +311,7 @@ def sequential_forward(mut mods: NativeModules, model: PythonObject, source: Pyt
     var options: List[Int] = [x_snapshot.source.rows, 4096, transform]
     var words = model_descriptor_words(native_program, options, sources)
     _ = neural_descriptor_execute(provider, MODEL_PREDICT, addresses, words, native_table)
+    mods.released()
     _ = x^
     _ = params^
     return out
@@ -314,6 +323,7 @@ def sequential_predict(mut mods: NativeModules, model: PythonObject, source: Pyt
     var saved_loss = py_get(fields, "_fit_loss")
     var loss = "" if saved_loss is None else String(saved_loss)
     var entries = sequential_entries(model, context)
+    mods.released()
     var classifier = loss == "cross_entropy" or loss == "bce_with_logits"
     if probabilities:
         if loss == "cross_entropy":
@@ -330,5 +340,7 @@ def sequential_predict(mut mods: NativeModules, model: PythonObject, source: Pyt
     if Bool(py=py_get(fields, "_y_1d", False)):
         # A one-output model is already contiguous. The native ndarray
         # constructor changes only its ABI rank, preserving the returned words.
-        return py_call(context["ndarray"], Python.tuple(result.shape[0]), dtype=context["float32"], buffer=result)
+        var windowed_result14 = py_call(context["ndarray"], Python.tuple(result.shape[0]), dtype=context["float32"], buffer=result)
+        mods.released()
+        return windowed_result14^
     return result

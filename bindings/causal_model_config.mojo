@@ -222,11 +222,16 @@ def config_load_binding(mut mods: NativeModules, cls: PythonObject, input_path: 
         raise Error("TypeError: config factory requires its connected class")
     var path = native_path(input_path)
     if native_path_exists(path, True):
+        mods.released()
         path = py_call(path.rstrip, "/") + PythonObject("/config.json")
+    mods.released()
     if not native_path_exists(path):
+        mods.released()
         raise Error("FileNotFoundError: config.json does not exist")
+    mods.released()
     var value = py_call(mods.module("builtins").object.__new__, cls)
     _ = config_init_binding(mods, value, native_json_read(path), path)
+    mods.released()
     return value
 
 

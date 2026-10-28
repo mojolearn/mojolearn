@@ -81,11 +81,15 @@ def _buffer(mut mods: NativeModules, value: PythonObject, context: PythonObject,
     if Bool(py=view.contiguous):
         # Both C and Fortran contiguous buffers are borrowed without a copy.
         # ndarray's C type owns the memoryview and preserves read-only status.
-        return py_call(context["ndarray"], view.shape, dtype=dtype, buffer=view, strides=view.strides)
+        var windowed_result17 = py_call(context["ndarray"], view.shape, dtype=dtype, buffer=view, strides=view.strides)
+        mods.released()
+        return windowed_result17^
     # CPython's native buffer implementation packs signed/zero strides in
     # logical C order, including read-only views. No NumPy conversion runs.
     var packed = py_call(view.tobytes, "C")
-    return py_call(context["ndarray"], view.shape, dtype=dtype, buffer=packed)
+    var windowed_result16 = py_call(context["ndarray"], view.shape, dtype=dtype, buffer=packed)
+    mods.released()
+    return windowed_result16^
 
 
 def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_depth: Int) raises:
@@ -142,10 +146,15 @@ def _sequence_values(mut mods: NativeModules, value: PythonObject, depth: Int, m
         _array_values(mods, value, depth, dims, values, kind, size, leaf_depth, context)
     elif numpy and py_type(value) is context["array_class"]:
         var view = py_call(context["array_fields"]["_mv"], value, context["array_class"])
+        mods.released()
         var shape = py_call(context["array_fields"]["shape"], value, context["array_class"])
+        mods.released()
         var dtype = py_call(context["array_fields"]["dtype"], value, context["array_class"])
+        mods.released()
         var order = py_call(context["array_fields"]["order"], value, context["array_class"])
+        mods.released()
         var array = py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
+        mods.released()
         _array_values(mods, array, depth, dims, values, kind, size, leaf_depth, context)
     elif numpy and (py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray):
         var array = _buffer(mods, value, context, False)
@@ -190,7 +199,9 @@ def sequential_input(mut mods: NativeModules, value: PythonObject, context: Pyth
         return _buffer(mods, value, context, samples)
     var packed = sequential_sequence(mods, value, context)
     var dtype = context["numeric_dtypes"][Python.tuple(packed[1], packed[2])]
-    return py_call(context["ndarray"], packed[0], dtype=dtype, buffer=packed[3])
+    var windowed_result15 = py_call(context["ndarray"], packed[0], dtype=dtype, buffer=packed[3])
+    mods.released()
+    return windowed_result15^
 
 
 def sequential_input(value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:

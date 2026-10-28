@@ -189,6 +189,7 @@ def _checkpoint_read_bytes(mut mods: NativeModules, fd: PythonObject, count: Int
     var read = _checkpoint_entries()["read"]
     while total < count:  # driver-loop: consume a bounded native file header including short reads
         var part = py_call(read, fd, count - total)
+        mods.released()
         if len(part) == 0:
             break
         total += len(part)
@@ -226,6 +227,7 @@ def checkpoint_array(mut mods: NativeModules, raw: PythonObject, shape: PythonOb
         dtype=PythonObject("<f4" if code == "f" else ("<u2" if code == "H" else ("<i8" if code == "q" else ("<i1" if code == "b" else "<i4")))),
         ndim=PythonObject(len(captured_shape)), size=PythonObject(count), nbytes=PythonObject(count * itemsize),
         itemsize=PythonObject(itemsize), order=PythonObject("C"), strides=py_call(bi.tuple, strides))
+    mods.released()
     var names = py_call(bi.list, fields.keys())
     for i in range(len(names)):  # small-loop(publish through admitted native Array member descriptors)
         _ = py_call(slots[names[i]].__set__, result, fields[names[i]])
@@ -260,8 +262,11 @@ def safetensors_init_binding(mut mods: NativeModules, value: PythonObject, input
     var bi = mods.module("builtins")
     var path = native_path(input_path)
     if not native_path_exists(path):
+        mods.released()
         raise Error("FileNotFoundError: safetensors file does not exist")
+    mods.released()
     var fd = py_call(entries["open"], path, entries["O_RDONLY"])
+    mods.released()
     var raw = PythonObject(None)
     var total = 0
     var n = 0
@@ -279,10 +284,14 @@ def safetensors_init_binding(mut mods: NativeModules, value: PythonObject, input
         if len(raw) != n:
             raise Error("safetensors: header is truncated")
         total = Int(py=py_call(entries["fstat"], fd).st_size)
+        mods.released()
     except error:
+        mods.released()
         _ = py_call(entries["close"], fd)
+        mods.released()
         raise error
     _ = py_call(entries["close"], fd)
+    mods.released()
     var header = native_json_parse(raw)
     model_dict(mods, header)
     var metadata = py_call(header.pop, "__metadata__", PythonObject(None))
@@ -337,7 +346,9 @@ def _safetensors_map(fields: PythonObject) raises -> PythonObject:
 
 
 def safetensors_map_binding(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
-    return _safetensors_map(_file_fields(mods, value))
+    var windowed_result2 = _safetensors_map(_file_fields(mods, value))
+    mods.released()
+    return windowed_result2^
 
 
 def safetensors_close_binding(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
@@ -348,6 +359,7 @@ def safetensors_close_binding(mut mods: NativeModules, value: PythonObject) rais
         if py_type(current) is not entries["mmap_class"]:
             raise Error("TypeError: safetensors close requires its retained native mmap")
         _ = py_call(entries["mmap_close"], current)
+        mods.released()
         py_setitem(fields, "_mm", PythonObject(None))
     if native_instance_item(fields, PythonObject("_fh")) is not None:
         raise Error("TypeError: safetensors does not accept Python file owners")
@@ -383,6 +395,7 @@ def _safetensors_read(mut mods: NativeModules, fields: PythonObject, info: Pytho
     if data_start < 0 or data_size < 0 or end > data_size or data_start > 9223372036854775807 - end:
         raise Error("ValueError: safetensors data offsets exceed the retained file")
     var mapped = _safetensors_map(fields)
+    mods.released()
     if data_start + end > len(mapped):
         raise Error("ValueError: safetensors file changed after header admission")
     var bi = mods.module("builtins")
@@ -445,10 +458,13 @@ def checkpoint_open_binding(mut mods: NativeModules, cls: PythonObject, input_pa
     var weight_map = Python.dict()
     var root = path
     if native_path_exists(path, True):
+        mods.released()
         var index = py_call(path.rstrip, "/") + PythonObject("/model.safetensors.index.json")
         var single = py_call(path.rstrip, "/") + PythonObject("/model.safetensors")
         if native_path_exists(index):
+            mods.released()
             var data = native_json_read(index)
+            mods.released()
             model_dict(mods, data)
             var wm = py_get(data, "weight_map")
             model_dict(mods, wm)
@@ -461,28 +477,43 @@ def checkpoint_open_binding(mut mods: NativeModules, cls: PythonObject, input_pa
                 if not Bool(py=py_call(filename.startswith, "/")):
                     filename = py_call(path.rstrip, "/") + PythonObject("/") + filename
                 if not native_path_exists(filename):
+                    mods.released()
                     raise Error("FileNotFoundError: checkpoint index names shard that does not exist: " + String(filename))
+                mods.released()
                 py_setitem(weight_map, names[i], filename)
                 if not py_contains(files, filename):
                     _ = py_call(files.append, filename)
             _ = py_call(files.sort)
         elif native_path_exists(single):
+            mods.released()
+            mods.released()
             _ = py_call(files.append, single)
         else:
+            mods.released()
+            mods.released()
             var entries = py_call(_checkpoint_entries()["listdir"], path)
+            mods.released()
             for i in range(len(entries)):  # driver-loop: find an unambiguous native checkpoint file
                 if Bool(py=py_call_typed(entries[i].endswith, ".safetensors")):
                     _ = py_call(files.append, py_call(path.rstrip, "/") + PythonObject("/") + entries[i])
             if len(files) != 1:
                 raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json (shard files alone are not an index)")
+        mods.released()
+        mods.released()
     elif native_path_exists(path):
+        mods.released()
+        mods.released()
         _ = py_call(files.append, path)
         var pieces = py_call(path.rsplit, "/", 1)
         root = pieces[0] if len(pieces) == 2 else PythonObject(".")
         if len(root) == 0:
             root = PythonObject("/")
     else:
+        mods.released()
+        mods.released()
         raise Error("FileNotFoundError: checkpoint path does not exist")
+    mods.released()
+    mods.released()
     var value = py_call(bi.object.__new__, cls)
     _ = checkpoint_init_binding(mods, value, files, weight_map, root)
     return value
@@ -630,7 +661,9 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
         return checkpoint_array(mods, py_call(mods.module("builtins").bytes), source.shape, "f", cls)
     var linalg = context["linalg_context"]
     var binding = lin_connected_binding(linalg)
+    mods.released()
     var result = _lin_from_f16(Python.tuple(binding, source), linalg)
+    mods.released()
     _ = source
     _ = captured
     _ = value

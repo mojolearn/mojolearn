@@ -196,6 +196,7 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
     var parallel = py_get(entries, "parallel_call")
     if parallel is not None:
         var routing = py_call(parallel, "capture_model", Python.list(model, fields))
+        mods.released()
         neural_string_keys(mods, routing)
         _ = py_call(fields.update, routing)
     else:
@@ -308,9 +309,11 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
             try:
                 if parallel is not None:
                     layer = py_call(parallel, "capture_state", Python.list(layers[i], model))
+                    mods.released()
                 else:
                     layer = causal_layer_capture(mods, layers[i], model.kind, context)
             except problem:
+                mods.released()
                 # Retain the original execution position of invalid layer
                 # state. Native execution raises here only when it reaches
                 # this layer, preserving earlier partial progress.

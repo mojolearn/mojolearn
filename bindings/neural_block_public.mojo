@@ -47,6 +47,7 @@ def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: Py
     var bindings = _model_bindings(mods, route, kind, context, mode)
     if kind == "transformer" and _native_has_entry(mods, bindings[kind], "transformer_arithmetic_profile"):
         var next_profile = _native_function(mods, bindings[kind], "transformer_arithmetic_profile")()
+        mods.released()
         var want_mode = _neural_default_mode(mods, context) if mode is None else mode
         var saved = py_get(fields, "_arithmetic_profile")
         if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == want_mode) and not Bool(py=saved == next_profile):
@@ -54,6 +55,7 @@ def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: Py
         py_setitem(fields, "_arithmetic_profile", next_profile)
         py_setitem(fields, "_arithmetic_profile_mode", want_mode)
         py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())
+        mods.released()
     var owner = py_call(mods.module("types").SimpleNamespace)
     py_setattr(owner, "_native_block_fields", Python.list(fields))
     py_setattr(owner, "_native_block_live", live)
@@ -317,6 +319,7 @@ def _neural_plain(mut mods: NativeModules, owner: PythonObject, x: PythonObject,
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
     if locked:
         lock_lease.acquire()
+        mods.released()
     try:
         if transformer and fields["_native_session"] is not None and (not reuse or fields["_session_binding"] is not e["block_binding"]):
             causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
@@ -350,17 +353,23 @@ def _neural_plain(mut mods: NativeModules, owner: PythonObject, x: PythonObject,
                 if fresh_session:
                     if fields["_native_session"] is None:
                         py_setitem(fields, "_native_session", e["create"]())
+                        mods.released()
                         py_setitem(fields, "_session_binding", e["block_binding"])
                     if native is not None:
                         var session_owner = fields["_native_session"]
                         var handle = Int(py=py_call(e["transformer_native_session_handle_v1"], session_owner))
+                        mods.released()
                         _ = neural_descriptor_reserved_execute(native, session_owner, handle, 0, 1, 2, addresses, params, [])
+                        mods.released()
                     else:
                         _ = py_call(e["transformer_session_forward_fresh"], fields["_native_session"], py_ints(addresses), py_ints(params))
+                        mods.released()
                 elif native is not None:
                     _ = neural_descriptor_execute(native, 4, addresses, params, [])
+                    mods.released()
                 else:
                     _ = py_call(e["transformer_forward_fresh"], py_ints(addresses), py_ints(params))
+                    mods.released()
                 if locked:
                     lock_lease.release()
                 _ = keep^
@@ -374,6 +383,7 @@ def _neural_plain(mut mods: NativeModules, owner: PythonObject, x: PythonObject,
             lock_lease.release()
         return result
     except error:
+        mods.released()
         if locked:
             lock_lease.release()
         if supplied_state is not None and String(owner.kind) == "mamba1":
@@ -467,6 +477,7 @@ def neural_block_forward_binding(mut mods: NativeModules, block: PythonObject, i
         _neural_publish_block(owner)
         return result
     except error:
+        mods.released()
         _neural_publish_state(state_value, captured)
         _neural_publish_block(owner)
         raise error^
@@ -497,7 +508,9 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
     if py_type(entries) is bi.str:
         raise Error("RuntimeError: " + String(entries))
     var vendor = String(_native_function(mods, entries, family + "_vendor")())
+    mods.released()
     var code = Int(py=_native_function(mods, entries, family + "_numeric_mode")())
+    mods.released()
     if code != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: native training binding numeric mode differs from the block")
     if String(fields["_native_route"]) == "cpu":
@@ -507,28 +520,33 @@ def neural_training_entries(mut mods: NativeModules, fields: PythonObject, conte
         raise Error("RuntimeError: GPU backward requires native GPU kernels")
     if family == "transformer" and _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
         var profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
+        mods.released()
         var saved = py_get(fields, "_arithmetic_profile")
         if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == mode) and not Bool(py=saved == profile):
             raise Error("RuntimeError: saved transformer arithmetic profile differs from training binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
         py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, entries, "transformer_arithmetic_profile_changed")())
+        mods.released()
     if family == "transformer":
         var native = PythonObject(None)
         if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
                 _native_function(mods, entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+            mods.released()
         py_setitem(fields, "_native_block_provider_cache", native)
     else:
         var native = PythonObject(None)
         if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
+            mods.released()
         py_setitem(fields, "_native_mamba_block_provider_cache", native)
         var state_provider = PythonObject(None)
         if native is not None:
             state_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
                 _native_function(mods, entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
+            mods.released()
         py_setitem(fields, "_native_mamba_state", state_provider)
     return entries
 
@@ -554,8 +572,11 @@ def neural_mamba_session_call(mut mods: NativeModules, native: PythonObject, fie
     var session = fields["_prefill_session"]
     var handle = neural_descriptor_handle(native,
         _native_function(mods, entries, "mamba_prefill_native_handle_v1"), session)
-    return neural_descriptor_reserved_execute(native, session, handle, 0, 1, operation,
+    mods.released()
+    var windowed_result9 = neural_descriptor_reserved_execute(native, session, handle, 0, 1, operation,
         addresses, params, [])
+    mods.released()
+    return windowed_result9^
 
 
 def neural_mamba_session_call(native: PythonObject, fields: PythonObject, entries: PythonObject,
@@ -569,9 +590,12 @@ def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries
     var bi = mods.module("builtins")
     if Bool(py=py_get(fields, "_owned_restore_pending", PythonObject(False))):
         if not _native_has_entry(mods, entries, "mamba3_owned_weights_enabled") or not Bool(py=_native_function(mods, entries, "mamba3_owned_weights_enabled")()):
+            mods.released()
             raise Error("RuntimeError: Mamba3 owned weights require the compiled owned-weight entry")
+        mods.released()
         if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
             py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
+            mods.released()
             py_setitem(fields, "_prefill_binding", entries.canonical)
         var addresses = bi.list()
         for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
@@ -583,6 +607,7 @@ def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries
             py_setitem(fields, "_owned_generation", PythonObject(generation))
         else:
             py_setitem(fields, "_owned_generation", py_call(_native_function(mods, entries, "mamba3_prefill_session_install_weights"), fields["_prefill_session"], addresses, fields["d_model"]))
+            mods.released()
         py_setitem(fields, "_owned_native_provider", native)
         py_setitem(fields, "_owned_restore_pending", False)
     if py_get(fields, "_owned_generation") is not None:
@@ -604,6 +629,7 @@ def neural_block_backward_binding(mut mods: NativeModules, block: PythonObject, 
         _neural_publish_fields(fields)
         return result
     except error:
+        mods.released()
         _neural_publish_fields(fields)
         raise error^
 
@@ -647,6 +673,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         var finite = 0
         with GILReleased(Python()):
             finite = all_finite_f32(grad_pointer, grad_count)
+        mods.released()
         if finite != 1:
             raise Error("neural backward: grad_output must be finite")
         # Preserve the existing current-weight shape validation without
@@ -683,6 +710,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         var lock = fields["_runtime_lock"]
         var lock_lease = OperationLockLease(lock)
         lock_lease.acquire()
+        mods.released()
         try:
             var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
@@ -692,25 +720,32 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                     py_setitem(fields, "_session_binding", PythonObject(None))
                 if fields["_native_session"] is None:
                     py_setitem(fields, "_native_session", _native_function(mods, entries, "transformer_session_create")())
+                    mods.released()
                     py_setitem(fields, "_session_binding", entries.canonical)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     var session_owner = fields["_native_session"]
                     var handle = Int(py=py_call(_native_function(mods, entries, "transformer_native_session_handle_v1"), session_owner))
+                    mods.released()
                     _ = neural_descriptor_reserved_execute(native, session_owner, handle, 0, 1, 3,
                         _neural_int_words(addresses), _neural_int_words(params), [])
+                    mods.released()
                 else:
                     _ = py_call(_native_function(mods, entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
+                    mods.released()
             else:
                 if fields["_native_session"] is not None and _native_has_entry(mods, entries, "transformer_session_invalidate_tape"):
                     causal_transformer_admin(mods, entries, fields["_native_session"], 12)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
+                    mods.released()
                 else:
                     _ = py_call(_native_function(mods, entries, name), addresses, params)
+                    mods.released()
             lock_lease.release()
         except error:
+            mods.released()
             lock_lease.release()
             raise error
     else:
@@ -731,20 +766,25 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                         _neural_int_words(owned_addresses), _neural_int_words(params))
                 else:
                     _ = py_call(_native_function(mods, entries, "mamba3_prefill_session_backward_owned"), fields["_prefill_session"], owned_addresses, params)
+                    mods.released()
             elif session:
                 if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
                     py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
+                    mods.released()
                     py_setitem(fields, "_prefill_binding", entries.canonical)
                 if native is not None:
                     _ = neural_mamba_session_call(mods, native, fields, entries, 7,
                         _neural_int_words(addresses), _neural_int_words(params))
                 else:
                     _ = py_call(_native_function(mods, entries, "mamba3_prefill_session_backward"), fields["_prefill_session"], addresses, params)
+                    mods.released()
             else:
                 if native is not None:
                     _ = neural_descriptor_execute(native, 4, _neural_int_words(addresses), _neural_int_words(params), [])
+                    mods.released()
                 else:
                     _ = py_call(_native_function(mods, entries, name), addresses, params)
+                    mods.released()
         else:
             if native is not None:
                 var words: List[Int] = [Int(py=params[0]), Int(py=params[1]), Int(py=params[2])]
@@ -754,8 +794,10 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                     floats.append(Float64(py=params[4]))
                 _ = neural_descriptor_execute(native, 3 if kind == "mamba2" else 2,
                     _neural_int_words(addresses), words, floats)
+                mods.released()
             else:
                 _ = py_call(_native_function(mods, entries, name), addresses, params)
+                mods.released()
     var result = bi.dict()
     py_setitem(result, "x", gradients[0])
     var names = fields["_neural_weight_names"]
@@ -782,15 +824,18 @@ def neural_block_getstate_binding(mut mods: NativeModules, block: PythonObject, 
     var saved_mode = py_get(fields, "_arithmetic_profile_mode", PythonObject("identical") if saved is not None else PythonObject(None))
     if _native_has_entry(mods, entries, "transformer_numeric_mode"):
         var code = Int(py=_native_function(mods, entries, "transformer_numeric_mode")())
+        mods.released()
         if code != (1 if String(mode) == "identical" else 0):
             raise Error("RuntimeError: transformer serialized model numeric mode differs from binding")
     if _native_has_entry(mods, entries, "transformer_arithmetic_profile"):
         var profile = _native_function(mods, entries, "transformer_arithmetic_profile")()
+        mods.released()
         if saved is not None and Bool(py=saved_mode == mode) and not Bool(py=saved == profile):
             raise Error("transformer serialized model arithmetic profile differs from binding")
         py_setitem(fields, "_arithmetic_profile", profile)
         py_setitem(fields, "_arithmetic_profile_mode", mode)
         py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, entries, "transformer_arithmetic_profile_changed")())
+        mods.released()
     elif saved is not None:
         raise Error("transformer: a tagged model requires a binding that reports its arithmetic profile")
     var result = py_call(bi.dict, fields)
@@ -819,14 +864,17 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
         mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
     if String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
         py_setitem(fields, "_runtime_lock", operation_lock_create())
+        mods.released()
     else:
         py_setitem(fields, "_runtime_lock", context["rlock"]())
+        mods.released()
     var session = PythonObject(None)
     var binding = PythonObject(None)
     if String(fields["_native_route"]) == "gpu" and String(mode) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
         var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)
         binding = bindings["transformer"]
         session = _native_function(mods, binding, "transformer_session_create")()
+        mods.released()
     py_setitem(fields, "_native_session", session)
     py_setitem(fields, "_session_binding", binding)
     py_setitem(fields, "_native_forward_owner", PythonObject(None))

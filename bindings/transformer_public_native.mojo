@@ -365,13 +365,17 @@ def _transformer_tape_provider(mut mods: NativeModules, entries: PythonObject) r
     # The ticket retains this provider through backward/discard. Keep it out
     # of model state: ordinary getstate/setstate remains unchanged, and the
     # existing 36-operation block caches need not be resized or invalidated.
-    return neural_descriptor_connect(_transformer_native_entry(mods, entries, "transformer_block_api_v1"),
+    var windowed_result19 = neural_descriptor_connect(_transformer_native_entry(mods, entries, "transformer_block_api_v1"),
         String(TRANSFORMER_BLOCK_ABI_NAME), 41)
+    mods.released()
+    return windowed_result19^
 
 
 def _transformer_tape_handle(mut mods: NativeModules, provider: PythonObject, entries: PythonObject, session: PythonObject) raises -> Int:
-    return neural_descriptor_handle(provider,
+    var windowed_result18 = neural_descriptor_handle(provider,
         _transformer_native_entry(mods, entries, "transformer_native_session_handle_v1"), session)
+    mods.released()
+    return windowed_result18^
 
 
 def _transformer_old_binding(mut mods: NativeModules, binding: PythonObject, neural: PythonObject) raises -> PythonObject:
@@ -397,7 +401,9 @@ def _transformer_tape_entries(mut mods: NativeModules, block: PythonObject, fiel
         raise Error("NotImplementedError: Transformer training tape requires default FP32 block options")
     var entries = neural_training_entries(mods, fields, neural)
     if Int(py=_transformer_native_entry(mods, entries, "transformer_numeric_mode")()) != 1:
+        mods.released()
         raise Error("NotImplementedError: Transformer training tape requires identical mode")
+    mods.released()
     var live = fields["_neural_live_fields"]
     for key in [String("_arithmetic_profile"), String("_arithmetic_profile_mode"), String("_arithmetic_profile_changed")]:  # driver-loop: binding profile bookkeeping on the live owner
         py_setitem(live, key, fields[key])
@@ -486,6 +492,7 @@ def transformer_forward_with_tape(mut mods: NativeModules, block: PythonObject, 
         configuration[3], configuration[4], configuration[5], budget, cost]
     var lease = OperationLockLease(fields["_runtime_lock"])
     lease.acquire()
+    mods.released()
     var tape = PythonObject(None)
     try:
         var session = live["_native_session"]
@@ -496,21 +503,25 @@ def transformer_forward_with_tape(mut mods: NativeModules, block: PythonObject, 
             # idempotent, while the existing GPU handle-admission entry rejects
             # closed owners. No numerical work uses this compiled close door.
             _ = py_call(_transformer_native_entry(mods, previous, "transformer_session_close"), session)
+            mods.released()
             session = PythonObject(None)
             py_setitem(live, "_native_session", session)
             py_setitem(live, "_session_binding", PythonObject(None))
         if session is None:
             session = neural_descriptor_construct(provider, _transformer_native_entry(mods, entries, "transformer_session_create"))
+            mods.released()
             py_setitem(live, "_native_session", session)
             py_setitem(live, "_session_binding", entries.canonical)
         py_setitem(fields, "_native_session", session)
         var handle = _transformer_tape_handle(mods, provider, entries, session)
         var report = transformer_session_tape_forward(provider, session, handle, addresses, params)
+        mods.released()
         tape = py_call(mods.module("builtins").object.__new__, context["tape_class"])
         _transformer_tape_publish(mods, tape, block, fields, entries, provider, handle,
             py_ints(report), shape.copy(), weight_shapes^, context)
         lease.release()
     except problem:
+        mods.released()
         lease.release()
         raise problem
     _ = keep^
@@ -577,6 +588,7 @@ def transformer_backward_from_tape(mut mods: NativeModules, block: PythonObject,
     _model_shape(dy, owner[].shape, "Transformer tape grad_output")
     var lease = OperationLockLease(fields["_runtime_lock"])
     lease.acquire()
+    mods.released()
     var result = Python.dict()
     try:
         if (owner[].consumed or owner[].session is not fields["_native_session"]
@@ -601,9 +613,11 @@ def transformer_backward_from_tape(mut mods: NativeModules, block: PythonObject,
         py_setitem(slots, "_consumed", PythonObject(True))
         transformer_session_tape_backward(owner[].provider, owner[].session, owner[].handle,
             addresses, owner[].token[0], owner[].token[1])
+        mods.released()
         _ = keep^
         lease.release()
     except problem:
+        mods.released()
         lease.release()
         raise problem
     _ = dy^
@@ -619,14 +633,17 @@ def transformer_tape_close(mut mods: NativeModules, tape: PythonObject, context:
     _ = neural_record_fields(mods, owner[].block, Python.tuple("_native_session", "_runtime_lock"))
     var lease = OperationLockLease(fields["_runtime_lock"])
     lease.acquire()
+    mods.released()
     try:
         if not owner[].consumed and owner[].session is fields["_native_session"]:
             transformer_session_tape_discard(owner[].provider, owner[].session, owner[].handle,
                 owner[].token[0], owner[].token[1])
+            mods.released()
         owner[].consumed = True
         py_setitem(slots, "_consumed", PythonObject(True))
         lease.release()
     except problem:
+        mods.released()
         lease.release()
         raise problem
     _ = hobj

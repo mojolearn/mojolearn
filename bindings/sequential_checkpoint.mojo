@@ -37,16 +37,24 @@ def _sidecar(mut mods: NativeModules, model: PythonObject, path: PythonObject, e
     var fields = sequential_fields(model)
     var x = sequential_array(mods, Python.tuple(16, fields["n_features_in_"]), context["float32"], context)
     _ = py_call_typed(entries["verify_fill"], sequential_address(x), x.size, PythonObject(0), PythonObject(0))
+    mods.released()
     var output = sequential_forward(mods, model, x, 0, PythonObject(None), entries, context)
     var input_json = _report_array(x, "X", True, entries)
+    mods.released()
     var output_json = _report_array(output, "output", False, entries)
+    mods.released()
     var sha = py_call_typed(entries["verify_file_sha256"], path)
+    mods.released()
     var info = py_call_typed(entries["verify_model_info"], path)
+    mods.released()
     var file = String(path)
     var parts = file.split("/")
     var uname = context["uname"]()
+    mods.released()
     var vendor = String(entries["x_sequence_vendor"]())
+    mods.released()
     var mode = "identical" if Int(py=entries["x_sequence_numeric_mode"]()) == 1 else "fast"
+    mods.released()
     var report = "{\"format\":\"mojolearn-model-verify/1\",\"install\":{\"mojolearn_version\":"
     report += _quote(String(context["version"])) + ",\"numeric_mode\":" + _quote(mode)
     report += ",\"vendor\":" + _quote(vendor) + ",\"device\":" + _quote(vendor + " native executor")
@@ -57,6 +65,7 @@ def _sidecar(mut mods: NativeModules, model: PythonObject, path: PythonObject, e
     report += input_json + "],\"outputs\":[" + output_json + "]}\n"
     with open(file + ".verify.json", "w") as stream:
         stream.write(report)
+        mods.released()
 
 
 def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonObject, export: Bool, context: PythonObject) raises -> PythonObject:
@@ -86,8 +95,10 @@ def sequential_save(mut mods: NativeModules, model: PythonObject, path: PythonOb
     var descriptor = PythonObject(None) if count == 0 else sequential_descriptor(classes, "classes")
     var program = sequential_program(mods, model, fields["n_features_in_"], PythonObject(None))
     var entries = sequential_entries(model, context)
+    mods.released()
     var normalized = native_path(path)
     _ = py_call_typed(entries["model_save_checkpoint"], normalized, addresses, program, ip, fp, descriptor)
+    mods.released()
     _sidecar(mods, model, normalized, entries, context)
     _ = fields^
     _ = classes^
@@ -104,8 +115,10 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
     py_setitem(fields, "_layers", Python.list())
     py_setitem(fields, "_options", PythonObject(None))
     var entries = sequential_entries(model, context)
+    mods.released()
     var normalized = native_path(path)
     var description = py_call_typed(entries["model_checkpoint_info"], normalized)
+    mods.released()
     var export = Bool(py=description[0])
     var layers = description[1]
     var ip = description[2]
@@ -150,6 +163,7 @@ def sequential_load_checkpoint(mut mods: NativeModules, cls: PythonObject, path:
         py_setitem(addresses, 3, sequential_address(state))
         py_setitem(addresses, 4, sequential_address(curve))
     _ = py_call_typed(entries["model_load_checkpoint"], normalized, addresses)
+    mods.released()
     py_setitem(fields, "params_", params)
     py_setitem(fields, "n_features_in_", ip[9])
     py_setitem(fields, "n_outputs_", ip[10])

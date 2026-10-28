@@ -76,6 +76,7 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
         raise Error("TypeError: source='torch' takes a mapping of names to tensors (a dict or OrderedDict)")
     var owners = Python.list()
     var values = _checkpoint(source, owners) if path else source
+    mods.released()
     var held = py_call(b.list, values.keys())
     var known = py_call(b.set, held)
     var missing = Python.list()
@@ -108,6 +109,7 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
             value = sequential_input(value, context)
         _ = py_call(tensor_owners.append, value)
         var record = _record(keys[k], Int(py=requests[k][0]), 0, value, path, scalar_owners)
+        mods.released()
         py_setitem(record, 1, requests[k][1])
         _ = py_call(records.extend, record)
     var sample = PythonObject(None)
@@ -134,9 +136,12 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
     var program = sequential_program(mods, model, PythonObject(width), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
+    mods.released()
     var counts = py_call_typed(entries["model_n_params"], program, table)
+    mods.released()
     var params = sequential_array(mods, Python.tuple(counts[0]), context["float32"], context)
     counts = py_call_typed(entries["model_import_params"], program, table, records, keys, sequential_address(params))
+    mods.released()
     # Raw addresses remain borrowed until the native transfer has completed.
     _ = owners^
     _ = tensor_owners^

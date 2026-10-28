@@ -77,6 +77,7 @@ def sequential_admit_value(mut mods: NativeModules, value: PythonObject, context
             if factory is not None and not _one_of(factory, context["native_default_factories"]) and not _one_of(factory, context["scalar_types"]):
                 raise Error("TypeError: Sequential defaultdict requires a native builtin default factory or None")
         var pairs = py_call(py_type(Python.list()), value.items())
+        mods.released()
         for k in range(len(pairs)):  # driver-loop: over native mapping keys and buffer owners
             sequential_admit_value(mods, pairs[k][0], context, depth + 1)
             sequential_admit_value(mods, pairs[k][1], context, depth + 1)
@@ -90,8 +91,11 @@ def sequential_admit_value(mut mods: NativeModules, value: PythonObject, context
             raise Error("TypeError: Sequential requires a memoryview over a native buffer owner")
         return
     if _ordinary_torch(cls, context):
+        mods.released()
         native_torch_admit(value)
+        mods.released()
         return
+    mods.released()
     raise Error("TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported")
 
 

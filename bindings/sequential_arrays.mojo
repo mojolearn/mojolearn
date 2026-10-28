@@ -13,7 +13,10 @@ def sequential_array(mut mods: NativeModules, shape: PythonObject, dtype: Python
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
     var storage = py_call(context["native_bytearray_type"], count * Int(py=dtype.itemsize))
-    return py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
+    mods.released()
+    var windowed_result13 = py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
+    mods.released()
+    return windowed_result13^
 
 
 def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -128,12 +128,14 @@ def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, li
     if format == "bfloat16":
         var bits = checkpoint_array(mods, py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
         _ = py_call(_native_function(mods, linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
+        mods.released()
         _ = bits  # keep the Python object alive through the native call above
         py_setitem(fields, "bits", bits)
     else:
         var codes = generation_array([rows, cols], "b")
         var exponents = generation_array([rows], "i")
         _ = py_call(_native_function(mods, linalg, "quantize_int8"), codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
+        mods.released()
         _ = exponents  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         py_setitem(fields, "codes", codes)
@@ -155,6 +157,7 @@ def _model_unpack(mut mods: NativeModules, value: PythonObject, linalg: PythonOb
         var bits = _model_native_buffer(mods, fields["bits"], "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
         _ = py_call(_native_function(mods, linalg, "from_bf16"), out._addr, bits._addr, py_ints([rows * cols]))
+        mods.released()
         _ = bits  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
         _ = bits^  # read by address above
@@ -164,6 +167,7 @@ def _model_unpack(mut mods: NativeModules, value: PythonObject, linalg: PythonOb
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
         _ = py_call(_native_function(mods, linalg, "dequantize_int8"), out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
+        mods.released()
         _ = exponents  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
@@ -186,6 +190,7 @@ def _model_quantize15(mut mods: NativeModules, value: PythonObject, linalg: Pyth
     var lo = generation_array([rows, cols], "b")
     var exponents = generation_array([rows], "i")
     _ = py_call(_native_function(mods, linalg, "quantize_int15"), py_ints([Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)]), py_ints([rows, cols]))
+    mods.released()
     _ = exponents  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
@@ -279,7 +284,9 @@ def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, 
         raise Error("CausalLM: " + String(block))
     var prefix = ("transformer" if kind == "transformer" else "mamba") if String(route) == "gpu" else "neural_host"
     var vendor = String(_native_function(mods, block, prefix + "_vendor")())
+    mods.released()
     var mode_code = Int(py=_native_function(mods, block, prefix + "_numeric_mode")())
+    mods.released()
     if String(route) == "cpu" and vendor != "cpu":
         raise Error("CausalLM: CPU route requires native CPU kernels")
     if String(route) == "gpu" and vendor != "metal" and vendor != "cuda" and vendor != "hip":
@@ -289,7 +296,9 @@ def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, 
     var arithmetic = entries["linalg"]
     if py_type(arithmetic) is not mods.module("builtins").str:
         if String(_native_function(mods, arithmetic, "linalg_vendor")()) != vendor or Int(py=_native_function(mods, arithmetic, "linalg_numeric_mode")()) != mode_code:
+            mods.released()
             raise Error("CausalLM: packed weight binding vendor or mode differs from model")
+        mods.released()
     return entries
 
 
@@ -503,21 +512,26 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         py_setitem(fields, "_gated", PythonObject(gated))
         if String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             py_setitem(fields, "_runtime_lock", operation_lock_create())
+            mods.released()
         else:
             py_setitem(fields, "_runtime_lock", context["rlock"]())
+            mods.released()
         var session = PythonObject(None)
         var session_binding = PythonObject(None)
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             if _native_has_entry(mods, bindings[kind], "transformer_session_create"):
                 session = _native_function(mods, bindings[kind], "transformer_session_create")()
+                mods.released()
                 session_binding = bindings[kind]
         py_setitem(fields, "_native_session", session)
         py_setitem(fields, "_session_binding", session_binding)
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
         if _native_has_entry(mods, bindings[kind], "transformer_arithmetic_profile"):
             py_setitem(fields, "_arithmetic_profile", _native_function(mods, bindings[kind], "transformer_arithmetic_profile")())
+            mods.released()
             py_setitem(fields, "_arithmetic_profile_mode", fields["numeric_mode"])
             py_setitem(fields, "_arithmetic_profile_changed", _native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())
+            mods.released()
         py_setitem(fields, "numeric_profile", profile)
         _ = py_call(shapes.append, py_ints([dm]))
         _ = py_call(shapes.append, py_ints([dm]))
@@ -640,9 +654,11 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             if _native_has_entry(mods, bindings[kind], "mamba3_prefill_session_create"):
                 py_setitem(fields, "_prefill_session", _native_function(mods, bindings[kind], "mamba3_prefill_session_create")())
+                mods.released()
                 py_setitem(fields, "_prefill_binding", bindings[kind])
         _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
             String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
+        mods.released()
     return block
 
 
@@ -818,6 +834,7 @@ def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, inpu
     try:
         _ = causal_lm_admit_binding(mods, admission, bindings[plan["kind"]], bindings["primitives"], bindings["linalg"] if captured["_head_int15"] is not None else PythonObject(None))
     except problem:
+        mods.released()
         _model_construction_admission(mods, live, admitted)
         raise problem
     _model_construction_admission(mods, live, admitted)
@@ -907,7 +924,9 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
         _model_profile_named(mods, options[3], context)
     var path = native_path(path_value)
     if not native_path_exists(path, True):
+        mods.released()
         raise Error("FileNotFoundError: CausalLM.load requires a checkpoint directory")
+    mods.released()
     var config = config_load_binding(mods, context["config_context"]["config_class"], path)
     var plan = model_plan_for_binding(mods, config, context["config_context"])
     var plan_fields = model_plan_snapshot(mods, plan)
@@ -918,6 +937,7 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
     try:
         weights = causal_model_read_weights_binding(mods, checkpoint, plan, options[0], route, context)
     except error:
+        mods.released()
         _ = checkpoint_close_binding(mods, checkpoint)
         raise error
     _ = checkpoint_close_binding(mods, checkpoint)
