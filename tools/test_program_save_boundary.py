@@ -26,7 +26,7 @@ def test_names_are_passive_and_keep_unnamed_count_fallback():
     assert source.index('py_type(entries) is not b.list') < source.index('len(entries)')
     assert source.index('py_type(row) is not b.list') < source.index('len(row)')
     assert source.index('py_type(row[0]) is not b.str') < source.index('String(py=row[0])')
-    assert 'if entries is None:\n        return out^' in source
+    assert 'if not py_contains(fields, attribute):\n        return out^' in source
     assert 'if len(entries) != count:\n        return out^' in source
 
 

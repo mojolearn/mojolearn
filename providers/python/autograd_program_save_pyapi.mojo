@@ -2,7 +2,7 @@
 # Provider boundary for native checkpoints and verification sidecars. Admit
 # the exact owner and passive metadata before reading any user-set field.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_fields, py_get
+from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session, ops_session_registry_token
@@ -33,9 +33,9 @@ def _names(fields: PythonObject, attribute: String, count: Int) raises -> List[S
     # descriptors, len/index hooks, or arbitrary name string conversions.
     var out = List[String]()
     var b = native_loaded_module("builtins")
-    var entries = py_get(fields, attribute)
-    if entries is None:
+    if not py_contains(fields, attribute):
         return out^
+    var entries = fields[PythonObject(attribute)]
     if py_type(entries) is not b.list and py_type(entries) is not b.tuple:
         raise Error("TypeError: program names require an exact list or tuple")
     if len(entries) != count:
