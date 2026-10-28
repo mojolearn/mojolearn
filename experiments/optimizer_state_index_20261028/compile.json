@@ -1,0 +1,50 @@
+{
+  "source_commit": "4f0eb800538643de7dff345f5ed7ee83d7bf9d48",
+  "target": "Mac arm64 CPU",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "flags": [
+    "--emit",
+    "shared-lib",
+    "--optimization-level",
+    "0",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    ".",
+    "-I",
+    "bindings"
+  ],
+  "compile_slot": "MOJOLEARN_COMPILE_SLOTS=4 bash tools/compile_slot.sh",
+  "compiler_environment": "pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+  "entry": "experiments/optimizer_state_index_20261028/compile.mojo",
+  "exit_code": 0,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/optimizer-state-index-20261028/optimizer-complete.dylib",
+  "binary_sha256": "0f9385fdae98c6391f4a9ac5e8a8191ee49422cb8a2a522e314ad176da4aef77",
+  "log": "/Users/andrewhendel/mojolearn-evidence/optimizer-state-index-20261028/compile-complete.log",
+  "source_closure": "/Users/andrewhendel/mojolearn-evidence/optimizer-state-index-20261028/source-closure.json",
+  "retained_source_bytes": "/Users/andrewhendel/mojolearn-evidence/optimizer-state-index-20261028/source-closure.tar.gz",
+  "source_closure_files": 112,
+  "coverage": [
+    "HostExec OpsSession construction and optimizer creation",
+    "state lookup/allocation and optimizer step",
+    "parameter free/retirement, reset and close"
+  ],
+  "earlier_compiles": [
+    {
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/optimizer-state-index-20261028/compile.log",
+      "reason": "Nested dictionary lookup may raise inside non-raising retirement; replaced outer map with optimizer-indexed native List"
+    },
+    {
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/optimizer-state-index-20261028/compile-final.log",
+      "scope": "same product source; probe lacked optimizer creation; final probe adds that changed path"
+    }
+  ],
+  "runtime_executed": false,
+  "performance_measured": false,
+  "cross_vendor_identity_executed": false,
+  "rented_boxes": []
+}
