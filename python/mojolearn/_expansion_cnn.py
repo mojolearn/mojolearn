@@ -1625,35 +1625,16 @@ class BasicBlock(_Layer):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, random_state=0, input_shape=None,
                  numeric_mode=None):
-        s = int(random_state or 0)
-        self.numeric_mode = numeric_mode
-        self.input_shape = input_shape
-        self.conv1 = Conv2d(inplanes, planes, 3, stride=stride, padding=1, bias=False, random_state=s,
-                            numeric_mode=numeric_mode)
-        self.bn1 = BatchNorm2d(planes, numeric_mode=numeric_mode)
-        self.relu1 = _ReLU(numeric_mode)
-        self.conv2 = Conv2d(planes, planes, 3, padding=1, bias=False, random_state=s + 1, numeric_mode=numeric_mode)
-        self.bn2 = BatchNorm2d(planes, numeric_mode=numeric_mode)
-        self.relu2 = _ReLU(numeric_mode)
-        if downsample is None and (stride != 1 or inplanes != planes):
-            downsample = True
-        self.downsample = None
-        if downsample:
-            self.downsample = [Conv2d(inplanes, planes, 1, stride=stride, bias=False, random_state=s + 2,
-                                      numeric_mode=numeric_mode), BatchNorm2d(planes, numeric_mode=numeric_mode)]
-        self.training = True
+        _XCNN(self, "block_init", (inplanes, planes, stride, downsample, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
 
     def _bns(self):
         return [self.bn1, self.bn2] + ([self.downsample[1]] if self.downsample else [])
 
     def train(self, mode=True):
-        self.training = bool(mode)
-        for bn in self._bns():  # glue: walks the block BatchNorm layers
-            bn.train(mode)
-        return self
+        return _XCNN(self, "block_train", (mode,), _XCNN_CONTEXT)
 
     def eval(self):
-        return self.train(False)
+        return _XCNN(self, "block_train", (False,), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding the block
     # runs on resident device arrays (`_Dev`): x goes up once, y comes down
@@ -1721,32 +1702,16 @@ class BasicBlock(_Layer):
         return _XCNN(self, "block_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        b = self._binding()
-        if self.__dict__.get("_chain") is not None and self._dev.b is b:
-            return self._backward_chain(b, grad_out)
-        if _is_t(grad_out):
-            return DeviceTensor._wrap(b, self.backward(grad_out.numpy()))
-        g = self.relu2.backward(grad_out)
-        gm = self.conv1.backward(self.bn1.backward(self.relu1.backward(self.conv2.backward(self.bn2.backward(g)))))
-        gi = g
-        if self.downsample:
-            gi = self.downsample[0].backward(self.downsample[1].backward(g))
-        return _add(self._binding(), gm, gi)
+        return _XCNN(self, "block_backward", (grad_out,), _XCNN_CONTEXT)
 
     def parameters(self):
-        out = []
-        layers = [self.conv1, self.bn1, self.conv2, self.bn2] + (self.downsample or [])
-        for layer in layers:  # glue: walks the block layer list
-            out.append((layer, "weight_", "grad_weight_"))
-            if isinstance(layer, BatchNorm2d):
-                out.append((layer, "bias_", "grad_bias_"))
-        return out
+        return _XCNN(self, "block_parameters", (), _XCNN_CONTEXT)
 
     def transform(self, X):
         return _XCNN(self, "block_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
-        return self
+        return _XCNN(self, "block_fit", (), _XCNN_CONTEXT)
 
 
 def _gemm(binding, a, b, m, n, k, op):
@@ -2077,6 +2042,7 @@ class SAGEConv(_Layer):
 
 
 _native_xcnn_bridge.register(
+    xcnn_bn_class=BatchNorm2d, xcnn_block_class=BasicBlock,
     xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
     xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
     xcnn_device_io_off=_DEVICE_IO_OFF, xcnn_graph_class=_Graph, xcnn_graph_key_class=_GraphKey,
