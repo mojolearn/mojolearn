@@ -898,71 +898,26 @@ class AvgPool1d(_Pool1dMixin, AvgPool2d):
 
 class _ReLU(_Layer):
     def __init__(self, numeric_mode=None):
-        self.numeric_mode = numeric_mode
+        _XCNN(self, "relu_init", (numeric_mode,), _XCNN_CONTEXT)
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane fam-neural (IDN_LAYER_DEV_IO): x and the output resident
-            # (`x_cnn_map2_m` kind 0, the host entry's element function)
-            b = self._binding()
-            if _on_dev(b, x) and _idn(b, _F_LAYER_IO) and x.size > 0:
-                out = DeviceTensor._new(b, x.shape)
-                b.x_cnn_map2_m([x.h, x.h, out.h], 0b111, [0, x.size])
-                self._x = x
-                return out
-        x = _f32(x, "x")
-        out = np.empty_like(x)
-        self._binding().x_cnn_relu_forward(x.ctypes.data, out.ctypes.data, [x.size])
-        self._x = x
-        return out
+        return _XCNN(self, "relu_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        if _is_t(self._x):
-            b = self._binding()
-            if _on_dev(b, grad_out, self._x) and grad_out.size == self._x.size:
-                dx = DeviceTensor._new(b, self._x.shape)
-                b.x_cnn_map2_m([self._x.h, grad_out.h, dx.h], 0b111, [1, dx.size])
-                return dx
-            self._x = self._x.numpy()
-        g = _f32(grad_out, "grad_out")
-        dx = np.empty_like(self._x)
-        self._binding().x_cnn_relu_backward(self._x.ctypes.data, g.ctypes.data, dx.ctypes.data, [g.size])
-        return dx
+        return _XCNN(self, "relu_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 class _Linear(_Layer):
     """y = x W^T + b on the pinned GEMM (PyTorch nn.Linear, default init)."""
 
     def __init__(self, in_features, out_features, random_state=0, numeric_mode=None):
-        np = _np()
-        self.in_features, self.out_features = int(in_features), int(out_features)
-        self.numeric_mode = numeric_mode
-        rng = _rng(random_state)
-        self.weight_ = _kaiming_uniform(rng, (self.out_features, self.in_features), self.in_features)
-        self.bias_ = _kaiming_uniform(rng, (self.out_features,), self.in_features)
+        _XCNN(self, "linear_init", (in_features, out_features, random_state, numeric_mode), _XCNN_CONTEXT)
 
     def forward(self, x):
-        np = _np()
-        x = _f32(x, "x")
-        out = np.empty((x.shape[0], self.out_features), np.float32)
-        self._binding().x_cnn_linear_forward(x.ctypes.data, self.weight_.ctypes.data, self.bias_.ctypes.data,
-                                             out.ctypes.data, [x.shape[0], self.in_features, self.out_features])
-        self._x = x
-        return out
+        return _XCNN(self, "linear_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
-        np = _np()
-        g = _f32(grad_out, "grad_out")
-        dx = np.empty_like(self._x)
-        dw = np.empty_like(self.weight_)
-        db = np.empty_like(self.bias_)
-        self._binding().x_cnn_linear_backward(self._x.ctypes.data, self.weight_.ctypes.data, g.ctypes.data,
-                                              dx.ctypes.data, dw.ctypes.data, db.ctypes.data,
-                                              [g.shape[0], self.in_features, self.out_features])
-        self.grad_weight_, self.grad_bias_ = dw, db
-        return dx
+        return _XCNN(self, "linear_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding=None):
@@ -1818,15 +1773,7 @@ class GCNConv(_Layer):
 
     def __init__(self, in_channels, out_channels, improved=False, add_self_loops=True, normalize=True, bias=True,
                  random_state=0, numeric_mode=None):
-        np = _np()
-        self.in_channels, self.out_channels = int(in_channels), int(out_channels)
-        self.improved, self.add_self_loops, self.normalize = bool(improved), bool(add_self_loops), bool(normalize)
-        self.bias = bool(bias)
-        self.numeric_mode = numeric_mode
-        rng = _rng(random_state)
-        bound = np.sqrt(6.0 / (self.in_channels + self.out_channels))  # glorot, PyG's Linear(weight_initializer='glorot')  # glue: scalar glorot bound of two sizes
-        self.weight_ = _uniform(rng, bound, (self.out_channels, self.in_channels))
-        self.bias_ = np.zeros(self.out_channels, np.float32)
+        _XCNN(self, "gcn_init", (in_channels, out_channels, improved, add_self_loops, normalize, bias, random_state, numeric_mode), _XCNN_CONTEXT)
 
     _device_io = True
 
@@ -1881,22 +1828,7 @@ class GCNConv(_Layer):
         return dx
 
     def backward(self, grad_out):
-        np = _np()
-        b = self._binding()
-        xd = self.__dict__.get("_xdev")
-        if _is_t(grad_out):
-            if xd is not None and xd[0].b is b and _on_dev(b, grad_out):
-                return self._backward_dev(b, grad_out)
-            return DeviceTensor._wrap(b, self.backward(grad_out.numpy()))
-        G = _f32(grad_out, "grad_out")
-        n = G.shape[0]
-        if xd is not None and xd[0].b is b:
-            return self._backward_dev(b, G)
-        self.grad_bias_ = (_gemm(b, G, np.ones(n, np.float32), self.out_channels, 1, n, 2).reshape(-1)
-                           if self.bias else np.zeros(self.out_channels, np.float32))
-        dh = self._g.spmm(b, self._g.vals_t(self._vals), G, 0, transposed=True)
-        self.grad_weight_ = _gemm(b, dh, self._x, self.out_channels, self.in_channels, n, 2)
-        return _gemm(b, dh, self.weight_, n, self.in_channels, self.out_channels, 0)
+        return _XCNN(self, "gcn_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 class SAGEConv(_Layer):
@@ -1912,26 +1844,7 @@ class SAGEConv(_Layer):
 
     def __init__(self, in_channels, out_channels, aggr="mean", normalize=False, root_weight=True, bias=True,
                  project=False, random_state=0, numeric_mode=None):
-        np = _np()
-        if aggr not in ("mean", "sum", "add", "max"):
-            raise NotImplementedError(f"mojolearn: SAGEConv aggr={aggr!r} is not implemented (NOT_IMPLEMENTED.tsv)")
-        self.normalize = bool(normalize)
-        self.in_channels, self.out_channels = int(in_channels), int(out_channels)
-        self.aggr, self.root_weight, self.bias = aggr, bool(root_weight), bool(bias)
-        self.numeric_mode = numeric_mode
-        rng = _rng(random_state)
-        self.lin_l = _Linear(self.in_channels, self.out_channels, random_state=rng.child_seed(),
-                             numeric_mode=numeric_mode)
-        if not self.bias:
-            self.lin_l.bias_[:] = 0
-        self.weight_r_ = _kaiming_uniform(rng, (self.out_channels, self.in_channels), self.in_channels)
-        # drawn last, so project=False keeps every earlier draw
-        self.project = bool(project)
-        self.lin = None
-        if self.project:
-            self.lin = _Linear(self.in_channels, self.in_channels, random_state=rng.child_seed(),
-                               numeric_mode=numeric_mode)
-            self._relu_p = _ReLU(numeric_mode)
+        _XCNN(self, "sage_init", (in_channels, out_channels, aggr, normalize, root_weight, bias, project, random_state, numeric_mode), _XCNN_CONTEXT)
 
     _device_io = True
 
@@ -2003,42 +1916,7 @@ class SAGEConv(_Layer):
         return dx
 
     def backward(self, grad_out):
-        np = _np()
-        b = self._binding()
-        xd = self.__dict__.get("_xdev")
-        if _is_t(grad_out):
-            if xd is not None and xd[0].b is b and _on_dev(b, grad_out):
-                return self._backward_dev(b, grad_out)
-            return DeviceTensor._wrap(b, self.backward(grad_out.numpy()))
-        G = _f32(grad_out, "grad_out")
-        n = G.shape[0]
-        if xd is not None and xd[0].b is b:
-            return self._backward_dev(b, G)
-        g = self._g
-        if self.normalize:
-            G2 = np.empty_like(G)
-            b.x_cnn_graph_op(self._y.ctypes.data, G.ctypes.data, self._den.ctypes.data, G2.ctypes.data,
-                             self._nograph.ctypes.data, [n, G.shape[1], 0, 3])
-            G = G2
-        dagg = self.lin_l.backward(G)
-        if not self.bias:
-            self.lin_l.grad_bias_[:] = 0
-        if self.aggr == "max":
-            dx = np.empty_like(self._xs)
-            dagg = np.ascontiguousarray(dagg)
-            b.x_cnn_graph_op(self._xs.ctypes.data, dagg.ctypes.data, self._max_aux.ctypes.data, dx.ctypes.data,
-                             g.csr_t.ctypes.data, [n, dagg.shape[1], g.nnz, 1])
-        elif self.aggr == "mean":
-            ones = np.ones(g.nnz, np.float32)
-            dx = g.spmm(b, ones, g.spmm(b, ones, dagg, 3), 0, transposed=True)
-        else:
-            dx = g.spmm(b, np.ones(g.nnz, np.float32), dagg, 0, transposed=True)
-        if self.project:
-            dx = self.lin.backward(self._relu_p.backward(dx))
-        if self.root_weight:
-            self.grad_weight_r_ = _gemm(b, G, self._x, self.out_channels, self.in_channels, n, 2)
-            dx = _add(b, _gemm(b, G, self.weight_r_, n, self.in_channels, self.out_channels, 0), dx)
-        return dx
+        return _XCNN(self, "sage_backward", (grad_out,), _XCNN_CONTEXT)
 
 
 _native_xcnn_bridge.register(
