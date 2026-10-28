@@ -1,17 +1,14 @@
 #!/bin/bash
-# Lane overhead-mamba-bwd self-merge leg on one CPU pod: (1) the integration
-# pod smoke over the merged tree (all host families through the binary cache,
-# import + tier_dir probe), (2) the before/after same-bits and same-refusals
-# fixture, (3) the two scripted gates. Exit codes land in $LEG_OUT/lane.rc.
+# Lane overhead-mamba-bwd self-merge gate on one CPU pod (Andrew 2026-10-28:
+# compile only). Clears shipped host binaries, then the integration pod smoke
+# builds every host family through the binary cache (including the lane's one
+# affected root, _mojolearn_tokenizer_host, CPU only; no define), imports
+# mojolearn and probes tier_dir. The same-bits fixture
+# (tools/tests/overhead_mamba_bwd_fixture.py, pod_fixture.sh) is RUN OWED to
+# the orchestrator's end-of-round fixture pass. Exit codes land in lane.rc.
 set -u
 OUT=${LEG_OUT:?}
 rm -f python/mojolearn/host/*.so
 bash experiments/overhead-mamba-bwd/pod_smoke_5b.sh > "$OUT/smoke.out" 2>&1
 echo "smoke_rc=$?" >> "$OUT/lane.rc"
-bash experiments/overhead-mamba-bwd/pod_fixture.sh > "$OUT/fixture.out" 2>&1
-echo "fixture_script_rc=$?" >> "$OUT/lane.rc"
-pixi run -e default python tools/tests/test_no_python_runtime.py > "$OUT/gate-no-python.log" 2>&1
-echo "gate_no_python_rc=$?" >> "$OUT/lane.rc"
-pixi run -e default python tools/tests/test_tombstones_preserved.py > "$OUT/gate-tombstones.log" 2>&1
-echo "gate_tombstones_rc=$?" >> "$OUT/lane.rc"
 cat "$OUT/lane.rc"
