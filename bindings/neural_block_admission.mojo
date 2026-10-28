@@ -78,17 +78,17 @@ def neural_plain_value(value: PythonObject, depth: Int = 0, context: PythonObjec
 def neural_record_fields(mut mods: NativeModules, value: PythonObject, names: PythonObject) raises -> PythonObject:
     # _fields rejects a replaced __dict__ descriptor before native dictionary
     # access, including on an otherwise ordinary subclass. No getattr is used.
-    var fields = _fields(value)
+    var fields = _fields(mods, value)
     var b = mods.module("builtins")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
     for i in range(len(ancestry)):  # driver-loop: refuse field descriptors before later shared attribute access
-        var namespace = _class_fields(ancestry[i])
+        var namespace = _class_fields(mods, ancestry[i])
         for j in range(len(names)):  # small-loop(known operation field names)
             if py_contains(namespace, names[j]):
                 var member = namespace[names[j]]
                 var member_mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(member))
                 for k in range(len(member_mro)):  # small-loop(descriptor protocol ancestry)
-                    if py_contains(_class_fields(member_mro[k]), "__get__"):
+                    if py_contains(_class_fields(mods, member_mro[k]), "__get__"):
                         raise Error("TypeError: neural fields require native instance storage, not Python descriptors")
     return fields
 
@@ -108,7 +108,7 @@ def neural_admit_weights(mut mods: NativeModules, values: PythonObject, context:
         if values[i] is None:
             continue
         if py_type(values[i]) is context["array_class"]:
-            _ = neural_array_snapshot(values[i], context)
+            _ = neural_array_snapshot(mods, values[i], context)
         else:
             admit_native_buffer_exporter(values[i])
 
@@ -154,12 +154,12 @@ def neural_block_fields(block: PythonObject, context: PythonObject, initialized:
 
 def neural_block_weight_names(mut mods: NativeModules, block: PythonObject) raises -> PythonObject:
     var b = mods.module("builtins")
-    var fields = _fields(block)
+    var fields = _fields(mods, block)
     var names = py_get(fields, "_W_NAMES")
     if names is None:
         var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(block))
         for i in range(len(ancestry)):  # driver-loop: native admission metadata and retained owner registry
-            names = py_get(_class_fields(ancestry[i]), "_W_NAMES")
+            names = py_get(_class_fields(mods, ancestry[i]), "_W_NAMES")
             if names is not None:
                 break
     if py_type(names) is not b.tuple and py_type(names) is not b.list:
@@ -180,11 +180,11 @@ def neural_weights_snapshot(mut mods: NativeModules, values: PythonObject, conte
         if value is None:
             py_call(result.append, value)
         elif py_type(value) is context["array_class"]:
-            py_call(result.append, neural_block_f32(value, "weight", context) if f32 else neural_array_snapshot(value, context))
+            py_call(result.append, neural_block_f32(mods, value, "weight", context) if f32 else neural_array_snapshot(mods, value, context))
         else:
             # Foreign model buffers historically copy to native storage on
             # use. Capture that copy once and retain it for this operation.
-            py_call(result.append, neural_block_f32(value, "weight", context))
+            py_call(result.append, neural_block_f32(mods, value, "weight", context))
     return result
 
 
@@ -257,13 +257,13 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
             var fields = neural_record_fields(mods, value, Python.tuple("shape", "bits", "codes", "exponents"))
             neural_plain_value(mods, fields["shape"], 0, context)
             var captured = py_call(b.object.__new__, py_type(value))
-            var saved = _fields(captured)
+            var saved = _fields(mods, captured)
             py_setitem(saved, "shape", neural_metadata_snapshot(mods, fields["shape"]))
             for name in ["bits", "codes", "exponents"]:  # small-loop(packed weight storage fields)
                 if py_contains(fields, name):
                     var storage = fields[name]
                     if py_type(storage) is context["array_class"]:
-                        storage = neural_array_snapshot(storage, context)
+                        storage = neural_array_snapshot(mods, storage, context)
                     else:
                         admit_native_buffer_exporter(storage)
                         # A retained native memoryview captures foreign metadata
@@ -272,13 +272,19 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
                     py_setitem(saved, name, storage)
             py_setitem(result, keys[i], captured)
         else:
-            py_setitem(result, keys[i], neural_block_f32(value, String(keys[i]), context))
+            py_setitem(result, keys[i], neural_block_f32(mods, value, String(keys[i]), context))
     return result
 
 
 def neural_block_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    # Callers without an operation handle keep their per-call module checks.
+    var mods = NativeModules()
+    return neural_block_f32(mods, value, name, context)
+
+
+def neural_block_f32(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     if py_type(value) is context["array_class"]:
-        var captured = neural_array_snapshot(value, context)
+        var captured = neural_array_snapshot(mods, value, context)
         if String(captured.dtype) != "<f4":
             raise Error("TypeError: neural " + name + " requires float32 input")
         if String(captured.order) == "C":
@@ -301,7 +307,7 @@ def neural_block_f32(value: PythonObject, name: String, context: PythonObject) r
     var layout = pin.layout.value().copy()
     if layout.itemsize != 4:
         raise Error("TypeError: neural float32 input requires four-byte elements")
-    _ = neural_array_slots(context)
+    _ = neural_array_slots(mods, context)
     var result = generation_array(layout.shape)
     layout.copy_to(Int(py=result._addr))
     _ = pin^

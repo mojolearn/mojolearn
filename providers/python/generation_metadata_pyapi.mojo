@@ -212,6 +212,17 @@ struct GenerationLayerSnapshot(Copyable, Movable):
         self.optional = GenerationWeightSnapshot(optional)
         self.packed = GenerationWeightSnapshot(packed)
 
+    def rebind(mut self, block: PythonObject, kind: String) raises:
+        # Prepared layer reuse: the weight views and layer words were captured
+        # from a block snapshot whose setup inputs are unchanged (prepared
+        # owner identity key); only the per-call snapshot and its arithmetic
+        # profile words are read again, exactly as __init__ reads them.
+        model_dict(block)
+        self.block = block
+        if kind == "transformer":
+            self.profile = model_plain(py_get(block, "_arithmetic_profile", PythonObject(None)))
+            self.profile_changed = _generation_bool(py_get(block, "_arithmetic_profile_changed", PythonObject(False)))
+
 
 struct GenerationHeadSnapshot(Copyable, Movable):
     var entries: PythonObject

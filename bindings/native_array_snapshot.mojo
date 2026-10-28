@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 """Capture native Array slots and retained buffer metadata without input hooks."""
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.mode_metadata_native import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 
 
 def native_array_slots(context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    # Callers without an operation handle keep their per-call module checks.
+    var mods = NativeModules()
+    return native_array_slots(mods, context)
+
+
+def native_array_slots(mut mods: NativeModules, context: PythonObject) raises -> PythonObject:
+    # `mods`: the operation's admitted module connections (one check per GIL
+    # release window instead of one per Array).
+    var b = mods.module("builtins")
     var cls = context["array_class"]
     if py_type(cls) is not b.type:
         raise Error("TypeError: neural arrays require their native storage class")
@@ -16,7 +24,7 @@ def native_array_slots(context: PythonObject) raises -> PythonObject:
     var names = Python.tuple("_store", "_base", "_pin", "_mv", "_addr", "_readonly",
         "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")
     var slots = Python.dict()
-    var types = native_loaded_module("types")
+    var types = mods.module("types")
     for i in range(len(names)):  # small-loop(Array native slot schema)
         var slot = py_get(namespace, names[i])
         if (py_type(slot) is not types.MemberDescriptorType or slot.__objclass__ is not cls
@@ -36,14 +44,20 @@ def native_array_slots(context: PythonObject) raises -> PythonObject:
 
 
 def native_array_snapshot(value: PythonObject, context: PythonObject, all_dtypes: Bool = False) raises -> PythonObject:
+    # Callers without an operation handle keep their per-call module checks.
+    var mods = NativeModules()
+    return native_array_snapshot(mods, value, context, all_dtypes)
+
+
+def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context: PythonObject, all_dtypes: Bool = False) raises -> PythonObject:
     # Capture every Array metadata word once through native member descriptors.
     # The returned passive view retains both the original owner and a real
     # buffer export; execution never consults mutable caller shape/stride slots.
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var cls = context["array_class"]
     if py_type(value) is not cls:
         raise Error("TypeError: neural Array input requires its exact native class")
-    var slots = native_array_slots(context)
+    var slots = native_array_slots(mods, context)
     var values = Python.dict()
     var names = py_call(b.list, slots.keys())
     for i in range(len(names)):  # small-loop(capture native Array metadata once)

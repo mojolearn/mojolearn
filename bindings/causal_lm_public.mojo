@@ -140,6 +140,12 @@ def _causal_array_guard() raises:
     _ = native_array_slots(generation_array_context())
 
 
+def _causal_array_guard(mut mods: NativeModules) raises:
+    # The same descriptor re-check through the operation's admitted module
+    # connections (re-checked after each GIL release window by the caller).
+    _ = native_array_slots(mods, generation_array_context())
+
+
 def _native_entry_fields(mut mods: NativeModules, entries: PythonObject) raises -> PythonObject:
     # Exact connected modules/namespaces use native storage, never getattr or
     # module __getattr__. Check keys before any string dictionary lookup.
@@ -668,7 +674,7 @@ def causal_transformer_admin(mut mods: NativeModules, binding: PythonObject, ses
 
 def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
     # Standalone public block calls retain their existing ABI and admit anew.
-    _causal_array_guard()
+    _causal_array_guard(mods)
     var shape = x.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
@@ -677,9 +683,45 @@ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: Py
     var entries = model._native_entries
     var profile = kind == "transformer" and model._head_int15 is not None
     var planes = profile and py_contains(entries, "forward15")
+    # A prepared standalone block owner carries the layer words and weight
+    # views captured at its setup; reuse them and bind this call's snapshot.
+    var prepared = PythonObject(None)
+    if py_type(model) is mods.module("types").SimpleNamespace:
+        prepared = py_get(_standalone_record_fields(mods, model), "_prepared_layer")
+    if prepared is not None:
+        var reused = prepared.downcast_value_ptr[PreparedGenerationLayer]()[].layer.copy()
+        reused.rebind(_block(mods, model, i), kind)
+        mods.released()
+        return _causal_layer_run_prepared(mods, entries, kind, d, b, l, reused, profile, planes, x, supplied_state, step)
     var layer = GenerationLayerSnapshot(_block(mods, model, i), kind, planes)
     mods.released()
     return _causal_layer_run_prepared(mods, entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+
+
+struct PreparedGenerationLayer(Movable, Writable):
+    # Python-held owner of one standalone block's captured layer words and
+    # weight views (registered by the tokenizer host binding).
+    var layer: GenerationLayerSnapshot
+
+    def __init__(out self, var layer: GenerationLayerSnapshot):
+        self.layer = layer^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("PreparedGenerationLayer(native)")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def causal_prepared_layer(mut mods: NativeModules, block_fields: PythonObject, kind: String, planes: Bool) raises -> PythonObject:
+    # Capture a reusable layer for a prepared standalone owner. A capture
+    # refusal is not raised here: the call then captures at its usual
+    # position (causal_layer_run) and refuses there with the same error.
+    try:
+        return PythonObject(alloc=PreparedGenerationLayer(GenerationLayerSnapshot(block_fields, kind, planes)))
+    except:
+        mods.released()
+        return PythonObject(None)
 
 
 def _causal_layer_run_prepared(mut mods: NativeModules,

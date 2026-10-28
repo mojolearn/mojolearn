@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
@@ -24,14 +24,22 @@ def _native_read(entry: PythonObject) raises -> PythonObject:
 
 
 def _fields(model: PythonObject) raises -> PythonObject:
+    # Callers without an operation handle keep their per-call module checks.
+    var mods = NativeModules()
+    return _fields(mods, model)
+
+
+def _fields(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    # `mods`: the operation's admitted module connections (one check per GIL
+    # release window instead of one per field read).
     ref cpy = Python().cpython()
-    var b = native_loaded_module("builtins")
+    var b = mods.module("builtins")
     var cls = py_type(model)
     # Native type descriptors read actual MRO/storage, including buffers with
     # native metaclasses. They do not consult a metaclass's Python hooks.
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for i in range(len(ancestry)):  # driver-loop: refuse dictionary protocol overrides before storage access
-        var namespace = _class_fields(ancestry[i])
+        var namespace = _class_fields(mods, ancestry[i])
         if py_contains(namespace, "__dict__"):
             var descriptor = namespace["__dict__"]
             if (py_type(descriptor) is not py_type(b.type.__dict__["__dict__"])
@@ -93,7 +101,13 @@ def _fitted(model: PythonObject) raises -> PythonObject:
 
 
 def _class_fields(cls: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+    # Callers without an operation handle keep their per-call module checks.
+    var mods = NativeModules()
+    return _class_fields(mods, cls)
+
+
+def _class_fields(mut mods: NativeModules, cls: PythonObject) raises -> PythonObject:
+    var b = mods.module("builtins")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
     var names = py_call(b.list, fields.keys())
     for i in range(len(names)):  # driver-loop: native class namespace keys before metadata reads

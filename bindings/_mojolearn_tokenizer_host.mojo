@@ -223,7 +223,7 @@ from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, N
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.causal_lm_public import (
-    GenerationHandle, causal_public_c, causal_lm_allocate_binding,
+    GenerationHandle, PreparedGenerationLayer, causal_public_c, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
@@ -1428,6 +1428,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         # causal_pin_entries stores PythonObject(alloc=CausalExecutionEntries(...)).
         _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
+        # neural_block_owner pins PythonObject(alloc=PreparedGenerationLayer(...)).
+        _ = module.add_type[PreparedGenerationLayer]("_PreparedGenerationLayer")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
