@@ -1,0 +1,77 @@
+Peer5 GBDT adapter parameter lifecycle — 2026-10-28
+Branch: lane/peer5-tree-aux-20261027
+Parent: 586ee57745 (tree restoration/fitted metadata batch).
+Worktree: /Users/andrewhendel/CascadeProjects/mojolearn-peer5-trees
+
+Completed public source operations
+- _GBDTAdapter.get_params calls the existing native parameter reader once. Its
+  already-connected gbdt schema supplies parameter order, passive lookup and
+  custom-constructor refusal. The historical shallow getter ignored deep; the
+  native call passes False and never invokes a caller's truth protocol.
+- The installed _GBDTAdapter constructor is one native tree-owner call. The
+  explicit original signature/default objects are captured once at import;
+  the original Python initializer is retained only as signature metadata.
+  Public execution uses the shared tree signature binder, not locals/inspect/
+  setattr loops. Constructor values retain their identities; numeric validation
+  stays at fit. Reinitialization retains non-parameter state as before.
+- set_params calls the native tree owner once. Empty updates return self. Other
+  updates use the same native parameter schema and signature binder, reject
+  unknown keys before mutation, then reset the dictionary to parameter-only
+  state. Retained parameter owners preserve identity; old fitted state is
+  admitted before being dropped. Custom allocator, setter and descriptor
+  protocols are refused before invocation, not silently bypassed.
+- Ordinary application subclasses inherit native parameter metadata through
+  the existing class-definition registration hook. A custom constructor retains
+  the prior get_params refusal. This is setup metadata, not per-call Python work.
+
+Shared implementation / ownership
+- trees_constructor_native now factors the existing signature binder into
+  tree_constructor_values. Both forests and GBDT adapters use it.
+- tree_store_parameters shares update/reset semantics and the accepted native
+  tree-owner release traversal. Forest constructor reinitialization now also
+  checks overwritten owners before mutation instead of dropping them unchecked.
+- The bridge records exact native GradientBoosting learner layouts and compiled
+  gbdt_resident_release identities. Releasing a fitted adapter follows passive
+  learner storage and the existing TreesResident owner; no new arithmetic,
+  Python fallback, callback workaround or toolchain patch was added.
+- trees_public_native's two added routes are immediately after
+  classical_connect_numpy. The new register() GBDT branch is adjacent to the
+  public-forest branch. Root/boost peer were notified of these exact regions.
+  register_boost and isolation-forest-specific code were not edited.
+- Host CPU review files _mojolearn_gbdt_host.mojo and
+  gbdt_host_entries_impl.mojo remain untouched.
+
+Compile/source evidence
+See compile.json and wrappers.json. Focused fixture exports the constructor,
+setter, existing params_metadata_c getter and shared forest constructor. These
+native owners and their release dependencies compiled on the Mac CPU column,
+identical define, apple-m1, O0, 10 workers (sysctl hw.activecpu = 10). Configured
+workers do not establish saturation. This batch did not rebuild the complete
+public dispatcher, load an installed extension or execute a product operation.
+No runtime, identity, GPU, or performance verification occurred.
+
+Complete retained evidence
+/Users/andrewhendel/mojolearn-evidence/peer5-gbdt-parameters-20261028/
+- attempt1: compiler aborted with exit -6 after 27.16 seconds; libc++ reported
+  'mutex lock failed: Invalid argument'. Full crash log and frozen source are
+  retained. This is not a source-error diagnostic or a successful compile.
+- attempt2: refactored shared storage implementation compiled successfully with
+  the same supported build settings, exit 0 after 6.91 seconds. This does not
+  diagnose or claim to repair the original compiler-internal abort.
+Each attempt retains compile.log, result.json, source-manifest.json and actual
+source-bytes.tgz. The successful .so is retained beside attempt2/result.json.
+No rented machine was used.
+
+Remaining scope
+- The installed public constructor/getter/setter still require future runtime
+  coverage when authorized, including populated resident-owner replacement,
+  pickle/clone workflows and unsupported-hook refusals. Compilation is not proof.
+- GBDT fit/predict decorator/lifecycle and transitive argument-admission work is
+  outside this parameter batch; legacy GradientBoosting/specialized ensemble
+  constructor operations are also separate.
+- Boost/embedding lifecycle and IsolationForest lifecycle have separate owners.
+- Existing generic fixed-owner CV routes remain separate native schemas; this
+  batch does not claim their transitive callback behavior is newly verified.
+
+Keep logs in files, inspect status/coverage/failures and bounded diagnostics.
+Main integration remains serialized by root; this branch never mutates main.
