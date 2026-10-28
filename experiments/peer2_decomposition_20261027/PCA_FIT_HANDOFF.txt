@@ -1,0 +1,86 @@
+Peer2 decomposition: PCA fit/fit_transform native envelope
+2026-10-27
+
+Branch lane/peer2-decomposition-20261027
+Base local main 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Compile/runtime status: PENDING. No lane compile or tests were run for this
+increment, following the owner's latest instruction. Required commit/push hooks
+are retained separately and are not evidence of runtime compliance.
+
+Public path reviewed
+mojolearn.PCA -> decomposition.PCA.fit/fit_transform -> one _PCA_ENTRY call
+-> pca_c -> pca_fit_operation. The existing _mojolearn_native_public class
+flag bypasses _mode input/fitted/output wrappers; no new flags or wrappers
+were introduced. Constructors and unrelated metadata/archive methods are
+outside this increment. No Python wrapper performs result conversion.
+
+The dedicated operation uses classical_family_admit before model fields,
+a private exact-dict settings snapshot and retained original scalar/buffer
+references. Each consumed setting is converted once before numerical execution,
+at its original validation point; solver/refusal ordering, exact/full/fraction/
+MLE/randomized behavior, ignored y admission and native host-only refusal are
+retained. Scalars use the shared native decoder/parser/warning provider with a
+dedicated import-connected metadata context, not a training or optimizer owner.
+Object conversion hooks are refused before they can execute. Unknown solver
+objects with representation hooks are refused instead of invoking repr.
+
+The whole input path is the PCA snapshot provider from the prior query chunk,
+including native dense/sparse preparation, rank/type/finite refusal, one metadata
+capture and original owner retention. Input copying metadata comes from that
+same preparation and source type, rather than rereading X after execution.
+The seven compiled fit/metadata/optional-whiten entries are identity-checked
+against import-retained entry/owner/name records before either metadata reader.
+Their private table is copied before use. Vendor/mode results are captured once.
+
+Output allocation captures each pointer once. Existing pca_fit_owned and
+pca_fit_randomized receive only newly boxed native addresses and dimensions.
+Their bindings unpack those primitives before GILReleased and invoke
+pca_fit_owned/pca_randomized_owned in decomposition/impl/pca_owner.mojo or the
+corresponding core/estimators_host_impl.mojo owners. The metadata reader
+bindings return fixed constants without releasing the GIL. Existing numerical
+implementations, dimensions, dtype, seeded arithmetic and algorithms are
+unchanged. Native memcpy trims the packed result prefix when rank selection
+changes the kept count. Only completed owned C-float32 arrays and the noise
+scalar are committed to the original admitted model dictionary; no setting is
+reread from the live model after execution.
+
+Dependencies
+- Prior PCA query/sparse commits through 847a303 and their integrated shared
+  array-metadata/classical-model admission prerequisites.
+- fa442d9bf27e94c4614ba8c2dc2109e733601501: four shared scalar decode calls reuse
+  their captured dtype (depends on cbca14a native_scalar_buffer_dtype factor).
+- cc18ae9: import-time query-loop annotation required by the push hook.
+
+Affected compile targets
+experiments/peer2_decomposition_20261027/pca_fit_compile.mojo instantiates both
+fit results, exact and randomized branches, metadata/scalar parsing and existing
+sparse input formats. Coordinator may compile this narrow root, then integrate
+pca_c; no unrelated family build is required solely for this increment.
+Existing _mojolearn_estimators and _mojolearn_estimators_host arithmetic sources
+were inspected and are unchanged; optional GPU/vendor and runtime coverage is
+explicitly pending final integration.
+
+Pending focused runtime controls
+Public exact/full/randomized/whiten fit and fit_transform; fractional/MLE prefix
+shape and ownership; fitted-state atomicity on refusal; NaN/complex/zero/rank
+errors; strict NumPy scalar dtype/rank/byte-order, warnings, invalid native
+settings and object-dtype hook controls; mutable model field replacement during
+native execution; all admitted dense/sparse/pandas/Torch inputs; input_copied_
+and output dtype/ownership. No source review or hook result substitutes for them.
+
+Remaining scope/debt
+Other decomposition/cross-decomposition public operations remain separate work.
+Legacy pca_exact/pca_randomized helper definitions no longer drive PCA fitting;
+shared pca_copied remains reachable by unrelated decomposition/manifold owners.
+PCA constructor/attribute/parameter/archive lifecycle and shared input/scalar
+provider closures retain their broader integration/audit responsibilities.
+No claim that the entire decomposition family is runtime compliant.
+
+Evidence
+~/mojolearn-evidence/peer2-decomposition-20261027/
+  scalar-captured-dtype-commit.log
+  pca-fit-commit.log
+  pca-fit-push.log
+  pca-connection-annotation-push.log
+Full hook output stays in those files. Compiler/runtime evidence belongs to
+the coordinator's frozen compile batch and final integration run.
