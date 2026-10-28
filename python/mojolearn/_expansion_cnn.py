@@ -444,105 +444,38 @@ class Conv2d(_Layer):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
                  bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
-        self.in_channels, self.out_channels = int(in_channels), int(out_channels)
-        self.kernel_size = _pair(kernel_size, "kernel_size")
-        self.stride = _pair(stride, "stride")
-        self.dilation = _pair(dilation, "dilation")
-        self.groups = int(groups)
-        if self.groups <= 0 or self.in_channels % self.groups or self.out_channels % self.groups:
-            raise ValueError("mojolearn: in_channels and out_channels must be divisible by groups")
-        if padding_mode not in self._PAD_MODES:
-            raise ValueError(f"mojolearn: padding_mode must be one of {sorted(self._PAD_MODES)}, got {padding_mode!r}")
-        self.padding_mode = padding_mode
-        kh, kw = self.kernel_size
-        if isinstance(padding, str):
-            if padding == "valid":
-                pads = (0, 0, 0, 0)
-            elif padding == "same":
-                if self.stride != (1, 1):
-                    raise ValueError("mojolearn: padding='same' is not supported for strided convolutions")
-                th, tw = self.dilation[0] * (kh - 1), self.dilation[1] * (kw - 1)
-                pads = (th // 2, th - th // 2, tw // 2, tw - tw // 2)
-            else:
-                raise ValueError(f"mojolearn: invalid padding string {padding!r}, should be one of 'valid', 'same'")
-            self.padding = padding
-        else:
-            ph, pw = _pair(padding, "padding")
-            pads = (ph, ph, pw, pw)
-            self.padding = (ph, pw)
-        self._pads = pads
-        # zeros with symmetric pads ride in the conv; anything else is an explicit pad first
-        self._explicit = padding_mode != "zeros" or pads[0] != pads[1] or pads[2] != pads[3]
-        self._conv_pad = (0, 0) if self._explicit else (pads[0], pads[2])
-        self.bias = bool(bias)
-        self.random_state = random_state
-        self.input_shape = input_shape
-        self.numeric_mode = numeric_mode
-        np = _np()
-        fan_in = (self.in_channels // self.groups) * kh * kw
-        rng = _rng(random_state)
-        self.weight_ = _kaiming_uniform(rng, (self.out_channels, self.in_channels // self.groups, kh, kw), fan_in)
-        self.bias_ = (_kaiming_uniform(rng, (self.out_channels,), fan_in) if self.bias
-                      else np.zeros(self.out_channels, np.float32))
+        _XCNN(self, "conv_init", (in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
 
     def set_weights(self, weight, bias=None):
-        np = _np()
-        w = _f32(weight, "weight")
-        if w.shape != self.weight_.shape:
-            raise ValueError(f"mojolearn: weight shape {w.shape}, expected {self.weight_.shape}")
-        self.weight_ = w.copy()
-        if bias is not None:
-            self.bias_ = _f32(bias, "bias").reshape(self.out_channels).copy()
-        elif not self.bias:
-            self.bias_ = np.zeros(self.out_channels, np.float32)
-        if self.__dict__.get("_pins"):
-            self.pin_weights()  # the pinned copy follows the new weights
-        return self
+        return _XCNN(self, "conv_set_weights", (weight, bias), _XCNN_CONTEXT)
 
     def pin_weights(self):
         """Keep `weight_` and `bias_` on the device for `DeviceTensor`
         forwards and backwards (lane fam2-neural); call again after changing
         them. Returns self."""
-        return _pin_weights(self, ("weight_", "bias_"))
+        return _XCNN(self, "conv_pin", (), _XCNN_CONTEXT)
 
     def unpin_weights(self):
-        self._pins = None
-        return self
+        return _XCNN(self, "conv_unpin", (), _XCNN_CONTEXT)
 
     # lane cnn-resident-glue (G3): the weight gradients of a resident
     # backward stay in this layer's resident arrays (`_gw_dev`, `_gb_dev`)
     # until read; the host value lives under the same name in `__dict__`.
     @property
     def grad_weight_(self):
-        d = self.__dict__
-        pend = d.get("_gw_dev")
-        if pend is not None:
-            np = _np()
-            w = pend[0].download(pend[1], np.empty(self.weight_.shape, np.float32))
-            d["grad_weight_"] = w[:, :, 0, :] if d.get("_gw_1d") else w
-            d["_gw_dev"] = None
-        if "grad_weight_" not in d:
-            raise AttributeError("grad_weight_")
-        return d["grad_weight_"]
+        return _XCNN(self, "conv_grad_weight", (), _XCNN_CONTEXT)
 
     @grad_weight_.setter
     def grad_weight_(self, v):
-        self.__dict__.update(grad_weight_=v, _gw_dev=None, _gw_1d=False)
+        return _XCNN(self, "conv_grad_weight_set", (v,), _XCNN_CONTEXT)
 
     @property
     def grad_bias_(self):
-        d = self.__dict__
-        pend = d.get("_gb_dev")
-        if pend is not None:
-            d["grad_bias_"] = pend[0].download(pend[1], _np().empty(self.out_channels, _np().float32))
-            d["_gb_dev"] = None
-        if "grad_bias_" not in d:
-            raise AttributeError("grad_bias_")
-        return d["grad_bias_"]
+        return _XCNN(self, "conv_grad_bias", (), _XCNN_CONTEXT)
 
     @grad_bias_.setter
     def grad_bias_(self, v):
-        self.__dict__.update(grad_bias_=v, _gb_dev=None)
+        return _XCNN(self, "conv_grad_bias_set", (v,), _XCNN_CONTEXT)
 
     def _res_w(self, b):
         """G3: (weight handle, bias handle) of the auto-pinned weights on
@@ -717,52 +650,7 @@ class Conv2d(_Layer):
                 and (not self._explicit or _idn(b, _F_PAD)))
 
     def backward(self, grad_out, x=None):
-        np = _np()
-        if _is_t(grad_out) or _is_t(x) or (x is None and _is_t(self.__dict__.get("_x"))):
-            return self._backward_t(grad_out, x)
-        if self._group_dev(self._binding()):
-            b = self._binding()
-            xs = _f32(self._x if x is None else x, "x")
-            dx = self._backward_t(DeviceTensor._wrap(b, _f32(grad_out, "grad_out")),
-                                  DeviceTensor._wrap(b, xs)).numpy()
-            self._x, self._xp = xs, None
-            return dx
-        if x is not None:
-            # lane gap-neural-overhead2: the backward needs x and its padded
-            # form only; the forward this ran (a conv, its upload and its
-            # download, the output discarded) is gone. The same xp words.
-            self._bind_input(x)
-        x, xp = self._x, self._xp
-        g = _f32(grad_out, "grad_out")
-        shape = self._out_shape(x.shape)
-        if g.shape != shape:
-            raise ValueError(f"mojolearn: grad_out shape {g.shape}, expected {shape}")
-        b = self._binding()
-        prm = self._params(xp.shape)
-        cg, og = self.in_channels // self.groups, self.out_channels // self.groups
-        dxp = np.empty(xp.shape, np.float32)
-        dw = np.empty(self.weight_.shape, np.float32)
-        db = np.empty(self.out_channels, np.float32)
-        for k in range(self.groups):  # glue: one conv backward launch per channel group (groups-sized: convolution groups)
-            xg = self._group(xp, k, cg)
-            gg = self._group(g, k, og)
-            wg = np.ascontiguousarray(self.weight_[k * og:(k + 1) * og])
-            dxg = dxp if self.groups == 1 else np.empty(xg.shape, np.float32)
-            dwg = np.empty(wg.shape, np.float32)
-            dbg = np.empty(og, np.float32)
-            b.x_cnn_conv2d_backward(xg.ctypes.data, wg.ctypes.data, gg.ctypes.data, dxg.ctypes.data,
-                                    dwg.ctypes.data, dbg.ctypes.data, prm)
-            if self.groups > 1:
-                dxp[:, k * cg:(k + 1) * cg] = dxg
-            dw[k * og:(k + 1) * og] = dwg
-            db[k * og:(k + 1) * og] = dbg
-        dx = dxp
-        if self._explicit:
-            dx = np.empty(x.shape, np.float32)
-            b.x_cnn_pad2d_backward(dxp.ctypes.data, dx.ctypes.data, self._pad_params(x.shape))
-        self.grad_weight_ = dw
-        self.grad_bias_ = db if self.bias else np.zeros_like(db)
-        return dx
+        return _XCNN(self, "conv_backward", (grad_out, x), _XCNN_CONTEXT)
 
     def _rows(self, X):
         X = _f32(X, "X")
@@ -797,38 +685,20 @@ class Conv1d(Conv2d):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
                  bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
-        k, s, d = (int(v if isinstance(v, int) else v[0]) for v in (kernel_size, stride, dilation))  # glue: unpacks three layer size arguments
-        pad = padding if isinstance(padding, str) else (0, int(padding if isinstance(padding, int) else padding[0]))
-        super().__init__(in_channels, out_channels, (1, k), (1, s), pad, (1, d), groups, bias, padding_mode,
-                         random_state, None, numeric_mode)
-        self.input_shape = input_shape
+        _XCNN(self, "conv_init1d", (in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
 
     def set_weights(self, weight, bias=None):
-        w = _f32(weight, "weight")
-        return super().set_weights(w.reshape(self.out_channels, self.in_channels // self.groups, 1, -1), bias)
+        return _XCNN(self, "conv_set_weights1d", (weight, bias), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out, x=None):
-        if _is_t(grad_out) or _is_t(x):
-            g = _t4(grad_out) if _is_t(grad_out) else _f32(grad_out, "grad_out")[:, :, None, :]
-            xx = x if x is None else (_t4(x) if _is_t(x) else _f32(x, "x")[:, :, None, :])
-            dx = super().backward(g, xx)
-            if self.__dict__.get("_gw_dev") is not None:
-                self.__dict__["_gw_1d"] = True   # G3: squeezed when downloaded
-            else:
-                self.grad_weight_ = self.grad_weight_[:, :, 0, :]
-            return _t3(dx) if _is_t(dx) else dx[:, :, 0, :]
-        g = _f32(grad_out, "grad_out")
-        xx = None if x is None else _f32(x, "x")[:, :, None, :]
-        dx = super().backward(g[:, :, None, :], xx)
-        self.grad_weight_ = self.grad_weight_[:, :, 0, :]
-        return dx[:, :, 0, :]
+        return _XCNN(self, "conv_backward", (grad_out, x), _XCNN_CONTEXT)
 
     @property
     def weight1d_(self):
-        return self.weight_[:, :, 0, :]
+        return _XCNN(self, "conv_weight1d", (), _XCNN_CONTEXT)
 
 
 class _Pool2d(_Layer):
