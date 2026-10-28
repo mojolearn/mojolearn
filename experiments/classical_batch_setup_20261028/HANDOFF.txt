@@ -1,0 +1,41 @@
+Classical batch setup reuse, 2026-10-28
+
+Branch: lane/classical-loop-hoist-20261028, following 8852d1891d.
+
+Repeated work removed:
+- HDBSCAN membership batching prepares one private address list and one private
+  parameter list per operation. Tree/training/core/label/query/output address
+  extraction and invariant scalar boxing leave the batch loop. The loop now
+  replaces only query/output offsets and changing row/count fields. The existing
+  native batch call and selected batch size remain unchanged.
+- Regression raw_values output captures its completed private result arena once;
+  per-output buffer_info calls disappear. The same low/high-word Float64 decode
+  remains in native code, with no arithmetic or output bit-layout change.
+
+Setup/reuse and invalidation:
+No cross-call cache is introduced. Public HDBSCAN admission and provider/mode
+selection still run per call; admitted input views and output remain retained
+through the final synchronous native batch. The native bindings consume the
+private argument lists synchronously and do not retain/mutate them. A subsequent
+operation captures current model/input metadata again. Regression arena/output
+owners stay retained through the final native read/write.
+
+Validation:
+Combined fixture compile.mojo instantiates the actual HDBSCAN public operation
+and regression metric dispatcher. Apple CPU identical O0 compile passed with ten
+workers under tools/compile_slot.sh; see compile.json. The first compile fixture
+used the wrong regression entry name and failed at import; fixed the fixture,
+then the affected source compiled successfully. Original failed outputs/source
+archive are retained as attempt1-* in the evidence directory.
+No runtime, identity or performance campaign; no GPU qualification or measured
+speedup claim. No rented box and no dependency change.
+
+Remaining limits:
+HDBSCAN still uses the existing Python-object compiled binding ABI per batch,
+and lower binding buffer materialization is unchanged. Public boundary metadata
+and output construction still use Python objects. This batch removes repeated
+setup without claiming Python-free execution or runtime qualification.
+
+Complete evidence: ~/mojolearn-evidence/classical-batch-setup-20261028/
+Artifact: _classical_batch_setup.so; full logs, source bytes/manifest and compiler
+and binary hashes retained there and referenced in compile.json.

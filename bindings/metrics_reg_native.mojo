@@ -298,10 +298,14 @@ def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObjec
     if r.mo == "raw_values":
         var values = family_array(Python.tuple(r.d), "<f8", context)
         var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
-        _ = values  # keep the Python object alive through the native call above
+        # The completed arena is private to this operation. Resolve its
+        # storage once, keeping the existing low-word-first binary64 decoding
+        # without a Python/CPython address lookup for each reported output.
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * out_buf)
         for i in range(r.d):  # driver-loop: over the metric's outputs
-            dst[i] = _arena_double(arena, out_buf + 2 * i)
-            _ = values  # keep the Python object alive through the native call above
+            dst[i] = bitcast[DType.float64](UInt64(words[2 * i]) | (UInt64(words[2 * i + 1]) << 32))
+        _ = arena
+        _ = values
         return values
     return PythonObject(_arena_double(arena, out_buf))
 

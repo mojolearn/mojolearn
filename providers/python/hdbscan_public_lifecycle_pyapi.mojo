@@ -181,20 +181,31 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var tree = Python.list(classical_address(parents), classical_address(lambdas), classical_address(deaths), classical_address(clusters),
                            classical_address(children), classical_address(indices), classical_address(offsets))
     var entry = neural_descriptor_entry(binding, "hdbscan_all_points_membership_vectors" if all_points else "hdbscan_membership_vector")
+    # The admitted views and output stay owned until the last synchronous
+    # native batch returns. Capture their addresses and invariant argument
+    # words once per public operation. The connected bindings only read these
+    # private lists; each iteration replaces the varying slice/count words.
+    var query_address = 0 if all_points else Int(py=classical_address(queries))
+    var output_address = Int(py=classical_address(output))
+    var addrs = Python.list(classical_address(raw))
+    if not all_points:
+        _ = py_call(addrs.append, classical_address(core))
+        _ = py_call(addrs.append, classical_address(labels))
+    _ = py_call(addrs.extend, tree)
+    if not all_points:
+        _ = py_call(addrs.append, query_address)
+    _ = py_call(addrs.append, output_address)
+    var output_slot = 8 if all_points else 11
+    var params = Python.list(rows, columns, edges, condensed, selected, exemplars, 0, neighbors)
     var first = 0
     while first < nq:  # driver-loop: public batching stays inside the single native operation
         var count = min(batch, nq - first)
-        var addrs = Python.list(classical_address(raw))
         if not all_points:
-            _ = py_call(addrs.append, classical_address(core))
-            _ = py_call(addrs.append, classical_address(labels))
-        _ = py_call(addrs.extend, tree)
-        if not all_points:
-            _ = py_call(addrs.append, Int(py=classical_address(queries)) + first * columns * 4)
-        _ = py_call(addrs.append, Int(py=classical_address(output)) + first * selected * 4)
-        var params = Python.list(rows, columns, edges, condensed, selected, exemplars)
-        _ = py_call(params.append, first if all_points else count)
-        _ = py_call(params.append, count if all_points else neighbors)
+            py_setitem(addrs, 10, query_address + first * columns * 4)
+        py_setitem(addrs, output_slot, output_address + first * selected * 4)
+        py_setitem(params, 6, first if all_points else count)
+        if all_points:
+            py_setitem(params, 7, count)
         _ = family_call(entry, addrs, params)
         first += count
     # Retain every input and output buffer owner through the final launch.
