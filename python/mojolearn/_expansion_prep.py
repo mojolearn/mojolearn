@@ -1009,6 +1009,9 @@ class OrdinalEncoder(_PrepBase):
     >>> X = np.array([[3.0, 10.0], [1.0, 20.0], [3.0, 10.0]], dtype=np.float32)
     >>> mojolearn.OrdinalEncoder().fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
@@ -1103,6 +1106,9 @@ class OneHotEncoder(_PrepBase):
     >>> X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.OneHotEncoder(drop="first").fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
@@ -1276,6 +1282,9 @@ class TargetEncoder(_PrepBase):
     >>> y = rng.random(1000).astype(np.float32)
     >>> Xt = mojolearn.TargetEncoder().fit_transform(X, y)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
     _sklearn_target_tags = {"required": True}
@@ -1353,6 +1362,9 @@ class SimpleImputer(_PrepBase):
     >>> X = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]], dtype=np.float32)
     >>> mojolearn.SimpleImputer(strategy="median").fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
@@ -1459,6 +1471,9 @@ class KBinsDiscretizer(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 4), dtype=np.float32)
     >>> Xt = mojolearn.KBinsDiscretizer(n_bins=4, encode="ordinal").fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
@@ -1498,6 +1513,9 @@ class KBinsDiscretizer(_PrepBase):
 class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
+    # Every subclass is a one-call native public class: the owner runs the
+    # whole lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     _estimator_type = "classifier"
     #: lane cpu4-misc: fit and every scoring method take a
     #: `_arena_io.DeviceRows` (a cross-validation fold's X on the device):
@@ -2260,6 +2278,9 @@ class QuantileTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).exponential(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
@@ -2335,6 +2356,9 @@ class PowerTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).lognormal(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("method", "standardize", "copy")
@@ -2455,6 +2479,9 @@ class PolynomialFeatures(_PrepBase):
     >>> X = np.arange(6, dtype=np.float32).reshape(3, 2)
     >>> mojolearn.PolynomialFeatures(degree=2).fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     _parameters = ("degree", "interaction_only", "include_bias", "order")
 
     def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
@@ -2532,6 +2559,9 @@ class SplineTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 3), dtype=np.float32)
     >>> Xt = mojolearn.SplineTransformer(n_knots=6, degree=3).fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
@@ -2595,6 +2625,9 @@ class Binarizer(_PrepBase):
     >>> X = np.array([[-1.0, 0.5], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     _parameters = ("threshold", "copy")
 
     def __init__(self, *, threshold=0.0, copy=True):
@@ -2714,6 +2747,9 @@ class LabelEncoder(_PrepBase):
     >>> enc.transform(np.array([30, 10]))
     >>> enc.inverse_transform(np.array([0, 2]))
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
     _sklearn_target_tags = {"one_d_labels": True}
@@ -2786,6 +2822,9 @@ class LabelBinarizer(_PrepBase):
     >>> lb = mojolearn.LabelBinarizer().fit(np.array([1, 2, 6, 4, 2]))
     >>> lb.transform(np.array([1, 6]))
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
     _sklearn_target_tags = {"one_d_labels": True}
@@ -2845,6 +2884,9 @@ class MultiLabelBinarizer(_PrepBase):
     >>> mlb = mojolearn.MultiLabelBinarizer()
     >>> mlb.fit_transform([[1, 2], [3], [2, 3]])
     """
+    # One native call per public method; the native owner runs the whole
+    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     # scikit-learn tags: transforms label collections, not an X matrix
     _sklearn_input_tags = {"two_d_array": False}
     _sklearn_target_tags = {"two_d_labels": True}
@@ -3000,6 +3042,9 @@ class IterativeImputer(_PrepBase):
 
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
+    # Every subclass is a one-call native public class: the owner runs the
+    # whole lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    _mojolearn_native_public = True
     def get_support(self, indices=False):
         """Return the selected features.
 
