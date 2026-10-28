@@ -33,7 +33,7 @@ from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
     generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
 )
-from bindings.native_array_snapshot import native_array_slots
+from bindings.native_array_snapshot import native_array_slots, NativeArrayAdmission
 from core.generation_policy_impl import generation_pick
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
@@ -1125,8 +1125,12 @@ def _run(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state:
 
 
 def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObject, state: PythonObject,
-                  mut snapshot: Optional[GenerationOperationSnapshot], remote_step: Bool = False) raises -> PythonObject:
-    _causal_array_guard()
+                  mut snapshot: Optional[GenerationOperationSnapshot], remote_step: Bool = False,
+                  admitted: Bool = False) raises -> PythonObject:
+    # `admitted`: the caller (the generation loop) already guarded the Array
+    # class for this GIL-release window; do not repeat the full guard.
+    if not admitted:
+        _causal_array_guard()
     var shape = ids.shape
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
@@ -1579,7 +1583,10 @@ def _read_engine(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int
     return out
 
 
-def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int) raises -> PythonObject:
+def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
+    # `admission` is set by the first decode step: ONE full Array guard per
+    # call. Each forward may release the GIL, so each is followed by exactly
+    # one post-release re-check against the admitted snapshot.
     if count < 1:
         raise Error("generation: read count must be positive")
     if not s.usable:
@@ -1599,10 +1606,12 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int) raises -
             return result
         var snapshot: Optional[GenerationOperationSnapshot] = None
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
-            _causal_array_guard()
+            if not admission:
+                admission = NativeArrayAdmission(generation_array_context())
             var l = Int(py=s.current.shape[1])
-            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, s.produced > 0)
-            _causal_array_guard()
+            var logits = _run_prepared(mods, s.model, s.current, s.state, snapshot, s.produced > 0, True)
+            # Post-release re-check for this forward's GIL-release window (not redundant).
+            admission.value().recheck(generation_array_context())
             var raw = f32_ptr(Int(py=logits._addr))
             _ = logits  # keep the Python object alive through the native call above
             var next = generation_array([b, 1], "i")
@@ -1633,6 +1642,11 @@ def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int) raises -
         s.busy = False
         s.usable = False
         raise error
+
+
+def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int) raises -> PythonObject:
+    var admission: Optional[NativeArrayAdmission] = None
+    return _read(mods, s, count, admission)
 
 
 def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonObject:
@@ -1715,8 +1729,15 @@ def _generate_complete(mut mods: NativeModules, model: PythonObject, value: Pyth
         var resident = causal_lm_resident_binding(mods, model, s.prompt, PythonObject(s.max_new), PythonObject(None), s.state)
         if resident is not None:
             return resident
-    var continuation = _read(mods, s, max(1, s.max_new))
-    _causal_array_guard()
+    var admission: Optional[NativeArrayAdmission] = None
+    var continuation = _read(mods, s, max(1, s.max_new), admission)
+    # Per call, before the continuation is joined: the decode loop's admitted
+    # snapshot makes this a cheap re-check; the engine route and an empty loop
+    # leave no admission and keep the full guard.
+    if admission:
+        admission.value().recheck(generation_array_context())
+    else:
+        _causal_array_guard()
     var b = len(s.lengths)
     var l = Int(py=s.prompt.shape[1])
     var n = Int(py=continuation.shape[1])
