@@ -24,7 +24,6 @@ from ._mode import NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
 from .linear_model import _dtype_name, _is_integer_labels, _shape_of
-from ._metrics_impl import _get_binding as _metrics_binding
 
 #: the x_neighbors binding, which holds the p2m_* ops the data loops below
 #: run through (lane apple-fast-py2mojo-neighbors)
@@ -989,7 +988,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         -------
         self
         """
-        return _NATIVE(self, "family_xn_knn_clf_fit", (self._bind(_XN), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_knn_clf_fit", (None, X, y), _NATIVE_CONTEXT)
 
 
     @property
@@ -1025,7 +1024,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
             If the model is not fitted, `X` has the wrong number of features,
             or `n_neighbors` exceeds the number of training samples.
         """
-        return _NATIVE(self, "family_xn_knn_clf_predict", (self._bind("_mojolearn"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_knn_clf_predict", (None, X), _NATIVE_CONTEXT)
 
 
     def predict_proba(self, X):
@@ -1042,7 +1041,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
             Columns follow `classes_` order. For a 2-D `y`, one array per
             output, as cuML and scikit-learn return it.
         """
-        return _NATIVE(self, "family_xn_knn_clf_predict_proba", (self._bind("_mojolearn"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_knn_clf_predict_proba", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
@@ -1062,7 +1061,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _NATIVE(self, "family_xn_knn_clf_score", (self._bind("_mojolearn"), X, y, sample_weight),
+        return _NATIVE(self, "family_xn_knn_clf_score", (None, X, y, sample_weight),
                        _NATIVE_CONTEXT)
 
 
@@ -1210,7 +1209,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         -------
         self
         """
-        return _NATIVE(self, "family_xn_knn_reg_fit", (self._bind(_XN), X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_knn_reg_fit", (None, X, y), _NATIVE_CONTEXT)
 
 
     def predict(self, X):
@@ -1232,7 +1231,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
             If the model is not fitted, `X` has the wrong number of features,
             or `n_neighbors` exceeds the number of training samples.
         """
-        return _NATIVE(self, "family_xn_knn_reg_predict", (self._bind("_mojolearn"), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xn_knn_reg_predict", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -1252,8 +1251,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
         return _NATIVE(self, "family_xn_knn_reg_score",
-                       (self._bind("_mojolearn"), X, y, sample_weight,
-                        _metrics_binding(getattr(self, "numeric_mode", None))), _NATIVE_CONTEXT)
+                       (None, X, y, sample_weight, None), _NATIVE_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring):
@@ -1551,3 +1549,6 @@ _QUERY_CONTEXT["neighbor_query_classifier_classes"] = {KNeighborsClassifier: Tru
 # takes the same names as scikit-learn's module.
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("neighbors")
+
+# Runtime binding selection belongs to the native family owner.
+_native_family_bridge.connect_bindings("_mojolearn", "_mojolearn_x_neighbors", "_mojolearn_metrics")

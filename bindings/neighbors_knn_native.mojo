@@ -24,8 +24,10 @@
 #   score                `ClassifierScoreMixin.score` (the accuracy owner) and
 #                        `RegressorScoreMixin.score` (the metrics owner's R^2)
 #
-# Arguments: args[0] is the binding the shell resolved (`self._bind(...)`):
-# `_mojolearn` for the searches, the x_neighbors binding for the fits.
+# Public methods pass None in the binding slot. The operation owner resolves
+# the import-connected provider after entry: `_mojolearn` for prediction and
+# x_neighbors for fit. Explicit bindings remain supported for native drivers.
+from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -821,13 +823,18 @@ def _reg_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     var truth = family_as_f32(args[2], -1, "y", context)
     var prediction = family_as_f32(_reg_predict(model, args[0], args[1], context), -1, "prediction", context)
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
-    return mcls_cluster_operation("family_mcls_r2", Python.tuple(args[4], truth, prediction, args[3],
+    var metrics = args[4] if args[4] is not None else estimator_binding(model, "_mojolearn_metrics", context)
+    return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
-def neighbors_knn_operation(model: PythonObject, operation: String, args: PythonObject,
+def neighbors_knn_operation(model: PythonObject, operation: String, var args: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
+    if operation == "family_xn_knn_clf_fit" or operation == "family_xn_knn_reg_fit":
+        args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
+    elif operation != "family_xn_knn_nn_fit":
+        args = estimator_arguments(model, "_mojolearn", args, context)
     if operation == "family_xn_knn_nn_fit":
         # args = (X,)
         _nn_fit(model, args[0], context)
