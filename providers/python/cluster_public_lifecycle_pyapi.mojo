@@ -31,10 +31,13 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
     var attributes = native_loaded_module("mojolearn._native_public_attributes")._CONTEXT
     var plan = _plan(model, attributes)
     var fields = _fields(model)
-    var parameters = py_get(context["cluster_public_parameters"], py_type(model))
+    var ancestry = _type_mro(py_type(model))
+    var parameters = PythonObject(None)
+    for i in range(len(ancestry)):  # driver-loop: passive subclasses share their connected native owner
+        if parameters is None:
+            parameters = py_get(context["cluster_public_parameters"], ancestry[i])
     if parameters is None:
         raise Error("TypeError: cluster execution requires a connected native estimator class")
-    var ancestry = _type_mro(py_type(model))
     var setter_seen = False
     for i in range(len(ancestry)):  # driver-loop: admit native field writes before entering algorithm owners
         var names = _class_fields(ancestry[i])
@@ -58,6 +61,11 @@ def _admit_model(model: PythonObject, context: PythonObject) raises -> PythonObj
             # Exact ndarray admission alone would still permit an object-dtype
             # scalar to execute Python __float__/__int__ during old-owner casts.
             host_inference_scalar(value, context, True)
+    var learned = Python.tuple("cluster_centers_", "labels_", "n_features_in_", "counts_", "_partial_init", "_partial_batch", "_partial_state", "_tree_nodes", "_tree_centers", "weights_", "means_", "precisions_cholesky_", "log_det_chol_", "_log_consts", "_full_pchol", "_warm")
+    for i in range(len(learned)):  # driver-loop: admit only fitted storage the cluster owners actually consume
+        if py_contains(fields, learned[i]):
+            var value = _lookup(model, learned[i], fields, plan, attributes)
+            classical_admit_value(value, context)
     return fields
 
 
