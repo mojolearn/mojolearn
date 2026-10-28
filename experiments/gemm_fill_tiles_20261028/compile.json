@@ -84,5 +84,62 @@
     "other bindings importing gemm_identical (33 per the rebuild fence; linalg used by the gemm recipe)",
     "the byte_lm host CPU root (broken on main)",
     "any runtime, identity or timing"
-  ]
+  ],
+  "final": {
+    "source_commit": "6c362f1432 (merge of origin/main 4a10a3069e; dirty tracked files 0)",
+    "compiler": "Mojo 1.0.0 (ed45d567)",
+    "note": "same commands as results[] (CPU root define on; sm_89 -O0 and gfx942 default optimization, arms A/B)",
+    "results": [
+      {
+        "name": "mamba_host_cpu_mac",
+        "exit": 0,
+        "seconds": 63,
+        "jobs": 10,
+        "binary_sha256": "711b4262d17ff069fbaa5d4b193e66815bb7dd98c9d19fe6a9ea557a56f2ddd2",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/mac-cpu/build.log"
+      },
+      {
+        "name": "bytelm_gfx942_armA",
+        "exit": 0,
+        "seconds": 116,
+        "jobs": 8,
+        "binary_sha256": "3209e2e284b08544e05e3f97afacd7ec683abdccdab334c66e5435b6abfb319e",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_gfx942_armA.log"
+      },
+      {
+        "name": "bytelm_gfx942_armB",
+        "exit": 0,
+        "seconds": 117,
+        "jobs": 8,
+        "binary_sha256": "a69cda94eabfe32d36eef808eedec74a10b78c5003247b8f4d19c555812008e5",
+        "opt": "default",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_gfx942_armB.log"
+      },
+      {
+        "name": "bytelm_sm89_armA",
+        "exit": 0,
+        "seconds": 181,
+        "jobs": 8,
+        "binary_sha256": "c4dd7149eff8a956a5f0f2583728e0acfc9218a109b4f0d4ee3aed2f7e9da136",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_sm89_armA.log"
+      },
+      {
+        "name": "bytelm_sm89_armB",
+        "exit": 0,
+        "seconds": 186,
+        "jobs": 8,
+        "binary_sha256": "27ff47b3e891dc7d639213f51fdf3ac97235f8a6bf20cd4c7ec35efd55fb53fe",
+        "opt": "-O0",
+        "log": "~/mojolearn-evidence/gemm-fill-tiles-20261028/final/pod-run/remote/leg_out/bytelm_sm89_armB.log"
+      }
+    ],
+    "pod": {
+      "name": "mojolearn-cpu-gemm-fill-tiles-20261028-104010",
+      "vcpu": 32,
+      "reaped_verified": true,
+      "spend_usd": 0.0827
+    }
+  }
 }
