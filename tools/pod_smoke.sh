@@ -27,12 +27,11 @@ export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS=$JOBS MOJOLEARN_COM
 fam() {
     local f=$1 t0 rc
     t0=$(date +%s)
-    pixi run -e default python tools/bincache.py build "bindings/build_${f}_host.sh" > "$OUT/logs/host_$f.log" 2>&1
+    # Declare the one output: builds run in parallel in one tree, and an undeclared build's
+    # snapshot diff would archive a neighbour's .so under this family's cache key.
+    MOJOLEARN_BINCACHE_OUTPUTS="python/mojolearn/host/_mojolearn_${f}_host.so" \
+        pixi run -e default python tools/bincache.py build "bindings/build_${f}_host.sh" > "$OUT/logs/host_$f.log" 2>&1
     rc=$?
-    # A cache restore can place this family's binary before its own build step runs; with the
-    # binary present that is not a source failure.
-    if [ $rc != 0 ] && grep -q 'bypass-destination-exists' "$OUT/logs/host_$f.log" \
-        && [ -f "python/mojolearn/host/_mojolearn_${f}_host.so" ]; then rc=0; fi
     printf 'host\t%s\trc=%s\t%ss\n' "$f" "$rc" "$(( $(date +%s) - t0 ))" >> "$OUT/results.tsv"
 }
 export -f fam
