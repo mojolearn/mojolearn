@@ -174,16 +174,27 @@ def kernel_public_refusal(error: Error, fitting: Bool, nested: Bool, rows: Int,
     for fault in ["device_context", "CUDA", "HIP", "hipError", "Metal", "MTL"]:  # small-loop(fixed prior device-error spellings)
         if text.find(fault) >= 0:
             return Error(String(error))
+    var native_kind = String("")
+    if not pending:
+        for label in ["ValueError", "TypeError", "ZeroDivisionError", "OverflowError", "NotImplementedError", "ImportError", "IndexError", "AttributeError", "RuntimeError", "InterruptedError", "NotFittedError", "DataConversionWarning", "HostInferenceWarning"]:  # small-loop(native boundary exception prefixes)
+            if text.startswith(label + ":"):
+                native_kind = label
+                break
+    var native_untyped = not pending and native_kind.byte_length() == 0
     var message = String("")
     var name = String(py_type(model).__name__)
-    if not nested and pending and kind is b.Exception:
+    # A direct descriptor preserves the numerical owner's unprefixed Mojo
+    # refusal; the old packed CPython door surfaced that as plain Exception.
+    # Keep the same nonfinite-first mapping before one-row/one-column errors.
+    # Explicitly typed native errors and device faults retain their meaning.
+    if not nested and ((pending and kind is b.Exception) or native_untyped):
         for spelling in ["NaN", "infinity", "Infinity", "infinite", "Infinite", "nonfinite", "non-finite", "not finite", "requires finite", "must be finite"]:  # small-loop(fixed prior nonfinite spellings)
             if text.find(spelling) >= 0:
                 message = (String("Input") if fitting else String("Input X")) + " contains NaN or infinity (" + name + ": " + text + ")"
                 break
     if message.byte_length() == 0 and fitting and not nested:
-        var value_error = kind is b.ValueError or (not pending and not text.startswith("TypeError:") and not text.startswith("RuntimeError:") and not text.startswith("ImportError:") and not text.startswith("AttributeError:") and not text.startswith("OverflowError:") and not text.startswith("IndexError:") and not text.startswith("DataConversionWarning:"))
-        if rows == 1 and (value_error or kind is b.Exception or kind is b.ZeroDivisionError):
+        var value_error = kind is b.ValueError or native_untyped or native_kind == "ValueError"
+        if rows == 1 and (value_error or kind is b.Exception or kind is b.ZeroDivisionError or native_kind == "ZeroDivisionError"):
             message = name + " cannot be fit on n_samples=1: " + text
         elif columns == 1 and value_error:
             message = name + " cannot be fit on n_features=1: " + text
