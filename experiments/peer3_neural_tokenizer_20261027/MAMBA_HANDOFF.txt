@@ -59,3 +59,15 @@ Follow-up source review
   annotated; no hook was bypassed. Original failure: push.log in evidence above.
 - Follow-up direct runner: 14 source tests passed, exit 0; 15 parameterized
   public runtime controls syntax checked only. Log: source-tests-followup.log.
+
+Saved-binding repair (supersedes the corresponding pending item above)
+- Owned-weight release, session info, export and checkpoint export now resolve
+  _prefill_binding by identity against the import-connected native Mamba entry
+  namespaces. Their saved module/proxy object is never queried with getattr or
+  hasattr. Exact SimpleNamespace dictionaries are read through the native C API;
+  selected functions must belong to the connected extension image.
+- The peer parent added info/export symbols to the import-time bridge and is
+  moving inference backward refusals to native, superseding that pending item.
+- Source runner now passes 15 checks, exit 0. The 19 parameterized public runtime
+  control cases are syntax checked only. Log: source-tests-binding.log.
+- Compilation and all product/runtime/vendor qualification remain pending.

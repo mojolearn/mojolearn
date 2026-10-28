@@ -195,6 +195,59 @@ def _m3_canonical(entries: PythonObject) raises -> PythonObject:
     return entries
 
 
+def _mamba_saved_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
+    # _prefill_binding is a mutable model field. Resolve it by identity in the
+    # import-connected table BEFORE touching its attributes: a saved binding
+    # may be the CPU _HostBinding proxy, whose missing-attribute hook is Python.
+    # The exact SimpleNamespace records contain already resolved C functions.
+    var bi = native_loaded_module("builtins")
+    var table = context["training_bindings"]
+    if py_type(table) is not bi.dict:
+        raise Error("TypeError: Mamba bindings require their native connection table")
+    var keys = py_call(bi.list, table.keys())
+    for i in range(len(keys)):  # driver-loop: connection keys before native keyed lookup
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: Mamba binding connections require string route keys")
+    for i in range(len(keys)):  # driver-loop: locate the retained compiled image by identity
+        var families = table[keys[i]]
+        if py_type(families) is not bi.dict:
+            raise Error("TypeError: Mamba bindings require native family dictionaries")
+        var family_names = py_call(bi.list, families.keys())
+        for j in range(len(family_names)):  # small-loop(connection family names before lookup)
+            if py_type(family_names[j]) is not bi.str:
+                raise Error("TypeError: Mamba binding families require string keys")
+        var entries = py_get(families, "mamba")
+        if entries is None or py_type(entries) is bi.str:
+            continue
+        if py_type(entries) is not native_loaded_module("types").SimpleNamespace:
+            raise Error("TypeError: Mamba requires its connected native entry namespace")
+        ref cpy = Python().cpython()
+        var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        if not pointer:
+            raise cpy.unsafe_get_error()
+        var fields = PythonObject(from_owned=pointer)
+        var names = py_call(bi.list, fields.keys())
+        for j in range(len(names)):  # driver-loop: exact names before saved-image identity lookup
+            if py_type(names[j]) is not bi.str:
+                raise Error("TypeError: Mamba native entry namespaces require string keys")
+        if binding is py_get(fields, "canonical"):
+            return fields
+    raise Error("TypeError: Mamba saved binding is not an import-connected native image")
+
+
+def _mamba_saved_entry(entries: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
+    var entry = py_get(entries, name)
+    if entry is None and not required:
+        return entry
+    var bi = native_loaded_module("builtins")
+    var marker = py_get(entries, "mamba_vendor")
+    if py_type(entry) is not py_type(bi.len) or py_type(marker) is not py_type(bi.len):
+        raise Error("TypeError: Mamba saved binding requires its compiled " + name + " entry")
+    if entry.__self__ is not marker.__self__:
+        raise Error("TypeError: Mamba saved entry belongs to a different native image")
+    return entry
+
+
 def _m3_allocate(block: PythonObject, fields: PythonObject, batch: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var b = Int(py=py_call(bi.int, batch))
@@ -348,18 +401,19 @@ def mamba3_install_owned(block: PythonObject, context: PythonObject) raises -> P
         _mamba3_publish_runtime(fields, block)
 
 
-def mamba3_release_owned(block: PythonObject) raises -> PythonObject:
+def mamba3_release_owned(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(block)
     var session = py_get(fields, "_prefill_session")
     var binding = py_get(fields, "_prefill_binding")
     if session is not None and binding is not None:
+        var entries = _mamba_saved_entries(binding, context)
         var native = py_get(fields, "_owned_native_provider")
         if neural_descriptor_matches(native, binding):
             var handle = neural_descriptor_handle(native,
-                _native_function(binding, "mamba_prefill_native_handle_v1"), session)
+                _mamba_saved_entry(entries, "mamba_prefill_native_handle_v1"), session)
             _ = neural_descriptor_execute(native, 18, [], [handle], [], False)
         else:
-            _ = py_call(_native_function(binding, "mamba3_prefill_session_close"), session)
+            _ = py_call(_mamba_saved_entry(entries, "mamba3_prefill_session_close"), session)
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_prefill_binding", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
@@ -368,14 +422,18 @@ def mamba3_release_owned(block: PythonObject) raises -> PythonObject:
     return PythonObject(None)
 
 
-def mamba3_session_info(block: PythonObject) raises -> PythonObject:
+def mamba3_session_info(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var fields = _fields(block)
     var session = py_get(fields, "_prefill_session")
     var binding = py_get(fields, "_prefill_binding")
-    if session is None or binding is None or not Bool(py=py_call(bi.hasattr, binding, "mamba3_prefill_session_info")):
+    if session is None or binding is None:
         return PythonObject(None)
-    var values = py_call(_native_function(binding, "mamba3_prefill_session_info"), session)
+    var entries = _mamba_saved_entries(binding, context)
+    var entry = _mamba_saved_entry(entries, "mamba3_prefill_session_info", False)
+    if entry is None:
+        return PythonObject(None)
+    var values = py_call(entry, session)
     var keys = [String("weight_uploads"), String("weight_recopies"), String("weight_reuses"),
                 String("backward_reuses"), String("backward_recomputes"), String("stages_held")]
     var result = bi.dict()
@@ -384,7 +442,7 @@ def mamba3_session_info(block: PythonObject) raises -> PythonObject:
     return result
 
 
-def mamba3_export_owned(block: PythonObject) raises -> PythonObject:
+def mamba3_export_owned(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var fields = _fields(block)
     var generation = py_get(fields, "_owned_generation")
@@ -412,15 +470,16 @@ def mamba3_export_owned(block: PythonObject) raises -> PythonObject:
         _ = py_call(arrays.append, array)
         _ = py_call(addresses.append, generation_address(array, keep))
     var binding = fields["_prefill_binding"]
+    var entries = _mamba_saved_entries(binding, context)
     var session = fields["_prefill_session"]
     var native = py_get(fields, "_owned_native_provider")
     if neural_descriptor_matches(native, binding):
         var handle = neural_descriptor_handle(native,
-            _native_function(binding, "mamba_prefill_native_handle_v1"), session)
+            _mamba_saved_entry(entries, "mamba_prefill_native_handle_v1"), session)
         _ = neural_descriptor_reserved_execute(native, session, handle, 0, 1, 17,
             _neural_int_words(addresses), [Int(py=generation)], [])
     else:
-        _ = py_call(_native_function(binding, "mamba3_prefill_session_export_weights"), session, addresses, generation)
+        _ = py_call(_mamba_saved_entry(entries, "mamba3_prefill_session_export_weights"), session, addresses, generation)
     var result = bi.dict()
     var names = _mamba3_weight_names()
     for i in range(len(names)):  # driver-loop: over named parameter slots
@@ -429,12 +488,12 @@ def mamba3_export_owned(block: PythonObject) raises -> PythonObject:
     return result
 
 
-def mamba3_getstate(block: PythonObject) raises -> PythonObject:
+def mamba3_getstate(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var fields = _fields(block)
     var result = py_call(bi.dict, fields)
     if py_get(fields, "_owned_generation") is not None:
-        var snapshot = mamba3_export_owned(block)
+        var snapshot = mamba3_export_owned(block, context)
         var names = _mamba3_weight_names()
         var weights = bi.list()
         for i in range(len(names)):  # driver-loop: over the fixed parameter name list
@@ -1085,13 +1144,13 @@ def mamba_native_call(operation: String, values: PythonObject, context: PythonOb
     if operation == "install_owned":
         return mamba3_install_owned(values[0], context)
     if operation == "release_owned":
-        return mamba3_release_owned(values[0])
+        return mamba3_release_owned(values[0], context)
     if operation == "session_info":
-        return mamba3_session_info(values[0])
+        return mamba3_session_info(values[0], context)
     if operation == "export_owned":
-        return mamba3_export_owned(values[0])
+        return mamba3_export_owned(values[0], context)
     if operation == "getstate":
-        return mamba3_getstate(values[0])
+        return mamba3_getstate(values[0], context)
     if operation == "setstate":
         return mamba3_setstate(values[0], values[1], context)
     if operation == "set_input_states":

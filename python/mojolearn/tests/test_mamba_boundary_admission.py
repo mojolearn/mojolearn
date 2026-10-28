@@ -126,3 +126,21 @@ def test_mamba3_native_cpu_route_does_not_invoke_class_descriptor(monkeypatch):
         patch.setattr(type(block), "__class__", property(forbidden), raising=False)
         block.forward(_tokens(1, 1, dm))
     assert calls == []
+
+
+@pytest.mark.parametrize("operation", ["release_owned_weights", "session_info", "export_owned_weights", "__getstate__"])
+def test_owned_operations_refuse_saved_binding_hooks(operation):
+    block, _ = _block("mamba3")
+    calls = []
+
+    class SavedBindingHook:
+        def __getattribute__(self, name):
+            calls.append(name)
+            raise AssertionError("saved binding hook was invoked")
+
+    block._prefill_binding = SavedBindingHook()
+    block._prefill_session = object()
+    block._owned_generation = 1
+    with pytest.raises(TypeError, match="saved binding|native image"):
+        getattr(block, operation)()
+    assert calls == []

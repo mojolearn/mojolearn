@@ -83,3 +83,15 @@ def test_session_release_survives_rejected_state_dictionary():
     assert "try:" in body and body.count("finally:") == 2
     assert body.index("_fields(state)") < body.index("finally:")
     assert body.index("h[].weights.clear()") > body.rindex("finally:")
+
+
+def test_saved_binding_lookup_uses_connected_identity_without_attribute_hooks():
+    body = NATIVE.split('def _mamba_saved_entries(')[1].split('def _mamba_saved_entry(')[0]
+    assert 'PyObject_GenericGetDict' in body
+    assert 'if binding is py_get(fields, "canonical"):' in body
+    assert 'getattr' not in body and 'hasattr' not in body
+    for operation, following in (("release_owned", "session_info"), ("session_info", "export_owned"),
+                                 ("export_owned", "getstate")):
+        body = NATIVE.split(f'def mamba3_{operation}(')[1].split(f'def mamba3_{following}(')[0]
+        assert '_mamba_saved_entries(binding, context)' in body
+        assert '_native_function(binding,' not in body
