@@ -1,0 +1,44 @@
+Recurrent/MLP public boundary follow-up — 2026-10-27
+
+Branch: lane/peer4-xseq-boundaries-20261027
+Base: 4dbd1178ef (main when this isolated worktree was created).
+
+Changes
+- rnn_hidden_sequence now uses the existing native public lifecycle, including
+  fitted-state and input admission. Its output remains the native hidden-state
+  tensor, with no regression-prediction widening.
+- Public recurrent/MLP methods reuse the connected full-reset constructor's
+  native class/storage admission plan before reading instance state. This does
+  not execute or replace constructors. Fixed class routing metadata, consumed
+  constructor parameters, schedules and fitted arrays are admitted before their
+  protocol/coercion reads; substituted Python hooks/descriptors are refused.
+- The two Python modules only connect the existing plan dictionary at import;
+  their public wrappers and already-installed native constructors stay intact.
+- MLP prediction converts and pins each fitted weight/bias once, captures its
+  shape/count, validates the layer topology, then packs those captured owners.
+  This removes raw weight metadata reads before admission and the second copy-
+  preparation pass over original objects.
+- Recurrent prediction admits params_ through the shared numeric input helper,
+  validates its count against the existing typed Net.n_params layout and checks
+  the returned result count before exposing output. No kernel arithmetic changes.
+- Parent owns the separate shared label encoding/decoding migration. This branch
+  does not alter xseq_labels/xseq_take or add a competing label implementation.
+
+Compilation and scope
+- compile.json records the final small selected xseq dispatcher compilation,
+  Mac CPU/identical, O0, 10 compiler workers. This compiles changed public owners
+  and transitively imported recurrent-state, score and forecast owner code.
+- Full logs/binary/source archive/manifests:
+  ~/mojolearn-evidence/peer4-xseq-boundaries-20261027/attempt2/.
+- Attempt1 passed before the final recurrent parameter/result count checks;
+  attempt2 covers final native source. Both complete logs remain retained.
+- Dynamic low-level neural kernels and full tokenizer host registration/loading
+  are not compiled by the fixture. No runtime, identity, GPU, performance tests
+  or rented boxes. Python syntax checks are AST-only; no package import.
+- Required source guards run on push; full output retained in the evidence root.
+
+Remaining coverage
+This is a scoped source repair with compilation evidence, not a runtime audit
+or a claim that every transitive repository path is callback-free. The parent
+label migration remains separate; actual public runtime, GPU and identity
+behavior remains unproven under the current compile-only instruction.
