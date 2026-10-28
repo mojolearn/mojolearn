@@ -1,0 +1,15 @@
+{
+  "scope": "Integrated CausalLM public forward and generate source closure, including native engine selection, native identity snapshots and native registry",
+  "source_commit": "0cceac7134",
+  "subsequent_changes": "fb62c91628 changes source-guard comments only",
+  "exit_code": 0,
+  "target": "Mac arm64 CPU",
+  "optimization_level": 0,
+  "compiler_workers": 2,
+  "binary": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/compile_engine",
+  "sha256": "4ab4e80c0403d94e022fb35108517deb4f3c42ef9fc9825a4551eb02cb499ed7",
+  "log": "/Users/andrewhendel/mojolearn-evidence/native-execution-20261028/engine-integrated-compile.log",
+  "runtime_executed": false,
+  "performance_measured": false,
+  "superseded_compile": "Full tokenizer root at older integration source intentionally cancelled rc143; not counted as success."
+}
