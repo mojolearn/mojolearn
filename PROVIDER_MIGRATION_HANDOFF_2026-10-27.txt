@@ -153,3 +153,12 @@ rekey opponent input evidence; retain quality and time on both arms.
 LOG RULE
 Keep complete build/test/GPU output in files; inspect exits/structured summaries,
 then bounded rg excerpts. Never infer whole success from passing filtered lines.
+
+CHECKPOINT COMPLETION UPDATE
+Neural lane remote: bd084cc97cdf7e33fe7a23e2d349fa3d2a2bcfb2; clean.
+Library lane remote: 25207fdad896394472d73dba3b052db9b673ee7f; clean.
+Framework lane remote: be0ebabac7c05937b1e98737d3ab0d5028b8c168; clean.
+IMPORTANT NEW WIP: neural checkpoint contains a Mamba generation route issue:
+original local _run_snapshot always uses forward(step=False); current WIP selects
+decode for later tokens. Correct before activation; do not call that WIP numerically
+unchanged. Lane handoff explicitly records it. No more source work after checkpoint.
