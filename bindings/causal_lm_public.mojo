@@ -9,6 +9,7 @@ arithmetic and uses no interpreter callback; targets are checked at admission.
 """
 from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run
 from std.python import Python, PythonObject
+from std.ffi import _Global
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -30,7 +31,7 @@ from providers.python.generation_metadata_pyapi import (
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
-    generation_ids, py_ints,
+    generation_ids, generation_initialize_binding, py_ints,
 )
 from core.generation_policy_impl import generation_pick
 from core.hostptr import f32_ptr, i32_ptr
@@ -47,7 +48,46 @@ from transformer.causal_lm_public_impl import (
 
 
 from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint
-from bindings.mode_metadata_native import _fields as _native_record_fields
+from bindings.mode_metadata_native import _fields as _native_record_fields, _truth
+from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys
+from bindings.causal_model_config import model_record_fields, model_plan_snapshot
+
+
+struct CausalPublicConnection(Defaultable, Movable):
+    var context: PythonObject
+
+    def __init__(out self):
+        self.context = PythonObject(None)
+
+
+comptime CAUSAL_PUBLIC_CONNECTION = _Global[StorageType=CausalPublicConnection,
+    name="MojoCausalPublicConnection", init_fn=CausalPublicConnection.__init__]
+
+
+def causal_public_connect(context: PythonObject) raises:
+    # Private import-connected metadata, retained natively for scalar admission.
+    CAUSAL_PUBLIC_CONNECTION.get_or_create_ptr()[].context = context
+    _ = generation_initialize_binding(context["generation_classes"])
+
+
+def _causal_context() raises -> PythonObject:
+    var context = CAUSAL_PUBLIC_CONNECTION.get_or_create_ptr()[].context
+    if context is None:
+        raise Error("RuntimeError: CausalLM requires its native construction context")
+    return context
+
+
+def _causal_state_fields(state: PythonObject) raises -> PythonObject:
+    return model_record_fields(state, _causal_context()["generation_classes"][1],
+        Python.tuple("batch_size", "max_tokens", "layers", "positions", "_owner", "_usable"))
+
+
+def _causal_model_fields(model: PythonObject) raises -> PythonObject:
+    return model_record_fields(model, _causal_context()["model_class"],
+        Python.tuple("plan", "config", "kind", "d_model", "vocab_size", "n_layers", "norm_eps",
+            "numeric_profile", "device", "weight_format", "max_positions", "_embed", "_norm", "_head",
+            "_blocks", "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15",
+            "_closed", "_failed", "_runtime", "_parallel_entry", "_block_kwargs", "unused_names", "_block_class", "_prims"))
 
 
 def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
@@ -55,7 +95,7 @@ def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
     # owner. Public models still use the ordinary class dictionary admission.
     # SimpleNamespace.__dict__ is a native member descriptor, not the Python
     # class getset descriptor expected by the public-record helper.
-    if py_type(model) is Python.import_module("types").SimpleNamespace:
+    if py_type(model) is native_loaded_module("types").SimpleNamespace:
         ref cpy = Python().cpython()
         var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr, PyObjectPtr())
         if not raw:
@@ -139,14 +179,14 @@ def causal_lm_admit_binding(
         py_setitem(entries, "decode", _native_function(block_binding, "transformer_decode_step"))
         py_setitem(entries, "block_binding", block_binding)
         for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:  # small-loop(optional entry names)
-            if Bool(py=py_call(g[].bi.hasattr, block_binding, name)):
+            if _native_has_entry(block_binding, name):
                 py_setitem(entries, name, _native_function(block_binding, name))
-        if Bool(py=py_call(g[].bi.hasattr, block_binding, "transformer_session_forward")):
+        if _native_has_entry(block_binding, "transformer_session_forward"):
             py_setitem(entries, "create", _native_function(block_binding, "transformer_session_create"))
             py_setitem(entries, "forward_session", _native_function(block_binding, "transformer_session_forward"))
             py_setitem(entries, "block_binding", block_binding)
         if model._head_int15 is not None:
-            if Bool(py=py_call(g[].bi.hasattr, block_binding, "transformer_session_forward_int15")):
+            if _native_has_entry(block_binding, "transformer_session_forward_int15"):
                 py_setitem(entries, "create", _native_function(block_binding, "transformer_session_create"))
                 py_setitem(entries, "forward15", _native_function(block_binding, "transformer_session_forward_int15"))
             else:
@@ -155,7 +195,7 @@ def causal_lm_admit_binding(
             py_setitem(entries, "gemm15", _native_function(int15_binding, "gemm_int15"))
         # Preserve the existing resident GPU route for fixed-length greedy
         # generation. No performance default changes with this migration.
-        if Bool(py=py_call(g[].bi.hasattr, block_binding, "causal_lm_session_run")):
+        if _native_has_entry(block_binding, "causal_lm_session_run"):
             py_setitem(entries, "resident_vendor", _native_function(block_binding, "transformer_vendor")())
             for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),  # small-loop(resident entry names)
                          String("transformer_decode_session_close"), String("causal_lm_session_create"),
@@ -163,7 +203,7 @@ def causal_lm_admit_binding(
                 py_setitem(entries, name, _native_function(block_binding, name))
             for name in [String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),  # small-loop(optional resident entry names)
                          String("causal_lm_session_forward")]:
-                if Bool(py=py_call(g[].bi.hasattr, block_binding, name)):
+                if _native_has_entry(block_binding, name):
                     py_setitem(entries, name, _native_function(block_binding, name))
             if model._head_int15 is not None:
                 py_setitem(entries, "transformer_decode_session_open_int15", _native_function(block_binding, "transformer_decode_session_open_int15"))
@@ -172,7 +212,7 @@ def causal_lm_admit_binding(
         py_setitem(entries, "forward", _native_function(block_binding, "mamba1_forward"))
         py_setitem(entries, "decode", _native_function(block_binding, "mamba1_decode_step"))
         var profile = 1
-        if Bool(py=py_call(g[].bi.hasattr, block_binding, "mamba1_profile")):
+        if _native_has_entry(block_binding, "mamba1_profile"):
             profile = Int(py=_native_function(block_binding, "mamba1_profile")())
         py_setitem(entries, "mamba1_profile", PythonObject(profile))
     elif kind == "mamba2":
@@ -359,17 +399,13 @@ def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises 
 
 
 def _public_int(value: PythonObject, message: String) raises -> Int:
-    # A public count is an integer (anything with __index__): a str is not
-    # parsed and a bool is not counted as 0 or 1.
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if py_type(value) is g[].bi.bool:
+    # Exact connected native integer classes preserve NumPy integer support
+    # without admitting arbitrary __index__ or conversion callbacks.
+    if py_type(value) is native_loaded_module("builtins").int:
+        return Int(py=value)
+    if not neural_native_scalar(value, _causal_context(), True):
         raise Error("TypeError: " + message)
-    var index = PythonObject(None)
-    try:
-        index = py_call(Python.import_module("operator").index, value)
-    except error:
-        raise Error("TypeError: " + message)
-    return Int(py=index)
+    return Int(py=value)
 
 
 def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacity: PythonObject) raises -> PythonObject:
@@ -1723,33 +1759,61 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         raise error
 
 
-def causal_state_init_binding(state: PythonObject, values: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    py_setattr(state, "batch_size", py_call(bi.int, values[0]))
-    py_setattr(state, "max_tokens", py_call(bi.int, values[1]))
-    py_setattr(state, "layers", py_call(bi.list, values[2]))
-    py_setattr(state, "positions", PythonObject(0))
-    py_setattr(state, "_owner", values[3])
-    py_setattr(state, "_usable", PythonObject(True))
+def causal_state_init_binding(state: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    causal_public_connect(context)
+    var fields = _causal_state_fields(state)
+    var bi = native_loaded_module("builtins")
+    for i in range(2):  # small-loop(public state dimension arguments)
+        if py_type(values[i]) is not bi.str and not neural_native_scalar(values[i], context):
+            raise Error("TypeError: CausalLMState dimensions require native scalar values")
+    if py_type(values[2]) is not bi.list and py_type(values[2]) is not bi.tuple:
+        raise Error("TypeError: CausalLMState layers require an ordinary list or tuple")
+    var batch = py_call(bi.int, values[0])
+    var capacity = py_call(bi.int, values[1])
+    var layers = py_call(bi.list, values[2])
+    py_setitem(fields, "batch_size", batch)
+    py_setitem(fields, "max_tokens", capacity)
+    py_setitem(fields, "layers", layers)
+    py_setitem(fields, "positions", PythonObject(0))
+    py_setitem(fields, "_owner", values[3])
+    py_setitem(fields, "_usable", PythonObject(True))
     return PythonObject(None)
 
 
-def _causal_owner_unusable(args_ptr: PyObjectPtr) -> Bool:
-    """True when the call's model is closed or lost its worker state.
+def causal_state_repr_binding(state: PythonObject) raises -> PythonObject:
+    var fields = _causal_state_fields(state)
+    var bi = native_loaded_module("builtins")
+    for name in ["batch_size", "max_tokens", "positions"]:  # small-loop(displayed scalar state metadata)
+        neural_plain_value(fields[name], 0, _causal_context())
+    var layers = fields["layers"]
+    if py_type(layers) is not bi.list and py_type(layers) is not bi.tuple:
+        raise Error("TypeError: CausalLMState layers require an ordinary list or tuple")
+    return PythonObject("CausalLMState(batch_size=" + String(fields["batch_size"]) +
+        ", max_tokens=" + String(fields["max_tokens"]) + ", layers=" + String(len(layers)) +
+        ", positions=" + String(fields["positions"]) + ")")
 
-    A ParallelCausalLM refusal raised through `py_call` (the parallel entry)
-    arrives here as a bare message: CPython's exception class does not cross
-    that boundary. A closed model or a lost state is a RuntimeError, so the
-    door classes it by the owner's state, not by the message text."""
+
+def causal_lm_repr_binding(model: PythonObject) raises -> PythonObject:
+    var fields = _causal_model_fields(model)
+    var plan = model_plan_snapshot(fields["plan"])
+    var bi = native_loaded_module("builtins")
+    for name in ["n_layers", "d_model", "vocab_size", "weight_format", "device"]:  # small-loop(displayed native model metadata)
+        neural_plain_value(fields[name], 0, _causal_context())
+    return PythonObject("CausalLM(model_type=" + String(py_call(bi.repr, plan["model_type"])) +
+        ", layers=" + String(fields["n_layers"]) + ", d_model=" + String(fields["d_model"]) +
+        ", vocab=" + String(fields["vocab_size"]) + ", weight_format=" + String(py_call(bi.repr, fields["weight_format"])) +
+        ", device=" + String(py_call(bi.repr, fields["device"])) + ")")
+
+
+def _causal_owner_unusable(args_ptr: PyObjectPtr) -> Bool:
+    # Error classification must not invoke a replaced property, __getattr__,
+    # __dict__ descriptor or boolean hook on the rejected public owner.
     try:
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) == 0:
             return False
-        var bi = Python.import_module("builtins")
-        var owner = args[0]
-        if Bool(py=py_call(bi.getattr, owner, PythonObject("_closed"), PythonObject(False))):
-            return True
-        return Bool(py=py_call(bi.getattr, owner, PythonObject("_failed"), PythonObject(False)))
+        var fields = neural_record_fields(args[0], Python.tuple("_closed", "_failed"))
+        return _truth(py_get(fields, "_closed")) or _truth(py_get(fields, "_failed"))
     except:
         return False
 
@@ -1788,8 +1852,12 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
             result = causal_lm_parameters_binding(args[0])
         elif operation == 14:
             result = causal_lm_blocks_binding(args[0])
+        elif operation == 15:
+            result = causal_state_init_binding(args[0], args[1], args[2])
+        elif operation == 16:
+            result = causal_lm_repr_binding(args[0])
         else:
-            result = causal_state_init_binding(args[0], args[1])
+            result = causal_state_repr_binding(args[0])
         return result.steal_data()
     except error:
         var message = String(error)

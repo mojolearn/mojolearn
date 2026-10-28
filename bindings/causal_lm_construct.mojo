@@ -5,6 +5,7 @@ Module connection metadata is supplied once by package import. Runtime route,
 profile, layout, shape admission, packing and layer construction live here.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -15,7 +16,7 @@ from std.memory import memcpy, bitcast
 from std.os import getenv
 from providers.python.operation_lock_pyapi import operation_lock_create
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints
-from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding
 from bindings.native_json import native_path, native_path_exists
@@ -46,7 +47,7 @@ def _model_dtype_refusal(name: String, code: String) -> String:
 
 
 def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(value) is context["array_class"]:
         if String(value.dtype) != "<f4":
             raise Error(_model_dtype_refusal(name, String(value.dtype)))
@@ -72,7 +73,7 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
 
 
 def _model_native_buffer(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(value) is context["array_class"]:
         var dtype = "<u2" if code == "H" else ("<i1" if code == "b" else "<i4")
         if String(value.dtype) != dtype or String(value.order) != "C":
@@ -85,7 +86,7 @@ def _model_native_buffer(value: PythonObject, code: String, context: PythonObjec
 
 
 def _model_pack(value: PythonObject, format: String, linalg: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if format == "float32":
         return value
     if len(value.shape) != 2:
@@ -111,7 +112,7 @@ def _model_pack(value: PythonObject, format: String, linalg: PythonObject, conte
 
 
 def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObject, name: String = "weight") raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var bf16 = py_type(value) is context["bf16_class"]
     var int8 = py_type(value) is context["int8_class"]
     if not bf16 and not int8:
@@ -152,15 +153,15 @@ def _model_quantize15(value: PythonObject, linalg: PythonObject) raises -> Pytho
     _ = exponents  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
-    var out = Python.import_module("builtins").list()
+    var out = native_loaded_module("builtins").list()
     _ = py_call(out.append, hi)
     _ = py_call(out.append, lo)
     _ = py_call(out.append, exponents)
-    return py_call(Python.import_module("builtins").tuple, out)
+    return py_call(native_loaded_module("builtins").tuple, out)
 
 
 def _model_profile(requested: PythonObject, family: String, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var profiles = context["profiles"]
     var defaults = context["profile_defaults"]
     var selected = requested
@@ -197,7 +198,7 @@ def _model_profile_named(requested: PythonObject, context: PythonObject) raises:
     """The family-free half of `_model_profile` for a NAMED profile: an
     unknown name or one unavailable for inference is refused before any
     path is read."""
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if py_type(requested) is not bi.str:
         raise Error("TypeError: numeric_profile must be a profile name")
     var selected = requested.strip()
@@ -225,7 +226,7 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject, re
     if entries is None:
         raise Error("CausalLM: native binding connection is unavailable for " + String(key))
     var block = entries[kind]
-    if py_type(block) is Python.import_module("builtins").str:
+    if py_type(block) is native_loaded_module("builtins").str:
         raise Error("CausalLM: " + String(block))
     var prefix = ("transformer" if kind == "transformer" else "mamba") if String(route) == "gpu" else "neural_host"
     var vendor = String(_native_function(block, prefix + "_vendor")())
@@ -237,7 +238,7 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject, re
     if mode_code != (1 if String(mode) == "identical" else 0):
         raise Error("CausalLM: binding numeric mode differs from requested mode")
     var arithmetic = entries["linalg"]
-    if py_type(arithmetic) is not Python.import_module("builtins").str:
+    if py_type(arithmetic) is not native_loaded_module("builtins").str:
         if String(_native_function(arithmetic, "linalg_vendor")()) != vendor or Int(py=_native_function(arithmetic, "linalg_numeric_mode")()) != mode_code:
             raise Error("CausalLM: packed weight binding vendor or mode differs from model")
     return entries
@@ -248,7 +249,7 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject) ra
 
 
 def _model_bits(value: PythonObject, name: String) raises -> Int:
-    var number = Float64(py=py_call(Python.import_module("builtins").float, value))
+    var number = Float64(py=py_call(native_loaded_module("builtins").float, value))
     if not isfinite(number) or number <= 0:
         raise Error("CausalLM: " + name + " must be finite and positive")
     var rounded = Float32(number)
@@ -258,7 +259,7 @@ def _model_bits(value: PythonObject, name: String) raises -> Int:
 
 
 def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObject, route: PythonObject, bindings: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var kind = String(plan.kind)
     var cls = context["block_classes"][route][kind]
     var block = py_call(bi.object.__new__, cls)
@@ -382,13 +383,13 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var session = PythonObject(None)
         var session_binding = PythonObject(None)
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
-            if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_session_create")):
+            if _native_has_entry(bindings[kind], "transformer_session_create"):
                 session = _native_function(bindings[kind], "transformer_session_create")()
                 session_binding = bindings[kind]
         py_setitem(fields, "_native_session", session)
         py_setitem(fields, "_session_binding", session_binding)
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
-        if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_arithmetic_profile")):
+        if _native_has_entry(bindings[kind], "transformer_arithmetic_profile"):
             py_setitem(fields, "_arithmetic_profile", _native_function(bindings[kind], "transformer_arithmetic_profile")())
             py_setitem(fields, "_arithmetic_profile_mode", fields["numeric_mode"])
             py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
@@ -512,7 +513,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
-            if Bool(py=py_call(bi.hasattr, bindings[kind], "mamba3_prefill_session_create")):
+            if _native_has_entry(bindings[kind], "mamba3_prefill_session_create"):
                 py_setitem(fields, "_prefill_session", _native_function(bindings[kind], "mamba3_prefill_session_create")())
                 py_setitem(fields, "_prefill_binding", bindings[kind])
         _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
@@ -523,8 +524,9 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
 def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     # Shared native admission and host metadata ownership. Parallel models
     # construct their layer owners in the assigned child processes afterward.
-    var bi = Python.import_module("builtins")
-    _ = generation_initialize_binding(context["generation_classes"])
+    var bi = native_loaded_module("builtins")
+    causal_public_connect(context)
+    _ = _causal_model_fields(model)
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
@@ -585,7 +587,7 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
 
 def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var bindings = causal_model_prepare(model, plan, weights, options, context)
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var format = String(options[0])
     var route = model.device
     var profile = model.numeric_profile
@@ -615,8 +617,8 @@ def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: 
 
 
 def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
-    _ = generation_initialize_binding(context["generation_classes"])
+    var bi = native_loaded_module("builtins")
+    causal_public_connect(context)
     var ck = context["checkpoint_context"]
     var infos = checkpoint_index_binding(checkpoint, ck)
     var need = model_checkpoint_names_binding(plan)
@@ -680,7 +682,7 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
 
 
 def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
