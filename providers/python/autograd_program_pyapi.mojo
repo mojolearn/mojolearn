@@ -410,7 +410,7 @@ def _imported_capture_input(value: PythonObject, integer: Bool, mut dims: List[I
         var rank = len(shape)
         if rank > 8:
             raise Error("ValueError: tensor rank must be at most 8")
-        for k in range(rank):  # small-loop(rank: admitted ndarray shape)
+        for k in range(rank):  # small-loop(rank: admitted ndarray axes): at most eight shape entries
             dims.append(Int(py=shape[k]))
         var sh = ShapeN.of(_imported_session_dims(dims))
         if sh.count() == 0:
@@ -453,7 +453,7 @@ def ops_imported_run_py(
     if (py_type(arrays) is not b.tuple and py_type(arrays) is not b.list) or py_type(named) is not b.dict:
         raise Error("TypeError: imported inputs require native positional and keyword containers")
     var keys = py_call(b.list, named)
-    for k in range(len(keys)):  # driver-loop: exact keyword names before hash/comparison
+    for k in range(len(keys)):  # driver-loop: over exact keyword names before hash/comparison
         if py_type(keys[k]) is not b.str:
             raise Error("TypeError: imported input names require exact strings")
     var given = arrays
@@ -481,12 +481,12 @@ def ops_imported_run_py(
     if len(declared) != plan.program.n_in:
         raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
     var inputs = List[ProgramInput]()
-    for k in range(len(declared)):  # driver-loop: input descriptors captured once before replay
+    for k in range(len(declared)):  # driver-loop: over input descriptors captured once before replay
         var got = List[Int]()
         var item = _imported_capture_input(given[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS, got)
         var want = declared[k][1]
         var same = len(got) == len(want)
-        for j in range(min(len(got), len(want))):  # small-loop(want: declared input rank)
+        for j in range(min(len(got), len(want))):  # small-loop(want: declared input rank): at most eight shape entries
             same = same and got[j] == Int(py=want[j])
         if not same:
             raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
