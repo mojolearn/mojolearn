@@ -1,5 +1,18 @@
 PROVIDER MIGRATION — ROOT HANDOFF FOR COMPACTION — 2026-10-28
 
+CPU GBDT INTEGRATION ADDENDUM (supersedes CTR/ranking READY entries below)
+The compiled CTR and ranking sets are integrated in this history:
+  CTR: 9d910269bf, ab0e2f3d2c, 9fe236a49f.
+  Ranking: f368c3c564, 3eb5489ff8, eb94eed000.
+Main checkpoint ed012ba767 is preserved through merge 9a89f43283.
+Only stale verifier-comment conflicts needed resolution; no arithmetic rewrite.
+Six source-only registration tests, docs_facts and lane_accounting pass on the
+combined tree. Existing per-batch compilation evidence is reused. Runtime,
+identity, negative-control execution and new QueryRMSE references remain pending.
+Do not cherry-pick these source sets again. Confirm origin/main and the CPU
+thread's completion notice before taking the next serialized main window.
+Full integration/push logs: ~/mojolearn-evidence/gbdt-cpu-ranking-compile-20261028/.
+
 READ THIS FIRST
 This is the current root handoff. PROVIDER_MIGRATION_HANDOFF_2026-10-27.txt
 contains retained earlier checkpoints/history and is not the current merge queue.
