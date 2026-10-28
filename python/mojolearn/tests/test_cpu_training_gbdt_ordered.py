@@ -278,8 +278,8 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
                                        **det).fit(coded, yc)
         outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
     assert outs[0] == outs[1], "two CTR host fits returned different bytes"
-    # Added with the CTR eval route on 2026-10-27; not executed for that
-    # source-only handoff. Compile the affected binding before running it.
+    # Added with the CTR eval route on 2026-10-27. The full CPU binding
+    # compiled for x86-64-v3 on 2026-10-28; this fixture remains unexecuted.
     # SkipTest must leave the learn model unchanged even when evaluation
     # contains unseen categories and a different target distribution.
     ex_ctr = coded[:300].copy()
