@@ -42,7 +42,8 @@ def _new_result(key: String, context: PythonObject) raises -> PythonObject:
 
 
 def _matrix(value: PythonObject, name: String, context: PythonObject, reject_double: Bool = True) raises -> ArimaBuffer:
-    var source = arima_buffer(value, name, context["xseq_lifecycle_context"])
+    var refusal = String("TypeError: ") + name + ": float64 is refused; pass float32"
+    var source = arima_buffer(value, name, context["xseq_lifecycle_context"], False, refusal if reject_double else String())
     if len(source.shape) > 2:
         raise Error("ValueError: " + name + " requires a vector or matrix")
     if reject_double and source.dtype_number == NPY_DOUBLE:

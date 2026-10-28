@@ -6,7 +6,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
-from bindings.classical_pandas import classical_admit_value
+from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.xseq_marshal import xseq_cast_nd
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_SIGNED
@@ -14,6 +14,7 @@ from bindings.sequential_admission import _one_of
 from providers.python.forecast_owner_pyapi import forecast_commit
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
+comptime _REFUSE_DOUBLE = "TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)"
 
 
 def _fields(model: PythonObject, cls: PythonObject) raises -> PythonObject:
@@ -61,14 +62,25 @@ def _buffer(value: PythonObject, name: String, context: PythonObject) raises -> 
     return array_metadata_once(prepared, array_shape_once(prepared, context), name, context)
 
 
+def _series_buffer(value: PythonObject, name: String, refusal: String, context: PythonObject) raises -> ArrayMetadata:
+    """`_buffer` of a public series input that may be a pandas DataFrame or
+    Series: its native block storage becomes one float32 copy, refused with
+    `refusal` when pandas promotes it beyond float32 (float64 or object)."""
+    classical_admit_value(value, context)
+    if not native_pandas_exact(value):
+        return _buffer(value, name, context)
+    var converted = native_pandas_f32(value, context, False, True, refusal)
+    return _buffer(converted, name, context)
+
+
 def autoarima_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model, context["autoarima_class"])
-    var source = _buffer(args[0], "endog", context)
+    var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context)
     var rank = len(source.shape)
     if rank != 1 and rank != 2 or source.count == 0:
         raise Error("ValueError: AutoARIMA: endog must be (batch_size, n_obs)")
     if source.dtype_number == NPY_DOUBLE:
-        raise Error("TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)")
+        raise Error(_REFUSE_DOUBLE)
     var rows = 1 if rank == 1 else source.shape[0]
     var cols = source.shape[0] if rank == 1 else source.shape[1]
     var out = source.keep

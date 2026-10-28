@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type
 from bindings.classical_arrays import classical_is_array, classical_input, classical_address
-from bindings.classical_pandas import classical_admit_value
+from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from providers.python.array_metadata_pyapi import array_shape_once, array_slot_once, array_owner_once
 from core.cast_in import cast_in_kind, NPY_FLOAT, NPY_HALF, NPY_DOUBLE
 
@@ -19,6 +19,9 @@ struct ArimaBuffer(Copyable, Movable):
     var kind: Int
     var dtype_number: Int
     var c_order: Bool
+    # True when the capture is a native float32 copy of pandas storage: the
+    # caller's own object was converted, whatever the copy's layout.
+    var converted: Bool
 
     def __init__(out self, keep: PythonObject, owner: PythonObject, var shape: List[Int], var strides: List[Int],
                  address: Int, count: Int, itemsize: Int, kind: Int, dtype_number: Int, c_order: Bool):
@@ -32,14 +35,25 @@ struct ArimaBuffer(Copyable, Movable):
         self.kind = kind
         self.dtype_number = dtype_number
         self.c_order = c_order
+        self.converted = False
 
     def f32_c(self) -> Bool:
         return self.dtype_number == NPY_FLOAT and self.itemsize == 4 and self.c_order
 
 
-def arima_buffer(value: PythonObject, name: String, context: PythonObject, packed: Bool = False) raises -> ArimaBuffer:
+def arima_buffer(value: PythonObject, name: String, context: PythonObject, packed: Bool = False,
+                 refuse_double: String = "") raises -> ArimaBuffer:
+    """`refuse_double`, when nonempty, is raised for pandas storage whose
+    common dtype promotes beyond float32 (see native_pandas_f32); ndarray and
+    Array callers apply their own dtype rule to the returned dtype number."""
     classical_admit_value(value, context)
-    var prepared = classical_input(value, context, name)
+    var pandas = native_pandas_exact(value)
+    var source = value
+    if pandas:
+        # Native pandas block storage, never DataFrame.__array__; nonfinite
+        # values pass through so each operation keeps its own finite rule.
+        source = native_pandas_f32(value, context, False, True, refuse_double)
+    var prepared = classical_input(source, context, name)
     var shape = array_shape_once(prepared, context)
     if len(shape) < 1 or len(shape) > 3:
         raise Error("ValueError: ARIMA " + name + " must have one to three dimensions")
@@ -84,4 +98,6 @@ def arima_buffer(value: PythonObject, name: String, context: PythonObject, packe
     if packed and (not contiguous or item != 4 or number != NPY_FLOAT):
         raise Error("TypeError: ARIMA fitted buffers require contiguous float32 storage")
     var owner = array_owner_once(prepared, context)
-    return ArimaBuffer(prepared, owner, shape^, strides^, Int(py=address), Int(py=count), item, kind, number, contiguous)
+    var captured = ArimaBuffer(prepared, owner, shape^, strides^, Int(py=address), Int(py=count), item, kind, number, contiguous)
+    captured.converted = pandas
+    return captured^

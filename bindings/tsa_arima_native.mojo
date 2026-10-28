@@ -121,7 +121,8 @@ def _series_major(source: PythonObject, context: PythonObject) raises -> PythonO
     var rows = 1 if rank == 1 else captured.shape[0]
     var cols = captured.shape[0] if rank == 1 else captured.shape[1]
     var result = _copy_series(captured, Python.tuple(rows, cols), context)
-    return Python.tuple(result, rows, cols, not captured.f32_c(), rank)
+    # pandas storage is converted natively, so the caller's input was copied.
+    return Python.tuple(result, rows, cols, captured.converted or not captured.f32_c(), rank)
 
 
 def _no_exog(context: PythonObject) raises -> PythonObject:
