@@ -20,3 +20,7 @@ GPU, installed-wheel or identity verification. Source bytes/hashes, complete
 compiler/log/artifact information are retained by compile.json and at:
 ~/mojolearn-evidence/classical-exception-admission-20261027/attempt1/
 No numerical kernels changed. Other shared error/warning paths remain separate.
+
+Four loop comments were aligned with the source guard annotation grammar
+after compilation; executable source is unchanged. Patch/hashes are retained
+in compile.json; no duplicate compilation is needed for annotation text.
