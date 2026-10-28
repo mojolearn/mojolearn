@@ -149,3 +149,51 @@ def test_tape_rejects_input_and_mutable_model_hooks():
     with pytest.raises(TypeError):
         block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32))
     assert calls == []
+
+
+def test_decode_session_state_roundtrip_and_original_route_bits():
+    block = _block()
+    source = np.full((1, 2, 16), .01, dtype=np.float32)
+    reference = block.allocate_state(1, 6)
+    expected = np.asarray(block.forward(source, reference)).copy()
+    state = block.allocate_state(1, 6)
+    with block.decode_session(state) as session:
+        actual = session.forward(source)
+        assert np.asarray(actual).tobytes() == expected.tobytes()
+        session.sync_state()
+        snapshot = np.asarray(state.keys()).copy()
+        session.load_state()
+        np.testing.assert_array_equal(np.asarray(state.keys()), snapshot)
+    assert not session.is_open
+    assert state.cached_tokens == 2
+    np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
+
+
+def test_decode_rejects_mutable_state_hooks_without_invocation():
+    block = _block()
+    state = block.allocate_state(1, 6)
+    calls = []
+    class Hook:
+        def __int__(self):
+            calls.append("int")
+            return 0
+    with block.decode_session(state) as session:
+        state.cached_tokens = Hook()
+        with pytest.raises(TypeError):
+            session.step(np.zeros((1, 1, 16), dtype=np.float32))
+        assert calls == []
+        state.cached_tokens = 0
+
+
+def test_decode_rejects_replaced_session_owners():
+    block = _block()
+    state = block.allocate_state(1, 6)
+    session = block.decode_session(state)
+    original = session._state
+    try:
+        session._state = object()
+        with pytest.raises(TypeError):
+            session.step(np.zeros((1, 1, 16), dtype=np.float32))
+    finally:
+        session._state = original
+        session.discard()

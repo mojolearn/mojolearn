@@ -12,6 +12,7 @@ from bindings.neural_block_admission import (
     neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
 )
 from bindings.mode_metadata_native import _fields
+from bindings.native_loaded_module import native_loaded_module
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from std.memory import memcpy
 from std.os import getenv
@@ -46,7 +47,7 @@ def neural_block_owner(block: PythonObject, context: PythonObject) raises -> Pyt
         py_setitem(fields, "_arithmetic_profile", next_profile)
         py_setitem(fields, "_arithmetic_profile_mode", want_mode)
         py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
-    var owner = py_call(bi.object.__new__, context["model_class"])
+    var owner = py_call(native_loaded_module("types").SimpleNamespace)
     py_setattr(owner, "_native_block_fields", Python.list(fields))
     py_setattr(owner, "_native_block_live", live)
     py_setattr(owner, "_native_context", context)
@@ -72,13 +73,14 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     var fields = neural_block_fields(block, context, False)
     _ = neural_block_weight_names(block)
     var kind = String(kind_value)
-    var cpu = Bool(py=py_call(bi.isinstance, block, context["block_classes"]["cpu"][kind]))
+    ref cpy = Python().cpython()
+    var cpu = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
     var route = PythonObject("cpu" if cpu else "gpu")
     # The established GPU block class routes to native host arithmetic on a
     # CPU-only installation, just as the package binding selector does.
     if context["selected_vendor"] is None or String(context["selected_vendor"]) == "cpu":
         route = PythonObject("cpu")
-    var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
+    var plan = py_call(native_loaded_module("types").SimpleNamespace)
     py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
     var norm = _model_f32(admitted_weights[norm_name], norm_name, context)
@@ -99,6 +101,12 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     elif kind == "mamba2":
         py_setitem(plan.block_kwargs, "dt_limit", captured_options[2])
     var bindings = _model_bindings(route, kind, context, mode)
+    # Preflight the selected storage class before shared construction can read
+    # its dictionary or weight-name registry (CPU fallback may select a peer
+    # class rather than the caller's class).
+    var storage_probe = py_call(bi.object.__new__, context["block_classes"][route][kind])
+    _ = neural_block_fields(storage_probe, context, False)
+    _ = neural_block_weight_names(storage_probe)
     var created = _model_block(admitted_weights, plan, profile, route, bindings, context)
     _ = py_call(fields.update, neural_block_fields(created, context))
     py_setitem(fields, "numeric_mode", mode)
@@ -587,7 +595,7 @@ def _neural_backward_prepared(block: PythonObject, input: PythonObject, grad_out
             raise Error("neural backward: grad_output must be finite")
         # Preserve the existing current-weight shape validation without
         # calling a Python block constructor from the operation.
-        var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
+        var plan = py_call(native_loaded_module("types").SimpleNamespace)
         py_setattr(plan, "kind", PythonObject(kind))
         py_setattr(plan, "d_model", PythonObject(d))
         py_setattr(plan, "block_kwargs", bi.dict())

@@ -8,7 +8,7 @@ def test_transformer_session_public_methods_are_single_native_connections():
     tree=ast.parse((ROOT/'python/mojolearn/_transformer_impl.py').read_text())
     cls=next(node for node in tree.body if isinstance(node,ast.ClassDef) and node.name=='TransformerDecodeSession')
     methods={node.name:node for node in cls.body if isinstance(node,ast.FunctionDef)}
-    for name in ('__init__','step','forward','sync_state','load_state','close','discard','state','is_open','__enter__','__exit__','__repr__'):
+    for name in ('__init__','step','forward','sync_state','load_state','close','discard','state','is_open','__enter__','__exit__','__repr__','__del__'):
         body=methods[name].body
         if isinstance(body[0],ast.Expr) and isinstance(body[0].value,ast.Constant):
             body=body[1:]
@@ -27,8 +27,8 @@ def test_native_session_owner_preserves_cpu_copies_gpu_provider_and_cleanup():
     assert 'snapshot.packed.resolve(keep)' in source
     for operation in ('19 if packed else 18','20 if step else 21','23 if load else 22'):
         assert operation in source
-    assert 'finally:\n            transformer_decode_release(session)' in source
-    assert '_writeback(copies)' in source
+    assert 'finally:\n            transformer_decode_release(session, context)' in source
+    assert 'keys.publish()' in source and 'vals.publish()' in source
     assert 'if load:\n        _transformer_decode_profile(fields, slots)' in source
     assert 'transformer_decode_native_c, "transformer_decode_native_call"' in (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert '"transformer_session_class": TransformerDecodeSession' in (ROOT/'python/mojolearn/models/causal_lm.py').read_text()
@@ -51,3 +51,21 @@ def test_resident_whole_model_uses_original_run_and_atomic_group_reservation():
     public=(ROOT/'bindings/causal_lm_public.mojo').read_text()
     for name in ('transformer_resident_lm_run','transformer_resident_lm_open','transformer_resident_lm_close'):
         assert name+'(provider,' in public
+
+
+def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
+    source=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    assert 'py_fields(' not in source
+    assert '_native_function(' not in source
+    assert 'py_call(bi.hasattr' not in source
+    assert 'PyModule_GetDict' in source
+    assert 'neural_string_keys(fields)' in source
+    assert 'self.block = block' in source and 'self.state = state' in source
+    assert 'owner fields were replaced' in source
+    assert 'configuration/cache dimensions changed' in source
+    cache=source.split('struct TransformerDecodeCache',1)[1].split('def _transformer_decode_profile',1)[0]
+    assert cache.index('admit_native_buffer_exporter(value)') < cache.index('AdmittedBorrowedBuffer(value, True)')
+    assert 'layout.copy_to(self.address)' in cache
+    assert 'layout.value().copy_from(self.address)' in cache
+    assert '_transformer_decode_entry(h[].binding' in source
+    assert 'len(args) != 3 or py_type(args[0]) is not bi.str' in source
