@@ -39,8 +39,8 @@ def program_host_request[E: Exec & Movable & Deinitable, KIND: Int](
         request[].plan = program_execute_prepare[E, KIND](sid, words[3], sid, False, False)
         request[].prepared = True
     elif words[4] == 1 and request[].prepared and not request[].finished:
-        var inputs = request[].inputs^
-        request[].inputs = List[ProgramInput]()
+        var inputs = List[ProgramInput]()
+        swap(inputs, request[].inputs)
         request[].result = program_execute_run[E, KIND](sid, request[].plan, inputs^, False)
         request[].finished = True
     else:

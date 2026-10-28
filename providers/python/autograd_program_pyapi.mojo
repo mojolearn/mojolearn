@@ -397,11 +397,10 @@ def _imported_session_dims(dims: List[Int]) -> List[Int]:
     return out^
 
 
-def _imported_capture_input(value: PythonObject, integer: Bool) raises -> Tuple[ProgramInput, List[Int]]:
+def _imported_capture_input(value: PythonObject, integer: Bool, mut dims: List[Int]) raises -> ProgramInput:
     # Exact admission precedes every protocol read. Capture ndarray shape,
     # strides, dtype and address once, then use only native descriptors.
     var a = program_native_input(value)
-    var dims = List[Int]()
     var values = List[Float64]()
     var ids = List[Int64]()
     if is_ndarray(a):
@@ -433,15 +432,15 @@ def _imported_capture_input(value: PythonObject, integer: Bool) raises -> Tuple[
             raise Error("ValueError: tensors above rank two must be C-contiguous")
         var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, sh.rows(), sh.cols(), s0, s1)
         src.check("numeric program input")
-        return (ProgramInput(src, sh, values^, ids^), dims^)
+        return ProgramInput(src, sh, values^, ids^)
     var leaf_depth = -1
     _sequence_values(a, 0, dims, values, ids, integer, leaf_depth)
     var sh = ShapeN.of(_imported_session_dims(dims))
     if integer:
         var src = CastIn(Int(ids.unsafe_ptr()), CAST_KIND_SIGNED, 8, sh.rows(), sh.cols(), sh.cols() * 8, 8)
-        return (ProgramInput(src, sh, values^, ids^), dims^)
+        return ProgramInput(src, sh, values^, ids^)
     var src = CastIn(Int(values.unsafe_ptr()), CAST_KIND_FLOAT, 8, sh.rows(), sh.cols(), sh.cols() * 8, 8)
-    return (ProgramInput(src, sh, values^, ids^), dims^)
+    return ProgramInput(src, sh, values^, ids^)
 
 
 def ops_imported_run_py(
@@ -483,9 +482,8 @@ def ops_imported_run_py(
         raise Error("ValueError: this program takes " + String(plan.program.n_in) + " input arrays, got " + String(len(declared)))
     var inputs = List[ProgramInput]()
     for k in range(len(declared)):  # driver-loop: input descriptors captured once before replay
-        var captured = _imported_capture_input(given[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS)
-        var item = captured[0]^
-        var got = captured[1]^
+        var got = List[Int]()
+        var item = _imported_capture_input(given[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS, got)
         var want = declared[k][1]
         var same = len(got) == len(want)
         for j in range(min(len(got), len(want))):  # small-loop(want: declared input rank)
