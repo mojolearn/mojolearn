@@ -27,7 +27,7 @@
   {
    "define": "MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN",
    "control": "mamba1_chunked_scan",
-   "reason": "REJECTED 2026-10-28: breaks decode==prefill at 64-token chunk boundaries; never on main, recoverable at lane/mamba-folds@db803a1337; define refused in core/six_lane_experiment_guards.mojo; docs/TOMBSTONES.md"
+   "reason": "REJECTED 2026-10-28: breaks decode==prefill at 64-token chunk boundaries; never on main, recoverable at lane/mamba-folds@db803a1337; define refused in mamba/impl/ops/selective_scan_interface.mojo (selective_scan_fn); docs/TOMBSTONES.md"
   }
  ]
 }
