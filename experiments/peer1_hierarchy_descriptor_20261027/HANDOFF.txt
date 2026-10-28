@@ -1,0 +1,170 @@
+Hierarchy numerical descriptor source audit and solver slice — 2026-10-27
+
+Start: b3239afc49478f01ff338b35121ee749396417aa (local main snapshot).
+Branch: lane/peer1-hierarchy-audit-20261027.
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-hierarchy-audit-20261027.
+Status: solver source implemented; shared registration supplied as a patch only.
+No compilation, runtime, identity tests or benchmarks performed by this lane.
+Not complete: general x_cluster, cosine predicate default dispatch and resident
+labeled-reference paths remain below. Source checks cannot qualify runtime.
+
+Implemented slice / root integration dependency
+- hierarchy/solver_descriptor_schema.mojo declares ABI and exact spans.
+- hierarchy/solver_descriptor_host.mojo calls unchanged
+  core.mojolearn_solver_host_impl.linkage_fit_host_into directly.
+- hierarchy/solver_descriptor_device.mojo calls unchanged
+  hierarchy.estimator.linkage_fit_host and synchronizes the same
+  MojoSolverContextIdentical/Fast process slot as _mojolearn_solver.
+- providers/python/hierarchy_solver_descriptor_pyapi.mojo uses the existing
+  NeuralDescriptorProvider/CompiledBindingSnapshot; exact compiled factory and
+  capsule admission retains module/image owners. No new provider type or
+  numerical CPython fallback. Buffer/output owners remain in _agglo_legacy.
+- bindings/cfb_agglo.mojo changes only _agglo_legacy routing, needed import/header.
+  Input snapshot is reused; children/labels/info addresses captured once;
+  existing state/result behavior and optional resident preparation stay intact.
+- root_solver_factory_registration.patch MUST be applied by root before this
+  source is integrated as a working public route. It only adds import, capsule
+  factory, and module registration in _mojolearn_solver{,_host}.mojo. Those
+  shared files were not edited here. Without registration the route refuses.
+
+Private descriptor contract
+Factory: hierarchy_solver_native_api_v1 (solver GPU and host modules).
+Capsule: mojolearn.hierarchy.solver.v1, existing one-entry NativeDescriptorCall.
+operation 0 LINKAGE:
+  addresses=[f32 X, i32 children, i32 labels, i32 info]
+  integers=[n_rows,n_cols,n_clusters,cuML metric,use_knn]; floats=[]
+  X has n_rows*n_cols cells; children has 2*(n_rows-1); labels n_rows;
+  info has 2 cells. Return is rounds (CPU -1); info writes unchanged.
+operation 1 MODE: no operands; compiled GLOBAL_NUMERIC_MODE.
+operation 2 CAPABILITIES: no operands; LINKAGE=1, DEVICE=2.
+All operations use the shared native error sink and result owner. Exact vector
+counts/non-null buffers and byte-span overflow are admitted before typed work;
+ordinary shape/metric/use_knn refusals stay in the old numerical functions.
+Capsule name/table live in native _Global storage; provider owns the capsule,
+factory and selected module while direct work runs with the shared GIL boundary.
+
+Mode semantics
+Normal solver selection remains estimator_binding(None,"_mojolearn_solver",...)
+in cfb_agglo_operation, not the model-mode selection used for x_cluster. Explicit
+parallel-plan modules remain explicit. No shared admission helper changed. The
+existing selector checks its legacy native metadata door; the dedicated adapter
+reads its own descriptor mode/capabilities once, accepting the existing 0/1
+modes without introducing an identical/fast switch or Apple-fast investment.
+
+Compile-only coverage for root
+Small numerical roots: compile_solver_host.mojo, compile_solver_device.mojo in
+this directory. They force the actual NativeDescriptorCall bodies and numerical
+owners into compilation. These stubs must never be executed as runtime tests.
+Public adapter/callsite root already exists at
+experiments/provider_hierarchy_20261027/compile_hierarchy.mojo (cfb_agglo_operation).
+After applying factory patch, smallest installed binding target is
+bindings/build_solver_host.sh / bindings/entry/entry__mojolearn_solver_host.mojo;
+GPU counterpart uses build_solver.sh / entry__mojolearn_solver.mojo. Parent
+chooses target/compiler/flags and retains provenance. Host numerical stub alone
+does not qualify factory registration or public provider admission; public root
+alone cannot prove the descriptor's dynamically selected numerical body built.
+No new build groups or generated entries are required. Shared host production
+image is _mojolearn_native_host; public owner remains tokenizer-host.
+
+Audit: actual remaining numerical chains at the starting snapshot
+1. _agglo_legacy -> family_call(linkage_fit) ->
+   bindings/_mojolearn_solver.mojo:184 (GPU) -> hierarchy/estimator.mojo:97 ->
+   hierarchy/impl/linkage.mojo:52 -> hierarchy/impl/cluster/detail/single_linkage
+   -> existing distance/MST/dendrogram/label kernels.
+   CPU binding :238 -> core/mojolearn_solver_host_impl.mojo:29 -> host_prim_mst,
+   host_dendrogram_fast, host_extract_flattened_clusters. All outputs already
+   typed caller buffers. This is the implemented descriptor slice.
+2. _agglo_x -> family_call(x_cluster_call,ENTRY_AGGLO=11) ->
+   bindings/_mojolearn_x_cluster{,_host}.mojo:29/:21 -> read_f32/py_ints/py_floats
+   -> x_cluster.entries.run_entry -> agglo_entry (:517) -> agglo_tree + tree_labels
+   with DeviceOps/HostOps -> ClusterOut -> cluster_out_to_py -> _xc_array.
+   The current packed result path imports/calls Python array.array and builds
+   Python containers; merely replacing its outer call would leave that path.
+3. hierarchy_resident_pyapi _handle/release/reference_labels use py_call of
+   labeled_reference_prepare/release/predict_resident and predict. Actual GPU
+   exports are in _mojolearn_estimators.mojo:203 and
+   bindings/labeled_reference_resident_binding.mojo:17/:38/:44. Typed owners are
+   core/labeled_reference_predict.mojo:101 and core/labeled_reference_resident
+   prepare/release/predict_resident. Host one-shot binding :806 calls
+   core.estimators_host_impl.labeled_reference_predict_host_run (:328) ->
+   core.labeled_reference_host_predict.host_labeled_reference_predict.
+   Host module exposes no resident prepare/predict exports; one-shot is supported.
+
+No existing descriptor factory for these three families was found in the six
+actual solver/x_cluster/estimators modules. Reusable infrastructure is the shared
+NativeDescriptorCall/error/result ABI and neural_descriptor_{connect,execute},
+CompiledBindingSnapshot and NativeDescriptorResource. The cosine row_all_zero
+primitive already has xn native descriptor support, but xn_admit is gated by
+MOJOLEARN_CLASSICAL_NATIVE_DISPATCH=1; default xn_execute still uses py_call.
+This audit is a source design review of these chains, not full transitive runtime
+qualification or a claim that all numerical sources have been proved callback-free.
+
+Next design slice: general agglo caller-owned outputs
+Propose new x_cluster/agglo_descriptor_schema.mojo plus native host/device
+wrappers. Export agglo_native_api_v1 from x_cluster GPU/host shared binding files.
+Use existing NativeDescriptorCall (separate capsule mojolearn.x_cluster.agglo.v1).
+FIT A=[X,aux,children,labels,distances,scalars_f64_2].
+I=[x_count,aux_count,n,d,linkage,metric,n_edges,n_merges,edge_mode,cut,use_threshold].
+F=[minkowski_p,threshold]. Metadata operations mode/capabilities, as above.
+Call existing agglo_entry(ops,read_f32(X),read_f32(aux),I[2:],F), validate
+ClusterOut lengths, memcpy its i[0],i[1],f[0],s[0:2] to caller buffers. Preserve
+DeviceOps/HostOps and exact output words; no arithmetic rewrite, Py array or
+ClusterOut object crosses the ABI. Empty aux/zero-merge outputs allow null
+pointers only at zero length. Keep X/HierarchyConnectivity/output owners until
+completion. The cfb caller sets existing fields and warnings directly from its
+own result arrays. It can omit storing distances while still preserving the old
+calculation. Calling agglo_entry directly avoids unrelated runtime entry routes;
+its current module imports broad cluster code, so optional extraction would be
+an additional root-owned shared edit, not required for this transport repair.
+
+Next design slice: shared labeled-reference descriptor (coordinate density)
+Propose core/labeled_reference_descriptor_schema.mojo and native host/device
+adapters, exported as labeled_reference_native_api_v1 from estimators modules,
+ABI mojolearn.labeled_reference.native.v1. Keep adapters in the SAME binary as
+the existing registry/context to prevent handle ownership crossing images.
+PREDICT A=[refs,keys,labels,queries,out_labels,out_refs],
+        I=[n_refs,n_queries,n_features,metric,has_threshold], F=[eps].
+PREPARE A=[refs,keys,labels], I=[n_refs,n_features,metric], F=[] -> handle.
+PREDICT_RESIDENT A=[handle,queries,out_labels],
+        I=[n_queries,n_features,metric,has_threshold], F=[eps].
+RELEASE A=[handle], I=[], F=[]; MODE/CAPABILITIES use no operands.
+Host advertises one-shot only; device also advertises resident support. Reuse
+current typed functions unchanged, with existing registry mutation/GIL contracts
+and synchronous completion. No capsule fallback to packed numerical exports.
+Retain source refs/labels in cache key and provider/module lifetime in the
+resource. NativeDescriptorResource already supports release A=[handle] with
+empty context; validate resource provider identity/ABI as well as handle before
+reuse (empty context alone cannot identify an engine). Adopt immediately after
+prepare so allocation/cache failure releases the newly minted device owner.
+
+Shared finalizer dependency
+host_archive_lifetime.mojo:55-58 still getattr/py_call releases (key,handle,module)
+resident tuples. Root owns this file and the archive connection schema; density
+child owns cfb_resident. Agree one shared resource representation before either
+family switches. RAII NativeDescriptorResource is reusable, but merely adding a
+resource beside a legacy tuple leaves the old release dispatch live and risks
+double release. Exact holder admission, refit cleanup, lazy loaded-model mint,
+getstate exclusion and native finalizer all must agree. Do not call prediction
+migration complete after only direct PREDICT is wired.
+
+Explicit remaining Python paths / verification pending
+- _agglo_x numerical packed x_cluster_call and cluster_out_to_py output handling.
+- Default xn cosine zero-row numerical dispatch when native candidate is off.
+- hierarchy_resident_pyapi numerical prepare/predict/release; shared finalizer.
+- Existing shared lifecycle/admission/attribute/archive closure remains outside
+  this numerical descriptor slice and requires its own final qualification.
+- Solver and public compile, installed factory/negative controls, metadata-owner
+  lifetime/refit/public results, runtime correctness, cross-vendor identity:
+  all pending root/integration. No unsupported workaround, Python numerical
+  fallback, algorithm adjustment or vendor route change was introduced.
+
+Evidence: full worktree creation and future push/check logs retained externally
+under ~/mojolearn-evidence/peer1-audit-tests-20261027/. Source manifest is adjacent.
+Exploratory lookup misses (nonexistent guessed paths, rg no-match exit 1) were
+corrected by reading actual imports; they are not test or compile outcomes.
+
+Source verification: root factory patch git apply --check passed. Initial staged
+diff check exited 2 only on blank context-line markers in the retained patch;
+removed their trailing spaces, and patch still applies without special options.
+Original failure retained as hierarchy-staged-diff-check.log; final evidence uses
+hierarchy-staged-diff-check-final.log. No product compiler/test failure is hidden.
