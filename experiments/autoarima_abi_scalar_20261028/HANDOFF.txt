@@ -1,0 +1,33 @@
+AutoARIMA scratch-owner pins and retained ABI scalar, 2026-10-28
+
+Follow-up to 8852d1891d; independently cherry-pickable without af84ac53aa.
+
+Source review caught that the hoisted ic_k raw address did not itself retain its
+private allocation through the final IC call. Add explicit post-loop ic_k and
+grouped_ll owner uses. This was a source-review finding, not an observed runtime
+failure; no runtime execution was performed. The first batch had already been
+integrated by the root before this gap was reported.
+
+Reviewed the other captured pointers: dcounts and bcounts have explicit uses
+after their loops; best and best_ic are consumed by later selection/publication;
+llf stays owned through each IC call. All cached metadata is operation-local.
+
+Also retain each already-boxed penalty ABI scalar in its native candidate record.
+The grouped-search argument list and per-candidate IC call share it, removing
+both per-trial Python list indexing and a second Float64-to-Python boxing. The
+candidate order fields remain native Int; formulae and candidate order do not
+change. This is not a Python-free ABI claim.
+
+Affected actual TSA public dispatcher compiled successfully (Apple CPU identical
+O0, ten workers, compile_slot.sh). See compile.json. The earlier compile in this
+follow-up directory succeeded before the source-review lifetime fix; its source
+and outputs are retained under before-owner-pin-* but do not qualify the final
+source. The final artifact/log/manifest match the corrected source.
+
+No runtime, identity, GPU or performance campaign. No rented boxes. Remaining
+Python-object boundary admission, binding envelopes and publication containers
+are unchanged.
+
+Evidence: ~/mojolearn-evidence/autoarima-abi-scalar-20261028/
+Final binary: _autoarima_abi_scalar.so; source bytes/manifest, compiler/artifact
+hashes and complete log referenced by compile.json.

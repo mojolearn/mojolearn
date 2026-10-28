@@ -25,17 +25,19 @@ struct _Candidate(Copyable, Movable):
     var seasonal_q: Int
     var period: Int
     var intercept: Int
-    var penalty: Float64
+    # Keep the already boxed ABI scalar too: the grouped kernel and IC fold
+    # share it, without a Python list lookup or second boxing per candidate.
+    var penalty: PythonObject
 
     def __init__(out self, p: Int, q: Int, seasonal_p: Int, seasonal_q: Int,
-                 period: Int, intercept: Int, penalty: Float64):
+                 period: Int, intercept: Int, penalty: Float64) raises:
         self.p = p
         self.q = q
         self.seasonal_p = seasonal_p
         self.seasonal_q = seasonal_q
         self.period = period
         self.intercept = intercept
-        self.penalty = penalty
+        self.penalty = PythonObject(penalty)
 
 
 def _array(count: Int, code: Int, context: PythonObject) raises -> PythonObject:
@@ -247,10 +249,11 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                                 continue
                             var s = period if P + seasonal_d + Q else 0
                             var penalty = _penalty(p + q + P + Q + k + 1, criterion, n_obs, d, seasonal_d, s)
-                            grid.append(_Candidate(p, q, P, Q, s, k, penalty))
+                            var candidate = _Candidate(p, q, P, Q, s, k, penalty)
                             _ = py_call(table.append, Python.list(p, d, q, P, seasonal_d, Q, s, k))
                             _ = py_call(packed.extend, Python.tuple(p, q, P, Q, k))
-                            _ = py_call(pens.append, penalty)
+                            _ = py_call(pens.append, candidate.penalty)
+                            grid.append(candidate^)
         var trials = len(grid)
         if trials == 0:
             raise Error("ValueError: AutoARIMA: no (p, q, P, Q, k) order to try")
@@ -329,6 +332,9 @@ def autoarima_search(model: PythonObject, args: PythonObject, context: PythonObj
                 _ = py_call_typed(ic_entry, address, count, order.penalty, trial,
                                   ic_k_address, best_ic_address, best_address)
                 _ = llf
+            # Raw addresses do not keep Python-owned allocations alive.
+            _ = ic_k
+            _ = grouped_ll
         var table_array = classical_input(table, context, "order table")
         var selected_orders = _take(table_array, best, trials, count, 8, 3, context)
         _put(order_out, ids, selected_orders, batch, count, 64, context)
