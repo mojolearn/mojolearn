@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Typed host-side helpers of the trees entry points (`xtrees/api_pyapi.mojo`):
+"""Typed host-side helpers of the trees entry points (`providers/python/xtrees_api_pyapi.mojo`):
 the host column's cv folds, the scatter refusal, KernelExplainer's coalition
 schedule, the class priors and DART's per-tree bookkeeping. Every argument is
 a typed pointer or scalar; the PythonObject unpacking stays in the shell."""

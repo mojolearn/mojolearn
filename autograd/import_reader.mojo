@@ -1585,6 +1585,10 @@ comptime _ONNX_GRAPHS = _Global[StorageType=_OnnxStore, name=_ONNX_NAME, init_fn
 comptime OnnxPtr = UnsafePointer[OnnxGraph, MutUntrackedOrigin]
 
 
+def onnx_registry_token() raises -> Int:
+    return Int(_ONNX_GRAPHS.get_or_create_ptr())
+
+
 def onnx_graph(h: Int) raises -> OnnxPtr:
     """The graph of handle `h`."""
     var s = _ONNX_GRAPHS.get_or_create_ptr()

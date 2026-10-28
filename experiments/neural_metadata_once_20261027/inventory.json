@@ -1,0 +1,508 @@
+{
+  "schema": "mojolearn.neural-metadata-inventory.v1",
+  "base_commit": "6d07addbc",
+  "recipe_count": 29,
+  "scope": "All GPU neural recipes mapped; not all mixed boundaries migrated or runtime-qualified",
+  "rows": [
+    {
+      "lane": "causal-lm-generate",
+      "family": "causal-generation",
+      "public_api": "mojolearn.models.CausalLM.load(dir, weight_format='float32', numeric_profile='fp32_v1', device='gpu') once (untimed, the warm-up round); generate(prompt_ids, 1) [prefill] and generate(prompt_ids, N) [the clock]: greedy, the prompt ids from the host, the ids back on the host",
+      "sources": [
+        "bindings/causal_lm_public.mojo"
+      ],
+      "native_metadata": "Resident sessions and native growing generation state",
+      "status": "Separate generation provider/ABI/native-dispatch lane",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "causal-lm-generate-smollm2",
+      "family": "causal-generation",
+      "public_api": "mojolearn.models.CausalLM.load(dir, weight_format='float32', numeric_profile='fp32_v1', device='gpu') once (untimed, the warm-up round); generate(prompt_ids, 1) [prefill] and generate(prompt_ids, N) [the clock]: greedy, the prompt ids from the host, the ids back on the host",
+      "sources": [
+        "bindings/causal_lm_public.mojo"
+      ],
+      "native_metadata": "Resident sessions and native growing generation state",
+      "status": "Separate generation provider/ABI/native-dispatch lane",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "gemm",
+      "family": "gemm",
+      "public_api": "mojolearn.linalg.matmul(a, b)",
+      "sources": [
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_common.mojo"
+      ],
+      "native_metadata": "Native dimensions/addresses per independent matmul",
+      "status": "Already bounded public operation; no model or batch loop requiring provider calls",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "gemm-bf16",
+      "family": "gemm",
+      "public_api": "mojolearn.linalg.matmul_bf16(a_bf16, b_bf16) (bf16 bits made before the clock)",
+      "sources": [
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_common.mojo"
+      ],
+      "native_metadata": "Native dimensions/addresses per independent matmul",
+      "status": "Already bounded public operation; no model or batch loop requiring provider calls",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "gemm-int8",
+      "family": "gemm",
+      "public_api": "mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
+      "sources": [
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_common.mojo"
+      ],
+      "native_metadata": "Native dimensions/addresses per independent matmul",
+      "status": "Already bounded public operation; no model or batch loop requiring provider calls",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "gru-fit",
+      "family": "estimator-fit",
+      "public_api": "mojolearn.GRURegressor(hidden_size=64, num_layers=1, optimizer='adam', learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+      "sources": [
+        "bindings/xseq_neural_native.mojo",
+        "sequence/mlp.mojo",
+        "sequence/recurrent.mojo"
+      ],
+      "native_metadata": "Native packed training layout, dimensions and optimizer state",
+      "status": "MLP prediction packing metadata repaired; recurrent fit epoch/time-step engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "lm-forward",
+      "family": "resident-lm",
+      "public_api": "mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
+      "sources": [
+        "bindings/causal_lm_public.mojo"
+      ],
+      "native_metadata": "Resident native model/optimizer/session state and shape records",
+      "status": "Generation/native-dispatch owner; no edits here",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "lm-train-step",
+      "family": "resident-lm",
+      "public_api": "mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
+      "sources": [
+        "bindings/causal_lm_public.mojo"
+      ],
+      "native_metadata": "Resident native model/optimizer/session state and shape records",
+      "status": "Generation/native-dispatch owner; no edits here",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "lstm-fit",
+      "family": "estimator-fit",
+      "public_api": "mojolearn.LSTMRegressor(hidden_size=64, num_layers=1, optimizer='adam', learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+      "sources": [
+        "bindings/xseq_neural_native.mojo",
+        "sequence/mlp.mojo",
+        "sequence/recurrent.mojo"
+      ],
+      "native_metadata": "Native packed training layout, dimensions and optimizer state",
+      "status": "MLP prediction packing metadata repaired; recurrent fit epoch/time-step engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mamba1-decode",
+      "family": "mamba",
+      "public_api": "mojolearn.Mamba1Block(weights).decode_session(state): load_state(); step(x[:, t:t+1]) for t < L (resident GPU decode)",
+      "sources": [
+        "bindings/mamba_public_native.mojo",
+        "bindings/neural_block_public.mojo"
+      ],
+      "native_metadata": "Native recurrence/session state with Python-visible block owners",
+      "status": "Shared generation/native-dispatch owner; changing state must remain live",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mamba1-forward",
+      "family": "mamba",
+      "public_api": "mojolearn.Mamba1Block(weights).forward(x)",
+      "sources": [
+        "bindings/mamba_public_native.mojo",
+        "bindings/neural_block_public.mojo"
+      ],
+      "native_metadata": "Native recurrence/session state with Python-visible block owners",
+      "status": "Shared generation/native-dispatch owner; changing state must remain live",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mamba2-decode",
+      "family": "mamba",
+      "public_api": "mojolearn.Mamba2Block(weights): state = allocate_state(B); step(x[:, t:t+1], state) for t < L",
+      "sources": [
+        "bindings/mamba_public_native.mojo",
+        "bindings/neural_block_public.mojo"
+      ],
+      "native_metadata": "Native recurrence/session state with Python-visible block owners",
+      "status": "Shared generation/native-dispatch owner; changing state must remain live",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mamba2-forward",
+      "family": "mamba",
+      "public_api": "mojolearn.Mamba2Block(weights).forward(x)",
+      "sources": [
+        "bindings/mamba_public_native.mojo",
+        "bindings/neural_block_public.mojo"
+      ],
+      "native_metadata": "Native recurrence/session state with Python-visible block owners",
+      "status": "Shared generation/native-dispatch owner; changing state must remain live",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mamba3-decode",
+      "family": "mamba",
+      "public_api": "mojolearn.Mamba3Block(weights): state = allocate_state(B); step(x[:, t:t+1], state) for t < L",
+      "sources": [
+        "bindings/mamba_public_native.mojo",
+        "bindings/neural_block_public.mojo"
+      ],
+      "native_metadata": "Native recurrence/session state with Python-visible block owners",
+      "status": "Shared generation/native-dispatch owner; changing state must remain live",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mamba3-forward",
+      "family": "mamba",
+      "public_api": "mojolearn.Mamba3Block(weights).forward(x)",
+      "sources": [
+        "bindings/mamba_public_native.mojo",
+        "bindings/neural_block_public.mojo"
+      ],
+      "native_metadata": "Native recurrence/session state with Python-visible block owners",
+      "status": "Shared generation/native-dispatch owner; changing state must remain live",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mlp-fit",
+      "family": "estimator-fit",
+      "public_api": "mojolearn.MLPClassifier(hidden_layer_sizes=(256,), activation='relu', solver='adam', alpha=0.0, batch_size=512, learning_rate_init=1e-3, max_iter=1, shuffle=True, random_state=7, tol=0.0, n_iter_no_change=1000).fit(X, y) (the tape path, the MLP's default)",
+      "sources": [
+        "bindings/xseq_neural_native.mojo",
+        "sequence/mlp.mojo",
+        "sequence/recurrent.mojo"
+      ],
+      "native_metadata": "Native packed training layout, dimensions and optimizer state",
+      "status": "MLP prediction packing metadata repaired; recurrent fit epoch/time-step engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mlp-predict",
+      "family": "small-mlp",
+      "public_api": "mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
+      "sources": [
+        "bindings/small_mlp_native.mojo",
+        "core/small_mlp_state_impl.mojo"
+      ],
+      "native_metadata": "MlpState handle store, native arrays and dimensions",
+      "status": "Already retained native model metadata; mixed compiled entry dispatch remains at edge",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "mlp-train-step",
+      "family": "small-mlp",
+      "public_api": "mojolearn.SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)",
+      "sources": [
+        "bindings/small_mlp_native.mojo",
+        "core/small_mlp_state_impl.mojo"
+      ],
+      "native_metadata": "MlpState handle store, native arrays and dimensions",
+      "status": "Already retained native model metadata; mixed compiled entry dispatch remains at edge",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "ops-session-step",
+      "family": "ops-program",
+      "public_api": "mojolearn.ops.Session(record=True): tensor(X), tensor(y_codes), tensor(w1, b1, w2, b2, requires_grad=True); relu(linear(x, w1, b1)); linear(h, w2, b2); cross_entropy(logits, codes); backward(loss); scalar(loss); grad(p) for each parameter; step(optimizer('sgd', lr), [w1, b1, w2, b2]): the SGD update p - lr * grad in place on the device from the backward's gradients (no gradient re-upload); numpy(p) for each updated parameter",
+      "sources": [
+        "providers/python/autograd_program_pyapi.mojo",
+        "autograd/program_io.mojo",
+        "autograd/ops_api.mojo",
+        "autograd/program_runtime.mojo"
+      ],
+      "native_metadata": "CastIn, ShapeN, ProgramInput, OpsProgram, OpsSession and Tape",
+      "status": "Program provider fields captured once; recorded operation/replay/backward engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "program-run",
+      "family": "ops-program",
+      "public_api": "mojolearn.ops.Session(): tensor(X), tensor(w1, b1, w2, b2); softmax(linear(relu(linear(x, w1, b1)), w2, b2)); capture(inputs=[x], outputs=[p]) before the clock; Program.run(X) inside it: X to the device, every captured operation, the probabilities back on the host, one call",
+      "sources": [
+        "providers/python/autograd_program_pyapi.mojo",
+        "autograd/program_io.mojo",
+        "autograd/ops_api.mojo",
+        "autograd/program_runtime.mojo"
+      ],
+      "native_metadata": "CastIn, ShapeN, ProgramInput, OpsProgram, OpsSession and Tape",
+      "status": "Program provider fields captured once; recorded operation/replay/backward engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "rnn-fit",
+      "family": "estimator-fit",
+      "public_api": "mojolearn.RNNRegressor(hidden_size=64, num_layers=1, nonlinearity='tanh', optimizer='adam', learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+      "sources": [
+        "bindings/xseq_neural_native.mojo",
+        "sequence/mlp.mojo",
+        "sequence/recurrent.mojo"
+      ],
+      "native_metadata": "Native packed training layout, dimensions and optimizer state",
+      "status": "MLP prediction packing metadata repaired; recurrent fit epoch/time-step engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "samba-decode",
+      "family": "samba",
+      "public_api": "mojolearn.SambaStack(config, weights): state = allocate_state(B, L); step(ids[:, t], state) for t < L -> logits (B, L, vocab)",
+      "sources": [
+        "bindings/samba_training_native.mojo",
+        "bindings/samba_inference_native.mojo"
+      ],
+      "native_metadata": "Native kernels/state, operation-local native dropout metadata",
+      "status": "Gradient dropout key/settings, layer count and tied-head flag reused; forward/decode remain mixed provider orchestration",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "samba-forward",
+      "family": "samba",
+      "public_api": "mojolearn.SambaStack(config, weights).forward(inputs)",
+      "sources": [
+        "bindings/samba_training_native.mojo",
+        "bindings/samba_inference_native.mojo"
+      ],
+      "native_metadata": "Native kernels/state, operation-local native dropout metadata",
+      "status": "Gradient dropout key/settings, layer count and tied-head flag reused; forward/decode remain mixed provider orchestration",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "samba-train-step",
+      "family": "samba",
+      "public_api": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+      "sources": [
+        "bindings/samba_training_native.mojo",
+        "bindings/samba_inference_native.mojo"
+      ],
+      "native_metadata": "Native kernels/state, operation-local native dropout metadata",
+      "status": "Gradient dropout key/settings, layer count and tied-head flag reused; forward/decode remain mixed provider orchestration",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "sequential-fit",
+      "family": "sequential",
+      "public_api": "mojolearn.Sequential().linear(128).relu().linear(64).relu().linear(1); compile(loss='bce_with_logits', optimizer='adam', lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule='constant', tol=0.0, n_iter_no_change=0); fit(X, y, epochs=1, batch_size=512, shuffle=True, seed=7); predict_proba(X_test)",
+      "sources": [
+        "bindings/sequential_arrays.mojo",
+        "bindings/sequential_execution.mojo",
+        "autograd/model.mojo"
+      ],
+      "native_metadata": "CastIn, native shape, FitConfig, model program and Tape",
+      "status": "Operation-local descriptor reuse repaired; whole epoch/batch engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "sequential-predict",
+      "family": "sequential",
+      "public_api": "the sequential-fit network and fit (untimed, the warm-up round); then predict_proba(X_test) inside the clock",
+      "sources": [
+        "bindings/sequential_arrays.mojo",
+        "bindings/sequential_execution.mojo",
+        "autograd/model.mojo"
+      ],
+      "native_metadata": "CastIn, native shape, FitConfig, model program and Tape",
+      "status": "Operation-local descriptor reuse repaired; whole epoch/batch engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "tape-user-model",
+      "family": "sequential",
+      "public_api": "mojolearn.Sequential().linear(64).relu().linear(64).relu().linear(1); compile(loss='bce_with_logits', optimizer='adam', lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule='constant', tol=0.0, n_iter_no_change=0); fit(X, y, epochs=1, batch_size=512, shuffle=True, seed=7)",
+      "sources": [
+        "bindings/sequential_arrays.mojo",
+        "bindings/sequential_execution.mojo",
+        "autograd/model.mojo"
+      ],
+      "native_metadata": "CastIn, native shape, FitConfig, model program and Tape",
+      "status": "Operation-local descriptor reuse repaired; whole epoch/batch engine already native",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "transformer-decode",
+      "family": "transformer",
+      "public_api": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).decode_session(state): state.cached_tokens = 0; load_state(); step(x[:, t:t+1]) for t < L (resident GPU decode, one token per call)",
+      "sources": [
+        "bindings/neural_block_public.mojo",
+        "bindings/causal_lm_public.mojo"
+      ],
+      "native_metadata": "Block/session configuration and evolving KV state",
+      "status": "Generation/native-dispatch owner; fresh public step inputs require admission",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    },
+    {
+      "lane": "transformer-forward",
+      "family": "transformer",
+      "public_api": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+      "sources": [
+        "bindings/neural_block_public.mojo",
+        "bindings/causal_lm_public.mojo"
+      ],
+      "native_metadata": "Block/session configuration and evolving KV state",
+      "status": "Generation/native-dispatch owner; fresh public step inputs require admission",
+      "public_runtime_validated": false,
+      "vendors": {
+        "apple": "pending local candidate runtime",
+        "amd": "untested; no campaign in this refactor task",
+        "nvidia": "untested; no campaign in this refactor task"
+      }
+    }
+  ]
+}

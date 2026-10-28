@@ -15,7 +15,7 @@ import pytest
 
 from mojolearn import SmallByteLanguageModelTrainer
 from mojolearn import _byte_lm_impl as impl
-from mojolearn._byte_lm_trainer_host import TrainerOwnerEntries
+from ._byte_lm_owner_mock import TrainerOwnerEntries
 
 
 def buffer(address, count, integer=False):

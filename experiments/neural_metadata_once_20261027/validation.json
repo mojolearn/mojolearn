@@ -1,0 +1,65 @@
+{
+  "schema": "mojolearn.neural-metadata-validation.v1",
+  "base_commit": "6d07addbc",
+  "implementation": "Shared vendor-independent code; no numerical kernels changed",
+  "validation_scope": "Source-only in lane; root runs candidate Mac validation",
+  "source_tests": {
+    "exit_code": 0,
+    "passed": 26,
+    "subtests_passed": 14,
+    "failed": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/source-tests.log",
+    "junit": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/source-tests.xml"
+  },
+  "native_dependency_audit": {
+    "passed": true,
+    "native_roots": 6,
+    "transitive_modules": 79,
+    "failures": 0,
+    "report": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/native-dependencies.json",
+    "baseline_exemptions": 0
+  },
+  "python_syntax": "passed",
+  "runtime_probe": {
+    "path": "python/mojolearn/tests/test_neural_metadata_snapshot.py",
+    "cases": 5,
+    "executed": false,
+    "coverage": [
+      "Sequential changed input/shape/dtype/layout/data and refit",
+      "Sequential checkpoint owner refresh and output lifetime",
+      "MLP replaced fitted weights",
+      "Program dynamic inputs/native eager comparison and result lifetime",
+      "Samba dropout stream/shape refresh against independent gradients"
+    ]
+  },
+  "pending": [
+    "Mac compilation of changed binding groups",
+    "Mac candidate bounded public probe",
+    "Affected admission/protocol and numerical regression checks",
+    "Generation per-token/per-layer metadata snapshots (separate coordinated extension)"
+  ],
+  "vendors": {
+    "apple": "not runtime-tested in lane",
+    "amd": "untested; shared code; no new build/measurement campaign",
+    "nvidia": "untested; shared code; no new build/measurement campaign"
+  },
+  "not_run": [
+    "Mojo build",
+    "GPU execution",
+    "runtime probes",
+    "identity",
+    "performance",
+    "release"
+  ],
+  "stale_source_guards": "Fixed explicit public/internal meta lifecycle bridge and current classical keyword admission assertions; runtime dispatch unchanged",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027",
+  "provider_dependency_guard_followup": {
+    "exit_code": 0,
+    "passed": 27,
+    "subtests_passed": 14,
+    "failed": 0,
+    "log": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/source-tests-provider-followup.log",
+    "junit": "/Users/andrewhendel/mojolearn-evidence/neural-metadata-once-20261027/source-tests-provider-followup.xml",
+    "purpose": "Guard existing providers/python edge transitively; fifth negative control"
+  }
+}

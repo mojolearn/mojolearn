@@ -5,6 +5,7 @@
 # `family_*` operation. Each family's file holds its operations; the door
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
+from providers.python.estimator_binding_pyapi import estimator_arguments
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common import family_call
@@ -23,6 +24,7 @@ from bindings.cluster_fit_a_native import cluster_fit_a_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
 from bindings.mixture_native import mixture_operation
 from bindings.linalg_ops_native import linalg_ops_operation
+from providers.python.lowbit_weight_pyapi import lowbit_weight_operation
 from bindings.parallel_public_native import parallel_public_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter_all, plan_exit_all
 from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits
@@ -67,8 +69,21 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     return result
 
 
-def family_operation(model: PythonObject, operation: String, args: PythonObject,
+
+def family_operation(model: PythonObject, operation: String, var args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    # These public frontdoors share one import-connected binding provider.
+    # Deeper algorithm dispatch is migrated separately; do not equate this
+    # boundary repair with completion of every transitive runtime path.
+    if operation.startswith("family_svc_linear_") or operation.startswith("family_svm_linear_"):
+        args = estimator_arguments(model, "_mojolearn_estimators", args, context)
+    elif operation.startswith("family_svc_svc_") or operation.startswith("family_svc_svr_"):
+        args = estimator_arguments(model, "_mojolearn_svm", args, context)
+    elif operation.startswith("family_kmeans_"):
+        args = estimator_arguments(model, "_mojolearn", args, context)
+    if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
+            or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
+        args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
@@ -121,6 +136,8 @@ def family_operation(model: PythonObject, operation: String, args: PythonObject,
         if py_type(entry) is not context["family_builtin_type"]:
             raise Error("TypeError: manifold requires its compiled native entry")
         return family_call(entry, model, PythonObject(operation), args, context)
+    if operation.startswith("family_low_"):
+        return lowbit_weight_operation(model, operation, args, context)
     if operation.startswith("family_lin_"):
         return linalg_ops_operation(model, operation, args, context)
     if operation.startswith("family_rs_"):

@@ -3,7 +3,7 @@
 """gamma='scale' exact sums, THE HOST COLUMN (lane/apple-fast-py2mojo-linear):
 `svm/impl/scale_gamma_limbs.mojo`'s limbs from one host loop, for the CPU
 bindings (`_mojolearn_svm_host`, `_mojolearn_kernel_methods_host`). The Python
-entry points are in `svm/host/scale_gamma_host_pyapi.mojo`."""
+entry points are in `providers/python/svm_host_scale_gamma_host_pyapi.mojo`."""
 
 from core.py2mojo_linear import py2mojo_linear_flags
 from svm.impl.scale_gamma_limbs import (

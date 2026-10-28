@@ -32,7 +32,7 @@ from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
-    TREES_NONFINITE, TreesMatrix, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
+    TREES_NONFINITE, TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_need,
     trees_helper, trees_env, trees_empty, trees_vector, trees_reshape, trees_address, trees_f32,
     trees_all_finite, trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast,
     trees_weighted_rows, trees_call,
@@ -192,36 +192,60 @@ def _indices(xt: PythonObject, pool: Int, draw: Int, replace: Bool, seed: Int, s
     return out
 
 
+# These views describe trusted internal Arrays, never arbitrary user objects.
+# External inputs still go through trees_view/trees_f32 admission. The owner in
+# each view must survive the raw-address call; callers may reuse a view only
+# while its Array's storage/shape are unchanged (for example within one fold).
+def _gather_view(xt: PythonObject, x_addr: Int, n_src: Int, d_src: Int, rows: TreesView, cols: TreesView,
+                 context: PythonObject) raises -> PythonObject:
+    var r = rows.shape[0]
+    var c = cols.shape[0]
+    var out = trees_empty(Python.tuple(r, c), "<f4", context)
+    _ = py_call_typed(_x(xt, "x_trees_gather_f32"), _P(x_addr), _P(rows.addr), _P(cols.addr), _A(out),
+                      Python.list(_P(n_src), _P(d_src), _P(r), _P(c)))
+    _ = rows
+    _ = cols
+    _ = out  # keep the owners alive through the native call above
+    return out
+
+
 def _gather(xt: PythonObject, x_addr: Int, n_src: Int, d_src: Int, rows: PythonObject, cols: PythonObject,
             context: PythonObject) raises -> PythonObject:
-    var r = len(rows)
-    var c = len(cols)
-    var out = trees_empty(Python.tuple(r, c), "<f4", context)
-    _ = py_call_typed(_x(xt, "x_trees_gather_f32"), _P(x_addr), _A(rows), _A(cols), _A(out),
-                      Python.list(_P(n_src), _P(d_src), _P(r), _P(c)))
-    _ = out  # keep the Python object alive through the native call above
+    return _gather_view(xt, x_addr, n_src, d_src, _view_of_array(rows), _view_of_array(cols), context)
+
+
+def _gather_codes_view(xt: PythonObject, codes: TreesView, rows: TreesView, context: PythonObject) raises -> PythonObject:
+    var out = trees_vector(rows.shape[0], "<i4", context)
+    _ = py_call_typed(_x(xt, "x_trees_gather_i32"), _P(codes.addr), _P(rows.addr), _A(out),
+                      Python.list(_P(codes.shape[0]), _P(rows.shape[0])))
+    _ = codes
+    _ = rows
+    _ = out  # keep the owners alive through the native call above
     return out
 
 
 def _gather_codes(xt: PythonObject, codes: PythonObject, rows: PythonObject, context: PythonObject) raises -> PythonObject:
-    var out = trees_vector(len(rows), "<i4", context)
-    _ = py_call_typed(_x(xt, "x_trees_gather_i32"), _A(codes), _A(rows), _A(out), Python.list(_P(len(codes)), _P(len(rows))))
-    _ = out  # keep the Python object alive through the native call above
-    return out
+    return _gather_codes_view(xt, _view_of_array(codes), _view_of_array(rows), context)
+
+
+def _gather_vec_view(xt: PythonObject, v_addr: Int, n: Int, rows: TreesView, context: PythonObject) raises -> PythonObject:
+    """A float32 vector gathered at rows (as an n x 1 matrix)."""
+    var col = trees_vector(1, "<i4", context)
+    var out = _gather_view(xt, v_addr, n, 1, rows, _view_of_array(col), context)
+    return trees_reshape(out, Python.tuple(rows.shape[0]), context)
 
 
 def _gather_vec(xt: PythonObject, v_addr: Int, n: Int, rows: PythonObject, context: PythonObject) raises -> PythonObject:
-    """A float32 vector gathered at rows (as an n x 1 matrix)."""
-    var col = trees_vector(1, "<i4", context)
-    var out = _gather(xt, v_addr, n, 1, rows, col, context)
-    return trees_reshape(out, Python.tuple(len(rows)), context)
+    return _gather_vec_view(xt, v_addr, n, _view_of_array(rows), context)
 
 
 def _acc_cols(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: PythonObject, n: Int, k: Int,
               context: PythonObject) raises:
     var xa = trees_f32(x, 2, "C", "sub-estimator output", context)
-    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.addr), _A(cols),
-                      Python.list(_P(n), _P(k), _P(len(cols)), _F(1.0)))
+    var cols_view = _view_of_array(cols)
+    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.addr), _P(cols_view.addr),
+                      Python.list(_P(n), _P(k), _P(cols_view.shape[0]), _F(1.0)))
+    _ = cols_view
     _ = xa  # keep the Python object alive through the native call above
     _ = xa^
 

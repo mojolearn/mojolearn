@@ -1,0 +1,152 @@
+{
+  "base": "904bd41c93fa1cf9012f174ade1e7065d5e2beb1",
+  "groups": [
+    {
+      "entry": "bindings/entry/entry__mojolearn_estimators.mojo",
+      "affected_sources": [
+        "providers/python/core_py2mojo_rows_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_estimators_host.mojo",
+      "affected_sources": [
+        "providers/python/core_py2mojo_rows_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_runtime_classical_host.mojo",
+      "affected_sources": [
+        "core/classical_cast.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_runtime_manifold_host.mojo",
+      "affected_sources": [
+        "core/classical_cast.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_runtime_model_selection_host.mojo",
+      "affected_sources": [
+        "core/classical_cast.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_runtime_sequential_host.mojo",
+      "affected_sources": [
+        "providers/python/autograd_execution_profile_pyapi.mojo",
+        "providers/python/autograd_program_arrays_pyapi.mojo",
+        "providers/python/autograd_program_pyapi.mojo",
+        "providers/python/autograd_pyapi.mojo",
+        "providers/python/autograd_weight_frontend_pyapi.mojo",
+        "providers/python/sequence_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_tokenizer_host.mojo",
+      "affected_sources": [
+        "core/classical_cast.mojo",
+        "core/generation_policy_impl.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_training.mojo",
+      "affected_sources": [
+        "providers/python/training_samba_afn_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_linear.mojo",
+      "affected_sources": [
+        "providers/python/core_py2mojo_rows_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_linear_host.mojo",
+      "affected_sources": [
+        "providers/python/core_py2mojo_rows_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_sequence.mojo",
+      "affected_sources": [
+        "providers/python/autograd_control_checkpoint_pyapi.mojo",
+        "providers/python/autograd_distributed_pyapi.mojo",
+        "providers/python/autograd_execution_profile_pyapi.mojo",
+        "providers/python/autograd_gradient_diagnostics_pyapi.mojo",
+        "providers/python/autograd_import_frontend_pyapi.mojo",
+        "providers/python/autograd_import_lower_pyapi.mojo",
+        "providers/python/autograd_import_reader_pyapi.mojo",
+        "providers/python/autograd_import_resolve_pyapi.mojo",
+        "providers/python/autograd_model_checkpoint_pyapi.mojo",
+        "providers/python/autograd_model_verify_pyapi.mojo",
+        "providers/python/autograd_ops_frontend_pyapi.mojo",
+        "providers/python/autograd_partition_pyapi.mojo",
+        "providers/python/autograd_program_arrays_pyapi.mojo",
+        "providers/python/autograd_program_control_grad_pyapi.mojo",
+        "providers/python/autograd_program_control_pyapi.mojo",
+        "providers/python/autograd_program_device_pyapi.mojo",
+        "providers/python/autograd_program_pyapi.mojo",
+        "providers/python/autograd_program_save_pyapi.mojo",
+        "providers/python/autograd_pyapi.mojo",
+        "providers/python/autograd_python_errors_pyapi.mojo",
+        "providers/python/autograd_session_frontend_pyapi.mojo",
+        "providers/python/autograd_session_lifetime_pyapi.mojo",
+        "providers/python/autograd_torch_program_pyapi.mojo",
+        "providers/python/autograd_weight_frontend_pyapi.mojo",
+        "providers/python/sequence_ets_team_pyapi.mojo",
+        "providers/python/sequence_fit_team_pyapi.mojo",
+        "providers/python/sequence_layernorm_dev_pyapi.mojo",
+        "providers/python/sequence_moe_dev_pyapi.mojo",
+        "providers/python/sequence_opt_public_pyapi.mojo",
+        "providers/python/sequence_opt_resident_pyapi.mojo",
+        "providers/python/sequence_prophet_prep_pyapi.mojo",
+        "providers/python/sequence_pyapi.mojo",
+        "providers/python/sequence_seq_tensor_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_sequence_host.mojo",
+      "affected_sources": [
+        "providers/python/autograd_control_checkpoint_pyapi.mojo",
+        "providers/python/autograd_distributed_pyapi.mojo",
+        "providers/python/autograd_execution_profile_pyapi.mojo",
+        "providers/python/autograd_gradient_diagnostics_pyapi.mojo",
+        "providers/python/autograd_import_frontend_pyapi.mojo",
+        "providers/python/autograd_import_lower_pyapi.mojo",
+        "providers/python/autograd_import_reader_pyapi.mojo",
+        "providers/python/autograd_import_resolve_pyapi.mojo",
+        "providers/python/autograd_model_checkpoint_pyapi.mojo",
+        "providers/python/autograd_model_verify_pyapi.mojo",
+        "providers/python/autograd_ops_frontend_pyapi.mojo",
+        "providers/python/autograd_partition_pyapi.mojo",
+        "providers/python/autograd_program_arrays_pyapi.mojo",
+        "providers/python/autograd_program_control_grad_pyapi.mojo",
+        "providers/python/autograd_program_control_pyapi.mojo",
+        "providers/python/autograd_program_pyapi.mojo",
+        "providers/python/autograd_program_save_pyapi.mojo",
+        "providers/python/autograd_pyapi.mojo",
+        "providers/python/autograd_python_errors_pyapi.mojo",
+        "providers/python/autograd_session_frontend_pyapi.mojo",
+        "providers/python/autograd_session_lifetime_pyapi.mojo",
+        "providers/python/autograd_torch_program_pyapi.mojo",
+        "providers/python/autograd_weight_frontend_pyapi.mojo",
+        "providers/python/sequence_opt_public_host_pyapi.mojo",
+        "providers/python/sequence_prophet_prep_pyapi.mojo",
+        "providers/python/sequence_pyapi.mojo"
+      ],
+      "reason": "static transitive import closure intersects relocated source; root decides reusable compile evidence"
+    }
+  ]
+}

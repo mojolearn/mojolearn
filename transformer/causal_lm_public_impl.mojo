@@ -5,7 +5,7 @@ Every loop over batch rows, tokens or bytes lives here, over native pointers
 and lists. The shell only unpacks Python objects and calls these functions.
 """
 from std.memory import memcpy
-from bindings.generation_policy import generation_pick
+from core.generation_policy_impl import generation_pick
 
 
 def causal_lm_rows_done(finished: List[Bool]) -> Bool:

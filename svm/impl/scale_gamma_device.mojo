@@ -7,7 +7,7 @@ adds a grid-stride share of the cells into its own limbs, carries them, and
 each block folds its threads' limbs slot by slot in shared memory into one
 partial row; a second launch, one block per slot, folds the partial rows.
 Integer sums are exact, so the words' value equals the host column's.
-The Python entry points are in `svm/impl/scale_gamma_device_pyapi.mojo`.
+The Python entry points are in `providers/python/svm_impl_scale_gamma_device_pyapi.mojo`.
 """
 
 from std.gpu import block_idx, thread_idx

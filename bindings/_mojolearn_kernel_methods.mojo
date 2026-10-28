@@ -75,7 +75,7 @@ from kernel_methods.km_binding_impl import (
 )
 
 
-from svm.impl.scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from kernel_methods.estimator import _family_ctx as _sg_family_ctx
 from kernel_methods.rbf_resident import KM_FAST_RBF_RESIDENT
 from kernel_methods.krr_resident import (
@@ -83,7 +83,16 @@ from kernel_methods.krr_resident import (
     kernel_ridge_resident_release,
     kernel_ridge_predict_resident,
 )
-from kernel_methods.rbf_resident_pyapi import rbf_sampler_fit_transform_binding, rbf_staged_binding
+from providers.python.kernel_methods_rbf_resident_pyapi import rbf_sampler_fit_transform_binding, rbf_staged_binding
+
+from kernel_methods.native_descriptor_dispatch import KERNEL_METHOD_NATIVE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+
+
+def kernel_methods_api_v1_binding() raises -> PythonObject:
+    var api = KERNEL_METHOD_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
@@ -796,6 +805,7 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         m.def_function[kernel_methods_numeric_mode_binding](
             "kernel_methods_numeric_mode"
         )
+        m.def_function[kernel_methods_api_v1_binding]("kernel_methods_api_v1")
         m.def_function[kernel_ridge_fit_binding]("kernel_ridge_fit")
         m.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
         comptime if KRR_IDN_PTR_IN:

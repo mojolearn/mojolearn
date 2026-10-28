@@ -37,6 +37,10 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # back as a sabotage build too.
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
+from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
+from providers.python.byte_lm_host_compat_pyapi import register
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from training.byte_lm_host_io import (
     all_finite_f32_scan,
     all_finite_f64_scan,
@@ -93,6 +97,11 @@ def _host_config(shape: PythonObject) raises -> ByteConfig:
                          values[4], values[5], values[6], values[7], values[8], chunked)
     cfg.validate()
     return cfg^
+
+
+def byte_lm_host_native_api_binding() raises -> PythonObject:
+    var api = BYTE_HOST_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def byte_lm_host_numeric_mode_binding() raises -> PythonObject:
@@ -174,25 +183,9 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
     var thread_count = _thread_count(threads)
     if len(addresses) != 3 or len(dims) != 2:
         raise Error("byte LM host: expected 3 addresses and 2 dims")
-    var batch = _index(dims[0])
-    var length = _index(dims[1])
-    if batch <= 0 or batch > 1048576 or length <= 0 or length > cfg.length:
-        raise Error("byte LM host: batch in [1, 2^20] and length in [1, configured length]")
-    var m = batch * length
-    if m > BYTE_HOST_MAX_LOGITS // cfg.vocab_size:
-        raise Error("byte LM host: logits exceed the admitted span")
-    var params_addr = _index(addresses[0])
-    var ids_addr = _index(addresses[1])
-    var out_addr = _index(addresses[2])
-    var params = read_f32(params_addr, cfg.n_total())
-    var ids = read_i32(ids_addr, m)
-    var logits: List[Float32]
-    if use_threads == 1:
-        logits = byte_host_logits_threaded(params, ids, batch, length, cfg, thread_count)
-    else:
-        logits = byte_host_logits(params, ids, batch, length, cfg)
-    byte_host_store_f32(f32_ptr(out_addr), logits)
-    return PythonObject(len(logits))
+    var dims_native: List[Int] = [_index(dims[0]), _index(dims[1])]
+    var addresses_native: List[Int] = [_index(addresses[0]), _index(addresses[1]), _index(addresses[2])]
+    return PythonObject(byte_host_logits_native(addresses_native, dims_native, cfg, use_threads, thread_count))
 
 
 def byte_lm_host_next_binding(addresses: PythonObject, dims: PythonObject,
@@ -202,37 +195,9 @@ def byte_lm_host_next_binding(addresses: PythonObject, dims: PythonObject,
     var thread_count = _thread_count(threads)
     if len(addresses) != 3 or len(dims) != 2:
         raise Error("byte LM host next: expected 3 addresses and 2 dims")
-    var batch = _index(dims[0])
-    var length = _index(dims[1])
-    if batch <= 0 or batch > 1048576 or length <= 0 or length > cfg.length:
-        raise Error("byte LM host next: batch in [1, 2^20] and length in [1, configured length]")
-    var params = read_f32(_index(addresses[0]), cfg.n_total())
-    var ids = read_i32(_index(addresses[1]), batch * length)
-    var next = byte_host_next_threaded(params, ids, batch, length, cfg, thread_count)
-    byte_host_store_i32(i32_ptr(_index(addresses[2])), next, batch)
-    return PythonObject(batch)
-
-
-def _read_f32_rows(address: Int, n: Int) raises -> List[Float32]:
-    """`read_f32` through the chunked copy: an owned list of the `n` floats at
-    `address`, every element written by the copy."""
-    var src = f32_ptr(address)
-    if n < 0:
-        raise Error("byte LM host: negative float32 copy length")
-    var out = host_f32_uninit(n)
-    if n > 0:
-        host_f32_copy(rebind[HostF32Ptr](out.unsafe_ptr()), rebind[HostF32Ptr](src), n)
-    return out^
-
-
-def _write_span(address: Int, values: List[Float32]) raises:
-    """Copy a host list into a caller-owned buffer at `address`.
-
-    `raises` because `f32_ptr` refuses a null address, and a function that
-    calls a raising function must say so."""
-    var out = f32_ptr(address)
-    if len(values) > 0:
-        host_f32_copy(rebind[HostF32Ptr](out), rebind[HostF32Ptr](values.unsafe_ptr()), len(values))
+    var dims_native: List[Int] = [_index(dims[0]), _index(dims[1])]
+    var addresses_native: List[Int] = [_index(addresses[0]), _index(addresses[1]), _index(addresses[2])]
+    return PythonObject(byte_host_next_native(addresses_native, dims_native, cfg, thread_count))
 
 
 def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject,
@@ -269,25 +234,13 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
     var completed_steps = _index(completed)
     if completed_steps < 0:
         raise Error("byte LM host: completed_steps must not be negative")
-    var n = cfg.n_total()
-    # The three registry-sized inputs come in through the chunked copy (lane
-    # neural-pass8) and go into the step OWNED; the step updates them in place.
-    var params = _read_f32_rows(_index(addresses[0]), n)
-    var m_state = _read_f32_rows(_index(addresses[1]), n)
-    var v_state = _read_f32_rows(_index(addresses[2]), n)
-    var ids = read_i32(_index(addresses[3]), cfg.batch * (cfg.length + 1))
-    var opt = byte_host_adamw(
-        Float32(Float64(py=scalars[0])), Float32(Float64(py=scalars[1])),
-        Float32(Float64(py=scalars[2])), Float32(Float64(py=scalars[3])),
-        Float32(Float64(py=scalars[4])),
-    )
-    var step = byte_host_train_step(params^, m_state^, v_state^, ids, cfg, opt,
-                                   completed_steps)
-    _write_span(_index(addresses[4]), step.grad)
-    _write_span(_index(addresses[5]), step.param)
-    _write_span(_index(addresses[6]), step.m_state)
-    _write_span(_index(addresses[7]), step.v_state)
-    return PythonObject(Int(bitcast[DType.uint32](step.loss)))
+    var addresses_native = List[Int]()
+    for i in range(8):  # driver-loop: over the eight admitted training buffers
+        addresses_native.append(_index(addresses[i]))
+    var scalars_native = List[Float64]()
+    for i in range(5):  # driver-loop: over the five optimizer scalar descriptors
+        scalars_native.append(Float64(py=scalars[i]))
+    return PythonObject(byte_host_train_native(addresses_native, cfg, scalars_native, completed_steps))
 
 
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
@@ -301,10 +254,8 @@ def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
     if use_threads != 0 and use_threads != 1:
         raise Error("byte LM host: threaded must be 0 or 1")
     var thread_count = _thread_count(threads)
-    var params = read_f32(_index(addresses[0]), cfg.n_total())
-    var ids = read_i32(_index(addresses[1]), cfg.batch * (cfg.length + 1))
-    var loss = byte_host_loss(params, ids, cfg, use_threads == 1, thread_count)
-    return PythonObject(Int(bitcast[DType.uint32](loss)))
+    var addresses_native: List[Int] = [_index(addresses[0]), _index(addresses[1])]
+    return PythonObject(byte_host_loss_native(addresses_native, cfg, use_threads, thread_count))
 
 
 # ===========================================================================
@@ -371,6 +322,8 @@ def byte_lm_host_arithmetic_suffix_binding() raises -> PythonObject:
 def build__mojolearn_byte_lm_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm_host")
+        register(module)
+        module.def_function[byte_lm_host_native_api_binding]("byte_lm_host_api_v1")
         module.def_function[byte_lm_host_arithmetic_suffix_binding]("byte_lm_host_arithmetic_suffix")
         module.def_function[byte_lm_host_numeric_mode_binding]("byte_lm_host_numeric_mode")
         module.def_function[byte_lm_host_vendor_binding]("byte_lm_host_vendor")

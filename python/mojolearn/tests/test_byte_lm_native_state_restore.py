@@ -1,0 +1,187 @@
+"""Actual public candidate probes; root runs with the rebuilt Mac artifact."""
+import copy
+
+import numpy as np
+import pytest
+
+
+def _model():
+    from mojolearn import LanguageModelTrainer
+    from mojolearn._byte_lm_config import ByteLanguageModelConfig
+    shape = ByteLanguageModelConfig(batch=1, length=4, d_model=32, n_heads=4,
+                                   n_kv=2, head_dim=8, intermediate=64,
+                                   n_layers=1, vocab_size=32)
+    parameters = (np.random.default_rng(81).standard_normal(shape.n_total) * .02).astype('f4')
+    return LanguageModelTrainer(parameters, data_schedule={'batch_size': 1},
+                                shape=shape, resident=True, step_result='lean')
+
+
+def _detached(state):
+    result = {key: copy.deepcopy(value) for key, value in state.items()
+              if key not in ('parameters', 'm', 'v', 'flags')}
+    for key in ('parameters', 'm', 'v', 'flags'):
+        result[key] = np.asarray(state[key]).copy()
+    return result
+
+
+def _same(left, right):
+    for key in ('parameters', 'm', 'v', 'flags'):
+        a, b = np.asarray(left[key]), np.asarray(right[key])
+        assert a.dtype == b.dtype and a.shape == b.shape and a.tobytes() == b.tobytes(), key
+    for key in ('completed_steps', 'next_batch_index', 'config', 'data_schedule',
+                'parameter_names', 'parameter_shapes', 'parameter_offsets'):
+        assert left[key] == right[key], key
+
+
+def test_restore_is_one_native_call_detaches_and_resumes():
+    from mojolearn._verify_native_runtime import audit_native_call
+    first, restored = _model(), _model()
+    ids = np.array([[1, 3, 5, 7, 9]], dtype='i4')
+    first.train_step(ids)
+    saved = _detached(first.export_state())
+    expected = _detached(saved)
+    audit = audit_native_call(restored.load_state_dict, saved)
+    assert audit.assert_native() is restored
+    saved['parameters'].fill(0)
+    saved['m'].fill(1)
+    saved['flags'].fill(1)
+    saved['data_schedule']['batch_size'] = 999
+    _same(restored.export_state(), expected)
+    a, b = first.train_step(ids), restored.train_step(ids)
+    assert np.asarray(a['loss']).tobytes() == np.asarray(b['loss']).tobytes()
+    _same(first.export_state(), restored.export_state())
+
+
+def test_invalid_restore_preserves_live_session_and_state():
+    model = _model()
+    model.train_step(np.array([[1, 3, 5, 7, 9]], dtype='i4'))
+    before = _detached(model.export_state())
+    session = model._native_session
+    mutations = (
+        lambda s: s['v'].__setitem__(0, -1),
+        lambda s: s['flags'].__setitem__(0, 2),
+        lambda s: s.__setitem__('next_batch_index', 44),
+        lambda s: s['parameter_offsets'].__setitem__(0, 1),
+        lambda s: s['model_shape'].__setitem__('head_dim', 7),
+        lambda s: s.__setitem__('parameters', s['parameters'].astype('f8')),
+    )
+    for mutate in mutations:
+        state = _detached(before)
+        mutate(state)
+        with pytest.raises((TypeError, ValueError)):
+            model.load_state_dict(state)
+        assert model._native_session is session
+        _same(model.export_state(), before)
+
+
+def test_restore_strided_int32_flags_and_rejects_python_hooks():
+    model = _model()
+    saved = _detached(model.export_state())
+    flags = np.zeros(saved['flags'].size * 2, dtype='i4')[::2]
+    flags[:] = saved['flags']
+    saved['flags'] = flags
+    model.load_state_dict(saved)
+    _same(model.export_state(), saved)
+    calls = []
+    class IndexHook:
+        def __index__(self):
+            calls.append('index')
+            raise AssertionError('Python scalar hook reached')
+    bad = _detached(saved)
+    bad['completed_steps'] = IndexHook()
+    with pytest.raises(TypeError):
+        model.load_state_dict(bad)
+    assert calls == []
+
+
+def test_binary_checkpoint_public_roundtrip_and_original_io_errors(tmp_path):
+    from mojolearn import LanguageModelTrainer
+    from mojolearn._verify_native_runtime import audit_native_call
+    model = _model()
+    ids = np.array([[1, 3, 5, 7, 9]], dtype='i4')
+    model.train_step(ids)
+    expected = _detached(model.export_state())
+    path = tmp_path / 'state.bin'
+    digest = audit_native_call(model.export_checkpoint_binary, path).assert_native()
+    import hashlib
+    assert digest == hashlib.sha256(path.read_bytes()).hexdigest()
+    restored = audit_native_call(LanguageModelTrainer.from_checkpoint_binary, path, resident=True).assert_native()
+    _same(restored.export_state(), expected)
+    model.train_step(ids)
+    restored.train_step(ids)
+    _same(model.export_state(), restored.export_state())
+    missing = tmp_path / 'missing' / 'state.bin'
+    with pytest.raises(FileNotFoundError) as failure:
+        LanguageModelTrainer.from_checkpoint_binary(missing, resident=True)
+    assert failure.value.errno == 2 and str(missing) in str(failure.value.filename)
+    original = path.read_bytes()
+    path.write_bytes(original[:-1])
+    with pytest.raises(ValueError):
+        LanguageModelTrainer.from_checkpoint_binary(path, resident=True)
+    assert path.read_bytes() == original[:-1]
+
+
+def test_attention_report_reads_native_metadata_without_computation():
+    from mojolearn._verify_native_runtime import audit_native_call
+    model = _model()
+    assert audit_native_call(model.attention_stage_report).assert_native() is None
+    model.train_step(np.array([[1, 3, 5, 7, 9]], dtype='i4'))
+    before = _detached(model.export_state())
+    report = audit_native_call(model.attention_stage_report).assert_native()
+    info = model._session_binding.byte_lm_session_info(model._native_session)
+    assert report['forward_eager_cells'] == info[4]
+    assert report['forward_aexp_cells'] == info[5]
+    assert report['backward_eager_cells'] == info[6]
+    assert report['total_bytes'] == sum(info[4:7]) * 4
+    n = min(report['layers'], info[10], info[11])
+    assert report['forward_status'] == info[12:12 + 3 * n:3]
+    assert report['backward_status'] == info[13:12 + 3 * n:3]
+    assert report['attn_materialized'] == list(map(bool, info[14:12 + 3 * n:3]))
+    assert report['backward_repair_sites'] == info[17 + 4 * n:17 + 5 * n]
+    assert sum(report['forward_status_counts'].values()) == n
+    assert sum(report['backward_status_counts'].values()) == n
+    _same(model.export_state(), before)
+    model.close()
+    assert model.attention_stage_report() is None
+
+
+def test_json_checkpoint_canonical_bytes_and_public_restores(tmp_path):
+    import hashlib
+    import json
+    from mojolearn import LanguageModelTrainer
+    from mojolearn._verify_native_runtime import audit_native_call
+    model = _model()
+    state = _detached(model.export_state())
+    state['parameters'][0] = np.float32(-0.0)
+    model.load_state_dict(state)
+    path = tmp_path / 'state.json'
+    assert audit_native_call(model.export_checkpoint, path).assert_native() is None
+    encoded = path.read_bytes()
+    envelope = json.loads(encoded)
+    canonical = lambda value: json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                         ensure_ascii=True, allow_nan=False).encode('ascii')
+    assert canonical(envelope) + b'\n' == encoded
+    assert hashlib.sha256(canonical(envelope['payload'])).hexdigest() == envelope['payload_sha256']
+    for name in ('parameters', 'm', 'v', 'flags'):
+        assert bytes.fromhex(envelope['payload'][name]['hex']) == state[name].tobytes()
+    from_file = audit_native_call(LanguageModelTrainer.from_checkpoint, path, resident=True).assert_native()
+    from_bytes = audit_native_call(LanguageModelTrainer.from_checkpoint_bytes, encoded, resident=True).assert_native()
+    _same(from_file.export_state(), state)
+    _same(from_bytes.export_state(), state)
+    alias = tmp_path / 'alias.json'
+    audit_native_call(model.save_checkpoint, alias).assert_native()
+    assert alias.read_bytes() == encoded
+    for bad in (encoded.replace(b'"schema":', b'"schema":null,"schema":', 1),
+                encoded + b'x', b' ' * (2 * 1024 * 1024 + 1)):
+        with pytest.raises(ValueError):
+            LanguageModelTrainer.from_checkpoint_bytes(bad, resident=True)
+    with pytest.raises(TypeError):
+        LanguageModelTrainer.from_checkpoint_bytes(bytearray(encoded), resident=True)
+    with pytest.raises(FileNotFoundError) as failure:
+        model.export_checkpoint(tmp_path / 'missing' / 'state.json')
+    assert failure.value.errno == 2
+    directory = tmp_path / 'directory'
+    directory.mkdir()
+    with pytest.raises(IsADirectoryError):
+        model.export_checkpoint(directory)
+    assert directory.is_dir() and not list(tmp_path.glob('*.tmp-*'))

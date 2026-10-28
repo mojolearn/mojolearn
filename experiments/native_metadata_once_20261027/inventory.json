@@ -1,0 +1,169 @@
+{
+  "schema": "mojolearn.native-metadata-inventory.v1",
+  "base_commit": "7d103e556dea894611e883c5b72cd5dd86473993",
+  "scope": "Initial tree/meta-estimator repair; no whole-library completion claim",
+  "runtime_validated": false,
+  "performance_measured": false,
+  "items": [
+    {
+      "id": "stacking-fit",
+      "source": [
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_stacking_fit",
+      "status": "repaired",
+      "classification": "Array.__len__ callbacks and stable slot/option reads inside fold/member loops",
+      "reuse_scope": "X/y/weights per invocation; train/test index descriptors per fold; output width/method snapshots per fit",
+      "lifetime_and_refresh": "TreesView.keep plus existing local X/y/weight owners; public refit admits anew"
+    },
+    {
+      "id": "stacking-transform",
+      "source": [
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_stacking_transform/_stack_out",
+      "status": "repaired",
+      "classification": "Repeated binary option/input row reads and scatter index length callback",
+      "reuse_scope": "Input, binary/passthrough flags, row-map and destination per invocation",
+      "lifetime_and_refresh": "Fresh input and model attributes read on each transform; member outputs remain freshly admitted"
+    },
+    {
+      "id": "gather-scatter",
+      "source": [
+        "bindings/trees_public_boost.mojo",
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_gather/_gather_codes/_gather_vec/_place",
+      "status": "repaired",
+      "classification": "Actual Array.__len__ callbacks in internal shared glue",
+      "reuse_scope": "Prepared TreesView variants reuse snapshots; compatibility helpers snapshot per helper call",
+      "lifetime_and_refresh": "Only trusted internal Arrays; descriptor owners retained until compiled kernel returns; source float address owner retained by caller"
+    },
+    {
+      "id": "probability-columns",
+      "source": [
+        "bindings/trees_public_boost.mojo",
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_acc_cols/_acc_cols_w",
+      "status": "repaired",
+      "classification": "Actual Array.__len__ callback for native column map",
+      "reuse_scope": "One descriptor per accumulation call; newly produced member output admitted separately",
+      "lifetime_and_refresh": "Column map and output owner retained through kernel call"
+    },
+    {
+      "id": "class-indicators",
+      "source": [
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_ovr_fit/_indicator/_splits",
+      "status": "repaired",
+      "classification": "Actual Array.__len__ callbacks on encoded labels",
+      "reuse_scope": "Codes descriptor once before multiclass loop; split count once at validation",
+      "lifetime_and_refresh": "Codes are private encoded Arrays, refreshed on each fit"
+    },
+    {
+      "id": "tree-admission",
+      "source": [
+        "bindings/trees_public_inputs.mojo"
+      ],
+      "site": "_view_of_array/_view_of_buffer",
+      "status": "repaired",
+      "classification": "Repeated ordinary slot/native memoryview metadata reads in rank loop; not demonstrated Python bytecode",
+      "reuse_scope": "Capture shape/stride tuples once for each admitted owner",
+      "lifetime_and_refresh": "Existing TreesView retains owner or memoryview export; dtype/layout conversion rules unchanged"
+    },
+    {
+      "id": "compiled-member-admission",
+      "source": [
+        "bindings/prep_native_estimator.mojo",
+        "bindings/msel_estimator_native.mojo"
+      ],
+      "site": "prep_estimator_call/prep_entry_call",
+      "status": "remaining",
+      "classification": "Compiled-extension dispatch via CPython; target public member operation can re-admit the same X",
+      "reuse_scope": "Potential descriptor-taking internal ABI with operation-local retained owner",
+      "lifetime_and_refresh": "Requires shared native entry design and runtime proof; do not relabel native dispatch as Python bytecode"
+    },
+    {
+      "id": "other-meta-reads",
+      "source": [
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_multioutput_regressor_fit/_proba_positive/_fit_calibrators/_calibrated_fit",
+      "status": "remaining",
+      "classification": "Repeated admitted Xa/Y/S/code addresses or row/column metadata within output/class/fold loops",
+      "reuse_scope": "Input snapshots per public operation, column/fold state per iteration; mutable fresh outputs cannot be shared blindly",
+      "lifetime_and_refresh": "Shared helper callback removal applies, but all orchestration metadata has not been hoisted"
+    },
+    {
+      "id": "boosted-tree-lengths",
+      "source": [
+        "bindings/trees_public_boost.mojo"
+      ],
+      "site": "_member_fit_session_rows/_unseen_rows/_all_columns/_dart_member/_dart_boost",
+      "status": "remaining",
+      "classification": "Remaining len(Array) callbacks outside repaired shared gather/accumulate helpers",
+      "reuse_scope": "Fresh sample/feature subset per member or boosting iteration; stable source metadata per operation",
+      "lifetime_and_refresh": "Do not hoist changing sampling arrays across iterations; these callbacks remain debt, not exemptions"
+    },
+    {
+      "id": "prep-row-admission",
+      "source": [
+        "bindings/x_prep_native_inputs.mojo",
+        "bindings/msel_inputs.mojo",
+        "bindings/arena_rows_native.mojo"
+      ],
+      "site": "_rows_snapshot/msel_admit/msel_input_count",
+      "status": "remaining",
+      "classification": "Native metadata dictionaries and repeated provider field reads; classify native slots separately from callbacks",
+      "reuse_scope": "Typed descriptor at admission; preserve original dtype and rows snapshot semantics",
+      "lifetime_and_refresh": "Pandas blocks, device row owners and converted storage require existing retention and conversion policy"
+    },
+    {
+      "id": "sequential-provider-admission",
+      "source": [
+        "bindings/sequential_inputs.mojo",
+        "bindings/native_buffer_owner.mojo"
+      ],
+      "site": "_buffer/native_buffer_view",
+      "status": "existing-boundary",
+      "classification": "Native buffer protocol and exact-provider metadata; ordinary PythonObject presence does not prove bytecode",
+      "reuse_scope": "One provider admission per public call, then native descriptor for downstream execution",
+      "lifetime_and_refresh": "Preserve strides/read-only/dtype promotion and exported-buffer ownership"
+    },
+    {
+      "id": "generation",
+      "source": [
+        "bindings/causal_lm_public.mojo"
+      ],
+      "site": "_run/_read/_resident_open_all/GenerationHandle",
+      "status": "other-lane",
+      "classification": "Model fields and layer metadata may be stable; current token tensor shape and cache state change during execution",
+      "reuse_scope": "Model-state generation for persistent metadata; native token/batch counters for evolving values",
+      "lifetime_and_refresh": "Read-only inventory here; execution/dispatch assigned to separate lane; retain resident cache invalidation and provider lifetimes"
+    },
+    {
+      "id": "adapter-abi",
+      "source": [
+        "adapters/native/abi.h"
+      ],
+      "site": "mojolearn_adapter_train",
+      "status": "existing-boundary",
+      "classification": "Whole-model native descriptors already carry address/kind/rank/extents",
+      "reuse_scope": "One synchronous whole-model invocation; caller owns storage until return",
+      "lifetime_and_refresh": "Reuse contract; no per-operation public adapter surface and no silent ABI/layout/device widening"
+    },
+    {
+      "id": "builtin-containers",
+      "source": [
+        "bindings/trees_public_meta.mojo"
+      ],
+      "site": "_multioutput_classifier_fit/_multioutput_classifier_predict/_active",
+      "status": "classified",
+      "classification": "len(exact list/tuple), list append and tuple indexing are CPython native container work; not Array.__len__",
+      "reuse_scope": "Some stable container lengths could be read once; heterogeneous labels still need per-item admission",
+      "lifetime_and_refresh": "Do not replace arbitrary descriptor/protocol hooks with an exemption; runtime target validation remains required"
+    }
+  ]
+}

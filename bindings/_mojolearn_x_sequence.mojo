@@ -1,28 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU binding of the sequence expansion lane (algorithm
-expansion lane 6). Every entry is `sequence/pyapi.mojo`'s, run on a `DeviceExec`; the
+expansion lane 6). Every entry is `providers/python/sequence_pyapi.mojo`'s, run on a `DeviceExec`; the
 CPU host binding `bindings/_mojolearn_x_sequence_host.mojo` exports the same
 names over a `HostExec`, the same element bodies (`sequence/ops.mojo`)."""
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
-from autograd.python_errors_pyapi import graph_python_error
-from autograd.ops_frontend_pyapi import ops_session_call_py
-from autograd.session_frontend_pyapi import ops_session_initialize_py
+from sequence.model_device_dispatch import NATIVE_MODEL_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.autograd_python_errors_pyapi import graph_python_error
+from providers.python.autograd_ops_frontend_pyapi import ops_session_call_py
+from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
-from autograd.session_lifetime_pyapi import ops_session_create_py
+from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
-from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
+from providers.python.sequence_fit_team_pyapi import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
-from sequence.ets_team_py import ets_team_applies, ets_team_py
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
+from providers.python.sequence_ets_team_pyapi import ets_team_applies, ets_team_py
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
-from sequence.opt_public_pyapi import (
+from providers.python.sequence_opt_public_pyapi import (
     seq_optimizer_init_py,
     seq_optimizer_step_py,
     seq_lamb_step_py,
@@ -32,57 +34,58 @@ from sequence.opt_public_pyapi import (
     seq_optimizer_import_py,
     seq_optimizer_close_py,
 )
-from sequence.opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
-from autograd.program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
-from autograd.program_device_pyapi import ops_imported_run_device_py
-from autograd.torch_program_pyapi import ops_torch_program_run_py
-from autograd.program_control_pyapi import ops_program_control_py
-from autograd.distributed_pyapi import (
+from providers.python.sequence_opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
+from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
+from providers.python.autograd_program_device_pyapi import ops_imported_run_device_py
+from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
+from providers.python.autograd_program_control_pyapi import ops_program_control_py
+from providers.python.autograd_distributed_pyapi import (
     distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
     distributed_run_py, distributed_state_py, distributed_residency_py,
     distributed_save_py, distributed_close_py, distributed_enter_py,
 )
-from autograd.partition_pyapi import (
+from providers.python.autograd_partition_pyapi import (
     partition_open, partition_load, partition_fit_py, partition_run_py,
     partition_state_py, partition_residency_py, partition_save_py,
     partition_close_py, partition_enter_py, partition_profile_py,
 )
 from sequence.x_sequence_impl import device_executors
-from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
-from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from autograd.pyapi import model_gather_labels_py
-from autograd.pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
-from autograd.pyapi import model_import_params_py
+from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
+from providers.python.autograd_pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
+from providers.python.autograd_pyapi import model_gather_labels_py
+from providers.python.autograd_pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
+from providers.python.autograd_pyapi import model_import_params_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
-from autograd.pyapi import ops_shape_py
+from providers.python.autograd_pyapi import ops_shape_py
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
-from autograd.import_resolve_pyapi import onnx_resolve_py
+from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py, onnx_native_api_py
+from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
-from autograd.import_frontend_pyapi import ops_import_model_c
-from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py
-from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from autograd.model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
-from sequence.pyapi import moe_backward_py, moe_backward_run
-from sequence.opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
-from sequence.seq_tensor_pyapi import (
+from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
+from providers.python.autograd_graph_metadata_pyapi import graph_record_c
+from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
+from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
+from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
+from providers.python.sequence_pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
+from providers.python.sequence_pyapi import moe_backward_py, moe_backward_run
+from providers.python.sequence_opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
+from providers.python.sequence_seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
-from sequence.layernorm_dev_pyapi import layer_norm_dev_py
+from providers.python.sequence_layernorm_dev_pyapi import layer_norm_dev_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 # TOMBSTONE: sched_exp_block (MOJOLEARN_SCHED_FAST_TABLE) (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/sched_exp_block.patch
-from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
-from sequence.moe_dev_pyapi import moe_forward_dev_py
+from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
@@ -204,6 +207,11 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
+def model_native_api_binding() raises -> PythonObject:
+    var api = NATIVE_MODEL_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def model_fit_binding(addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return model_fit_py(ex, addrs, prog, ip, fp)
@@ -218,7 +226,7 @@ def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_ad
     """Sorted distinct labels and one int32 code per row for Sequential's
     classification losses, on the device (`core/label_cast_device.mojo`
     around the base binding's `unique_inverse` sort): `src` the user's
-    labels as they are (autograd/pyapi.mojo cast_in_of descriptor, one per
+    labels as they are (providers/python/autograd_pyapi.mojo cast_in_of descriptor, one per
     row), the classes in the labels' own dtype into classes_addr (n slots),
     codes into codes_addr. Returns the class count."""
     var ck = model_labels_check(src, classes_addr, codes_addr)
@@ -229,7 +237,7 @@ def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_ad
 
 def model_predict_labels_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
     """Sequential.predict of a classifier: the codes and the label gather
-    stay on the executor (autograd/pyapi.mojo model_predict_labels_py)."""
+    stay on the executor (providers/python/autograd_pyapi.mojo model_predict_labels_py)."""
     var ex = DeviceExec()
     return model_predict_labels_py(ex, addrs, prog, ptab, ip)
 
@@ -239,7 +247,7 @@ def model_fit_labels_binding(
 ) raises -> PythonObject:
     """Sequential.fit of a classifier in one call: the label sort writes the
     classes to the caller's buffer and the codes into an executor buffer,
-    and the fit reads them there (autograd/pyapi.mojo model_fit_labels_py).
+    and the fit reads them there (providers/python/autograd_pyapi.mojo model_fit_labels_py).
     Returns [class count, epochs run]."""
     var la = model_fit_labels_check(lab)
     var ex = DeviceExec()
@@ -627,7 +635,7 @@ def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 
 
 def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """`moe_backward` (sequence/pyapi.mojo moe_backward_py): ip = [T, D, F,
+    """`moe_backward` (providers/python/sequence_pyapi.mojo moe_backward_py): ip = [T, D, F,
     E, k, renormalise]; a seventh entry > 0 is a `moe_weights_put` handle
     whose device copies are read instead of addrs[1..3]."""
     if len(ip) == 7 and ival(ip, 6) > 0:
@@ -723,6 +731,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
+        m.def_function[model_native_api_binding]("model_native_api_v1")
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")
@@ -835,6 +844,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[moe_weights_put_binding]("moe_weights_put")
         m.def_function[moe_weights_free_binding]("moe_weights_free")
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
+        m.def_function[onnx_native_api_py]("onnx_native_api_v1")
         m.def_function[onnx_read_binding]("onnx_read")
         m.def_function[onnx_info_binding]("onnx_info")
         m.def_function[onnx_buffers_binding]("onnx_buffers")
@@ -843,6 +853,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")
+        m.def_py_c_function(graph_record_c, "ops_graph_record")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()

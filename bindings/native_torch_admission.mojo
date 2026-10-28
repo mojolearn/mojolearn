@@ -182,18 +182,30 @@ def native_torch_modes_admit() raises:
         raise Error("TypeError: Torch buffers cannot be used while Python PreDispatch is active")
 
 
-def native_torch_metadata(value: PythonObject) raises -> PythonObject:
-    native_torch_admit(value)
-    var cache = NATIVE_TORCH.get_or_create_ptr()
-    var methods = cache[].methods
-    # Invoke native base descriptors directly: an instance can shadow a
-    # non-data Tensor method with a Python callable despite having exact type.
-    var device = py_call(methods["device"].__get__, value)
+def _torch_storage_metadata_admitted(value: PythonObject) raises -> PythonObject:
+    # Called only after native_torch_admit. Device was captured separately by
+    # callers that choose a transfer route; do not read that metadata twice.
+    var methods = NATIVE_TORCH.get_or_create_ptr()[].methods
     var dtype = py_call(methods["dtype"].__get__, value)
     var shape = py_call(methods["shape"].__get__, value)
     var address = py_call(methods["data_ptr"], value)
     var strides = py_call(methods["stride"], value)
-    return Python.tuple(dtype, device.type, shape, strides, address)
+    return Python.tuple(dtype, shape, strides, address)
+
+
+def native_torch_storage_metadata(value: PythonObject) raises -> PythonObject:
+    native_torch_admit(value)
+    return _torch_storage_metadata_admitted(value)
+
+
+def native_torch_metadata(value: PythonObject) raises -> PythonObject:
+    native_torch_admit(value)
+    var cache = NATIVE_TORCH.get_or_create_ptr()
+    # Invoke native base descriptors directly: an instance can shadow a
+    # non-data Tensor method with a Python callable despite having exact type.
+    var device = py_call(cache[].methods["device"].__get__, value)
+    var info = _torch_storage_metadata_admitted(value)
+    return Python.tuple(info[0], device.type, info[1], info[2], info[3])
 
 
 def native_torch_numpy(value: PythonObject) raises -> PythonObject:

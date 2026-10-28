@@ -17,6 +17,7 @@
 # Scalars derived on the host (the contamination percentile, the prior
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from std.math import floor, isinf
 from std.memory import memcpy
 from std.os import getenv
@@ -94,8 +95,7 @@ def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonOb
     """`_XNeighbors._op(name, bufs, ints, floats)`: the binding's `xn_<name>`
     with the address, int and float lists. The caller keeps every buffer
     alive across the call."""
-    var entry = family_entry(binding, "xn_" + name, context)
-    _ = family_call(entry, addrs, ints, floats)
+    xn_execute(binding, name, addrs, ints, floats)
 
 
 def _i(v: Int) -> PythonObject:
@@ -275,8 +275,7 @@ def _lof_percentile(binding: PythonObject, score: PythonObject, q: Float64, cont
     var steps = _pow2_steps(nnz)
     var oc = _out(Python.tuple(nnz), "<i4", context)
     var od = _out(Python.tuple(nnz), "<f4", context)
-    var entry = family_entry(binding, "xn_p2m_row_sort", context)
-    _ = family_call(entry, Python.list(classical_address(indptr), classical_address(cols), classical_address(score),
+    xn_execute(binding, "p2m_row_sort", Python.list(classical_address(indptr), classical_address(cols), classical_address(score),
                                        classical_address(oc), classical_address(od)),
                     Python.list(_i(_rows(indptr) - 1), _i(nnz), _i(steps[0]), _i(steps[1])), Python.list())
     _ = indptr  # keep the Python object alive through the native call above
@@ -773,7 +772,7 @@ def _imp_nan_cells(binding: PythonObject, x: PythonObject, colmiss_only: Int,
     var d = _cols(x)
     var lean = False
     if colmiss_only != 0:
-        var probe = py_call(b.getattr, binding, PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
+        var probe = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
         if probe is not None:
             lean = Int(py=family_call(b.int, family_call(probe))) != 0
     var cells = _out(Python.tuple(1 if lean else max(n * d, 1)), "<i4", context)
@@ -900,8 +899,9 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
 # ------------------------------------------------------------------ door
 
 
-def neighbors_local_operation(model: PythonObject, operation: String, args: PythonObject,
+def neighbors_local_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
+    args = xn_admit_arguments(args, context)
     classical_connect_numpy(context)
     if operation == "family_xn_loc_lof_fit":
         _lof_fit(model, args, context)

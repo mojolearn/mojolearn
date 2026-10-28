@@ -10,12 +10,12 @@ _ENTRY = None
 _CONTEXT = None
 
 #: the compiled `_mojolearn_x_sequence` entries the owner runs
-_SEQUENCE_ENTRIES = ("x_sequence_vendor", "x_sequence_numeric_mode", "model_labels", "rnn_fit", "rnn_predict",
+_SEQUENCE_ENTRIES = ("x_sequence_vendor", "x_sequence_numeric_mode", "model_native_api_v1", "model_labels", "rnn_fit", "rnn_predict",
                      "mlp_fit", "mlp_predict", "theta", "croston", "croston_forecast", "ets", "garch", "var_fit",
                      "stl", "prophet_days", "prophet_features", "prophet_changepoints", "prophet_fit",
                      "prophet_predict")
 #: the base-binding entries it runs (weight draws, row argmax, label thresholds, scans)
-_BASE_ENTRIES = ("uniform_init_f32", "argmax_rows_f32", "threshold_labels_i64", "reduce_stat", "all_finite_f32")
+_BASE_ENTRIES = ("uniform_init_f32", "argmax_rows_f32", "threshold_labels_i64", "reduce_stat", "all_finite_f32", "all_finite_f64")
 
 
 def _unavailable(error):
@@ -91,10 +91,16 @@ def connect():
         r2_options = _native_family_bridge.connect()
     except ImportError:
         r2_options = None
+    from ._native_family_bridge import shared_context
+    from ._labels import ClassLabels
+    lifecycle = shared_context()
+    lifecycle.update(classifier_labels_class=ClassLabels,
+                     classifier_labels_namespace=dict(vars(ClassLabels)),
+                     classifier_labels_mro=ClassLabels.__mro__)
     context = dict(_SEQUENTIAL_CONTEXT)
     context.update(xseq_bindings=bindings, xseq_base=base, optimizer_context=_OPT_CONTEXT,
                    os_urandom=os.urandom, np_asarray=np.asarray, xseq_linalg_error=np.linalg.LinAlgError,
-                   xseq_metrics=metrics, xseq_r2_options=r2_options)
+                   xseq_metrics=metrics, xseq_r2_options=r2_options, xseq_lifecycle_context=lifecycle)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

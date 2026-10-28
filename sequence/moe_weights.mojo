@@ -8,7 +8,7 @@ The board's MoE cell (x (8192, 1024), E 8, F 2816) uploaded the router,
 PCIe per call for weights that had not changed. `moe_weights_put` copies
 them once into device buffers on the sequence lane's context and returns a
 handle; the GPU binding's `moe_forward` with that handle reads them in place
-(`sequence/pyapi.mojo::moe_forward_run`, the same launches on the same
+(`providers/python/sequence_pyapi.mojo::moe_forward_run`, the same launches on the same
 words). The Python layer owns the handle: it puts a new copy when a weight
 array is replaced and frees the old one (`_x_sequence_moe.MoEBlock`).
 Copies only: no bit moves."""

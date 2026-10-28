@@ -1,0 +1,27 @@
+{
+  "schema": 2,
+  "commit": "a68a5b4cd3f033e7162c801b3f29391c2de54a5f",
+  "summary": {
+    "lifecycle_candidates": 843,
+    "expected_python_lifecycle_wrappers": 735,
+    "files": 863,
+    "candidate_bodies": 7840,
+    "classifications": {
+      "requires_manual_or_transitive_audit": 7555,
+      "single_known_native_call_body": 274,
+      "allowed_sklearn_tag_metadata_only": 11
+    },
+    "bodies_with_loader_calls": 210,
+    "bodies_with_metadata_expressions": 834,
+    "bodies_with_decorators": 1848,
+    "unresolved_parse_failures": 0
+  },
+  "limitations": [
+    "Candidate bodies include private modules/base classes; public reexports and inheritance require resolution.",
+    "One native call body does not audit descriptors, constructors, native transitive callees, or ownership.",
+    "Metadata syntax and calls are candidates for inspection, not proof of runtime execution or a violation.",
+    "Lifecycle wrapper findings are source predictions, not imported-class introspection; explicit installer calls and generated methods still need runtime audit.",
+    "Compiled/runtime-generated methods and callbacks may be absent from AST; this is not exhaustive runtime coverage."
+  ],
+  "full_report": "/Users/andrewhendel/mojolearn-evidence/library-provider-completion-20261027/public-boundary-census-r2.json"
+}

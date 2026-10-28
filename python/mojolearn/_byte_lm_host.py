@@ -227,34 +227,7 @@ class LanguageModelInference:
     """
 
     def __init__(self, parameters, *, shape=None, threaded=True, threads=None):
-        shape = ByteLanguageModelConfig() if shape is None else shape
-        if not isinstance(shape, ByteLanguageModelConfig):
-            raise TypeError('shape must be a ByteLanguageModelConfig')
-        if not isinstance(threaded, bool):
-            raise TypeError('threaded must be a bool')
-        _thread_count(threads)
-        self._threaded = threaded
-        self._threads = threads
-        # lane/identical-lowbit-inference (2026-09-17): a dict keyed by
-        # `shape.parameter_names` whose matrices may be packed
-        # (mojolearn.lowbit) is materialized exactly and flattened; the
-        # host forward runs unchanged on the float32 vector.
-        self.weight_format = "float32"
-        if hasattr(parameters, "keys"):
-            parameters, self.weight_format = _flatten_parameters(parameters, shape)
-        array, _ = as_f32_c(parameters, ndim=1, name='parameters')
-        if tuple(array.shape) != (shape.n_total,):
-            raise ValueError(f'parameters must be float32 [{shape.n_total}]')
-        if not all_finite(array):
-            raise ValueError('parameters must be finite')
-        self._parameters = frombytes(le_bytes(array, 'f'), '<f4', (shape.n_total,))
-        self._shape = shape
-        self._native = _native_shape(shape)
-        self._binding = _load()
-        compiled = str(self._binding.byte_lm_host_profile(self._native))
-        expected = shape.profile + str(self._binding.byte_lm_host_arithmetic_suffix())
-        if compiled != expected:
-            raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {expected}')
+        _HOST_TRAIN(self, "inference_construct", (parameters, shape, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, *, threaded=True, threads=None):
@@ -276,34 +249,21 @@ class LanguageModelInference:
         -------
         LanguageModelInference
         """
-        from ._byte_lm_impl import _CHECKPOINT_LIMIT, _decode_checkpoint
-        with Path(path).open('rb') as stream:
-            encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        state, shape = _decode_checkpoint(encoded)
-        return cls(state['parameters'], shape=shape, threaded=threaded, threads=threads)
-
-    def _threads_flag(self, threaded):
-        value = self._threaded if threaded is None else threaded
-        if not isinstance(value, bool):
-            raise TypeError('threaded must be a bool or None')
-        return 1 if value else 0
-
-    def _threads_arg(self, threads):
-        return _thread_count(self._threads if threads is None else threads)
+        return _HOST_TRAIN(cls, "inference_from_checkpoint", (path, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     @property
     def shape(self):
         """The model dimensions, a :class:`~mojolearn.LanguageModelConfig`."""
-        return self._shape
+        return _HOST_TRAIN(self, "shape", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def profile(self):
         """The name of the arithmetic profile the CPU binding computes."""
-        return str(self._binding.byte_lm_host_profile(self._native))
+        return _HOST_TRAIN(self, "profile", (), _HOST_TRAIN_CONTEXT)
 
     def parameters_sha256(self):
         """SHA-256 of the parameters' little-endian float32 bytes."""
-        return _parameters_sha256(self._parameters)
+        return _HOST_TRAIN(self, "parameters_sha256", (), _HOST_TRAIN_CONTEXT)
 
     def logits(self, ids, *, lengths=None, threaded=None, threads=None):
         """Float32 logits for every position.
@@ -327,23 +287,7 @@ class LanguageModelInference:
         -------
         Array of shape (batch, length, vocab_size), float32
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            return _ragged.ragged_forward(
-                lambda padded: self.logits(padded, threaded=threaded, threads=threads),
-                raw, None, lengths, '<i4', 'LanguageModelInference.logits')[0]
-        flag = self._threads_flag(threaded)
-        count = self._threads_arg(threads)
-        tokens, _ = _logits_ids(ids, self._shape)
-        batch, length = tokens.shape
-        out = zeros((batch, length, self._shape.vocab_size), '<f4')
-        written = self._binding.byte_lm_host_logits(
-            [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
-             addr(out, name='logits')],
-            [batch, length], self._native, flag, count)
-        if int(written) != batch * length * self._shape.vocab_size:
-            raise RuntimeError('byte LM host wrote an unexpected number of logits')
-        return out
+        return _HOST_TRAIN(self, "logits", (ids, lengths, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     def loss_bits(self, ids, *, threaded=None, threads=None):
         """IEEE-754 bit pattern of the mean next-token loss.
@@ -363,21 +307,11 @@ class LanguageModelInference:
         int
             The float32 loss's bits, for exact comparison.
         """
-        flag = self._threads_flag(threaded)
-        count = self._threads_arg(threads)
-        tokens, _ = as_i32_c(ids, ndim=2, name='ids')
-        if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
-            raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
-        _refuse_ids(tokens, self._shape.vocab_size, self._shape.batch, self._shape.length + 1,
-                    self._shape.length)
-        return int(self._binding.byte_lm_host_loss(
-            [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids')],
-            self._native, flag, count))
+        return _HOST_TRAIN(self, "loss_bits", (ids, None, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     def loss(self, ids, *, threaded=None, threads=None):
         """Mean next-token loss as a float; see :meth:`loss_bits`."""
-        bits = self.loss_bits(ids, threaded=threaded, threads=threads)
-        return struct.unpack('<f', struct.pack('<I', bits))[0]
+        return _HOST_TRAIN(self, "inference_loss", (ids, None, threaded, threads), _HOST_TRAIN_CONTEXT)
 
     def next_bytes(self, ids, *, lengths=None, threaded=None, threads=None):
         """Greedy next token after each row.
@@ -401,27 +335,8 @@ class LanguageModelInference:
         list of int
             One token id per row.
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            logits, lens = _ragged.ragged_forward(
-                lambda padded: self.logits(padded, threaded=threaded, threads=threads),
-                raw, None, lengths, '<i4', 'LanguageModelInference.next_bytes')
-            return _greedy_next_bytes(_ragged.last_real_rows(logits, lens, 'LanguageModelInference.next_bytes'))
-        flag = self._threads_flag(threaded)
-        entry = getattr(self._binding, 'byte_lm_host_next', None)
-        if flag and callable(entry):
-            count = self._threads_arg(threads)
-            tokens, _ = _logits_ids(ids, self._shape)
-            batch, length = tokens.shape
-            out = zeros((batch,), '<i4')
-            written = entry(
-                [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
-                 addr(out, name='next_bytes')],
-                [batch, length], self._native, count)
-            if int(written) != batch:
-                raise RuntimeError('byte LM host wrote an unexpected number of next bytes')
-            return list(flat_view(out, 'i'))
-        return _greedy_next_bytes(self.logits(ids, threaded=threaded, threads=threads))
+        return _HOST_TRAIN(self, "next_bytes", (ids, lengths, threaded, threads), _HOST_TRAIN_CONTEXT)
+
 
 
 class LanguageModelHostTrainer:
@@ -453,54 +368,8 @@ class LanguageModelHostTrainer:
     def __init__(self, parameters, *, m=None, v=None, shape=None,
                  completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
                  weight_decay=.01):
-        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
-        _numeric_profile.require_training("mojolearn.LanguageModelHostTrainer")
-        shape = ByteLanguageModelConfig() if shape is None else shape
-        self._shape = shape
-        self._native = _native_shape(shape)
-        self._binding = _load()
-        # A host binding built before DEVIATION 2680 loads fine and runs
-        # inference fine; it simply has no training entry. Say so by name at
-        # construction rather than letting the call fail later, which is what
-        # the GPU surface does for its own missing entries.
-        if not callable(getattr(self._binding, 'byte_lm_host_train_step', None)):
-            raise ImportError(
-                'byte LM host binding is missing byte_lm_host_train_step; '
-                'rebuild bindings/build_byte_lm_host.sh')
-        self._train_entry = self._binding.byte_lm_host_train_step
-        n = shape.n_total
-        array, _ = as_f32_c(parameters, ndim=1, name='parameters')
-        if array.size != n:
-            raise ValueError(f'parameters must hold {n} float32 values')
-        if not all_finite(array):
-            raise ValueError('parameters must be finite')
-        self._parameters = frombytes(le_bytes(array, 'f'), '<f4', (n,))
-        self._m = self._moment(m, 'm', n)
-        self._v = self._moment(v, 'v', n)
-        if not isinstance(completed_steps, int) or isinstance(completed_steps, bool):
-            raise ValueError('completed_steps must be an int')
-        if completed_steps < 0:
-            raise ValueError('completed_steps must not be negative')
-        self._completed = completed_steps
-        beta1, beta2 = betas
-        # The byte LM trainer's own validator admits positive-lr AdamW only,
-        # with no clipping and no SGD options, so this refuses the same set
-        # rather than passing a configuration the native side would reject.
-        for name, value in (('lr', lr), ('beta1', beta1), ('beta2', beta2),
-                            ('eps', eps), ('weight_decay', weight_decay)):
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ValueError(f'{name} must be a real number')
-        if not lr > 0 or not eps > 0:
-            raise ValueError('lr and eps must be positive')
-        if not 0 <= beta1 < 1 or not 0 <= beta2 < 1:
-            raise ValueError('betas must be in [0, 1)')
-        if weight_decay < 0:
-            raise ValueError('weight_decay must not be negative')
-        self._scalars = [float(lr), float(beta1), float(beta2), float(eps),
-                         float(weight_decay)]
-        # the shape words the native train_step reads (bindings/byte_lm_host_trainer_native.mojo)
-        self._step_words = (shape.batch, shape.length + 1, shape.vocab_size, shape.n_total)
-        self._gradient = None
+        return _HOST_TRAIN(self, "construct", (parameters, m, v, shape, completed_steps,
+                                               lr, betas, eps, weight_decay), _HOST_TRAIN_CONTEXT)
 
     def _moment(self, given, name, n):
         if given is None:
@@ -516,40 +385,40 @@ class LanguageModelHostTrainer:
     def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):
         """A trainer resuming a recorded step's starting state, which is how
         the gate replays one step of the retained capture in isolation."""
-        return cls(parameters, m=m, v=v, completed_steps=completed_steps, **kwargs)
+        return _HOST_TRAIN(cls, "from_state", (parameters, m, v, completed_steps, kwargs), _HOST_TRAIN_CONTEXT)
 
     @property
     def shape(self):
-        return self._shape
+        return _HOST_TRAIN(self, "shape", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def profile(self):
-        return str(self._binding.byte_lm_host_profile(self._native))
+        return _HOST_TRAIN(self, "profile", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def completed_steps(self):
-        return self._completed
+        return _HOST_TRAIN(self, "completed_steps", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def parameters_(self):
-        return self._parameters
+        return _HOST_TRAIN(self, "parameters", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def m_(self):
-        return self._m
+        return _HOST_TRAIN(self, "m", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def v_(self):
-        return self._v
+        return _HOST_TRAIN(self, "v", (), _HOST_TRAIN_CONTEXT)
 
     @property
     def gradient_(self):
         """The last step's gradient, or None before any step. A failed step
         leaves this None rather than a stale value."""
-        return self._gradient
+        return _HOST_TRAIN(self, "gradient", (), _HOST_TRAIN_CONTEXT)
 
     def parameters_sha256(self):
-        return _parameters_sha256(self._parameters)
+        return _HOST_TRAIN(self, "parameters_sha256", (), _HOST_TRAIN_CONTEXT)
 
     def train_step(self, ids):
         """One step on int32 ids `[shape.batch, shape.length + 1]`, the
@@ -565,7 +434,7 @@ class LanguageModelHostTrainer:
     def loss(self, ids):
         """`train_step`'s loss as a float. The bits are the comparable value;
         this is for reading."""
-        return struct.unpack('<f', struct.pack('<I', self.train_step(ids)))[0]
+        return _HOST_TRAIN(self, "loss", (ids,), _HOST_TRAIN_CONTEXT)
 
 
 def _connect_host_trainer():
@@ -573,8 +442,23 @@ def _connect_host_trainer():
     # (bindings/byte_lm_host_trainer_native.mojo); the compiled step it runs
     # is the trainer's own binding entry, retained at construction
     from .tokenizer import _binding
+    from . import lowbit, _linalg_impl
+    from ._byte_lm_impl import _LM_TRAINER_CONTEXT
+    from ._byte_lm_config import _DEFAULT_PROFILE
     from ._native_classical_bridge import _state_context
-    return _binding()._module.byte_lm_host_trainer_call, _state_context()
+    context = _state_context()
+    _numeric_profile.default_profile("training")  # glue: connect profile metadata at import
+    try:
+        binding = _load()
+    except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+        binding = type(error).__name__ + ": " + str(error)
+    context.update(byte_lm_checkpoint_context=_LM_TRAINER_CONTEXT, byte_lm_bf16_class=lowbit.BF16Weight, byte_lm_int8_class=lowbit.Int8Weight,
+                   byte_lm_linalg_context=_linalg_impl._NATIVE_CONTEXT, byte_lm_default_profile=_DEFAULT_PROFILE,
+                   byte_lm_host_trainer_class=LanguageModelHostTrainer,
+                   byte_lm_host_inference_class=LanguageModelInference,
+                   byte_lm_config_class=ByteLanguageModelConfig, byte_lm_host_binding=binding,
+                   byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES)
+    return _binding()._module.byte_lm_host_trainer_call, context
 
 
 _HOST_TRAIN, _HOST_TRAIN_CONTEXT = _connect_host_trainer()

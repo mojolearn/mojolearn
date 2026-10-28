@@ -690,13 +690,20 @@ def x_neighbors_numeric_mode_binding() raises -> PythonObject:
     reg = "".join(f'    m.def_function[{name}_binding]("xn_{name}")\n' for name in [o[0] for o in OPS] + [c[0] for c in CUSTOM_OPS] + list(OWN_DRIVERS))
     s.append(f"""
 
+def x_neighbors_native_api_binding() raises -> PythonObject:
+    var table = XN_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
+    m.def_function[x_neighbors_native_api_binding]("x_neighbors_native_api_v1")
 {reg}    m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 """)
     return "".join(s)
 
 
-BIND_HEAD = """from std.os import abort
+BIND_HEAD = """from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -712,15 +719,15 @@ def own_imports(col):
 def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
-            + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
+            + BIND_HEAD + "from x_neighbors.native_descriptor_device import XN_NATIVE_API\n" + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
-            + "from x_neighbors.dev_pyapi import kpca_resident_binding\n"
-            + "from x_neighbors.dev_pyapi import lp_fast_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import lp_fast_resident_binding\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
-            + "from x_neighbors.dev_pyapi import ocsvm_resident_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding\n"
             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
-            + "from x_neighbors.dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
+            + "from providers.python.x_neighbors_dev_pyapi import kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -758,11 +765,11 @@ def build__mojolearn_x_neighbors() -> PythonObject:
 def host_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
-            + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
+            + BIND_HEAD + "from x_neighbors.native_descriptor_host import XN_NATIVE_API\n" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
-            + "from x_neighbors.host_pyapi import kpca_resident_binding\n"
-            + "from x_neighbors.host_pyapi import lp_fast_resident_binding\n"
+            + "from providers.python.x_neighbors_host_pyapi import kpca_resident_binding\n"
+            + "from providers.python.x_neighbors_host_pyapi import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:

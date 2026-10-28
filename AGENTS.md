@@ -1,5 +1,16 @@
 # Agent working rules
 
+## Exported graph boundary (Andrew, 2026-10-27)
+
+- The provider migration may change the API to require an already exported
+  graph. Do not execute a user's Python `forward`, exporter or serialization
+  callback inside product execution. Mojo owns admission and execution, with
+  stable input metadata captured once per public operation.
+- Cross-version output changes are allowed. Preserve bitwise identity across
+  supported GPU vendors within the new version. If arithmetic changes, limit
+  additional vendor verification to the affected algorithms and invalidated
+  evidence; adapters do not gain duplicate arithmetic identity lanes.
+
 ## Focus on identical; stop Apple fast investment (Andrew, 2026-10-22)
 
 - `deterministic` is retired, with no separate mode, build, evidence campaign

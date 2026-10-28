@@ -307,7 +307,7 @@ def optimizer_config_packed(
 
 def optimizer_slots(cfg: OptimizerConfig) -> Tuple[Bool, Bool, Bool]:
     """Which of the three state buffers OP_OPT reads or writes for this
-    configuration (sequence/pyapi.mojo::opt_slots, plus the sklearn kinds)."""
+    configuration (providers/python/sequence_pyapi.mojo::opt_slots, plus the sklearn kinds)."""
     var k = cfg.kind
     if k == OPT_SGD:
         return (cfg.momentum != Float32(0.0), False, False)

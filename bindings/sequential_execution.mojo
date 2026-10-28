@@ -2,9 +2,14 @@
 """Native Sequential orchestration of the existing model numerical ABI."""
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
-from bindings.py_typed_call import py_call_typed
-from bindings.sequential_description import sequential_fields, sequential_sample, sequential_program, sequential_table, _integer
-from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x, sequential_curve
+from core.cast_in import CastIn
+from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
+from autograd.model_execution import model_counts_native
+from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT, MODEL_FIT_LABELS, MODEL_PREDICT, MODEL_PREDICT_LABELS, model_descriptor_words
+from providers.python.autograd_pyapi import _ints, model_float64_words, model_admit_addresses
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
+from bindings.sequential_description import sequential_fields, sequential_sample_shape, sequential_program, sequential_table, _integer
+from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x_snapshot, sequential_curve
 
 
 def sequential_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -26,6 +31,12 @@ def sequential_entries(model: PythonObject, context: PythonObject) raises -> Pyt
         raise Error("RuntimeError: Sequential native numerical mode differs from the requested mode")
     if actual_vendor != String(context["vendor"]):
         raise Error("RuntimeError: Sequential native vendor differs from the selected execution route")
+    # Connection/metadata admission only. Exact compiled factory/module identity
+    # owns the shared provider; no per-model pointer cache or Python callable is
+    # used by the subsequent native fit/predict execution.
+    var provider = neural_descriptor_reuse(py_get(entries, "native_model_provider"),
+        entries["model_native_api_v1"], String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
+    py_setitem(entries, "native_model_provider", provider)
     return entries
 
 
@@ -79,13 +90,14 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var batch_size = Int(py=py_call(b.int, batch))
     if epochs < 1 or batch_size < 1:
         raise Error("epochs and batch_size must be >= 1")
-    var x = sequential_x(args[0], "X", context)
-    var xd = sequential_descriptor(x, "X", True)
-    var n = Int(py=xd[3])
-    var d = Int(py=xd[4])
+    var x_snapshot = sequential_x_snapshot(args[0], "X", context)
+    var x = x_snapshot.keep
+    var xd = x_snapshot.abi()
+    var n = x_snapshot.source.rows
+    var d = x_snapshot.source.cols
     if resume and d != Int(py=fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
-    var sample = sequential_sample(model, x)
+    var sample = sequential_sample_shape(model, x_snapshot.shape)
     if resume and not Bool(py=sample == py_get(fields, "_sample_shape")):
         raise Error("resume=True takes inputs of the shape the model was fitted on")
     var warm = not resume and Bool(py=py_get(fields, "_imported", False))
@@ -94,9 +106,11 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var program = sequential_program(model, PythonObject(d), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
-    var counts = py_call_typed(entries["model_n_params"], program, table)
-    var n_params = Int(py=counts[0])
-    var n_out = Int(py=counts[1])
+    var native_program = _ints(program)
+    var native_table = model_float64_words(table)
+    var counts = model_counts_native(native_program, native_table)
+    var n_params = counts[0]
+    var n_out = counts[1]
     var target_data = sequential_targets(model, args[1], n, n_out, String(options["loss"]), entries, context)
     var y = target_data[0]
     var yd = target_data[1]
@@ -128,7 +142,6 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         0 if resume or warm else 1, 1 if resume else 0)
     var fp = Python.list(options["lr"], options["f1"], options["f2"], options["eps"],
         options["weight_decay"], 0.0, options["tol"], options["gamma"], options["huber_delta"])
-    _ = py_call(fp.extend, table)
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if previous is None else sequential_address(previous))
@@ -145,13 +158,14 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     if validation is not None:
         if not (Bool(py=py_call(b.isinstance, validation, b.tuple)) or Bool(py=py_call(b.isinstance, validation, b.list))) or len(validation) != 2:
             raise Error("validation_data must be (X, y)")
-        vx = sequential_x(validation[0], "validation X", context)
-        var vxd = sequential_descriptor(vx, "validation X", True)
+        var vx_snapshot = sequential_x_snapshot(validation[0], "validation X", context)
+        vx = vx_snapshot.keep
+        var vxd = vx_snapshot.abi()
         vy = sequential_input(validation[1], context)
         var vnd = Int(py=vy.ndim)
-        if not Bool(py=sequential_sample(model, vx) == sample) or Int(py=vxd[4]) != d:
+        if not Bool(py=sequential_sample_shape(model, vx_snapshot.shape) == sample) or vx_snapshot.source.cols != d:
             raise Error("validation inputs must have the training sample shape")
-        if vnd < 1 or vnd > 2 or Int(py=vy.shape[0]) != Int(py=vxd[3]):
+        if vnd < 1 or vnd > 2 or Int(py=vy.shape[0]) != vx_snapshot.source.rows:
             raise Error("validation targets must match the validation rows")
         if target != 0 and vnd != 1:
             raise Error("validation classification targets must be a vector")
@@ -171,11 +185,18 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         _ = val_info  # keep the Python object alive through the native call above
         _ = val_curve  # keep the Python object alive through the native call above
         _ = py_call(ip.append, 1 if restore_best else 0)
+    var native_inputs = model_admit_addresses(addresses, target, False, x_snapshot.source)
+    var native_options = _ints(ip)
+    var native_scalars = model_float64_words(fp)
+    for scalar in native_table:  # driver-loop: reuse already admitted native layer options
+        native_scalars.append(scalar)
+    var provider = entries["native_model_provider"]
     var n_iter: Int
     if target != 0:
-        var labels = Python.list(yd, sequential_address(classes_full), n_out, target)
-        _ = classes_full  # keep the Python object alive through the native call above
-        var done = py_call_typed(entries["model_fit_labels"], addresses, program, ip, fp, labels)
+        var class_count = List[Int](length=1, fill=0)
+        var words = model_descriptor_words(native_program, native_options, native_inputs[1],
+            Int(py=sequential_address(classes_full)), n_out, target, Int(class_count.unsafe_ptr()))
+        n_iter = neural_descriptor_execute(provider, MODEL_FIT_LABELS, native_inputs[0], words, native_scalars)
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
         _ = state  # keep the Python object alive through the native call above
@@ -183,11 +204,11 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         _ = moment  # keep the Python object alive through the native call above
         _ = params  # keep the Python object alive through the native call above
         _ = classes_full  # keep the Python object alive through the native call above
-        var count = Int(py=done[0])
-        n_iter = Int(py=done[1])
+        var count = class_count[0]
         py_setitem(fields, "classes_", py_call(context["ndarray"], Python.tuple(count), dtype=classes_full.dtype, buffer=classes_full))
     else:
-        n_iter = Int(py=py_call_typed(entries["model_fit"], addresses, program, ip, fp))
+        var words = model_descriptor_words(native_program, native_options, native_inputs[1])
+        n_iter = neural_descriptor_execute(provider, MODEL_FIT, native_inputs[0], words, native_scalars)
         _ = curve  # keep the Python object alive through the native call above
         _ = previous  # keep the Python object alive through the native call above
         _ = state  # keep the Python object alive through the native call above
@@ -244,36 +265,43 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
     if not py_contains(fields, "params_"):
         raise Error("call fit before predict")
     var sample = py_get(fields, "_sample_shape")
-    var x = sequential_x(source, "X", context)
-    if sample is None and Int(py=x.ndim) != 2:
+    var x_snapshot = sequential_x_snapshot(source, "X", context)
+    var x = x_snapshot.keep
+    var rank = len(x_snapshot.shape)
+    if sample is None and rank != 2:
         raise Error("X must be a 2-D array of shape (n_samples, n_features)")
-    if sample is not None and Int(py=x.ndim) > 2:
+    if sample is not None and rank > 2:
         var actual = Python.list()
-        for k in range(1, Int(py=x.ndim)):  # driver-loop: over the prediction input sample rank
-            _ = py_call(actual.append, x.shape[k])
+        for k in range(1, rank):  # driver-loop: over the prediction input sample rank
+            _ = py_call(actual.append, PythonObject(x_snapshot.shape[k]))
         if not Bool(py=py_call(Python.import_module("builtins").tuple, actual) == sample):
             raise Error("X samples have a different shape from the fitted model")
-    var xd = sequential_descriptor(x, "X", True)
-    if not Bool(py=xd[4] == fields["n_features_in_"]):
+    if not Bool(py=PythonObject(x_snapshot.source.cols) == fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
     var params = fields["params_"]
+    var native_program = _ints(sequential_program(model, fields["n_features_in_"], sample))
+    var native_table = model_float64_words(sequential_table(model))
+    var sources: List[CastIn] = [x_snapshot.source]
+    var provider = entries["native_model_provider"]
     var out: PythonObject
     if classes is not None:
         # the labels of a classifier, in classes_' dtype
-        out = sequential_array(Python.tuple(xd[3]), classes.dtype, context)
-        _ = py_call_typed(entries["model_predict_labels"],
-            Python.list(xd, sequential_address(params), sequential_address(classes), sequential_address(out)),
-            sequential_program(model, fields["n_features_in_"], sample), sequential_table(model),
-            Python.list(xd[3], 4096, transform, classes.shape[0], classes.dtype.itemsize))
+        out = sequential_array(Python.tuple(x_snapshot.source.rows), classes.dtype, context)
+        var addresses: List[Int] = [0, Int(py=sequential_address(params)),
+                                    Int(py=sequential_address(classes)), Int(py=sequential_address(out))]
+        var options: List[Int] = [x_snapshot.source.rows, 4096, transform, Int(py=classes.shape[0]), Int(py=classes.dtype.itemsize)]
+        var words = model_descriptor_words(native_program, options, sources)
+        _ = neural_descriptor_execute(provider, MODEL_PREDICT_LABELS, addresses, words, native_table)
         _ = params  # keep the Python object alive through the native call above
         _ = x^
         _ = params^
         return out
     var output_width = fields["n_outputs_"] if width is None else width
-    out = sequential_array(Python.tuple(xd[3], output_width), context["float32"], context)
-    _ = py_call_typed(entries["model_predict"], Python.list(xd, sequential_address(params), sequential_address(out)),
-        sequential_program(model, fields["n_features_in_"], sample), sequential_table(model),
-        Python.list(xd[3], 4096, transform))
+    out = sequential_array(Python.tuple(x_snapshot.source.rows, output_width), context["float32"], context)
+    var addresses: List[Int] = [0, Int(py=sequential_address(params)), Int(py=sequential_address(out))]
+    var options: List[Int] = [x_snapshot.source.rows, 4096, transform]
+    var words = model_descriptor_words(native_program, options, sources)
+    _ = neural_descriptor_execute(provider, MODEL_PREDICT, addresses, words, native_table)
     _ = x^
     _ = params^
     return out

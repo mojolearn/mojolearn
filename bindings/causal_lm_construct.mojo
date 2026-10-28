@@ -13,11 +13,14 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import memcpy, bitcast
 from std.os import getenv
+from providers.python.operation_lock_pyapi import operation_lock_create
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_address, py_ints
 from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding
 from bindings.native_json import native_path, native_path_exists
+from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
+from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 
@@ -372,9 +375,18 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             extended = extended or tail[i] != default_tail[i]
         py_setitem(fields, "_extended", PythonObject(extended))
         py_setitem(fields, "_gated", PythonObject(gated))
-        py_setitem(fields, "_runtime_lock", context["rlock"]())
-        py_setitem(fields, "_native_session", PythonObject(None))
-        py_setitem(fields, "_session_binding", PythonObject(None))
+        if String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            py_setitem(fields, "_runtime_lock", operation_lock_create())
+        else:
+            py_setitem(fields, "_runtime_lock", context["rlock"]())
+        var session = PythonObject(None)
+        var session_binding = PythonObject(None)
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_session_create")):
+                session = _native_function(bindings[kind], "transformer_session_create")()
+                session_binding = bindings[kind]
+        py_setitem(fields, "_native_session", session)
+        py_setitem(fields, "_session_binding", session_binding)
         py_setitem(fields, "_arithmetic_profile", PythonObject(None))
         if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_arithmetic_profile")):
             py_setitem(fields, "_arithmetic_profile", _native_function(bindings[kind], "transformer_arithmetic_profile")())
@@ -498,6 +510,13 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         for i in range(2, 9):  # driver-loop: over the seven transformer projections
             _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(base[i], bindings["linalg"]))
         py_setitem(fields, "_int15", planes)
+    if kind == "mamba3":
+        if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            if Bool(py=py_call(bi.hasattr, bindings[kind], "mamba3_prefill_session_create")):
+                py_setitem(fields, "_prefill_session", _native_function(bindings[kind], "mamba3_prefill_session_create")())
+                py_setitem(fields, "_prefill_binding", bindings[kind])
+        _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
+            String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
     return block
 
 

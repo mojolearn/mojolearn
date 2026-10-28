@@ -18,7 +18,7 @@ the caller moves data, and the device forms of the entries
 buffers in place. The kernels are the per-call entries' launches on the same
 values: no bit moves. Storage is `std.ffi._Global`, one pool per numeric
 tier (as `_ResPool`); a freed handle's slot is reused. The Python entries
-(`seq_tensor_alloc_py` ...) are `sequence/seq_tensor_pyapi.mojo`'s; this
+(`seq_tensor_alloc_py` ...) are `providers/python/sequence_seq_tensor_pyapi.mojo`'s; this
 file takes typed handles and addresses only."""
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer

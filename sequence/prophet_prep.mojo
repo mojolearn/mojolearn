@@ -11,7 +11,7 @@ Float64 throughout and one rounding to float32 per output, so it runs in
 Mojo on the host in both bindings (the Apple GPU has no float64): the same
 code and the same bits on every column. O(N) per series set, no data
 dependence across rows beyond the running checks. The Python entries
-(`prophet_days_py` ...) are `sequence/prophet_prep_pyapi.mojo`'s."""
+(`prophet_days_py` ...) are `providers/python/sequence_prophet_prep_pyapi.mojo`'s."""
 from std.memory import bitcast
 from std.builtin.sort import sort
 from sequence.exec_trait import Exec

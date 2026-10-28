@@ -19,7 +19,7 @@ statements on the same values: no bit moves against the per-call entries.
 `opt_resident_get` / `_set` move a slot for a state read or a
 `load_state_dict`. Storage is `std.ffi._Global`, one slot per tier; a
 handle indexes the pool and a closed handle's slot is reused. The Python
-entries (`opt_resident_open_py` ...) are `sequence/opt_resident_pyapi.mojo`'s;
+entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident_pyapi.mojo`'s;
 this file takes typed handles, addresses and parameters only."""
 from std.ffi import _Global
 from std.memory import bitcast, memcpy
@@ -236,7 +236,7 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
 
 
 def _host_fp(a: Int, what: String) raises -> FP:
-    """A caller's host float32 array at address a (`sequence/pyapi.mojo`
+    """A caller's host float32 array at address a (`providers/python/sequence_pyapi.mojo`
     `fptr`'s check)."""
     if a == 0:
         raise Error("sequence: null float32 buffer for " + what)
@@ -244,7 +244,7 @@ def _host_fp(a: Int, what: String) raises -> FP:
 
 
 def _opt_of(ip: List[Int], at: Int, fp: List[Float64], fat: Int) raises -> OptConfig:
-    """`sequence/pyapi.mojo` `opt_of` on typed parameters: ip[at] kind,
+    """`providers/python/sequence_pyapi.mojo` `opt_of` on typed parameters: ip[at] kind,
     ip[at + 1] flags, fp[fat .. fat + 4] as float32."""
     var kind = ip[at]
     if kind < OPT_SGD or kind > OPT_NADAM or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
@@ -254,7 +254,7 @@ def _opt_of(ip: List[Int], at: Int, fp: List[Float64], fat: Int) raises -> OptCo
 
 
 def _lamb_offsets(ip: List[Int], at: Int, nt: Int) raises -> List[Int]:
-    """`sequence/pyapi.mojo` `lamb_offsets` on typed parameters: ip[at ..
+    """`providers/python/sequence_pyapi.mojo` `lamb_offsets` on typed parameters: ip[at ..
     at + nt], rising strictly from 0, below 2^31."""
     var offs = List[Int]()
     for k in range(nt + 1):  # small-loop(nt: parameter tensors): offset admission, no data

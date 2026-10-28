@@ -411,7 +411,7 @@ def _connect_causal_native():
     import hashlib  # Connection-time import; generation owns only the cached C SHA256 entry.
     from ..tokenizer import _binding as runtime_binding
     from .. import _training_impl as training
-    from .._transformer_impl import TransformerBlock, TransformerState, _OPT_NAMES
+    from .._transformer_impl import TransformerBlock, TransformerState, TransformerDecodeSession, _OPT_NAMES
     from .._mamba_impl import (Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State, Mamba3State,
                                Mamba1DecodeSession, _Mamba2DecodeSession, _Mamba3DecodeSession)
     from ..neural_inference import (TransformerBlockInference, Mamba1BlockInference,
@@ -420,6 +420,8 @@ def _connect_causal_native():
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
     from .._native_neural_bridge import connect_training
     runtime = runtime_binding()._module
+    from .._native_operation_lock import connect as connect_operation_lock
+    connect_operation_lock(runtime)
     runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
     selected_mode = _backend.default_mode()
     bindings = {"cpu:identical": _causal_native_connections()}
@@ -464,6 +466,7 @@ def _connect_causal_native():
             "gpu": {"transformer": TransformerBlock, "mamba1": Mamba1Block,
                     "mamba2": Mamba2Block, "mamba3": Mamba3Block}},
         "mamba3_state_class": Mamba3State,
+        "transformer_session_class": TransformerDecodeSession,
         "mamba_session_classes": {"mamba1": Mamba1DecodeSession, "mamba2": _Mamba2DecodeSession,
                                   "mamba3": _Mamba3DecodeSession},
         "generation_classes": (Array, CausalLMState,

@@ -52,6 +52,8 @@ def _f32(a, name):
 
 
 class _RecurrentBase(ParamsMixin):
+    # The xseq public native lifecycle owns the former fit/validation/output wrappers.
+    _mojolearn_native_public = True
     _CELL = "lstm"
     _TASK = 0
 

@@ -19,7 +19,7 @@ loops, so the CPU column computes the device's words:
 
 `python/mojolearn/_svm_impl.py` keeps its Python reference of the libsvm
 arithmetic (`_sigmoid_train`, `_splitmix_perm`, ...) in the same orders.
-The Python entry points are in `svm/host/svc_proba_pyapi.mojo`.
+The Python entry points are in `providers/python/svm_host_svc_proba_pyapi.mojo`.
 """
 
 from std.memory import bitcast

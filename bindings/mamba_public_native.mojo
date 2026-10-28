@@ -18,6 +18,7 @@ for other compiled owners. Dictionary insertion retains each report before
 the temporary tuple is released.
 """
 from std.python import Python, PythonObject
+from std.os import getenv
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -27,10 +28,15 @@ from bindings.generation_buffers import (
 )
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block, _model_f32
-from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths
+from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words
 from bindings.neural_prefill_native import _prefill_mamba3_reports
+from providers.python.neural_descriptor_pyapi import (
+    neural_descriptor_handle, neural_descriptor_reserved_execute,
+    neural_descriptor_execute, neural_descriptor_matches, neural_descriptor_reuse,
+)
 from bindings.samba_inference_native import _m3_shapes, _m3_names, _m3_state_call
 from core.neural_block_public_impl import neural_copy_row_prefixes
+from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 
 
@@ -42,7 +48,17 @@ def _m3_entries(block: PythonObject, fields: PythonObject, context: PythonObject
     # host binding for the CPU inference class, the block's tier otherwise.
     var bi = Python.import_module("builtins")
     if Bool(py=py_call(bi.isinstance, block, context["block_classes"]["cpu"]["mamba3"])):
-        return _model_bindings(PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
+        var entries = _model_bindings(PythonObject("cpu"), "mamba3", context, PythonObject("identical"))["mamba3"]
+        var block_provider = PythonObject(None)
+        var state_provider = PythonObject(None)
+        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            block_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
+                _native_function(entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
+            state_provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
+                _native_function(entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
+        py_setitem(fields, "_native_mamba_block_provider_cache", block_provider)
+        py_setitem(fields, "_native_mamba_state", state_provider)
+        return entries
     return neural_training_entries(fields, context)
 
 
@@ -130,7 +146,7 @@ def _m3_checked_weights(block: PythonObject, fields: PythonObject, context: Pyth
 
 
 def mamba3_install_owned(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(prefill session, binding, generation)`; the glue assigns all three."""
+    # Publish session, binding and generation together after successful upload.
     var bi = Python.import_module("builtins")
     var fields = block.__dict__
     var entries = _m3_entries(block, fields, context)
@@ -145,9 +161,23 @@ def mamba3_install_owned(block: PythonObject, context: PythonObject) raises -> P
     var addresses = py_ints([])
     for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
         _ = py_call(addresses.append, generation_address(weights[i], keep))
-    var generation = py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), session, addresses, fields["d_model"])
+    var generation = PythonObject(None)
+    var native = py_get(fields, "_native_mamba_block_provider_cache")
+    if neural_descriptor_matches(native, canonical):
+        var handle = neural_descriptor_handle(native,
+            _native_function(entries, "mamba_prefill_native_handle_v1"), session)
+        generation = PythonObject(neural_descriptor_reserved_execute(native, session, handle, 0, 1, 15,
+            _neural_int_words(addresses), [Int(py=fields["d_model"])], []))
+    else:
+        native = PythonObject(None)
+        generation = py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), session, addresses, fields["d_model"])
+    py_setitem(fields, "_prefill_session", session)
+    py_setitem(fields, "_prefill_binding", canonical)
+    py_setitem(fields, "_owned_generation", generation)
+    py_setitem(fields, "_owned_native_provider", native)
+    py_setitem(fields, "_owned_restore_pending", False)
     _ = keep^
-    return Python.tuple(session, canonical, generation)
+    return generation
 
 
 def mamba3_release_owned(block: PythonObject) raises -> PythonObject:
@@ -155,10 +185,17 @@ def mamba3_release_owned(block: PythonObject) raises -> PythonObject:
     var session = py_get(fields, "_prefill_session")
     var binding = py_get(fields, "_prefill_binding")
     if session is not None and binding is not None:
-        _ = py_call(_native_function(binding, "mamba3_prefill_session_close"), session)
+        var native = py_get(fields, "_owned_native_provider")
+        if neural_descriptor_matches(native, binding):
+            var handle = neural_descriptor_handle(native,
+                _native_function(binding, "mamba_prefill_native_handle_v1"), session)
+            _ = neural_descriptor_execute(native, 18, [], [handle], [], False)
+        else:
+            _ = py_call(_native_function(binding, "mamba3_prefill_session_close"), session)
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_prefill_binding", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
+    py_setitem(fields, "_owned_native_provider", PythonObject(None))
     py_setitem(fields, "_owned_restore_pending", PythonObject(False))
     return PythonObject(None)
 
@@ -206,7 +243,16 @@ def mamba3_export_owned(block: PythonObject) raises -> PythonObject:
         var array = generation_array(shapes[i])
         _ = py_call(arrays.append, array)
         _ = py_call(addresses.append, generation_address(array, keep))
-    _ = py_call(_native_function(fields["_prefill_binding"], "mamba3_prefill_session_export_weights"), fields["_prefill_session"], addresses, generation)
+    var binding = fields["_prefill_binding"]
+    var session = fields["_prefill_session"]
+    var native = py_get(fields, "_owned_native_provider")
+    if neural_descriptor_matches(native, binding):
+        var handle = neural_descriptor_handle(native,
+            _native_function(binding, "mamba_prefill_native_handle_v1"), session)
+        _ = neural_descriptor_reserved_execute(native, session, handle, 0, 1, 17,
+            _neural_int_words(addresses), [Int(py=generation)], [])
+    else:
+        _ = py_call(_native_function(binding, "mamba3_prefill_session_export_weights"), session, addresses, generation)
     var result = bi.dict()
     var names = block._W_NAMES
     for i in range(len(names)):  # driver-loop: over named parameter slots
@@ -230,15 +276,25 @@ def mamba3_getstate(block: PythonObject) raises -> PythonObject:
     py_setitem(result, "_owned_generation", PythonObject(None))
     _ = py_call(result.pop, "_prefill_session", PythonObject(None))
     _ = py_call(result.pop, "_prefill_binding", PythonObject(None))
+    var transient_names = [String("_owned_native_provider"), String("_native_mamba_block_provider_cache"),
+                           String("_native_mamba_state"), String("_native_forward_owner")]
+    for name in transient_names:  # driver-loop: over ephemeral native owners excluded from serialized model state
+        _ = py_call(result.pop, name, PythonObject(None))
     return result
 
 
-def mamba3_setstate(block: PythonObject, state: PythonObject) raises -> PythonObject:
+def mamba3_setstate(block: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = block.__dict__
     _ = py_call(fields.update, state)
     py_setitem(fields, "_prefill_session", PythonObject(None))
     py_setitem(fields, "_prefill_binding", PythonObject(None))
     py_setitem(fields, "_owned_generation", PythonObject(None))
+    py_setitem(fields, "_owned_native_provider", PythonObject(None))
+    py_setitem(fields, "_native_mamba_block_provider_cache", PythonObject(None))
+    if String(fields["_native_route"]) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+        var entries = _m3_entries(block, fields, context)
+        py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+        py_setitem(fields, "_prefill_binding", _m3_canonical(entries))
     return PythonObject(None)
 
 
@@ -289,6 +345,8 @@ struct MambaDecodeHandle(Movable, Writable):
     var kind: Int
     var binding: PythonObject
     var device: PythonObject
+    var provider: PythonObject
+    var device_address: Int
     var open: Bool
     var b: Int
     var d_model: Int
@@ -307,6 +365,8 @@ struct MambaDecodeHandle(Movable, Writable):
         self.kind = kind
         self.binding = binding
         self.device = PythonObject(None)
+        self.provider = PythonObject(None)
+        self.device_address = 0
         self.open = False
         self.b = 0
         self.d_model = 0
@@ -453,8 +513,31 @@ def mamba_session_init(session: PythonObject, block: PythonObject, state: Python
             _ = py_call(params.append, handle.q)
             _ = py_call(params.append, 1 if handle.pending else 0)
         handle.device = _native_function(binding, kind_name + "_session_create")()
-        _ = py_call(_native_function(binding, kind_name + "_session_open"), handle.device, addresses, params)
+        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
+            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
+                _native_function(binding, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
+            handle.device_address = neural_descriptor_handle(handle.provider,
+                _native_function(binding, kind_name + "_decode_native_handle_v1"), handle.device)
+            var p: List[Int] = [handle.b, handle.d_model]
+            var f = List[Float64]()
+            if kind == 1 and handle.profile != 1:
+                raise Error("Mamba1 resident decode requires the binding's supported profile")
+            if kind == 2:
+                p.append(handle.q)
+                f.append(Float64(py=handle.dt_limit[0]))
+                f.append(Float64(py=handle.dt_limit[1]))
+            elif kind == 3:
+                p.append(handle.q)
+                p.append(Int(handle.pending))
+            var base = 20 + 8 * (kind - 1)
+            _ = neural_descriptor_reserved_execute(handle.provider, handle.device, handle.device_address,
+                base, base + 2, base + 3, _neural_int_words(addresses), p, f)
+        else:
+            _ = py_call(_native_function(binding, kind_name + "_session_open"), handle.device, addresses, params)
     else:
+        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_mamba_state"),
+                _native_function(binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
         # The host arm owns typed copies, the device arm's upload on the host.
         for i in range(len(weights)):  # driver-loop: over block weight slots
             handle.weights.append(mamba_host_copy(generation_address(weights[i], keep), Int(py=weights[i].size)))
@@ -506,9 +589,16 @@ def mamba_session_step(session: PythonObject, input: PythonObject, context: Pyth
         var addresses = py_ints([generation_address(x, keep), generation_address(y, keep)])
         for i in range(len(reports)):  # driver-loop: over the fixed report buffers
             _ = py_call(addresses.append, generation_address(reports[i], keep))
-        var updated = py_call(_native_function(h[].binding, name + "_session_step"), h[].device, addresses)
-        if kind != 1:
-            h[].q = Int(py=updated)
+        if h[].provider is not None:
+            var base = 20 + 8 * (kind - 1)
+            var updated = neural_descriptor_reserved_execute(h[].provider, h[].device, h[].device_address,
+                base + 1, base + 2, base + 4, _neural_int_words(addresses), [], [])
+            if kind != 1:
+                h[].q = updated
+        else:
+            var updated = py_call(_native_function(h[].binding, name + "_session_step"), h[].device, addresses)
+            if kind != 1:
+                h[].q = Int(py=updated)
     else:
         # The per-call `<kind>_decode_step` address order with the session's
         # own copies standing where the caller's buffers would: x, weights,
@@ -534,9 +624,22 @@ def mamba_session_step(session: PythonObject, input: PythonObject, context: Pyth
         else:
             _ = py_call(params.append, h[].q)
             _ = py_call(params.append, 1 if h[].pending else 0)
-        var updated = py_call(_native_function(h[].binding, name + "_decode_step"), addresses, params)
-        if kind != 1:
-            h[].q = Int(py=updated)
+        if h[].provider is not None:
+            var p: List[Int] = [b, h[].d_model]
+            var f = List[Float64]()
+            if kind != 1:
+                p.append(h[].q)
+            if kind == 2:
+                f.append(Float64(py=h[].dt_limit[0])); f.append(Float64(py=h[].dt_limit[1]))
+            elif kind == 3:
+                p.append(Int(h[].pending))
+            var updated = neural_descriptor_execute(h[].provider, 2 * kind - 1, _neural_int_words(addresses), p, f)
+            if kind != 1:
+                h[].q = updated
+        else:
+            var updated = py_call(_native_function(h[].binding, name + "_decode_step"), addresses, params)
+            if kind != 1:
+                h[].q = Int(py=updated)
         if kind == 3:
             h[].pending = False
     if kind == 1 and h[].profile == 2:
@@ -574,15 +677,25 @@ def mamba_session_sync(session: PythonObject, context: PythonObject) raises -> P
     var pieces = _session_pieces(hobj, slots, what, keep, copies)
     if h[].device is not None:
         var addresses = py_ints(pieces)
-        var exported = py_call(_native_function(h[].binding, _kind_name(kind) + "_session_export_state"), h[].device, addresses)
-        if kind == 1:
-            if h[].profile == 2:
-                h[].position = Int(py=exported)
-        elif kind == 2:
-            h[].q = Int(py=exported)
+        if h[].provider is not None:
+            var base = 20 + 8 * (kind - 1)
+            var result = neural_descriptor_reserved_execute(h[].provider, h[].device, h[].device_address,
+                base + 1, base + 2, base + 5, pieces, [], [])
+            if kind == 2:
+                h[].q = result
+            elif kind == 3:
+                h[].q = result // 2
+                h[].pending = (result & 1) != 0
         else:
-            h[].q = Int(py=exported[0])
-            h[].pending = Bool(py=exported[1])
+            var exported = py_call(_native_function(h[].binding, _kind_name(kind) + "_session_export_state"), h[].device, addresses)
+            if kind == 1:
+                if h[].profile == 2:
+                    h[].position = Int(py=exported)
+            elif kind == 2:
+                h[].q = Int(py=exported)
+            else:
+                h[].q = Int(py=exported[0])
+                h[].pending = Bool(py=exported[1])
     else:
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
             mamba_copy_f32(pieces[i], Int(h[].parts[i].unsafe_ptr()), _count(h[].dims[i]))
@@ -622,14 +735,24 @@ def mamba_session_load(session: PythonObject, context: PythonObject) raises -> P
     if h[].device is not None:
         var addresses = py_ints(pieces)
         var name = _kind_name(kind) + "_session_load_state"
-        if kind == 1:
-            if h[].profile == 2:
-                _ = py_call(addresses.append, position)
-            _ = py_call(_native_function(h[].binding, name), h[].device, addresses)
-        elif kind == 2:
-            _ = py_call(_native_function(h[].binding, name), h[].device, addresses, py_ints([q]))
+        if h[].provider is not None:
+            var p = List[Int]()
+            if kind != 1:
+                p.append(q)
+            if kind == 3:
+                p.append(Int(pending))
+            var base = 20 + 8 * (kind - 1)
+            _ = neural_descriptor_reserved_execute(h[].provider, h[].device, h[].device_address,
+                base + 1, base + 2, base + 6, pieces, p, [])
         else:
-            _ = py_call(_native_function(h[].binding, name), h[].device, addresses, py_ints([q, 1 if pending else 0]))
+            if kind == 1:
+                if h[].profile == 2:
+                    _ = py_call(addresses.append, position)
+                _ = py_call(_native_function(h[].binding, name), h[].device, addresses)
+            elif kind == 2:
+                _ = py_call(_native_function(h[].binding, name), h[].device, addresses, py_ints([q]))
+            else:
+                _ = py_call(_native_function(h[].binding, name), h[].device, addresses, py_ints([q, 1 if pending else 0]))
     else:
         for i in range(len(pieces)):  # driver-loop: over the state's named pieces
             mamba_copy_f32(Int(h[].parts[i].unsafe_ptr()), pieces[i], _count(h[].dims[i]))
@@ -648,7 +771,10 @@ def _session_release(hobj: PythonObject, state: PythonObject) raises:
     if state is not None:
         py_setitem(state.__dict__, "_resident_session", PythonObject(None))
     if h[].device is not None:
-        _ = py_call(_native_function(h[].binding, _kind_name(h[].kind) + "_session_close"), h[].device)
+        if h[].provider is not None:
+            _ = neural_descriptor_execute(h[].provider, 27 + 8 * (h[].kind - 1), [], [h[].device_address], [], False)
+        else:
+            _ = py_call(_native_function(h[].binding, _kind_name(h[].kind) + "_session_close"), h[].device)
     h[].weights.clear()
     h[].parts.clear()
 
@@ -725,7 +851,7 @@ def mamba_native_call(operation: String, values: PythonObject, context: PythonOb
     if operation == "getstate":
         return mamba3_getstate(values[0])
     if operation == "setstate":
-        return mamba3_setstate(values[0], values[1])
+        return mamba3_setstate(values[0], values[1], context)
     if operation == "set_input_states":
         return mamba3_set_input_states(values[0], values[1], values[2], values[3], values[4], context)
     if operation == "session_open":

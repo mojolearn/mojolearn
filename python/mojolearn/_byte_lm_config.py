@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shape configuration for the decoder language model trainer."""
-from dataclasses import dataclass, fields
-import operator
+from dataclasses import dataclass, FrozenInstanceError
 
 _DEFAULT_PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 
@@ -13,7 +12,7 @@ _DEFAULT_PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v
 # ``chunked_lm_head_v2=True`` selects the explicit IDENTICAL loss/gradient
 # profile with bounded vocabulary panels. Logits prediction still returns
 # the full vocabulary; its per-cell GEMM contraction is unchanged.
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False, repr=False, eq=False)
 class ByteLanguageModelConfig:
     """Dimensions of the decoder language model: batch, sequence, layers, vocabulary.
 
@@ -76,106 +75,93 @@ class ByteLanguageModelConfig:
     vocab_size: int = 256
     chunked_lm_head_v2: bool = False
 
+    def __init__(self, batch=2, length=32, d_model=32, n_heads=4, n_kv=2,
+                 head_dim=8, intermediate=64, n_layers=2, vocab_size=256,
+                 chunked_lm_head_v2=False):
+        return _CONFIG(self, "config_construct", (batch, length, d_model, n_heads, n_kv,
+                       head_dim, intermediate, n_layers, vocab_size, chunked_lm_head_v2), _CONFIG_CONTEXT)
+
     def __post_init__(self):
-        for field in fields(self):  # glue: validates config dataclass fields
-            value = getattr(self, field.name)
-            if field.name == 'chunked_lm_head_v2':
-                if not isinstance(value, bool):
-                    raise ValueError('chunked_lm_head_v2 must be a boolean')
-                continue
-            if isinstance(value, bool) or type(value).__name__ in ('bool', 'bool_'):
-                raise ValueError('Byte-LM shape requires integer dimensions')
-            try:
-                value = operator.index(value)
-            except TypeError as exc:
-                raise ValueError('Byte-LM shape requires integer dimensions') from exc
-            if not 0 < value <= 1 << 20:
-                raise ValueError('Byte-LM dimensions must be in [1, 2**20]')
-            object.__setattr__(self, field.name, value)
-        if (self.length > 8192 or self.d_model != self.n_heads * self.head_dim
-                or self.n_heads % self.n_kv or self.head_dim % 2):
-            raise ValueError('Byte-LM requires L <= 8192, DM = H*HD, H divisible by KV, and even HD')
-        if self.chunked_lm_head_v2 and self.vocab_size < 2:
-            raise ValueError('chunked_lm_head_v2 requires vocabulary size >= 2')
-        b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape[:9]
-        spans = (self.n_total, b * l * vocab, b * l * dm, b * l * ff,
-                 b * h * l * l, b * kv * l * hd, b * (l + 1))
-        if max(spans) > 2147483647:  # glue: max over seven shape spans
-            raise ValueError('Byte-LM shape exceeds signed 32-bit indexing')
+        return _CONFIG(self, "config_validate", (), _CONFIG_CONTEXT)
+
+    def __repr__(self):
+        return _CONFIG(self, "config_repr", (), _CONFIG_CONTEXT)
+
+    def __eq__(self, other):
+        return _CONFIG(self, "config_equal", (other,), _CONFIG_CONTEXT)
+
+    def __hash__(self):
+        return _CONFIG(self, "config_hash", (), _CONFIG_CONTEXT)
 
     @property
     def native_shape(self):
         """The dimensions as a tuple of ints, in field order."""
-        dimensions = tuple(getattr(self, field.name) for field in fields(self)  # glue: dataclass shape fields only
-                           if field.name != 'chunked_lm_head_v2')  # glue: dataclass shape fields only
-        # Preserve the existing nine-integer ABI when the opt-in is absent.
-        return dimensions + (1,) if self.chunked_lm_head_v2 else dimensions
+        return _CONFIG(self, "config_native_shape", (), _CONFIG_CONTEXT)
 
     @property
     def profile(self):
         """The name of the training profile this shape selects."""
-        if self.native_shape == (2, 32, 32, 4, 2, 8, 64, 2, 256):
-            return _DEFAULT_PROFILE
-        b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape[:9]
-        suffix = '-v256-blocks2.fp32.v2' if (layers, vocab) == (2, 256) else f'-v{vocab}-blocks{layers}.fp32.v3'
-        head = '-lmhead-chunk256-v2' if self.chunked_lm_head_v2 else ''
-        return (f'mojolearn.byte-lm.b{b}-l{l}-d{dm}-h{h}-kv{kv}-hd{hd}'
-                f'-ff{ff}{suffix}{head}')
+        return _CONFIG(self, "config_profile", (), _CONFIG_CONTEXT)
 
     @property
     def parameter_shapes(self):
         """The shape of every parameter tensor, in packing order."""
-        dm, kd, ff = self.d_model, self.n_kv * self.head_dim, self.intermediate
-        block = ((dm,), (dm, dm), (kd, dm), (kd, dm), (dm, dm),
-                 (dm,), (ff, dm), (ff, dm), (dm, ff))
-        return ((self.vocab_size, dm), *(block * self.n_layers), (self.vocab_size, dm))
+        return _CONFIG(self, "config_shapes", (), _CONFIG_CONTEXT)
 
     @property
     def n_tensors(self):
         """Number of parameter tensors: ``2 + 9 * n_layers``."""
-        return 2 + 9 * self.n_layers
+        return _CONFIG(self, "config_n_tensors", (), _CONFIG_CONTEXT)
 
     @property
     def parameter_names(self):
         """The name of every parameter tensor, in packing order."""
-        names = ('norm1_w', 'w_q', 'w_k', 'w_v', 'w_o', 'norm2_w', 'w_gate', 'w_up', 'w_down')
-        return ('embed', *(f'block{layer}.{name}' for layer in range(self.n_layers) for name in names), 'lm_head')  # glue: parameter names per layer
+        return _CONFIG(self, "config_names", (), _CONFIG_CONTEXT)
 
     @property
     def offsets(self):
         """Start offset of every parameter tensor in the flat parameter vector, plus the total."""
-        from ._portable_math import prod
-        offsets = [0]
-        for shape in self.parameter_shapes:  # glue: offsets over parameter shapes
-            offsets.append(offsets[-1] + prod(shape))
-        return tuple(offsets)
+        return _CONFIG(self, "config_offsets", (), _CONFIG_CONTEXT)
 
     @property
     def n_total(self):
         """Total number of parameters."""
-        return self.offsets[-1]
+        return _CONFIG(self, "config_n_total", (), _CONFIG_CONTEXT)
 
     def to_dict(self):
         """The fields as a dict, suitable for ``ByteLanguageModelConfig(**d)``."""
-        return {field.name: getattr(self, field.name) for field in fields(self)}  # glue: config dataclass field values
+        return _CONFIG(self, "config_dict", (), _CONFIG_CONTEXT)
 
 
 def require_shape(value=None):
-    if value is None:
-        return ByteLanguageModelConfig()
-    if not isinstance(value, ByteLanguageModelConfig):
-        raise TypeError('shape must be a ByteLanguageModelConfig')
-    return value
+    return _CONFIG(value, "config_require", (), _CONFIG_CONTEXT)
 
 
 def state_shape(state):
-    if 'model_shape' not in state:
-        return ByteLanguageModelConfig()
-    value = state['model_shape']
-    expected = {field.name for field in fields(ByteLanguageModelConfig)}  # glue: config dataclass field names
-    accepted = (expected, expected - {'chunked_lm_head_v2'},
-                expected - {'n_layers', 'vocab_size'},
-                expected - {'n_layers', 'vocab_size', 'chunked_lm_head_v2'})
-    if not isinstance(value, dict) or set(value) not in accepted:
-        raise ValueError('Byte-LM model_shape has missing or unknown dimensions')
-    return ByteLanguageModelConfig(**value)
+    return _CONFIG(state, "config_state", (), _CONFIG_CONTEXT)
+
+
+def _config_setattr(self, name, value):
+    return _CONFIG(self, "config_setattr", (name, value), _CONFIG_CONTEXT)
+
+
+def _config_delattr(self, name):
+    return _CONFIG(self, "config_delattr", (name,), _CONFIG_CONTEXT)
+
+
+def _connect_config():
+    # glue: dataclass storage stays compatible; native code owns public methods.
+    from ._native_family_bridge import shared_context, _unavailable
+    from .tokenizer import _binding
+    context = dict(shared_context(), byte_lm_config_class=ByteLanguageModelConfig,
+                   byte_lm_config_frozen_error=FrozenInstanceError, byte_lm_default_profile=_DEFAULT_PROFILE)
+    try:
+        entry = _binding()._module.byte_lm_trainer_call
+    except (ImportError, AttributeError, OSError) as error:
+        entry = _unavailable(error)
+    return entry, context
+
+
+_CONFIG, _CONFIG_CONTEXT = _connect_config()
+ByteLanguageModelConfig.__setattr__ = _config_setattr
+ByteLanguageModelConfig.__delattr__ = _config_delattr

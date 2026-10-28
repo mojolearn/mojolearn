@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed input marshaling moved word for word from bindings/classical_arrays.mojo."""
 from std.memory import bitcast
-from bindings.classical_cast import classical_f32_bits
+from core.classical_cast import classical_f32_bits
 
 
 def classical_cast_rows(

@@ -84,6 +84,7 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
+from providers.python.transformer_decode_pyapi import transformer_decode_native_c, TransformerDecodeHandle
 from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
 from bindings.samba_config_native import samba_config_c
 from bindings.samba_public_native import samba_public_c
@@ -107,7 +108,7 @@ from bindings.runtime_sequential_forward import runtime_sequential_forward_c
 from bindings.runtime_classical_unavailable import runtime_classical_unavailable_c
 from bindings.xseq_native import xseq_c
 from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
-from bindings.byte_lm_trainer_native import byte_lm_trainer_c
+from bindings.byte_lm_trainer_native import byte_lm_trainer_c, byte_lm_pooled_finalize_c
 from bindings.xcnn_native import xcnn_c
 from bindings.tsa_public_native import tsa_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
@@ -206,6 +207,9 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     vocab_fingerprint_hex,
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
+from providers.python.generation_session_pyapi import GenerationNativeProvider, GenerationNativeSession
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info
+from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_lm_public import (
     GenerationHandle, causal_public_c, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
@@ -1319,6 +1323,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(xseq_c, "xseq_native_call")
         module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
         module.def_py_c_function(byte_lm_trainer_c, "byte_lm_trainer_call")
+        module.def_py_c_function(byte_lm_pooled_finalize_c, "byte_lm_pooled_finalize_call")
         module.def_py_c_function(xcnn_c, "xcnn_native_call")
         module.def_py_c_function(tsa_c, "tsa_native_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "classical_native_call")
@@ -1430,17 +1435,34 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[4], "neural_block_set_params")
+        module.def_py_c_function(neural_block_c[5], "neural_block_getstate")
+        module.def_py_c_function(neural_block_c[6], "neural_block_setstate")
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
+        module.def_py_c_function(transformer_decode_native_c, "transformer_decode_native_call")
+        _ = module.add_type[TransformerDecodeHandle]("_TransformerDecodeHandle")
         module.def_py_c_function(mamba_native_c, "mamba_native_call")
         _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
+        _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
+        _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
+        _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
+        _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
+        _ = module.add_type[ProviderOperationLock]("_NativeOperationLockOwner")
+        module.def_function[operation_lock_connect]("operation_lock_connect")
+        module.def_py_c_function(operation_lock_c[0], "operation_lock_init")
+        module.def_py_c_function(operation_lock_c[1], "operation_lock_acquire")
+        module.def_py_c_function(operation_lock_c[2], "operation_lock_release")
+        module.def_py_c_function(operation_lock_c[3], "operation_lock_enter")
+        module.def_py_c_function(operation_lock_c[4], "operation_lock_exit")
+        module.def_py_c_function(operation_lock_c[5], "operation_lock_owned")
+        module.def_function[neural_descriptor_info]("neural_native_dispatch_info")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch

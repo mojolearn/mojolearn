@@ -1,0 +1,600 @@
+{
+  "base": "05eb7d45d5f689ac78bba19f3fa0a1870751e0a8",
+  "moves": [
+    {
+      "old": "kernel_methods/rbf_resident_pyapi.mojo",
+      "new": "providers/python/kernel_methods_rbf_resident_pyapi.mojo",
+      "old_module": "kernel_methods.rbf_resident_pyapi",
+      "new_module": "providers.python.kernel_methods_rbf_resident_pyapi",
+      "family": "kernel_methods",
+      "sha256_before": "421325b10dadcdaf2d8ee0265a9ebc9984db14a518363eec854b7af254ecd82f"
+    },
+    {
+      "old": "svm/host/scale_gamma_host_pyapi.mojo",
+      "new": "providers/python/svm_host_scale_gamma_host_pyapi.mojo",
+      "old_module": "svm.host.scale_gamma_host_pyapi",
+      "new_module": "providers.python.svm_host_scale_gamma_host_pyapi",
+      "family": "svm",
+      "sha256_before": "7f775e4a71c4b7f671f15ddcb68f3d74904bf3bc7dbccbea9401d69a47e6cac2"
+    },
+    {
+      "old": "svm/host/svc_ovo_host_pyapi.mojo",
+      "new": "providers/python/svm_host_svc_ovo_host_pyapi.mojo",
+      "old_module": "svm.host.svc_ovo_host_pyapi",
+      "new_module": "providers.python.svm_host_svc_ovo_host_pyapi",
+      "family": "svm",
+      "sha256_before": "a2b42850e97d5c987d189b3dd565bc3252a2cf80fe056a37c5cc976c7c8d571b"
+    },
+    {
+      "old": "svm/host/svc_proba_pyapi.mojo",
+      "new": "providers/python/svm_host_svc_proba_pyapi.mojo",
+      "old_module": "svm.host.svc_proba_pyapi",
+      "new_module": "providers.python.svm_host_svc_proba_pyapi",
+      "family": "svm",
+      "sha256_before": "e5acccfbd5bf272db5c4341d9a9daaebbd11b2a0f5cb5a220836f5beaa250d7f"
+    },
+    {
+      "old": "svm/impl/scale_gamma_device_pyapi.mojo",
+      "new": "providers/python/svm_impl_scale_gamma_device_pyapi.mojo",
+      "old_module": "svm.impl.scale_gamma_device_pyapi",
+      "new_module": "providers.python.svm_impl_scale_gamma_device_pyapi",
+      "family": "svm",
+      "sha256_before": "4e7f6d47fdf0bd49d2eb8f74365605d218d593b95457e07c2763a93a6ef41044"
+    },
+    {
+      "old": "svm/impl/svc_epilogue_pyapi.mojo",
+      "new": "providers/python/svm_impl_svc_epilogue_pyapi.mojo",
+      "old_module": "svm.impl.svc_epilogue_pyapi",
+      "new_module": "providers.python.svm_impl_svc_epilogue_pyapi",
+      "family": "svm",
+      "sha256_before": "8001fd16f32cf742e5fcd8e9e614cdfae4de12cbfa7496ab78d9b7c5eaebefef"
+    },
+    {
+      "old": "svm/impl/svc_ovo_layout_pyapi.mojo",
+      "new": "providers/python/svm_impl_svc_ovo_layout_pyapi.mojo",
+      "old_module": "svm.impl.svc_ovo_layout_pyapi",
+      "new_module": "providers.python.svm_impl_svc_ovo_layout_pyapi",
+      "family": "svm",
+      "sha256_before": "1a98109f9b76502426e45d0ba52f284dc3a05a3e2ac5da0e78939f9c235ff40c"
+    },
+    {
+      "old": "x_ann/abi_pyapi.mojo",
+      "new": "providers/python/x_ann_abi_pyapi.mojo",
+      "old_module": "x_ann.abi_pyapi",
+      "new_module": "providers.python.x_ann_abi_pyapi",
+      "family": "x_ann",
+      "sha256_before": "e161c011ea4105c62f0118f14810526c178fc030bdc2a452e0b961ed40b599ee"
+    },
+    {
+      "old": "x_ann/resident_pyapi.mojo",
+      "new": "providers/python/x_ann_resident_pyapi.mojo",
+      "old_module": "x_ann.resident_pyapi",
+      "new_module": "providers.python.x_ann_resident_pyapi",
+      "family": "x_ann",
+      "sha256_before": "7f199c3b7cf37bf3b65ff121a80ba9d305196131cde0da4b937b6a18be86ae5a"
+    },
+    {
+      "old": "x_cluster/out_pyapi.mojo",
+      "new": "providers/python/x_cluster_out_pyapi.mojo",
+      "old_module": "x_cluster.out_pyapi",
+      "new_module": "providers.python.x_cluster_out_pyapi",
+      "family": "x_cluster",
+      "sha256_before": "df8dfaf9dbe1c3ff0634bde4541683384bb5de649a8b71c692c69863852ddd26"
+    },
+    {
+      "old": "x_cnn/host/ops_host_pyapi.mojo",
+      "new": "providers/python/x_cnn_host_ops_host_pyapi.mojo",
+      "old_module": "x_cnn.host.ops_host_pyapi",
+      "new_module": "providers.python.x_cnn_host_ops_host_pyapi",
+      "family": "x_cnn",
+      "sha256_before": "18a5a3462cb7f7264e3ef83273936cc5f7aae530eb66ec240111c3e0e8597375"
+    },
+    {
+      "old": "x_decomp/als_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_als_dev_pyapi.mojo",
+      "old_module": "x_decomp.als_dev_pyapi",
+      "new_module": "providers.python.x_decomp_als_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "7a5716eac58af2f5d520e8a799bdae4037345e74c2c07d83874a48e564d48d3a"
+    },
+    {
+      "old": "x_decomp/als_pyapi.mojo",
+      "new": "providers/python/x_decomp_als_pyapi.mojo",
+      "old_module": "x_decomp.als_pyapi",
+      "new_module": "providers.python.x_decomp_als_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "527bb076ad8785ffcc7776b3bd72b5d0d60d59daaa49a22fbdef2d4e48ec4356"
+    },
+    {
+      "old": "x_decomp/api_pyapi.mojo",
+      "new": "providers/python/x_decomp_api_pyapi.mojo",
+      "old_module": "x_decomp.api_pyapi",
+      "new_module": "providers.python.x_decomp_api_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "81b13a4592e062e57c1f939281437b056ea0bbb4b3cdaa0a46db526e327b0537"
+    },
+    {
+      "old": "x_decomp/chi2_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_chi2_dev_pyapi.mojo",
+      "old_module": "x_decomp.chi2_dev_pyapi",
+      "new_module": "providers.python.x_decomp_chi2_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "9be8d9ebdbd3f14f607bce2d0f7632194572cb2ca687ad8760dd2dda2e1ad793"
+    },
+    {
+      "old": "x_decomp/chi2_pyapi.mojo",
+      "new": "providers/python/x_decomp_chi2_pyapi.mojo",
+      "old_module": "x_decomp.chi2_pyapi",
+      "new_module": "providers.python.x_decomp_chi2_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "97b4bf41aaabc70c52200d0fd11d4ebff6430361959757f09fff4ac7cd291c08"
+    },
+    {
+      "old": "x_decomp/decomp_owner_pyapi.mojo",
+      "new": "providers/python/x_decomp_decomp_owner_pyapi.mojo",
+      "old_module": "x_decomp.decomp_owner_pyapi",
+      "new_module": "providers.python.x_decomp_decomp_owner_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "525bde59a38337d0471fa705b15627c92cc676190f29d6947e5d42e1f1ed40ee"
+    },
+    {
+      "old": "x_decomp/dictl_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_dictl_dev_pyapi.mojo",
+      "old_module": "x_decomp.dictl_dev_pyapi",
+      "new_module": "providers.python.x_decomp_dictl_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "033c6862fb833d734b259d804f5a49e7f02f0ef56574cf9fd582f4a631e67d03"
+    },
+    {
+      "old": "x_decomp/dictl_pyapi.mojo",
+      "new": "providers/python/x_decomp_dictl_pyapi.mojo",
+      "old_module": "x_decomp.dictl_pyapi",
+      "new_module": "providers.python.x_decomp_dictl_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "b4722b3bcdb3df960be827787bfd4805dad190dfd538b6a258526dd501565575"
+    },
+    {
+      "old": "x_decomp/graph_device_pyapi.mojo",
+      "new": "providers/python/x_decomp_graph_device_pyapi.mojo",
+      "old_module": "x_decomp.graph_device_pyapi",
+      "new_module": "providers.python.x_decomp_graph_device_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "3e2b0762b6c9791da06d6a64dbedb441f20ab1d5a1a66122e51382969e5f3a85"
+    },
+    {
+      "old": "x_decomp/graph_host_pyapi.mojo",
+      "new": "providers/python/x_decomp_graph_host_pyapi.mojo",
+      "old_module": "x_decomp.graph_host_pyapi",
+      "new_module": "providers.python.x_decomp_graph_host_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "cdce46e5922f08200de8601a5a5d09164903e813e3763cbcf56fe99510044c19"
+    },
+    {
+      "old": "x_decomp/ipca_owner_pyapi.mojo",
+      "new": "providers/python/x_decomp_ipca_owner_pyapi.mojo",
+      "old_module": "x_decomp.ipca_owner_pyapi",
+      "new_module": "providers.python.x_decomp_ipca_owner_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "63da675af559297a46a8d8b6ad27ee4c8cd2e2318d07613da3c89c1962246a20"
+    },
+    {
+      "old": "x_decomp/kit_device_pyapi.mojo",
+      "new": "providers/python/x_decomp_kit_device_pyapi.mojo",
+      "old_module": "x_decomp.kit_device_pyapi",
+      "new_module": "providers.python.x_decomp_kit_device_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "6c76544a6d09a9d5dee122ea0c8364ff82267f8bd6efcdc24cf2ccc9b07b902a"
+    },
+    {
+      "old": "x_decomp/lanczos_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_lanczos_dev_pyapi.mojo",
+      "old_module": "x_decomp.lanczos_dev_pyapi",
+      "new_module": "providers.python.x_decomp_lanczos_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "513ec0e897e51ac42d20db4cb0e7434475fe92b309cff6c2b27228f86664031b"
+    },
+    {
+      "old": "x_decomp/lanczos_host_pyapi.mojo",
+      "new": "providers/python/x_decomp_lanczos_host_pyapi.mojo",
+      "old_module": "x_decomp.lanczos_host_pyapi",
+      "new_module": "providers.python.x_decomp_lanczos_host_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "d12438f655be4d2d7eb42cd772321f5e3459dfda0bd1081dcebcb4a90f9df1ab"
+    },
+    {
+      "old": "x_decomp/lle_iter_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_lle_iter_dev_pyapi.mojo",
+      "old_module": "x_decomp.lle_iter_dev_pyapi",
+      "new_module": "providers.python.x_decomp_lle_iter_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "bb7f7ead830648d6d604f8bf4f2b673ac6bb56ab3c838dcb97f0922107be7d13"
+    },
+    {
+      "old": "x_decomp/lle_iter_pyapi.mojo",
+      "new": "providers/python/x_decomp_lle_iter_pyapi.mojo",
+      "old_module": "x_decomp.lle_iter_pyapi",
+      "new_module": "providers.python.x_decomp_lle_iter_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "4ffdd3a1f16a0256804a6b865beb4575a9277866145c81b8821029fff1732eea"
+    },
+    {
+      "old": "x_decomp/mcd_bmma_pyapi.mojo",
+      "new": "providers/python/x_decomp_mcd_bmma_pyapi.mojo",
+      "old_module": "x_decomp.mcd_bmma_pyapi",
+      "new_module": "providers.python.x_decomp_mcd_bmma_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "645728092b3ab867c8b73ff1d391adb6e1942af173583e2bfaace2b291c4b5bd"
+    },
+    {
+      "old": "x_decomp/mds_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_mds_dev_pyapi.mojo",
+      "old_module": "x_decomp.mds_dev_pyapi",
+      "new_module": "providers.python.x_decomp_mds_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "ae13179e6ed405e166ae63f4af357706ba17f8e63ab9b99367e540a6f2064c38"
+    },
+    {
+      "old": "x_decomp/mds_pyapi.mojo",
+      "new": "providers/python/x_decomp_mds_pyapi.mojo",
+      "old_module": "x_decomp.mds_pyapi",
+      "new_module": "providers.python.x_decomp_mds_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "076ecf77db6623ac8fb0a6826268698431c4d51ba14fef106e64f7d1e0483508"
+    },
+    {
+      "old": "x_decomp/pls_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_pls_dev_pyapi.mojo",
+      "old_module": "x_decomp.pls_dev_pyapi",
+      "new_module": "providers.python.x_decomp_pls_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "5345a1819d9074c4dacf0ebc70d5a7d721be02778c5c6ca23760fc6cde7c84f0"
+    },
+    {
+      "old": "x_decomp/pls_pyapi.mojo",
+      "new": "providers/python/x_decomp_pls_pyapi.mojo",
+      "old_module": "x_decomp.pls_pyapi",
+      "new_module": "providers.python.x_decomp_pls_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "1988bcf5dc00bce17e2d5fc2394763a23d8f19e3a3ccdf90ec7198bd78a61a37"
+    },
+    {
+      "old": "x_decomp/qfix_pyapi.mojo",
+      "new": "providers/python/x_decomp_qfix_pyapi.mojo",
+      "old_module": "x_decomp.qfix_pyapi",
+      "new_module": "providers.python.x_decomp_qfix_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "53928218b7ddbaa3cd85f58beea0953e89e5fdcbc723d89ce0428e8fa4908646"
+    },
+    {
+      "old": "x_decomp/resident_pyapi.mojo",
+      "new": "providers/python/x_decomp_resident_pyapi.mojo",
+      "old_module": "x_decomp.resident_pyapi",
+      "new_module": "providers.python.x_decomp_resident_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "1ebd7c5780cc68595ba4d98c80343c0e501e52448d78918ba9a898172d881995"
+    },
+    {
+      "old": "x_decomp/s_linalg_fast_pyapi.mojo",
+      "new": "providers/python/x_decomp_s_linalg_fast_pyapi.mojo",
+      "old_module": "x_decomp.s_linalg_fast_pyapi",
+      "new_module": "providers.python.x_decomp_s_linalg_fast_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "8cfaaf34c5e3b0434d55c3d90ff6a97db57bb4c66939854ee5858406d72d2e14"
+    },
+    {
+      "old": "x_decomp/select_dev_pyapi.mojo",
+      "new": "providers/python/x_decomp_select_dev_pyapi.mojo",
+      "old_module": "x_decomp.select_dev_pyapi",
+      "new_module": "providers.python.x_decomp_select_dev_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "d311a8df0796baac4cd03c9653f311940cb5267cc44439254248cdaa0a62fd16"
+    },
+    {
+      "old": "x_decomp/select_ops_pyapi.mojo",
+      "new": "providers/python/x_decomp_select_ops_pyapi.mojo",
+      "old_module": "x_decomp.select_ops_pyapi",
+      "new_module": "providers.python.x_decomp_select_ops_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "b38f43ca0e4c4da7f186aecfe2275120cf75080db28ebe514188edb7b116974b"
+    },
+    {
+      "old": "x_decomp/tsvd_owner_pyapi.mojo",
+      "new": "providers/python/x_decomp_tsvd_owner_pyapi.mojo",
+      "old_module": "x_decomp.tsvd_owner_pyapi",
+      "new_module": "providers.python.x_decomp_tsvd_owner_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "1fbadb080a36d0b2f8a3c5a3f2fea5d416c57899b42666b642ff0d98212c3528"
+    },
+    {
+      "old": "x_decomp/w4_fast_pyapi.mojo",
+      "new": "providers/python/x_decomp_w4_fast_pyapi.mojo",
+      "old_module": "x_decomp.w4_fast_pyapi",
+      "new_module": "providers.python.x_decomp_w4_fast_pyapi",
+      "family": "x_decomp",
+      "sha256_before": "e788b0c2a0a16c26b5d7a8eb8ba45312fc98902d02ed1b9c441e44c8964682c3"
+    },
+    {
+      "old": "x_neighbors/dev_pyapi.mojo",
+      "new": "providers/python/x_neighbors_dev_pyapi.mojo",
+      "old_module": "x_neighbors.dev_pyapi",
+      "new_module": "providers.python.x_neighbors_dev_pyapi",
+      "family": "x_neighbors",
+      "sha256_before": "2cbd91da6c70815fc16f7dd1fa55e32c7c0c4eb721f31d267d24c6f1e4034155"
+    },
+    {
+      "old": "x_neighbors/host_pyapi.mojo",
+      "new": "providers/python/x_neighbors_host_pyapi.mojo",
+      "old_module": "x_neighbors.host_pyapi",
+      "new_module": "providers.python.x_neighbors_host_pyapi",
+      "family": "x_neighbors",
+      "sha256_before": "d78d109d0e3395b6c68b1e715dff78c23f11536c71e09dad7b72af5a880ffbb8"
+    },
+    {
+      "old": "x_prep/fastnb_csr_pyapi.mojo",
+      "new": "providers/python/x_prep_fastnb_csr_pyapi.mojo",
+      "old_module": "x_prep.fastnb_csr_pyapi",
+      "new_module": "providers.python.x_prep_fastnb_csr_pyapi",
+      "family": "x_prep",
+      "sha256_before": "d55d73a54f610e03eb3159aecc500c22cb7b36e09ef912cb5eec89f110441732"
+    },
+    {
+      "old": "xtrees/api_pyapi.mojo",
+      "new": "providers/python/xtrees_api_pyapi.mojo",
+      "old_module": "xtrees.api_pyapi",
+      "new_module": "providers.python.xtrees_api_pyapi",
+      "family": "xtrees",
+      "sha256_before": "4b21b9637d17f4e9de5cefd7b8dad4caf8a9fc53cdf0801d556596ab149dda51"
+    }
+  ],
+  "family_roots": [
+    "arima",
+    "cholesky",
+    "cluster",
+    "dbscan",
+    "decomposition",
+    "embedding",
+    "ensemble",
+    "extratrees",
+    "gaussian_process",
+    "gbdt",
+    "gemm",
+    "glm",
+    "hdbscan",
+    "hierarchy",
+    "holtwinters",
+    "isolation_forest",
+    "ivf",
+    "kde",
+    "kernel_methods",
+    "metrics",
+    "mixture",
+    "naive_bayes",
+    "neighbors",
+    "preprocessing",
+    "resample",
+    "solver",
+    "spectral",
+    "svm",
+    "tokenizer",
+    "tsa",
+    "umap",
+    "x_ann",
+    "x_cluster",
+    "x_cnn",
+    "x_decomp",
+    "x_linear",
+    "x_metrics",
+    "x_neighbors",
+    "x_prep",
+    "xtrees"
+  ],
+  "affected_groups": [
+    {
+      "entry": "bindings/entry/entry__mojolearn_estimators_host.mojo",
+      "families": [
+        "svm"
+      ],
+      "affected_sources": [
+        "svm/host/scale_gamma_host_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_kernel_methods.mojo",
+      "families": [
+        "kernel_methods",
+        "svm"
+      ],
+      "affected_sources": [
+        "kernel_methods/rbf_resident_pyapi.mojo",
+        "svm/impl/scale_gamma_device_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_kernel_methods_host.mojo",
+      "families": [
+        "svm"
+      ],
+      "affected_sources": [
+        "svm/host/scale_gamma_host_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_svm.mojo",
+      "families": [
+        "svm"
+      ],
+      "affected_sources": [
+        "svm/impl/scale_gamma_device_pyapi.mojo",
+        "svm/impl/svc_epilogue_pyapi.mojo",
+        "svm/impl/svc_ovo_layout_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_svm_host.mojo",
+      "families": [
+        "svm"
+      ],
+      "affected_sources": [
+        "svm/host/scale_gamma_host_pyapi.mojo",
+        "svm/host/svc_ovo_host_pyapi.mojo",
+        "svm/host/svc_proba_pyapi.mojo",
+        "svm/impl/svc_ovo_layout_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_ann.mojo",
+      "families": [
+        "x_ann"
+      ],
+      "affected_sources": [
+        "x_ann/abi_pyapi.mojo",
+        "x_ann/resident_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_ann_host.mojo",
+      "families": [
+        "x_ann"
+      ],
+      "affected_sources": [
+        "x_ann/abi_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_cluster.mojo",
+      "families": [
+        "x_cluster"
+      ],
+      "affected_sources": [
+        "x_cluster/out_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_cluster_host.mojo",
+      "families": [
+        "x_cluster"
+      ],
+      "affected_sources": [
+        "x_cluster/out_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_cnn_host.mojo",
+      "families": [
+        "x_cnn"
+      ],
+      "affected_sources": [
+        "x_cnn/host/ops_host_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_decomp.mojo",
+      "families": [
+        "x_decomp"
+      ],
+      "affected_sources": [
+        "x_decomp/als_dev_pyapi.mojo",
+        "x_decomp/als_pyapi.mojo",
+        "x_decomp/api_pyapi.mojo",
+        "x_decomp/chi2_dev_pyapi.mojo",
+        "x_decomp/decomp_owner_pyapi.mojo",
+        "x_decomp/dictl_dev_pyapi.mojo",
+        "x_decomp/dictl_pyapi.mojo",
+        "x_decomp/graph_device_pyapi.mojo",
+        "x_decomp/ipca_owner_pyapi.mojo",
+        "x_decomp/kit_device_pyapi.mojo",
+        "x_decomp/lanczos_dev_pyapi.mojo",
+        "x_decomp/lle_iter_dev_pyapi.mojo",
+        "x_decomp/lle_iter_pyapi.mojo",
+        "x_decomp/mcd_bmma_pyapi.mojo",
+        "x_decomp/mds_dev_pyapi.mojo",
+        "x_decomp/mds_pyapi.mojo",
+        "x_decomp/pls_dev_pyapi.mojo",
+        "x_decomp/pls_pyapi.mojo",
+        "x_decomp/qfix_pyapi.mojo",
+        "x_decomp/resident_pyapi.mojo",
+        "x_decomp/s_linalg_fast_pyapi.mojo",
+        "x_decomp/select_dev_pyapi.mojo",
+        "x_decomp/select_ops_pyapi.mojo",
+        "x_decomp/tsvd_owner_pyapi.mojo",
+        "x_decomp/w4_fast_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_decomp_host.mojo",
+      "families": [
+        "x_decomp"
+      ],
+      "affected_sources": [
+        "x_decomp/als_pyapi.mojo",
+        "x_decomp/api_pyapi.mojo",
+        "x_decomp/chi2_pyapi.mojo",
+        "x_decomp/decomp_owner_pyapi.mojo",
+        "x_decomp/dictl_pyapi.mojo",
+        "x_decomp/graph_host_pyapi.mojo",
+        "x_decomp/ipca_owner_pyapi.mojo",
+        "x_decomp/lanczos_host_pyapi.mojo",
+        "x_decomp/lle_iter_pyapi.mojo",
+        "x_decomp/mds_pyapi.mojo",
+        "x_decomp/pls_pyapi.mojo",
+        "x_decomp/select_ops_pyapi.mojo",
+        "x_decomp/tsvd_owner_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_linear_host.mojo",
+      "families": [
+        "svm"
+      ],
+      "affected_sources": [
+        "svm/host/scale_gamma_host_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_neighbors.mojo",
+      "families": [
+        "x_neighbors"
+      ],
+      "affected_sources": [
+        "x_neighbors/dev_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_neighbors_host.mojo",
+      "families": [
+        "x_neighbors"
+      ],
+      "affected_sources": [
+        "x_neighbors/host_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_prep.mojo",
+      "families": [
+        "x_prep"
+      ],
+      "affected_sources": [
+        "x_prep/fastnb_csr_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_trees.mojo",
+      "families": [
+        "xtrees"
+      ],
+      "affected_sources": [
+        "xtrees/api_pyapi.mojo"
+      ]
+    },
+    {
+      "entry": "bindings/entry/entry__mojolearn_x_trees_host.mojo",
+      "families": [
+        "xtrees"
+      ],
+      "affected_sources": [
+        "xtrees/api_pyapi.mojo"
+      ]
+    }
+  ],
+  "scope": "Static private-boundary relocation; numerical owners unchanged; no runtime/performance proof."
+}

@@ -19,17 +19,24 @@
 # integer math (core/scale_gamma_exact.mojo). A binding without a door
 # takes the entries it has, as before.
 from std.python import Python, PythonObject
+from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.kernel_method_descriptor_pyapi import kernel_method_provider, kernel_method_execute, kernel_method_metadata
+from providers.python.neural_descriptor_pyapi import (
+    neural_descriptor_execute, neural_descriptor_adopt, neural_descriptor_resource_close,
+    neural_descriptor_info,
+)
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_field, plan_require_identical
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
+from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_str, family_is_int, family_is_real, family_type_name, family_call,
     family_entry, family_array, family_view, family_cast_view, family_as_f32, family_as_f32_dense,
-    family_owned, family_min, family_sample_weight, family_field, family_f32,
+    family_owned, family_owned_snapshot, family_min, family_f32_snapshot, family_snapshot_min, family_sample_weight, family_field, family_f32,
 )
 
 comptime _KERNEL_PRECOMPUTED = 4
@@ -76,23 +83,27 @@ def _km_gamma(gamma: PythonObject, n_features: Int, where: String, kernel: Int) 
     return _km_real(gamma, "gamma", where)
 
 
-def _km_chi2_input(x: PythonObject, kernel: Int, where: String) raises:
+def _km_chi2_input(x: ArrayMetadata, kernel: Int, where: String) raises:
     """scikit-learn's chi2 kernels refuse negative input, before any device work."""
-    if (kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2) and Int(py=x.size) > 0 and Float64(family_min(x)) < 0.0:
+    if (kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2) and x.count > 0 and Float64(family_snapshot_min(x)) < 0.0:
         raise Error("mojolearn " + where + ": X contains negative values (the chi2 kernels need x >= 0)")
 
 
-def _km_extension(model: PythonObject, binding: PythonObject, where: String, context: PythonObject) raises -> PythonObject:
+def _km_extension(fields: PythonObject, binding: PythonObject, where: String, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
     """`_KernelMethodBase._extension`: the binary's own compile-time mode
     must be the one requested."""
     var b = Python.import_module("builtins")
-    var fields = py_fields(model)
     var want = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
     if want is None or not Bool(py=py_call(b.bool, want)):
         want = context["backend_fields"]["_DEFAULT_MODE"]
-    var getter = py_call(b.getattr, binding, PythonObject("kernel_methods_numeric_mode"), PythonObject(None))
-    if getter is not None:
-        var got = Int(py=family_call(b.int, family_call(getter)))
+    var native = kernel_method_provider(fields, binding)
+    var getter = PythonObject(None)
+    if native is None:
+        getter = py_call(b.getattr, binding, PythonObject("kernel_methods_numeric_mode"), PythonObject(None))
+    if native is not None or getter is not None:
+        var got = kernel_method_metadata(native, 13) if native is not None else Int(py=family_call(b.int, family_call(getter)))
+        if native is not None and got != 1:
+            raise Error("kernel methods native provider candidate requires identical mode")
         var codes = context["family_km_mode_codes"]
         var wanted = py_get(codes, want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
@@ -100,7 +111,8 @@ def _km_extension(model: PythonObject, binding: PythonObject, where: String, con
                         + "but " + String(py_call(b.getattr, binding, PythonObject("__name__"))) + " reports compile-time mode code "
                         + String(got) + "; the binary and the directory it sits in disagree, rebuild "
                         + "it with bash bindings/build_kernel_methods.sh")
-    return binding
+    var flags = kernel_method_metadata(native, 14) if native is not None else 0
+    return (binding, native, flags)
 
 
 def _km_pointer_entry(binding: PythonObject, pointer: String, name: String, context: PythonObject) raises -> PythonObject:
@@ -127,9 +139,10 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var where = String("KernelRidge")
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = x_meta.keep
+    var n = x_meta.source.rows
+    var d = x_meta.source.cols
     var target = family_view(args[2], -1, "y", context)
     var rank = Int(py=target.ndim)
     var t = 1
@@ -148,7 +161,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                             + family_type_name(family_field(fields, "degree")))
     var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel)
     var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where)
-    _km_chi2_input(x, kernel, where)
+    _km_chi2_input(x_meta, kernel, where)
     if kernel == _KERNEL_PRECOMPUTED and d != n:
         raise Error("mojolearn " + where + ": kernel='precomputed' needs the square "
                     + "n x n kernel matrix as X, got " + String(n) + " x " + String(d))
@@ -158,11 +171,16 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var weights = PythonObject(None)
     if args[3] is not None:
         weights = family_sample_weight(args[3], n, False, context, wide=True)
-    var binding = _km_extension(model, args[0], where, context)
-    var fit = _km_pointer_entry(binding, "kernel_ridge_fit_ptr", "kernel_ridge_fit", context)
+    var admission = _km_extension(fields, args[0], where, context)
+    var binding = admission[0]
+    var native = admission[1]
+    var flags = admission[2]
+    var fit = PythonObject(None)
+    if native is None:
+        fit = _km_pointer_entry(binding, "kernel_ridge_fit_ptr", "kernel_ridge_fit", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding:
     # x, y, dual_out, scalars_out[, sw]; n, d, t, kernel, degree, gamma, coef0, alpha.
-    var addresses = Python.list(classical_address(x), classical_address(y), classical_address(dual),
+    var addresses = Python.list(PythonObject(x_meta.source.addr), classical_address(y), classical_address(dual),
                                 classical_address(scalars))
     _ = dual  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
@@ -177,13 +195,13 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = x  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), PythonObject(kernel),
                              PythonObject(degree), gamma, coef0, alpha)
-    var info = family_call(fit, addresses, params)
+    var info = kernel_method_execute(native, "kernel_ridge_fit_ptr" if (flags & 1) != 0 else "kernel_ridge_fit", addresses, params) if native is not None else family_call(fit, addresses, params)
     _ = weights  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    var kept = family_owned(x, context)
+    var kept = family_owned_snapshot(x_meta, context)
     _ = y^
     _ = weights^
     _ = target^
@@ -213,47 +231,61 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("dual_coef_")):
         raise Error("mojolearn " + where + ": call fit before predict")
-    var xq = family_as_f32_dense(args[1], 2, "X", context)
-    var q = Int(py=xq.shape[0])
-    var d = Int(py=xq.shape[1])
+    var xq_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var xq = xq_meta.keep
+    var q = xq_meta.source.rows
+    var d = xq_meta.source.cols
     var fitted = family_field(fields, "n_features_in_")
     if d != Int(py=fitted):
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(Int(py=fitted)))
     var x_fit_obj = family_field(fields, "X_fit_")
-    var x_fit = family_as_f32(x_fit_obj, 2, "X_fit_", context)
-    var n = Int(py=x_fit.shape[0])
+    var x_fit_meta = family_f32_snapshot(x_fit_obj, 2, "X_fit_", context)
+    var x_fit = x_fit_meta.keep
+    var n = x_fit_meta.source.rows
     var t = Int(py=family_field(fields, "n_targets_"))
     var kp = family_field(fields, "_kernel_params")
     var kernel = Int(py=kp[0])
-    _km_chi2_input(xq, kernel, where)
+    _km_chi2_input(xq_meta, kernel, where)
     var dual_obj = family_field(fields, "dual_coef_")
-    var dual = family_as_f32(dual_obj, -1, "dual_coef_", context)
+    var dual_meta = family_f32_snapshot(dual_obj, -1, "dual_coef_", context)
+    var dual = dual_meta.keep
     var squeeze = Bool(py=py_call(b.bool, family_field(fields, "_squeeze")))
     var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
-    var binding = _km_extension(model, args[0], where, context)
+    var admission = _km_extension(fields, args[0], where, context)
+    var binding = admission[0]
+    var native = admission[1]
+    var flags = admission[2]
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
                              family_field(fields, "info_"), PythonObject(q))
     var handle = PythonObject(None)
     if resident:
-        handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit, dual, n, d, t, context)
+        handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit_meta, dual_meta, n, d, t, context, native, flags)
     if handle is not None:
         # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_resident_binding:
         # handle; x_new, out; the predict's ten params.
-        _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle,
-                        Python.list(classical_address(xq), classical_address(out)), params)
+        var output_addresses = Python.list(PythonObject(xq_meta.source.addr), classical_address(out))
+        if native is not None:
+            _ = kernel_method_execute(native, "kernel_ridge_predict_resident", output_addresses, params, Int(py=handle))
+        else:
+            _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle, output_addresses, params)
         _ = out  # keep the Python object alive through the native call above
         _ = xq  # keep the Python object alive through the native call above
         _ = x_fit^
         _ = dual^
         _ = xq^
         return out
-    var predict = _km_pointer_entry(binding, "kernel_ridge_predict_ptr", "kernel_ridge_predict", context)
+    var predict = PythonObject(None)
+    if native is None:
+        predict = _km_pointer_entry(binding, "kernel_ridge_predict_ptr", "kernel_ridge_predict", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding:
     # x_fit, dual, x_new, out; n, d, t, kernel, degree, gamma, coef0, alpha, info, q.
-    var addresses = Python.list(classical_address(x_fit), classical_address(dual), classical_address(xq),
+    var addresses = Python.list(PythonObject(x_fit_meta.source.addr), PythonObject(dual_meta.source.addr), PythonObject(xq_meta.source.addr),
                                 classical_address(out))
     _ = out  # keep the Python object alive through the native call above
-    _ = family_call(predict, addresses, params)
+    if native is not None:
+        _ = kernel_method_execute(native, "kernel_ridge_predict_ptr" if (flags & 1) != 0 else "kernel_ridge_predict", addresses, params)
+    else:
+        _ = family_call(predict, addresses, params)
     _ = out  # keep the Python object alive through the native call above
     _ = x_fit^
     _ = dual^
@@ -271,9 +303,10 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var where = String("Nystroem")
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = x_meta.keep
+    var n = x_meta.source.rows
+    var d = x_meta.source.cols
     var kernel = _km_kernel_code(family_field(fields, "kernel"), where, False, context)
     var degree = _km_degree(fields, where, "mojolearn " + where + ": degree must be an int")
     var components_param = family_field(fields, "n_components")
@@ -291,7 +324,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                                      + " in inefficient evaluation of the full kernel."))
         q = n
     var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel)
-    _km_chi2_input(x, kernel, where)
+    _km_chi2_input(x_meta, kernel, where)
     var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where)
     var seed = family_call(b.int, family_field(fields, "random_state"))
     var components = family_array(Python.tuple(q, d), "<f4", context)
@@ -300,18 +333,25 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var eigenvalues = family_array(Python.tuple(q), "<f4", context)
     var eigenvectors = family_array(Python.tuple(q, q), "<f4", context)
     var scalars = family_array(Python.tuple(1), "<f8", context)
-    var binding = _km_extension(model, args[0], where, context)
+    var admission = _km_extension(fields, args[0], where, context)
+    var binding = admission[0]
+    var native = admission[1]
+    var flags = admission[2]
     var joint = PythonObject(None)
     if transform:
-        joint = _km_door(binding, "nystroem_fit_transform_ptr", context)
+        if native is not None:
+            if (flags & 6) == 6:
+                joint = PythonObject(True)
+        else:
+            joint = _km_door(binding, "nystroem_fit_transform_ptr", context)
     var out = PythonObject(None)
     var fit = joint
-    if joint is None:
+    if joint is None and native is None:
         fit = _km_pointer_entry(binding, "nystroem_fit_ptr", "nystroem_fit", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding:
     # x, components_out, indices_out, normalization_out, eigenvalues_out,
     # eigenvectors_out, scalars_out; n, d, kernel, degree, gamma, coef0, q, seed.
-    var addresses = Python.list(classical_address(x), classical_address(components), classical_address(indices),
+    var addresses = Python.list(PythonObject(x_meta.source.addr), classical_address(components), classical_address(indices),
                                 classical_address(normalization), classical_address(eigenvalues),
                                 classical_address(eigenvectors), classical_address(scalars))
     _ = indices  # keep the Python object alive through the native call above
@@ -336,7 +376,8 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = indices  # keep the Python object alive through the native call above
         _ = components  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
-    var sweeps = family_call(fit, addresses, params)
+    var fit_name = "nystroem_fit_transform_ptr" if joint is not None else ("nystroem_fit_ptr" if (flags & 2) != 0 else "nystroem_fit")
+    var sweeps = kernel_method_execute(native, fit_name, addresses, params) if native is not None else family_call(fit, addresses, params)
     _ = out  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
     _ = eigenvectors  # keep the Python object alive through the native call above
@@ -345,7 +386,6 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = indices  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    _ = x^
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "components_", components)
     py_setitem(fields, "component_indices_", indices)
@@ -354,6 +394,14 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     py_setitem(fields, "eigenvectors_", eigenvectors)
     py_setitem(fields, "sweeps_", family_call(b.int, sweeps))
     py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
+    if transform and out is None and native is not None:
+        out = family_array(Python.tuple(n, q), "<f4", context)
+        var transform_addresses = Python.list(classical_address(components), classical_address(indices),
+            classical_address(normalization), classical_address(eigenvalues), classical_address(eigenvectors),
+            PythonObject(x_meta.source.addr), classical_address(out))
+        var transform_parameters = Python.list(q, d, kernel, degree, gamma, coef0, seed, sweeps, n)
+        _ = kernel_method_execute(native, "nystroem_transform", transform_addresses, transform_parameters)
+    _ = x^
     return out
 
 
@@ -364,29 +412,39 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("components_")):
         raise Error("mojolearn " + where + ": call fit before transform")
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var m = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = x_meta.keep
+    var m = x_meta.source.rows
+    var d = x_meta.source.cols
     var fitted = family_field(fields, "n_features_in_")
     if d != Int(py=fitted):
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(Int(py=fitted)))
-    var components = family_as_f32(family_field(fields, "components_"), 2, "components_", context)
-    var q = Int(py=components.shape[0])
+    var components_meta = family_f32_snapshot(family_field(fields, "components_"), 2, "components_", context)
+    var components = components_meta.keep
+    var q = components_meta.source.rows
     var kp = family_field(fields, "_kernel_params")
-    _km_chi2_input(x, Int(py=kp[0]), where)
+    _km_chi2_input(x_meta, Int(py=kp[0]), where)
     var out = family_array(Python.tuple(m, q), "<f4", context)
     var indices = family_field(fields, "component_indices_")
-    var normalization = family_as_f32(family_field(fields, "normalization_"), 2, "normalization_", context)
-    var eigenvalues = family_as_f32(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
-    var eigenvectors = family_as_f32(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
-    var binding = _km_extension(model, args[0], where, context)
-    var transform = family_entry(binding, "nystroem_transform", context)
+    var normalization_meta = family_f32_snapshot(family_field(fields, "normalization_"), 2, "normalization_", context)
+    var normalization = normalization_meta.keep
+    var eigenvalues_meta = family_f32_snapshot(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
+    var eigenvalues = eigenvalues_meta.keep
+    var eigenvectors_meta = family_f32_snapshot(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
+    var eigenvectors = eigenvectors_meta.keep
+    var admission = _km_extension(fields, args[0], where, context)
+    var binding = admission[0]
+    var native = admission[1]
+    var flags = admission[2]
+    var transform = PythonObject(None)
+    if native is None:
+        transform = family_entry(binding, "nystroem_transform", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding:
     # components, indices, normalization, eigenvalues, eigenvectors, x, out;
     # q, d, kernel, degree, gamma, coef0, seed, sweeps, m.
-    var addresses = Python.list(classical_address(components), classical_address(indices),
-                                classical_address(normalization), classical_address(eigenvalues),
-                                classical_address(eigenvectors), classical_address(x), classical_address(out))
+    var addresses = Python.list(PythonObject(components_meta.source.addr), classical_address(indices),
+                                PythonObject(normalization_meta.source.addr), PythonObject(eigenvalues_meta.source.addr),
+                                PythonObject(eigenvectors_meta.source.addr), PythonObject(x_meta.source.addr), classical_address(out))
     _ = indices  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = eigenvalues  # keep the Python object alive through the native call above
@@ -396,7 +454,10 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     _ = x  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(q), PythonObject(d), kp[0], kp[1], kp[2], kp[3], kp[4],
                              family_field(fields, "sweeps_"), PythonObject(m))
-    _ = family_call(transform, addresses, params)
+    if native is not None:
+        _ = kernel_method_execute(native, "nystroem_transform", addresses, params)
+    else:
+        _ = family_call(transform, addresses, params)
     _ = eigenvectors  # keep the Python object alive through the native call above
     _ = eigenvalues  # keep the Python object alive through the native call above
     _ = normalization  # keep the Python object alive through the native call above
@@ -420,25 +481,31 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("random_weights_")):
         raise Error("mojolearn " + where + ": call fit before transform")
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var m = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = x_meta.keep
+    var m = x_meta.source.rows
+    var d = x_meta.source.cols
     var fitted = family_field(fields, "n_features_in_")
     if d != Int(py=fitted):
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(Int(py=fitted)))
-    var weights = family_as_f32(family_field(fields, "random_weights_"), 2, "random_weights_", context)
-    var q = Int(py=weights.shape[1])
+    var weights_meta = family_f32_snapshot(family_field(fields, "random_weights_"), 2, "random_weights_", context)
+    var weights = weights_meta.keep
+    var q = weights_meta.source.cols
     var params = family_field(fields, "_params")
     var offset = family_field(fields, "random_offset_")
     var out = family_array(Python.tuple(m, q), "<f4", context)
-    var binding = _km_extension(model, args[0], where, context)
+    var admission = _km_extension(fields, args[0], where, context)
+    var binding = admission[0]
+    var native = admission[1]
+    var flags = admission[2]
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_transform_binding:
     # weights, offset, x, out; d, q, gamma, seed, sigma, scale, m.
-    _ = family_call(family_entry(binding, "rbf_sampler_transform", context),
-                    Python.list(classical_address(weights), classical_address(offset), classical_address(x),
-                                classical_address(out)),
-                    Python.list(PythonObject(d), PythonObject(q), params[0], params[1], family_field(fields, "sigma_"),
-                                family_field(fields, "scale_"), PythonObject(m)))
+    var addresses = Python.list(PythonObject(weights_meta.source.addr), classical_address(offset), PythonObject(x_meta.source.addr), classical_address(out))
+    var parameters = Python.list(PythonObject(d), PythonObject(q), params[0], params[1], family_field(fields, "sigma_"), family_field(fields, "scale_"), PythonObject(m))
+    if native is not None:
+        _ = kernel_method_execute(native, "rbf_sampler_transform", addresses, parameters)
+    else:
+        _ = family_call(family_entry(binding, "rbf_sampler_transform", context), addresses, parameters)
     _ = offset  # keep the Python object alive through the native call above
     _ = weights  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -477,21 +544,28 @@ def _km_release(model: PythonObject, release: String) raises:
         return
     py_setitem(holder, "index", PythonObject(None))
     try:
+        if len(held) == 5:
+            neural_descriptor_resource_close(held[3], [])
+            return
         _ = py_call(py_call(b.getattr, held[2], PythonObject(release)), held[1])
     except:
         pass
 
 
 def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: PythonObject, dual_obj: PythonObject,
-                     x_fit: PythonObject, dual: PythonObject, n: Int, d: Int, t: Int,
-                     context: PythonObject) raises -> PythonObject:
+                     x_fit: ArrayMetadata, dual: ArrayMetadata, n: Int, d: Int, t: Int,
+                     context: PythonObject, native: PythonObject, flags: Int) raises -> PythonObject:
     """The handle of the device copy of the fit's X and dual, uploaded at
     the first predict after a fit and reused while `X_fit_` and
     `dual_coef_` are the same objects (the held key keeps references to
     them) and the binding is the minting one; None where the binding has no
     resident door. Only the holder dictionary changes."""
-    var prepare = _km_door(binding, "kernel_ridge_resident_prepare", context)
-    if prepare is None:
+    var prepare = PythonObject(None)
+    if native is None:
+        prepare = _km_door(binding, "kernel_ridge_resident_prepare", context)
+        if prepare is None:
+            return PythonObject(None)
+    elif (flags & 1) == 0:
         return PythonObject(None)
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
@@ -503,33 +577,45 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     if held is not None:
         var key = held[0]
         if (key[0] is x_fit_obj and key[1] is dual_obj and held[2] is binding and Int(py=key[2]) == n
-                and Int(py=key[3]) == d and Int(py=key[4]) == t):
+                and Int(py=key[3]) == d and Int(py=key[4]) == t
+                and ((native is None and len(held) == 3) or (native is not None and len(held) == 5 and held[4] is native))):
             return held[1]
         _km_release(model, "kernel_ridge_resident_release")
-    var handle = family_call(prepare, Python.list(classical_address(x_fit), classical_address(dual)),
-                             Python.list(PythonObject(n), PythonObject(d), PythonObject(t)))
-    py_setitem(holder, "index", Python.tuple(
-        Python.tuple(x_fit_obj, dual_obj, PythonObject(n), PythonObject(d), PythonObject(t)), handle, binding))
+    var addresses = Python.list(PythonObject(x_fit.source.addr), PythonObject(dual.source.addr))
+    var parameters = Python.list(PythonObject(n), PythonObject(d), PythonObject(t))
+    var key = Python.tuple(x_fit_obj, dual_obj, PythonObject(n), PythonObject(d), PythonObject(t))
+    var handle = kernel_method_execute(native, "kernel_ridge_resident_prepare", addresses, parameters) if native is not None else family_call(prepare, addresses, parameters)
+    if native is not None:
+        var owner = neural_descriptor_adopt(native, Int(py=handle), 5, [])
+        py_setitem(holder, "index", Python.tuple(key, handle, binding, owner, native))
+    else:
+        py_setitem(holder, "index", Python.tuple(key, handle, binding))
     return handle
 
 
-def _km_scale_gamma(binding: PythonObject, x: PythonObject, d: Int, context: PythonObject) raises -> PythonObject:
+def _km_scale_gamma(binding: PythonObject, x: ArrayMetadata, d: Int, context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`_scale_gamma.scale_gamma_x`: the binding's exact limbs of the float32
     cells, the one rounding in exact integer math."""
     var b = Python.import_module("builtins")
-    var flags_entry = py_call(b.getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
+    var flags_entry = PythonObject(None)
     var flags = 0
-    if flags_entry is not None:
-        flags = Int(py=family_call(b.int, family_call(flags_entry)))
+    if native is not None:
+        flags = kernel_method_metadata(native, 15)
+    else:
+        flags_entry = py_call(b.getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
+        if flags_entry is not None:
+            flags = Int(py=family_call(b.int, family_call(flags_entry)))
     if (flags & _PY2MOJO_SCALE_GAMMA) == 0:
         raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
                     + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
-    var n = Int(py=x.size)
+    var n = x.count
     if n == 0:
         raise Error("gamma='scale' needs at least one cell of X")
     var words = family_array(Python.tuple(SGX_BAD + 1), "<i8", context)
-    _ = family_call(family_call(b.getattr, binding, PythonObject("scale_gamma_limbs")), classical_address(x),
-                    PythonObject(n), classical_address(words))
+    if native is not None:
+        _ = neural_descriptor_execute(native, 16, [x.source.addr, Int(py=classical_address(words))], [n], [0.0])
+    else:
+        _ = family_call(family_call(b.getattr, binding, PythonObject("scale_gamma_limbs")), PythonObject(x.source.addr), PythonObject(n), classical_address(words))
     _ = words  # keep the Python object alive through the native call above
     var wp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
     _ = words  # keep the Python object alive through the native call above
@@ -549,15 +635,21 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     var where = String("RBFSampler")
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
-    var x = family_as_f32_dense(args[1], 2, "X", context)
-    var m = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = x_meta.keep
+    var m = x_meta.source.rows
+    var d = x_meta.source.cols
     var binding = args[0]
     # `_fit_params`: gamma, then n_components, then the seed.
     var gamma_param = family_field(fields, "gamma")
     var gamma: PythonObject
+    var extension = PythonObject(None)
+    var native = PythonObject(None)
     if family_is_str(gamma_param) and String(gamma_param) == "scale":
-        gamma = _km_scale_gamma(_km_extension(model, binding, where, context), x, d, context)
+        var admission = _km_extension(fields, binding, where, context)
+        extension = admission[0]
+        native = admission[1]
+        gamma = _km_scale_gamma(extension, x_meta, d, context, native)
     else:
         gamma = _km_real(gamma_param, "gamma", where)
     var components_param = family_field(fields, "n_components")
@@ -571,10 +663,13 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     var weights = family_array(Python.tuple(d, q), "<f4", context)
     var offset = family_array(Python.tuple(q), "<f4", context)
     var scalars = family_array(Python.tuple(2), "<f8", context)
-    var extension = _km_extension(model, binding, where, context)
+    if extension is None:
+        var admission = _km_extension(fields, binding, where, context)
+        extension = admission[0]
+        native = admission[1]
     var out = PythonObject(None)
     var joint = PythonObject(None)
-    if transform:
+    if transform and native is None:
         joint = py_call(b.getattr, extension, PythonObject("rbf_sampler_fit_transform_resident"), PythonObject(None))
     if joint is not None:
         # lane apple-fast-w2-kfeat MOJOLEARN_KM_FAST_RBF_RESIDENT
@@ -583,7 +678,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         out = family_array(Python.tuple(m, q), "<f4", context)
         # ORDER MATCHES kernel_methods/rbf_resident.mojo::rbf_sampler_fit_transform_binding.
         _ = family_call(joint, Python.list(classical_address(weights), classical_address(offset),
-                                           classical_address(scalars), classical_address(x), classical_address(out)),
+                                           classical_address(scalars), PythonObject(x_meta.source.addr), classical_address(out)),
                         Python.list(PythonObject(d), PythonObject(q), gamma, seed, PythonObject(m)))
         _ = offset  # keep the Python object alive through the native call above
         _ = weights  # keep the Python object alive through the native call above
@@ -593,9 +688,12 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     else:
         # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding:
         # weights_out, offset_out, scalars_out; d, q, gamma, seed.
-        _ = family_call(family_entry(extension, "rbf_sampler_fit", context),
-                        Python.list(classical_address(weights), classical_address(offset), classical_address(scalars)),
-                        Python.list(PythonObject(d), PythonObject(q), gamma, seed))
+        var addresses = Python.list(classical_address(weights), classical_address(offset), classical_address(scalars))
+        var parameters = Python.list(PythonObject(d), PythonObject(q), gamma, seed)
+        if native is not None:
+            _ = kernel_method_execute(native, "rbf_sampler_fit", addresses, parameters)
+        else:
+            _ = family_call(family_entry(extension, "rbf_sampler_fit", context), addresses, parameters)
         _ = scalars  # keep the Python object alive through the native call above
         _ = offset  # keep the Python object alive through the native call above
         _ = weights  # keep the Python object alive through the native call above
@@ -604,9 +702,11 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "random_weights_", weights)
     py_setitem(fields, "random_offset_", offset)
-    py_setitem(fields, "sigma_", PythonObject(sp[0]))
+    var sigma = sp[0]
+    var scale = sp[1]
+    py_setitem(fields, "sigma_", PythonObject(sigma))
     _ = scalars  # keep the Python object alive through the native call above
-    py_setitem(fields, "scale_", PythonObject(sp[1]))
+    py_setitem(fields, "scale_", PythonObject(scale))
     _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "_params", Python.tuple(gamma, seed))
     _ = scalars^
@@ -614,8 +714,14 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = x^
         return model
     if out is None:
-        _ = x^
-        return _rbf_transform(model, args, context)
+        if native is not None:
+            out = family_array(Python.tuple(m, q), "<f4", context)
+            var addresses = Python.list(classical_address(weights), classical_address(offset), PythonObject(x_meta.source.addr), classical_address(out))
+            var parameters = Python.list(d, q, gamma, seed, sigma, scale, m)
+            _ = kernel_method_execute(native, "rbf_sampler_transform", addresses, parameters)
+        else:
+            _ = x^
+            return _rbf_transform(model, args, context)
     _ = x^
     return out
 
@@ -693,7 +799,18 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
 
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
-    """The kernel methods' public operations: args[0] is the resolved binding."""
+    """The kernel methods' public operations: admit an import-connected binding."""
+    var admitted_args = estimator_arguments(model, "_mojolearn_kernel_methods", args, context)
+    return _kernel_methods_operation(model, operation, admitted_args, context)
+
+
+def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
+    if operation == "family_km_provider_info":
+        var provider = py_get(py_fields(model), "_native_kernel_method_provider")
+        if provider is None:
+            raise Error("kernel methods provider was not admitted")
+        return neural_descriptor_info(provider)
     if operation == "family_km_par_fit":
         return _km_par_fit(model, args, context)
     if operation == "family_km_par_apply":
@@ -735,6 +852,7 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         # in the minting process); the copy uploads its own at first use.
         var state = py_call(Python.import_module("builtins").dict, py_fields(model))
         _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
+        _ = py_call(state.pop, "_native_kernel_method_provider", PythonObject(None))
         return state
     if operation == "family_km_setstate":
         var fields = py_fields(model)

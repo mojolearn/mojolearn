@@ -7,6 +7,9 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec
+from bindings.lr_table_helpers import _lr_refusal
+from bindings.native_array_storage import native_array_zeros
+from sequence.lr_table import lr_spec_fill, F32P
 
 
 def schedule_kind(owner: PythonObject, context: PythonObject) raises -> Int:
@@ -128,10 +131,9 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
     opt_schedule(owner, context)
     var kind = schedule_kind(owner, context)
     var spec = schedule_spec(owner)
-    var ip = Python.list(spec.kind, spec.a, spec.b, spec.c)
-    var fp = Python.list(spec.f0, spec.f1, spec.f2, spec.f3)
     if operation == "schedule_spec":
-        return Python.tuple(ip, fp)
+        return Python.tuple(Python.list(spec.kind, spec.a, spec.b, spec.c),
+                            Python.list(spec.f0, spec.f1, spec.f2, spec.f3))
     if operation == "schedule_config":
         var fields = py_fields(owner)
         var names = Python.tuple("constant", "linear", "cosine")
@@ -139,11 +141,23 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
                            warmup_steps=fields["warmup_steps"], total_steps=fields["total_steps"])
     opt_scalar(values, context)
     var style = 0 if kind < 3 else (1 if kind < 5 else 2)
-    var entries = context["schedule_entries"]
+    # The existing native schedule owner is already linked here. Reuse its
+    # admitted LrSpec directly; do not box/re-read it through a CPython entry.
+    # Public scalar conversion and output allocation stay at this boundary.
+    var requested = Int(py=py_call(b.int, values[0]))
     if operation == "schedule_values" or operation == "schedule_list":
-        var result = py_call_typed(entries["lr_schedule_series"], ip, fp, values[0], style)
+        var count = max(requested, 0)
+        var result = native_array_zeros("f", count)
+        var status = lr_spec_fill(spec, 1, count, F32P(unsafe_from_address=Int(py=result.buffer_info()[0])))
+        _ = result
+        if status[0] != 0:
+            raise _lr_refusal(status[0], 1 + status[1], style, spec.c)
         return py_call(result.tolist) if operation == "schedule_list" else result
-    var value = py_call_typed(entries["lr_schedule_at"], ip, fp, values[0], style)
+    var stored = List[Float32](length=1, fill=0)
+    var status = lr_spec_fill(spec, requested, 1,
+        stored.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
+    if status[0] != 0:
+        raise _lr_refusal(status[0], requested, style, spec.c)
     if operation == "schedule_bits":
-        return PythonObject(Int(bitcast[DType.uint32](Float32(Float64(py=value)))))
-    return value
+        return PythonObject(Int(bitcast[DType.uint32](stored[0])))
+    return PythonObject(Float64(stored[0]))

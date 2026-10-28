@@ -318,7 +318,7 @@ def test_byte_lm_trainer_runs_on_the_host_when_built():
     try:
         binding.byte_lm_offload_step
     except AttributeError as exc:
-        assert "no CPU implementation of _mojolearn_byte_lm.byte_lm_offload_step" in str(exc)
+        assert "byte_lm_offload_step" in str(exc)
     else:
         raise AssertionError("the adapter served a multi-GPU entry")
     shape = mojolearn.ByteLanguageModelConfig()

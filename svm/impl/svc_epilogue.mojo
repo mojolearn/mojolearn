@@ -31,7 +31,7 @@ THE SAME BITS AS BEFORE, EXCEPT PLATT AND THE SHUFFLE:
     by the low 32 bits of one SplitMix64 step of the 64-bit seed. The fold
     membership of the probability cross-validation changes.
 
-The Python entry points are in `svm/impl/svc_epilogue_pyapi.mojo`.
+The Python entry points are in `providers/python/svm_impl_svc_epilogue_pyapi.mojo`.
 """
 
 from std.atomic import Atomic, Ordering

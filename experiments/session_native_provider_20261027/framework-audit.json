@@ -1,0 +1,87 @@
+{
+  "schema": "mojolearn.neural-framework-boundary-audit.v1",
+  "base": "73b922de9",
+  "method": "source call-path audit only; no compilation/runtime or timing",
+  "rows": [
+    {
+      "surface": "ImportedProgram import/cleanup",
+      "sources": [
+        "providers/python/autograd_import_frontend_pyapi.mojo:_import",
+        "python/mojolearn/importers/_native_import_bridge.py:connect"
+      ],
+      "native_execution": "Native import directly calls the shared Session initializer with the same ops connection dictionary and exact Session/Program classes; new generic Session lifetime remains compatible at source level.",
+      "gaps": [
+        "ONNX import_file/import/buffers entries are invoked through internal py_call to compiled extensions; failure cleanup similarly dispatches the retained compiled Session entry through py_call.",
+        "Completed input/output schema is constructed as Python tuples/lists and retained on ImportedProgram, rather than native persistent schema."
+      ],
+      "repair_direction": "Share exact compiled registry ownership and an admitted native whole-program/import entry; use direct native cleanup and native I/O schema. Preserve graph-reader binding identity and all import error behavior. Runtime import compatibility remains pending."
+    },
+    {
+      "surface": "ImportedProgram.run host",
+      "sources": [
+        "providers/python/autograd_program_pyapi.mojo:_imported_given_dims",
+        "providers/python/autograd_program_pyapi.mojo:_imported_input",
+        "providers/python/autograd_program_pyapi.mojo:ops_imported_run_py"
+      ],
+      "native_execution": "program_execute_prepare -> program_execute_run uses existing native ProgramExecPlan/ProgramInput/replay",
+      "gaps": [
+        "program.inputs/outputs/_s and original scalar/array metadata read through Python-object protocols before strict ordinary Program admission",
+        "_imported_given_dims invokes hasattr and subclass/sequence hooks; _imported_input reads dtype/shape/strides again after dimension inspection",
+        "Declared output shape/type reparsed after replay; model metadata is not one persistent native I/O schema"
+      ],
+      "repair_direction": "Reuse common exact-type admission; capture one operation-local input descriptor + owners; retain declared native I/O schema with native program ownership and explicit replacement/invalidation for reimport. Preserve distinct rank-0/rank-1 imported shape rules; do not substitute ordinary Program shape semantics."
+    },
+    {
+      "surface": "torch.compile callable",
+      "sources": [
+        "python/mojolearn/adapters/_torch_compile.py:_Compiled.__call__",
+        "python/mojolearn/adapters/_torch_compile.py:_weight_versions",
+        "python/mojolearn/adapters/_torch_compile.py:_import",
+        "providers/python/autograd_torch_program_pyapi.mojo:ops_torch_program_run_py"
+      ],
+      "native_execution": "Host route directly calls program_execute_run; device route internally py_call(run, program, descriptors, addresses) enters compiled ops_imported_run_device then native replay",
+      "gaps": [
+        "Python __call__ reads parameter versions every invocation and may invoke Python graph export/reimport after changed weights",
+        "Device route retains an internal CPython compiled-entry dispatch; moving its file did not remove this",
+        "Input routing/preparation/describing reads tensor device/shape metadata across separate boundary phases; prepared tensors retained but no single native admitted tensor record is threaded throughout"
+      ],
+      "existing_guards": "native_torch_admit and native_torch_modes_admit reject custom Tensor/protocol/dispatch-mode callbacks; individual CPython C-extension calls are not automatically Python bytecode",
+      "repair_direction": "Keep graph/model replacement explicit, admit framework tensor owners and version/layout once per operation, and use a shared whole-program native entry with opaque native registry ownership. Preserve host/MPS and CUDA/ROCm routes and synchronization; no per-operation adapter surface."
+    },
+    {
+      "surface": "ImportedProgram device entry",
+      "sources": [
+        "providers/python/autograd_program_device_pyapi.mojo:ops_imported_run_device_py"
+      ],
+      "native_execution": "Descriptors become native CastIn/ShapeN and direct native replay/device buffers",
+      "gaps": [
+        "External program metadata, shape tuples and addresses remain Python-object admission without the new ordinary Program guard",
+        "Device entry is reached by CPython dispatch from Torch bridge"
+      ],
+      "repair_direction": "Extract already-native device execution behind the same whole-program descriptor/registry contract; do not change numerical replay or pretend CUDA pointers apply to MPS."
+    },
+    {
+      "surface": "Torch registered train / MAX train and resume",
+      "sources": [
+        "adapters/native/abi.h",
+        "adapters/native/training.mojo:run_training",
+        "adapters/torch/registration.cpp",
+        "adapters/max_ops/__init__.mojo"
+      ],
+      "native_execution": "Native C++/Mojo whole-model adapter ABI calls existing native model training; no Python import in native adapter execution source",
+      "gaps": [
+        "Adapter ABI uses 11-word tensor descriptors and 13 training options; Python Sequential has richer numeric labels/validation admission, so the two frontends cannot be blindly substituted",
+        "Framework load/registration and torch.compile capture/export are separate boundary work; this audit is not installed-artifact adapter runtime proof"
+      ],
+      "repair_direction": "Retain native-only Torch/MAX adapter doors. Consolidate admission into existing native CastIn/model request/model state where semantics align, calling the same native engines directly. Do not add a Python provider hop or duplicate identity lanes."
+    }
+  ],
+  "not_qualified": [
+    "ImportedProgram custom protocol support",
+    "torch.compile Python capture/export and changed-weight reimport",
+    "Device route CPython dispatch",
+    "Installed Torch/MAX adapter smokes"
+  ],
+  "measurements": "No measurements started. Ordinary Program.run in the 29 suite is distinct from ImportedProgram/torch.compile.",
+  "architecture": "One shared provider transport/lifetime/error interface; native per-engine schemas are allowed. Python/Torch/MAX frontends own admission/output formatting, internal engines own native descriptors and state."
+}

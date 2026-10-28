@@ -63,3 +63,36 @@ def tables(**fixed):
     shared context, once, at that module's import."""
     context = shared_context()
     context.update(fixed)
+
+
+def connect_bindings(*names):
+    """Connect estimator bindings during module import, never during execution."""
+    from . import _backend
+    context = shared_context()
+    connections = context.setdefault('family_binding_connections', {})
+    offerings = context.setdefault('family_binding_offerings', {})
+    readers = context.setdefault('family_binding_readers', {})
+    context['family_mode_set_type'] = _backend._ModeSet
+    context['family_mode_set_fields'] = vars(_backend._ModeSet)['__dict__'].__get__
+    for name in names:  # glue: fixed module-import binding names, never user data or product execution
+        modes = {}
+        readers[name] = _backend._vendor_fn(name).removesuffix('_vendor') + '_numeric_mode'
+        offerings[name] = {}
+        for mode in ('identical', 'fast'):  # glue: fixed module-import binding modes, never product execution
+            offerings[name][mode] = _backend._offers(name, mode)
+            try:
+                binding = _backend.binding(name, mode)
+                reader = _backend._vendor_fn(name).removesuffix('_vendor') + '_numeric_mode'
+                if type(binding) is _backend._HostBinding:
+                    if _backend._CPU_ONLY is None:
+                        raise TypeError("host binding facade cannot serve a GPU operation")
+                    basename = vars(binding)['_HostBinding__basename']
+                    binding = _backend.load_host_module(basename)  # cpu-route: import connection of an explicitly selected CPU-only binding
+                    reader = _backend._host_prefix(basename) + '_numeric_mode'
+                elif type(binding) is _backend._NoGpuBinding:
+                    raise ImportError(_backend._no_cpu_implementation(
+                        name, 'native provider', vars(binding)['_NoGpuBinding__reason']))
+                modes[mode] = (binding, binding.__name__, reader)
+            except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+                modes[mode] = (type(error).__name__ + ': ' + str(error),)
+        connections[name] = modes

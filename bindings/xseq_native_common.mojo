@@ -14,6 +14,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
+from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
+from autograd.model_descriptor import MODEL_ABI_NAME
 from core.cast_in import cast_in_kind
 from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32, xseq_column_copy_i64
 
@@ -53,6 +56,20 @@ def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
         raise Error("RuntimeError: mojolearn: _mojolearn_x_sequence was compiled for the other numeric mode; rebuild the "
                     + String(py=mode) + " binding")
     return entries
+
+
+def xseq_neural_provider(entries: PythonObject) raises -> PythonObject:
+    # Immutable engine table only. Inputs/weights are admitted afresh by callers.
+    var provider = neural_descriptor_reuse(py_get(entries, "native_model_provider"),
+        entries["model_native_api_v1"], String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
+    py_setitem(entries, "native_model_provider", provider)
+    return provider
+
+
+def xseq_output_provider(context: PythonObject) raises -> PythonObject:
+    # Preserve the old base-helper route: default mode, independent of a
+    # particular estimator's optional numeric_mode override.
+    return xseq_neural_provider(context["xseq_bindings"][context["backend_fields"]["_DEFAULT_MODE"]])
 
 
 def xseq_base(context: PythonObject, name: String) raises -> PythonObject:
@@ -257,6 +274,14 @@ struct XseqStream(Movable):
             _ = py_call_typed(xseq_base(context, "uniform_init_f32"), address, PythonObject(n), PythonObject(low),
                               PythonObject(high), PythonObject(Int(self.seed & 0xFFFFFFFF)),
                               PythonObject(Int(self.seed >> 32)), PythonObject(self.offset))
+        self.offset += n
+
+    def fill_uniform_native(mut self, provider: PythonObject, address: Int, n: Int, low: Float64, high: Float64) raises:
+        if n:
+            var addresses: List[Int] = [address]
+            var options: List[Int] = [n, Int(self.seed & 0xFFFFFFFF), Int(self.seed >> 32), self.offset]
+            var scalars: List[Float64] = [low, high]
+            _ = neural_descriptor_execute(provider, MODEL_UNIFORM, addresses, options, scalars)
         self.offset += n
 
     def child_seed(mut self) -> UInt64:

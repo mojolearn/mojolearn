@@ -7,18 +7,31 @@ allocation, layer traversal, token traversal and selection are native. Calling
 a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
+from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
+from checks.numerics import NUMERIC_IDENTICAL
+from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
+from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_reserved_execute
+from providers.python.generation_session_pyapi import (
+    generation_reuse_native_provider, generation_connect_native_session,
+    generation_native_session_matches, generation_native_forward,
+)
+from core.generation_metadata import generation_transformer_addresses
+from transformer.native_generation_engine import NativeGenerationProgress, native_generation_read
+from providers.python.generation_metadata_pyapi import (
+    GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission,
+)
 from std.memory import memcpy
 from bindings.generation_buffers import (
-    GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
+    GENERATION_BOUNDARY, generation_array, generation_address, generation_copy, generation_mutable,
     generation_ids, py_ints,
 )
-from bindings.generation_policy import generation_pick
+from core.generation_policy_impl import generation_pick
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
 from bindings.sha256_door import sha256_update, sha256_update_text
@@ -47,6 +60,7 @@ def causal_lm_admit_binding(
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entries = g[].bi.dict()
     var requested_gpu = String(model.device) == "gpu"
+    py_setitem(entries, "cpu", PythonObject(not requested_gpu))
     var kind = String(model.kind)
     var block_prefix = ("transformer" if kind == "transformer" else "mamba") if requested_gpu else "neural_host"
     var primitive_prefix = "training" if requested_gpu else "neural_host"
@@ -117,6 +131,34 @@ def causal_lm_admit_binding(
         py_setitem(entries, "decode", _native_function(block_binding, "mamba2_decode_step"))
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
+    # Private candidate: resolve its native table once at admission. Keep
+    # the qualified default until whole-workload NVIDIA/AMD A/B and required
+    # public runtime/identity checks are complete. No Apple fast campaign.
+    if requested_gpu and kind == "transformer" and mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1" or String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1"):
+        if not py_contains(entries, "forward_session"):
+            raise Error("CausalLM: native session candidate requires transformer_session_forward")
+        var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
+        var provider = generation_reuse_native_provider(py_get(owner_fields, "_native_session_provider_cache"), block_binding,
+            _native_function(block_binding, "transformer_native_api_v1"),
+            _native_function(block_binding, "transformer_native_session_handle_v1"))
+        py_setitem(owner_fields, "_native_session_provider_cache", provider)
+        py_setitem(entries, "native_session_provider", provider)
+    if mode == NUMERIC_IDENTICAL and String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
+        var owner_fields = py_call(g[].bi.object.__getattribute__, model._blocks[0], "__dict__")
+        var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
+            _native_function(primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
+        py_setitem(owner_fields, "_native_primitives_provider_cache", primitive_provider)
+        py_setitem(entries, "native_primitives", primitive_provider)
+        if kind == "transformer":
+            var block_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_block_provider_cache"),
+                _native_function(block_binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+            py_setitem(owner_fields, "_native_block_provider_cache", block_provider)
+            py_setitem(entries, "native_block_operations", block_provider)
+        if kind == "mamba1" or kind == "mamba2":
+            var mamba_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_mamba_provider_cache"),
+                _native_function(block_binding, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME))
+            py_setitem(owner_fields, "_native_mamba_provider_cache", mamba_provider)
+            py_setitem(entries, "native_mamba", mamba_provider)
     py_setattr(model, "_native_entries", entries)
     return PythonObject(None)
 
@@ -348,46 +390,7 @@ def _mutable(
     value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
     name: String = "",
 ) raises -> Int:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var label = String("state buffer")
-    if name != "":
-        label = "state buffer " + name
-    var view = PythonObject(None)
-    var shape = PythonObject(None)
-    if value is None:
-        raise Error("CausalLM: " + label + " is missing; allocate_state() makes a complete state")
-    if py_type(value) is g[].array_cls:
-        if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
-            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
-        view = value._mv
-        shape = value.shape
-    else:
-        view = py_call(g[].bi.memoryview, value)
-        shape = view.shape
-        if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
-            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
-    var want = String("(")
-    for i in range(len(expected)):  # small-loop(state buffer shape dims)
-        if i > 0:
-            want += ", "
-        want += String(expected[i])
-    want += ")"
-    if len(shape) != len(expected):
-        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
-    var size = 1
-    for i in range(len(expected)):  # small-loop(state buffer shape dims)
-        if Int(py=shape[i]) != expected[i]:
-            raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
-        size *= expected[i]
-    if Int(py=view.nbytes) != size * 4:
-        raise Error("CausalLM: " + label + " span differs from its shape")
-    var address = _addr(value, keep)
-    if py_type(value) is not g[].array_cls:
-        var pair = g[].bi.list()
-        _ = py_call(pair.append, view)
-        _ = py_call(pair.append, keep[len(keep) - 1])
-        copies.append(pair)
-    return address
+    return generation_mutable(value, expected, keep, copies, name)
 
 
 def _writeback(mut copies: List[PythonObject]) raises:
@@ -399,43 +402,86 @@ def _writeback(mut copies: List[PythonObject]) raises:
     copies.clear()
 
 
+def _transformer_arg_words(
+    model: PythonObject, blk: PythonObject, st: PythonObject, x: PythonObject, y: PythonObject,
+    b: Int, l: Int, planes: Bool, mut keep: List[PythonObject],
+) raises -> List[Int]:
+    var addresses = List[Int]()
+    addresses.append(_addr(x, keep))
+    var weights = blk["_w"]
+    for j in range(len(weights)):  # driver-loop: over block weight slots
+        addresses.append(0 if planes and j >= 2 else _addr(weights[j], keep))
+    addresses.append(_addr(st.k_cache, keep))
+    addresses.append(_addr(st.v_cache, keep))
+    addresses.append(_addr(y, keep))
+    var optional = blk["_wopt"]
+    for j in range(len(optional)):  # driver-loop: over optional block weight slots
+        addresses.append(_addr(optional[j], keep))
+    if planes:
+        var packed = blk["_int15"]
+        for j in range(len(packed)):  # driver-loop: over packed block weight slots
+            var trip = packed[j]
+            for k in range(3):  # small-loop(int15 plane triple)
+                addresses.append(0 if trip is None else _addr(trip[k], keep))
+    return addresses^
+
+
+def _transformer_param_words(blk: PythonObject, st: PythonObject, b: Int, l: Int) raises -> List[Int]:
+    var p: List[Int] = [b, l, Int(py=blk["d_model"]), Int(py=blk["n_heads"]), Int(py=blk["n_kv_heads"]),
+                        Int(py=blk["head_dim"]), Int(py=blk["intermediate"]), Int(py=st.max_tokens),
+                        Int(py=st.cached_tokens), Int(py=blk["window"])]
+    var tail = blk["_opts_tail"]
+    for j in range(len(tail)):  # driver-loop: read the block's admitted options tail
+        p.append(Int(py=tail[j]))
+    return p^
+
+
 def _transformer_args(
     model: PythonObject, blk: PythonObject, st: PythonObject, x: PythonObject, y: PythonObject,
     b: Int, l: Int, planes: Bool, mut keep: List[PythonObject],
 ) raises -> PythonObject:
-    var addresses = py_ints([_addr(x, keep)])
-    for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
-        _ = py_call(addresses.append, 0 if planes and j >= 2 else _addr(blk["_w"][j], keep))
-    _ = py_call(addresses.append, _addr(st.k_cache, keep))
-    _ = py_call(addresses.append, _addr(st.v_cache, keep))
-    _ = py_call(addresses.append, _addr(y, keep))
-    for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
-        _ = py_call(addresses.append, _addr(blk["_wopt"][j], keep))
-    if planes:
-        for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
-            var trip = blk["_int15"][j]
-            for k in range(3):  # small-loop(int15 plane triple)
-                _ = py_call(addresses.append, 0 if trip is None else _addr(trip[k], keep))
-    return addresses
+    return py_ints(_transformer_arg_words(model, blk, st, x, y, b, l, planes, keep))
 
 
 def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) raises -> PythonObject:
-    var p = py_ints([b, l, Int(py=blk["d_model"]), Int(py=blk["n_heads"]), Int(py=blk["n_kv_heads"]),
-                    Int(py=blk["head_dim"]), Int(py=blk["intermediate"]), Int(py=st.max_tokens),
-                    Int(py=st.cached_tokens), Int(py=blk["window"])])
-    _ = py_call(p.extend, blk["_opts_tail"])
-    return p
+    return py_ints(_transformer_param_words(blk, st, b, l))
 
+
+
+def causal_transformer_admin(binding: PythonObject, session: PythonObject, operation: Int) raises:
+    # Boundary-only lifetime admission against the session's original image.
+    # Administration intentionally holds the GIL, matching the raw public API.
+    if String(getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH")) == "1":
+        var provider = neural_descriptor_reuse(PythonObject(None),
+            _native_function(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
+        var handle = neural_descriptor_handle(provider,
+            _native_function(binding, "transformer_native_session_handle_v1"), session)
+        _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
+    else:
+        var name = "transformer_session_invalidate_tape" if operation == 12 else "transformer_session_close"
+        _ = py_call(_native_function(binding, name), session)
 
 def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
-    var b = Int(py=x.shape[0])
-    var l = Int(py=x.shape[1])
+    # Standalone public block calls retain their existing ABI and admit anew.
+    var shape = x.shape
+    var b = Int(py=shape[0])
+    var l = Int(py=shape[1])
     var d = Int(py=model.d_model)
     var kind = String(model.kind)
-    var e = model._native_entries
+    var entries = model._native_entries
+    var profile = kind == "transformer" and model._head_int15 is not None
+    var planes = profile and py_contains(entries, "forward15")
+    var layer = GenerationLayerSnapshot(_block(model, i), kind, planes)
+    return _causal_layer_run_prepared(entries, kind, d, b, l, layer, profile, planes, x, supplied_state, step)
+
+
+def _causal_layer_run_prepared(
+    e: PythonObject, kind: String, d: Int, b: Int, l: Int, layer: GenerationLayerSnapshot,
+    head_profile: Bool, device15: Bool, x: PythonObject, supplied_state: PythonObject, step: Bool,
+) raises -> PythonObject:
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
-    var blk = _block(model, i)
+    var blk = layer.block
     var st = supplied_state
     var y = generation_array([b, l, d])
     var addresses = PythonObject(None)
@@ -447,88 +493,129 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
     if kind == "transformer":
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
-        var profile_id = py_get(blk, "_arithmetic_profile", PythonObject(None))
-        if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=py_get(blk, "_arithmetic_profile_changed", PythonObject(False))):
+        var profile_id = layer.profile
+        if old_profile is None and Int(py=st.cached_tokens) != 0 and layer.profile_changed:
             raise Error("CausalLM: cached state requires arithmetic profile metadata")
         if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
             raise Error("CausalLM: state arithmetic profile differs")
         if profile_id is not None:
             py_setattr(st, "arithmetic_profile", profile_id)
-        var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
-        var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
-        params = _transformer_params(blk, st, b, l)
-        var profile = model._head_int15 is not None
-        var device15 = profile and py_contains(e, "forward15")
-        addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
-        py_setitem(addresses, 10, PythonObject(_mutable(st.k_cache, [cache_n], keep, copies, "k_cache")))
-        py_setitem(addresses, 11, PythonObject(_mutable(st.v_cache, [cache_n], keep, copies, "v_cache")))
-        if device15:
+        var capacity = Int(py=st.max_tokens)
+        var cache_n = layer.words.cache_count(b, capacity)
+        var p_words = layer.words.transformer_params(b, l, capacity, Int(py=st.cached_tokens))
+        var a_words = generation_transformer_addresses(_addr(x, keep), layer.weights.resolve(keep),
+            _addr(st.k_cache, keep), _addr(st.v_cache, keep), _addr(y, keep),
+            layer.optional.resolve(keep), layer.packed.resolve(keep))
+        a_words[10] = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
+        a_words[11] = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
+        var native_provider = py_get(e, "native_session_provider")
+        var block_provider = py_get(e, "native_block_operations")
+        if Bool(py=e["cpu"]) and block_provider is not None:
+            py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_execute(block_provider,
+                34 if head_profile else 33, a_words, p_words, [])))
+        elif device15 and block_provider is not None:
             if blk["_native_session"] is None:
                 py_setitem(blk, "_native_session", e["create"]())
                 py_setitem(blk, "_session_binding", e["block_binding"])
-            py_setattr(st, "cached_tokens", py_call(e["forward15"], blk["_native_session"], addresses, params))
-        elif profile:
-            py_setattr(st, "cached_tokens", py_call(e["forward15_host"], addresses, params))
-        elif py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
+            var session = blk["_native_session"]
+            var handle = neural_descriptor_handle(block_provider,
+                _native_function(e["block_binding"], "transformer_native_session_handle_v1"), session)
+            py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_reserved_execute(block_provider,
+                session, handle, 0, 1, 35, a_words, p_words, [])))
+        elif native_provider is not None and not head_profile and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
             if blk["_native_session"] is None:
                 py_setitem(blk, "_native_session", e["create"]())
                 py_setitem(blk, "_session_binding", e["block_binding"])
-            py_setattr(st, "cached_tokens", py_call(e["forward_session"], blk["_native_session"], addresses, params))
+            var session = blk["_native_session"]
+            var linked = py_get(blk, "_native_forward_owner")
+            if linked is None or not generation_native_session_matches(linked, native_provider, session):
+                linked = generation_connect_native_session(native_provider, session)
+                py_setitem(blk, "_native_forward_owner", linked)
+            # Native vectors cross directly. No Python argument-list packing
+            # or CPython callable dispatch occurs in this repeated layer call.
+            py_setattr(st, "cached_tokens", PythonObject(generation_native_forward(linked, a_words, p_words)))
         else:
-            if step:
-                _ = py_call(params.pop, 1)
-            py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
+            addresses = py_ints(a_words)
+            params = py_ints(p_words)
+            if device15:
+                if blk["_native_session"] is None:
+                    py_setitem(blk, "_native_session", e["create"]())
+                    py_setitem(blk, "_session_binding", e["block_binding"])
+                py_setattr(st, "cached_tokens", py_call(e["forward15"], blk["_native_session"], addresses, params))
+            elif head_profile:
+                py_setattr(st, "cached_tokens", py_call(e["forward15_host"], addresses, params))
+            elif py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
+                if blk["_native_session"] is None:
+                    py_setitem(blk, "_native_session", e["create"]())
+                    py_setitem(blk, "_session_binding", e["block_binding"])
+                py_setattr(st, "cached_tokens", py_call(e["forward_session"], blk["_native_session"], addresses, params))
+            else:
+                if step:
+                    _ = py_call(params.pop, 1)
+                py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
     else:
         if py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
             raise Error("neural block: state is owned by a resident decode session")
-        addresses = py_ints([_addr(x, keep)])
-        for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
-            _ = py_call(addresses.append, _addr(blk["_w"][j], keep))
+        var m_addresses: List[Int] = [_addr(x, keep)]
+        var weight_addresses = layer.weights.resolve(keep)
+        for j in range(len(weight_addresses)):  # driver-loop: over retained native weight addresses
+            m_addresses.append(weight_addresses[j])
         if kind == "mamba1":
-            var di = Int(py=blk["d_inner"])
-            _ = py_call(addresses.append, _mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
-            _ = py_call(addresses.append, _mutable(st.h, [b, di, 16], keep, copies, "h"))
-            _ = py_call(addresses.append, _addr(y, keep))
+            var di = layer.words.inner
+            m_addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
+            m_addresses.append(_mutable(st.h, [b, di, 16], keep, copies, "h"))
+            m_addresses.append(_addr(y, keep))
             _ = y  # keep the Python object alive through the native call above
-            params = py_ints([b, d]) if step else py_ints([b, l, d])
+            var m_params: List[Int] = [b, d] if step else [b, l, d]
             var profile = Int(py=e["mamba1_profile"])
             if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
                 raise Error("CausalLM: incompatible or failed Mamba1 state")
             if profile == 2:
-                _ = py_call(addresses.append, _mutable(st.affine_boundary, [b, di, 16], keep, copies, "affine_boundary"))
+                m_addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies, "affine_boundary"))
                 _ = y  # keep the Python object alive through the native call above
-                _ = py_call(addresses.append, _mutable(st.affine_a, [b, di, 16, 6], keep, copies, "affine_a"))
+                m_addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies, "affine_a"))
                 _ = y  # keep the Python object alive through the native call above
-                _ = py_call(addresses.append, _mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
+                m_addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
                 _ = y  # keep the Python object alive through the native call above
-                _ = py_call(params.append, st.absolute_position)
-            _ = py_call(e["decode" if step else "forward"], addresses, params)
+                m_params.append(Int(py=st.absolute_position))
+            var native = py_get(e, "native_mamba")
+            if native is not None and profile == 1:
+                _ = neural_descriptor_execute(native, 1 if step else 0, m_addresses, m_params, [])
+            else:
+                _ = py_call(e["decode" if step else "forward"], py_ints(m_addresses), py_ints(m_params))
             _ = y  # keep the Python object alive through the native call above
             py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
         else:
-            var nh = Int(py=blk["nheads"])
-            var cd = Int(py=blk["conv_dim"])
-            _ = py_call(addresses.append, _mutable(st.conv_window, [b, cd, 4], keep, copies, "conv_window"))
+            var nh = layer.words.heads
+            var cd = layer.words.conv
+            m_addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies, "conv_window"))
             _ = y  # keep the Python object alive through the native call above
-            _ = py_call(addresses.append, _mutable(st.h, [b, nh, 64, 128], keep, copies, "h"))
+            m_addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies, "h"))
             _ = y  # keep the Python object alive through the native call above
-            _ = py_call(addresses.append, _mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
+            m_addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
             _ = y  # keep the Python object alive through the native call above
-            _ = py_call(addresses.append, _mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
+            m_addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
             _ = y  # keep the Python object alive through the native call above
-            _ = py_call(addresses.append, _addr(y, keep))
+            m_addresses.append(_addr(y, keep))
             _ = y  # keep the Python object alive through the native call above
-            var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
-            _ = py_call(addresses.append, _addr(last, keep))
+            var last = generation_array([b, layer.words.heads, 64, 128])
+            m_addresses.append(_addr(last, keep))
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
-            params = py_ints([b, d, Int(py=st.buffered_tokens)]) if step else py_ints([b, l, d, Int(py=st.buffered_tokens)])
-            _ = py_call(params.extend, blk["dt_limit"])
-            py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], addresses, params))
+            var m_params: List[Int] = [b, d, Int(py=st.buffered_tokens)] if step else [b, l, d, Int(py=st.buffered_tokens)]
+            var native = py_get(e, "native_mamba")
+            if native is not None:
+                py_setattr(st, "buffered_tokens", PythonObject(neural_descriptor_execute(native, 3 if step else 2,
+                    m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
+            else:
+                params = py_ints(m_params)
+                _ = py_call(params.extend, Python.list(PythonObject(layer.words.dt_low), PythonObject(layer.words.dt_high)))
+                py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], py_ints(m_addresses), params))
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
             py_setitem(blk, "h_last_", last)
     _writeback(copies)
+    _ = layer  # retain captured Array weights until every native read completes
     _ = keep^
     return y
 
@@ -540,15 +627,29 @@ def causal_model_embedding(model: PythonObject, ids: PythonObject) raises -> Pyt
     var d = Int(py=model.d_model)
     var v = Int(py=model.vocab_size)
     var e = model._native_entries
+    var weights = GenerationWeightSnapshot(Python.list(model._embed))
+    return _causal_model_embedding_prepared(e, py_get(e, "native_primitives"), d, v, b, l, flat, weights, ids)
+
+
+def _causal_model_embedding_prepared(
+    e: PythonObject, native: PythonObject, d: Int, v: Int, b: Int, l: Int, flat: Bool,
+    weights: GenerationWeightSnapshot, ids: PythonObject,
+) raises -> PythonObject:
     var keep = List[PythonObject]()
     var x = generation_array([b, l, d])
-    _ = py_call(e["embedding_forward"], py_ints([_addr(x, keep), _addr(model._embed, keep), _addr(ids, keep)]), py_ints([b * l, v, d]))
+    var weights_at = weights.resolve(keep)
+    var a: List[Int] = [_addr(x, keep), weights_at[0], _addr(ids, keep)]
+    if native is not None:
+        _ = neural_descriptor_execute(native, 0, a, [b * l, v, d], [])
+    else:
+        _ = py_call(e["embedding_forward"], py_ints(a), py_ints([b * l, v, d]))
     _ = x  # keep the Python object alive through the native call above
     if flat:
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
         py_setattr(x, "shape", py_call(bi.tuple, py_ints([l, d])))
         py_setattr(x, "strides", py_call(bi.tuple, py_ints([d * 4, 4])))
         py_setattr(x, "ndim", PythonObject(2))
+    _ = weights
     _ = keep^
     return x
 
@@ -559,18 +660,35 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
     var l = Int(py=x.shape[0]) if flat else Int(py=x.shape[1])
     var d = Int(py=model.d_model)
     var v = Int(py=model.vocab_size)
-    var e = model._native_entries
+    var head = GenerationHeadSnapshot(model, model._native_entries, d, v, normalize, packed)
+    return _causal_model_head_prepared(head, x, b, l, flat)
+
+
+def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b: Int, l: Int, flat: Bool) raises -> PythonObject:
+    var e = head.entries
+    var d = head.width
+    var v = head.vocab
     var keep = List[PythonObject]()
+    var weights_at = head.weights.resolve(keep)
     var hn = x
-    if normalize and model._norm is not None:
+    var native = head.native
+    if head.normalize:
         hn = generation_array([b, l, d])
-        var np = py_ints([b * l, d])
-        _ = py_call(np.append, model.norm_eps)
-        _ = py_call(e["rms_norm_forward"], py_ints([_addr(hn, keep), _addr(x, keep), _addr(model._norm, keep)]), np)
+        var a: List[Int] = [_addr(hn, keep), _addr(x, keep), weights_at[0]]
+        if native is not None:
+            _ = neural_descriptor_execute(native, 2, a, [b * l, d], [head.norm_eps])
+        else:
+            var np = py_ints([b * l, d])
+            _ = py_call(np.append, PythonObject(head.norm_eps))
+            _ = py_call(e["rms_norm_forward"], py_ints(a), np)
         _ = hn  # keep the Python object alive through the native call above
     var out = generation_array([b, l, v])
-    if model._head_int15 is None or not packed:
-        _ = py_call(e["linear_forward"], py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
+    if not head.packed:
+        var a: List[Int] = [_addr(out, keep), _addr(hn, keep), weights_at[1]]
+        if native is not None:
+            _ = neural_descriptor_execute(native, 4, a, [b * l, v, d], [])
+        else:
+            _ = py_call(e["linear_forward"], py_ints(a), py_ints([b * l, v, d]))
         _ = out  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
     else:
@@ -582,9 +700,8 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
         _ = lo  # keep the Python object alive through the native call above
         _ = hi  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
-        var hp = model._head_int15
         e["gemm15"](py_ints([_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
-            _addr(hp[0], keep), _addr(hp[1], keep), _addr(hp[2], keep)]), py_ints([b * l, v, d]))
+            weights_at[2], weights_at[3], weights_at[4]]), py_ints([b * l, v, d]))
         _ = ex  # keep the Python object alive through the native call above
         _ = lo  # keep the Python object alive through the native call above
         _ = hi  # keep the Python object alive through the native call above
@@ -594,6 +711,7 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
         py_setattr(out, "shape", py_call(bi.tuple, py_ints([l, v])))
         py_setattr(out, "strides", py_call(bi.tuple, py_ints([v * 4, 4])))
         py_setattr(out, "ndim", PythonObject(2))
+    _ = head
     _ = keep^
     return out
 
@@ -661,7 +779,12 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
             var opened = _resident_open_all(model, e, state, b, l, int15, keep)
             lm = opened[0]
             sessions = opened[1]
-        var cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
+        var provider = py_get(e, "native_block_operations")
+        var cached = PythonObject(None)
+        if provider is not None:
+            cached = PythonObject(transformer_resident_lm_run(provider, lm, sessions, False, [_addr(ids, keep), _addr(out, keep)], [l]))
+        else:
+            cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
         _ = out  # keep the Python object alive through the native call above
         for i in range(len(sessions)):  # driver-loop: over layer decode sessions
             var blk = _block(model, i)
@@ -670,7 +793,11 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
             var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
             var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
             var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-            _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
+            var provider = py_get(e, "native_block_operations")
+            if provider is not None:
+                _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
+            else:
+                _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
             py_setattr(st, "cached_tokens", cached)
             _ = out  # keep the Python object alive through the native call above
         _writeback(copies)
@@ -690,10 +817,69 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
     return out
 
 
+def _engine_admission(model: PythonObject, state: PythonObject, batch: Int, length: Int) raises -> GenerationEngineAdmission:
+    # Explicit experimental route: unsupported branches refuse clearly rather
+    # than silently executing mixed orchestration in a qualifying measurement.
+    # The default public routes remain available with this experiment off.
+    _state(model, state, batch, length)
+    try:
+        var entries = model._native_entries
+        if py_get(entries, "parallel_call") is not None:
+            raise Error("CausalLM: native generation engine distributed execution is pending")
+        if _resident_forward_ok(model, state):
+            raise Error("CausalLM: native generation engine does not replace the existing resident route")
+        if getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", "0") == "1":
+            raise Error("CausalLM: native generation engine requires the supported session setup")
+        var blocks = List[PythonObject]()
+        for i in range(len(model._blocks)):  # driver-loop: one operation's retained model owners
+            blocks.append(_block(model, i))
+        var snapshot = GenerationOperationSnapshot(model, entries, blocks)
+        return GenerationEngineAdmission(snapshot, state, batch, length)
+    except problem:
+        py_setattr(state, "_usable", PythonObject(False))
+        raise problem
+
+
+def _run_engine(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+    var shape = ids.shape
+    var batch = Int(py=shape[0])
+    var length = Int(py=shape[1])
+    var owner = _engine_admission(model, state, batch, length)
+    var keep = List[PythonObject]()
+    var address = _addr(ids, keep)
+    var logits = List[Float32]()
+    try:
+        # Common endpoints own per-call GIL release, lock acquisition and
+        # session reservation. The native layer loop enters GIL-held.
+        logits = owner.native.forward(address, length)
+    except problem:
+        owner.publish()
+        raise problem
+    owner.publish()
+    var result = generation_array([batch, length, owner.native.vocab])
+    memcpy(dest=f32_ptr(Int(py=result._addr)), src=logits.unsafe_ptr(), count=len(logits))
+    _ = result
+    _ = logits
+    _ = owner
+    _ = keep^
+    return result
+
+
 def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
-    var l = Int(py=ids.shape[1])
-    _state(model, state, Int(py=ids.shape[0]), l)
-    var parallel = py_get(model._native_entries, "parallel_call")
+    if getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
+        return _run_engine(model, ids, state)
+    var snapshot: Optional[GenerationOperationSnapshot] = None
+    return _run_prepared(model, ids, state, snapshot, remote_step)
+
+
+def _run_prepared(model: PythonObject, ids: PythonObject, state: PythonObject,
+                  mut snapshot: Optional[GenerationOperationSnapshot], remote_step: Bool = False) raises -> PythonObject:
+    var shape = ids.shape
+    var b = Int(py=shape[0])
+    var l = Int(py=shape[1])
+    _state(model, state, b, l)
+    var entries = model._native_entries
+    var parallel = py_get(entries, "parallel_call")
     try:
         if parallel is not None:
             return py_call(parallel, "run", Python.list(model, ids, state, remote_step))
@@ -701,15 +887,31 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_ste
             var logits = _resident_forward(model, ids, state)
             py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
             return logits
-        var x = causal_model_embedding(model, ids)
-        for i in range(len(model._blocks)):  # driver-loop: over ordered model layers
-            x = causal_layer_run(model, i, x, state.layers[i])
-        var out = causal_model_head(model, x)
+        if not snapshot:
+            # Build only on the local nonresident route, after admission and
+            # route checks. Parallel/resident execution retains its own owners.
+            var blocks = List[PythonObject]()
+            for i in range(len(model._blocks)):  # driver-loop: capture layer owners once per operation
+                blocks.append(_block(model, i))
+            snapshot = GenerationOperationSnapshot(model, entries, blocks)
+        var out = _run_snapshot(snapshot.value(), ids, state, b, l)
         py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
         return out
     except error:
         py_setattr(state, "_usable", PythonObject(False))
         raise error
+
+
+def _run_snapshot(snapshot: GenerationOperationSnapshot, ids: PythonObject, state: PythonObject,
+                  b: Int, l: Int) raises -> PythonObject:
+    var x = _causal_model_embedding_prepared(snapshot.entries, snapshot.native, snapshot.width, snapshot.vocab,
+                                            b, l, False, snapshot.embedding, ids)
+    for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
+        x = _causal_layer_run_prepared(snapshot.entries, snapshot.kind, snapshot.width, b, l,
+            snapshot.layers[i], snapshot.head.packed, snapshot.planes, x, state.layers[i], False)
+    var out = _causal_model_head_prepared(snapshot.head, x, b, l, False)
+    _ = snapshot  # pins model and all captured weight owners until computation finishes
+    return out
 
 
 def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied_state: PythonObject, step: PythonObject) raises -> PythonObject:
@@ -742,9 +944,17 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
 
 
 def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
-    _ = py_call_typed(entries["causal_lm_session_close"], lm)
+    var provider = py_get(entries, "native_block_operations")
+    if provider is not None:
+        transformer_resident_lm_close(provider, lm)
+    else:
+        _ = py_call_typed(entries["causal_lm_session_close"], lm)
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-        _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
+        var provider = py_get(entries, "native_block_operations")
+        if provider is not None:
+            _ = transformer_resident_decode_call(provider, sessions[i], 24, [], [])
+        else:
+            _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
 
 
 def _resident_open_all(
@@ -774,7 +984,12 @@ def _resident_open_all(
                     _ = py_call(open_p.append, p[j])
             var ss = e["transformer_decode_session_create"]()
             _ = py_call(sessions.append, ss)
-            _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
+            var provider = py_get(e, "native_block_operations")
+            if provider is not None:
+                _ = transformer_resident_decode_call(provider, ss, 19 if int15 else 18,
+                    transformer_resident_words(open_a), transformer_resident_words(open_p))
+            else:
+                _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
         var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
@@ -783,7 +998,12 @@ def _resident_open_all(
             _ = py_call(top.append, 0 if model._head is model._embed else _addr(model._head, keep))
         var tp = py_ints([b, Int(py=model.vocab_size), Int(py=model.d_model)])
         _ = py_call(tp.append, model.norm_eps)
-        _ = py_call(e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"], lm, top, tp)
+        var provider = py_get(e, "native_block_operations")
+        if provider is not None:
+            transformer_resident_lm_open(provider, lm, int15, transformer_resident_words(top),
+                [b, Int(py=model.vocab_size), Int(py=model.d_model)], Float64(py=model.norm_eps))
+        else:
+            _ = py_call(e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"], lm, top, tp)
     except error:
         _resident_close(e, lm, sessions)
         raise error
@@ -805,8 +1025,13 @@ def _resident_load_states(e: PythonObject, sessions: PythonObject, state: Python
     an open; the weights stay where they are)."""
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
         var st = state.layers[i]
-        _ = py_call(e["transformer_decode_session_load_state"], sessions[i],
-                    py_ints([_addr(st.k_cache, keep), _addr(st.v_cache, keep)]), py_ints([Int(py=st.cached_tokens)]))
+        var provider = py_get(e, "native_block_operations")
+        var a: List[Int] = [_addr(st.k_cache, keep), _addr(st.v_cache, keep)]
+        var p: List[Int] = [Int(py=st.cached_tokens)]
+        if provider is not None:
+            _ = transformer_resident_decode_call(provider, sessions[i], 23, a, p)
+        else:
+            _ = py_call(e["transformer_decode_session_load_state"], sessions[i], py_ints(a), py_ints(p))
 
 
 def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
@@ -860,7 +1085,12 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
             var opened = _resident_open_all(model, e, state, b, l, int15, keep)
             lm = opened[0]
             sessions = opened[1]
-        _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
+        var provider = py_get(e, "native_block_operations")
+        if provider is not None:
+            _ = transformer_resident_lm_run(provider, lm, sessions, True,
+                [_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)], [l, n, 0])
+        else:
+            _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
         _ = out  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
     except error:
@@ -1005,6 +1235,40 @@ def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: 
     return stream
 
 
+def _engine_publish_stream(mut s: GenerationHandle, progress: NativeGenerationProgress, batch: Int) raises:
+    if progress.wrote > 0:
+        var current = generation_array([batch, progress.length], "i")
+        memcpy(dest=i32_ptr(Int(py=current._addr)), src=progress.current.unsafe_ptr(), count=len(progress.current))
+        _ = current
+        s.current = current
+        s.produced = progress.produced
+    _ = progress
+
+
+def _read_engine(mut s: GenerationHandle, capacity: Int) raises -> PythonObject:
+    var batch = len(s.finished)
+    var length = Int(py=s.current.shape[1])
+    var owner = _engine_admission(s.model, s.state, batch, length)
+    var keep = List[PythonObject]()
+    var address = _addr(s.current, keep)
+    var progress = NativeGenerationProgress(address, batch, length, s.produced, capacity)
+    try:
+        native_generation_read(owner.native, progress, capacity, s.max_new, s.finished, s.lengths,
+            s.eos, s.pad, s.greedy, s.temperature, s.top_k, s.top_p, s.seed)
+    except problem:
+        owner.publish()
+        _engine_publish_stream(s, progress, batch)
+        raise problem
+    owner.publish()
+    _engine_publish_stream(s, progress, batch)
+    var out = generation_array([batch, progress.wrote], "i")
+    causal_lm_tokens_row_major(progress.tokens, i32_ptr(Int(py=out._addr)), batch, progress.wrote)
+    _ = out
+    _ = owner
+    _ = keep^
+    return out
+
+
 def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
     if count < 1:
         raise Error("generation: read count must be positive")
@@ -1019,9 +1283,14 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
     var wrote = 0
     s.busy = True
     try:
+        if capacity > 0 and not s.done() and getenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0") == "1":
+            var result = _read_engine(s, capacity)
+            s.busy = False
+            return result
+        var snapshot: Optional[GenerationOperationSnapshot] = None
         while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
             var l = Int(py=s.current.shape[1])
-            var logits = _run(s.model, s.current, s.state, s.produced > 0)
+            var logits = _run_prepared(s.model, s.current, s.state, snapshot, s.produced > 0)
             var raw = f32_ptr(Int(py=logits._addr))
             _ = logits  # keep the Python object alive through the native call above
             var next = generation_array([b, 1], "i")

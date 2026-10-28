@@ -4,7 +4,7 @@
 (lane/apple-fast-py2mojo-linear): `svm/impl/svc_ovo_layout.mojo`'s rules as
 plain loops for the CPU binding, the same words (integer placement, and the
 same ascending binary64 chain per feature for `coef_`). The Python entry points
-are in `svm/host/svc_ovo_host_pyapi.mojo`."""
+are in `providers/python/svm_host_svc_ovo_host_pyapi.mojo`."""
 
 from svm.impl.svc_ovo_layout import (
     OvoPairs,

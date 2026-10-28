@@ -23,46 +23,54 @@ _CACHE = {}
 
 def directory():
     """The `_adapters/` directory of the GPU set this process uses."""
-    if "directory" in _CACHE:
-        return _CACHE["directory"]
-    from .. import _backend
-    try:
-        _kind, base = _backend._layout()
-    except ImportError as exc:
-        raise ImportError(
-            "mojolearn: the framework adapters run on a GPU, and this install selected no GPU set "
-            f"({exc})") from exc
-    path = os.path.join(base, DIRECTORY)
-    if not os.path.isfile(os.path.join(path, MANIFEST)):
-        raise ImportError(
-            "mojolearn: this install carries no framework adapters for its GPU set "
-            f"(no {MANIFEST} in {path}). They ship in the mojolearn GPU wheels: "
-            "reinstall mojolearn (on Linux: mojolearn-nvidia or mojolearn-amd).")
-    _CACHE["directory"] = path
-    return path
+    return _NATIVE("directory", (), _CONTEXT)
 
 
 def manifest():
     """The parsed `adapters.json` of this install's adapters."""
-    if "manifest" in _CACHE:
-        return _CACHE["manifest"]
-    path = os.path.join(directory(), MANIFEST)
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
-    if not isinstance(doc, dict) or doc.get("schema") != SCHEMA or doc.get("abi") != ABI:
-        raise ImportError(f"mojolearn: {path} is not a {SCHEMA} manifest of adapter ABI {ABI}; reinstall mojolearn")
-    _CACHE["manifest"] = doc
-    return doc
+    return _NATIVE("manifest", (), _CONTEXT)
 
 
 def path(role):
     """The installed path of one adapter file: 'native', 'torch' or 'max'."""
-    full = os.path.join(directory(), FILES[role])
-    if not os.path.isfile(full):
-        raise ImportError(f"mojolearn: the framework adapter file {full} is missing; reinstall mojolearn")
-    return full
+    return _NATIVE("path", (role,), _CONTEXT)
 
 
 def series(version):
     """'2.13' from '2.13.0+rocm7.2' (the Torch C++ ABI is per minor series)."""
-    return ".".join(version.split("+", 1)[0].split(".")[:2])
+    return _NATIVE("series", (version,), _CONTEXT)
+
+
+def _connect():
+    # glue: framework installation and exact path storage are connected once.
+    # No model or public metadata helper calls this setup function.
+    from .. import _backend
+    from .._native_family_bridge import _unavailable
+    from pathlib import PosixPath
+    from types import MemberDescriptorType
+    try:
+        _kind, base = _backend._layout()
+        directory = os.path.join(base, DIRECTORY)
+        error = None
+    except ImportError as exc:
+        directory, error = None, str(exc)
+    fields = {}
+    for cls in PosixPath.__mro__:  # glue: fixed standard-library slot descriptors
+        fields.update({name: value for name, value in vars(cls).items()  # glue: import-time native slot metadata only
+                       if type(value) is MemberDescriptorType})
+    raw = '_raw_paths' in fields
+    layout = {'class': PosixPath, 'raw_paths': raw}
+    if raw:
+        layout['set_raw'] = fields['_raw_paths'].__set__
+    else:
+        layout.update(set_drive=fields['_drv'].__set__, set_root=fields['_root'].__set__,
+                      set_parts=fields['_parts'].__set__)
+    try:
+        entry = _backend.binding("_mojolearn_x_sequence").ops_import_model
+    except (ImportError, AttributeError) as exc:
+        entry = _unavailable(exc)
+    return entry, dict(cache=_CACHE, directory=directory, layout_error=error,
+                               schema=SCHEMA, abi=ABI, files=FILES, path_layout=layout)
+
+
+_NATIVE, _CONTEXT = _connect()

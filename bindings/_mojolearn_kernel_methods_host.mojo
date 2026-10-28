@@ -69,7 +69,7 @@ from kernel_methods.host.km_host_oracle import (
 )
 
 
-from svm.host.scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 
 def kernel_methods_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)

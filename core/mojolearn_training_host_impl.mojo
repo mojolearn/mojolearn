@@ -304,3 +304,120 @@ def optimizer_step_host_into(
         fp[1] = stages.clip_total[1]
         fp[2] = stages.clip_total[2]
     return n_total
+
+
+def embedding_forward_host_into(a: List[Int], n_positions: Int, vocab: Int, width: Int) raises -> Int:
+    var count = 0
+    if n_positions < 1 or vocab < 1 or width < 1:
+        raise Error("mojolearn samba ops: embedding shape must be positive")
+    var y = host_samba_embedding_forward(
+        read_f32(a[1], vocab * width), read_i32(a[2], n_positions),
+        n_positions, vocab, width,
+    )
+    _write_f32(y, f32_ptr(a[0]))
+    count = n_positions * width
+    return count
+
+
+def embedding_backward_host_into(a: List[Int], n_positions: Int, vocab: Int, width: Int) raises -> Int:
+    var count = 0
+    if n_positions < 1 or vocab < 1 or width < 1:
+        raise Error("mojolearn samba ops: embedding shape must be positive")
+    var dw = host_samba_embedding_backward(
+        read_f32(a[1], n_positions * width), read_i32(a[2], n_positions),
+        n_positions, vocab, width,
+    )
+    _write_f32(dw, f32_ptr(a[0]))
+    count = vocab * width
+    return count
+
+
+def rms_norm_forward_host_into(a: List[Int], m: Int, dm: Int, eps: Float32) raises -> Int:
+    var count = 0
+    if m < 1 or dm < 1:
+        raise Error("mojolearn samba ops: rms_norm shape must be positive")
+    var y = host_samba_rms_norm_forward(
+        read_f32(a[1], m * dm), read_f32(a[2], dm), m, dm, eps
+    )
+    _write_f32(y, f32_ptr(a[0]))
+    count = m * dm
+    return count
+
+
+def rms_norm_backward_host_into(a: List[Int], m: Int, dm: Int, eps: Float32) raises -> Int:
+    var count = 0
+    if m < 1 or dm < 1:
+        raise Error("mojolearn samba ops: rms_norm shape must be positive")
+    var r = host_samba_rms_norm_backward(
+        read_f32(a[2], m * dm), read_f32(a[3], m * dm), read_f32(a[4], dm),
+        m, dm, eps,
+    )
+    _write_f32(r[0], f32_ptr(a[0]))
+    _write_f32(r[1], f32_ptr(a[1]))
+    count = m * dm
+    return count
+
+
+def linear_forward_host_into(a: List[Int], m: Int, n: Int, k: Int) raises -> Int:
+    var count = 0
+    if m < 1 or n < 1 or k < 1:
+        raise Error("mojolearn samba ops: linear shape must be positive")
+    var c = host_samba_linear_forward(read_f32(a[1], m * k), read_f32(a[2], n * k), m, n, k)
+    _write_f32(c, f32_ptr(a[0]))
+    count = m * n
+    return count
+
+
+def linear_backward_host_into(a: List[Int], m: Int, n: Int, k: Int) raises -> Int:
+    var count = 0
+    if m < 1 or n < 1 or k < 1:
+        raise Error("mojolearn samba ops: linear shape must be positive")
+    var r = host_samba_linear_backward(
+        read_f32(a[2], m * n), read_f32(a[3], m * k), read_f32(a[4], n * k), m, n, k
+    )
+    _write_f32(r[0], f32_ptr(a[0]))
+    _write_f32(r[1], f32_ptr(a[1]))
+    count = m * k
+    return count
+
+
+def accumulate_host_into(a: List[Int], n: Int, steps: Int, t_tokens: Int) raises -> Int:
+    var count = 0
+    if n < 1 or steps < 1:
+        raise Error("mojolearn samba ops: accumulate n and accumulation_steps must be at least 1")
+    var out = host_samba_accumulate(read_f32(a[1], n * steps), n, steps, t_tokens)
+    _write_f32(out, f32_ptr(a[0]))
+    count = n
+    return count
+
+
+def chunked_lm_head_v2_loss_host_into(a: List[Int], rows: Int, vocab: Int, width: Int) raises -> Int:
+    var count = 0
+    if rows < 1 or vocab < 2 or width < 1:
+        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+    var r = chunked_lm_head_v2_oracle_forward(
+        read_f32(a[3], rows * width), read_f32(a[4], vocab * width),
+        read_i32(a[5], rows), rows, vocab, width,
+    )
+    f32_ptr(a[0])[0] = r.loss
+    _write_f32(r.row_max, f32_ptr(a[1]))
+    _write_f32(r.row_denom, f32_ptr(a[2]))
+    count = rows
+    return count
+
+
+def chunked_lm_head_v2_train_host_into(a: List[Int], rows: Int, vocab: Int, width: Int) raises -> Int:
+    var count = 0
+    if rows < 1 or vocab < 2 or width < 1:
+        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+    var r = chunked_lm_head_v2_oracle(
+        read_f32(a[5], rows * width), read_f32(a[6], vocab * width),
+        read_i32(a[7], rows), rows, vocab, width,
+    )
+    f32_ptr(a[0])[0] = r.loss
+    _write_f32(r.row_max, f32_ptr(a[1]))
+    _write_f32(r.row_denom, f32_ptr(a[2]))
+    _write_f32(r.d_hidden, f32_ptr(a[3]))
+    _write_f32(r.d_weight, f32_ptr(a[4]))
+    count = rows
+    return count

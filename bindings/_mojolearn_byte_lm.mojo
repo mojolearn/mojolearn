@@ -22,6 +22,10 @@ detects after native success.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
+from training.byte_lm_native_status import byte_lm_status
+from training.byte_lm_native_dispatch import BYTE_LM_NATIVE_TABLE
+from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.ffi import _Global
@@ -66,6 +70,7 @@ from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import download_f32, download_f32_into
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
 from training.byte_lm import (
     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
@@ -162,6 +167,17 @@ def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> Pyth
     return out
 
 
+def byte_lm_native_api_binding() raises -> PythonObject:
+    var api = BYTE_LM_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def byte_lm_native_session_handle_binding(session: PythonObject) raises -> PythonObject:
+    # Only the extension that minted this exact native value may unwrap it.
+    # The Python provider retains session and module for every use of this handle.
+    return PythonObject(Int(session.downcast_value_ptr[ByteLMSession]()))
+
+
 def byte_lm_session_create_binding() raises -> PythonObject:
     # Lazy: creation and import perform no GPU operation.
     return PythonObject(alloc=ByteLMSession())
@@ -198,227 +214,19 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     Param/m/v/grad spans use shape.n_total(); flags[shape.n_tensors()] int32(0/1);
     IDs[B,L+1] int32[0,shape.vocab_size). kind=2(AdamW). All config fields explicit. Positive learning rate, no clipping or SGD options.
     """
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not BYTE_LM_FAST_APPLE:
-        raise Error("byte LM binding requires IDENTICAL (or FAST on Apple)")
-    if String(COMPILED_VENDOR) != "cuda" and String(COMPILED_VENDOR) != "hip" and String(COMPILED_VENDOR) != "metal":
-        raise Error("byte LM binding requires CUDA, HIP or Metal")
     if len(addresses) != 11 or len(params) != 12:
         raise Error("byte LM: expected 11 addresses and 12 scalar parameters")
-    shape.validate()
-    var n = shape.n_total()
-    var action = Int(py=params[0])
-    var completed = Int(py=params[1])
-    var kind = Int(py=params[2])
-    var nesterov = Int(py=params[10])
-    if (action != 0 and action != 1) or (nesterov != 0 and nesterov != 1):
-        raise Error("byte LM: action/nesterov must be 0 or 1")
-    if completed < 0 or completed >= 1000000 or (action == 1 and completed >= 999999):
-        raise Error("byte LM: completed step outside admitted bound")
-    var cfg = OptimizerConfig(kind,
-        Float32(Float64(py=params[3])), Float32(Float64(py=params[4])),
-        Float32(Float64(py=params[5])), Float32(Float64(py=params[6])),
-        Float32(Float64(py=params[7])), Float32(Float64(py=params[8])),
-        Float32(Float64(py=params[9])), nesterov == 1,
-        Float32(Float64(py=params[11])))
-    byte_validate_optimizer(cfg)
-    var addr = List[Int]()
-    for i in range(11):  # small-loop(addresses: eleven address slots): reads the addresses, no data
-        addr.append(Int(py=addresses[i]))
-    _validate_addresses(addr, action, shape)
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    # DEVIATION 2513: one getenv per call, same cost class as `ton`; the
-    # keeper itself is touched only on a call that creates a context.
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
-    # DEVIATION 2518: two OPT-IN teardown variants for the stateless path
-    # (retain=False) only, one getenv each per call, OFF by default, no
-    # effect on the resident session or on any arithmetic. Each prints one
-    # witness line when it is on, so a run can prove the branch was reached.
-    #   sync_before_teardown: synchronize() immediately before the trainer
-    #     (its ~250 buffers) is released, and again after that release and
-    #     before the context is released, so every stream-ordered buffer
-    #     free has drained while the context is still alive.
-    #   teardown_with_gil: release the trainer and the context AFTER the
-    #     GILReleased block, i.e. with the GIL held, the way close() does,
-    #     instead of inside it.
-    var sync_before_teardown = String(getenv("MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN")) == "1"
-    var teardown_with_gil = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
-    var tk = Int(perf_counter_ns())
-    # No GPU work before all borrowed inputs become validated owned host lists.
-    var initial_p = _read_f32(addr[0], n)
-    var initial_m = _read_f32(addr[1], n)
-    var initial_v = _read_f32(addr[2], n)
-    var flags_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[3])
-    var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[4])
-    var flags = List[Bool]()
-    var ids = List[Int32]()
-    for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): validates per tensor flags, not data
-        var flag = flags_ptr.unsafe_load(i)
-        if flag != 0 and flag != 1:
-            raise Error("byte LM: momentum flags must be exactly 0 or 1")
-        flags.append(flag == 1)
-    # one memcpy of the borrowed token ids (no per-element host loop)
-    ids = list_i32(ids_ptr, shape.batch * (shape.length + 1))
-    # Host-to-host: three n-float Lists plus flags and ids from Python memory.
-    _btick(ton, tk, "step.bind_read_inputs")
-    _bbytes(ton, "step.bind_read_inputs_bytes", 3 * n * 4 + shape.n_tensors() * 4 + shape.batch * (shape.length + 1) * 4)
-    byte_validate_state(initial_p, initial_m, initial_v, flags, completed, shape)
-    byte_validate_tokens(ids, shape)
-    _btick(ton, tk, "step.bind_validate_inputs")
-    var out_p = List[Float32]()
-    var out_m = List[Float32]()
-    var out_v = List[Float32]()
-    var out_g = List[Float32]()
-    var out_flags = List[Bool]()
-    var loss = Float32(0)
-    var result_step = completed
-    if session.busy or not session.usable:
-        raise Error("byte LM: session is busy, closed or failed; recreate it")
-    session.busy = True
-    session.usable = False
-    try:
-        with GILReleased(Python()):
-            var reused = Bool(session.ctx)
-            if not session.ctx:
-                if keep_context:
-                    # DEVIATION 2513: a SEPARATE keeper context, created
-                    # before the per-call one and never released. Idempotent
-                    # after the first creating call. Off: this branch is
-                    # not entered and nothing below changes.
-                    BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-                session.ctx = neural_ctx[_NEURAL_CTX]()
-                session.trainer = ByteTrainer(session.ctx.value(), initial_p, initial_m,
-                    initial_v, flags, completed, cfg, shape)
-            ref ctx = session.ctx.value()
-            # First call only: context and ByteTrainer construction (uploads).
-            _btick(ton, tk, "step.bind_context_or_trainer_setup")
-            if reused:
-                # Reuse must never silently ignore a supplied checkpoint/config.
-                if session.trainer.value().config.profile() != shape.profile():
-                    raise Error("byte LM: resident model shape mismatch")
-                if session.trainer.value().completed_steps != completed:
-                    raise Error("byte LM: resident completed-step mismatch")
-                var prior_cfg = session.trainer.value().optimizer.copy()
-                if (prior_cfg.kind != cfg.kind or prior_cfg.nesterov != cfg.nesterov
-                    or bitcast[DType.uint32](prior_cfg.lr) != bitcast[DType.uint32](cfg.lr) or bitcast[DType.uint32](prior_cfg.beta1) != bitcast[DType.uint32](cfg.beta1)
-                    or bitcast[DType.uint32](prior_cfg.beta2) != bitcast[DType.uint32](cfg.beta2) or bitcast[DType.uint32](prior_cfg.eps) != bitcast[DType.uint32](cfg.eps)
-                    or bitcast[DType.uint32](prior_cfg.weight_decay) != bitcast[DType.uint32](cfg.weight_decay)
-                    or bitcast[DType.uint32](prior_cfg.momentum) != bitcast[DType.uint32](cfg.momentum) or bitcast[DType.uint32](prior_cfg.dampening) != bitcast[DType.uint32](cfg.dampening)
-                    or bitcast[DType.uint32](prior_cfg.max_norm) != bitcast[DType.uint32](cfg.max_norm)):
-                    raise Error("byte LM: resident optimizer mismatch")
-                _require_same_bits(ctx, initial_p, session.trainer.value().buffers.param, n)
-                _require_same_bits(ctx, initial_m, session.trainer.value().buffers.m_state, n)
-                _require_same_bits(ctx, initial_v, session.trainer.value().buffers.v_state, n)
-                for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
-                    if flags[i] != session.trainer.value().buffers.buf_initialized[i]:
-                        raise Error("byte LM: resident flags mismatch")
-                # Three device bit compares (each waits inside on one int
-                # read back); the device queue is empty at this tick.
-                _btick(ton, tk, "step.bind_resident_admission")
-                _bbytes(ton, "step.bind_resident_admission_bytes", 3 * n * 4)
-            if action == 1:
-                var capture = byte_train_step(ctx, session.trainer.value(), ids)
-                # The trainer printed its own `step.*` lines; its last tick
-                # (`step.capture_copy`) ended with nothing queued.
-                if ton:
-                    tk = Int(perf_counter_ns())
-                loss = capture.loss
-                result_step = capture.completed_steps
-                out_p = capture.after_params^
-                capture.after_params = List[Float32]()
-                out_m = capture.after_m^
-                capture.after_m = List[Float32]()
-                out_v = capture.after_v^
-                capture.after_v = List[Float32]()
-                out_g = capture.gradients^
-                capture.gradients = List[Float32]()
-                out_flags = capture.after_flags^
-                capture.after_flags = List[Bool]()
-                _btick(ton, tk, "step.bind_move_outputs")
-            else:
-                loss = byte_eval_loss(ctx, session.trainer.value(), ids)
-                if ton:
-                    tk = Int(perf_counter_ns())
-                # Read actual post-evaluation state rather than simply echoing the
-                # inputs, which would hide an accidental mutation in evaluation.
-                out_p = download_f32(ctx, session.trainer.value().buffers.param, n)
-                out_m = download_f32(ctx, session.trainer.value().buffers.m_state, n)
-                out_v = download_f32(ctx, session.trainer.value().buffers.v_state, n)
-                out_flags = session.trainer.value().buffers.buf_initialized.copy()
-                result_step = session.trainer.value().completed_steps
-                _require_same_bits(ctx, initial_p, session.trainer.value().buffers.param, n)
-                _require_same_bits(ctx, initial_m, session.trainer.value().buffers.m_state, n)
-                _require_same_bits(ctx, initial_v, session.trainer.value().buffers.v_state, n)
-                for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
-                    if flags[i] != out_flags[i]:
-                        raise Error("byte LM eval changed momentum flags")
-                _btick(ton, tk, "step.bind_eval_readback")
-                _bbytes(ton, "step.bind_eval_readback_bytes", 3 * n * 4)
-            # lane cgr4-download-loop: the returned state is validated where
-            # it lives (the trainer's device buffers it was downloaded from):
-            # device scans, the same predicates and messages, no host walk
-            ref tr = session.trainer.value()
-            byte_validate_device_state(ctx, tr.scan, tr.buffers.param, tr.buffers.m_state,
-                                       tr.buffers.v_state, out_flags, result_step, shape)
-            if result_step != completed + action:
-                raise Error("byte LM: successful result has wrong completed step")
-            if (bitcast[DType.uint32](loss) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                raise Error("byte LM: nonfinite returned loss")
-            if action == 1:
-                if len(out_g) != n:
-                    raise Error("byte LM: wrong gradient length")
-                if tr.scan.first_nonfinite(ctx, tr.buffers.grad, n) >= 0:
-                    raise Error("byte LM: nonfinite returned gradient")
-            # Device scans of param/m/v (byte_validate_device_state) and grad.
-            _btick(ton, tk, "step.bind_validate_outputs")
-            ctx.synchronize()
-            _btick(ton, tk, "step.bind_final_sync")
-            if not retain and not teardown_with_gil:
-                # DEVIATION 2520 (was 2518 variant (a), measured on the RTX
-                # 4090 run 6: this order PASSES where the bare release hung):
-                # release the trainer, then DRAIN the frees it enqueued before
-                # the context is destroyed. The native backtrace of the hang
-                # was the next context's first enqueueCreateBuffer blocked in
-                # pthread_mutex_lock inside libKGENCompilerRTShared, the
-                # runtime allocator's lock the dying context never returned.
-                if sync_before_teardown:
-                    print("byte LM teardown variant: sync_before_teardown")
-                session.logits_scratch = None
-                session.trainer = None
-                session.ctx.value().synchronize()
-                session.ctx = None
-    except error:
-        session.busy = False
-        raise error
-    session.busy = False
-    session.usable = retain
-    if not retain and teardown_with_gil:
-        # DEVIATION 2518 variant (b): the same two releases, after the
-        # GILReleased block has re-acquired the GIL (the resident close()
-        # shape: synchronized above, released with the GIL held). Off, the
-        # teardown above ran and both Optionals are already empty.
-        print("byte LM teardown variant: teardown_with_gil")
-        session.logits_scratch = None
-        session.trainer = None
-        # DEVIATION 2520: drain the enqueued frees before the context goes.
-        if session.ctx:
-            session.ctx.value().synchronize()
-        session.ctx = None
-    # lane py-runtime round 2: the input-unchanged guard runs here, in the
-    # binding, before anything is published
-    _require_inputs_unchanged(addr, initial_p, initial_m, initial_v, flags, ids, shape)
-    # Publication starts after the synchronized GPU scope succeeds. The
-    # Python wrapper commits these fresh arrays atomically to its state object.
-    _write_f32(addr[5], out_p)
-    _write_f32(addr[6], out_m)
-    _write_f32(addr[7], out_v)
-    if action == 1:
-        _write_f32(addr[8], out_g)
-    _write_flags_n(addr[9], out_flags, shape.n_tensors())
-    _write_loss(addr[10], loss)
-    # Host-to-host: the four n-float outputs copied into Python memory.
-    _btick(ton, tk, "step.bind_publish")
-    _bbytes(ton, "step.bind_publish_bytes", (3 + action) * n * 4)
-    return PythonObject(result_step)
+    var action = _params_action(params)
+    var completed = _params_completed(params)
+    var cfg = _params_optimizer(params)
+    var addr = _read_addresses(addresses, 11)
+    var locked_teardown = String(getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")) == "1"
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_lm_run_native(addr, action, completed, cfg, shape, session, retain, locked_teardown)
+    if not retain and locked_teardown:
+        byte_lm_run_finalize(session)
+    return PythonObject(result)
 
 
 # ---------------------------------------------------------------------------
@@ -640,24 +448,10 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     Policy flags, released cells and repair-site masks follow these triples;
     byte_attention_eager_cells documents their append-only ordering."""
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var completed = -1
-    var grad_step = -1
-    var is_open = 0
-    var eager = List[Int]()
-    for _ in range(6):  # small-loop(eager: six zero counters when no trainer is open)
-        eager.append(0)
-    if owner[].trainer:
-        completed = owner[].trainer.value().completed_steps
-        grad_step = owner[].trainer.value().grad_step
-        is_open = 1
-        eager = byte_attention_eager_cells(owner[].trainer.value())
+    var values = byte_lm_status(owner[])
     var out = Python.list()
-    out.append(PythonObject(completed))
-    out.append(PythonObject(grad_step))
-    out.append(PythonObject(1 if owner[].usable else 0))
-    out.append(PythonObject(is_open))
-    for i in range(len(eager)):  # small-loop(eager: one entry per layer): reports per layer cell counts, no data
-        out.append(PythonObject(eager[i]))
+    for value in values:  # driver-loop: over completed native session metadata
+        out.append(PythonObject(value))
     return out
 
 
@@ -741,38 +535,11 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
     _require_binding_profile()
     var cfg = _byte_config(shape)
     var bl = _logits_dims(dims, cfg)
-    var m = bl[0] * bl[1]
-    var cells_out = m * cfg.vocab_size
-    var n = cfg.n_total()
     var addr = _read_addresses(addresses, 3)
-    var cells: List[Int] = [n, m, cells_out]
-    _validate_slot_table(addr, cells, 2)
-    var params = _read_f32(addr[0], n)
-    var ids = _read_ids(addr[1], m)
-    byte_logits_validate(ids, bl[0], bl[1], cfg)
-    byte_logits_validate_params(params, cfg)
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
-    # lane/neural-net-experiment: the logits land in the caller's array by
-    # one device-to-host copy (`byte_logits_from_params_into`), no host
-    # List, no second copy; the caller's array is alive for the whole call.
-    var out = f32_ptr(addr[2])
-    var session = ByteLMSession()
-    session.busy = True
-    try:
-        with GILReleased(Python()):
-            if keep_context:
-                # DEVIATION 2513: the same keeper the other per-call path uses.
-                BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-            session.ctx = neural_ctx[_NEURAL_CTX]()
-            byte_logits_from_params_into(session.ctx.value(), params, ids, bl[0], bl[1], cfg, out)
-            session.ctx.value().synchronize()
-            session.ctx = None
-    except error:
-        session.busy = False
-        raise error
-    session.busy = False
-    session.usable = False
-    return PythonObject(cells_out)
+    var written = 0
+    with GILReleased(Python()):
+        written = byte_lm_stateless_logits_native(addr, bl[0], bl[1], cfg)
+    return PythonObject(written)
 
 
 def _claimed_step(completed: PythonObject) raises -> Int:
@@ -1475,6 +1242,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_run_configured_binding]("byte_lm_run_configured")
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
+        module.def_function[byte_lm_native_api_binding]("byte_lm_trainer_api_v1")
+        module.def_function[byte_lm_native_session_handle_binding]("byte_lm_native_session_handle_v1")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         # TOMBSTONE: byte_lm_launch_probe (dead native entry: tool-only launch-cost probe, deleted with tools/byte_lm_launch_probe.py and its byte_lm_session_launch_probe partner) deleted 2026-10-26 by be2f9a1be; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/byte_lm_launch_probe.patch

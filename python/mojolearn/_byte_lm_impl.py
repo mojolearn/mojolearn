@@ -716,56 +716,13 @@ class SmallByteLanguageModelTrainer:
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
                  eps=1e-8, weight_decay=.01, shape=None, resident=None, step_result=None):
-        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
-        _numeric_profile.require_training("mojolearn.SmallByteLanguageModelTrainer")
-        # cpu2-l11-neural (2026-10-04): `resident=None` (the default) is
-        # AUTO: the device-owned session whenever the loaded binding carries
-        # the session entries (every current GPU build), so no step mirrors,
-        # copies or re-scans the parameters and moments on the host. It is
-        # resolved at the first call that needs the binding (`_is_resident`).
-        # `resident=False` keeps the stateless path as an explicit opt-out.
-        if resident is not None and type(resident) is not bool:
-            raise TypeError("resident must be a bool")
-        if step_result is None:
-            # AUTO keeps the stateless return shape ('full').
-            step_result = 'lean' if resident is True else 'full'
-        if type(step_result) is not str or step_result not in ('full', 'lean'):
-            raise ValueError("step_result must be 'full' or 'lean'")
-        if step_result == 'lean' and resident is not True:
-            raise ValueError("step_result='lean' requires resident=True: the stateless path "
-                             "destroys its context before returning, so there is nothing to export from")
-        self._resident = resident
-        self._step_result = step_result
-        self._native_session = None
-        self._session_binding = None
-        self._session_open = False
-        self._logits_pool = _LogitsPool()
-        self._grad_step = -1
-        self._last_export_step = 0
-        self._lost_at = None
-        shape = require_shape(shape)
-        flat = _parameters(parameters, shape)
-        config = _configuration(lr, betas, eps, weight_decay)
-        descriptor = _schedule(data_schedule)
-        _require_schedule_vocabulary(descriptor, shape)
-        mode = _mode()
-        self._lock = threading.RLock()
-        self._runtime = None
-        self._runtime_binding = None
-        self._state = dict(schema=_SCHEMA, profile=_runtime_profile(shape, mode), numeric_mode=mode,
-                           parameter_names=list(shape.parameter_names),
-                           parameter_shapes=[list(shape) for shape in shape.parameter_shapes],  # glue: lists the model parameter shapes
-                           parameter_offsets=list(shape.offsets), parameters=flat,
-                           m=_buffers.zeros(shape.n_total, '<f4'), v=_buffers.zeros(shape.n_total, '<f4'),
-                           flags=_buffers.zeros(shape.n_tensors, '<i4'), completed_steps=0, next_batch_index=0,
-                           config=config, data_schedule=descriptor)
-        if shape.profile != PROFILE:
-            self._state['model_shape'] = shape.to_dict()
+        _LM_TRAINER(self, "construct", (parameters, data_schedule, lr, betas, eps,
+                    weight_decay, shape, resident, step_result), _LM_TRAINER_CONTEXT)
 
     @property
     def data_schedule(self):
         """A copy of the ``data_schedule`` descriptor, as checkpoints keep it."""
-        return json.loads(json.dumps(self._state['data_schedule']))
+        return _LM_TRAINER(self, "data_schedule", (), _LM_TRAINER_CONTEXT)
 
     @staticmethod
     def parameter_registry(shape=None):
@@ -782,29 +739,21 @@ class SmallByteLanguageModelTrainer:
             One ``{"name", "shape", "offset", "size"}`` record per tensor, in
             the order of the flat parameter vector.
         """
-        shape = require_shape(shape)
-        return [{'name': name, 'shape': tensor_shape, 'offset': shape.offsets[index],
-                 'size': shape.offsets[index + 1] - shape.offsets[index]}
-                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))]  # glue: one registry entry per named parameter
+        return _LM_TRAINER(None, "parameter_registry", (shape,), _LM_TRAINER_CONTEXT)
 
     @property
     def step_(self):
         """Number of completed training steps."""
-        with self._lock:
-            return self._state['completed_steps']
+        return _LM_TRAINER(self, "step", (), _LM_TRAINER_CONTEXT)
 
     @property
     def parameters_(self):
         """A copy of the current flat float32 parameters."""
-        with self._lock:
-            if self._session_open:
-                return self.export_state()['parameters']
-            self._require_not_lost()
-            return self._state['parameters'].copy()
+        return _LM_TRAINER(self, "parameters", (), _LM_TRAINER_CONTEXT)
 
     def state_dict(self):
         """The complete training state; same as :meth:`export_state`."""
-        return self.export_state()
+        return _LM_TRAINER(self, "export_state", (), _LM_TRAINER_CONTEXT)
 
     def _require_not_lost(self):
         if self._lost_at is not None:
@@ -834,11 +783,7 @@ class SmallByteLanguageModelTrainer:
             configuration, ``data_schedule`` and metadata, as accepted by
             :meth:`load_state_dict`.
         """
-        with self._lock:
-            self._require_not_lost()
-            if self._session_open:
-                return _snapshot(self._export_state_impl(), copy=False)
-            return _snapshot(self._state)
+        return _LM_TRAINER(self, "export_state", (), _LM_TRAINER_CONTEXT)
 
     def export_gradients(self, named=True):
         """The pre-update gradient of the last completed step of a resident session.
@@ -863,16 +808,7 @@ class SmallByteLanguageModelTrainer:
             If no resident session is open, or no step has completed since it was
             opened, restored or rolled back.
         """
-        with self._lock:
-            self._require_not_lost()
-            if not self._session_open:
-                raise RuntimeError('Byte-LM export_gradients requires an open resident session; '
-                                   'the stateless train_step returns its gradients')
-            completed = self._state['completed_steps']
-            if self._grad_step != completed:
-                raise RuntimeError('Byte-LM has no gradient to export: no step has completed '
-                                   'since open, restore, import or rollback')
-            return self._export_gradients_impl(completed, named)
+        return _LM_TRAINER(self, "export_gradients", (named,), _LM_TRAINER_CONTEXT)
 
     # DEVIATION 3010: what the OPEN resident session's quadratic
     # attention stages are holding RIGHT NOW. `None` when no session is
@@ -936,51 +872,7 @@ class SmallByteLanguageModelTrainer:
             None when no resident session is open or the loaded binaries do not
             report it.
         """
-        with self._lock:
-            if not self._session_open or self._native_session is None:
-                return None
-            info = self._session_binding.byte_lm_session_info(self._native_session)
-            if len(info) < 10:
-                return None
-            fwd, aexp, bwd = int(info[4]), int(info[5]), int(info[6])
-            report = dict(forward_eager_cells=fwd, forward_aexp_cells=aexp,
-                        backward_eager_cells=bwd,
-                        forward_eager_bytes=fwd * 4, forward_aexp_bytes=aexp * 4,
-                        backward_eager_bytes=bwd * 4,
-                        eager_bytes=(fwd + bwd) * 4,
-                        total_bytes=(fwd + aexp + bwd) * 4,
-                        layers_grown_forward=int(info[7]),
-                        layers_grown_backward=int(info[8]),
-                        layers_full_aexp=int(info[9]),
-                        layers=state_shape(self._state).n_layers)
-            n_layers = report['layers']
-            if len(info) >= 12:
-                report['stage_lists'] = (int(info[10]), int(info[11]))
-                n_layers = min(n_layers, int(info[10]), int(info[11]))
-            if len(info) >= 12 + 3 * n_layers:
-                names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
-                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER', 3: 'FUSED_SKIPPED_STICKY'}
-                for offset, key in ((0, 'forward_status'), (1, 'backward_status')):  # glue: two status keys of the stage report
-                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n_layers)]  # glue: reads per-layer status codes from the binding (n_layers-sized: model layers)
-                    report[key] = values
-                    report[key + '_counts'] = {name: values.count(code)
-                                              for code, name in names.items()}  # glue: maps status code names
-                report['attn_materialized'] = [bool(info[14 + 3 * layer])
-                                             for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
-            if len(info) > 12 + 3 * n_layers:
-                report['exact_tail_guard'] = bool(info[12 + 3 * n_layers])
-            if len(info) > 14 + 3 * n_layers:
-                report['release_eager'] = bool(info[13 + 3 * n_layers])
-                report['released_eager_bytes'] = int(info[14 + 3 * n_layers]) * 4
-            if len(info) >= 16 + 4 * n_layers:
-                report['sticky_eager'] = bool(info[15 + 3 * n_layers])
-                report['layers_prefer_eager'] = [bool(info[16 + 3 * n_layers + layer])
-                                               for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
-            if len(info) >= 17 + 5 * n_layers:
-                report['repair_masked_tail'] = bool(info[16 + 4 * n_layers])
-                report['backward_repair_sites'] = [int(info[17 + 4 * n_layers + layer])
-                                                  for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
-            return report
+        return _LM_TRAINER(self, "attention_stage_report", (), _LM_TRAINER_CONTEXT)
 
     def _export_state_impl(self, release=False):
         """Lock held, session open. ONE native call
@@ -1028,8 +920,7 @@ class SmallByteLanguageModelTrainer:
         session nothing can be exported: the device is released and the trainer
         stays lost until :meth:`load_state_dict`.
         """
-        with self._lock:
-            self._suspend_session()
+        return _LM_TRAINER(self, "close", (), _LM_TRAINER_CONTEXT)
 
     def _suspend_session(self):
         if self._session_open and self._lost_at is None:
@@ -1136,14 +1027,7 @@ class SmallByteLanguageModelTrainer:
         state : dict
             A state from :meth:`export_state` (or :meth:`state_dict`).
         """
-        with self._lock:
-            replacement = _validate_state(state)
-            _mode()
-            self._release_session()
-            self._state = replacement
-            self._lost_at = None
-            self._last_export_step = replacement['completed_steps']
-        return self
+        return _LM_TRAINER(self, "load_state", (state,), _LM_TRAINER_CONTEXT)
 
     def _binding(self):
         binding = _load(state_shape(self._state))
@@ -1183,14 +1067,7 @@ class SmallByteLanguageModelTrainer:
         -------
         dict
         """
-        with self._lock:
-            self._binding()
-            return dict(json.loads(_canonical(self._runtime)), schema='small-byte-lm.run-metadata.v1',
-                        qualification='authored/unqualified', profile=self._state['profile'],
-                        device_state_lifetime='resident' if self._is_resident() else 'call',
-                        step_result=self._step_result, last_export_step=self._last_export_step,
-                        config=dict(self._state['config']), data_schedule=_schedule(self._state['data_schedule']),
-                        completed_steps=self.step_, next_batch_index=self.step_)
+        return _LM_TRAINER(self, "run_metadata", (), _LM_TRAINER_CONTEXT)
 
     def _run(self, ids, train):
         """`train_step` / `evaluate`: the ids are checked and copied here, and
@@ -1329,8 +1206,7 @@ class SmallByteLanguageModelTrainer:
         -------
         float
         """
-        with self._lock:
-            return self._run(ids, False)
+        return _LM_TRAINER(self, "evaluate", (ids,), _LM_TRAINER_CONTEXT)
 
     # Float32 logits `[batch, length, vocab]` for int32 ids `[batch,
     # length]` (DEVIATION 2658), for positions 0 to length - 1 of each row,
@@ -1393,16 +1269,7 @@ class SmallByteLanguageModelTrainer:
         RuntimeError
             If a logit is not finite.
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            return _ragged.ragged_forward(self.logits, raw, None, lengths, '<i4',
-                                          'SmallByteLanguageModelTrainer.logits')[0]
-        with self._lock:
-            shape = state_shape(self._state)
-            tokens, batch, length = _gpu_logits_ids(ids, shape)
-            if self._is_resident():
-                return self._logits_resident(tokens, batch, length, shape)
-            return self._logits_stateless(tokens, batch, length, shape)
+        return _LM_TRAINER(self, "logits", (ids, lengths), _LM_TRAINER_CONTEXT)
 
     # The greedy next byte after each row of ids `[batch, length]`, ties
     # to the lowest byte value, picked from `logits(ids)` by the helper
@@ -1427,21 +1294,7 @@ class SmallByteLanguageModelTrainer:
         list of int
             One token id per row.
         """
-        if lengths is not None:
-            raw, _ = as_i32_c(ids, ndim=2, name='ids')
-            logits, lens = _ragged.ragged_forward(self.logits, raw, None, lengths, '<i4',
-                                                  'SmallByteLanguageModelTrainer.next_bytes')
-            return _greedy_next_bytes(_ragged.last_real_rows(logits, lens,
-                                                             'SmallByteLanguageModelTrainer.next_bytes'))
-        with self._lock:
-            if self._is_resident():
-                # cpu3-seq: on a resident session the forward, the refusal
-                # and the per-row argmax run on the device and only `batch`
-                # int32 come back (the logits never cross the bus).
-                shape = state_shape(self._state)
-                tokens, batch, length = _gpu_logits_ids(ids, shape)
-                return self._next_bytes_resident(tokens, batch, length, shape)
-        return _greedy_next_bytes(self.logits(ids))
+        return _LM_TRAINER(self, "next_bytes", (ids, lengths), _LM_TRAINER_CONTEXT)
 
     def _logits_call(self, entry_name, tokens, out, batch, length, shape):
         """Lock held, resident. ONE native call (`byte_lm_trainer_logits` or
@@ -1512,7 +1365,7 @@ class SmallByteLanguageModelTrainer:
 
     def save_checkpoint(self, path):
         """Same as :meth:`export_checkpoint`."""
-        return self.export_checkpoint(path)
+        return _LM_TRAINER(self, "export_checkpoint", (path,), _LM_TRAINER_CONTEXT)
 
     def export_checkpoint(self, path):
         """Write the complete state to ``path`` as a JSON checkpoint.
@@ -1526,35 +1379,7 @@ class SmallByteLanguageModelTrainer:
         path : str or path-like
             Destination file.
         """
-        with self._lock:
-            # Refuse guaranteed-oversize saves before copying/hex-encoding state.
-            if state_shape(self._state).n_total * 24 + state_shape(self._state).n_tensors * 8 > _CHECKPOINT_LIMIT:
-                raise ValueError('Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays')
-            payload = self.export_state()
-        for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
-            value = payload[key]
-            integer = key == 'flags'
-            dtype = '<i4' if integer else '<f4'
-            payload[key] = dict(dtype=dtype, shape=list(value.shape),
-                                hex=le_bytes(value, 'i' if integer else 'f').hex())
-        envelope = dict(schema=_CHECKPOINT_SCHEMA, payload=payload,
-                        payload_sha256=_sha256_hex(_canonical(payload)))
-        encoded = _canonical(envelope) + b'\n'
-        if len(encoded) > _CHECKPOINT_LIMIT:
-            raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
-        path = Path(path)
-        temporary = None
-        try:
-            with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.' + path.name + '.', delete=False) as stream:
-                temporary = stream.name
-                stream.write(encoded)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-            temporary = None
-        finally:
-            if temporary is not None:
-                os.unlink(temporary)
+        return _LM_TRAINER(self, "export_checkpoint", (path,), _LM_TRAINER_CONTEXT)
 
     # Atomically write the complete state as a streamed BINARY archive
     # (`_byte_lm_checkpoint`, schema `mojolearn.byte-lm-stream.v1`), from
@@ -1597,9 +1422,7 @@ class SmallByteLanguageModelTrainer:
         str
             The file's SHA-256.
         """
-        with self._lock:
-            payload = self.export_state()
-        return _byte_lm_checkpoint.save(path, payload)
+        return _LM_TRAINER(self, "export_checkpoint_binary", (path,), _LM_TRAINER_CONTEXT)
 
     @classmethod
     def from_checkpoint_binary(cls, path, *, resident=None):
@@ -1620,13 +1443,7 @@ class SmallByteLanguageModelTrainer:
         -------
         LanguageModelTrainer
         """
-        state = _byte_lm_checkpoint.load(path)
-        shape = state_shape(state)
-        cfg = state['config']
-        result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
-                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
-                     shape=shape, resident=resident)
-        return result.load_state_dict(state)
+        return _LM_TRAINER(cls, "from_checkpoint_binary", (path, resident), _LM_TRAINER_CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, *, resident=None):
@@ -1643,9 +1460,7 @@ class SmallByteLanguageModelTrainer:
         -------
         LanguageModelTrainer
         """
-        with Path(path).open('rb') as stream:
-            encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        return cls.from_checkpoint_bytes(encoded, resident=resident)
+        return _LM_TRAINER(cls, "from_checkpoint", (path, resident), _LM_TRAINER_CONTEXT)
 
     @classmethod
     def from_checkpoint_bytes(cls, encoded, *, resident=None):
@@ -1665,12 +1480,7 @@ class SmallByteLanguageModelTrainer:
         -------
         LanguageModelTrainer
         """
-        state, shape = _decode_checkpoint(encoded)
-        cfg = state['config']
-        result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
-                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
-                     shape=shape, resident=resident)
-        return result.load_state_dict(state)
+        return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident), _LM_TRAINER_CONTEXT)
 
 
 def _decode_checkpoint(encoded):
@@ -1729,7 +1539,17 @@ def _connect_trainer():
     # metadata once, at package import
     from .tokenizer import _binding as _tokenizer_binding
     from ._native_classical_bridge import _state_context
+    from types import MethodType
     context = _state_context()
+    _numeric_profile.default_profile("training")  # glue: connect the training profile before public construction
+    context.update(byte_lm_source_root=str(Path(__file__).resolve().parents[2]), byte_lm_wrapper_file=__file__,
+                   byte_lm_source_names=('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
+                                        'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
+                                        'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py'))
+    context.update(byte_lm_trainer_class=SmallByteLanguageModelTrainer, byte_lm_config_class=ByteLanguageModelConfig,
+                   byte_lm_profile_defaults=_numeric_profile._defaults, byte_lm_profiles=_numeric_profile.PROFILES,
+                   byte_lm_lock=type(threading.RLock()))
+    _backend.default_mode()  # glue: resolve mode before any native product operation
     bindings = {}
     for mode in _NATIVE_MODE_CODE:  # glue: the two numeric modes, connected once
         try:
@@ -1740,7 +1560,30 @@ def _connect_trainer():
                    byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
                    byte_lm_profile=PROFILE, byte_lm_session_entries=_SESSION_ENTRIES,
                    byte_lm_run_entry=_RUN_ENTRY, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
-    return _tokenizer_binding()._module.byte_lm_trainer_call, context
+    module = _tokenizer_binding()._module
+    pooled_context = dict(context, array_class=_PooledLogits)
+    context.update(byte_lm_pooled_class=_PooledLogits, byte_lm_pooled_context=pooled_context,
+                   byte_lm_store_getter=vars(_Array)["_store"].__get__)
+    _PooledLogits.__del__ = module.classical_attribute_descriptor(
+        MethodType(module.byte_lm_pooled_finalize_call, context))
+    # glue: pin the existing native slot and exact pooled storage hooks once.
+    # Native logits checks replacements before allocation, then reads this slot
+    # once; Array.__array_interface__ is never an output-address fallback.
+    from types import MemberDescriptorType
+    address_slot = vars(_Array)["_addr"]
+    if type(address_slot) is not MemberDescriptorType:
+        raise TypeError("Byte-LM pooled logits require the native Array address slot")
+    mro = _PooledLogits.__mro__
+    hooks = ('__getattribute__', '__getattr__', '__setattr__', '__del__', '__dict__',
+             '__array_interface__', '_pool', '_store', '_base', '_pin', '_mv', '_addr',
+             '_readonly', 'shape', 'dtype', 'ndim', 'size', 'nbytes', 'itemsize', 'strides', 'order')
+    layout = tuple((base, tuple((name, vars(base).get(name)) for name in hooks))  # glue: fixed native storage hooks
+                   for base in mro)  # glue: exact connected pooled Array ancestry
+    context.update(byte_lm_addr_getter=address_slot.__get__, byte_lm_pooled_mro=mro,
+                   byte_lm_pooled_layout=layout,
+                   byte_lm_type_mro_getter=type.__dict__['__mro__'].__get__,
+                   byte_lm_type_dict_getter=type.__dict__['__dict__'].__get__)
+    return module.byte_lm_trainer_call, context
 
 
 _LM_TRAINER, _LM_TRAINER_CONTEXT = _connect_trainer()

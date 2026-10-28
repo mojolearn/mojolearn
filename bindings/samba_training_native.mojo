@@ -1,14 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Complete native Samba forward/backward over existing numerical kernels."""
 from std.python import Python, PythonObject
+from core.native_descriptor_abi import PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
+from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_training_ids_into
+from core.samba_count_impl import samba_target_count
+from providers.python.samba_execution_pyapi import samba_provider_gradients
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_from_state
 from bindings.neural_prefill_native import neural_prefill_forward, neural_prefill_backward, neural_prefill_close
 from bindings.neural_block_public import neural_block_backward_binding
 from bindings.causal_lm_public import _native_function
-from bindings.py_balanced import py_call, py_setitem, py_type
+from bindings.py_balanced import py_call, py_setitem, py_type, py_get
 
 
 def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObject) raises -> PythonObject:
@@ -36,37 +40,36 @@ def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObj
 
 
 def _samba_count(targets: PythonObject, context: PythonObject) raises -> Int:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var n = Int(py=targets.size)
-    var ignored = py_call(g[].arrays, "i", Python.list(PythonObject(-100))) * n
-    var mask = generation_array([n], "b")
-    _ = py_call(context["equal_elements"], targets._addr, ignored.buffer_info()[0], 2, n, mask._addr)
-    # The address does not retain its exporter. Keep the temporary native
-    # comparison buffer alive until the synchronous kernel has consumed it.
-    _ = ignored^
-    var count = py_call(context["reduce_stat"], mask._addr, 5, n, 5)
-    _ = mask^
-    if Int(py=count[0]) != 0 or Int(py=count[1]) != 0:
-        raise Error("Samba: ignored-target count exceeds kernel indexing")
-    return n - Int(py=count[2])
+    return samba_target_count(Int(py=targets._addr), Int(py=targets.size))
 
 
-def _samba_dropout(value: PythonObject, fields: PythonObject, stream: PythonObject, offset: Int, backward: Bool, entries: PythonObject) raises -> PythonObject:
-    var config = samba_fields(fields["config"])
-    var probability = Float32(Float64(py=config["dropout"]))
-    var scale = Float32(1.0 / (1.0 - Float64(probability)))
-    var rng = samba_fields(fields["generator"])
-    var seed = rng["seed"]
-    var low = Int(py=seed & PythonObject(0xffffffff))
-    var high = Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff))
-    var dims = List[Int]()
-    for i in range(len(value.shape)):  # driver-loop: over dropout output shape metadata
-        dims.append(Int(py=value.shape[i]))
+struct SambaDropoutMetadata(Copyable, Movable):
+    # Stable configuration for one gradient operation, not persistent model
+    # state. Stream position remains an explicit native operation argument.
+    var probability: Float32
+    var scale: Float32
+    var seed_low: Int
+    var seed_high: Int
+    var stream: Int
+
+    def __init__(out self, fields: PythonObject, probability: Float64, stream: PythonObject) raises:
+        self.probability = Float32(probability)
+        self.scale = Float32(1.0 / (1.0 - Float64(self.probability)))
+        var rng = samba_fields(fields["generator"])
+        var seed = rng["seed"]
+        self.seed_low = Int(py=seed & PythonObject(0xffffffff))
+        self.seed_high = Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff))
+        self.stream = Int(py=stream)
+
+
+def _samba_dropout(value: PythonObject, metadata: SambaDropoutMetadata, dims: List[Int], size: Int,
+                   offset: Int, backward: Bool, entries: PythonObject) raises -> PythonObject:
     var out = generation_array(dims)
-    var params = py_ints([Int(py=value.size), offset, low, high, Int(py=stream), 3 if backward else 2])
-    _ = py_call(params.append, Float64(probability))
-    _ = py_call(params.append, Float64(scale))
+    var params = py_ints([size, offset, metadata.seed_low, metadata.seed_high, metadata.stream, 3 if backward else 2])
+    _ = py_call(params.append, Float64(metadata.probability))
+    _ = py_call(params.append, Float64(metadata.scale))
     _ = py_call(_native_function(entries, "neural_rng"), Python.list(out._addr, value._addr), params)
+    _ = value  # retain the source while the compiled RNG entry reads its address
     return out
 
 
@@ -83,19 +86,27 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var entries = samba_entries(context, fields["numeric_mode"])
+    var native = py_get(fields, "_native_primitives")
+    if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):
+        native = PythonObject(None)
     var d = Int(py=config["d_model"])
     var vocab = Int(py=config["vocab"])
     var ids = samba_ids(inputs, vocab, False, context)
     var y = samba_ids(targets, vocab, True, context)
-    if Bool(py=ids.shape != y.shape):
+    var shape = ids.shape
+    if Bool(py=shape != y.shape):
         raise Error("Samba: targets must match inputs' shape")
-    var b = Int(py=ids.shape[0])
-    var l = Int(py=ids.shape[1])
+    var b = Int(py=shape[0])
+    var l = Int(py=shape[1])
     var rows = b * l
+    var completed = samba_provider_gradients(fields, config, entries, ids, y, num_items, stream, token_offset, context["neural"])
+    if completed is not None:
+        return completed
     var count = _samba_count(y, context)
     var items = count if num_items is None else Int(py=num_items)
     var arrays = fields["arrays"]
-    var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
+    var tie_embeddings = Bool(py=config["tie_embeddings"])
+    var head = arrays["embed.weight"] if tie_embeddings else arrays["lm_head.weight"]
     var norm = arrays["norm_f.weight"]
     var afn = True
     for name in [String("samba_afn_norm_head_forward"), String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the optional fused-tail capability tuple
@@ -104,20 +115,28 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
     var chunked = False
     if not afn and Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")):
         chunked = Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")())
-    var dropout = Float64(py=config["dropout"]) > 0.0 and stream is not None
+    var dropout_probability = Float64(py=config["dropout"])
+    var dropout = dropout_probability > 0.0 and stream is not None
+    var dropout_metadata: Optional[SambaDropoutMetadata] = None
+    if dropout:
+        dropout_metadata = SambaDropoutMetadata(fields, dropout_probability, stream)
     var offset = token_offset * d
     var hidden = generation_array([b, l, d])
-    _ = py_call(_native_function(entries, "embedding_forward"), Python.list(hidden._addr, arrays["embed.weight"]._addr, ids._addr), py_ints([rows, vocab, d]))
+    if native is not None:
+        _ = neural_descriptor_execute(native, 0, [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [rows, vocab, d], [])
+    else:
+        _ = py_call(_native_function(entries, "embedding_forward"), Python.list(hidden._addr, arrays["embed.weight"]._addr, ids._addr), py_ints([rows, vocab, d]))
     if dropout:
-        hidden = _samba_dropout(hidden, fields, stream, offset, False, entries)
+        hidden = _samba_dropout(hidden, dropout_metadata.value(), [b, l, d], rows * d, offset, False, entries)
     var blocks = fields["_blocks"]
-    if len(blocks) != len(config["layers"]):
+    var layer_count = len(blocks)
+    if layer_count != len(config["layers"]):
         raise Error("Samba: block registry does not match configured layer count")
     var xs = bi.list()
     var tapes = bi.list()
     var gradients = bi.dict()
     try:
-        for i in range(len(blocks)):  # driver-loop: over configured forward layers
+        for i in range(layer_count):  # driver-loop: over configured forward layers
             _ = py_call(xs.append, hidden)
             var forward = neural_prefill_forward(blocks[i], hidden, context["neural"])
             hidden = forward[0]
@@ -141,7 +160,10 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
             var normalized = generation_array([b, l, d])
             var norm_params = py_ints([rows, d])
             _ = py_call(norm_params.append, config["norm_eps"])
-            _ = py_call(_native_function(entries, "rms_norm_forward"), Python.list(normalized._addr, hidden._addr, norm._addr), norm_params)
+            if native is not None:
+                _ = neural_descriptor_execute(native, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [Float64(py=config["norm_eps"])])
+            else:
+                _ = py_call(_native_function(entries, "rms_norm_forward"), Python.list(normalized._addr, hidden._addr, norm._addr), norm_params)
             var dnormalized = generation_array([b, l, d])
             if chunked and count == rows and items == count:
                 var row_denom = generation_array([rows])
@@ -158,19 +180,28 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
             else:
                 var logits = generation_array([rows, vocab])
                 var dlogits = generation_array([rows, vocab])
-                _ = py_call(_native_function(entries, "linear_forward"), Python.list(logits._addr, normalized._addr, head._addr), py_ints([rows, vocab, d]))
+                if native is not None:
+                    _ = neural_descriptor_execute(native, 4, [Int(py=logits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
+                else:
+                    _ = py_call(_native_function(entries, "linear_forward"), Python.list(logits._addr, normalized._addr, head._addr), py_ints([rows, vocab, d]))
                 var loss_params = py_ints([rows, vocab, -100, 1, items, 1])
                 _ = py_call(loss_params.append, 0.0)
                 _ = py_call(_native_function(entries, "ce_loss"), loss._addr, row_loss._addr, dlogits._addr, logits._addr, y._addr, loss_params)
-                _ = py_call(_native_function(entries, "linear_backward"), Python.list(dnormalized._addr, dhead._addr, dlogits._addr, normalized._addr, head._addr), py_ints([rows, vocab, d]))
+                if native is not None:
+                    _ = neural_descriptor_execute(native, 5, [Int(py=dnormalized._addr), Int(py=dhead._addr), Int(py=dlogits._addr), Int(py=normalized._addr), Int(py=head._addr)], [rows, vocab, d], [])
+                else:
+                    _ = py_call(_native_function(entries, "linear_backward"), Python.list(dnormalized._addr, dhead._addr, dlogits._addr, normalized._addr, head._addr), py_ints([rows, vocab, d]))
                 _ = logits^
                 _ = dlogits^
-            _ = py_call(_native_function(entries, "rms_norm_backward"), Python.list(dh._addr, dnorm._addr, dnormalized._addr, hidden._addr, norm._addr), norm_params)
+            if native is not None:
+                _ = neural_descriptor_execute(native, 3, [Int(py=dh._addr), Int(py=dnorm._addr), Int(py=dnormalized._addr), Int(py=hidden._addr), Int(py=norm._addr)], [rows, d], [Float64(py=config["norm_eps"])])
+            else:
+                _ = py_call(_native_function(entries, "rms_norm_backward"), Python.list(dh._addr, dnorm._addr, dnormalized._addr, hidden._addr, norm._addr), norm_params)
             _ = normalized^
             _ = dnormalized^
         py_setitem(gradients, "norm_f.weight", dnorm)
-        for reverse in range(len(blocks)):  # driver-loop: over the full reverse layer walk
-            var i = len(blocks) - reverse - 1
+        for reverse in range(layer_count):  # driver-loop: over the full reverse layer walk
+            var i = layer_count - reverse - 1
             var result = PythonObject(None)
             if tapes[i] is None:
                 result = neural_block_backward_binding(blocks[i], xs[i], dh, context["neural"])
@@ -183,13 +214,16 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
             for j in range(len(names)):  # driver-loop: over each layer's named gradient registry
                 py_setitem(gradients, "layers." + String(i) + "." + String(names[j]), result[names[j]])
         if dropout:
-            dh = _samba_dropout(dh, fields, stream, offset, True, entries)
+            dh = _samba_dropout(dh, dropout_metadata.value(), [b, l, d], rows * d, offset, True, entries)
         var dembed = generation_array([vocab, d])
-        if Bool(py=config["tie_embeddings"]) and afn:
+        if tie_embeddings and afn:
             _ = py_call(_native_function(entries, "samba_afn_embedding_backward_tied"), Python.list(dembed._addr, dh._addr, ids._addr, dhead._addr), py_ints([rows, vocab, d]))
         else:
-            _ = py_call(_native_function(entries, "embedding_backward"), Python.list(dembed._addr, dh._addr, ids._addr), py_ints([rows, vocab, d]))
-            if Bool(py=config["tie_embeddings"]):
+            if native is not None:
+                _ = neural_descriptor_execute(native, 1, [Int(py=dembed._addr), Int(py=dh._addr), Int(py=ids._addr)], [rows, vocab, d], [])
+            else:
+                _ = py_call(_native_function(entries, "embedding_backward"), Python.list(dembed._addr, dh._addr, ids._addr), py_ints([rows, vocab, d]))
+            if tie_embeddings:
                 var pair = generation_array([2, vocab * d])
                 var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=pair._addr))
                 var embedding_src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=dembed._addr))
@@ -199,7 +233,7 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
                 _ = py_call(_native_function(entries, "accumulate"), Python.list(dembed._addr, pair._addr), py_ints([vocab * d, 2, -1]))
                 _ = pair^
         py_setitem(gradients, "embed.weight", dembed)
-        if not Bool(py=config["tie_embeddings"]):
+        if not tie_embeddings:
             py_setitem(gradients, "lm_head.weight", dhead)
         # The entries above read `dh` and `dhead` by address; keep both alive
         # until every one has returned.

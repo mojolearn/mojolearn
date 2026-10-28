@@ -7,7 +7,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
-from autograd.weight_frontend_pyapi import _checkpoint, _record
+from providers.python.autograd_weight_frontend_pyapi import _checkpoint, _record
 from autograd.program_io import ProgramInput
 from bindings.sequential_description import sequential_fields, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries

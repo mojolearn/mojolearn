@@ -16,7 +16,6 @@ into description integers. It never reads a floating-point element.
 # lane purge-user-objects: a torch model is exported to ONNX first.)
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 
 # ------------------------------------------------------------------ dtypes --
@@ -35,7 +34,7 @@ INT_DTYPES = frozenset(("i64", "i32", "bool"))
 
 def onnx_dtype_name(code):
     """The readable name of an ONNX DataType code."""
-    return ONNX_DTYPE.get(code) or ONNX_DTYPE_REFUSED.get(code) or f"data type {code}"
+    return _READER_NATIVE("dtype_name", code, None, _READER_CONTEXT)
 
 
 # ------------------------------------------------------------------ errors --
@@ -46,20 +45,11 @@ class UnsupportedModel(ValueError):
     ``(node_or_value_name, op_or_None, reason)``."""
 
     def __init__(self, source, problems):
-        self.source = source
-        self.problems = tuple(problems)
-        super().__init__(_message(source, self.problems))
+        return _READER_NATIVE("unsupported_construct", self, (source, problems), _READER_CONTEXT)
 
 
 def _message(source, problems):
-    src = os.path.basename(str(source)) or str(source)
-    n = len(problems)
-    nodes = all(op is not None for _, op, _ in problems)  # glue: the refusal entries of the error message
-    what = ("node" if n == 1 else "nodes") if nodes else ("item" if n == 1 else "items")
-    lines = [f"{n} {what} of {src} cannot be imported:"]
-    for name, op, reason in problems:  # glue: one line per refusal entry of the error message
-        lines.append(f"  {name} ({op}): {reason}" if op is not None else f"  {name}: {reason}")
-    return "\n".join(lines)
+    return _READER_NATIVE("unsupported_message", source, problems, _READER_CONTEXT)
 
 
 # ---------------------------------------------------------------- the IR ----
@@ -73,6 +63,12 @@ class TensorInfo:
     shape: tuple
     data: object = None  # memoryview | None
 
+    def __init__(self, name, dtype, shape, data=None):
+        return _READER_NATIVE("record_construct", self, (name, dtype, shape, data), _READER_CONTEXT)
+
+
+_ATTRS_DEFAULT = object()
+
 
 @dataclass(frozen=True)
 class Node:
@@ -84,6 +80,9 @@ class Node:
     inputs: tuple
     outputs: tuple
     attrs: dict = field(default_factory=dict)
+
+    def __init__(self, op, domain, name, inputs, outputs, attrs=_ATTRS_DEFAULT):
+        return _READER_NATIVE("record_construct", self, (op, domain, name, inputs, outputs, attrs), _READER_CONTEXT)
 
 
 @dataclass
@@ -98,19 +97,19 @@ class GraphIR:
     initializers: dict
     source: str
 
+    def __init__(self, opset, inputs, outputs, nodes, initializers, source):
+        return _READER_NATIVE("record_construct", self, (opset, inputs, outputs, nodes, initializers, source), _READER_CONTEXT)
+
 
 # -------------------------------------------------- tensor buffers ----
 
 def bytes_view(data):
     """A NumPy uint8 view of a buffer (no copy), or None when it is empty."""
-    from .._optional_numpy import require_numpy
-    np = require_numpy("mojolearn.importers")
-    raw = memoryview(data).cast("B") if data is not None else memoryview(b"")
-    return np.frombuffer(raw, dtype=np.uint8) if raw.nbytes else None
+    return _READER_NATIVE("bytes_view", data, None, _READER_CONTEXT)
 
 
 def buffer_address(a):
-    return 0 if a is None else int(a.ctypes.data)
+    return _READER_NATIVE("buffer_address", a, None, _READER_CONTEXT)
 
 
 # ---------------------------------------------------- shape resolution ----
@@ -127,6 +126,9 @@ class Resolved:
     no_rule: tuple
     problems: tuple
 
+    def __init__(self, shapes, dtypes, folded, no_rule, problems):
+        return _READER_NATIVE("record_construct", self, (shapes, dtypes, folded, no_rule, problems), _READER_CONTEXT)
+
 
 def resolve(g, shapes=None):
     """Every value's static shape and dtype from the inputs' resolved shapes,
@@ -135,18 +137,35 @@ def resolve(g, shapes=None):
     depends on tensor values, inconsistent shapes) are in ``problems`` and
     the nodes with no shape rule in ``no_rule``, so the lowering can report
     them together with its own refusals in one error."""
-    native = getattr(g, "_native", None)
-    if native is None:
-        raise TypeError("resolve takes a graph read by mojolearn.importers.onnx.read")
-    # a graph the Mojo reader holds (importers/onnx.py): resolved on its handle
-    return native.resolve(shapes)
+    return _READER_NATIVE("resolve", g, shapes, _READER_CONTEXT)
 
 
 def resolve_shapes(g, shapes=None):
     """Every value's static shape from the inputs' resolved shapes; integer
     shape subgraphs folded; raises UnsupportedModel on an unresolved axis or
     a data-dependent shape, by node name."""
-    r = resolve(g, shapes)
-    if r.problems:
-        raise UnsupportedModel(g.source, r.problems)
-    return r.shapes
+    return _READER_NATIVE("resolve_shapes", g, shapes, _READER_CONTEXT)
+
+
+class _Native:
+    """The retained reader handle and its native buffer views."""
+
+    def __init__(self, b, h, views=()):
+        return _READER_NATIVE("reader_construct", self, (b, h, views), _READER_CONTEXT)
+
+    def resolve(self, shapes=None):
+        return _READER_NATIVE("reader_resolve", self, shapes, _READER_CONTEXT)
+
+
+def _connect_reader():
+    # glue: one import-time connection, also for manually constructed GraphIR.
+    from ._native_reader_bridge import connect
+    return connect(GraphIR, _Native, Node, TensorInfo, Resolved, UnsupportedModel,
+                   _ATTRS_DEFAULT, ONNX_DTYPE, ONNX_DTYPE_REFUSED)
+
+
+_READER_NATIVE, _READER_CONTEXT = _connect_reader()
+
+# glue: the static table helper shares this connection without an import cycle.
+from . import _table
+_table._READER_NATIVE, _table._READER_CONTEXT = _READER_NATIVE, _READER_CONTEXT

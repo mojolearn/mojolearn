@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE ANN LANE'S GPU BINDING (lane/algos-ann): IVF-PQ, t-SNE, CAGRA and the
 IVF quantization arms. Every entry takes (addrs, params) lists; the orders
-are written in x_ann/abi_pyapi.mojo's callers below and in
+are written in providers/python/x_ann_abi_pyapi.mojo's callers below and in
 python/mojolearn/_expansion_ann.py. `bindings/_mojolearn_x_ann_host.mojo`
 exports the same names with the same contract on the CPU."""
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
@@ -16,7 +16,7 @@ from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_compon
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search
-from x_ann.abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int
+from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.switches import ANN3_DIRECT_OUT, IVF_PQ_ONE_UPLOAD, IVF_PQ_RESIDENT_FIT
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER
 from x_ann.ivf_pq_core import IvfPqIndex, pq_len_of
@@ -26,8 +26,8 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import upload_f32, upload_i32
 from core.abs_sum_blocked import device_any_index_out_of_range
 from x_ann.tsne_device import tsne_fit_device
-from x_ann.resident_pyapi import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
-from x_ann.resident_pyapi import x_ann_index_export_codes_binding
+from providers.python.x_ann_resident_pyapi import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
+from providers.python.x_ann_resident_pyapi import x_ann_index_export_codes_binding
 from x_ann.resident import x_ann_register_pq_built
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
 from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident

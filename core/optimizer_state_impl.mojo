@@ -2,7 +2,7 @@
 # State input conversion; optimizer arithmetic and accumulation order are unchanged.
 from std.memory import bitcast
 from std.math import isfinite
-from bindings.classical_cast import classical_f32_bits
+from core.classical_cast import classical_f32_bits
 from core.classical_pandas_impl import _pd_double
 
 

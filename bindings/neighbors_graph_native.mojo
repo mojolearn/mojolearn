@@ -17,6 +17,7 @@
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -115,8 +116,7 @@ def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonOb
         floats: PythonObject) raises:
     """`_XNeighbors._op(name, bufs, ints, floats)`: `binding.xn_<name>(addrs,
     ints, floats)`, the entry looked up as `getattr` looked it up."""
-    var entry = family_call(_b().getattr, binding, PythonObject("xn_" + name))
-    _ = family_call(entry, addrs, ints, floats)
+    xn_execute(binding, name, addrs, ints, floats)
 
 
 def _empty_list() raises -> PythonObject:
@@ -154,8 +154,7 @@ def _p2m_relabel(binding: PythonObject, lab: PythonObject, context: PythonObject
     var n = Int(py=lab.shape[0])
     var out = family_array(Python.tuple(max(n, 1)), "<i4", context)
     var info = family_array(Python.tuple(2), "<i4", context)
-    var entry = family_call(_b().getattr, binding, PythonObject("xn_p2m_relabel"))
-    _ = family_call(entry, Python.list(_addr(lab), _addr(out), _addr(info)), Python.list(PythonObject(n)),
+    xn_execute(binding, "p2m_relabel", Python.list(_addr(lab), _addr(out), _addr(info)), Python.list(PythonObject(n)),
                     _empty_list())
     _ = lab  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -245,8 +244,14 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
     """`PageRank._unit(v, n, what)`: a caller's length-n non-negative vector
     divided by its sum on the device (`x_neighbors_unit_ff`)."""
     var b = _b()
-    var unit_fn = py_call(b.getattr, binding, PythonObject("x_neighbors_unit_ff"), PythonObject(None))
-    if unit_fn is None:
+    var unit_fn = PythonObject(None)
+    var available = False
+    if xn_is_module(binding):
+        unit_fn = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_unit_ff"), PythonObject(None))
+        available = unit_fn is not None
+    else:
+        available = (xn_capabilities(binding) & 4) != 0
+    if not available:
         raise Error("NotImplementedError: mojolearn PageRank " + what + ": this binary lacks x_neighbors_unit_ff "
                     + "(rebuild without -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)")
     var wv = family_as_f32(v, 1, what, context)
@@ -254,8 +259,12 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
         raise Error(what + " must be n non-negative values, not all zero")
     var out = family_array(Python.tuple(n), "<f4", context)
     var uinfo = family_array(Python.tuple(2), "<i4", context)
-    _ = family_call(unit_fn, Python.list(_addr(wv), _addr(out), _addr(uinfo)), Python.list(PythonObject(n)),
-                    _empty_list())
+    if xn_is_module(binding):
+        _ = family_call(unit_fn, Python.list(_addr(wv), _addr(out), _addr(uinfo)), Python.list(PythonObject(n)),
+                        _empty_list())
+    else:
+        xn_execute(binding, "unit_ff", Python.list(_addr(wv), _addr(out), _addr(uinfo)),
+                   Python.list(PythonObject(n)), _empty_list())
     _ = wv  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = uinfo  # keep the Python object alive through the native call above
@@ -642,8 +651,9 @@ def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) 
                                   PythonObject("uniform_average"), PythonObject(True), mode), context)
 
 
-def neighbors_graph_operation(model: PythonObject, operation: String, args: PythonObject,
+def neighbors_graph_operation(model: PythonObject, operation: String, var args: PythonObject,
                               context: PythonObject) raises -> PythonObject:
+    args = xn_admit_arguments(args, context)
     if operation == "family_xn_graph_pagerank_fit":
         _pagerank_fit(model, args, context)
         return model

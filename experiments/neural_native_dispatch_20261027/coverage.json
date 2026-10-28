@@ -1,0 +1,268 @@
+{
+  "candidate_default": "off",
+  "switch": "MOJOLEARN_NEURAL_NATIVE_DISPATCH=1",
+  "scope": "shared source; local Mac qualification only; no vendor jobs",
+  "recipes": [
+    {
+      "id": "neural/lm-train-step/bytes/shape=full",
+      "lane": "lm-train-step",
+      "status": "existing_native_owner",
+      "source": "bindings/byte_lm_trainer_native.mojo",
+      "detail": "Whole-model native trainer/forward owner; no per-layer CPython conversion in this lane.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/lm-forward/bytes/shape=full",
+      "lane": "lm-forward",
+      "status": "existing_native_owner",
+      "source": "bindings/byte_lm_trainer_native.mojo",
+      "detail": "Whole-model native trainer/forward owner; no per-layer CPython conversion in this lane.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/gemm/gaussian/shape=full",
+      "lane": "gemm",
+      "status": "existing_native_owner",
+      "source": "bindings/_mojolearn_linalg.mojo",
+      "detail": "One public GEMM operation; no repeated package dispatch loop.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/transformer-forward/gaussian/shape=full",
+      "lane": "transformer-forward",
+      "status": "public_boundary_native_core",
+      "source": "bindings/neural_block_public.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mamba1-forward/gaussian/shape=full",
+      "lane": "mamba1-forward",
+      "status": "public_boundary_native_core",
+      "source": "bindings/neural_block_public.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mamba2-forward/gaussian/shape=full",
+      "lane": "mamba2-forward",
+      "status": "public_boundary_native_core",
+      "source": "bindings/neural_block_public.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mamba3-forward/gaussian/shape=full",
+      "lane": "mamba3-forward",
+      "status": "public_boundary_native_core",
+      "source": "bindings/mamba_public_native.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/samba-train-step/bytes/shape=full",
+      "lane": "samba-train-step",
+      "status": "repaired_dispatch_mixed_metadata",
+      "source": "bindings/samba_training_native.mojo",
+      "detail": "Default stateless forward/train may use existing resident whole-native owner. Stateful decode/nonresident fallback uses new primitive/Mamba3 descriptor when enabled. Transformer block routing, Python-backed fields/state/buffers, owned Mamba3 and training tapes/CE/optimizer still mixed. No entire-recipe native claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/samba-forward/bytes/shape=full",
+      "lane": "samba-forward",
+      "status": "repaired_dispatch_mixed_metadata",
+      "source": "bindings/samba_inference_native.mojo",
+      "detail": "Default stateless forward/train may use existing resident whole-native owner. Stateful decode/nonresident fallback uses new primitive/Mamba3 descriptor when enabled. Transformer block routing, Python-backed fields/state/buffers, owned Mamba3 and training tapes/CE/optimizer still mixed. No entire-recipe native claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mlp-train-step/gaussian/shape=full",
+      "lane": "mlp-train-step",
+      "status": "existing_native_owner",
+      "source": "bindings/_mojolearn_training.mojo",
+      "detail": "Whole native MLP operation; metadata admission handled separately.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/transformer-decode/gaussian/shape=full",
+      "lane": "transformer-decode",
+      "status": "public_boundary_native_core",
+      "source": "bindings/neural_block_public.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mamba1-decode/gaussian/shape=full",
+      "lane": "mamba1-decode",
+      "status": "public_boundary_native_core",
+      "source": "bindings/neural_block_public.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mamba2-decode/gaussian/shape=full",
+      "lane": "mamba2-decode",
+      "status": "public_boundary_native_core",
+      "source": "bindings/neural_block_public.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mamba3-decode/gaussian/shape=full",
+      "lane": "mamba3-decode",
+      "status": "public_boundary_native_core",
+      "source": "bindings/mamba_public_native.mojo",
+      "detail": "One public block call; decode repetitions belong to benchmark controller. Transformer/Mamba1/2 neural_block_owner calls causal admission; candidate normal carried-state routes use native descriptors. Block-held provider reuse avoids reconnecting unchanged factories. Fresh/owned/tape paths are unchanged; Mamba3 ordinary state provider is admitted at construction. No whole-recipe Python-free claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/samba-decode/bytes/shape=full",
+      "lane": "samba-decode",
+      "status": "repaired_dispatch_mixed_metadata",
+      "source": "bindings/samba_inference_native.mojo",
+      "detail": "Default stateless forward/train may use existing resident whole-native owner. Stateful decode/nonresident fallback uses new primitive/Mamba3 descriptor when enabled. Transformer block routing, Python-backed fields/state/buffers, owned Mamba3 and training tapes/CE/optimizer still mixed. No entire-recipe native claim.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mlp-predict/gaussian/shape=full",
+      "lane": "mlp-predict",
+      "status": "existing_native_owner",
+      "source": "bindings/_mojolearn_training.mojo",
+      "detail": "Whole native MLP operation; metadata admission handled separately.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/gemm-bf16/gaussian/shape=full",
+      "lane": "gemm-bf16",
+      "status": "existing_native_owner",
+      "source": "bindings/_mojolearn_linalg.mojo",
+      "detail": "One public GEMM operation; no repeated package dispatch loop.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/gemm-int8/gaussian/shape=full",
+      "lane": "gemm-int8",
+      "status": "existing_native_owner",
+      "source": "bindings/_mojolearn_linalg.mojo",
+      "detail": "One public GEMM operation; no repeated package dispatch loop.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/mlp-fit/higgs/shape=full",
+      "lane": "mlp-fit",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/lstm-fit/higgs/shape=full",
+      "lane": "lstm-fit",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/gru-fit/higgs/shape=full",
+      "lane": "gru-fit",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/rnn-fit/higgs/shape=full",
+      "lane": "rnn-fit",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/tape-user-model/higgs/shape=full",
+      "lane": "tape-user-model",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/sequential-fit/synthetic/shape=full",
+      "lane": "sequential-fit",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/sequential-predict/synthetic/shape=full",
+      "lane": "sequential-predict",
+      "status": "existing_native_owner",
+      "source": "bindings/sequential_execution.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/ops-session-step/gaussian/shape=full",
+      "lane": "ops-session-step",
+      "status": "existing_native_owner",
+      "source": "providers/python/autograd_session_frontend_pyapi.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/program-run/gaussian/shape=full",
+      "lane": "program-run",
+      "status": "existing_native_owner",
+      "source": "autograd/program_runtime.mojo",
+      "detail": "Existing native operation/training/tape/program owner; metadata-lane admission audit remains separate. No new internal descriptor needed merely to replace a public entry.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/causal-lm-generate/mojolearn-162m/shape=full",
+      "lane": "causal-lm-generate",
+      "status": "repaired_dispatch_mixed_metadata",
+      "source": "bindings/causal_lm_public.mojo",
+      "detail": "162M normless checkpoint cannot select resident route: normal per-layer transformer session plus embedding/head candidate removes those CPython function calls. Private field/weight/shape lookups remain pending operation snapshots. SmolLM2 normally selects existing resident generation; candidate presence does not prove execution. Route defaults/math unchanged.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    },
+    {
+      "id": "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
+      "lane": "causal-lm-generate-smollm2",
+      "status": "repaired_dispatch_mixed_metadata",
+      "source": "bindings/causal_lm_public.mojo",
+      "detail": "162M normless checkpoint cannot select resident route: normal per-layer transformer session plus embedding/head candidate removes those CPython function calls. Private field/weight/shape lookups remain pending operation snapshots. SmolLM2 normally selects existing resident generation; candidate presence does not prove execution. Route defaults/math unchanged.",
+      "whole_recipe_python_free": false,
+      "runtime_validation": "pending_local_mac"
+    }
+  ]
+}
