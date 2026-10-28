@@ -1391,61 +1391,49 @@ ADAPTED_MODULES = {
     "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
-#: The lanes with NO CPU path of any kind, as the README states them. A
-#: lane leaves this list the day its host lane merges; docs_facts fails the
-#: README until the marked span is rewritten.
+#: Configuration groups that still lack a CPU training route. These are
+#: not six whole algorithms, nor a count of individual refusal sites.
+#: Cooperative multi-GPU operations are a separate capability and are not
+#: missing CPU algorithms. docs_facts generates the corresponding doc spans.
 #:
-#: EVERY ENTRY NAMES WHAT REFUSES AND WHY. Until lane/close-no-cpu-path-gbdt
-#: (2026-09-20) this list held ONE entry ending "among them", which hid an
-#: unknown count behind a phrase. The count is 6 and it is below; the
-#: guard-by-guard enumeration each entry summarizes (50 by-name training
-#: refusal sites) was checked against the exact refusal text and the line
-#: that raises it, and the refusals are reproduced by fitting each configuration on a CPU-only install rather than
-#: read off the source.
-#:
-#: WHAT IS NOT HERE, AND WAS. "eval sets ... outside the
-#: gbdt-pointwise-l2-bayesian-eval configuration" was already stale when this
-#: was rewritten: Ordered boosting took an eval set, the detector and
-#: use_best_model at 000dbd2cf (2026-09-19), and this lane added them to the
-#: Plain SymmetricTree Logloss fit through
-#: gbdt/host/gbdt_oracle_eval.mojo. What remains of that item is entry 4.
+#: Source review 2026-10-27: binary class weights and the dedicated weighted
+#: pointwise lane predate this review; CTR training with all permutations has
+#: existed since 2026-09-28. The former blanket weight/CTR refusals were stale.
+#: Plain numeric Logloss now admits sample weights through the existing
+#: weighted owners. That extension requires its own runtime/identity evidence;
+#: this source inventory and its compile receipt do not supply that evidence.
 NO_CPU_PATH = (
-    "gradient boosting training with sample weights on any arm (`gbdt_fit` "
-    "refuses `sample_weight`, and `class_weights` outside MultiClass and "
-    "MultiClassOneVsAll, which reach the device through the same per-row "
-    "weight column): the device's weighted target, histogram and "
-    "partition-reduce kernels are a second launch arm (`has_weights`) and "
-    "the gbdt/host oracles restate the unit-weight arm only",
+    "gradient boosting training with sample weights outside Plain numeric "
+    "Logloss and the dedicated pointwise Logloss configuration; weighted "
+    "Depthwise and Lossguide Logloss additionally require Newton leaves "
+    "and no bootstrap. Class weights remain unsupported outside numeric "
+    "Logloss, MultiClass and MultiClassOneVsAll, and in Ordered boosting "
+    "or the pointwise searcher",
 
-    "gradient boosting training on a CTR categorical column, a "
-    "`cat_features` column with more than `one_hot_max_size` categories: "
-    "the CTR calcers build ordered target statistics over several "
-    "permutations, with their online counters, grids and tables joined back "
-    "into the compressed index, and the host path is pinned to one "
-    "permutation with no calcer. One-hot categorical columns DO train, "
-    "`ExperimentalTwoLevelFeatureFreq` has its own CPU route "
-    "(gbdt/host/gbdt_oracle_feature_freq.mojo) except on a tree whose level "
-    "winner is the tensor column itself, and CTR INFERENCE from a saved "
-    "model is closed; it is the calcer tables' training that is not",
+    "gradient boosting training with an eval set on a CTR categorical "
+    "column: CPU CTR training and saved-model inference exist, but this "
+    "training route does not yet apply its CTR tables to held-out rows. "
+    "The separate ExperimentalTwoLevelFeatureFreq CPU route also refuses "
+    "a tree whose level winner is the tensor column itself",
 
     "gradient boosting training with a categorical or one-hot column "
-    "outside SymmetricTree with Logloss and Plain boosting: the one-hot "
-    "grid and the `take_bin` equality split are restated in the symmetric "
-    "searcher alone",
+    "outside SymmetricTree with Logloss and Plain boosting, or with "
+    "sample/class weights, bootstrap or nonzero random_strength: the "
+    "categorical owners do not implement those combinations",
 
     "gradient boosting training with an eval set or the overfitting "
-    "detector outside SymmetricTree with Logloss, Ordered boosting and the "
-    "pointwise searcher's own lane: the held-out curve runs THAT arm's loss "
-    "kernel (the multilogit and one-vs-all launches, `launch_approximate` at "
-    "each pointwise objective) and the non-symmetric shapes put a tree on "
-    "the cursor through a different apply, and neither is restated",
+    "detector outside the covered SymmetricTree Logloss, Ordered and "
+    "pointwise Logloss routes: RMSE, multiclass, the other loss owners and "
+    "the non-symmetric tree shapes lack the corresponding held-out loss "
+    "and model-application path",
 
     "gradient boosting training with the pointwise searcher outside the "
     "gbdt-pointwise-l2-bayesian-eval configuration (L2 scores, the Bayesian "
     "bootstrap, Newton leaves, sample weights, an eval set with the Iter "
     "detector, boost_from_average on, GreedyLogSum borders, numeric "
-    "columns): every other option selects a different launch shape of the "
-    "pointwise kernels and one shape is restated",
+    "columns, no class weights, random_strength zero and feature_fraction "
+    "one). This includes PairLogit and YetiRank with "
+    "use_pointwise_searcher=True; their greedy-searcher CPU routes exist",
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
@@ -1453,8 +1441,9 @@ NO_CPU_PATH = (
     "losses under Depthwise and Lossguide, score functions and leaf "
     "estimators outside each policy's covered pair, Depthwise's "
     "min_split_gain, min_child_hessian and min_data_in_leaf, feature_fraction "
-    "outside Logloss, "
-    "boost_from_average outside RMSE and the quantile family, and a NaN in X "
+    "outside Lossguide with Logloss, "
+    "boost_from_average outside RMSE, the quantile family and the dedicated "
+    "pointwise Logloss route, and a NaN in X "
     "outside SymmetricTree with Logloss -- each one its own device kernel or "
     "its own searcher gate order",
 )

@@ -105,7 +105,7 @@ from gbdt.host.gbdt_host_entries_impl import (
     _HostModelArrays,
     _parse_model,
     _refuse_predict,
-    gbdt_host_binary_class_row_weights,
+    gbdt_host_binary_row_weights,
     gbdt_host_binary_margins_check,
     gbdt_host_binary_prediction_into,
     gbdt_host_eval_const,
@@ -993,7 +993,8 @@ def gbdt_fit_binding(
         )
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
-    _ = f32_ptr(Int(py=weights_addr))
+    var weights_address = Int(py=weights_addr)
+    _ = f32_ptr(weights_address)
     var cp = u32_ptr(Int(py=cat_flags_addr))
     _ = f32_ptr(Int(py=eval_x_addr))
     _ = f32_ptr(Int(py=eval_y_addr))
@@ -1254,12 +1255,15 @@ def gbdt_fit_binding(
         )
         if not pw_boot and not lg_boot and not sym_boot:
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
-    if n_weights != 0:
-        _refuse("sample_weight")
-    # binary class weights (lane/fix-cpu-column2): Logloss on a plain
-    # SymmetricTree, Depthwise or Lossguide fit, `train`'s weight column
-    # `class_weights[y > 0.5]` threaded through the search planes, the leaf
-    # estimation and the learn loss (gbdt/host/gbdt_oracle.mojo)
+    # Plain numeric Logloss already threads row weights through search,
+    # leaf estimation and learn loss. Sample weights use that same owner;
+    # class weights multiply them as in train.mojo. The non-symmetric
+    # owner retains its Newton/no-bootstrap restriction below.
+    var binary_sample_weights = (
+        n_weights != 0 and loss == String("Logloss") and n_flags == 0
+    )
+    if n_weights != 0 and not binary_sample_weights:
+        _refuse("sample_weight outside Plain Logloss without categorical columns")
     var binary_class_weights = (
         n_class_weights != 0 and loss == String("Logloss") and n_flags == 0
     )
@@ -1532,11 +1536,14 @@ def gbdt_fit_binding(
         var x = read_f32(x_address, n_rows * n_features)
         # MultiRMSE's `target_dim` dim-major planes; one per row otherwise
         var y = read_f32(y_address, n_rows * target_dim)
-        # `train`'s weight column for binary class weights: `1.0 *
-        # class_weights[cls]`, cls the binarized target (y > 0.5)
+        # Read and fold row weights natively before entering the existing
+        # weighted search/leaf/loss owners. An empty list keeps the original
+        # unweighted arm when neither weighting option was requested.
         var row_weights = List[Float32]()
-        if binary_class_weights:
-            row_weights = gbdt_host_binary_class_row_weights(y, n_rows, class_weights)
+        if binary_class_weights or binary_sample_weights:
+            row_weights = gbdt_host_binary_row_weights(
+                y, n_rows, class_weights, read_f32(weights_address, n_weights)
+            )
         if is_multi:
             # gbdt/host/gbdt_oracle_multiclass.mojo
             var multi_objective = GBDT_OBJ_MULTICLASS_OVA

@@ -8436,7 +8436,8 @@ def _(ml, X, yc, yr, Xh=None):
 # are the driver's own Python and their shards are host arithmetic covered
 # lanes already hash, so on a CPU-only install a "device index" is one
 # WORKER PROCESS and all of it runs. The four lanes now take a CPU column
-# with an oracle in the cell, `GPU_ONLY_LANES` is empty, and the question
+# with an oracle in the cell, which emptied `GPU_ONLY_LANES` at that time.
+# The pointwise ranking entries added on 2026-10-14 remain below. The question
 # that was not asked -- "is the thing that refuses the thing the lane
 # hashes?" -- is written down there as the bar for the next entry.
 #
@@ -8470,9 +8471,10 @@ def _(ml, X, yc, yr, Xh=None):
 #: record's scope on every column; this is one column's inability to state the
 #: proposition at all, the same fact `lane_applicability` derives for cpu-host.
 #:
-#: EMPTY SINCE 2026-09-20 (lane/cpu-routes-gpu-only-four), and kept because
-#: the four entries it held were WRONG in a way worth writing down rather
-#: than deleting. Every one of the four refusals was real, by name, on a
+#: The four original entries were removed on 2026-09-20
+#: (lane/cpu-routes-gpu-only-four); the two pointwise ranking entries below
+#: were added on 2026-10-14. Preserve why the original entries were wrong.
+#: Every one of the four refusals was real, by name, on a
 #: CPU-only install, and every one was read as a statement about arithmetic:
 #:
 #:   `mamba1-decode-session` / `transformer-decode-session`
