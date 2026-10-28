@@ -1287,6 +1287,11 @@ def tokenizer_bpe_encode_corpus(tokenizer: PythonObject, data: PythonObject, poi
     var width = _int(document_bytes, "document_bytes")
     if width < 1:
         raise Error("ValueError: document_bytes must be >= 1")
+    # No document can exceed its corpus. Normalize a larger positive limit
+    # before the existing cutter adds it to a later split offset; an otherwise
+    # valid Int.MAX limit must not wrap that addition. Document cuts and BPE
+    # arithmetic are unchanged, including the empty-corpus path.
+    width = min(width, max(len(bytes), 1))
     var ids = List[Int32](length=max(len(bytes), 1), fill=0)
     var bounds = List[Int64](length=max(len(points), 1), fill=0)
     var stats = List[Int64](length=3, fill=0)
@@ -1329,6 +1334,9 @@ def tokenizer_bpe_train_corpus(data: PythonObject, point_values: PythonObject, l
         raise Error("ValueError: bpe_train_corpus: [lo, hi) must lie inside the corpus")
     if width < 1:
         raise Error("ValueError: document_bytes must be >= 1")
+    # The trainer sees only [lo, hi); a larger positive document limit has the
+    # same cuts as this span length, without adding Int.MAX to a split offset.
+    width = min(width, max(hi - lo, 1))
     var sabotage = getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")
     var reverse = sabotage != "" and sabotage != "0"
     var handle = BpeTrainedHandle()
