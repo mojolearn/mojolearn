@@ -51,15 +51,21 @@ def replay_values[E: Exec & Movable & Deinitable](
         s.int_words[s._slot(h)] = s.int_words[s._slot(p.params[j])]
         temps.append(h)
         phs.append(h)
+    # The synchronous operation consumes these words before the next node.
+    # Keep native scratch capacities across the replay rather than constructing
+    # three fresh containers for every captured operation.
+    var hs = List[Int]()
+    var ints = List[Int]()
+    var fs = List[Float32]()
     for k in range(p.n_nodes()):  # driver-loop: over captured operations
-        var hs = List[Int]()
+        hs.clear()
+        ints.clear()
+        fs.clear()
         for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node arguments
             var rf = p.args[j]
             hs.append(phs[-rf - 1] if rf < 0 else vals[rf])
-        var ints = List[Int]()
         for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over node metadata
             ints.append(p.ints[j])
-        var fs = List[Float32]()
         for j in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over node metadata
             fs.append(p.fs[j])
         if step >= 0 and p.code[k] == OPS_DROPOUT:
@@ -167,6 +173,19 @@ def train_program_control[E: Exec & Movable & Deinitable](
     var temps = List[Int]()
     var true_batches = 0
     var false_batches = 0
+    # Program graphs, feature widths and trainable membership belong to this
+    # admitted fit. Only the minibatch row count and conditional selection vary.
+    # Reuse their native containers throughout the epoch/batch loop.
+    var batch_shapes = shapes.copy()
+    var widths = List[Int]()
+    for k in range(len(shapes)):  # driver-loop: over admitted input shape metadata once per fit
+        widths.append(shapes[k].count() // n)
+    var selected = trainable.copy()
+    var no_grad = List[Bool](length=len(params) if conditional else 0, fill=False)
+    var phs = List[Int]()
+    var pred_params = List[Int]()
+    var branch_stride = p.n_nodes() + choice.otherwise.n_nodes() if conditional else 0
+    var cfg = s.opts[oi].cfg
     try:
         for k in range(len(srcs)):  # driver-loop: over program input arrays
             var buf = s.ex.alloc(srcs[k].count())
@@ -195,6 +214,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
         s.tape.record()
         for e in range(epochs):  # driver-loop: over epochs
             var epoch = s.opts[oi].epoch
+            # Scheduler advancement occurs only at the end of this epoch.
+            var lr = s.learning_rate(optimizer)
             if shuffle_rows:
                 permutation(s.ex, seed, epoch, n, indices.value())
             else:
@@ -207,22 +228,17 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 s._drop_temps(temps)
                 temps.clear()
                 s.tape.reset()
-                var batch_shapes = List[ShapeN]()
                 for k in range(len(full)):  # driver-loop: over program inputs
-                    var sh = shapes[k]
-                    var width = sh.count() // n
-                    gather_rows(s.ex, full[k], indices.value(), start, count, width, batches[k])
-                    sh.d[0] = count
-                    batch_shapes.append(sh)
+                    gather_rows(s.ex, full[k], indices.value(), start, count, widths[k], batches[k])
+                    batch_shapes[k].d[0] = count
                 if loss_kind != 0:
                     gather_rows(s.ex, ty.value(), indices.value(), start, count, target.cols, yb.value())
-                var phs = List[Int]()
+                phs.clear()
                 var step = 0
                 for j in range(len(states)):  # driver-loop: over optimizer states
                     if states[j] >= 0:
                         step = max(step, s.opt_states[states[j]].t)
-                var branch = p.copy()
-                var selected = trainable.copy()
+                var take_body = True
                 var random_stride = 0
                 var random_offset = 0
                 if conditional:
@@ -230,8 +246,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     # parameters, but contributes no derivative. No Python
                     # callback, unselected branch replay or gradient update.
                     s.tape.no_grad()
-                    var no_grad = List[Bool](length=len(params), fill=False)
-                    var pred_params = List[Int]()
+                    pred_params.clear()
                     var decision = replay_values(s, choice.condition, batches, batch_shapes,
                                                  params, no_grad, temps, pred_params)
                     if s.shape_nd(decision[0]).count() != 1:
@@ -239,12 +254,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     var scalar = s.scalar(decision[0])
                     if (bitcast[DType.uint32](scalar) & UInt32(0x7fffffff)) >= UInt32(0x7f800000):
                         raise Error("ValueError: conditional training predicate must be finite")
-                    var take_body = scalar != 0
+                    take_body = scalar != 0
                     if take_body:
                         true_batches += 1
                     else:
                         false_batches += 1
-                        branch = choice.otherwise.copy()
                     for j in range(len(selected)):  # driver-loop: over chosen branch trainable parameters
                         selected[j] = trainable[j] and (choice.body_parameters[j] if take_body else choice.other_parameters[j])
                     s._drop_temps(temps)
@@ -254,9 +268,13 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     # Epoch plus minibatch is a persistent native step key.
                     # Distinct branch node spans cannot reuse dropout keys.
                     step = epoch * n_batches + bi
-                    random_stride = p.n_nodes() + choice.otherwise.n_nodes()
+                    random_stride = branch_stride
                     random_offset = 0 if take_body else p.n_nodes()
-                var outs = replay_values(s, branch, batches, batch_shapes, params, selected,
+                # Borrow the admitted immutable graph. Copying it per batch
+                # duplicated every node, argument, shape and output table.
+                var outs = replay_values(s, p, batches, batch_shapes, params, selected,
+                                         temps, phs, step, random_stride, random_offset) if take_body else replay_values(
+                                         s, choice.otherwise, batches, batch_shapes, params, selected,
                                          temps, phs, step, random_stride, random_offset)
                 var out = s.tensor(outs[0])
                 var y = s.tape.variable(s.ex, yb.value(), count, max(1, target.cols), False)
@@ -276,8 +294,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     var st = s._state_view(si)
                     var t = s.opt_states[si].t + 1
                     var gradient = s.tape.gradient(s.tensor(phs[j]))
-                    step_lr(s.ex, s.opts[oi].cfg, st, params[j], gradient, p.param_shapes[j].count(),
-                            t, s.learning_rate(optimizer))
+                    step_lr(s.ex, cfg, st, params[j], gradient, p.param_shapes[j].count(), t, lr)
                     s.opt_states[si].t = t
                     s.opt_states[si].pw1 = st.pw1
                     s.opt_states[si].pw2 = st.pw2
