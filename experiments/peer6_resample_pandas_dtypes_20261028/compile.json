@@ -1,0 +1,23 @@
+{
+ "source_commit": "bf93046c4bb2c0bc672855ebdd4ec81b0a4c14ca",
+ "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-peer6-pandas",
+ "entry": "checks/peer6_resample_pandas_compile.mojo",
+ "exit_code": 0,
+ "seconds": 5,
+ "jobs": 10,
+ "command": "compile_slot.sh pixi run mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I <wt> -I <wt>/bindings <entry> -o <out>",
+ "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+ "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/resample-pandas-dtypes/_peer6_resample_pandas_compile.so",
+ "artifact_sha256": "9929584fc765d0bd83b2fb1a431132bebbe1c2cefd9bacefe9af2c14b380e74e",
+ "log": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/resample-pandas-dtypes/compile.log",
+ "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-forecast-pandas-20261028/resample-pandas-dtypes/source.tgz",
+ "runtime_executed": false,
+ "gpu_compiled": false,
+ "scope": "Mac CPU/O0/identical/apple-m1 -j10: native pandas resample storage reader (resample_pandas_array) incl. categorical dictionaries, SparseArray, IntervalArray and extended-precision widening, after origin/main merge",
+ "not_covered": [
+  "reader is not wired into a public resample entry; public composed row operation compile pending",
+  "Arrow temporal/date/decimal/nested families still refuse",
+  "GPU targets",
+  "runtime/identity execution (excluded)"
+ ]
+}
