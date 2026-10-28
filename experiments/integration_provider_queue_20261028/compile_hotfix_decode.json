@@ -1,0 +1,38 @@
+{
+ "scope": "hotfix: transformer _arithmetic_profile_changed stored as bool (decode_session refusal); pod smoke adds a TransformerBlock decode_session step",
+ "source_commit": "2872d58e9d",
+ "pod": "2hnjv7t7sllxny",
+ "reaped_verified": true,
+ "summary": [
+  "host_builds total=46 ok=46",
+  "import_smoke rc=0",
+  "probe_tier_dir rc=0",
+  "runtime_check rc=0",
+  "POD_SMOKE status=PASS"
+ ],
+ "resources": [
+  "cores_affinity=32",
+  "cgroup_cpu_max=max 100000",
+  "parallel_builds=4",
+  "jobs_per_build=8",
+  "mojo_version=Mojo 1.0.0 (ed45d567)"
+ ],
+ "runtime": [
+  "matmul ok (4, 2)",
+  "ridge ok (50,) 0.2022237777709961",
+  "kmeans ok (50,)",
+  "lm trainer ok SmallByteLanguageModelTrainer",
+  "transformer forward ok (1, 8, 32)",
+  "transformer decode_session ok (1, 1, 32)",
+  "mamba2 forward ok (1, 8, 32)",
+  "RUNTIME-OK",
+  "Exception ignored while calling deallocator <function TransformerDecodeSession.__del__ at 0x7e129c729220>:",
+  "Traceback (most recent call last):",
+  "  File \"/root/mojolearn/python/mojolearn/_transformer_impl.py\", line 1349, in __del__",
+  "AttributeError: 'NoneType' object has no attribute 'RUNTIME'"
+ ],
+ "notes": [
+  "CPU stock outage: 5 refused creates (19:50-19:56Z) before placement",
+  "mamba2-decode regression: bisect queued on amd (lq 117-121), not fixed in this hotfix"
+ ]
+}
