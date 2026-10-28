@@ -4,6 +4,7 @@
 #   roots: host (bindings/_mojolearn_mamba_host.mojo, shared-lib)
 #          device (bindings/_mojolearn_mamba.mojo, shared-lib)
 #          oracle (mamba/checks/mamba_backward_host_oracle_check.mojo, executable)
+#          training (bindings/_mojolearn_training.mojo, shared-lib; the Samba train step)
 #   DEFSETS: space-separated arms; "off" or a comma list of defines (default: off m1 bwd both)
 set -u
 WT=$(cd "$(dirname "$0")/../.." && pwd)
@@ -28,6 +29,7 @@ for root in $ROOTS; do
     host) entry=bindings/_mojolearn_mamba_host.mojo; emit=(--emit shared-lib); ext=so ;;
     device) entry=bindings/_mojolearn_mamba.mojo; emit=(--emit shared-lib); ext=so ;;
     oracle) entry=mamba/checks/mamba_backward_host_oracle_check.mojo; emit=(); ext=bin ;;
+    training) entry=bindings/_mojolearn_training.mojo; emit=(--emit shared-lib); ext=so ;;
     *) echo "unknown root $root"; exit 2 ;;
   esac
   for arm in $DEFSETS; do
