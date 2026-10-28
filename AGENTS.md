@@ -24,6 +24,8 @@
 - This authorizes focused CPU compilation by peers/subagents, superseding the
   older lane-never-compiles restriction for this migration. Avoid duplicate
   same-source builds; a small successful compile remains required before merge.
+- Mac compiles hold one of 4 machine-wide slots: `bash tools/compile_slot.sh <command>`
+  (`~/mojolearn-evidence/compile_slot.sh` remains as a shim that execs the main checkout's copy).
 - Peers may fan out and resolve routine implementation and merge decisions
   autonomously. Report completed coherent batches, genuine blockers/ownership
   conflicts, and rented-box ownership. Put routine findings in handoff files
