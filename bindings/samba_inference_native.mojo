@@ -100,7 +100,7 @@ def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> P
     return neural_training_entries(samba_fields(block), nc)
 
 def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, entries: PythonObject,
-                   captured_fields: PythonObject = PythonObject(None), captured_slots: PythonObject = PythonObject(None)) raises -> PythonObject:
+                   captured_fields: PythonObject, captured_slots: PythonObject) raises -> PythonObject:
     """One carried-state call: `(y, h_last, k_last, v_last, theta_last)`. The
     state's pieces, `buffered_tokens` and `pending` are updated; the caller
     assigns the four reports."""
@@ -177,8 +177,10 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
 
 
 def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
-    var result = _m3_state_call(block, x, state, step, _samba_block_entries(block, context))
+    # Captured fields/slots are passed explicitly: a PythonObject(None)
+    # default is evaluated at compile time and needs a live interpreter.
     var fields = samba_fields(block)
+    var result = _m3_state_call(block, x, state, step, _samba_block_entries(block, context), fields, samba_fields(state))
     var report_names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over reporting result metadata
         py_setitem(fields, report_names[i], result[i + 1])
