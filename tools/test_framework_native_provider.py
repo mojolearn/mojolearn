@@ -230,3 +230,8 @@ def test_onnx_reader_and_resolver_use_common_native_resource():
     graph = (ROOT / 'python/mojolearn/importers/_graph.py').read_text()
     for name in ('resolve', 'resolve_shapes'):
         assert f'return _READER_NATIVE("{name}", g, shapes, _READER_CONTEXT)' in graph
+
+
+def test_cpu_profile_preserves_public_default_shape_independently_of_build_toggle():
+    source = (ROOT / 'providers/python/byte_lm_host_compat_pyapi.mojo').read_text()
+    assert 'ByteConfig(chunked_lm_head_v2=False).profile()' in source

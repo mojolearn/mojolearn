@@ -1,4 +1,4 @@
-"""Bounded root-only host provider runtime probe; constructors remain audited debt."""
+"""Bounded root-only public host provider probes; runtime results must be retained separately."""
 import numpy as np
 import pytest
 
