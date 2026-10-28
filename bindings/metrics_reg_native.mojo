@@ -633,12 +633,53 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     return _reg_result(r, out, arena, context)
 
 
+def _regression_report(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The existing report's stage order and shared target loads are retained.
+    # This is orchestration migration, not a new performance/default decision.
+    var b = native_loaded_module("builtins")
+    if py_type(args[5]) is not b.str or String(args[5]) != "identical":
+        raise Error("regression_report requires numeric_mode='identical'")
+    from bindings.host_inference_scalars import host_inference_scalar
+    host_inference_scalar(args[4], context, True)
+    var r = _reg_new(args, args[3], "regression_report", False, context)
+    r.program(0.0, context)
+    var y = r.y_off
+    var p = r.p_off
+    var squared = r.term(Int(py=context["family_metrics_terms"]["sq"]), y, p, False)
+    var absolute = r.term(Int(py=context["family_metrics_terms"]["abs"]), y, p, False)
+    var squared_sums = r.sums(squared)
+    var squared_means = r.fin(squared_sums, _RE_DIV)
+    var mse = r.average(squared_means, False, _NONE, context)
+    var absolute_sums = r.sums(absolute)
+    var absolute_means = r.fin(absolute_sums, _RE_DIV)
+    var mae = r.average(absolute_means, False, _NONE, context)
+    var y_sums = r.sums(y)
+    var y_mean = r.fin32(y_sums, _RE_DIV)
+    var centered = r.term(Int(py=context["family_metrics_terms"]["sq"]), y, y_mean, True)
+    var centered_sums = r.sums(centered)
+    var denominator = r.fin(centered_sums, 0)
+    var numerator = r.fin(squared_sums, 0)
+    var r2 = r.assemble(numerator, denominator, Bool(py=args[4]), True, context)
+    var arena = _reg_run(r.prog, args[5], context)
+    var result = Python.dict()
+    py_setitem(result, "mean_squared_error", _reg_result(r, mse, arena, context))
+    py_setitem(result, "mean_absolute_error", _reg_result(r, mae, arena, context))
+    if r.n < 2:
+        _undefined("R^2 score is not well-defined with less than two samples.", context)
+        py_setitem(result, "r2_score", py_call(b.float, PythonObject("nan")))
+    else:
+        py_setitem(result, "r2_score", _reg_result(r, r2, arena, context))
+    return result
+
+
 def metrics_reg_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The regression metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py)."""
     classical_connect_numpy(context)
     classical_admit_value(args, context)
     args = metric_arguments(args, 0, context)
+    if operation == "family_metric_regression_report":
+        return _regression_report(args, context)
     if operation == "family_metric_regression_error":
         # args = (name, y_true, y_pred, sample_weight, multioutput, mode):
         # mean_squared_error / mean_absolute_error / root_mean_squared_error
