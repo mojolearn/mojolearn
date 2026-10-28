@@ -218,9 +218,29 @@ tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
 
 ## 9. Not claimed
 
-No chunked or tree scan (MAX's serial-over-L shape only; the cub
+No chunked or tree scan in the shipped profile (section 10 is an opt-in experiment; MAX's serial-over-L shape only; the cub
 BlockScan tree is the priced follow-on and out of scope). No Mamba-2, no
 SSD. No BF16 or FP16. No training, no backward. No multi-block model, no
 tokenizer, no cache manager beyond one block's state. No performance
 number (`tools/lanes_price.sh` carries the wiring; the number is blank
 until measured). Nothing cross-vendor until the leg runs.
+
+## 10. Opt-in v2 scan fold: `MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN` (2026-10-28, default OFF)
+
+An experiment build, not the shipped profile. With the define the scan runs the chunked
+fold of `mamba/impl/ops/m1_chunked_scan.mojo` (profile name `...mamba1.fp32.v2-chunk64`):
+chunks of W = 64 tokens anchored at the first token of each call; inside a chunk the affine
+map `(P, Lc)` folds serially from the chunk's first token (`P = da`, `Lc = dbu`, then
+`P = ftz(da * P)`, `Lc = ftz(fma(da, Lc, dbu))`) and the state is `h = ftz(fma(P, H_k, Lc))`
+with `H_k` the serially carried chunk-entry state. S5-S8, S10 and S11 are unchanged. The
+fold is the same on NVIDIA, AMD, Apple and the host column (generated from the same
+source) and in both host oracles (`mamba_oracle.mojo::M1ChainFold`), so section 8's
+cross-vendor clause holds within the version; the backward checkpoint holds the v2 states.
+
+What it changes in section 5: a one-token call (the decode step) is one chunk of one token
+and keeps the v1 bits, but a multi-token prefill re-associates at every chunk, so gate D
+(decode == prefill, per token) is not a theorem under v2 past the first chunk of a prefill.
+The decode state ABI (conv window + h) is unchanged; carrying the open chunk across calls
+(Mamba-2's DEVIATION 786 construction) would need the in-chunk `(H_k, P, Lc, position)` in
+the state and is not part of this experiment. Promotion therefore needs the owner's
+decision on gate D as well as the A/B.
