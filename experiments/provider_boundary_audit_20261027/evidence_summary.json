@@ -1,0 +1,102 @@
+{
+  "schema": "mojolearn.provider-boundary-audit.v1",
+  "source_commit": "b2dccf5dd8",
+  "followup_source_review": "6fd7f1aca9",
+  "branch": "lane/provider-boundary-audit-20261027",
+  "product_changes": false,
+  "builds": false,
+  "runtime_tests_executed": false,
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027",
+  "coverage": {
+    "layout": {
+      "exit_code": 0,
+      "roots": 750,
+      "closure_modules": 1125,
+      "violations": 0,
+      "test_exclusions": 3
+    },
+    "neural_boundary": {
+      "exit_code": 0,
+      "closure_modules": 173,
+      "failures": 0
+    },
+    "public_inventory": {
+      "exit_code": 1,
+      "endpoints": 3808,
+      "by_status": {
+        "native_boundary": 2414,
+        "prohibited_source": 714,
+        "unresolved": 475,
+        "allowed_tag_metadata": 194,
+        "refusal_only": 11
+      },
+      "installed_attribute_slots": 0,
+      "note": "Aliases and inherited/source-only uncertainty included; not distinct defect counts."
+    },
+    "source_tests_original": {
+      "exit_code": 1,
+      "passed": 43,
+      "failed": 1,
+      "subtests_passed": 2,
+      "cause": "Stale io_error.restore() expectation; compiled repair uses io_error^.restore()."
+    },
+    "source_tests_after_assertion_repair": {
+      "exit_code": 0,
+      "passed": 44,
+      "failed": 0,
+      "subtests_passed": 2
+    },
+    "new_public_runtime_cases": {
+      "cases": 17,
+      "syntax": "pass",
+      "execution": "NOT RUN"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/layout.log",
+      "bytes": 99,
+      "sha256": "b7415f90a375204f6f8ac1090fac218819d253d76ec9b44bf12b86c92a0db01c"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/neural-closure.json",
+      "bytes": 5395,
+      "sha256": "b96548f950e2e689d5e76075c2cf2837562e5c5980bdf5da1d0d3eba1d05189b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/neural-closure.log",
+      "bytes": 52,
+      "sha256": "1b1426099a25019b4c05241b5682ae359008fcaabb7e81517341196f7b16552e"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/endpoints.json",
+      "bytes": 6475255,
+      "sha256": "60a5f42d2ed7af814bbf9e3d6a7108587ea51f5414c992344c1b707af40082fa"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/endpoints.log",
+      "bytes": 8115,
+      "sha256": "d75d41eecc89640a30e304985d44c02666457a23c0a498f137b7b8627b63cb96"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/source-tests.log",
+      "bytes": 1783,
+      "sha256": "92004cf66f428666ab22cfba156ebd07edfe325a4ee10a7cf2c9a3719a43df94"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/source-tests-after.log",
+      "bytes": 116,
+      "sha256": "11bbf8f6282e19b504d6990665abb4c782de885c919173a949f389878306ef4d"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/python-token-source-paths.txt",
+      "bytes": 25375,
+      "sha256": "4003b4848d59cb5586e883865f14bb4e1fc3763f89e7d7ccb8600efb50b6bf0c"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/provider-boundary-audit-20261027/probe-syntax.log",
+      "bytes": 100,
+      "sha256": "f18c249cd81914b554bab080c224f9a365c4fbcbee28cfbb3f9cc19a03a9f4ff"
+    }
+  ]
+}
