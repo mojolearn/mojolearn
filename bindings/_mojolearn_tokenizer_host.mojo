@@ -82,6 +82,7 @@ from core.hostptr import i32_ptr
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
+from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
 from bindings.transformer_public_native import transformer_public_c, TransformerPublicTapeOwner
@@ -1424,6 +1425,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(operation_lock_c[5], "operation_lock_owned")
         module.def_function[neural_descriptor_info]("neural_native_dispatch_info")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
+        # causal_pin_entries stores PythonObject(alloc=CausalExecutionEntries(...)).
+        _ = module.add_type[CausalExecutionEntries]("_CausalExecutionEntries")
         # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_host.patch
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
