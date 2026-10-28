@@ -1,0 +1,39 @@
+Cluster/density/linear algebra lane — 2026-10-27
+
+First coherent batch: Cholesky public operations
+Final source db4a14967ada7b5f0d5796702902883a9735aa1e.
+Prior source dea80b857f compile is retained but superseded.
+Constructor, fit binding selection, solve, determinant property, profile jitter,
+vendor readback and private binding accessors now hand over directly to the
+native family owner. Cholesky opts out of Python _mode lifecycle wrappers;
+fit tracking is native. Solve uses the existing native implementation, with
+admission of scalar state and a factor-buffer size guard before dispatch.
+Exact module entry reads avoid optional module __getattr__ callbacks. Model
+settings and input owners remain retained for the whole operation.
+
+Review repair: native_release_admit checks all overwritten constructor fields
+before any mutation; the owner context is explicitly connected at import. Fit
+checks all replaced learned-state owners too. Reinitialization with omitted mode
+retains the previous instance numeric_mode, matching the former wrapper.
+
+Validation: final small compile PASS, Mac CPU column,O0,ten workers,91.69s.
+Compiled true native linalg_operation plus shared classical_family_admit. No
+runtime execution, GPU/identity result or full-library completion claimed.
+See cholesky_lifetime_compile.json for compiler/flags/source/binary hashes and full logs.
+
+Remaining scope (not completed by this batch):
+- mixture.GaussianMixture still resolves bindings and has Python _mode wrappers;
+  constructor and whole lifecycle need migration. Existing native arithmetic
+  owners can be reused after their input/state admission is checked.
+- density.DBSCAN/KernelDensity and HDBSCAN still resolve bindings in Python;
+  constructor, pickle/lifetime, fit/output wrappers need full native envelopes.
+- _expansion_cluster six classes already use the root's native lifecycle, but
+  their direct Python constructors and any live private helpers remain to audit.
+- _linalg_impl public operations currently use native linalg_ops owner; profile,
+  metadata and remaining private helper reachability require source review.
+- linear_model major public fit/predict/score paths already use native owners;
+  its historical helper definitions are not by themselves live violations.
+- Shared archive paths and any remaining verified-native C entry dispatch are
+  not claimed callback-free merely because this Cholesky compile passed.
+
+No main mutation by this lane. Root serializes merges of passing commits.
