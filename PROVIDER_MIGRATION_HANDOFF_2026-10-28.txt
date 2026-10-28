@@ -679,4 +679,20 @@ Receipt experiments/integration_provider_queue_20261028/compile_hotfix_linpin.js
 import smoke PASS, tier_dir PASS, runtime check PASS (matmul, Ridge, KMeans fit+predict); linalg sm_89/gfx942 rc=0.
 Pods vefpymixxwsth0, wz15xs7krsoh14 reaped.
 
+SELF-MERGE 2026-10-28 (lane nv-occupancy, Claude Opus 5.5) — MOJOLEARN_IDN_SSD_OCCUPANCY (default OFF)
+lane/nv-occupancy merged to main by fast-forward to 2d92b431d6 (lane code 87595704da; host copy regenerated, mamba_host_gen --check rc 0).
+The Mamba-2 SSD S10/S12/S18 device arms (coalesced discretize, 16x16 shared C.B tile, 32-row C.h_prev tile) are identical-safe by
+construction (same chains and operands), are behind the define and are off on main. RunPod CPU pod 0l6m0aa0i032lg (32 cores, 60-min
+dead-man, reaped and verified 404, $0.41) ran on the merged tree 0b32521b80 (= main ebcd7f9477 + lane):
+  - sm_89 entry__mojolearn_mamba arms A/B rc 0/0;
+  - CPU entry__mojolearn_mamba_host arms A/B rc 0/0;
+  - test_no_python_runtime rc 0;
+  - pod smoke rc 0 (46/46 host families, import smoke missing_bindings 0, tier_dir probe rc 0);
+  - tiny LinearRegression fit+predict on the CPU column rc 0.
+test_tombstones_preserved failed on the pod (rc 1) only because the lean sparse worktree ships no bench/results inline markers. On a
+full checkout it is rc 0 at ebcd7f9477 and rc 0 at the final 2d92b431d6, where test_no_python_runtime is also rc 0.
+Main moved (927e59c779, no lane input touched), so the lane re-merged it and the gates were re-run without a recompile.
+Receipt: experiments/nv_occupancy_20261028/compile.json; evidence ~/mojolearn-evidence/nv-occupancy-20261028/.
+RUN OWED: the mamba2-forward A/B on nv and amd (ARMS=A:,B:-DMOJOLEARN_IDN_SSD_OCCUPANCY=1); arm B's hash is expected to equal 0350b90b398bccbf.
+Not compiled: the AMD gfx942 and Apple targets with the define on.
 SELF-MERGE RECEIPT lane/grad-views (MOJOLEARN_IDN_PARAM_GRAD_VIEWS, default OFF, IDENTICAL byte LM train step parameter/gradient views; same bits): merged tree 870eb68017 on RunPod CPU pod oyrb87n73kc225 (32 vCPU, deleted and verified gone, $0.41): test_no_python_runtime rc=0; byte LM entry sm_89 arm off rc=0, arm on rc=0; pod_smoke_5b rc=0 (46/46 host families, smoke_after rc=0, probe_tier_dir rc=0); tiny classical fit+predict on the CPU column rc=0. Two pod results are not lane defects: test_tombstones_preserved rc=1 there because the shipped tree has no git metadata (the test calls git grep), and the Linux COLUMN_CPU build of the GPU byte LM entry fails identically for arm off and arm on (not a valid Linux target; the CPU column for byte LM is _mojolearn_byte_lm_host, green in the smoke; the Mac CPU root, apple-m1 COLUMN_CPU, was green for both arms at b1055551c1, receipt experiments/grad_views_20261028/compile.json). After main moved to 927e59c779 the lane merged it (2dd8cdecea; no byte LM closure file changed) and both gates were re-run in the git checkout: test_no_python_runtime rc=0, test_tombstones_preserved rc=0. GPU A/B owed (gview-A off / gview-B on, lm-train-step bytes, nv + amd). Evidence ~/mojolearn-evidence/grad-views-20261028/.

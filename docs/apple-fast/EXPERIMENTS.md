@@ -2215,4 +2215,10 @@ Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` a
 |---|---|---|---|---|---|---|
 | `SCHED_FAST_TABLE` (rollback `SCHED_FAST_TABLE_OFF`) | lr-exponential / synthetic | lane/dead-native-entries-0859@9552c0ecb (code at 485ba9cc1) | rab13-schedtable (2026-10-05) | 231.8 -> 19.2 (then); no reader since | DELETED (dead code) | it only registered `sched_exp_block`, which nothing called after the schedules moved into `lr_schedule_at` / `lr_schedule_series`; the define now refuses (docs/TOMBSTONES.md) |
 | `PURITY_3_OFF`, `PURITY_6_OFF` | nearest-centroid, per-row argmax (lane apple-fast-purity) | lane/dead-native-entries-0859@1d3757533 (code at 485ba9cc1) | none | not timed | DELETED (dead code) | they only changed the `x_neighbors_purity_flags` word, which nothing read; the defines now refuse (docs/TOMBSTONES.md) |
+
+### lane nv-occupancy (2026-10-28, neural-perf-ideas idea 8)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_IDN_SSD_OCCUPANCY` (default off) | mamba2-forward / gaussian (B1 L2048 DM384) | lane/nv-occupancy@87595704da | pending nv | NV 15.78 (Oct 27 board, RTX 6000 Ada) / AMD 5.06 -> pending | PENDING | Mamba-2 SSD S10 discretize one thread per (b,t,h,p) (coalesced), S12 G=C.B as 16x16 shared tiles (stride-129 rows), S18 C.h_prev row tile with the entering state staged once and exp(dA_cs) once per row; same chains and operands, so same bits (identical-safe; host column keeps the cell kernels) |
 | `MOJOLEARN_IDN_PARAM_GRAD_VIEWS` | lm-train-step / bytes (IDENTICAL, NVIDIA + AMD) | lane/grad-views @ 7d2703511a | pending nv (gview-off / gview-on), pending amd | NV 35.98, AMD 42.99 (Oct 27 board) -> pending | pending | idea 9 (roadmap C2): block, embedding and head parameters and weight gradients as views of the flat param/grad owners; drops the per-step unpack, pack and dw_emb/dw_lm copies; aliases only, same bits required |
