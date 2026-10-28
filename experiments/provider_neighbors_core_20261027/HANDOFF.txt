@@ -1,0 +1,105 @@
+Peer 1 neighbor core source handoff — 2026-10-27
+
+Branch: lane/peer1-neighbors-core-20261027
+Worktree: /Users/andrewhendel/mojolearn-wt/peer1-neighbors-core-20261027
+Starting local-main commit: 7de54456bde166c42fd0d9f7378e402bb0f3be91
+Source head before this evidence commit: e95e8bd127c54b259d0c3af206f68b31b28eea15
+No main or other agent worktree was modified. No compilation, runtime test,
+GPU run, benchmark, machine rental, publication, or main merge was performed.
+
+Changes
+- KNeighborsClassifier fit/predict/predict_proba/score and KNeighborsRegressor
+  fit/predict/score pass model/input/settings directly into one native call.
+  Native dedicated dispatch resolves import-connected computation and metrics
+  bindings. KernelDensity fit/score_samples/score does the same.
+- Native neighbor public lifecycle owns reset-aware fitted checks, finite and
+  feature-width checks, target/ignored-y validation, fit tracking, feature names,
+  cache-holder initialization, output float64 widening and ndarray conversion.
+  NearestNeighbors fit also retains ignored y for native validation.
+- LocalOutlierFactor score_samples and NearestCentroid predict_log_proba now
+  have dedicated whole-operation dispatch entries. Parent owns their Python
+  wrapper replacement, native_method marks and LOF availability connection.
+- KNN and KDE pickle-state capture is native. KNN restore is native and strips
+  process-local resident state after releasing the old native handle.
+- KNN fitted index/query and regressor target preparation retain ArrayMetadata;
+  the query pointer/shape/owners are consumed from the retained snapshot.
+  Metric nonnegativity uses a native reduction. KNN fit transposes use the
+  existing x_neighbors descriptor provider when admitted.
+- Local/KNN/KDE mutable scalar and data admission precedes coercion hooks.
+  Resident handle/key schemas and exact native extension entries are checked
+  before cache comparisons and calls; module __getattr__ is never invoked.
+- NearestCentroid priors avoid ndarray.tolist; the native owner unwraps the
+  finished ClassLabels container through its verified native storage helper.
+  Its softmax64 capability probe now supports admitted provider snapshots.
+
+Integration dependencies
+- Parent changes _mode._guard_cpu_training to respect native_method markers
+  (require_training was a no-op; this removes that Python wrapper).
+- Parent changes the local _expansion_neighbors.py wrappers and preserves y in
+  LOF fit/fit_predict and KNNImputer fit/fit_transform, then adds native_method.
+- Parent connects native LOF available_if checks in public attribute metadata.
+- Keep all three with the lifecycle commit; source-thin methods alone do not
+  remove the installed wrapper/decorator behavior.
+
+Native entries and compile scope
+- classical_native_call -> neighbors_knn_operation / neighbors_kde_operation /
+  neighbors_local_operation. Prefixes family_xn_knn_*, family_xn_kde_*,
+  family_xn_loc_*; new local suffixes lof_score_samples, nc_predict_log_proba;
+  new serialization suffixes knn_getstate, knn_setstate, kde_getstate.
+- Smallest existing standalone development build: bindings/build_runtime_classical_host.sh.
+- knn_door and _check_metric_input are also consumed by native query/shard
+  workers in tokenizer_host. Parent's affected neighbor-query/tokenizer compile
+  must include those imports. The previous _check_metric_input array ABI is
+  retained as an overload for those workers.
+- Source checks are not compilation evidence. Root must obtain successful small
+  compilation before merging. Runtime and vendor verification remain pending.
+
+Validation and retained failures
+- Python AST/one-native-return source check: exit 0 in
+  ~/mojolearn-evidence/peer1-neighbors-core-20261027/lifecycle-python-ast-final.log.
+  Earlier source check failed on KDE __getstate__; original failure retained in
+  lifecycle-python-ast.log and repaired in baf0191370.
+- Every edited diff passed git diff --check. Complete outputs in the same
+  evidence directory, named *-diff-check.log; empty output means exit 0.
+- Independent source review by audit agent found no new concrete lifecycle
+  issue; it did not run compiled operations or tests.
+- First push was stopped by no_compute_in_shells for a multiline loop whose
+  small-loop comment was on its continuation. Full push.log retained; fixed in
+  cb88042ade without bypassing hooks. push-final.log records the successful
+  push through cb88042ade; subsequent final source/evidence push is retained
+  separately as push-complete.log.
+
+Explicit remaining Python/provider paths — family is NOT complete
+1. Base KNN numerical execution/residency still calls admitted compiled
+   knn_* exports through CPython. KDE does likewise for kde_* exports. Neither
+   has the native descriptor table required for a completed provider migration.
+   Exact-entry admission prevents Python replacement callbacks; it does not
+   qualify CPython-dispatched numerical execution as a native-provider finish.
+2. KNN/classical label and score helpers retain CPython numerical helper doors
+   (cast_elements, prepare_targets, all_finite, reductions and metrics). Local
+   neighbor helpers retain compiled helper doors such as fsum_float64 and class
+   ratios. Those transitive arithmetic paths remain unqualified.
+3. x_neighbors direct descriptor execution is still gated by the existing
+   MOJOLEARN_CLASSICAL_NATIVE_DISPATCH setting. The unselected legacy route
+   executes packed extension doors through CPython. No default was promoted.
+4. KDE lifecycle and _kde_dense repeat source metadata capture; preserving its
+   input borrowing and input_copied_ behavior requires a descriptor-taking dense
+   helper. Supervised target metadata is also revisited by older label helpers.
+   Local/fitted-model array helpers still fetch internal shape/addresses more
+   than once. Input/settings snapshot completeness is not claimed.
+5. Save/load wrappers, inherited metadata/lifecycle surfaces and query/shard
+   owners need final installed-slot/transitive audit. Constructors are installed
+   by the shared native initializer machinery (per audit); retained Python
+   constructor source alone is not proof of active runtime execution.
+6. RadiusNeighbors fit and standalone kneighbors/radius_neighbors, IVF/ANN,
+   broader kernel estimators and expansion-file connection are parent/sibling
+   scope. This branch does not claim their migration or verification.
+7. Source-only AST checks cannot qualify late installed decorators, native
+   exception bridge behavior, compiled ABI availability, supported inputs,
+   finished output dtypes/lifetimes, or Apple/NVIDIA/AMD bits. Those checks are
+   explicitly deferred to root's focused integration verification.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep
+with bounded surrounding lines and short tails, and summarize exit status,
+coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
+never hide failures or infer full success from filtered output.
