@@ -30,7 +30,7 @@ from . import _native_family_bridge
 # partial_fit, fit_predict and fit_transform of MiniBatchKMeans,
 # BisectingKMeans, MeanShift, OPTICS and AffinityPropagation
 # (bindings/cluster_fit_a_native.mojo) are one native call each, handed the
-# binding `_bind` resolves.
+# binding selected by the shared native provider after admission.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"]
@@ -89,6 +89,7 @@ def _seed(random_state):
 class _XCluster(NumericModeMixin):
     """The lane's shared call: `x_cluster_call` on `_mojolearn_x_cluster`
     (the CPU host binding `_mojolearn_x_cluster_host` on a CPU-only install)."""
+    _mojolearn_native_public = True
     _BINDING = "_mojolearn_x_cluster"
 
     def _call(self, which, x, a, ip, fp=()):
@@ -141,7 +142,7 @@ class _CentersMixin:
             If `X` is empty, has the wrong number of features, or contains
             NaN or infinity.
         """
-        return _NATIVE(self, "family_xc_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_predict", (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Distance from each row of `X` to every cluster center.
@@ -161,7 +162,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the training labels.
@@ -182,7 +183,7 @@ class _CentersMixin:
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return _NATIVE(self, "family_cfa_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the distances to the centers.
@@ -202,7 +203,7 @@ class _CentersMixin:
         distances : Array of shape (n_samples, n_clusters), float32
             Euclidean distance from each training row to each center.
         """
-        return _NATIVE(self, "family_cfa_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_fit_transform", (None, X, y), _NATIVE_CONTEXT)
 
     def score(self, X, y=None, sample_weight=None):
         """Opposite of the inertia of `X` under the fitted centers.
@@ -227,7 +228,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_score", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_score", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_kmeans.py` (MiniBatchKMeans),
@@ -324,19 +325,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
                  verbose=0, compute_labels=True, random_state=None, tol=0.0,
-                 max_no_improvement=10, init_size=None, n_init="auto", reassignment_ratio=0.01):
-        self.n_clusters = n_clusters
-        self.init = init
-        self.max_iter = max_iter
-        self.batch_size = batch_size
-        self.verbose = verbose
-        self.compute_labels = compute_labels
-        self.random_state = random_state
-        self.tol = tol
-        self.max_no_improvement = max_no_improvement
-        self.init_size = init_size
-        self.n_init = n_init
-        self.reassignment_ratio = reassignment_ratio
+                 max_no_improvement=10, init_size=None, n_init="auto", reassignment_ratio=0.01, numeric_mode=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, max_iter, batch_size, verbose, compute_labels, random_state, tol, max_no_improvement, init_size, n_init, reassignment_ratio, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the centers on `X`.
@@ -364,7 +354,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             string or an array of the wrong shape, `n_init` is below 1, or
             `X` contains NaN or infinity.
         """
-        return _NATIVE(self, "family_cfa_mbk_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_mbk_fit", (None, X, sample_weight, y), _NATIVE_CONTEXT)
 
 
     def partial_fit(self, X, y=None, sample_weight=None):
@@ -397,7 +387,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             or on the first call if `n_clusters` exceeds the number of rows
             or `init` is invalid.
         """
-        return _NATIVE(self, "family_cfa_mbk_partial_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_mbk_partial_fit", (None, X, sample_weight, y), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_bisect_k_means.py`. The 2-means is this
@@ -465,17 +455,8 @@ class BisectingKMeans(_CentersMixin, _XCluster):
     _estimator_type = "clusterer"
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
-                 verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia"):
-        self.n_clusters = n_clusters
-        self.init = init
-        self.n_init = n_init
-        self.random_state = random_state
-        self.max_iter = max_iter
-        self.verbose = verbose
-        self.tol = tol
-        self.copy_x = copy_x
-        self.algorithm = algorithm
-        self.bisecting_strategy = bisecting_strategy
+                 verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia", numeric_mode=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, n_init, random_state, max_iter, verbose, tol, copy_x, algorithm, bisecting_strategy, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Build the bisection tree on `X`.
@@ -504,7 +485,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
             is outside [1, n_samples], `n_init` is below 1, or `X` contains
             NaN or infinity.
         """
-        return _NATIVE(self, "family_cfa_bisect_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_bisect_fit", (None, X, sample_weight, y), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to a leaf cluster.
@@ -528,7 +509,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_bisect_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_bisect_predict", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_mean_shift.py`. Every seed's shift loop is
@@ -594,14 +575,8 @@ class MeanShift(_XCluster):
     _estimator_type = "clusterer"
 
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
-                 cluster_all=True, n_jobs=None, max_iter=300):
-        self.bandwidth = bandwidth
-        self.seeds = seeds
-        self.bin_seeding = bin_seeding
-        self.min_bin_freq = min_bin_freq
-        self.cluster_all = cluster_all
-        self.n_jobs = n_jobs
-        self.max_iter = max_iter
+                 cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (bandwidth, seeds, bin_seeding, min_bin_freq, cluster_all, n_jobs, max_iter, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Find the cluster centers of `X`.
@@ -625,7 +600,7 @@ class MeanShift(_XCluster):
             If `bandwidth` is not positive, `seeds` has a different number
             of features than `X`, or `X` contains NaN or infinity.
         """
-        return _NATIVE(self, "family_cfa_meanshift_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_meanshift_fit", (None, X, y), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to its nearest cluster center.
@@ -647,7 +622,7 @@ class MeanShift(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_predict", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
@@ -664,7 +639,7 @@ class MeanShift(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return _NATIVE(self, "family_cfa_meanshift_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_meanshift_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_optics.py`. The n x n distances and the
@@ -752,21 +727,8 @@ class OPTICS(_XCluster):
     def __init__(self, *, min_samples=5, max_eps=float("inf"), metric="minkowski", p=2,
                  metric_params=None, cluster_method="xi", eps=None, xi=0.05,
                  predecessor_correction=True, min_cluster_size=None, algorithm="auto",
-                 leaf_size=30, memory=None, n_jobs=None):
-        self.min_samples = min_samples
-        self.max_eps = max_eps
-        self.metric = metric
-        self.p = p
-        self.metric_params = metric_params
-        self.cluster_method = cluster_method
-        self.eps = eps
-        self.xi = xi
-        self.predecessor_correction = predecessor_correction
-        self.min_cluster_size = min_cluster_size
-        self.algorithm = algorithm
-        self.leaf_size = leaf_size
-        self.memory = memory
-        self.n_jobs = n_jobs
+                 leaf_size=30, memory=None, n_jobs=None, numeric_mode=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (min_samples, max_eps, metric, p, metric_params, cluster_method, eps, xi, predecessor_correction, min_cluster_size, algorithm, leaf_size, memory, n_jobs, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the reachability ordering of `X` and extract clusters.
@@ -794,7 +756,7 @@ class OPTICS(_XCluster):
             `xi` or `p` is out of range, or a precomputed matrix is not
             square.
         """
-        return _NATIVE(self, "family_cfa_optics_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_optics_fit", (None, X, y), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the cluster labels.
@@ -812,7 +774,7 @@ class OPTICS(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`; -1 marks noise.
         """
-        return _NATIVE(self, "family_cfa_optics_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_optics_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_affinity_propagation.py`. The
@@ -883,15 +845,8 @@ class AffinityPropagation(_XCluster):
     _estimator_type = "clusterer"
 
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
-                 preference=None, affinity="euclidean", verbose=False, random_state=None):
-        self.damping = damping
-        self.max_iter = max_iter
-        self.convergence_iter = convergence_iter
-        self.copy = copy
-        self.preference = preference
-        self.affinity = affinity
-        self.verbose = verbose
-        self.random_state = random_state
+                 preference=None, affinity="euclidean", verbose=False, random_state=None, numeric_mode=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (damping, max_iter, convergence_iter, copy, preference, affinity, verbose, random_state, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Find the exemplars of `X`.
@@ -916,7 +871,7 @@ class AffinityPropagation(_XCluster):
             If `affinity`, `damping`, `max_iter`, `convergence_iter` or
             `preference` is invalid, or a precomputed matrix is not square.
         """
-        return _NATIVE(self, "family_cfa_ap_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_ap_fit", (None, X, y), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to its nearest exemplar.
@@ -939,7 +894,7 @@ class AffinityPropagation(_XCluster):
         ValueError
             If ``affinity='precomputed'``.
         """
-        return _NATIVE(self, "family_xc_ap_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_ap_predict", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
@@ -957,7 +912,7 @@ class AffinityPropagation(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return _NATIVE(self, "family_cfa_ap_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_cfa_ap_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `mixture/_bayesian_mixture.py` with `_base.py`'s EM
@@ -1079,24 +1034,8 @@ class BayesianGaussianMixture(_XCluster):
                  weight_concentration_prior_type="dirichlet_process", weight_concentration_prior=None,
                  mean_precision_prior=None, mean_prior=None, degrees_of_freedom_prior=None,
                  covariance_prior=None, random_state=None, warm_start=False, verbose=0,
-                 verbose_interval=10):
-        self.n_components = n_components
-        self.covariance_type = covariance_type
-        self.tol = tol
-        self.reg_covar = reg_covar
-        self.max_iter = max_iter
-        self.n_init = n_init
-        self.init_params = init_params
-        self.weight_concentration_prior_type = weight_concentration_prior_type
-        self.weight_concentration_prior = weight_concentration_prior
-        self.mean_precision_prior = mean_precision_prior
-        self.mean_prior = mean_prior
-        self.degrees_of_freedom_prior = degrees_of_freedom_prior
-        self.covariance_prior = covariance_prior
-        self.random_state = random_state
-        self.warm_start = warm_start
-        self.verbose = verbose
-        self.verbose_interval = verbose_interval
+                 verbose_interval=10, numeric_mode=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (n_components, covariance_type, tol, reg_covar, max_iter, n_init, init_params, weight_concentration_prior_type, weight_concentration_prior, mean_precision_prior, mean_prior, degrees_of_freedom_prior, covariance_prior, random_state, warm_start, verbose, verbose_interval, numeric_mode,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the mixture on `X`.
@@ -1122,7 +1061,7 @@ class BayesianGaussianMixture(_XCluster):
             exceeds the number of samples, `n_init` or `max_iter` is below
             1, or a prior has the wrong shape.
         """
-        return _NATIVE(self, "family_mix_bgmm_fit", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_fit", (None, X, y), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the mixture on `X` and return the component of each row.
@@ -1139,7 +1078,7 @@ class BayesianGaussianMixture(_XCluster):
         labels : Array of shape (n_samples,), int32
             Most likely component of each training row.
         """
-        return _NATIVE(self, "family_mix_bgmm_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_fit_predict", (None, X, y), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Most likely component of each row of `X`.
@@ -1161,7 +1100,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_predict", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_predict", (None, X), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Responsibility of each component for each row of `X`.
@@ -1181,7 +1120,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_predict_proba", (None, X), _NATIVE_CONTEXT)
 
     def score_samples(self, X):
         """Log-likelihood of each row of `X` under the mixture.
@@ -1201,7 +1140,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_score_samples", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_score_samples", (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y=None):
         """Mean log-likelihood of the rows of `X`.
@@ -1223,7 +1162,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_mix_bgmm_score", (self._bind(), X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_mix_bgmm_score", (None, X), _NATIVE_CONTEXT)
 
 
 # The fixed tables the native fits read (bindings/cluster_fit_a_native.mojo):
@@ -1234,3 +1173,18 @@ _native_family_bridge.tables(
     family_cfa_optics_metrics={"euclidean": 0, "l2": 0, "manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2,
                                "infinity": 2, "cosine": 4, "precomputed": 5},
 )
+
+# Fixed binding connections belong to package setup, never a model operation.
+_native_family_bridge.connect_bindings("_mojolearn_x_cluster")
+from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
+_connect_cluster_owner_context(_NATIVE_CONTEXT)
+
+# Import-time schema only; runtime reads each admitted parameter natively.
+from inspect import signature as _cluster_signature
+_native_family_bridge.tables(
+    cluster_public_parameters={cls: tuple(name for name in _cluster_signature(cls.__init__).parameters if name != "self")
+                               for cls in (MiniBatchKMeans, BisectingKMeans, MeanShift, OPTICS,
+                                           AffinityPropagation, BayesianGaussianMixture)},
+    cluster_public_array_parameters=("init", "seeds", "preference", "mean_prior", "covariance_prior", "metric_params"),
+)
+del _cluster_signature

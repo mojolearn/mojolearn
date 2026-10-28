@@ -105,7 +105,7 @@ from gbdt.host.gbdt_host_entries_impl import (
     _HostModelArrays,
     _parse_model,
     _refuse_predict,
-    gbdt_host_binary_class_row_weights,
+    gbdt_host_binary_row_weights,
     gbdt_host_binary_margins_check,
     gbdt_host_binary_prediction_into,
     gbdt_host_eval_const,
@@ -153,11 +153,13 @@ from gbdt.host.gbdt_oracle import (
     GBDT_BOOT_POISSON,
     GBDT_LOGLOSS_NEWTON_ITERATIONS,
     GBDT_ORACLE_HOST_SABOTAGE,
+    GbdtHostModel,
     GbdtHostParams,
     gbdt_host_fit,
     gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
+from gbdt.host.gbdt_oracle_pointwise_rank import gbdt_ranking_pointwise_host_fit
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_EXACT,
     GBDT_LEAF_GRADIENT,
@@ -993,7 +995,8 @@ def gbdt_fit_binding(
         )
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
-    _ = f32_ptr(Int(py=weights_addr))
+    var weights_address = Int(py=weights_addr)
+    _ = f32_ptr(weights_address)
     var cp = u32_ptr(Int(py=cat_flags_addr))
     _ = f32_ptr(Int(py=eval_x_addr))
     _ = f32_ptr(Int(py=eval_y_addr))
@@ -1193,7 +1196,15 @@ def gbdt_fit_binding(
         )
     if use_pointwise and border_type != BORDER_TYPE_GREEDY_LOG_SUM:
         _refuse("feature_border_type under use_pointwise_searcher")
-    if use_pointwise:
+    # CPU binding compilation passed on Apple M1 at O0 (2026-10-28);
+    # runtime/identity remain pending. Existing ranking CPU derivatives are
+    # shared; this owner performs the distinct doc-parallel tree search.
+    var ranking_pointwise = use_pointwise and (
+        pw_objective == GBDT_OBJ_QUERY_RMSE
+        or pw_objective == GBDT_OBJ_PAIR_LOGIT
+        or pw_objective == GBDT_OBJ_YETI_RANK
+    )
+    if use_pointwise and not ranking_pointwise:
         # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
         # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)
         return _gbdt_fit_pointwise_arm(
@@ -1225,6 +1236,14 @@ def gbdt_fit_binding(
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
         if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
             _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
+    elif ranking_pointwise:
+        if (
+            score_function != GBDT_HOST_SCORE_COSINE
+            and score_function != GBDT_HOST_SCORE_NEWTON_COSINE
+            and score_function != GBDT_HOST_SCORE_L2
+            and score_function != GBDT_HOST_SCORE_NEWTON_L2
+        ):
+            _refuse("score_function code " + String(score_function) + " under grouped pointwise search (Cosine, NewtonCosine, L2 or NewtonL2)")
     elif score_function != GBDT_HOST_SCORE_COSINE:
         _refuse("score_function code " + String(score_function) + " (only Cosine)")
     if grow_code == 1:
@@ -1254,12 +1273,15 @@ def gbdt_fit_binding(
         )
         if not pw_boot and not lg_boot and not sym_boot:
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
-    if n_weights != 0:
-        _refuse("sample_weight")
-    # binary class weights (lane/fix-cpu-column2): Logloss on a plain
-    # SymmetricTree, Depthwise or Lossguide fit, `train`'s weight column
-    # `class_weights[y > 0.5]` threaded through the search planes, the leaf
-    # estimation and the learn loss (gbdt/host/gbdt_oracle.mojo)
+    # Plain numeric Logloss already threads row weights through search,
+    # leaf estimation and learn loss. Sample weights use that same owner;
+    # class weights multiply them as in train.mojo. The non-symmetric
+    # owner retains its Newton/no-bootstrap restriction below.
+    var binary_sample_weights = (
+        n_weights != 0 and loss == String("Logloss") and n_flags == 0
+    )
+    if n_weights != 0 and not binary_sample_weights:
+        _refuse("sample_weight outside Plain Logloss without categorical columns")
     var binary_class_weights = (
         n_class_weights != 0 and loss == String("Logloss") and n_flags == 0
     )
@@ -1532,11 +1554,14 @@ def gbdt_fit_binding(
         var x = read_f32(x_address, n_rows * n_features)
         # MultiRMSE's `target_dim` dim-major planes; one per row otherwise
         var y = read_f32(y_address, n_rows * target_dim)
-        # `train`'s weight column for binary class weights: `1.0 *
-        # class_weights[cls]`, cls the binarized target (y > 0.5)
+        # Read and fold row weights natively before entering the existing
+        # weighted search/leaf/loss owners. An empty list keeps the original
+        # unweighted arm when neither weighting option was requested.
         var row_weights = List[Float32]()
-        if binary_class_weights:
-            row_weights = gbdt_host_binary_class_row_weights(y, n_rows, class_weights)
+        if binary_class_weights or binary_sample_weights:
+            row_weights = gbdt_host_binary_row_weights(
+                y, n_rows, class_weights, read_f32(weights_address, n_weights)
+            )
         if is_multi:
             # gbdt/host/gbdt_oracle_multiclass.mojo
             var multi_objective = GBDT_OBJ_MULTICLASS_OVA
@@ -1576,11 +1601,23 @@ def gbdt_fit_binding(
                             QUANTILE_CONST_DELTA,
                         )
                     )
-            var pw_model = gbdt_losses_host_fit(
-                x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
-                host_pair_winners, host_pair_losers, host_pair_weights,
-                pw_start, random_strength,
-            )
+            var pw_model: GbdtHostModel
+            if ranking_pointwise:
+                pw_model = gbdt_ranking_pointwise_host_fit(
+                    x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
+                    host_pair_winners, host_pair_losers, host_pair_weights,
+                    score_function == GBDT_HOST_SCORE_NEWTON_COSINE
+                    or score_function == GBDT_HOST_SCORE_NEWTON_L2,
+                    score_function == GBDT_HOST_SCORE_COSINE
+                    or score_function == GBDT_HOST_SCORE_NEWTON_COSINE,
+                    random_strength,
+                )
+            else:
+                pw_model = gbdt_losses_host_fit(
+                    x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
+                    host_pair_winners, host_pair_losers, host_pair_weights,
+                    pw_start, random_strength,
+                )
             losses = pw_model.losses.copy()
             best_iteration = pw_model.best_iteration
             stopped_early = pw_model.stopped_early
@@ -1601,21 +1638,25 @@ def gbdt_fit_binding(
         ):
             # the CTR categorical arm (gbdt-categorical-ctr-tables):
             # gbdt/host/gbdt_oracle_ctr.mojo, every permutation
-            if n_eval_rows != 0:
-                raise Error(
-                    "no CPU implementation of _mojolearn_gbdt.gbdt_fit for"
-                    " eval_set with a CTR categorical column (the held-out"
-                    " rows need the CTR tables applied; not restated on the"
-                    " host)"
-                )
+            # Full CPU binding compiled at 2d5c5081a83e, 2026-10-28:
+            # x86-64-v3/O0, 32 jobs, exit 0. Runtime/identity are pending.
+            # Receipt: docs/plans/gbdt-cpu-ctr-eval-20261028-compile.json.
+            # The owner expands eval rows with its final learn-only tables
+            # and reuses the existing held-out boost/detector/shrink arm.
+            var ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
             var ctr_fit = gbdt_ctr_host_fit(
                 x, y, n_rows, n_features, p, flags, permutation_count,
-                ctr_permutation_id,
+                ctr_permutation_id, ev^,
             )
             text = gbdt_ctr_host_model_text(ctr_fit)
             losses = ctr_fit.fit.model.losses.copy()
             best_iteration = ctr_fit.fit.eval.best_iteration
             stopped_early = ctr_fit.fit.eval.stopped_early
+            test_losses = ctr_fit.fit.eval.test_losses.copy()
         elif grow_code == 0 and len(flags) != 0:
             # the one-hot categorical arm (gbdt-categorical-ctr):
             # gbdt/host/gbdt_oracle_onehot.mojo

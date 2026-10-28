@@ -1,0 +1,39 @@
+{
+  "base_commit": "d2277027102ee3136c1132ef2d4646223c4ab7cd",
+  "exit_code": 0,
+  "target": "apple-m1 CPU column",
+  "workers": 10,
+  "cpu_allocation": 10,
+  "flags": [
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU"
+  ],
+  "fixture": "checks/metrics_reports_compile.mojo",
+  "scope": "Native regression_report and ranking_report through full regression/expanded metric operation owners; Mac CPU column compile only",
+  "runtime_executed": false,
+  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-reports-20261027/metrics-reports.so",
+  "artifact_sha256": "92af5b03854b990430d0dd6adbbf431e7ddfe2eae76325ee48194f42f2d04654",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-reports-20261027/source-bytes.tgz",
+  "source_archive_sha256": "df0ebfa7662c02028b6859fa449ffe4203aac05cca619ddf541147a630b34b03",
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-reports-20261027/source-manifest.json",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-reports-20261027/compile.log",
+  "earlier_attempt_logs": [
+    "/Users/andrewhendel/mojolearn-evidence/peer6-metrics-reports-20261027/compile-attempt1.log"
+  ],
+  "pending": [
+    "GPU target compilation",
+    "Runtime and identity checks excluded by owner",
+    "Older shared metric metadata capture-once audit"
+  ]
+}

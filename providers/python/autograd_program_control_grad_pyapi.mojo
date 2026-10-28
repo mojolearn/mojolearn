@@ -3,10 +3,11 @@
 # unpacking and ndarray gradient results around the typed entries.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem
+from bindings.native_loaded_module import native_loaded_module
 from sequence.exec_trait import Exec
 from autograd.program_io import ProgramInput, HostArray
 from providers.python.autograd_program_pyapi import program_input, program_inputs, _integer, _result, _dict
-from providers.python.autograd_program_arrays_pyapi import host_array_py, host_arrays_py
+from providers.python.autograd_program_arrays_pyapi import host_array_py, host_arrays_py, program_native_input
 from autograd.program_control_grad import (
     control_vjp_abort, control_vjp_finish, control_vjp_forward, control_vjp_prepare,
 )
@@ -35,8 +36,9 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
     var explicit_parameters = requested is not PythonObject(None)
     var parameters = List[Int]()
     if explicit_parameters:
-        for j in range(len(requested)):  # small-loop(requested: the requested parameter handles): argument parsing, no data
-            parameters.append(_integer(requested[j], "parameter", 1))
+        var selected_values = program_native_input(requested)
+        for j in range(len(selected_values)):  # small-loop(selected_values: requested parameter handles): argument parsing, no data
+            parameters.append(_integer(selected_values[j], "parameter", 1))
     var st = control_vjp_forward[E, KIND](Int(py=sid), plan, prepared^, parameters, explicit_parameters)
     var seed_list = List[ProgramInput]()
     try:
@@ -45,6 +47,7 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
         if len(st.outputs) == 1:
             _ = py_call(seed_arrays.append, seeds)
         else:
+            seeds = program_native_input(seeds)
             if len(seeds) != len(st.outputs):
                 raise Error("ValueError: control VJP needs one seed per output")
             seed_arrays = seeds
@@ -62,7 +65,7 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
         py_setitem(parameter_gradients, r.parameters[k], _gradient_py(r.parameter_gradients, r.parameter_present, k))
     var result = _dict()
     py_setitem(result, "outputs", _result(host_arrays_py(r.values)))
-    py_setitem(result, "input_gradients", py_call(Python.import_module("builtins").tuple, input_gradients))
+    py_setitem(result, "input_gradients", py_call(native_loaded_module("builtins").tuple, input_gradients))
     py_setitem(result, "parameter_gradients", parameter_gradients)
     py_setitem(result, "iterations", r.iterations)
     py_setitem(result, "stopped", r.stopped)

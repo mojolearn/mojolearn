@@ -46,18 +46,12 @@ classes.
 The binding is resolved on first use, so an install without it still
 imports and raises BY NAME when touched.
 """
-import json
-from pathlib import Path
-
 from . import _backend
 from . import _native_samba_bridge
+from . import _native_neural_bridge
 from . import _ragged
 from . import lowbit as _lowbit
-from ._buffer import addr, addr_ro, all_finite, empty
-from ._mlp_impl import (
-    _FILE_LIMIT, _FILE_SCHEMA, _NAMES, _SHAPES, _array, _batch, _canonical,
-    _decode_state, _unique_object, _validate_state,
-)
+from ._mlp_impl import _NATIVE as _MLP_NATIVE
 from ._transformer_impl import TransformerBlock
 from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block, _f32_strict
 from ._arrays import _addr, _addr_ro
@@ -108,12 +102,7 @@ class MLPInference:
     def __init__(self, weight1, bias1, weight2, bias2):
         # lane/identical-lowbit-inference (2026-09-17): the two matrices may
         # arrive packed (mojolearn.lowbit); materialized exactly, fp32 after.
-        self.weight_format = _lowbit.format_of([weight1, weight2])
-        weight1 = _lowbit.materialize_one(weight1, "weight1")
-        weight2 = _lowbit.materialize_one(weight2, "weight2")
-        self._weights = [_array(value, shape, name) for value, shape, name in
-                         zip((weight1, bias1, weight2, bias2), _SHAPES, _NAMES)]
-        self._m = _binding()
+        return _MLP_NATIVE("inference_initialize", (self, weight1, bias1, weight2, bias2))
 
     @classmethod
     def from_checkpoint(cls, path):
@@ -131,31 +120,12 @@ class MLPInference:
         -------
         MLPInference
         """
-        with Path(path).open("rb") as stream:
-            encoded = stream.read(_FILE_LIMIT + 1)
-        if len(encoded) > _FILE_LIMIT:
-            raise ValueError("MLPInference checkpoint exceeds its size bound")
-        try:
-            envelope = json.loads(encoded, object_pairs_hook=_unique_object)
-        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-            raise ValueError("MLPInference checkpoint is not valid bounded JSON") from exc
-        if not isinstance(envelope, dict) or set(envelope) not in ({"schema", "payload", "payload_sha256"}, {"schema", "payload", "payload_sha256", "arithmetic_profile"}):
-            raise ValueError("MLPInference checkpoint envelope mismatch")
-        if envelope["schema"] != _FILE_SCHEMA:
-            raise ValueError("MLPInference checkpoint schema mismatch")
-        binding = _binding()
-        if str(binding.sha256_hex(_canonical(envelope["payload"]))) != envelope["payload_sha256"]:
-            raise ValueError("MLPInference checkpoint integrity mismatch")
-        expected_profile = str(binding.neural_arithmetic_profile())
-        if envelope.get("arithmetic_profile", "mojolearn.neural-training.fp32.v1") != expected_profile:
-            raise ValueError("MLPInference checkpoint arithmetic profile mismatch")
-        weights, _, _, _ = _validate_state(_decode_state(envelope["payload"]))
-        return cls(*weights)
+        return _MLP_NATIVE("inference_checkpoint", (cls, path))
 
     @property
     def weights_(self):
         """An independent copy of the four weights, keyed by name."""
-        return {name: w.copy() for name, w in zip(_NAMES, self._weights)}
+        return _MLP_NATIVE("inference_weights", (self,))
 
     def predict_logits(self, X):
         """Logits for `X`.
@@ -169,20 +139,31 @@ class MLPInference:
         -------
         mojolearn.Array of float32, shape (rows, 3)
         """
-        x = _batch(X)
-        rows = int(x.shape[0])
-        out = empty((rows, 3), "<f4")
-        w1, b1, w2, b2 = self._weights
-        wrote = int(self._m.mlp_forward_logits(
-            [addr_ro(x, name="X"), addr_ro(w1, name="weight1"), addr_ro(b1, name="bias1"),
-             addr_ro(w2, name="weight2"), addr_ro(b2, name="bias2"), addr(out, name="logits")],
-            [rows]))
-        if wrote != rows * 3 or not all_finite(out):
-            raise RuntimeError("MLPInference returned an invalid result")
-        return out
+        return _MLP_NATIVE("inference_predict", (self, X))
 
     def __repr__(self):
-        return "MLPInference(architecture=[8, 16, 3])"
+        return _MLP_NATIVE("inference_repr", (self,))
+
+
+# glue: connect only MLPInference's native host entries and packed-weight types.
+# No inference operation invokes a Python loader or constructor callback.
+def _connect_mlp_inference():
+    from types import BuiltinFunctionType
+    entries = {}
+    try:
+        module = _binding()
+        entries["module"] = module
+        for name in ("mlp_forward_logits", "sha256_hex", "neural_arithmetic_profile"):  # glue: fixed host ABI symbols
+            entry = getattr(module, name)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError("MLPInference requires compiled " + name)
+            entries[name] = entry
+    except (ImportError, RuntimeError, ValueError, OSError, AttributeError, TypeError) as error:
+        entries = type(error).__name__ + ": " + str(error)
+    return {"class": MLPInference, "entries": entries, "lowbit": _lowbit._NATIVE_CONTEXT}
+
+
+_MLP_NATIVE("inference_connect", (_connect_mlp_inference(),))
 
 
 # Nothing is overridden except the binding (lane/stateful-cpu-decoding): the host binding
@@ -214,9 +195,7 @@ class TransformerBlockInference(TransformerBlock):
         """Not available: inference is forward only. Always raises `NotImplementedError`;
         train with the GPU block class.
         """
-        raise NotImplementedError(
-            "mojolearn TransformerBlockInference.backward: inference is forward only; "
-            "the backward pass runs on TransformerBlock over a training binding")
+        return _native_neural_bridge.RUNTIME.neural_block_inference_backward(self)
 
 
 # ---------------------------------------------------------------- Mamba (lane/inference-neural-forward, 2026-09-15)
@@ -245,9 +224,7 @@ class _RecurrentBlockInference:
         return _binding()
 
     def backward(self, x, grad_output):
-        raise NotImplementedError(
-            f"mojolearn {type(self).__name__}.backward: inference is forward only; "
-            "the backward pass runs on the GPU block class over a training binding")
+        return _native_neural_bridge.RUNTIME.neural_block_inference_backward(self)
 
 
 # Shared base _RecurrentBlockInference: only the binding and backward are overridden; the

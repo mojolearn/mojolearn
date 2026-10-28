@@ -1,0 +1,31 @@
+Program save native boundary repair, 2026-10-27.
+
+Changes: Program and ImportedProgram storage layouts plus version/platform
+provenance connect once at import. Native serialization admits exact classes,
+layout identities, Session ownership/registry, native ids and passive name
+metadata before reading them. Removed runtime hasattr/getattr and implicit
+len/index/string protocol calls. Missing names and count mismatches retain
+unnamed fallback; explicitly invalid metadata is refused. Existing native
+checkpoint/sidecar writer and arithmetic remain unchanged.
+
+Validation: three source guards passed. Actual save boundary/writer compiled
+with HostExec on local Mac CPU, optimization level 0, all ten compiler workers,
+exit0 in39.711s. No runtime operation, artifact import smoke or identity check
+was run. compile.json records exact source closure, compiler, flags, binary
+hash and retained full logs/source bytes. The earlier successful source
+freeze is retained separately; the final rebuild followed a real metadata
+refusal correction.
+
+Explicitly still pending:
+- Program public methods (including save) still look up mutable instance
+  callable/owner attributes before reaching the native operation. This batch
+  repairs transitive serialization admission, not that public routing hole.
+- Program run/profile/inspect/control/fit and initialization admission require
+  the dedicated whole-operation public provider path, preserving Session mode
+  and registry ownership.
+- Distributed/partitioned public wrappers and native owner admission are in
+  the delegated lane; their results are not included here.
+- model_pool_training.py and offload_training.py require current-source
+  reassessment; earlier audit rows are not proof that they remain unchanged.
+
+No boxes were rented and no shared watcher or verification campaign ran.

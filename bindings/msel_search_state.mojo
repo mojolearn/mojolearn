@@ -5,7 +5,12 @@ from std.python import Python, PythonObject
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.msel_inputs import msel_input, msel_admit
-from bindings.arena_materialize_native import _array
+from bindings.arena_materialize_native import _array, _cast
+from bindings.msel_estimator_native import msel_estimator_plan
+from bindings.msel_scorer_native import msel_scorer_fields
+from bindings.native_owner_lifetime import native_release_weakrefs
+from bindings.declared_params_native import _release as declared_release
+from bindings.params_metadata_native import _resolved
 
 
 def msel_search_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -43,6 +48,93 @@ def msel_search_fields(model: PythonObject, context: PythonObject) raises -> Pyt
     return fields
 
 
+def _search_release(values: PythonObject, retained: PythonObject,
+                    context: PythonObject) raises:
+    # Replacement is an ownership operation: the input-admission table alone
+    # cannot rule out transitive __del__/weakref callbacks in old model state.
+    # Reuse the declared setter's exact native model/finalizer plans, with the
+    # search/scorer records and container cycle walk specific to this owner.
+    var b = native_loaded_module("builtins")
+    var release = context["family_msel_release_context"]
+    if not Bool(py=release["ready"]):
+        raise Error("RuntimeError: native search owner-release plans are not connected")
+    var todo = py_call(b.list, values)
+    var seen = Python.dict()
+    var cursor = 0
+    while cursor < len(todo):  # driver-loop: cycle-safe old ownership traversal before any replacement
+        var item = todo[cursor]
+        cursor += 1
+        var identity = PythonObject(Int(item._obj_ptr))
+        if py_contains(seen, identity):
+            continue
+        py_setitem(seen, identity, item)
+        var kept = False
+        for i in range(len(retained)):  # driver-loop: unchanged or replacement fields independently retain identical owners
+            if item is retained[i]:
+                kept = True
+                break
+        if kept:
+            continue
+        var cls = py_type(item)
+        # Connected metric functions are keys retained by the import-time
+        # registry; dropping a scorer cannot destroy that function object.
+        if cls is context["family_msel_metric_function_type"] and py_contains(context["family_msel_metric_plans"], item):
+            continue
+        if cls is b.range:
+            continue
+        native_release_weakrefs(item, release["ownership"])
+        if cls is b.list or cls is b.tuple:
+            for i in range(len(item)):  # driver-loop: exact native sequence owners
+                _ = py_call(todo.append, item[i])
+        elif cls is b.set or cls is b.frozenset:
+            var members = py_call(b.list, item)
+            for i in range(len(members)):  # driver-loop: native set iteration does not hash or compare its elements
+                _ = py_call(todo.append, members[i])
+        elif cls is b.dict:
+            var pairs = py_call(b.list, item.items())
+            for i in range(len(pairs)):  # driver-loop: inspect owners without application-key hashing/equality
+                _ = py_call(todo.append, pairs[i][0])
+                _ = py_call(todo.append, pairs[i][1])
+        elif cls is context["family_msel_scorer_class"]:
+            var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
+            if len(ancestry) != 2 or ancestry[1] is not b.object:
+                raise Error("TypeError: native scorer release refuses inherited lifecycle hooks")
+            _ = py_call(todo.append, msel_scorer_fields(item, context))
+        elif py_type(cls) is b.type and py_contains(context["family_msel_search_layouts"], cls):
+            _ = py_call(todo.append, msel_search_fields(item, context))
+        elif py_type(cls) is b.type and py_contains(release["release_plans"], cls):
+            var plan = msel_estimator_plan(item, context)
+            var finalizer = release["release_plans"][cls]["finalizer"]
+            if _resolved(cls, PythonObject("__del__"), release["missing"]) is not finalizer:
+                raise Error("TypeError: native search refuses changed model finalizers")
+            _ = py_call(todo.append, py_call(plan["fields_get"], item, cls))
+        else:
+            # This existing owner admits native buffers/dtypes, connected
+            # module identities and known native archive finalizers; Python
+            # finalizers or callback-bearing array owners are refused.
+            declared_release(item, release)
+
+
+def msel_search_update(fields: PythonObject, updates: PythonObject,
+                       context: PythonObject) raises:
+    var b = native_loaded_module("builtins")
+    var names = py_call(b.list, updates)
+    var existing = py_call(b.list, fields)
+    var retained = py_call(b.list, updates.values())
+    var previous = Python.list()
+    for i in range(len(existing)):  # driver-loop: preserve owners reachable through unchanged public fields
+        var name = existing[i]
+        if py_contains(updates, name):
+            if fields[name] is not updates[name]:
+                _ = py_call(previous.append, fields[name])
+        else:
+            _ = py_call(retained.append, fields[name])
+    if len(previous) > 0:
+        _search_release(previous, retained, context)
+    for i in range(len(names)):  # driver-loop: all old owner checks finish before the first dictionary write
+        py_setitem(fields, names[i], updates[names[i]])
+
+
 def msel_search_initialize(model: PythonObject, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     var plan = msel_search_plan(model, context)
@@ -50,8 +142,10 @@ def msel_search_initialize(model: PythonObject, args: PythonObject,
     var names = plan["parameters"]
     if len(args) != len(names):
         raise Error("TypeError: native search constructor argument count disagrees with its schema")
-    for k in range(len(names)):  # driver-loop: fixed constructor assignments, no callbacks or input coercion
-        py_setitem(fields, names[k], args[k])
+    var updates = Python.dict()
+    for k in range(len(names)):  # driver-loop: borrowed constructor values, no clone or conversion callbacks
+        py_setitem(updates, names[k], args[k])
+    msel_search_update(fields, updates, context)
     return PythonObject(None)
 
 
@@ -67,6 +161,11 @@ def msel_parameter_values(value: PythonObject, context: PythonObject) raises -> 
         if rank == 0:
             raise Error("TypeError: iteration over a 0-d Array")
         if rank == 1:
+            # Float16 Array storage is a native uint16 memoryview. Iteration
+            # must publish its numeric values, not the backing bit patterns.
+            if String(packed.dtype) == "<f2":
+                var scalars = _cast(packed, "<f8", context["family_msel_resident_context"])
+                return py_call(b.list, scalars._mv)
             return py_call(b.list, packed._mv)
         var shape = py_slice_from(packed.shape, 1)
         var n = Int(py=packed.shape[0])

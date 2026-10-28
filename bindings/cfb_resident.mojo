@@ -12,7 +12,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
-from bindings.family_common import family_call, family_entry, family_array
+from bindings.family_common import family_call, family_array
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.cluster_native import _labeled_reference
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 
@@ -21,21 +22,7 @@ def cfb_optional_entry(binding: PythonObject, name: String, context: PythonObjec
     """The compiled entry `name` of `binding`, or None where the binding
     does not export it (an absent name is ImportError on a host binding
     proxy and AttributeError on a module; both mean "no residency")."""
-    var b = native_loaded_module("builtins")
-    var entry = PythonObject(None)
-    if py_type(binding) is py_type(b):
-        # An exact module: read its namespace. A failed getattr on a module
-        # runs Python's import machinery (ModuleSpec.has_location on 3.13+)
-        # to word the AttributeError, a Python frame inside predict.
-        entry = py_get(_loaded_fields(binding), PythonObject(name))
-    else:
-        try:
-            entry = py_call(b.getattr, binding, PythonObject(name))
-        except:
-            return PythonObject(None)
-    if py_type(entry) is not context["family_builtin_type"]:
-        return PythonObject(None)
-    return entry
+    return neural_descriptor_entry(binding, name, False)
 
 
 def cfb_release(model: PythonObject) raises:
@@ -51,12 +38,20 @@ def cfb_release(model: PythonObject) raises:
     var holder = py_get(fields, PythonObject("_resident_holder"), PythonObject(None))
     if holder is None or py_type(holder) is not b.dict:
         return
+    var keys = py_call(b.list, holder)
+    for i in range(len(keys)):  # driver-loop: resident dictionary lookup may not invoke Python key equality
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: resident state requires exact string keys")
     var held = py_get(holder, PythonObject("index"), PythonObject(None))
     if held is None:
         return
+    if py_type(held) is not b.tuple or len(held) != 3 or py_type(held[1]) is not b.int:
+        raise Error("TypeError: resident state requires its native handle and provider tuple")
+    var release = neural_descriptor_entry(held[2], "labeled_reference_release", False)
     py_setitem(holder, "index", PythonObject(None))
     try:
-        _ = py_call(py_call(b.getattr, held[2], PythonObject("labeled_reference_release")), held[1])
+        if release is not None:
+            _ = py_call(release, held[1])
     except:
         pass
 
@@ -120,10 +115,11 @@ def cfb_reference_labels(model: PythonObject, binding: PythonObject, refs: Pytho
     where the binding has one, else the one-shot `labeled_reference_predict`."""
     var handle = cfb_handle(model, binding, refs, keys, labels, n_refs, n_features, metric, context)
     if handle < 0:
+        _ = neural_descriptor_entry(binding, "labeled_reference_predict")
         return _labeled_reference(binding, refs, keys, labels, q, n_refs, n_features, metric, eps, has_thresh, context)
     var nq = Int(py=q.shape[0])
     var out = family_array(Python.tuple(nq), "<i4", context)
-    var entry = family_entry(binding, "labeled_reference_predict_resident", context)
+    var entry = neural_descriptor_entry(binding, "labeled_reference_predict_resident")
     # ORDER MATCHES bindings/labeled_reference_resident_binding.mojo::
     # labeled_reference_predict_resident_binding.
     _ = family_call(entry, PythonObject(handle), Python.list(classical_address(q), classical_address(out)),

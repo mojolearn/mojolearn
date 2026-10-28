@@ -1,0 +1,41 @@
+Peer6 AutoARIMA complete public lifecycle source batch — 2026-10-27
+Branch: lane/peer6-timeseries-20261027, follows corrective e89bfc1b2d.
+
+AutoARIMA.search now performs one native call covering passive option/buffer
+admission, captured source metadata, KPSS differencing, grid construction,
+compiled candidate execution, information criteria and first-min selection,
+result grouping and finished state. Existing grouped device, plain grouped,
+per-order fallback, optional fit-block reuse and quality-switch routes remain.
+Private obsolete Python search/gather/callback implementations are removed.
+
+AutoARIMA.fit now admits exact native selected-order/group/reuse metadata,
+captures original buffers once, gathers subgroups, runs native ARIMA fitting
+or captured-address fit-block adoption, then commits finished fitted models.
+AutoARIMA.predict and forecast share the native output owner with scalar and
+fitted-state admission, compiled ARIMA execution and compiled scatter.
+
+Search/fit state replacement admits the entire previous native owner graph,
+including exact ordinary fitted ARIMA models. Class finalizers, weakref
+callbacks and foreign storage descriptors refuse before release; unchanged
+references are retained. Shared constructor release repair remains e89bfc1b2d.
+The ARIMA library-created class branch avoids runtime class attribute hooks.
+
+Compile: actual TSA public C dispatcher and reachable AutoARIMA operations,
+Mac CPU identical O0, 10 configured compiler workers (all available logical
+CPUs; concurrent peer jobs may exist). No runtime was loaded or executed.
+Receipt: compile.json. Complete logs, source bytes, manifest and binary:
+~/mojolearn-evidence/peer6-autoarima-search-20261027/
+Failed reserved-parameter and bytes-literal syntax attempts are retained;
+intermediate successful compiles remain scoped to their preceding source.
+
+This establishes source migration plus the stated compilation only: GPU
+compilation, runtime results, bitwise identity and performance remain pending.
+No whole-library Python-free claim. No rented box or verification campaign.
+Current legacy TSA/ARIMA/Prophet/STL/VAR inventory: current_source_inventory.json.
+ExponentialSmoothing work is assigned separately to Peer6 cv_review; standalone
+ARIMA and STL/VAR remain this time-series lane's pending work. Prophet is
+assigned separately to the parent lane.
+
+Initial push source guard refused a multiline import-time registration loop
+whose glue annotation was on the continuation line; annotation repaired.
+Native compiled source unchanged by this guard repair.

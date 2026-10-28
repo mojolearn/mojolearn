@@ -419,6 +419,10 @@ def _connect_causal_native():
     from .config import _NATIVE_CONTEXT as config_context
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
     from .._native_neural_bridge import connect_training
+    from .._native_classical_bridge import _numpy_free_context
+    from types import ModuleType
+    admission_context = _numpy_free_context()
+    admission_context["native_module_type"] = ModuleType
     runtime = runtime_binding()._module
     from .._native_operation_lock import connect as connect_operation_lock
     connect_operation_lock(runtime)
@@ -446,6 +450,7 @@ def _connect_causal_native():
                     entries[name] = f"native binding {target} for {mode} is unavailable: {exc}"
             bindings["gpu:" + mode] = entries
     return runtime, {
+        "admission_context": admission_context,
         "runtime": runtime, "backend": _backend, "selected_vendor": vendor, "model_class": CausalLM,
         "block_option_names": ("n_kv_heads", "head_dim", "window", "rope_theta", "rope_scaling",
                                "rope_dim", "max_positions", "qkv_bias", "o_bias", "norm", "norm_eps",

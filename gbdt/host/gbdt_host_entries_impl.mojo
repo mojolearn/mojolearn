@@ -398,15 +398,29 @@ def gbdt_host_read_pairs(
         host_pair_weights.append(pw.unsafe_load(q))
 
 
-def gbdt_host_binary_class_row_weights(
-    y: List[Float32], n_rows: Int, class_weights: List[Float32]
-) -> List[Float32]:
-    """`train`'s weight column for binary class weights: `1.0 *
-    class_weights[cls]`, cls the binarized target (y > 0.5)."""
+def gbdt_host_binary_row_weights(
+    y: List[Float32], n_rows: Int, class_weights: List[Float32],
+    sample_weights: List[Float32],
+) raises -> List[Float32]:
+    """Build `train`'s binary weight column from sample and class weights."""
+    # The existing weighted Logloss search and leaf owners accept either
+    # source of row weights. Match target_prep.mojo's single product when
+    # both are supplied; without class weights, copy the sample word.
+    if len(sample_weights) != 0 and len(sample_weights) != n_rows:
+        raise Error("sample_weight size mismatch")
+    if len(class_weights) != 0 and len(class_weights) != 2:
+        raise Error("class_weights takes 2 entries for loss 'Logloss'")
     var row_weights = List[Float32](length=n_rows, fill=Float32(0.0))
     for r in range(n_rows):
-        var cls = 1 if y[r] > Float32(0.5) else 0
-        row_weights[r] = Float32(1.0) * class_weights[cls]
+        var weight = Float32(1.0)
+        if len(sample_weights) != 0:
+            weight = sample_weights[r]
+            if weight < Float32(0.0):
+                raise Error("sample_weight at row " + String(r) + " is negative")
+        if len(class_weights) != 0:
+            var cls = 1 if y[r] > Float32(0.5) else 0
+            weight = weight * class_weights[cls]
+        row_weights[r] = weight
     return row_weights^
 
 

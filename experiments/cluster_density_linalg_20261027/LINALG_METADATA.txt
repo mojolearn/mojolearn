@@ -1,0 +1,18 @@
+Linalg public metadata — 2026-10-27
+
+Frozen source: 722b31d181e5378ff375da09732a8d9225ff1481.
+numeric_mode(), profile() and require_identical() now each pass through one
+native operation. They reuse the existing live provider selection, profile
+validation and identity-mode refusal already used by matmul. Profile's returned
+dictionary and experimental-profile qualification fields are assembled natively.
+Optional and legacy entry reads now use exact compiled module dictionary entries;
+binary-path metadata requires an exact string. No numerical kernel change.
+
+Compile PASS: actual lin_lowbit_operation, Mac CPU O0, ten workers, 76.86s.
+Receipt linalg_metadata_public_compile.json; full source bytes, log and binary
+in ~/mojolearn-evidence/cluster-density-linalg-20261027/
+linalg-metadata-public-compile/. Runtime/identity/vendor verification not run.
+
+This branch includes earlier HDBSCAN/GaussianMixture batches and initial QN
+source as ancestry. Merge the final QN exception/receipt branch separately;
+this batch makes no QN edits and does not supersede that follow-up.

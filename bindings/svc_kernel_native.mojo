@@ -996,7 +996,7 @@ def _run(fields: PythonObject, binding: PythonObject, source: PythonObject, pred
     """`SVC._run`: the binary machine's (n,) float32 decisions or labels."""
     var q_meta = _query(fields, source, context)
     var q = q_meta.keep
-    var shape = q_meta.shape
+    var shape = q_meta.shape.copy()
     var n_rows = shape[0]
     var query_cols = shape[1]
     var settings = _svc_predict_settings(fields, context)
@@ -1019,7 +1019,7 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
     var q_meta = _query(fields, source, context)
     var q = q_meta.keep
     var pairs = svc_field(fields, "_pairs")
-    var shape = q_meta.shape
+    var shape = q_meta.shape.copy()
     var n_rows = shape[0]
     var query_cols = shape[1]
     var settings = _svc_predict_settings(fields, context)

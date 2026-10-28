@@ -3,14 +3,15 @@
 # fabricated addresses are metadata only and are never dereferenced.
 from std.os import abort
 from std.python import Python, PythonObject
-from std.python.bindings import PythonModuleBuilder
+from std.python.bindings import PythonModuleBuilder, raise_python_exception
+from std.python._cpython import PyObjectPtr
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_HALF
 from providers.python.array_metadata_pyapi import ArrayMetadata
 
 
 def replace_binding(source: PythonObject, original_owner: PythonObject,
                     converted_f32: PythonObject, converted_f64: PythonObject, route: Int) raises -> PythonObject:
-    var metadata = ArrayMetadata(source, List[Int](2, 3),
+    var metadata = ArrayMetadata(source, List[Int]([2, 3]),
         CastIn(256, CAST_KIND_FLOAT, 2, 2, 3, 6, 2), 6, NPY_HALF,
         True, False, True, original_owner, False)
     if route == 32 or route == 3264:
@@ -24,11 +25,19 @@ def replace_binding(source: PythonObject, original_owner: PythonObject,
         metadata.source.s0, metadata.source.s1, metadata.count, metadata.python_shape())
 
 
+def replace_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        return replace_binding(args[0], args[1], args[2], args[3], Int(py=args[4])).steal_data()
+    except error:
+        return raise_python_exception(error)
+
+
 @export
 def PyInit_array_metadata_owner_probe() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("array_metadata_owner_probe")
-        module.def_function[replace_binding]("replace")
+        module.def_py_c_function(replace_c, "replace")
         return module.finalize()
     except error:
         abort(String(error))

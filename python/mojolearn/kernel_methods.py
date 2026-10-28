@@ -38,8 +38,8 @@ transforms from a saved model on a CPU without a GPU.
 
 from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
+from ._native_robust_bridge import native_method
 from ._mode import RegressorScoreMixin
-from ._metrics_impl import _get_binding
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -54,8 +54,9 @@ _RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner (bindings/kernel_methods_native.mojo), connected
 # once at import: KernelRidge `fit`/`predict` and Nystroem `fit`/`transform`/
-# `fit_transform` are one native call each, handed the binding `_bind`
-# resolves; the tables it reads are connected below `_MODE_CODE`/`_KERNELS`.
+# `fit_transform` are one native call each. The native lifecycle selects the
+# binding and owns fitted checks, feature metadata and finished public results;
+# the fixed tables it reads are connected below `_MODE_CODE`/`_KERNELS`.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 
@@ -215,6 +216,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
     # scikit-learn's `_solve_cholesky_kernel` weighted arm: `sw = sqrt(w)`
     # (binary64, rounded once to float32), `y * sw`, `K * outer(sw, sw)`,
     # then `dual_coef * sw` (float32 on both columns, DEVIATION 1688).
+    @native_method
     def fit(self, X, y, sample_weight=None):
         """Fit the kernel ridge model.
 
@@ -238,6 +240,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
 
     # Maintainer note: `K(X, X_fit_) . dual_coef_` through the identical GEMM
     # (DEVIATION 1680).
+    @native_method
     def predict(self, X):
         """Predict with the fitted model: `K(X, X_fit_) @ dual_coef_`.
 
@@ -254,6 +257,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         """
         return _NATIVE(self, "family_km_krr_predict", (None, X), _NATIVE_CONTEXT)
 
+    @native_method
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
 
@@ -272,7 +276,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
         return _NATIVE(self, "family_km_krr_score",
-                       (self._bind(), X, y, sample_weight, _get_binding(getattr(self, "numeric_mode", None))),
+                       (None, X, y, sample_weight),
                        _NATIVE_CONTEXT)
 
     # The fitted X and dual live on the device after the first predict,
@@ -403,6 +407,7 @@ class Nystroem(_KernelMethodBase):
         self.n_components = n_components
         self.random_state = random_state
 
+    @native_method
     def fit(self, X, y=None):
         """Choose the basis rows and compute the normalization.
 
@@ -418,8 +423,9 @@ class Nystroem(_KernelMethodBase):
         self : Nystroem
             The fitted transformer.
         """
-        return _NATIVE(self, "family_km_nys_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_nys_fit", (None, X, y), _NATIVE_CONTEXT)
 
+    @native_method
     def transform(self, X):
         """Map `X` to the approximate kernel feature space.
 
@@ -435,6 +441,7 @@ class Nystroem(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_nys_transform", (None, X), _NATIVE_CONTEXT)
 
+    @native_method
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
 
@@ -450,7 +457,7 @@ class Nystroem(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        return _NATIVE(self, "family_km_nys_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_nys_fit_transform", (None, X, y), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: every model array as fitted, `hyper` `<f8`
     # [gamma, coef0] as the fit resolved them, `meta` `<i8` [n_components,
@@ -549,6 +556,7 @@ class RBFSampler(_KernelMethodBase):
         self.n_components = n_components
         self.random_state = random_state
 
+    @native_method
     def fit(self, X, y=None):
         """Draw the random weights and offsets.
 
@@ -567,8 +575,9 @@ class RBFSampler(_KernelMethodBase):
         self : RBFSampler
             The fitted transformer.
         """
-        return _NATIVE(self, "family_km_rbf_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_rbf_fit", (None, X, y), _NATIVE_CONTEXT)
 
+    @native_method
     def transform(self, X):
         """Map `X` to the random Fourier feature space.
 
@@ -584,6 +593,7 @@ class RBFSampler(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_rbf_transform", (None, X), _NATIVE_CONTEXT)
 
+    @native_method
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
 
@@ -599,7 +609,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        return _NATIVE(self, "family_km_rbf_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_km_rbf_fit_transform", (None, X, y), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: the weights and offsets as drawn, `hyper`
     # `<f8` [gamma, sigma_, scale_], `meta` `<i8` [n_features, n_components,
@@ -693,4 +703,11 @@ _native_family_bridge.tables(family_km_par_classes=(KernelRidge, Nystroem))
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]
 
 # Resolve optional mode images at import; public methods enter native admission once.
-_native_family_bridge.connect_bindings("_mojolearn_kernel_methods")
+_native_family_bridge.connect_bindings("_mojolearn_kernel_methods", "_mojolearn_metrics")
+
+# Import-time schema for the native kernel lifecycle; no runtime reflection.
+_native_family_bridge.tables(family_km_public_parameters={
+    KernelRidge: ("alpha", "kernel", "gamma", "degree", "coef0", "numeric_mode"),
+    Nystroem: ("kernel", "gamma", "degree", "coef0", "n_components", "random_state", "numeric_mode"),
+    RBFSampler: ("gamma", "n_components", "random_state", "numeric_mode"),
+})

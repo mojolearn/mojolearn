@@ -143,6 +143,13 @@ def connect():
         classifier_labels_namespace=dict(vars(ClassLabels)),
         classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
     )
+    from ._native_owner_lifetime import connect_owner_context
+    connect_owner_context(context)
+    tables = tuple(table for modes in context['trees_bindings'].values()  # glue: fixed native binding tables retained independently of model lifetime
+                   for table in modes.values() if type(table) is dict)  # glue: exclude import-time refusal strings
+    context['trees_state_retained'] = tables
+    context['trees_state_releases'] = tuple(table['forest_release_gpu'] for table in tables  # glue: native resident release identities, once at connection
+                                           if 'forest_release_gpu' in table)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

@@ -11,7 +11,7 @@ _HELPERS = (
 )
 
 _SPLITTER_FIELDS = ('_default_test_size', '_folds', '_pairs', 'cv', 'cvargs', 'gap', 'max_train_size',
-                    'n_groups', 'n_repeats', 'n_splits', 'p', 'random_state', 'shuffle', 'test_size', 'train_size')
+                    'n_groups', 'n_repeats', 'n_splits', 'p', 'random_state', 'shuffle', 'test_fold', 'test_size', 'train_size')
 
 
 def connect(context, resident_context):
@@ -42,6 +42,8 @@ def connect(context, resident_context):
     except Exception as error:
         entries['x_metrics_first_rows'] = _refusal(error)  # glue: retain import failure metadata without running the operation
     context.update(label_context())
+    from ._native_owner_lifetime import connect_owner_context
+    connect_owner_context(context)
     context.update(family_msel_entries=entries, family_msel_resident_context=resident_context)
     # The resident row owner (bindings/arena_resident_rows.mojo) materializes
     # a foreign fold container through this same native input owner.

@@ -14,11 +14,14 @@ from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 
 
-def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
+def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,
+                            captured_fields: PythonObject = PythonObject(None)) raises -> PythonObject:
     """The zero-state prefill: `(y, h_last, k_last, v_last, theta_last)`, the
     reports None where the binding skips them. The caller assigns them."""
     var bi = Python.import_module("builtins")
-    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    # A public Mamba operation captures model metadata and weight owners once;
+    # its caller publishes session/cache changes back to the live dictionary.
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__") if captured_fields is None else captured_fields
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=fields["d_model"])

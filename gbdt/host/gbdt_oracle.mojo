@@ -22,18 +22,19 @@ differs, which is what the border search taught; see
 `_calc_quantization_phase_b`). Every device KERNEL the fit reaches is
 RESTATED below, with the file and line it MIRRORS.
 
-THE CONFIGURATION THIS COVERS, and it is the lane's, by name
-(tools/identity_break.py `gbdt-symmetric`: 20 trees, depth 6, Logloss, every
-other option at its default). The binding refuses by name every value
-outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
+The original `gbdt-symmetric` lane uses 20 depth-6 Logloss trees. The
+current binding also admits the extensions described below; this historical
+lane is not a complete list of supported configurations. Admission lives in
+bindings/_mojolearn_gbdt_host.mojo.
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
   score_function Cosine, leaf_estimation_method Newton (any iteration count),
-  no bootstrap, no sample_weight, binary class_weights on Logloss (the
-  weight column `class_weights[y > 0.5]`, since 2026-10-03), no CTR categorical
-  column (one-hot columns are carried, `one_hot_in` below and
-  gbdt/host/gbdt_oracle_onehot.mojo), no eval_set and no overfitting detector,
-  random_strength 0, the greedy searcher (use_pointwise_searcher False),
+  optional numeric row weights (sample_weight multiplied by binary
+  class_weights when present), numeric bootstrap and score noise. One-hot
+  columns use `one_hot_in` and gbdt_oracle_onehot.mojo; CTR training has its
+  own owner in gbdt_oracle_ctr.mojo. The held-out cursor, stopping detector
+  and best-model selection use gbdt_oracle_eval.mojo through
+  gbdt_host_fit_eval. The greedy searcher (use_pointwise_searcher False),
   boost_from_average unset or False and feature_fraction 1. A feature with
   exactly one border (the BINARY histogram policy) is carried since
   2026-09-22 (`_binary_block`, the nibble-combination decode of
@@ -449,7 +450,7 @@ def _logloss_search_pass(
     through the halving tree. Out-of-range threads add 0.0. `weights`
     empty is the unit weight; otherwise one weight per row, the kernel's
     `has_weights` arm (plane 0 the row's weight, the direction and score
-    scaled by it): binary class weights, `train`'s weight column."""
+    scaled by it): sample weights and/or binary class weights, as in `train`."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var has_weights = len(weights) > 0
     var weight = Float32(1.0)

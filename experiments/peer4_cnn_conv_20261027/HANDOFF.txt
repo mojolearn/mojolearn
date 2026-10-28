@@ -1,0 +1,31 @@
+Conv1d/Conv2d native whole-operation batch — 2026-10-27
+Branch: lane/peer4-cnn-conv-20261027
+
+Changed: constructors, set_weights, pin/unpin, gradient getters/setters,
+backward and weight1d_ are one compiled binding call. Native backward retains
+host, grouped and resident numerical paths and lazy device gradients. Native
+input/weight views retain storage and stabilize per-operation metadata. Host
+channel selection/placement uses native buffer copies. Admission refuses
+Python configuration protocols before conversion; state keys and pinned
+metadata are admitted before reads. Existing Conv forward/transform/fit share
+these owners. Numerical kernel bodies are unchanged.
+
+Compiled: checks/peer4_cnn_conv_compile.mojo -> native xcnn_conv_layers and
+transitive imported owners; Mac CPU column, apple-m1, identical, O0, 10 workers.
+Accepted final attempt6 exit 0 (23.58s). Earlier attempts1/2 failed (compile
+fixture signature and default PythonObject argument); complete logs preserved.
+Attempts3/4/5 passed earlier source snapshots; only attempt6 qualifies final
+source. No runtime/identity/vendor verification was run.
+
+Evidence: experiments/peer4_cnn_conv_20261027/compile.json;
+/Users/andrewhendel/mojolearn-evidence/peer4-cnn-conv-20261027/attempt6/ contains
+full compile log, retained binary, complete Mojo source archive and manifest.
+All earlier logs/results/binaries remain in sibling attempt directories.
+
+Integration requirement: parent owns xcnn_native.mojo dispatch and common
+admission, and must route all conv_ operations into xcnn_conv_layers. This
+branch intentionally does not alter that shared dispatcher. Its compiled
+owner alone is not an installed public runtime qualification. Common tensor
+slots/array-address/output helpers remain parent-owned; their integrated
+source needs its own affected compile. BasicBlock and other CNN classes are
+not completed by this batch.

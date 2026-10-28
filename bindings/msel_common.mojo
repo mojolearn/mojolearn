@@ -18,7 +18,7 @@ from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
-from bindings.classical_labels import _flatten_labels, labels_encode_labels
+from bindings.classical_labels import _label_list, labels_encode_labels
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_warn
 from bindings.native_torch_admission import native_torch_exact
@@ -188,16 +188,49 @@ def msel_flatten(value: PythonObject, context: PythonObject) raises -> PythonObj
         # Validate retained slots and owners before the native label reader
         # reads Array._mv; its Python convenience methods are never called.
         source = msel_materialize(value, "labels", context)
-    var flat = _flatten_labels(source, context)
-    # Object ndarray storage can contain arbitrary objects. Admit its leaves
-    # before comparison, hashing, scalar conversion or label sorting.
-    msel_admit(flat, context)
+    var b = msel_b()
+    var cls = py_type(source)
+    if cls is not b.list and cls is not b.tuple and cls is not b.str and cls is not b.bytes:
+        source = _label_list(source, context)
+        # An exact object ndarray's native tolist preserves arbitrary leaves.
+        # Admit those owners before any classification or flattening protocol.
+        msel_admit(source, context)
+        cls = py_type(source)
+    if cls is b.str or cls is b.bytes:
+        raise Error("mojolearn: y must be a sequence of labels")
+    var flat = Python.list()
+    _msel_flatten_into(source, flat)
     return flat
+
+
+def _msel_flatten_into(item: PythonObject, out_buf: PythonObject) raises:
+    # Exact native containers: isinstance could consult a leaf's __class__.
+    var cls = py_type(item)
+    if cls is py_type(Python.list()) or cls is py_type(Python.tuple()):
+        for i in range(len(item)):  # driver-loop: flatten already admitted native label containers
+            _msel_flatten_into(item[i], out_buf)
+    else:
+        _ = py_call(out_buf.append, item)
+
+
+def _msel_admit_labels(values: PythonObject, context: PythonObject) raises:
+    var b = msel_b()
+    for i in range(len(values)):  # driver-loop: label scalar identities before hashing, equality or error display
+        var item = values[i]
+        var cls = py_type(item)
+        if cls is b.str or msel_is_real(item, context) or msel_is_bool(item, context):
+            continue
+        # Native NumPy str_ is admitted by its exact type before this native
+        # subclass check. Unknown label types never reach their repr hook.
+        if Bool(py=py_call(b.issubclass, cls, b.str)):
+            continue
+        raise Error("TypeError: model-selection labels must be native numbers or strings")
 
 
 def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.encode_labels(value)`: (classes, int32 codes)."""
     var flat = msel_flatten(value, context)
+    _msel_admit_labels(flat, context)
     var labels_context = py_call(msel_b().dict, context)
     var real = Python.list()
     _ = py_call(real.extend, Python.tuple(msel_b().int, msel_b().float, msel_b().bool))
@@ -211,7 +244,9 @@ def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObje
 def msel_labels_list(y: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     if y is None:
         raise Error("The '" + name + "' parameter should not be None.")
-    return msel_flatten(y, context)
+    var flat = msel_flatten(y, context)
+    _msel_admit_labels(flat, context)
+    return flat
 
 
 def msel_n_samples(x: PythonObject, context: PythonObject) raises -> Int:
@@ -373,7 +408,9 @@ def msel_index_copy(value: PythonObject, context: PythonObject) raises -> Python
     """`_index_copy(value)`: an int64 / int32 1-D buffer widened to an
     owned int64 Array; anything else `_as_index(flatten_labels(value))`."""
     var b = msel_b()
-    if not family_isinstance(value, Python.tuple(b.list, b.tuple, b.range)):
+    msel_admit(value, context)
+    var cls = py_type(value)
+    if cls is not b.list and cls is not b.tuple and cls is not b.range:
         var a = msel_try_materialize(value, "cv indices", Python.tuple(b.TypeError, b.ValueError), context)
         if not msel_missed(a, context) and Int(py=a.ndim) == 1:
             var dtype = String(py=a.dtype)
@@ -672,9 +709,9 @@ def msel_shuffle_sizes(n: Int, test_size_in: PythonObject, train_size: PythonObj
         raise Error("train_size=" + family_str(train_size) + " should be either positive and smaller than the number "
                     + "of samples " + String(n) + " or a float in the (0, 1) range")
     if rk == "x":
-        raise Error("Invalid value for train_size: " + family_str(train_size))
+        raise Error("Invalid value for train_size: expected a native numeric size")
     if tk == "x":
-        raise Error("Invalid value for test_size: " + family_str(test_size))
+        raise Error("Invalid value for test_size: expected a native numeric size")
     var add = msel_op("add")
     var mul = msel_op("mul")
     if rk == "f" and tk == "f" and msel_cmp("gt", family_call(add, train_size, test_size), one):

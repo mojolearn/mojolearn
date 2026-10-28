@@ -12,6 +12,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
@@ -45,11 +46,58 @@ from transformer.causal_lm_public_impl import (
 )
 
 
+from bindings.tokenizer_public_native import tokenizer_vocab_encode, tokenizer_vocab_decode, tokenizer_vocab_fingerprint
+from bindings.mode_metadata_native import _fields as _native_record_fields
+
+
+def _standalone_record_fields(model: PythonObject) raises -> PythonObject:
+    # Standalone blocks use a private exact C namespace as their per-operation
+    # owner. Public models still use the ordinary class dictionary admission.
+    # SimpleNamespace.__dict__ is a native member descriptor, not the Python
+    # class getset descriptor expected by the public-record helper.
+    if py_type(model) is Python.import_module("types").SimpleNamespace:
+        ref cpy = Python().cpython()
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr, PyObjectPtr())
+        if not raw:
+            raise cpy.unsafe_get_error()
+        return PythonObject(from_owned=raw)
+    return _native_record_fields(model)
+
+
+def _native_entry_fields(entries: PythonObject) raises -> PythonObject:
+    # Exact connected modules/namespaces use native storage, never getattr or
+    # module __getattr__. Check keys before any string dictionary lookup.
+    var types = native_loaded_module("types")
+    var bi = native_loaded_module("builtins")
+    ref cpy = Python().cpython()
+    var fields = PythonObject(None)
+    if py_type(entries) is types.ModuleType:
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(entries._obj_ptr)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        fields = PythonObject(from_owned=cpy.Py_NewRef(raw))
+    elif py_type(entries) is types.SimpleNamespace:
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(entries._obj_ptr, PyObjectPtr())
+        if not raw:
+            raise cpy.unsafe_get_error()
+        fields = PythonObject(from_owned=raw)
+    else:
+        raise Error("TypeError: native binding entries require a connected module or namespace")
+    var keys = py_call(bi.list, fields.keys())
+    for i in range(len(keys)):  # small-loop(native binding record field names before keyed reads)
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: native binding entries require ordinary string keys")
+    return fields
+
+
+def _native_has_entry(entries: PythonObject, name: String) raises -> Bool:
+    return py_contains(_native_entry_fields(entries), name)
+
+
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var entry = py_call(g[].bi.getattr, module, name)
-    if py_type(entry) is not py_type(g[].bi.len):
-        raise Error("CausalLM: " + name + " must be a compiled native extension entry")
+    var entry = py_get(_native_entry_fields(module), name)
+    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
+        raise Error("TypeError: CausalLM " + name + " must be a compiled native extension entry")
     return entry
 
 
@@ -82,7 +130,8 @@ def causal_lm_admit_binding(
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
     py_setattr(model, "_native_vendor", PythonObject(vendor))
     py_setattr(model, "_native_numeric_mode", PythonObject(mode))
-    py_setitem(entries, "weight_names", py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
+    var local_blocks = py_get(_standalone_record_fields(model), "_native_block_fields")
+    py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
         py_setitem(entries, name, _native_function(primitives, name))
     if kind == "transformer":
@@ -167,6 +216,10 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
     # PublicOutputsMixin.__getattribute__ is Python even for private metadata.
     # Access the object's plain dictionary with CPython's base implementation,
     # bypassing that overridden getter; every field below is stored metadata.
+    # Standalone blocks provide one operation-local admission snapshot.
+    var local = py_get(_standalone_record_fields(model), "_native_block_fields")
+    if local is not None:
+        return local[index]
     var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
         return py_call(parallel, "block_fields", Python.list(model, index))
@@ -1327,7 +1380,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     var n = Int(py=ids.shape[1])
     var raw = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
     var values = py_ints(causal_lm_drop_eos(raw, n, s.eos))
-    _ = py_call(s.pending_bytes.extend, py_call(_native_function(s.tokenizer._m, "vocab_decode_public"), s.tokenizer, values, PythonObject(True), PythonObject("replace")))
+    _ = py_call(s.pending_bytes.extend, tokenizer_vocab_decode(s.tokenizer, values, PythonObject(True), PythonObject("replace")))
     var size = len(s.pending_bytes)
     # The CPython array constructor copies the pending bytes to native storage.
     var pending = py_call(g[].arrays, "B", s.pending_bytes)
@@ -1400,8 +1453,7 @@ def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum
 
 
 def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
-    var encode = _native_function(tokenizer._m, "vocab_encode_public")
-    var ids = py_call(encode, tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
+    var ids = tokenizer_vocab_encode(tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
     var prompt = generation_array([1, len(ids)], "i")
     var ptr = i32_ptr(Int(py=prompt._addr))
     _ = prompt  # keep the Python object alive through the native call above
@@ -1545,7 +1597,7 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
     py_setitem(result, "text", PythonObject(s[].tokenizer is not None))
     py_setitem(result, "tokenizer", PythonObject(None))
     if s[].tokenizer is not None:
-        py_setitem(result, "tokenizer", py_call(_native_function(s[].tokenizer._m, "vocab_fingerprint"), s[].tokenizer))
+        py_setitem(result, "tokenizer", tokenizer_vocab_fingerprint(s[].tokenizer))
     py_setitem(result, "pending_bytes", py_call(g[].bi.bytes, s[].pending_bytes))
     var options = g[].bi.list()
     _ = py_call(options.append, s[].greedy)
@@ -1594,7 +1646,7 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
     if Bool(py=checkpoint["text"]) and tokenizer is None:
         raise Error("generation: a text checkpoint requires its tokenizer")
     if Bool(py=checkpoint["text"]):
-        var fingerprint = py_call(_native_function(tokenizer._m, "vocab_fingerprint"), tokenizer)
+        var fingerprint = tokenizer_vocab_fingerprint(tokenizer)
         if not Bool(py=checkpoint["tokenizer"] == fingerprint):
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])

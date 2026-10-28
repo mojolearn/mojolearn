@@ -10,6 +10,7 @@ from bindings.classical_validate import classical_check_x, classical_check_y, cl
 from bindings.classical_ridge import classical_means, classical_center
 from bindings.classical_tsqr import classical_tsqr_solve
 from bindings.sequential_description import sequential_fields
+from bindings.classical_metadata import classical_fit_replacements_admit
 
 
 def classical_scale_rows(x: PythonObject, weight: PythonObject, rows: Int, cols: Int,
@@ -61,6 +62,7 @@ def classical_paired_means(x: PythonObject, y: PythonObject, rows: Int, cols: In
 def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
+    classical_fit_replacements_admit(fields, False, context)
     var intercept = Bool(py=fields["fit_intercept"])
     var est = classical_estimator_name(model)
     var x = classical_check_x(args[0], est, context)

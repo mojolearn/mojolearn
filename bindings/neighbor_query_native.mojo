@@ -16,8 +16,12 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_input, sequential_sequence
 from bindings.family_common import family_array, family_as_f32, family_entry, family_call
+from bindings.family_common import family_f32_snapshot
+from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.neighbors_knn_native import knn_door
 from bindings.neighbors_ann_native import _ivf_metric, _ann_release
+from bindings.neighbors_ann_query_native import ann_pq_materialize
 from bindings.parallel_neighbor_worker import neighbor_kneighbors, _radius, _i32_vector, _flag
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.parallel_public_result import parallel_public_result
@@ -124,13 +128,21 @@ def _ivf_materialize(fields: PythonObject, context: PythonObject) raises:
     var cached = py_get(fields, "_resident")
     if cached is None:
         raise Error("RuntimeError: resident IVF index was released before its list data was read")
+    var key = cached[0]
+    var tuple_type = native_loaded_module("builtins").tuple
+    if py_type(key) is not tuple_type or len(key) != 7 or py_type(key[0]) is not tuple_type or len(key[0]) != 5:
+        raise Error("TypeError: resident IVF index requires its native storage key")
     var n = Int(py=fields["n_rows_"])
     var dim = Int(py=fields["n_features_in_"])
     var data = family_array(Python.tuple(n, dim), "<f4", context)
     _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1], classical_address(data), PythonObject(n * dim))
     py_setitem(fields, "list_data_", data)
     _ = py_call(fields.pop, "_device_list_data")
-    py_setitem(fields, "_resident", Python.tuple(_ivf_key(fields, cached[2]), cached[1], cached[2]))
+    # Export changes only the device-data marker. Preserve every other saved
+    # key so a caller's replaced centers/offsets still invalidate this handle.
+    var arrays = Python.tuple(key[0][0], key[0][1], key[0][2], key[0][3], _ivf_key_entry(fields, "list_data_"))
+    var replacement = Python.tuple(arrays, key[1], key[2], key[3], key[4], key[5], key[6])
+    py_setitem(fields, "_resident", Python.tuple(replacement, cached[1], cached[2]))
 
 
 def _ivf_addresses(fields: PythonObject) raises -> PythonObject:
@@ -252,10 +264,102 @@ def _ivf_search(model: PythonObject, args: PythonObject, context: PythonObject) 
     return Python.tuple(dist, ids)
 
 
+def _ivf_stored_snapshot(fields: PythonObject, name: String, expected: List[Int],
+                         kind: Int, context: PythonObject) raises -> ArrayMetadata:
+    # Fitted arrays are mutable public state. Admit exact storage before any
+    # metadata read, then carry its owner and descriptor through the operation.
+    var value = py_get(fields, name)
+    classical_admit_value(value, context)
+    if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
+        raise Error("TypeError: " + name + " requires native array storage")
+    var shape = array_shape_once(value, context)
+    if len(shape) != len(expected):
+        raise Error("ValueError: " + name + " has the wrong fitted shape")
+    for i in range(len(shape)):  # small-loop(fitted array rank)
+        if shape[i] != expected[i]:
+            raise Error("ValueError: " + name + " has the wrong fitted shape")
+    var snapshot = array_metadata_once(value, shape^, name, context)
+    if not snapshot.c_order or snapshot.source.kind != kind or snapshot.source.itemsize != 4:
+        raise Error("TypeError: " + name + " requires its C-contiguous 32-bit fitted dtype")
+    return snapshot^
+
+
+def _ivf_extend(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(model)
+    var b = native_loaded_module("builtins")
+    if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
+        raise Error("ValueError: mojolearn IVFIndex: call fit (or load) before extend")
+    var x = family_f32_snapshot(args[0], 2, "X", context)
+    var names = Python.tuple("n_rows_", "n_features_in_", "n_lists_", "metric_code_")
+    for i in range(len(names)):  # small-loop(four fitted integer parameters)
+        if py_type(fields[names[i]]) is not b.int:
+            raise Error("TypeError: " + String(names[i]) + " must be an exact native integer")
+    var n = Int(py=fields["n_rows_"])
+    var dim = Int(py=fields["n_features_in_"])
+    var n_lists = Int(py=fields["n_lists_"])
+    var metric = Int(py=fields["metric_code_"])
+    if n < 1 or dim < 1 or n_lists < 1 or n_lists > n or (metric != 0 and metric != 1):
+        raise Error("ValueError: invalid fitted IVF index dimensions or metric")
+    var m = x.shape[0]
+    if x.shape[1] != dim:
+        raise Error("ValueError: mojolearn IVFIndex: X has " + String(x.shape[1])
+                    + " features, the index has " + String(dim))
+    if Int(py=_ivf_metric(fields, context)) != metric:
+        raise Error("ValueError: mojolearn IVFIndex: metric does not name the metric this index was built under")
+    var centers = _ivf_stored_snapshot(fields, "centers_", [n_lists, dim], CAST_KIND_FLOAT, context)
+    var norms = _ivf_stored_snapshot(fields, "center_norms_", [n_lists], CAST_KIND_FLOAT, context)
+    var old_offsets = _ivf_stored_snapshot(fields, "list_offsets_", [n_lists + 1], CAST_KIND_SIGNED, context)
+    var old_indices = _ivf_stored_snapshot(fields, "list_indices_", [n], CAST_KIND_SIGNED, context)
+    var cached = _resident_owner(py_get(fields, "_resident"), context)
+    py_setitem(fields, "_resident", cached)
+    if py_contains(fields, "_device_list_data"):
+        if cached is None:
+            raise Error("RuntimeError: resident IVF index was released before its list data was read")
+        var exported = family_array(Python.tuple(n, dim), "<f4", context)
+        _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1],
+                        classical_address(exported), PythonObject(n * dim))
+        py_setitem(fields, "list_data_", exported)
+        _ = py_call(fields.pop, "_device_list_data")
+    var old_data = _ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context)
+    var binding = _query_route(model, "ivf", context)
+    var entry = family_entry(binding, "ivf_flat_extend", context)
+    var total = n + m
+    var offsets = family_array(Python.tuple(n_lists + 1), "<i4", context)
+    var indices = family_array(Python.tuple(total), "<i4", context)
+    var data = family_array(Python.tuple(total, dim), "<f4", context)
+    var labels = family_array(Python.tuple(m), "<i4", context)
+    _ann_release(fields, "ivf_flat_index_release")
+    # Existing compiled IVF algorithm and address order; no arithmetic changes.
+    _ = family_call(entry, Python.list(centers.source.addr, norms.source.addr,
+        old_offsets.source.addr, old_indices.source.addr, old_data.source.addr, x.source.addr,
+        classical_address(offsets), classical_address(indices), classical_address(data), classical_address(labels)),
+        Python.list(n, dim, n_lists, metric, m))
+    _ = x
+    _ = centers
+    _ = norms
+    _ = old_offsets
+    _ = old_indices
+    _ = old_data
+    py_setitem(fields, "list_offsets_", offsets)
+    py_setitem(fields, "list_indices_", indices)
+    py_setitem(fields, "list_data_", data)
+    py_setitem(fields, "n_rows_", PythonObject(total))
+    py_setitem(fields, "extend_labels_", labels)
+    return model
+
+
 def neighbor_query(model: PythonObject, op: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var kind = _query_kind(model, context)
+    if op == "extend" and String(kind[0]) == "ivf":
+        return _ivf_extend(model, args, context)
     _admit_state(model, kind, context)
+    if op == "getstate" and String(kind[0]) == "ivf":
+        var fields = py_fields(model)
+        _ivf_materialize(fields, context)
+        var state = py_call(native_loaded_module("builtins").dict, fields)
+        _ = py_call(state.pop, "_resident", PythonObject(None))
+        return state
     if op == "search" and String(kind[0]) == "ivf":
         return _ivf_search(model, args, context)
     var binding = _query_route(model, "base", context)
@@ -311,6 +415,8 @@ def neighbor_query_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         if String(kind[0]) == "ivf" and text == "list_data_":
             _admit_state(model, kind, context)
             _ivf_materialize(fields, context)
+        if String(kind[0]) == "ann_pq" and text == "codes_":
+            _ = ann_pq_materialize(model, context)
         if String(kind[0]) == "knn":
             if text == "_resident":
                 return py_get(py_get(fields, "_resident_holder", Python.dict()), "index").steal_data()

@@ -6,6 +6,7 @@
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
 from providers.python.estimator_binding_pyapi import estimator_arguments
+from providers.python.cluster_public_lifecycle_pyapi import cluster_public_operation
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common import family_call
@@ -21,6 +22,8 @@ from bindings.gp_native import gp_operation
 from bindings.metrics_cls_native import metrics_cls_operation
 from bindings.metrics_exp_native import metrics_exp_operation
 from bindings.cluster_fit_a_native import cluster_fit_a_operation
+from providers.python.hdbscan_public_lifecycle_pyapi import hdbscan_public_operation
+from providers.python.density_public_lifecycle_pyapi import density_public_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
 from bindings.mixture_native import mixture_operation
 from bindings.linalg_ops_native import linalg_ops_operation
@@ -84,6 +87,13 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
     if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
             or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
         args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
+    if ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
+            or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
+                and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_")):
+        if len(args) > 0 and args[0] is None:
+            return cluster_public_operation(model, operation, args, context)
+    if operation.startswith("family_density_"):
+        return density_public_operation(model, operation, args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
@@ -120,6 +130,8 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
         return metrics_cls_operation(model, operation, args, context)
     if operation.startswith("family_mexp_"):
         return metrics_exp_operation(model, operation, args, context)
+    if operation.startswith("family_hdbscan_public_"):
+        return hdbscan_public_operation(model, operation, args, context)
     if operation.startswith("family_cfa_"):
         return cluster_fit_a_operation(model, operation, args, context)
     if operation.startswith("family_cfb_"):
