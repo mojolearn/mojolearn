@@ -134,9 +134,7 @@ class GARCH(ParamsMixin):
         ndarray of shape (horizon,) or (batch_size, horizon), float32
             Forecast conditional variances.
         """
-        h = int(horizon)
-        if h > self._fc.shape[1]:
-            y = self._y[0] if self._one else self._y
-            self.fit(y, horizon=h)
-        f = self._fc[:, :h]
-        return f[0] if self._one else f
+        return _XSEQ(self, "garch_forecast", (horizon,), _XSEQ_CONTEXT)
+
+
+_native_xseq_bridge.register(xseq_garch_classes=((GARCH, None),))

@@ -181,9 +181,7 @@ class ETS(ParamsMixin):
         dict
             ``{"mean": forecasts}``, as returned by :meth:`predict`.
         """
-        if fitted:
-            raise NotImplementedError("ETS: fitted values are not implemented")
-        return self.fit(y).predict(h, level=level)
+        return _XSEQ(self, "ets_forecast", (y, h, X, X_future, level, fitted), _XSEQ_CONTEXT)
 
 
 class DampedETS(ETS):
@@ -223,3 +221,5 @@ class DampedETS(ETS):
     def __init__(self, season_length=1, error="A", alpha=None, beta=None, phi=None, numeric_mode=None):
         super().__init__(season_length, error + "AN", True, alpha, beta, phi, numeric_mode=numeric_mode)
         self.error = error  # stored so get_params / clone report it
+
+_native_xseq_bridge.register(xseq_ets_classes=((ETS, None), (DampedETS, None)))

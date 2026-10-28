@@ -10,6 +10,7 @@ into `xseq_native_call`, which runs the same compiled entries, in the same
 order and with the same arguments, as the Python bodies it replaces.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -31,7 +32,7 @@ comptime XU8P = MutPointer[UInt8, MutUntrackedOrigin]
 def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """The model's numeric mode, or the process default, as `_backend.binding`
     resolves it."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -46,7 +47,7 @@ def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObjec
 def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """The compiled `_mojolearn_x_sequence` entries of the model's mode,
     connected at import; the connection error of that mode otherwise."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var mode = xseq_mode(fields, context)
     var entries = context["xseq_bindings"][mode]
     if Bool(py=py_call(b.isinstance, entries, b.str)):
@@ -161,20 +162,20 @@ def xseq_f32p(value: PythonObject) raises -> XF32P:
 def xseq_reshape(value: PythonObject, shape: PythonObject) raises -> PythonObject:
     """`value.reshape(shape)`: a view of the same words (ndarray's own C
     method)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(py_call(b.getattr, value, "reshape"), shape)
 
 
 def xseq_copy(value: PythonObject) raises -> PythonObject:
     """`value.copy()` (ndarray's own C method)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(py_call(b.getattr, value, "copy"))
 
 
 def xseq_item(value: PythonObject, index: Int) raises -> PythonObject:
     """`value[index]` (ndarray's own C subscript): a NumPy scalar of a 1-D
     array, a row view of a 2-D one."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(py_call(b.getattr, value, "__getitem__"), index)
 
 
@@ -206,7 +207,7 @@ def xseq_curve_list(value: PythonObject, count: Int) raises -> PythonObject:
     (`curve[:count].tolist()`)."""
     var result = Python.list()
     var p = xseq_f32p(value)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     for k in range(count):  # driver-loop: over the native training engine's per-epoch scalar report
         _ = py_call(py_call(b.getattr, result, "append"), PythonObject(Float64(p[k])))
     return result
@@ -223,25 +224,25 @@ def xseq_mean_dict(forecast: PythonObject) raises -> PythonObject:
 
 def xseq_int(value: PythonObject) raises -> Int:
     """`int(value)` (the builtin conversion, its own TypeError/ValueError)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Int(py=py_call_typed(b.int, value))
 
 
 def xseq_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Float64(py=py_call_typed(b.float, value))
 
 
 def xseq_truth(value: PythonObject) raises -> Bool:
     """`bool(value)`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Bool(py=py_call_typed(b.bool, value))
 
 
 def xseq_is_int(value: PythonObject, context: PythonObject) raises -> Bool:
     """`isinstance(value, (int, np.integer))`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return Bool(py=py_call(b.isinstance, value, context["int_types"]))
 
 
@@ -255,7 +256,7 @@ struct XseqStream(Movable):
     var offset: Int
 
     def __init__(out self, random_state: PythonObject, context: PythonObject) raises:
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var word: PythonObject
         if random_state is None:
             # `secrets.randbits(64)`: eight bytes of the OS generator

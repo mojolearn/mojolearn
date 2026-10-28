@@ -151,9 +151,7 @@ class AutoTheta(ParamsMixin):
         dict
             ``{"mean": forecasts}``, as returned by :meth:`predict`.
         """
-        if fitted:
-            raise NotImplementedError("Theta: fitted values are not implemented")
-        return self.fit(y, X).predict(h, level=level)
+        return _XSEQ(self, "theta_forecast", (y, h, X, X_future, level, fitted), _XSEQ_CONTEXT)
 
 
 class Theta(AutoTheta):
@@ -376,3 +374,5 @@ class DynamicOptimizedTheta(AutoTheta):
 
 
 _native_xseq_bridge.register(xseq_theta_codes=_MODELS, xseq_theta_models=tuple(_MODELS))
+
+_native_xseq_bridge.register(xseq_theta_classes=((AutoTheta, None), (Theta, "STM"), (OptimizedTheta, "OTM"), (DynamicTheta, "DSTM"), (DynamicOptimizedTheta, "DOTM")))

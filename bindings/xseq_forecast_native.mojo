@@ -12,6 +12,12 @@ attributes or the forecast dict. The stored-forecast reuse of theta and ETS
 is kept as it was.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_pandas import classical_admit_value
+from bindings.sequential_admission import _one_of
+from providers.python.autoarima_lifecycle_pyapi import _fields
+from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
+from core.cast_in import NPY_DOUBLE
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
@@ -19,11 +25,11 @@ from bindings.xseq_native_common import (
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth,
 )
-from core.xseq_marshal import xseq_var_blocks
+from core.xseq_marshal import xseq_var_blocks, xseq_cast_nd
 
 
 def _getattr(owner: PythonObject, name: String) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(b.getattr, owner, PythonObject(name))
 
 
@@ -32,12 +38,31 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
     """`(one, Y)`: `y = np.asarray(source)`, float64 refused, and `Y` the
     C-ordered float32 (batch, n_obs) view of it (one series reshaped to one
     row); `copy` keeps a private copy."""
+    var lifecycle = context["xseq_lifecycle_context"]
+    classical_admit_value(source, lifecycle)
     var y = xseq_input(source, context)
-    xseq_refuse_f64(y, label + ": " + message)
-    var one = Int(py=y.ndim) == 1
-    var arr = xseq_f32(y, label, copy, context)
-    if one:
-        arr = xseq_reshape(arr, Python.tuple(1, -1))
+    var shape = array_shape_once(y, lifecycle)
+    if len(shape) != 1 and len(shape) != 2:
+        raise Error(label + ": input must be one series or a matrix of series")
+    var metadata = array_metadata_once(y, shape^, label, lifecycle)
+    if metadata.dtype_number == NPY_DOUBLE:
+        raise Error("TypeError: " + label + ": " + message)
+    var one = len(metadata.shape) == 1
+    var rows = 1 if one else metadata.shape[0]
+    var cols = metadata.shape[0] if one else metadata.shape[1]
+    var arr = y
+    if not copy and metadata.f32_c():
+        if one:
+            arr = xseq_reshape(y, Python.tuple(1, cols))
+    else:
+        arr = xseq_zeros(Python.tuple(rows, cols), context)
+        var strides = List[Int]()
+        strides.append(metadata.source.s0)
+        if not one:
+            strides.append(metadata.source.s1)
+        xseq_cast_nd(metadata.source.addr, metadata.shape, strides, metadata.source.itemsize,
+                     metadata.source.kind, False, xseq_f32p(arr))
+    _ = metadata
     return Python.tuple(one, arr)
 
 
@@ -79,7 +104,7 @@ def _theta_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
 def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     if args[2] is not None:
         raise Error("NotImplementedError: Theta: prediction intervals (level) are not implemented")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var h = xseq_int(args[0])
     var models = context["xseq_theta_models"]
     var chosen = py_get(fields, "model")
@@ -134,7 +159,7 @@ def _croston_fit(model: PythonObject, fields: PythonObject, args: PythonObject, 
     _store(fields, "mean_", mean)
     var entries = xseq_entries(fields, context)
     _ = py_call_typed(entries["croston"], Python.list(xseq_addr(y), xseq_addr(mean)),
-                      Python.list(batch, n, _getattr(py_type(model), "_VARIANT")))
+                      Python.list(batch, n, _croston_variant(model, context)))
     _ = mean  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     return model
@@ -214,7 +239,7 @@ def _index(letters: String, letter: String) -> Int:
 def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     if args[2] is not None:
         raise Error("NotImplementedError: ETS: prediction intervals are not implemented")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var y = fields["_y"]
     var batch = Int(py=y.shape[0])
     var n = Int(py=y.shape[1])
@@ -260,7 +285,7 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
 # ---------------------------------------------------------------- GARCH
 
 def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var series = _series(args[0], "GARCH", False, context)
     var one = Bool(py=series[0])
     _store(fields, "_one", series[0])
@@ -307,7 +332,7 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
 # ---------------------------------------------------------------- VAR
 
 def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if args[2] is not None:
         raise Error("NotImplementedError: VAR.fit: information-criterion order selection (ic=) is not implemented")
     if not Bool(py=args[1] == PythonObject("ols")):
@@ -385,7 +410,7 @@ def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
 # ---------------------------------------------------------------- STL
 
 def _stl_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var robust = xseq_truth(fields["robust"])
     var inner = (2 if robust else 5) if args[0] is None else xseq_int(args[0])
     var outer = (15 if robust else 0) if args[1] is None else xseq_int(args[1])
@@ -419,7 +444,99 @@ def _stl_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     return result
 
 
+def _croston_variant(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var records = context["xseq_croston_classes"]
+    for i in range(len(records)):  # driver-loop: over connected Croston class metadata
+        if py_type(model) is records[i][0]:
+            return records[i][1]
+    raise Error("TypeError: Croston requires an exact connected forecaster class")
+
+
+def _setting(value: PythonObject, context: PythonObject) raises:
+    var cls = py_type(value)
+    if value is None or cls is py_type(PythonObject("")) or cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or _one_of(cls, context["scalar_types"]):
+        return
+    raise Error("TypeError: forecast settings require native scalar metadata")
+
+
+def _forecast_fields(model: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
+    var records = context["xseq_" + kind + "_classes"]
+    var cls = py_type(model)
+    var found = False
+    for i in range(len(records)):  # driver-loop: over connected forecast classes
+        found = found or cls is records[i][0]
+    if not found:
+        raise Error("TypeError: forecast requires an exact connected model class")
+    var fields = _fields(model, cls)
+    var names = Python.tuple("numeric_mode")
+    if kind == "theta":
+        names = Python.tuple("numeric_mode", "season_length", "decomposition_type", "model", "initial_smoothed", "alpha", "theta")
+    elif kind == "ets":
+        names = Python.tuple("numeric_mode", "season_length", "model", "damped", "alpha", "beta", "phi", "gamma")
+    elif kind == "garch":
+        names = Python.tuple("numeric_mode", "p", "o", "q", "mean", "dist", "power", "_one")
+    var lifecycle = context["xseq_lifecycle_context"]
+    for i in range(len(names)):  # driver-loop: over consumed forecast scalar settings
+        _setting(py_get(fields, names[i]), lifecycle)
+    var stall = py_get(fields, "_fast_stall")
+    if stall is not None:
+        if py_type(stall) is not py_type(Python.tuple()) or len(stall) != 2:
+            raise Error("TypeError: forecast stopping metadata requires a native pair")
+        _setting(stall[0], lifecycle)
+        _setting(stall[1], lifecycle)
+    return fields
+
+
+def _forecast_operation(model: PythonObject, kind: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = _forecast_fields(model, kind, context)
+    var lifecycle = context["xseq_lifecycle_context"]
+    if kind == "garch":
+        _setting(args[0], lifecycle)
+        var h = xseq_int(args[0])
+        var forecast = py_get(fields, "_fc")
+        if forecast is None:
+            raise Error("AttributeError: GARCH: call fit() before forecast()")
+        classical_admit_value(forecast, lifecycle)
+        if py_type(forecast) is not context["ndarray"]:
+            raise Error("TypeError: GARCH forecast storage requires its native ndarray")
+        var metadata = array_metadata_once(forecast, array_shape_once(forecast, lifecycle), "forecast", lifecycle)
+        if len(metadata.shape) != 2 or not metadata.f32_c():
+            raise Error("TypeError: GARCH forecast storage requires a contiguous float32 matrix")
+        if h > metadata.shape[1]:
+            var y = fields["_y"]
+            classical_admit_value(y, lifecycle)
+            if py_type(y) is not context["ndarray"]:
+                raise Error("TypeError: GARCH stored observations require a native ndarray")
+            _ = _garch_fit(model, fields, Python.tuple(xseq_first(y, xseq_truth(fields["_one"])), h), context)
+            forecast = fields["_fc"]
+        var b = native_loaded_module("builtins")
+        # Exact ndarray native slicing preserves the original view semantics,
+        # including zero/negative horizons and the one-series output rank.
+        var result = forecast[Python.tuple(py_call(b.slice, PythonObject(None)), py_call(b.slice, PythonObject(None), h))]
+        _ = metadata
+        return xseq_first(result, xseq_truth(fields["_one"]))
+    _setting(args[1], lifecycle)
+    _setting(args[5], lifecycle)
+    if xseq_truth(args[5]):
+        raise Error("NotImplementedError: " + kind + ": fitted values are not implemented")
+    # Preserve the public conveniences' accepted exogenous arguments: Theta
+    # forwards X to fit; Croston/ETS historically ignore X and X_future.
+    var fit_args = Python.tuple(args[0], args[2] if kind == "theta" else PythonObject(None))
+    var predict_args = Python.tuple(args[1], PythonObject(None), args[4])
+    if kind == "croston":
+        _ = _croston_fit(model, fields, fit_args, context)
+        return _croston_predict(model, fields, predict_args, context)
+    if kind == "ets":
+        _ = _ets_fit(model, fields, fit_args, context)
+        return _ets_predict(model, fields, predict_args, context)
+    _ = _theta_fit(model, fields, fit_args, context)
+    return _theta_predict(model, fields, predict_args, context)
+
+
 def xseq_forecast(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    if operation == "croston_forecast" or operation == "ets_forecast" or operation == "theta_forecast" or operation == "garch_forecast":
+        var kind = "croston" if operation == "croston_forecast" else ("ets" if operation == "ets_forecast" else ("theta" if operation == "theta_forecast" else "garch"))
+        return _forecast_operation(model, kind, args, context)
     var fields = py_fields(model)
     if operation == "theta_fit":
         return _theta_fit(model, fields, args, context)
