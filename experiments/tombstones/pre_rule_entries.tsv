@@ -1,0 +1,52 @@
+# Index rows of docs/TOMBSTONES.md with no inline tombstone marker in the tree, allowed because the deletion predates
+# the inline-marker rule (CLAUDE.md "Deleting an experiment", Andrew 2026-10-10). Populated 2026-10-28 (lane
+# tombstone-guard-20261028) from origin/main, every row dated before 2026-10-10.
+# THIS FILE CAN ONLY SHRINK: tools/tests/test_tombstones_preserved.py refuses a row the merge-base with main did not
+# have, and refuses a row whose entry has gained a marker (delete the row when you add the marker). Never add a row:
+# a new deletion carries its inline marker (or, for code that never reached main, says "lane only" in the index).
+# columns: key (first backticked name of the index row) <TAB> section anchor <TAB> index date <TAB> marker state on main
+MOJOLEARN_APPLE_FAST_GEMM_NT_TILED	mojolearn_apple_fast_gemm_nt_tiled	2026-10-03	no marker
+MOJOLEARN_ARIMA_FAST_LS_NOREAD	mojolearn_arima_fast_ls_noread	2026-10-03	no marker
+MOJOLEARN_GMM_FAST_GRID_COV	mojolearn_gmm_fast_grid_cov	2026-10-03	no marker
+MOJOLEARN_KERNEL_FAST_BAYES_JACOBI	mojolearn_kernel_fast_bayes_jacobi	2026-10-03	no marker
+MOJOLEARN_KERNEL_FAST_BAYES_STATS	mojolearn_kernel_fast_bayes_stats	2026-10-03	no marker
+MOJOLEARN_SEQ_FAST_THETA_HOIST	mojolearn_seq_fast_theta_hoist	2026-10-03	no marker
+MOJOLEARN_TSA2_KPSS	mojolearn_tsa2_kpss	2026-10-03	named in a non-marker comment or record
+MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID	mojolearn_yeti_tree_search_score_grid	2026-10-03	named in a non-marker comment or record
+MOJOLEARN_C29_STREAM_TOPK	mojolearn_c29_stream_topk	2026-10-07	no marker
+MOJOLEARN_C29_TILE	mojolearn_c29_tile	2026-10-07	no marker
+MOJOLEARN_C60_DIFF_REUSE	mojolearn_c60_diff_reuse	2026-10-07	no marker
+MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE	mojolearn_idn_gemm_compact_live_tile	2026-10-07	no marker
+MOJOLEARN_IDN_GEMM_FOLD_LEAF_64	mojolearn_idn_gemm_fold_leaf_64	2026-10-07	no marker
+MOJOLEARN_IDN_GEMM_FS2	mojolearn_idn_gemm_fs2	2026-10-07	no marker
+MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY	mojolearn_idn_gemm_group_tiles_body	2026-10-07	no marker
+MOJOLEARN_IDN_GEMM_TILE_SHORT_K	mojolearn_idn_gemm_tile_short_k	2026-10-07	no marker
+MOJOLEARN_IDN_NEURAL_LEAF	mojolearn_idn_neural_leaf	2026-10-07	no marker
+MOJOLEARN_IDN_RF_DEVICE_LOOP_K1	mojolearn_idn_rf_device_loop_k1	2026-10-07	no marker
+MOJOLEARN_IDN_RF_TASK_ROWS256	mojolearn_idn_rf_task_rows256	2026-10-07	no marker
+MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN	mojolearn_idn_seq_row_serial_scan	2026-10-07	no marker
+MOJOLEARN_NI13_CNN_WEIGHT_GENERATION_CACHE	mojolearn_ni13_cnn_weight_generation_cache	2026-10-07	no marker
+MOJOLEARN_TREES_C47_GBDT	mojolearn_trees_c47_gbdt	2026-10-07	no marker
+MOJOLEARN_TREES_T27	mojolearn_trees_t27	2026-10-07	no marker
+MOJOLEARN_C37_FUSED_ACCUMULATE	mojolearn_c37_fused_accumulate	2026-10-08	no marker
+MOJOLEARN_C37_FUSED_ROWS	mojolearn_c37_fused_rows	2026-10-08	no marker
+MOJOLEARN_C58_FORECAST4	mojolearn_c58_forecast4	2026-10-08	no marker
+MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF	mojolearn_classical_c13_fold_stats_off	2026-10-08	no marker
+MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS	mojolearn_classical_c61_da_class_stats	2026-10-08	no marker
+MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS	mojolearn_classical_c61_nb_class_stats	2026-10-08	no marker
+MOJOLEARN_GRAPH_DIRECT_DISTANCE	mojolearn_graph_direct_distance	2026-10-08	no marker
+MOJOLEARN_IDN_GEMM_OZAKI_LINALG	mojolearn_idn_gemm_ozaki_linalg	2026-10-08	no marker
+MOJOLEARN_IDN_GMM_COV_SYM	mojolearn_idn_gmm_cov_sym	2026-10-08	no marker
+MOJOLEARN_IDN_NEURAL_NN05	mojolearn_idn_neural_nn05	2026-10-08	named in a non-marker comment or record
+MOJOLEARN_IDN_NN20_SPLIT_KV	mojolearn_idn_nn20_split_kv	2026-10-08	no marker
+MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES	mojolearn_idn_nn20_split_kv_leaves	2026-10-08	no marker
+MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF	mojolearn_idn_ols_one_entry_off	2026-10-08	no marker
+MOJOLEARN_KMEANS_DIRECT_DISTANCE	mojolearn_kmeans_direct_distance	2026-10-08	no marker
+MOJOLEARN_TREES_HIST_MULTISTAT	mojolearn_trees_hist_multistat	2026-10-08	no marker
+MOJOLEARN_TREES_T19	mojolearn_trees_t19	2026-10-08	no marker
+MOJOLEARN_TREES_T29_VERSIONED	mojolearn_trees_t29_versioned	2026-10-08	no marker
+MOJOLEARN_IDN_AF_VEC_FUSED	mojolearn_idn_af_vec_fused	2026-10-09	named in a non-marker comment or record
+MOJOLEARN_IDN_PQ_SCAN_FUSED	mojolearn_idn_pq_scan_fused	2026-10-09	named in a non-marker comment or record
+MOJOLEARN_IVF_LAYOUT_SCATTER	mojolearn_ivf_layout_scatter	2026-10-09	named in a non-marker comment or record
+MOJOLEARN_KAPPROX_DEVICE	mojolearn_kapprox_device	2026-10-09	named in a non-marker comment or record
+MOJOLEARN_SPARSE_RP_DEVICE	mojolearn_sparse_rp_device	2026-10-09	named in a non-marker comment or record

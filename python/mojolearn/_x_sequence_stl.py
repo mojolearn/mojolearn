@@ -83,6 +83,11 @@ class STL(ParamsMixin):
     (144,)
     """
 
+    # Every public method is one xseq_native_call; none needs a fitted
+    # guard (the native forecast refuses an unfitted model itself), so no
+    # `_mode` class-creation wrappers are installed.
+    _mojolearn_native_public = True
+
     def __init__(self, endog, period=None, seasonal=7, trend=None, low_pass=None, seasonal_deg=1,
                  trend_deg=1, low_pass_deg=1, robust=False, seasonal_jump=1, trend_jump=1,
                  low_pass_jump=1, numeric_mode=None):
