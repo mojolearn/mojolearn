@@ -13,7 +13,7 @@ from bindings.neural_block_admission import (
 )
 from bindings.mode_metadata_native import _fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_fields, prepared_key_same
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_fields, prepared_key_same
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from std.memory import memcpy
 from std.os import getenv
@@ -812,9 +812,54 @@ def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: 
     neural_mamba3_restore(mods, fields, entries, weights)
 
 
+comptime _NEURAL_SNAPSHOT_SLOT = "neural_block_snapshot_v1"
+
+
+def _neural_derived_words(mut mods: NativeModules, snapshot: PythonObject) raises -> PythonObject:
+    # The snapshot words neural_block_snapshot computes from the stored
+    # fields (weight views, metadata copies, weight names).
+    var derived = mods.module("builtins").dict()
+    for name in [String("_neural_weight_names"), String("dt_limit"), String("_opts_tail"), String("rope_scaling"),  # small-loop(setup-derived snapshot words)
+                 String("_neural_original_w"), String("_w"), String("_neural_original_wopt"), String("_wopt"), String("_int15")]:
+        if py_contains(snapshot, name):
+            py_setitem(derived, name, snapshot[name])
+    return derived
+
+
+def neural_block_snapshot_prepared(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
+    # neural_block_snapshot, prepared: the weight views and metadata copies
+    # are captured on first use and reused while every stored field keeps
+    # its identity; field admission runs first on every call.
+    var bi = mods.module("builtins")
+    var live = neural_block_fields(mods, block, context)
+    # The derived words are functions of these stored fields only; every
+    # other field is taken live per call, as the full snapshot copies it.
+    var key = PythonObject(None)
+    try:
+        key = bi.list()
+        _ = py_call(key.append, py_type(block))
+        _ = py_call(key.append, context)
+        for name in [String("_w"), String("_wopt"), String("_int15"), String("dt_limit"), String("_opts_tail"), String("rope_scaling")]:  # small-loop(snapshot inputs)
+            _ = py_call(key.append, PythonObject(py_contains(live, name)))
+            prepared_key_add(mods, key, py_get(live, name), 1)
+    except:
+        key = PythonObject(None)
+    var record = prepared_get(mods, _NEURAL_SNAPSHOT_SLOT, block)
+    if key is not None and record is not None and prepared_key_same(record[0], key):
+        var fields = py_call(bi.dict, live)
+        _ = py_call(fields.update, record[1])
+        py_setitem(fields, "_neural_live_fields", live)
+        py_setitem(fields, "_neural_weight_names", neural_block_weight_names(mods, block))
+        return fields
+    var snapshot = neural_block_snapshot(mods, block, context)
+    if key is not None and _neural_owner_reusable(mods, snapshot, live, context):
+        prepared_put(mods, _NEURAL_SNAPSHOT_SLOT, block, Python.list(key, _neural_derived_words(mods, snapshot)))
+    return snapshot
+
+
 def neural_block_backward_binding(mut mods: NativeModules, block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var fields = neural_block_snapshot(mods, block, context)
+    var fields = neural_block_snapshot_prepared(mods, block, context)
     try:
         var result = _neural_backward_prepared(mods, block, input, grad_output, fields, context)
         _neural_publish_fields(fields)
