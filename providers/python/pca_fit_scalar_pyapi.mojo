@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.native_loaded_module import native_loaded_module
+from bindings.sequential_admission import sequential_admit_value
 from bindings.native_scalar_decode import NativeScalarBuffer, native_scalar_buffer_dtype
 from bindings.native_numpy_metadata import native_numpy_module_fields
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
@@ -57,6 +58,7 @@ struct PCAFitScalar(Copyable, Movable):
                 self.value = py_call(b.bytearray, value)
                 break
             if cls is b.memoryview:
+                sequential_admit_value(value, context)
                 if Bool(py=value.c_contiguous):
                     self.value = py_call(b.memoryview, training_void_bytes(value))
                 else:
@@ -72,9 +74,26 @@ struct PCAFitScalar(Copyable, Movable):
                 self.value = training_void_bytes(value)
                 break
             if cls is not context["ndarray"]:
-                # Primitive NumPy scalars and builtin numbers/text are
-                # immutable. Unsupported protocol objects are merely retained;
-                # the shared scalar admission refuses them before conversion.
+                # A native void scalar may be a mutable view into another
+                # array; capture its bytes too. Other native scalar numbers
+                # and text are immutable. Refuse protocol objects now, before
+                # input work could drop the model's last reference to them.
+                var classes = sequence_dtype_classes(scalar_context)
+                if cls is sequence_dtype_create(PythonObject("V"), scalar_context).type:
+                    var dtype = value.dtype
+                    _ = py_call(self.owners.append, dtype)
+                    if dtype.fields is not None:
+                        self.refusal = "TypeError: float() argument must be a string or a real number, not 'tuple'"
+                    else:
+                        self.value = training_void_bytes(value)
+                    break
+                var native_scalar = False
+                for index in range(len(classes)):  # driver-loop: exact native scalar identities before retaining a terminal object
+                    native_scalar = native_scalar or cls is classes[index][1]
+                for code in ["q", "Q"]:  # small-loop(two native long-long scalar aliases)
+                    native_scalar = native_scalar or cls is sequence_dtype_create(PythonObject(code), scalar_context).type
+                if not native_scalar:
+                    sequential_admit_value(value, context)
                 break
             if depth == 65:
                 self.refusal = "TypeError: scalar configuration exceeds native nesting; supply a native number"
