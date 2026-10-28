@@ -5,6 +5,7 @@ from sequence.ops import Args, FP
 from autograd.ops import op_ag_softmax_fwd, op_ag_softmax_vjp
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_div, identical_rsqrt, identical_sin, identical_cos
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from gemm.contract import contract_leaf_size, leaf_count
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_cell
 
@@ -44,9 +45,14 @@ def _rms(row: Int, a: Args):
     var d = a.i0
     var base = row * d
     var acc = Float32(0)
-    for j in range(d):  # device-loop: pinned ascending fused sum of squares
-        var x = ftz(a.p0.unsafe_load(base + j))
-        acc = ftz(identical_mul_add(x, x, acc))
+    comptime if IDN_NORM_FIXED_LANES:
+        # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (one thread)
+        var xs = a.p0.unsafe_origin_cast[MutAnyOrigin]()
+        acc = nfl_dot(xs, xs, base, base, d)
+    else:
+        for j in range(d):  # device-loop: pinned ascending fused sum of squares
+            var x = ftz(a.p0.unsafe_load(base + j))
+            acc = ftz(identical_mul_add(x, x, acc))
     comptime if NN24_NORM_LANES8:
         var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()
         acc = norm_profile_dot[NN24_LANES](values, values, base, base, d)
@@ -64,7 +70,12 @@ def _rms_dx(row: Int, a: Args):
     for j in range(d):  # device-loop: native row derivative and fused dot order
         var dh = ftz(identical_mul(ftz(a.p2.unsafe_load(base + j)), ftz(a.p1.unsafe_load(j))))
         a.p5.unsafe_store(base + j, dh)
-        dot = ftz(identical_mul_add(dh, ftz(a.p0.unsafe_load(base + j)), dot))
+        comptime if not IDN_NORM_FIXED_LANES:
+            dot = ftz(identical_mul_add(dh, ftz(a.p0.unsafe_load(base + j)), dot))
+    comptime if IDN_NORM_FIXED_LANES:
+        # MOJOLEARN_IDN_NORM_FIXED_LANES: the dot as the fixed 32-lane fold
+        # over the stored dh (one thread; the cell kernels' bits)
+        dot = ftz(nfl_dot(a.p5.unsafe_origin_cast[MutAnyOrigin](), a.p0.unsafe_origin_cast[MutAnyOrigin](), base, base, d))
     comptime if NN24_NORM_LANES8:
         var products = a.p5.unsafe_origin_cast[MutAnyOrigin]()
         var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()
