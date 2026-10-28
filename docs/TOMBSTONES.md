@@ -3648,3 +3648,15 @@ Hand-glue deletion (lane ag-transformer-owners, 2026-10-19). No define: the walk
   `MOJOLEARN_SVD_FAST_CHOLQR.patch` now also needs `fast_defines_py` and `_kit_fast_define` back (dead_entries_x_decomp).
   The batch-1 patches `byte_lm_launch_probe`, `lr_schedule_fill`, `x_decomp_knn_select` and `x_neighbors_purity_flags`
   were refreshed to apply on the new head.
+
+## Implicit Python model capture (2026-10-27)
+
+Owner-authorized API change during provider migration: `import_model` accepts an
+exported ONNX path or native reader graph. Implicit `torch.nn.Module` export,
+`ModelProto.SerializeToString`, the `example_inputs` argument, automatic
+TorchDynamo backend registration and automatic changed-weight re-export are
+removed. Direct imports of the former backend receive a native refusal.
+`ImportedProgram.run_torch` uses the existing whole-model native executor.
+Graph/weights are imported explicitly; input metadata is captured per execution.
+The implementation is on the provider integration branch pending compilation and
+public runtime qualification; this entry is not release or performance evidence.

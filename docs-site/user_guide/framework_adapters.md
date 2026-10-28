@@ -7,62 +7,51 @@ PyTorch or MAX graph.
 
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 
-## Run a PyTorch model with `torch.compile`
+## Run an exported PyTorch model
 
-Import `mojolearn.adapters.torch` and compile the model with the `"mojolearn"` backend:
+Export the model once, then import its graph and weights into mojolearn:
 
 ```python
 import torch
-import mojolearn.adapters.torch  # registers the "mojolearn" backend
+import mojolearn
 
 model = torch.nn.Sequential(torch.nn.Linear(3, 4), torch.nn.ReLU(), torch.nn.Linear(4, 2)).eval()
-compiled = torch.compile(model, backend="mojolearn", fullgraph=True, dynamic=False)
-
+example = torch.ones(8, 3)
+torch.onnx.export(model, (example,), "model.onnx", input_names=["input"],
+                  opset_version=17, dynamo=False)
+program = mojolearn.import_model("model.onnx", numeric_mode="identical")
 x = torch.randn(8, 3, device="cuda")  # "mps" on a Mac
-with torch.no_grad():
-    y = compiled(x)  # every operation runs in one mojolearn program call
+y = program.run_torch(x)
 ```
 
-The first call captures the model's graph, imports it into mojolearn and copies its weights to the GPU
-once. Each later call runs the whole graph as one program and returns new tensors on the input's device.
+The export is explicit preparation in PyTorch. Import creates a native model with
+its own graph and weight snapshot. Each `run_torch` call captures the input tensor
+metadata once and executes the whole model. Outputs are inference tensors on the
+first input's device; an `argmax` output uses `int32`.
 
-- **Nothing falls back to PyTorch.** If the model uses an operation the import does not support, the
-  compile fails with an `UnsupportedModel` error that names every unsupported node. Keep
-  `torch._dynamo.config.suppress_errors` at its default, `False`: set to `True`, PyTorch would run the
-  model itself instead of raising.
-- **`fullgraph=True`** makes a graph break an error, so no part of the model runs between programs in
-  PyTorch.
-- **`dynamic=False`** compiles each input shape as its own program. The backend compiles fixed shapes
-  only and refuses a graph with symbolic (dynamic) sizes.
-- **Weights** are read when the graph is imported. If you change them in place (an optimizer step or
-  `load_state_dict`), the next call imports the graph again with the new values.
-- **Numeric mode**: pass `options={"numeric_mode": "fast"}` to `torch.compile` for the `fast` mode, which
-  is available on Apple GPUs only. The default is `identical`.
-- Outputs are tensors without gradients: the compiled model is for inference. An `argmax` output is
-  `int32`.
+- Input shapes are fixed by the artifact or the `shapes` argument at import.
+- To use changed weights, export and import an updated artifact. Existing programs
+  retain their original weights.
+- Unsupported graph operations produce an `UnsupportedModel` error naming the
+  unsupported nodes.
+- `numeric_mode="fast"` is Apple only. The default is `identical`.
 
-Inputs on an NVIDIA or AMD GPU (CUDA and ROCm tensors on GPU 0) are read on the GPU where they are, and
-the outputs are written straight into new tensors on that GPU, with no copy through the host. Inputs
-anywhere else, including Apple GPU (`mps`) tensors, are copied once from the host into the program and
-the outputs copied back to the input's device. Both ways return the same bits.
+CUDA and ROCm tensors on GPU zero use device buffers. Other tensors, including
+Apple MPS tensors, use host staging and return outputs to the input's device.
 
-## Import a PyTorch model without `torch.compile`
+## Run with array inputs
 
-`mojolearn.import_model` does the same import directly and returns the program, which you can run on
-NumPy arrays and save:
+The same imported program accepts array inputs and can be saved:
 
 ```python
-import mojolearn
 import numpy as np
 
-program = mojolearn.import_model(model, example_inputs=torch.zeros(8, 3))
 y = program.run(np.ones((8, 3), dtype=np.float32))
 program.save("model.mlprog")
 ```
 
-`example_inputs` gives the shapes and dtypes the program will take; their values are not used. An ONNX
-file imports the same way: `mojolearn.import_model("model.onnx", shapes={"input": (8, 3)})`. A model the
-import cannot run is refused with the same `UnsupportedModel` error.
+For an artifact with an open input dimension, supply its fixed shape at import:
+`mojolearn.import_model("model.onnx", shapes={"input": (8, 3)})`.
 
 ## Train from PyTorch
 
