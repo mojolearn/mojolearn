@@ -1186,7 +1186,8 @@ def tokenizer_bpe_identity_text(text: PythonObject, n_ranks: PythonObject) raise
     ref cpy = Python().cpython()
     var raw = cpy.lib.get_function[PyObjectPtr]("PyUnicode_AsASCIIString")(text._obj_ptr)
     if not raw:
-        raise stash_python_error()
+        var error = stash_python_error()
+        raise error^
     var keep = PythonObject(from_owned=raw)
     var result = _identity(canonical, ranks)
     _ = keep
@@ -1439,7 +1440,7 @@ def _train_native_values(module: PythonObject, documents: PythonObject, size_val
     var lengths = List[Int64]()
     for i in range(len(values)):  # cpu-route: capture native training buffers before the existing trainer call
         var bytes = _bytes(values[i], False)
-        lengths.append(len(bytes))
+        lengths.append(Int64(len(bytes)))
         tokenizer_append_bytes(arena, bytes)
     var result = PythonObject(None)
     if module is context[3]:
