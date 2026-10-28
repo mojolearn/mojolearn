@@ -229,7 +229,8 @@ def _connect_parallel_byte_native():
         # legacy adapter. Cache its stored native module, never adapter methods.
         # Byte-LM owns registered Mojo types: preserve the one-mode-per-process
         # contract, including a fresh process selected as Apple fast at import.
-        modes = {mode: selected._host if vendor == "cpu" else selected}  # glue: installed native mode connection
+        # On CPU the adapter's binding() already returns the host module itself.
+        modes = {mode: selected}  # glue: installed native mode connection
     runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
     runtime("admit_class", (ParallelByteLanguageModelTrainer, "replica"))
     return runtime
