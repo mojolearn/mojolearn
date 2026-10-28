@@ -1,0 +1,18 @@
+{
+  "exit_code": 0,
+  "seconds": 10,
+  "source_commit": "fe290e16b0ee581edc1979375ad5bc31e170d647",
+  "entry": "experiments/peer4_mode_boundaries_20261028/compile.mojo",
+  "command_script": "/Users/andrewhendel/mojolearn-evidence/peer4-mode-20261028/compile1/compile-command.sh",
+  "command": "mojo build --optimization-level 0 -j 10 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings experiments/peer4_mode_boundaries_20261028/compile.mojo",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "compiler_workers": 10,
+  "host": "Mac (compile_slot.sh, nice 19)",
+  "log": "/Users/andrewhendel/mojolearn-evidence/peer4-mode-20261028/compile1/build.log",
+  "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer4-mode-20261028/compile1/source.tar.gz",
+  "artifact": "/Users/andrewhendel/mojolearn-evidence/peer4-mode-20261028/compile1/_mojolearn_mode_boundaries_compile.so",
+  "artifact_sha256": "f760f60eb17a2a6ac5a80b387affd8224e88c2d6da6bc8204e1ac005bbc47f1c",
+  "runtime_executed": false,
+  "scope": "public_attribute_c (native property recipes incl. ARIMA parameter properties) and full_reset_params_c (native constructor reconstruction for inherited set_params) with native_mode_recipe; CPU/identical compile only",
+  "not_covered": "Python glue (_native_mode_reconstruction/_native_mode_properties) is not executed; no runtime, identity or GPU check; merged bindings not rebuilt"
+}
