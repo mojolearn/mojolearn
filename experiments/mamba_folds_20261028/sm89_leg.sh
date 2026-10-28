@@ -4,7 +4,7 @@
 set -u
 NPROC=$(nproc)
 echo "nproc=$NPROC" > "$LEG_OUT/host.txt"
-MAIN=$PWD COLUMN_DEFS="" EXTRA="--target-accelerator sm_89" JOBS=$NPROC \
+MAIN=$PWD COLUMN_DEFS="-D MOJOLEARN_COLUMN_NVIDIA" EXTRA="--target-accelerator sm_89" JOBS=$NPROC \
   bash experiments/mamba_folds_20261028/compile.sh "$LEG_OUT/sm89" device training
 rc=$?
 echo "LEG rc=$rc" | tee -a "$LEG_OUT/host.txt"

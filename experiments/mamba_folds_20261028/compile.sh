@@ -1,7 +1,8 @@
 #!/bin/bash
 # Compile-only closure for lane mamba-folds (2026-10-28): both defines, each arm.
 # Usage: bash compile.sh <evidence_dir> <roots...>   (env DEFSETS, COLUMN_DEFS, EXTRA, MOJO_RUN_MODE)
-#   roots: host (bindings/_mojolearn_mamba_host.mojo, shared-lib)
+#   roots (the PyInit entries the binding build scripts compile; a module body alone emits an empty stub):
+#          host (bindings/entry/entry__mojolearn_mamba_host.mojo, shared-lib)
 #          device (bindings/_mojolearn_mamba.mojo, shared-lib)
 #          oracle (mamba/checks/mamba_backward_host_oracle_check.mojo, executable)
 #          training (bindings/_mojolearn_training.mojo, shared-lib; the Samba train step)
@@ -26,10 +27,10 @@ git rev-parse HEAD > "$EV/source-commit.txt"
 overall=0
 for root in $ROOTS; do
   case $root in
-    host) entry=bindings/_mojolearn_mamba_host.mojo; emit=(--emit shared-lib); ext=so ;;
-    device) entry=bindings/_mojolearn_mamba.mojo; emit=(--emit shared-lib); ext=so ;;
+    host) entry=bindings/entry/entry__mojolearn_mamba_host.mojo; emit=(--emit shared-lib); ext=so ;;
+    device) entry=bindings/entry/entry__mojolearn_mamba.mojo; emit=(--emit shared-lib); ext=so ;;
     oracle) entry=mamba/checks/mamba_backward_host_oracle_check.mojo; emit=(); ext=bin ;;
-    training) entry=bindings/_mojolearn_training.mojo; emit=(--emit shared-lib); ext=so ;;
+    training) entry=bindings/entry/entry__mojolearn_training.mojo; emit=(--emit shared-lib); ext=so ;;
     *) echo "unknown root $root"; exit 2 ;;
   esac
   for arm in $DEFSETS; do
