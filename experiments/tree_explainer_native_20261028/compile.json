@@ -1,7 +1,7 @@
 {
  "exit_code": 0,
- "seconds": 117.09,
- "source_commit": "cab1cde66b4f7e450b68db24e043a45c60eb916a",
+ "seconds": 127.0,
+ "source_commit": "4f7c03567febd2d916aa6502ae186b6bbd9344e7",
  "tracked_dirty": false,
  "entry": "checks/tree_auxiliary_public_compile.mojo",
  "command": [
@@ -34,7 +34,7 @@
   "/Users/andrewhendel/CascadeProjects/mojolearn-explainers/bindings",
   "/Users/andrewhendel/CascadeProjects/mojolearn-explainers/checks/tree_auxiliary_public_compile.mojo",
   "-o",
-  "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt1/tree_auxiliary_public_compile.so"
+  "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt2/tree_auxiliary_public_compile.so"
  ],
  "compiler_version": "Mojo 1.0.0 (ed45d567)",
  "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
@@ -42,10 +42,10 @@
  "resource": "Mac, compile_slot.sh nice 19, sysctl hw.activecpu=10",
  "scope": "Complete tree public dispatcher incl. TreeExplainer + Kernel/Permutation explainer native owners; CPU column, identical, O0",
  "runtime_executed": false,
- "log": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt1/compile.log",
- "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt1/source-bytes.tgz",
- "source_archive_sha256": "9ce286521d5ca18a9c864c38c7feb9df0c02d8166acb0eae8df0aef41f92de8d",
- "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt1/source-manifest.json",
- "binary": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt1/tree_auxiliary_public_compile.so",
- "binary_sha256": "5f3efbcebfa232478b37290e1edce785895a3d19489179281e80fa62148a1ab1"
+ "log": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt2/compile.log",
+ "source_archive": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt2/source-bytes.tgz",
+ "source_archive_sha256": "81de4d8146ede806aa624251aad30d9a7276c542b05744a52027076e9c0e15b8",
+ "source_manifest": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt2/source-manifest.json",
+ "binary": "/Users/andrewhendel/mojolearn-evidence/peer5-explainers-treeaux-20261028/explainers/attempt2/tree_auxiliary_public_compile.so",
+ "binary_sha256": "ba718d73161a6579878e6fed273753464ee700da2c2a918eaba9e54e2ddcea36"
 }
