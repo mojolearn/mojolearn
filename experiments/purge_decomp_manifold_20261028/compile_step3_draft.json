@@ -1,0 +1,72 @@
+{
+ "step": "3: unwired UMAP categorical label draft, label cap removed",
+ "coverage": "bindings/umap_labels_native.mojo umap_categorical through a compile-only root",
+ "not_covered": "not wired into mani_umap_native; no manifold host builder compile with it; runtime, identity, GPU",
+ "missing_before_wiring": [
+  "NumPy temporal scalar labels inside object arrays",
+  "void/record labels",
+  "bare str/bytes/dict y sequences",
+  "first-float mixed-list validation",
+  "pandas extension storage (coordinate with preprocessing owner: msel_inputs.mojo 95-107 pattern)",
+  "bridge import-time _datetime registration needs connection-test fixture updates",
+  "replace the callback block in bindings/mani_umap_native.mojo:200-236 with umap_categorical"
+ ],
+ "compiles": [
+  {
+   "group": "umap_labels_draft",
+   "source_commit": "ed3a12997fa555b217063ca244de891b84654991",
+   "tracked_dirty_files": 0,
+   "entry": "experiments/purge_decomp_manifold_20261028/compile_umap_labels_draft.mojo",
+   "exit_status": 0,
+   "seconds": 2.94,
+   "binary_sha256": "17fcc7c673b5a4bb94ee6a46445134832069b761f3b996b010032547c7940255",
+   "compiler_version": "Mojo 1.0.0 (ed45d567)",
+   "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
+   "log": "/Users/andrewhendel/mojolearn-evidence/purge-decomp-manifold-20261028/step3-final/umap_labels_draft/build.log",
+   "command": [
+    "pixi",
+    "run",
+    "--manifest-path",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml",
+    "--environment",
+    "default",
+    "--locked",
+    "--no-install",
+    "--executable",
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+    "build",
+    "--optimization-level",
+    "0",
+    "-j",
+    "10",
+    "--emit",
+    "shared-lib",
+    "--target-cpu",
+    "apple-m1",
+    "-D",
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-D",
+    "MOJOLEARN_COLUMN_CPU",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027/bindings",
+    "/Users/andrewhendel/mojolearn-wt/peer2-manifold-20261027/experiments/purge_decomp_manifold_20261028/compile_umap_labels_draft.mojo",
+    "-o",
+    "/Users/andrewhendel/mojolearn-evidence/purge-decomp-manifold-20261028/step3-final/umap_labels_draft/out.so"
+   ],
+   "jobs": 10,
+   "target": "local Mac CPU apple-m1, MOJOLEARN_NUMERIC_IDENTICAL=1, MOJOLEARN_COLUMN_CPU, O0",
+   "runtime": "NOT_RUN",
+   "vendor_identity": "NOT_RUN"
+  }
+ ],
+ "failed_attempts": [
+  {
+   "tag": "step3-a1",
+   "exit_status": 1,
+   "cause": "parse errors at umap_labels_native.mojo:104,139,140",
+   "log": "/Users/andrewhendel/mojolearn-evidence/purge-decomp-manifold-20261028/step3-a1/umap_labels_draft/build.log"
+  }
+ ]
+}
