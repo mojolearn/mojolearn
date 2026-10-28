@@ -4330,7 +4330,7 @@ def _gemm_tile_step_down_rules(m: Int, n: Int, k: Int, plan: Int) -> Int:
 #: tiles of 128 x 128 on a 142-SM L40S) keep a tile that leaves most SMs
 #: idle. Today's rules answer until a device has been seen (the first call
 #: of a process) and on every other column (Apple, CPU), where the define is
-#: inert.
+#: inert. (Superseded paragraph "SPLIT DECISION HELD": see TILE AND GROUPS below.)
 #: OCCUPANCY REASONING for the multiple: a tuned block is TUNED_TPB threads;
 #: an NVIDIA SM has 4 warp schedulers and a CDNA CU 4 SIMDs. A scheduler
 #: needs at least two resident warps / waves so one can issue while the
@@ -4342,13 +4342,35 @@ def _gemm_tile_step_down_rules(m: Int, n: Int, k: Int, plan: Int) -> Int:
 #: SAME BITS: the plan is an execution plan only (contract 6.1): every tuned
 #: plan computes the same leaves of `contract_partition(k)`, each one chain
 #: over k ascending from +0.0, folded by the same contract tree
-#: (`check_device_is_launch_invariant`). SPLIT DECISION HELD: the group
-#: (split-K) rules read `choose_gemm_plan_tiles`, which this does not touch,
-#: but the shipped body runs groups only on calls `choose_gemm_plan` leaves
-#: on TUNED 128x128. Where the column's TUNED 128 body would run groups at
-#: this shape (`_gemm_fill_tuned128_group_leaves > 0`), a move onto or off
-#: the 128 tile would change that decision, so the call keeps today's pick:
-#: the split decision is today's at every shape.
+#: (`check_device_is_launch_invariant`).
+#: TILE AND GROUPS CHOSEN TOGETHER (follow-up, 2026-10-28): a TUNED 128x128
+#: call may already run its leaves in G groups (the kpack-hg / matrix-core
+#: body's group rule, `_gemm_fill_tuned128_group_leaves`), so it issues
+#: tiles x G blocks plus one fold launch over m n G partials in global
+#: memory. The rule therefore ranks three shipped schedules by block count:
+#:   1. the widest tile (128, 64, 32) that reaches the target with ALL
+#:      leaves in one launch: no partial round trip through global memory
+#:      and no second launch, so it wins whenever it fills (cost reasoning:
+#:      the grouped schedule moves m n G words out and back for the fold);
+#:   2. else TUNED 128 with the body's own groups, if tiles x G reaches it;
+#:   3. else whichever of those two issues more blocks (ties keep today's).
+#: Choosing 1 for a call the 128 body would group turns that call's groups
+#: off; choosing 128 lets the body's unchanged group rule decide. No new
+#: group size is ever invented here.
+#: WHY THE FOLD IS THE SAME (per output cell): `contract_partition(k)` fixes
+#: the leaves (L, P) from k alone. Every candidate runs each leaf as one
+#: fma_rn chain over its k range ascending from +0.0, flushes it, and folds
+#: the P leaf partials by the contract's balanced tree in ascending leaf
+#: order (`_fold_push_local`, then `ftz(root)`). An all-leaves launch pushes
+#: all P partials through that tree in one thread. A group launch splits the
+#: leaves into power-of-two groups aligned at leaf 0; each group's local
+#: fold is exactly the contract tree's subtree over those leaves, and the
+#: fold launch combines the group nodes by the levels above them (long-k
+#: brief section 5, Lemmas A to C; `check_group_fold_is_the_contract_tree`
+#: checks it exhaustively on the host). So every candidate produces the same
+#: tree over the same leaf values: same bits. REFUSAL: a group size that is
+#: not a power of two would not be a subtree of that tree; the rule then
+#: keeps today's pick instead of changing the schedule.
 comptime IDN_GEMM_FILL_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
     "MOJOLEARN_IDN_GEMM_FILL_TILES"
 ]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -4443,27 +4465,48 @@ def _gemm_fill_tuned128_group_leaves(m: Int, n: Int, k: Int) -> Int:
 
 
 def gemm_fill_step_down(m: Int, n: Int, k: Int, plan: Int) -> Int:
-    """The continuous fill rule (`IDN_GEMM_FILL_TILES`): from the tile
-    chooser's TUNED pick, the widest tuned tile whose block count reaches
-    `gemm_fill_target_blocks()`, else the 32x32 tile; today's
-    `_gemm_tile_step_down_rules` while no device is known. A call whose
-    TUNED 128 body would run groups keeps today's pick wherever the fill
-    pick would move it onto or off the 128 tile (split decision held)."""
+    """The continuous fill rule (`IDN_GEMM_FILL_TILES`), tile and groups
+    chosen together (see the comment above `IDN_GEMM_FILL_TILES`): the
+    widest tuned tile that reaches `gemm_fill_target_blocks()` with all
+    leaves in one launch; else TUNED 128 with the body's own groups where
+    those reach it; else whichever issues more blocks. Today's
+    `_gemm_tile_step_down_rules` while no device is known, and wherever the
+    body's group size is not a power of two (refused: not a contract
+    subtree)."""
     var today = _gemm_tile_step_down_rules(m, n, k, plan)
     if plan != PLAN_TUNED_128_8X8 and plan != PLAN_TUNED_64_4X4:
         return today
     var target = gemm_fill_target_blocks()
     if target <= 0:
         return today
-    var pick = plan
-    if pick == PLAN_TUNED_128_8X8 and _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE) < target:
-        pick = PLAN_TUNED_64_4X4
-    if pick == PLAN_TUNED_64_4X4 and _tuned_tile_blocks(m, n, TUNED_BM_WIDE) < target:
-        pick = PLAN_TUNED_32_2X2
-    if (pick == PLAN_TUNED_128_8X8) != (today == PLAN_TUNED_128_8X8):
-        if _gemm_fill_tuned128_group_leaves(m, n, k) > 0:
-            return today
-    return pick
+    var gl = 0
+    if plan == PLAN_TUNED_128_8X8:
+        gl = _gemm_fill_tuned128_group_leaves(m, n, k)
+    if gl > 0 and (gl & (gl - 1)) != 0:
+        return today
+    var b128 = _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE)
+    var b64 = _tuned_tile_blocks(m, n, TUNED_BM_WIDE)
+    var b32 = _tuned_tile_blocks(m, n, TUNED_BM_NARROW)
+    # 1. all leaves in one launch, widest tile that fills.
+    if plan == PLAN_TUNED_128_8X8 and b128 >= target:
+        return PLAN_TUNED_128_8X8
+    if b64 >= target:
+        return PLAN_TUNED_64_4X4
+    if b32 >= target:
+        return PLAN_TUNED_32_2X2
+    # 2. TUNED 128 with the body's own groups.
+    var grouped = 0
+    if gl > 0:
+        var p_count = contract_partition(k)[1]
+        grouped = b128 * ((p_count + gl - 1) // gl)
+    if grouped >= target:
+        return PLAN_TUNED_128_8X8
+    # 3. neither fills: the schedule with more blocks; ties keep today's.
+    if grouped > b32:
+        return PLAN_TUNED_128_8X8
+    if b32 > grouped:
+        return PLAN_TUNED_32_2X2
+    return today
 
 
 def choose_gemm_plan_untuned(m: Int, n: Int, k: Int) -> Int:
