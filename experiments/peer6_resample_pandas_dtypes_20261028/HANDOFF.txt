@@ -1,0 +1,10 @@
+Peer6 resample pandas dtypes, 2026-10-28. Branch lane/peer6-resample-pandas.
+Commit "Read pandas categorical, sparse and interval storage natively
+for resampling" finishes the dirty draft of providers/python/resample_pandas_pyapi.mojo
+(categorical distinct dictionaries, SparseArray IntIndex/BlockIndex with typed fills,
+IntervalArray, extended-precision widening); merged origin/main after it.
+Compile: checks/peer6_resample_pandas_compile.mojo exit0 at the merge head (compile.json);
+earlier draft-only pass: ~/mojolearn-evidence/peer6-resample-pandas-20261027/attempt15.
+Helper only: not yet wired into the public resample row operation (that wiring and its
+composed compile remain pending). Arrow temporal/decimal/nested still refuse.
+No runtime/identity/GPU.
