@@ -8,6 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.mode_metadata_native import _fields, _fitted
 from bindings.public_attributes_native import _plan, _lookup, _string_keys
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
+from bindings.classifier_public_lifecycle import _feature_names
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_warnings import classical_warn_column
@@ -74,6 +75,24 @@ def kernel_public_finite(value: ArrayMetadata, name: String) raises:
     if not family_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=value.source.addr), value.count):
         raise Error("ValueError: Input " + name + " contains NaN or infinity")
     _ = value
+
+
+def kernel_public_feature_snapshot(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The shared native reader returns an owned array of admitted string
+    # references. Capture it before releasing the GIL for numerical execution;
+    # a later source-column change must not label the already captured X.
+    return _feature_names(source, context)
+
+
+def kernel_public_fit_complete(model: PythonObject, names: PythonObject) raises:
+    # Publish only the retained operation metadata, never reread the caller's
+    # input after native execution. Preserve the ordinary estimator fit flags.
+    var fields = _fields(model)
+    if names is None:
+        _ = py_call(fields.pop, "feature_names_in_", PythonObject(None))
+    else:
+        py_setitem(fields, "feature_names_in_", names)
+    py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
 
 
 def kernel_public_column_target(source: PythonObject, value: ArrayMetadata,
