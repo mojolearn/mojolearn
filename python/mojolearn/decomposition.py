@@ -429,13 +429,13 @@ class TruncatedSVD(NumericModeMixin):
     def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,
                  power_iteration_normalizer="auto", random_state=None, tol=0.0, numeric_mode=None):
         self.n_components = n_components
-        self.numeric_mode = numeric_mode
         self.tol = tol
         self.algorithm = algorithm
         self.n_iter = n_iter
         self.n_oversamples = n_oversamples
         self.power_iteration_normalizer = power_iteration_normalizer
         self.random_state = random_state
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
         """Fit the model to ``X``.
