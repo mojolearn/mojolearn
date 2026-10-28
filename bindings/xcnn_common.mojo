@@ -128,7 +128,7 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
     var descriptor = py_get(namespace, "shape")
     var types = native_loaded_module("types")
     if (py_type(descriptor) is not types.MemberDescriptorType
-            and py_type(descriptor) is not types.GetSetDescriptorType):
+            and py_type(descriptor) is not py_type(xcnn_builtins().type.__dict__["__dict__"])):
         raise Error("TypeError: CNN shape requires native storage metadata")
     if descriptor.__objclass__ is not cls:
         raise Error("TypeError: CNN shape refuses subclasses")
@@ -196,6 +196,9 @@ def xcnn_tensor_layout(context: PythonObject) raises:
                 raise Error("TypeError: CNN tensor refuses Python attribute hooks")
     var slots = context["xcnn_tensor_slots"]
     var namespace = _class_fields(cls)
+    var finalizer = py_get(context, "xcnn_tensor_finalizer")
+    if finalizer is not None and py_get(namespace, "__del__") is not finalizer:
+        raise Error("TypeError: CNN tensor requires its native lifetime descriptor")
     for name in ["b", "shape", "h", "_host", "_base"]:  # driver-loop: native connected tensor member descriptors
         if py_get(namespace, PythonObject(name)) is not slots[PythonObject(name)]:
             raise Error("TypeError: CNN tensor storage descriptors changed")
@@ -355,16 +358,22 @@ def xcnn_host_i32(shape: List[Int], context: PythonObject) raises -> PythonObjec
 def xcnn_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_f32(x, name)`: `np.asarray(x)`, float32 only (refused by name,
     never converted), C-contiguous."""
-    var b = xcnn_builtins()
-    # a DeviceTensor reads back through its `__array__` (`numpy()`)
     if not xcnn_is_t(value, context):
         sequential_admit_value(value, context)
     var a = xcnn_host_of(value, context) if xcnn_is_t(value, context) else sequential_input(value, context)
-    var dtype = a.dtype
-    if Int(py=dtype.num) != 11 or not Bool(py=dtype.isnative):
-        raise Error("TypeError: mojolearn: " + name + " must be float32 (got " + String(py=py_call(b.str, dtype))
-                    + "); convert it yourself so the bits that ran are bits you made")
-    return xseq_f32(a, name, False, context)
+    admit_native_buffer_exporter(a)
+    var borrowed = AdmittedBorrowedBuffer(a)
+    var layout = borrowed.layout.value().copy()
+    if borrowed.format != "f" and borrowed.format != "@f" and borrowed.format != "=f":
+        raise Error("TypeError: mojolearn: " + name + " must be native float32; convert it yourself so the bits that ran are bits you made")
+    # The original exporter metadata is captured once. The internal view has
+    # private shape metadata and retains the source owner for the operation.
+    if layout.contiguous():
+        return py_call(context["ndarray"], xcnn_tuple(layout.shape), dtype=context["float32"], buffer=a)
+    var out = xcnn_host_f32(layout.shape, context)
+    layout.copy_to(native_buffer_address(out))
+    _ = a
+    return out
 
 
 def xcnn_reshape(value: PythonObject, shape: List[Int]) raises -> PythonObject:

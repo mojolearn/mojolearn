@@ -167,6 +167,14 @@ def register(**tables):
                            warning_lineno=code.co_firstlineno,
                            warning_module=cls.__module__, warning_source_line="")
             context["xcnn_array_context"]["sequence_array_warnings"] = warning
+            from types import BuiltinFunctionType, MethodType
+            from .tokenizer import _binding
+            descriptor = _binding()._module.classical_attribute_descriptor
+            if type(descriptor) is not BuiltinFunctionType:
+                raise TypeError("CNN storage requires its native finalizer descriptor")
+            cls.__del__ = descriptor(MethodType(_ENTRY, (context, "tensor_finalize")))
+            tables["xcnn_dev_class"].__del__ = descriptor(MethodType(_ENTRY, (context, "dev_finalize")))
+            context["xcnn_tensor_finalizer"] = vars(cls)["__del__"]
 
 
 def connect_classifier():
@@ -184,10 +192,12 @@ def connect_classifier():
     labels = {}
     for mode in ("identical", "fast"):  # glue: the two numeric modes, connected once
         try:
-            entry = getattr(_backend.binding("_mojolearn_x_sequence", mode), "model_labels")
-            if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError("CNNClassifier requires the compiled model_labels")
-            labels[mode] = {"model_labels": entry}
+            module = _backend.binding("_mojolearn_x_sequence", mode)
+            entry = getattr(module, "model_labels")
+            provider = getattr(module, "model_native_api_v1")
+            if not isinstance(entry, BuiltinFunctionType) or not isinstance(provider, BuiltinFunctionType):
+                raise TypeError("CNNClassifier requires the compiled label provider")
+            labels[mode] = {"model_labels": entry, "model_native_api_v1": provider}
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             labels[mode] = type(error).__name__ + ": " + str(error)
     context.update(xcnn_label_bindings=labels, os_urandom=os.urandom,

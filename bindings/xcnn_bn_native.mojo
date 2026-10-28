@@ -38,7 +38,7 @@ def _truth(value: PythonObject) raises -> Bool:
 
 def _bn_admit(layer: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(layer)
-    for name in ["num_features", "eps", "affine", "momentum", "track_running_stats", "num_batches_tracked_",
+    for name in ["num_features", "eps", "affine", "momentum", "track_running_stats", "num_batches_tracked_",  # driver-loop: over consumed passive settings
                  "input_shape", "numeric_mode", "training", "_run_stale", "_aux_k", "_mode", "_x3shape", "_shape", "_xdev"]:  # driver-loop: admit consumed passive settings before coercion
         var value = py_get(fields, PythonObject(name))
         neural_plain_value(value, 0, context)
