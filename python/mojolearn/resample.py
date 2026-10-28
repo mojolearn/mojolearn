@@ -456,6 +456,8 @@ _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_rs_state=globals(),
                              family_rs_result_classes=(BootstrapResult, PermutationTestResult, MonteCarloResult, ConfidenceInterval))
 _native_family_bridge.connect_bindings("_mojolearn_resample")
+from ._native_owner_lifetime import connect_owner_context as _connect_owner_context
+_connect_owner_context(_NATIVE_CONTEXT)
 
 __all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate", "resample", "resample_indices",
            "BootstrapResult", "PermutationTestResult", "MonteCarloResult",
