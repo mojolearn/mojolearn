@@ -1,0 +1,120 @@
+Identical structural reuse delivery, 2026-10-28
+Base: dde8d170c4. Seven coherent batches, serialized integration into main.
+Focus: remove repeated work, not language-count changes. No runtime, performance,
+identity or cross-vendor campaign. No numerical/performance default promoted.
+No rented boxes, watcher services or changes to another session's worktrees.
+
+1. Shared admission (33bc4b818d; receipt 0bcb760b62)
+Removed: linear process/operation module-name scans; repeated Array descriptor
+key-list construction/indexing; duplicate container type checks and per-item
+CPython accessor resolution in recursive identity walks.
+Setup/reuse: native module maps; class admission retains native ancestry and
+slot vectors; container/stamp walks resolve accessors outside inner loops.
+Invalidation: module maps clear at GIL release; live module/class/export checks
+remain. All live namespace keys are admitted before keyed lookups. Array slot
+mutation and released-memoryview checks remain. Module global layout is V3.
+Compile: focused Mac CPU exported module admission/reuse/release, Array snapshot
+and recheck, identity capture/matching/fields/Array invalidation.
+Limits: live mutable scans and Python-owned boundary metadata remain; small-map
+performance is not measured. Detail: ../shared_admission_20261028/HANDOFF.txt.
+
+2. Generation descriptor/state metadata (a8f4e65e02)
+Removed: per-token/per-layer address/parameter vector copies; quadratic state
+alias searches; per-layer construction of the same field schema tuple.
+Setup/reuse: one public operation owns descriptor vectors and state alias map.
+Only token-dependent slots update before synchronous calls; owners pin map keys.
+Invalidation: next public forward/generate/stream read recaptures metadata.
+Compile: focused public CausalLM forward/generate, Mac CPU identical.
+Limits: local nonresident supported fp32 routes; specialized routes, snapshots,
+publication and other ABI envelopes remain. Detail:
+../generation_metadata_hoist_20261028/HANDOFF.txt.
+
+3. AutoARIMA candidate plans/setup (4fe5a56120, repair dd91e40d34)
+Removed: candidate tuple-grid indexing/integer decoding; repeated invariant
+plain-order decisions, IC binding/address lookup and count-buffer address reads.
+Setup/reuse: native candidate records, preboxed ABI penalties and private buffer
+addresses captured per search/group; unchanged candidate and kernel order.
+Invalidation: operation-local, fresh argument/model admission on next call.
+Source review found missing post-loop ic_k/grouped_ll lifetime pins after the
+first merge; the focused-compiled repair was pushed before later batches.
+Other hoisted pointer owners were reviewed. No runtime failure was observed.
+Compile: actual TSA public dispatcher including AutoARIMA, Mac CPU identical.
+Limits: table/packed/penalty marshalling, calls and results still use Python
+objects. Details: ../classical_loop_hoist_20261028/HANDOFF.txt and
+../autoarima_abi_scalar_20261028/HANDOFF.txt.
+
+4. HDBSCAN and regression results (da98ec9e06)
+Removed: per-batch HDBSCAN address/parameter envelope construction and stable
+buffer lookup; per-output regression arena address/metadata lookup.
+Setup/reuse: private call envelopes initialized once, varying offsets/counts
+updated per batch; one arena pointer reused through raw-result conversion.
+Invalidation: no persistent cache; every operation captures current views and
+keeps all source/output owners alive through their final native use.
+Compile: actual HDBSCAN public and regression dispatch roots, Mac CPU identical.
+Limits: Python-object binding envelopes and lower buffer materialization remain.
+Detail: ../classical_batch_setup_20261028/HANDOFF.txt.
+
+5. Generation activation workspaces (ac4585eaa3)
+Removed: allocation/destruction of hidden/output arrays at every layer and token.
+Setup/reuse: two private ping-pong native buffers, allocated lazily and reused
+across layers, final normalization and same-extent token forwards.
+Invalidation: size changes replace storage; fresh admission starts a new lifetime.
+Every output still zeroed; call order, aliases and partial publication preserved.
+Compile: focused public CausalLM forward/generate, Mac CPU identical.
+Limits: a spare activation buffer remains live beside logits and can increase
+peak live memory there. Logits, Mamba reports and sampling scratch still allocate.
+Detail: ../generation_workspace_reuse_20261028/HANDOFF.txt.
+
+6. Sequential descriptions/admission (38d6fc5c6e through f3b904f3e9)
+Removed: per-element empty Python container/type inventory construction and
+context-table reads; per-call Python program/scalar list build then conversion.
+Setup/reuse: type inventories per operation; retained native description vectors
+borrowed by fit/forward/predict with their owner kept through native execution.
+Invalidation: width and recursive layer/sample identity/length checks; mutable
+scalar buffers decline caching. Public admission and release-window module
+rechecks remain; weak prepared registry manages model lifetime.
+Compile: runtime_sequential host root and type registration, Mac CPU identical.
+Limits: mutable boundary scans remain; new implicit sample-shape objects can
+miss identity reuse; other importing families/GPU roots not compiled.
+Detail: ../neural_loop_metadata_20261028/HANDOFF.txt.
+
+7. Native optimizer indexes (85026a21f8 through 6b16358a52)
+Removed: all-state search for every parameter/step; quadratic prior-parameter
+search during duplicate admission. This work was already native.
+Setup/reuse: per-optimizer maps populated on state creation, keyed by complete
+generation-bearing parameter handles. Operation-local duplicate map preserves
+validation/update order. Parameter retirement reindexes compacted state vectors.
+Invalidation: close clears indexes; ordinary reset retains valid parameter state.
+Source review caught failed-checkpoint rollback before merge. Index tables stay
+available until partial states retire, then are reused at next creation; storage
+is bounded by optimizer-count high-water mark.
+Compile: HostExec session/optimizer construction, state allocation/lookup, step,
+free/retirement, reset, close and control-checkpoint restore/rollback, Mac CPU.
+Limits: retirement still scans/reindexes; per-step temporary lists/map remain;
+GPU executor instantiations not compiled. Detail:
+../optimizer_state_index_20261028/HANDOFF.txt.
+
+Compilation and push evidence
+Each detail directory contains compile.json, exact coverage, source/binary/log
+locations and retained failed attempts. Successful focused compilation qualifies
+only those source paths/targets; separate batch builds are not a full integrated
+runtime or GPU qualification. No failed compilation was accepted for delivery.
+Required source/push guards ran on every main push, including host routes,
+rebuild reporting, tombstones, Python-in-kernel, compute-in-shell and static
+public-runtime guards. Guard baselines were not relaxed. Final delivery push
+result lives in ~/mojolearn-evidence/optimizer-state-index-20261028/push.log.
+Complete logs/binaries/source records remain under ~/mojolearn-evidence/:
+shared-admission-20261028, generation-metadata-hoist-20261028,
+classical-loop-hoist-20261028, autoarima-abi-scalar-20261028,
+classical-batch-setup-20261028, generation-workspace-reuse-20261028,
+neural-loop-metadata-20261028, optimizer-state-index-20261028.
+Optimizer source-only review: optimizer-index-review-20261028/REVIEW.txt.
+
+Remaining destination
+Native-owned model metadata and explicit mutation generations remain the goal.
+Boundary identity scans, cold snapshot/output construction, several specialized
+routes and some Python-object ABI envelopes remain transitional. A concrete next
+shared target is providers/python/native_execution_pyapi.mojo: per-call address,
+integer and float vectors and an additional session-prefixed words vector are
+still reconstructed. Retain/admit transport metadata without extending lifetimes
+past safe mutation/release boundaries. No exhaustive repo-wide completion claim.
