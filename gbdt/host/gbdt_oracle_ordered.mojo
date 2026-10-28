@@ -561,8 +561,8 @@ def _ordered_tree_structure(
     scorer); `fold_count == 1` with `plain_l2` True is the single-task arm
     the pointwise lane runs (`find_optimal_split_single_fold_kernel` with
     `TL2ScoreCalcer` at meta exponent 1, `pointwise_scores.mojo:809-950`)."""
-    # The single-fold cosine arm is part of the uncompiled CPU ranking
-    # draft (2026-10-27); compile its actual caller before merging. It uses
+    # The single-fold cosine caller compiled in the CPU GBDT binding on
+    # Apple M1 at O0 (2026-10-28); runtime/identity remain pending. It uses
     # TCosineScoreCalcer, not the paired-fold dynamic cosine formula.
     if plain_cosine and (fold_count != 1 or plain_l2):
         raise Error("plain cosine needs one fold and cannot select L2")

@@ -1,8 +1,9 @@
-# CPU pointwise ranking implementation draft
+# CPU pointwise ranking implementation
 
-**Uncompiled. Do not merge this branch before successful affected compilation.**
-Andrew authorized this implementation in its own worktree on 2026-10-27,
-with compilation deferred. No runtime, identity or vendor campaign was run.
+**Affected CPU binding compilation passed on 2026-10-28.**
+The complete host entry compiled at O0 for Apple M1 with ten compiler workers.
+The retained native source is commit 8dc73e4c130425bc9a60a8004b9d9ef2e5343a04.
+See [compile receipt](plans/gbdt-cpu-ranking-20261028-compile.json). No runtime, identity or vendor campaign was run.
 This is an engineering handoff, not a published support claim.
 
 Branch: `lane/gbdt-cpu-ranking-20261027`.
@@ -15,7 +16,7 @@ The CPU already has QueryRMSE, PairLogit and YetiRank derivatives and grouped
 leaf estimation for greedy symmetric trees. The missing route is their
 `use_pointwise_searcher=True` doc-parallel structure search. The draft adds
 that route through `gbdt/host/gbdt_oracle_pointwise_rank.mojo` and the existing
-native `gbdt_fit` binding, keeping the original greedy route unchanged.
+native `gbdt_fit` binding, retaining greedy dispatch (the shared PairLogit leaf repair also affects it).
 
 - Plain SymmetricTree on numeric columns, without sample/class weights or
   evaluation rows. The shared binding continues to refuse categorical columns,
@@ -43,26 +44,21 @@ No multi-GPU CPU equivalent is proposed. Ranking evaluation sets are also
 refused by the current GPU owner; that is a shared limitation, not missing
 CPU parity. Sample-weight support for this route remains separate work.
 
-## Required before merge
+## Compilation and integration
 
-1. Compile the new owner with calls covering generated and explicit PairLogit
-   pairs, both search-weight planes and both leaf methods; QueryRMSE; YetiRank;
-   single-fold cosine and L2; bootstrap/no-bootstrap; and the existing greedy
-   PairLogit caller of the repaired pair-weight estimator. An import alone does
-   not establish that these functions compiled.
-2. Compile the affected actual host binding, including `gbdt_fit_binding`,
-   using the supported local Mojo toolchain and `MOJOLEARN_COLUMN_CPU` /
-   `MOJOLEARN_NUMERIC_IDENTICAL=1`. Retain full output, exit status, compiler,
-   flags, source closure and binary hashes. The repository entry is
-   `bindings/entry/entry__mojolearn_gbdt_host.mojo`; the supported family build
-   script is `bindings/build_gbdt_host.sh`.
-3. Inspect any integration overlap with the parent's separate numeric Logloss
-   `sample_weight` repair and CTR evaluation draft. Do not copy another
-   worktree's uncommitted files or merge this branch just because those other
-   routes compiled.
-4. Run required source/push guards on the integrated commit. Compilation is
-   development merge evidence only, never evidence of runtime correctness or
-   bitwise identity.
+The full public host binding entry compiled successfully with
+MOJOLEARN_COLUMN_CPU and MOJOLEARN_NUMERIC_IDENTICAL=1. Its native call graph
+includes the grouped pointwise owner and shared greedy PairLogit estimator.
+This is compilation evidence only; no parameter case was executed.
+The source archive, manifest, compiler hash, command, resource allocation,
+complete log and binary are retained under
+`~/mojolearn-evidence/gbdt-cpu-ranking-compile-20261028/`.
+Verifier registration changed no native code; later native edits update
+comments only, so the successful compilation is reused.
+
+Main integration must preserve the separate numeric Logloss sample-weight
+and CTR evaluation repairs, and pass required source/push guards.
+Runtime, identity and negative-control execution remain pending.
 
 ## Verifier registration and evidence still pending
 
@@ -105,10 +101,11 @@ until measured.
 Source inspection found that the shared PairLogit leaf helper constructed leaf
 weights from row counts, while GPU pair setup replaces row weights with pair
 weights. This draft repairs that native shared helper for both CPU searchers.
-It remains uncompiled and should not be described as qualified Gradient-leaf
+It compiled but must not be described as runtime-qualified Gradient-leaf
 parity until the affected evidence exists.
 
 Retained local evidence directory:
 `~/mojolearn-evidence/gbdt-cpu-ranking-draft-20261027/`.
 It contains source hashes, the bounded review diff and commit/push guard logs.
-No rented machine, background watcher or generated binary was used.
+The later local compilation retained its binary in the compile evidence directory.
+No rented machine or background watcher was used for ranking.
