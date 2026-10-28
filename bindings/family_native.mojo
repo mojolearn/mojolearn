@@ -84,6 +84,10 @@ def family_operation(model: PythonObject, operation: String, var args: PythonObj
     if (operation.startswith("family_xn_loc_") or operation.startswith("family_xn_semi_")
             or operation.startswith("family_xn_graph_") or operation.startswith("family_svc_ocsvm_")):
         args = estimator_arguments(model, "_mojolearn_x_neighbors", args, context)
+    if ((operation.startswith("family_cfa_") and not operation.startswith("family_cfa_hdbscan_"))
+            or (operation.startswith("family_xc_") and operation != "family_xc_dbscan_predict"
+                and operation != "family_xc_agglo_predict") or operation.startswith("family_mix_bgmm_")):
+        args = estimator_arguments(model, "_mojolearn_x_cluster", args, context)
     if operation == "family_par_public":
         return parallel_public_operation(model, args, context)
     if operation == "family_par_run":
